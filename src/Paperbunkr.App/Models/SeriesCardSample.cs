@@ -1,12 +1,15 @@
+using System;
+using System.Linq;
 using Avalonia;
 using Avalonia.Media;
+using Paperbunkr.Data.Entities;
 
 namespace Paperbunkr.App.Models;
 
 /// <summary>
-/// Sample data for a Library grid card. Mirrors the "covers" sample array from the
-/// "Paperbunkr App" Claude Design wireframe (project 43c40b25) - placeholder data until
-/// real Series/Issue records exist (docs/onboarding.md §5-6).
+/// Library grid card. Originally sample data mirroring the "covers" array from the "Paperbunkr
+/// App" Claude Design wireframe (project 43c40b25); now also buildable from a real
+/// <see cref="Series"/> record (docs/onboarding.md §5-6) via <see cref="FromSeries"/>.
 /// </summary>
 public sealed class SeriesCardSample
 {
@@ -28,4 +31,35 @@ public sealed class SeriesCardSample
             new GradientStop(Color.Parse(toHex), 1),
         },
     };
+
+    // Same palette used throughout the wireframe's own sample covers - picked deterministically
+    // per series (by name hash) since there's no real cover-art decode pipeline yet (that's the
+    // reader canvas work in docs/onboarding.md §8), just to keep the grid visually varied.
+    private static readonly (string From, string To)[] s_palette =
+    {
+        ("#3a2f45", "#8a4a2e"),
+        ("#1e3a3f", "#2f7d6a"),
+        ("#442a1c", "#c9803f"),
+        ("#26313f", "#4a6b8a"),
+        ("#3f2130", "#a34a5c"),
+        ("#1f2a1c", "#5c8a4a"),
+        ("#2a2333", "#6a5ca3"),
+        ("#332118", "#8a5a2e"),
+    };
+
+    public static SeriesCardSample FromSeries(Series series)
+    {
+        var (from, to) = s_palette[Math.Abs(series.Name.GetHashCode()) % s_palette.Length];
+        int unreadCount = series.Issues.Count(i => i.LastPageRead is null or 0);
+
+        return new SeriesCardSample
+        {
+            Title = series.Name.ToUpperInvariant(),
+            Name = series.Name,
+            Sub = $"{series.ContentType} · {series.Issues.Count} issues",
+            UnreadCount = unreadCount,
+            Missing = series.Issues.Any(i => i.FileIsMissing),
+            CoverBrush = Gradient(from, to),
+        };
+    }
 }

@@ -26,5 +26,6 @@
   <ItemGroup>
     <ProjectReference Include="..\Paperbunkr.Common\Paperbunkr.Common.csproj" />
     <ProjectReference Include="..\Paperbunkr.Engine\Paperbunkr.Engine.csproj" />
+    <ProjectReference Include="..\Paperbunkr.Data\Paperbunkr.Data.csproj" />
   </ItemGroup>
 </Project>

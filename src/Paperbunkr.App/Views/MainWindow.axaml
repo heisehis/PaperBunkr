@@ -134,7 +134,7 @@
                                         Background="{StaticResource PbAccentTextBrush}" VerticalAlignment="Center" />
                                 <TextBlock Grid.Column="1" Text="All Series" Margin="9,0,0,0" FontSize="13"
                                            FontWeight="Bold" Foreground="{StaticResource PbTextBrush}" VerticalAlignment="Center" />
-                                <TextBlock Grid.Column="2" Classes="count" Text="1,847"
+                                <TextBlock Grid.Column="2" Classes="count" Text="{Binding Library.AllSeriesCount}"
                                            Foreground="{StaticResource PbAccentTextBrush}" VerticalAlignment="Center" />
                             </Grid>
                         </Border>
@@ -157,13 +157,13 @@
                         <Border Classes="sideItem">
                             <Grid ColumnDefinitions="*,Auto">
                                 <TextBlock Grid.Column="0" Text="Comic" FontSize="13" Foreground="{StaticResource PbTextMutedBrush}" />
-                                <TextBlock Grid.Column="1" Classes="count" Text="1,120" Foreground="{StaticResource PbTextFaintBrush}" />
+                                <TextBlock Grid.Column="1" Classes="count" Text="{Binding Library.ComicCount}" Foreground="{StaticResource PbTextFaintBrush}" />
                             </Grid>
                         </Border>
                         <Border Classes="sideItem">
                             <Grid ColumnDefinitions="*,Auto">
                                 <TextBlock Grid.Column="0" Text="Manga" FontSize="13" Foreground="{StaticResource PbTextMutedBrush}" />
-                                <TextBlock Grid.Column="1" Classes="count" Text="402" Foreground="{StaticResource PbTextFaintBrush}" />
+                                <TextBlock Grid.Column="1" Classes="count" Text="{Binding Library.MangaCount}" Foreground="{StaticResource PbTextFaintBrush}" />
                             </Grid>
                         </Border>
                     </StackPanel>

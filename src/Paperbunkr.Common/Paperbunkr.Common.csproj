@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <RootNamespace>cYo.Common</RootNamespace>
+    <AssemblyName>Paperbunkr.Common</AssemblyName>
+    <!-- Ported from ComicRackCE's cYo.Common (net48) as part of the Paperbunkr net8 retarget spike.
+         Excludes cYo.Common.Windows / cYo.Common.Presentation (separate WinForms-only projects
+         in the source repo) per the porting brief; see docs/retarget_spike_report.md. -->
+    <UseWindowsForms>false</UseWindowsForms>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <NoWarn>CS0618;CS0612;CS0169;CS0414;CS0067;CS0108;CS0114;SYSLIB0011;SYSLIB0003</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Not a WinForms issue: SingleInstance/ISingleInstance self-host a WCF net.pipe ServiceHost
+         for single-instance IPC. WCF client packages only cover WCF clients on modern .NET;
+         ServiceHost-based self-hosting has no drop-in equivalent without adopting CoreWCF (a
+         different hosting model, ASP.NET Core based). Flagged as an open problem in
+         docs/retarget_spike_report.md rather than papered over. -->
+    <Compile Remove="Runtime\SingleInstance.cs" />
+    <Compile Remove="Runtime\ISingleInstance.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="DynamicExpresso.Core" Version="2.19.3" />
+    <PackageReference Include="SharpZipLib" Version="1.4.2" />
+    <PackageReference Include="System.Drawing.Common" Version="8.0.10" />
+    <PackageReference Include="System.Management" Version="8.0.0" />
+    <PackageReference Include="System.Text.Json" Version="8.0.5" />
+    <PackageReference Include="System.Resources.Extensions" Version="8.0.0" />
+    <PackageReference Include="System.Security.Permissions" Version="8.0.0" />
+  </ItemGroup>
+
+</Project>

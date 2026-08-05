@@ -1,0 +1,127 @@
+using System;
+using System.IO;
+using System.Linq;
+using cYo.Common.IO;
+using cYo.Common.Reflection;
+
+namespace cYo.Projects.ComicRack.Engine.IO.Provider.Readers
+{
+    public abstract class ComicProvider : ImageProvider, IInfoStorage
+    {
+        private static readonly string[] supportedTypes = new string[]
+        {
+            "jpg",
+            "jpeg",
+            "jif",
+            "jiff",
+            "gif",
+            "png",
+            "tif",
+            "tiff",
+            "bmp",
+            "djvu",
+            "webp",
+            "heic",
+            "heif",
+            "avif",
+            "jp2",
+            "j2k",
+            "jxl",
+        };
+
+        public bool UpdateEnabled => GetType().GetAttributes<FileFormatAttribute>().FirstOrDefault((FileFormatAttribute f) => f.Format.Supports(base.Source))?.EnableUpdate ?? false;
+
+        private bool disableNtfs = false;
+
+        public event EventHandler<ErrorEventArgs> Error;
+        public virtual void OnError(string errorMessage) => Error?.Invoke(this, new ErrorEventArgs(errorMessage));
+
+        protected bool DisableNtfs
+        {
+            get
+            {
+                if (disableNtfs)
+                    return true;
+
+                return EngineConfiguration.Default.DisableNTFS;
+            }
+
+            set => disableNtfs = value;
+        }
+
+        protected bool DisableSidecar
+        {
+            get;
+            set;
+        }
+
+        public T Load<T>(InfoLoadingMethod method, Func<Stream, T> deserializeDelegate) where T : ComicInfo
+        {
+            using (LockSource(readOnly: true))
+            {
+                T comicInfo = (DisableNtfs ? null : NtfsInfoStorage.LoadInfo<T>(base.Source));
+                if (comicInfo == null && !DisableSidecar)
+                    comicInfo = ComicInfo.LoadFromSidecar(base.Source, deserializeDelegate);
+
+                if (comicInfo != null && method == InfoLoadingMethod.Fast)
+                    return comicInfo;
+
+                T comicInfo2 = OnLoadInfo<T>();
+                return comicInfo2 ?? comicInfo;
+            }
+        }
+
+        public ComicInfo LoadInfo(InfoLoadingMethod method) => Load(method, ComicInfo.Deserialize);
+        public ComicBook LoadBook(InfoLoadingMethod method) => Load(method, ComicBook.DeserializeFull);
+
+        protected virtual T OnLoadInfo<T>() where T : ComicInfo
+        {
+            return default;
+        }
+
+        public bool StoreInfo(ComicInfo comicInfo)
+        {
+            bool flag = false;
+            using (LockSource(readOnly: false))
+            {
+                if (UpdateEnabled)
+                {
+                    if (!OnStoreInfo(comicInfo))
+                        return false;
+
+                    flag = true;
+                }
+                if (!DisableNtfs)
+                    flag |= NtfsInfoStorage.StoreInfo(base.Source, comicInfo);
+
+                return flag;
+            }
+        }
+
+        protected virtual bool OnStoreInfo(ComicInfo comicInfo)
+        {
+            return false;
+        }
+
+        protected virtual bool IsSupportedImage(ProviderImageInfo file)
+        {
+            if(IsImageThumbnailFolder(file.Name))
+                return false;
+
+            string fileExt = Path.GetExtension(FileUtility.MakeValidFilename(file.Name));
+            return supportedTypes.Any((string ext) => string.Equals(fileExt, "." + ext, StringComparison.OrdinalIgnoreCase));
+        }
+
+        private static bool IsImageThumbnailFolder(string file)
+        {
+            string[] ignore = { ".DS_Store\\", "__MACOSX\\" };
+            return ignore.Any(item => file.Contains(item));
+        }
+
+        private static bool IsFileTooSmall(long size)
+        {
+            long minSize = 256;
+            return size < minSize;
+        }
+    }
+}

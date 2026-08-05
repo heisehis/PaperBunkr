@@ -1,0 +1,86 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <RootNamespace>cYo.Projects.ComicRack.Engine</RootNamespace>
+    <AssemblyName>Paperbunkr.Engine</AssemblyName>
+    <!-- Ported from ComicRackCE's ComicRack.Engine (net48) as part of the Paperbunkr net8 retarget spike.
+         Excludes Controls/ (WinForms custom controls) and ComicRack.Engine.Display.Forms per the
+         porting brief. See docs/retarget_spike_report.md for additional exclusions found during
+         the WinForms sweep (Display/ComicDisplay.cs, Drawing/Thumb*Renderer.cs). -->
+    <UseWindowsForms>false</UseWindowsForms>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <NoWarn>CS0618;CS0612;CS0169;CS0414;CS0067;CS0108;CS0114</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Deep WinForms/theme coupling identified during the retarget spike: these display/render
+         classes reach into cYo.Common.Windows(.Forms) (the excluded WinForms presentation layer)
+         for control hosting or theme colors. Flagged as an open problem in retarget_spike_report.md
+         rather than mechanically stripped, since doing so would mean rewriting real logic. -->
+    <Compile Remove="Display\ComicDisplay.cs" />
+
+    <!-- Not a WinForms issue: the client/server "remote library" feature (IO/Network) is a WCF
+         ServiceContract/ServiceHost subsystem. Same story as Common's SingleInstance.cs: WCF
+         self-hosting has no drop-in net8 equivalent without adopting CoreWCF. Flagged in
+         docs/retarget_spike_report.md as a real open problem, not stripped. -->
+    <Compile Remove="IO\Network\ComicLibraryServer.cs" />
+    <Compile Remove="IO\Network\ComicLibraryClient.cs" />
+    <Compile Remove="IO\Network\IRemoteComicLibrary.cs" />
+    <Compile Remove="IO\Network\IRemoteServerInfo.cs" />
+    <Compile Remove="IO\Network\ServerRegistration.cs" />
+    <Compile Remove="IO\Network\RemoteComicBookProvider.cs" />
+    <Compile Remove="NetworkManager.cs" />
+
+    <!-- Deeper-than-expected WinForms list-view coupling found during the sweep: these types
+         implement/consume IViewableItem and IColumn, which live in the excluded
+         cYo.Common.Windows.Forms project (WinForms ListView item-model plumbing, including
+         GDI+ header-drawing methods: genuine UI code, not core domain data). Flagged in
+         docs/retarget_spike_report.md rather than mechanically stripped.
+         By contrast, ItemViewConfig (Database/StacksConfig.cs, DisplayListConfig.cs) and
+         RendererImage (IO/MemoryOptimizedImage.cs) turned out to be plain, portable data/wrapper
+         types with no real WinForms dependency once their one live-UI-only member was dropped;
+         ported into Windows/Forms and Presentation below instead of excluded. -->
+    <Compile Remove="Metadata\ComicBook\ComicBookMetadata.cs" />
+    <Compile Remove="Metadata\ComicBook\ComicBookMetadataCollection.cs" />
+    <Compile Remove="Metadata\ComicBook\ComicBookMetadataManager.cs" />
+    <Compile Remove="Drawing\ViewItemRenderer.cs" />
+
+    <!-- Out of scope per docs/onboarding.md §15 ("WiFi-sync settings are out of scope entirely,
+         the feature doesn't exist in Paperbunkr"): the whole Sync/ subsystem (portable-device and
+         wireless sync) plus QueueManager.cs, which exists almost entirely to drive it, are excluded
+         rather than reworked. WirelessSyncProvider.cs also has its own WCF dependency
+         (CommunicationException) on top of being out of scope. Sync/ExtraSyncInformation.cs is
+         kept in: it turned out to be a plain POCO that ComicBook.cs (core domain model) stores a
+         reference to, not sync-orchestration logic. -->
+    <Compile Remove="Sync\**\*.cs" />
+    <Compile Include="Sync\ExtraSyncInformation.cs" />
+    <Compile Remove="QueueManager.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="sharpPDF">
+      <HintPath>DLL\sharpPDF.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="bblanchon.PDFium.Win32" Version="148.0.7749" />
+    <PackageReference Include="CSJ2K" Version="3.0.0" />
+    <PackageReference Include="LibHeifSharp" Version="3.2.0" />
+    <PackageReference Include="MySqlConnector" Version="2.5.0" />
+    <PackageReference Include="PDFiumSharpV2" Version="1.1.4" />
+    <PackageReference Include="SharpCompress" Version="0.48.0" />
+    <PackageReference Include="SharpZipLib" Version="1.4.2" />
+    <PackageReference Include="System.Data.SqlClient" Version="4.9.0" />
+    <PackageReference Include="System.Drawing.Common" Version="8.0.10" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Paperbunkr.Common\Paperbunkr.Common.csproj" />
+  </ItemGroup>
+
+</Project>

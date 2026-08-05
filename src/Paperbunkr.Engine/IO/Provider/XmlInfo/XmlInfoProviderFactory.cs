@@ -1,0 +1,76 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Reflection;
+using System.Security.Cryptography;
+using System.Threading;
+using cYo.Common.Collections;
+using cYo.Common.Localize;
+using cYo.Common.Reflection;
+using cYo.Common.Threading;
+
+namespace cYo.Projects.ComicRack.Engine.IO.Provider.XmlInfo
+{
+    public class XmlInfoProviderFactory : ProviderFactoryBase<XmlInfoProvider>
+    {
+        public void RegisterProvider(Type pt, IEnumerable<XmlInfoFile> xmlInfoFile, bool withLocking = true)
+        {
+            using (withLocking ? rwLock.UpgradeableReadLock() : null)
+            {
+                if (!providerDict.Any(pi => pi.ProviderType == pt))
+                {
+                    using (withLocking ? rwLock.WriteLock() : null)
+                    {
+                        xmlInfoFile.ForEach(x => providerDict.Add(new XmlInfoProviderInfo(pt, x)));
+                    }
+                }
+            }
+        }
+
+        public override void RegisterProvider(Type pt, bool withLocking = true)
+        {
+            IValidateProvider validateProvider = Activator.CreateInstance(pt) as IValidateProvider;
+            if (validateProvider == null || validateProvider.IsValid)
+            {
+                IEnumerable<XmlInfoFile> xmlInfos = pt.GetAttributes<XmlInfoFileAttribute>().Select(ffa => new XmlInfoFile(ffa.XmlInfoFile, ffa.Order));
+                RegisterProvider(pt, xmlInfos, withLocking);
+            }
+        }
+
+        public IEnumerable<XmlInfoProviderInfo> GetProviderInfos(Type type)
+        {
+            // Get the provider info based on the generic argument of the provider type
+            return GetProviderInfos<XmlInfoProviderInfo>().Where(x => x.ProviderType.BaseType.GetGenericArguments().LastOrDefault(t => t == type) != null).OrderBy(x => x.XmlInfoFile.Order);
+        }
+
+        public IEnumerable<XmlInfoProviderInfo> GetProviderInfos()
+        {
+            return GetProviderInfos<XmlInfoProviderInfo>().OrderBy(x => x.XmlInfoFile.Order);
+        }
+
+        public IEnumerable<XmlInfoFile> GetXmlInfoFiles()
+        {
+            return GetProviderInfos().Select(p => p.XmlInfoFile);
+        }
+
+        public IEnumerable<XmlInfoProvider> CreateProviders()
+        {
+            return base.CreateProviders<XmlInfoProviderInfo>();
+        }
+
+        public T DeserializeAll<T>(Func<string, Stream> getDataDelegate) where T : class
+        {
+            foreach (var providerInfo in GetProviderInfos(typeof(T)))
+            {
+                Type type = providerInfo.ProviderType;
+                XmlInfoProvider<T> providerObject = Activator.CreateInstance(type) as XmlInfoProvider<T>;
+                T comicInfo = providerObject.Deserialize(getDataDelegate, providerInfo.XmlInfoFile.FileName);
+
+                if (comicInfo is not null)
+                    return comicInfo;
+            }
+            return null;
+        }
+    }
+}

@@ -204,9 +204,5 @@ port — flagging as a spot worth a closer look/test pass before relying on it f
 
 ## Commit
 
-Work is present in the working tree at `C:\Users\DeeDee\PaperBunkr` (`Paperbunkr.sln`,
-`src/Paperbunkr.Common/`, `src/Paperbunkr.Engine/`, this report). See the session notes for
-commit status — this agent's sandbox restricted `git` operations to a worktree rooted under
-`_reference/ComicRackCE/.claude/worktrees/...` and could not run `git` directly against the
-Paperbunkr repo checkout; the actual commit (or a manual `git add`/`git commit` by the user) needs
-to happen outside that restriction.
+Committed to the Paperbunkr repo (`Paperbunkr.sln`, `src/Paperbunkr.Common/`,
+`src/Paperbunkr.Engine/`, this report) — 930 files changed, 77972 insertions.

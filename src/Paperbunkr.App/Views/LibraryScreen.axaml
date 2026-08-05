@@ -1,0 +1,159 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Paperbunkr.App.ViewModels"
+             xmlns:models="using:Paperbunkr.App.Models"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="900" d:DesignHeight="700"
+             x:Class="Paperbunkr.App.Views.LibraryScreen"
+             x:DataType="vm:LibraryScreenViewModel">
+
+    <UserControl.Styles>
+        <Style Selector="Button.toolbarPill">
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="BorderBrush" Value="{StaticResource PbBorderBrush}" />
+            <Setter Property="Background" Value="{StaticResource PbChromeBrush}" />
+            <Setter Property="Foreground" Value="{StaticResource PbTextMutedBrush}" />
+            <Setter Property="CornerRadius" Value="999" />
+            <Setter Property="Padding" Value="12,6" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style Selector="Button.toolbarPill.open">
+            <Setter Property="BorderBrush" Value="{StaticResource PbAccentBrush}" />
+            <Setter Property="Background" Value="{StaticResource PbAccentSoftBrush}" />
+            <Setter Property="Foreground" Value="{StaticResource PbAccentTextBrush}" />
+        </Style>
+
+        <Style Selector="Border.dropdown">
+            <Setter Property="Background" Value="{StaticResource PbChromeBrush}" />
+            <Setter Property="BorderBrush" Value="{StaticResource PbBorderBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="7" />
+            <Setter Property="Padding" Value="14" />
+            <Setter Property="BoxShadow" Value="0 8 24 -12 #99000000" />
+        </Style>
+        <Style Selector="TextBlock.dropdownRow">
+            <Setter Property="FontSize" Value="12.5" />
+            <Setter Property="Foreground" Value="{StaticResource PbTextMutedBrush}" />
+            <Setter Property="Margin" Value="0,3" />
+        </Style>
+
+        <Style Selector="Button.card">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+        </Style>
+        <Style Selector="Border.cover">
+            <Setter Property="CornerRadius" Value="7" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="BorderBrush" Value="{StaticResource PbBorderBrush}" />
+            <Setter Property="BoxShadow" Value="0 8 24 -12 #80000000" />
+            <Setter Property="Height" Value="216" />
+        </Style>
+    </UserControl.Styles>
+
+    <Grid RowDefinitions="Auto,*">
+
+        <!-- ============ Toolbar (pills variant) ============ -->
+        <Border Grid.Row="0" Padding="24,14" BorderBrush="{StaticResource PbBorderBrush}" BorderThickness="0,0,0,1">
+          <Panel>
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <Border MaxWidth="260" Background="{StaticResource PbChromeBrush}" BorderBrush="{StaticResource PbBorderBrush}"
+                        BorderThickness="1" CornerRadius="5" Padding="10,7" HorizontalAlignment="Stretch" Width="260">
+                    <TextBlock Text="Search all series…" FontSize="12.5" Foreground="{StaticResource PbTextFaintBrush}" />
+                </Border>
+
+                <Button x:Name="FilterButton" Classes="toolbarPill" Classes.open="{Binding IsFilterOpen}"
+                        Command="{Binding ToggleFilterCommand}" Content="Filter ▾" />
+                <Button x:Name="SortButton" Classes="toolbarPill" Classes.open="{Binding IsSortOpen}"
+                        Command="{Binding ToggleSortCommand}" Content="Sort: Recently Added ▾" />
+                <Button x:Name="DisplayButton" Classes="toolbarPill" Classes.open="{Binding IsDisplayOpen}"
+                        Command="{Binding ToggleDisplayCommand}" Content="Display ▾" />
+            </StackPanel>
+
+            <Popup PlacementTarget="{Binding #FilterButton}" Placement="BottomEdgeAlignedLeft" VerticalOffset="6"
+                   IsOpen="{Binding IsFilterOpen}" IsLightDismissEnabled="True">
+                <Border Classes="dropdown" Width="210">
+                    <StackPanel>
+                        <TextBlock Classes="dropdownRow" Text="Unread only" />
+                        <TextBlock Classes="dropdownRow" Text="Missing issues" />
+                        <TextBlock Classes="dropdownRow" Text="Tracked series ✓" Foreground="{StaticResource PbTextBrush}" />
+                    </StackPanel>
+                </Border>
+            </Popup>
+
+            <Popup PlacementTarget="{Binding #SortButton}" Placement="BottomEdgeAlignedLeft" VerticalOffset="6"
+                   IsOpen="{Binding IsSortOpen}" IsLightDismissEnabled="True">
+                <Border Classes="dropdown" Width="190">
+                    <StackPanel>
+                        <TextBlock Classes="dropdownRow" Text="Recently Added" FontWeight="Bold" Foreground="{StaticResource PbAccentTextBrush}" />
+                        <TextBlock Classes="dropdownRow" Text="Title A–Z" />
+                        <TextBlock Classes="dropdownRow" Text="Unread count" />
+                    </StackPanel>
+                </Border>
+            </Popup>
+
+            <Popup PlacementTarget="{Binding #DisplayButton}" Placement="BottomEdgeAlignedRight" VerticalOffset="6"
+                   IsOpen="{Binding IsDisplayOpen}" IsLightDismissEnabled="True">
+                <Border Classes="dropdown" Width="210">
+                    <StackPanel>
+                        <TextBlock Classes="dropdownRow" Text="Grid density" Foreground="{StaticResource PbTextBrush}" Margin="0,0,0,4" />
+                        <Border Height="3" CornerRadius="2" Background="{StaticResource PbBorderBrush}" Margin="0,0,0,10">
+                            <Border Height="3" CornerRadius="2" Background="{StaticResource PbAccentBrush}"
+                                    HorizontalAlignment="Left" Width="90" />
+                        </Border>
+                        <TextBlock Classes="dropdownRow" Text="Unread count ✓" />
+                        <TextBlock Classes="dropdownRow" Text="Missing indicator ✓" />
+                        <TextBlock Classes="dropdownRow" Text="Content type ✓" />
+                    </StackPanel>
+                </Border>
+            </Popup>
+          </Panel>
+        </Border>
+
+        <!-- ============ Series grid ============ -->
+        <ScrollViewer Grid.Row="1">
+            <ItemsControl x:Name="CoversList" ItemsSource="{Binding Covers}" Margin="24,22,24,40">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <WrapPanel Orientation="Horizontal" />
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="models:SeriesCardSample">
+                        <Button Classes="card" Width="150" Margin="0,0,20,20"
+                                Command="{Binding #CoversList.((vm:LibraryScreenViewModel)DataContext).SelectCardCommand}"
+                                CommandParameter="{Binding}">
+                            <StackPanel>
+                                <Border Classes="cover" Background="{Binding CoverBrush}">
+                                    <Grid>
+                                        <Border IsVisible="{Binding UnreadCount}" Background="#B814161B"
+                                                CornerRadius="999" Padding="6,2" HorizontalAlignment="Right"
+                                                VerticalAlignment="Top" Margin="7">
+                                            <TextBlock Text="{Binding UnreadCount}" FontFamily="Consolas,monospace"
+                                                       FontSize="10" FontWeight="Bold" Foreground="White" />
+                                        </Border>
+                                        <TextBlock Text="{Binding Title}" TextWrapping="Wrap" FontSize="14" FontWeight="Black"
+                                                   Foreground="#FFFFF8EC" VerticalAlignment="Bottom"
+                                                   Margin="10,0,10,12" LineHeight="16" />
+                                    </Grid>
+                                </Border>
+                                <TextBlock Text="{Binding Name}" FontSize="12.5" FontWeight="SemiBold"
+                                           Foreground="{StaticResource PbTextBrush}" TextTrimming="CharacterEllipsis"
+                                           Margin="0,8,0,0" />
+                                <TextBlock Text="{Binding Sub}" FontSize="11" Foreground="{StaticResource PbTextFaintBrush}"
+                                           Margin="0,1,0,0" />
+                            </StackPanel>
+                        </Button>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </ScrollViewer>
+
+    </Grid>
+</UserControl>

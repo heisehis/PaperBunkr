@@ -10,6 +10,13 @@ namespace Paperbunkr.App.ViewModels;
 /// </summary>
 public partial class MainViewModel : ViewModelBase
 {
+    public MainViewModel()
+    {
+        Library = new LibraryScreenViewModel(GoDetail);
+    }
+
+    public LibraryScreenViewModel Library { get; }
+
     [ObservableProperty]
     private string _currentScreen = "library";
 
@@ -47,4 +54,6 @@ public partial class MainViewModel : ViewModelBase
 
     [RelayCommand]
     private void GoReader() => CurrentScreen = "reader";
+
+    private void GoDetail() => CurrentScreen = "detail";
 }

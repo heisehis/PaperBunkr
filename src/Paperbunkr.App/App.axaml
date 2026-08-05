@@ -1,0 +1,50 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="Paperbunkr.App.App"
+             xmlns:local="using:Paperbunkr.App"
+             RequestedThemeVariant="Dark">
+             <!-- Paperbunkr commits to a single dark identity (near-black + amber accent) rather than
+                  following the OS light/dark preference - see docs/wireframe_prototype_prompt.md. -->
+
+    <Application.Resources>
+        <!-- Design tokens from the Claude Design "Paperbunkr App" wireframe (project 43c40b25).
+             These are the app's own visual identity, distinct from the installable .crpck skin
+             system in docs/onboarding.md §13 - skins theme content chrome, not this shell. -->
+        <Color x:Key="PbBgColor">#14161B</Color>
+        <Color x:Key="PbChromeColor">#1C1F26</Color>
+        <Color x:Key="PbBorderColor">#2A2E37</Color>
+        <Color x:Key="PbTextColor">#ECE7DB</Color>
+        <Color x:Key="PbTextMutedColor">#B3ADA0</Color>
+        <Color x:Key="PbTextFaintColor">#77726A</Color>
+        <Color x:Key="PbAccentColor">#C9803F</Color>
+        <Color x:Key="PbAccentTextColor">#E0995A</Color>
+        <Color x:Key="PbAccentSoftColor">#29C9803F</Color>
+        <Color x:Key="PbBadgeColor">#D7AC4C</Color>
+        <Color x:Key="PbBadgeTextColor">#241505</Color>
+        <Color x:Key="PbSuccessColor">#5FA889</Color>
+
+        <SolidColorBrush x:Key="PbBgBrush" Color="{StaticResource PbBgColor}" />
+        <SolidColorBrush x:Key="PbChromeBrush" Color="{StaticResource PbChromeColor}" />
+        <SolidColorBrush x:Key="PbBorderBrush" Color="{StaticResource PbBorderColor}" />
+        <SolidColorBrush x:Key="PbTextBrush" Color="{StaticResource PbTextColor}" />
+        <SolidColorBrush x:Key="PbTextMutedBrush" Color="{StaticResource PbTextMutedColor}" />
+        <SolidColorBrush x:Key="PbTextFaintBrush" Color="{StaticResource PbTextFaintColor}" />
+        <SolidColorBrush x:Key="PbAccentBrush" Color="{StaticResource PbAccentColor}" />
+        <SolidColorBrush x:Key="PbAccentTextBrush" Color="{StaticResource PbAccentTextColor}" />
+        <SolidColorBrush x:Key="PbAccentSoftBrush" Color="{StaticResource PbAccentSoftColor}" />
+        <SolidColorBrush x:Key="PbBadgeBrush" Color="{StaticResource PbBadgeColor}" />
+        <SolidColorBrush x:Key="PbBadgeTextBrush" Color="{StaticResource PbBadgeTextColor}" />
+        <SolidColorBrush x:Key="PbSuccessBrush" Color="{StaticResource PbSuccessColor}" />
+
+        <x:Double x:Key="PbSpacingUnit">4</x:Double>
+        <x:Double x:Key="PbRadius">7</x:Double>
+    </Application.Resources>
+
+    <Application.DataTemplates>
+        <local:ViewLocator />
+    </Application.DataTemplates>
+
+    <Application.Styles>
+        <FluentTheme />
+    </Application.Styles>
+</Application>

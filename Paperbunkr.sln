@@ -9,6 +9,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Paperbunkr.Common", "src\Pa
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Paperbunkr.Engine", "src\Paperbunkr.Engine\Paperbunkr.Engine.csproj", "{91C359DE-6E6D-4FF7-B39B-81E05083E683}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Paperbunkr.App", "src\Paperbunkr.App\Paperbunkr.App.csproj", "{20E5A79A-20FB-4144-9CE8-3A8411DDFBA8}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -43,6 +45,18 @@ Global
 		{91C359DE-6E6D-4FF7-B39B-81E05083E683}.Release|x64.Build.0 = Release|Any CPU
 		{91C359DE-6E6D-4FF7-B39B-81E05083E683}.Release|x86.ActiveCfg = Release|Any CPU
 		{91C359DE-6E6D-4FF7-B39B-81E05083E683}.Release|x86.Build.0 = Release|Any CPU
+		{20E5A79A-20FB-4144-9CE8-3A8411DDFBA8}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{20E5A79A-20FB-4144-9CE8-3A8411DDFBA8}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{20E5A79A-20FB-4144-9CE8-3A8411DDFBA8}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{20E5A79A-20FB-4144-9CE8-3A8411DDFBA8}.Debug|x64.Build.0 = Debug|Any CPU
+		{20E5A79A-20FB-4144-9CE8-3A8411DDFBA8}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{20E5A79A-20FB-4144-9CE8-3A8411DDFBA8}.Debug|x86.Build.0 = Debug|Any CPU
+		{20E5A79A-20FB-4144-9CE8-3A8411DDFBA8}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{20E5A79A-20FB-4144-9CE8-3A8411DDFBA8}.Release|Any CPU.Build.0 = Release|Any CPU
+		{20E5A79A-20FB-4144-9CE8-3A8411DDFBA8}.Release|x64.ActiveCfg = Release|Any CPU
+		{20E5A79A-20FB-4144-9CE8-3A8411DDFBA8}.Release|x64.Build.0 = Release|Any CPU
+		{20E5A79A-20FB-4144-9CE8-3A8411DDFBA8}.Release|x86.ActiveCfg = Release|Any CPU
+		{20E5A79A-20FB-4144-9CE8-3A8411DDFBA8}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -50,5 +64,6 @@ Global
 	GlobalSection(NestedProjects) = preSolution
 		{88E766EE-8D96-45C3-BEF7-9A040D0E0B10} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{91C359DE-6E6D-4FF7-B39B-81E05083E683} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
+		{20E5A79A-20FB-4144-9CE8-3A8411DDFBA8} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 	EndGlobalSection
 EndGlobal

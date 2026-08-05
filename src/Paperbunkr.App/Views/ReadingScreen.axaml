@@ -1,0 +1,130 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Paperbunkr.App.ViewModels"
+             xmlns:models="using:Paperbunkr.App.Models"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="900" d:DesignHeight="760"
+             x:Class="Paperbunkr.App.Views.ReadingScreen"
+             x:DataType="vm:ReadingScreenViewModel">
+
+    <UserControl.Styles>
+        <Style Selector="Button.headerAction">
+            <Setter Property="Padding" Value="10,5" />
+            <Setter Property="CornerRadius" Value="5" />
+            <Setter Property="FontSize" Value="11.5" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style Selector="Button.headerAction.ghost">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Foreground" Value="{StaticResource PbTextMutedBrush}" />
+        </Style>
+        <Style Selector="Button.headerAction.secondary">
+            <Setter Property="Background" Value="{StaticResource PbChromeBrush}" />
+            <Setter Property="BorderBrush" Value="#383D47" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Foreground" Value="{StaticResource PbTextBrush}" />
+        </Style>
+
+        <Style Selector="Border.statCard">
+            <Setter Property="Background" Value="{StaticResource PbChromeBrush}" />
+            <Setter Property="BorderBrush" Value="{StaticResource PbBorderBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="7" />
+            <Setter Property="Padding" Value="16,12" />
+            <Setter Property="MinWidth" Value="120" />
+        </Style>
+        <Style Selector="TextBlock.statNumber">
+            <Setter Property="FontFamily" Value="Consolas,monospace" />
+            <Setter Property="FontSize" Value="20" />
+            <Setter Property="FontWeight" Value="Bold" />
+        </Style>
+        <Style Selector="TextBlock.statLabel">
+            <Setter Property="FontSize" Value="10.5" />
+            <Setter Property="Foreground" Value="{StaticResource PbTextFaintBrush}" />
+            <Setter Property="Margin" Value="0,2,0,0" />
+        </Style>
+
+        <Style Selector="Border.issueRow">
+            <Setter Property="CornerRadius" Value="5" />
+            <Setter Property="Padding" Value="12,9" />
+        </Style>
+    </UserControl.Styles>
+
+    <ScrollViewer>
+        <StackPanel>
+
+            <Grid ColumnDefinitions="*,Auto" Margin="28,20,28,16">
+                <StackPanel Grid.Column="0" VerticalAlignment="Bottom">
+                    <TextBlock Text="{Binding ListName}" FontSize="22" FontWeight="Bold" Foreground="{StaticResource PbTextBrush}" />
+                    <TextBlock Text="{Binding Subtitle}" FontSize="12.5" Foreground="{StaticResource PbTextFaintBrush}" Margin="0,4,0,0" />
+                </StackPanel>
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Bottom">
+                    <Button Classes="headerAction ghost" Content="Share" />
+                    <Button Classes="headerAction secondary" Content="Refresh" />
+                </StackPanel>
+            </Grid>
+            <Border BorderBrush="{StaticResource PbBorderBrush}" BorderThickness="0,0,0,1" Margin="0,0,0,24" />
+
+            <StackPanel MaxWidth="820" HorizontalAlignment="Left" Margin="28,0,28,40">
+
+                <StackPanel Orientation="Horizontal" Spacing="10" Margin="0,0,0,22">
+                    <Border Classes="statCard">
+                        <StackPanel><TextBlock Classes="statNumber" Text="{Binding TotalIssues}" Foreground="{StaticResource PbTextBrush}" />
+                            <TextBlock Classes="statLabel" Text="TOTAL ISSUES" /></StackPanel>
+                    </Border>
+                    <Border Classes="statCard">
+                        <StackPanel><TextBlock Classes="statNumber" Text="{Binding OwnedIssues}" Foreground="{StaticResource PbSuccessBrush}" />
+                            <TextBlock Classes="statLabel" Text="OWNED" /></StackPanel>
+                    </Border>
+                    <Border Classes="statCard">
+                        <StackPanel><TextBlock Classes="statNumber" Text="{Binding MissingIssues}" Foreground="{StaticResource PbBadgeBrush}" />
+                            <TextBlock Classes="statLabel" Text="MISSING" /></StackPanel>
+                    </Border>
+                </StackPanel>
+
+                <WrapPanel Margin="0,0,0,20">
+                    <Button Classes="headerAction secondary" Content="Import .CBL" Margin="0,0,8,8" />
+                    <Button Classes="headerAction secondary" Content="Import .CSV" Margin="0,0,8,8" />
+                    <Button Classes="headerAction secondary" Content="AniList" Margin="0,0,8,8" />
+                    <Button Classes="headerAction secondary" Content="MyAnimeList" Margin="0,0,8,8" />
+                    <Button Classes="headerAction secondary" Content="Auto-Build from Tracked Arc" Margin="0,0,8,8" />
+                </WrapPanel>
+
+                <ItemsControl ItemsSource="{Binding Arcs}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="models:ReadingArcSample">
+                            <StackPanel Margin="0,0,0,22">
+                                <TextBlock Text="{Binding Title}" FontSize="11" Foreground="{StaticResource PbTextFaintBrush}"
+                                           Margin="2,0,0,8" />
+                                <ItemsControl ItemsSource="{Binding Issues}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="models:ReadingArcIssueSample">
+                                            <Border Classes="issueRow">
+                                                <Grid ColumnDefinitions="30,30,*,Auto">
+                                                    <TextBlock Grid.Column="0" Text="{Binding Num}" FontFamily="Consolas,monospace"
+                                                               FontSize="11" Foreground="{StaticResource PbTextFaintBrush}" VerticalAlignment="Center" />
+                                                    <Border Grid.Column="1" Width="30" Height="42" CornerRadius="3"
+                                                            Background="#264A6B8A" VerticalAlignment="Center" />
+                                                    <TextBlock Grid.Column="2" Text="{Binding Name}" FontSize="13"
+                                                               Foreground="{StaticResource PbTextBrush}" VerticalAlignment="Center" Margin="12,0" />
+                                                    <TextBlock Grid.Column="3" IsVisible="{Binding IsOwned}" Text="✓ Owned"
+                                                               FontSize="11" FontWeight="Bold" Foreground="{StaticResource PbSuccessBrush}" VerticalAlignment="Center" />
+                                                    <TextBlock Grid.Column="3" IsVisible="{Binding IsMissing}" Text="⚠ Missing"
+                                                               FontSize="11" FontWeight="Bold" Foreground="{StaticResource PbBadgeBrush}" VerticalAlignment="Center" />
+                                                </Grid>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+
+            </StackPanel>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

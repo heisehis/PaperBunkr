@@ -1,0 +1,108 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Paperbunkr.App.ViewModels"
+             xmlns:views="using:Paperbunkr.App.Views"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="1000" d:DesignHeight="760"
+             x:Class="Paperbunkr.App.Views.DetailScreen"
+             x:DataType="vm:DetailScreenViewModel">
+
+    <UserControl.Styles>
+        <Style Selector="Border.metaPill">
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="999" />
+            <Setter Property="Padding" Value="9,3" />
+        </Style>
+        <Style Selector="Border.metaPill.accent">
+            <Setter Property="Background" Value="{StaticResource PbAccentSoftBrush}" />
+            <Setter Property="BorderBrush" Value="{StaticResource PbAccentBrush}" />
+        </Style>
+        <Style Selector="Border.metaPill.muted">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderBrush" Value="{StaticResource PbBorderBrush}" />
+        </Style>
+        <Style Selector="TextBlock.metaPillText">
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="FontWeight" Value="Bold" />
+        </Style>
+
+        <Style Selector="Button.detailAction">
+            <Setter Property="Padding" Value="14,8" />
+            <Setter Property="CornerRadius" Value="5" />
+            <Setter Property="FontSize" Value="12.5" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style Selector="Button.detailAction.primary">
+            <Setter Property="Background" Value="{StaticResource PbAccentBrush}" />
+            <Setter Property="BorderBrush" Value="{StaticResource PbAccentBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Foreground" Value="{StaticResource PbBadgeTextBrush}" />
+        </Style>
+        <Style Selector="Button.detailAction.secondary">
+            <Setter Property="Background" Value="{StaticResource PbChromeBrush}" />
+            <Setter Property="BorderBrush" Value="{StaticResource PbBorderBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Foreground" Value="{StaticResource PbTextBrush}" />
+        </Style>
+        <Style Selector="Button.detailAction.ghost">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Foreground" Value="{StaticResource PbTextMutedBrush}" />
+        </Style>
+
+        <Style Selector="Button.backLink">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Foreground" Value="{StaticResource PbTextFaintBrush}" />
+            <Setter Property="FontSize" Value="12.5" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+    </UserControl.Styles>
+
+    <ScrollViewer>
+        <StackPanel Margin="28,24,28,50">
+
+            <Button Classes="backLink" Command="{Binding GoBackCommand}" Content="← Back to Library" Margin="0,0,0,18" />
+
+            <Grid ColumnDefinitions="190,*">
+                <Border Grid.Column="0" CornerRadius="10" BorderThickness="1" BorderBrush="{StaticResource PbBorderBrush}"
+                        Background="{Binding CoverBrush}" Height="285" VerticalAlignment="Top">
+                    <TextBlock Text="{Binding CoverTitle}" FontSize="19" FontWeight="Black" Foreground="#FFFFF8EC"
+                               VerticalAlignment="Bottom" Margin="16" TextWrapping="Wrap" />
+                </Border>
+
+                <StackPanel Grid.Column="1" Margin="26,0,0,0">
+                    <StackPanel Orientation="Horizontal" Spacing="7" Margin="0,0,0,16">
+                        <Border Classes="metaPill accent"><TextBlock Classes="metaPillText" Text="{Binding ContentTypeLabel}"
+                                Foreground="{StaticResource PbAccentTextBrush}" /></Border>
+                        <Border Classes="metaPill muted"><TextBlock Classes="metaPillText" Text="{Binding StatusLabel}"
+                                Foreground="{StaticResource PbTextFaintBrush}" /></Border>
+                        <Border Classes="metaPill muted"><TextBlock Classes="metaPillText" Text="{Binding IssueCountLabel}"
+                                Foreground="{StaticResource PbTextFaintBrush}" /></Border>
+                    </StackPanel>
+
+                    <TextBlock Text="{Binding SeriesTitle}" FontSize="26" FontWeight="Bold"
+                               Foreground="{StaticResource PbTextBrush}" Margin="0,0,0,4" />
+                    <TextBlock Text="{Binding Summary}" FontSize="13" Foreground="{StaticResource PbTextMutedBrush}"
+                               TextWrapping="Wrap" Margin="0,0,0,14" />
+
+                    <StackPanel Orientation="Horizontal" Spacing="9" Margin="0,0,0,4">
+                        <Button Classes="detailAction primary" Content="{Binding ContinueLabel}" />
+                        <Button Classes="detailAction secondary" Content="Favorite" />
+                        <Button Classes="detailAction ghost" Content="Edit" />
+                    </StackPanel>
+
+                    <views:DetailMeta />
+                    <views:DetailPills />
+                </StackPanel>
+            </Grid>
+
+            <views:DetailTabs DataContext="{Binding Tabs}" />
+
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

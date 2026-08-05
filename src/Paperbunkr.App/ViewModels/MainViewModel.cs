@@ -13,9 +13,11 @@ public partial class MainViewModel : ViewModelBase
     public MainViewModel()
     {
         Library = new LibraryScreenViewModel(GoDetail);
+        Detail = new DetailScreenViewModel(GoLibrary);
     }
 
     public LibraryScreenViewModel Library { get; }
+    public DetailScreenViewModel Detail { get; }
 
     [ObservableProperty]
     private string _currentScreen = "library";

@@ -190,13 +190,12 @@
                     </DataTemplate>
                 </ContentControl.ContentTemplate>
             </ContentControl>
-            <ContentControl IsVisible="{Binding IsDetail}">
-                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="6">
-                    <TextBlock Text="Series Detail" FontSize="20" FontWeight="Bold"
-                               Foreground="{StaticResource PbTextBrush}" HorizontalAlignment="Center" />
-                    <TextBlock Text="Pending design handoff (DetailScreen.dc.html)." FontSize="13"
-                               Foreground="{StaticResource PbTextFaintBrush}" HorizontalAlignment="Center" />
-                </StackPanel>
+            <ContentControl IsVisible="{Binding IsDetail}" Content="{Binding Detail}">
+                <ContentControl.ContentTemplate>
+                    <DataTemplate x:DataType="vm:DetailScreenViewModel">
+                        <views:DetailScreen />
+                    </DataTemplate>
+                </ContentControl.ContentTemplate>
             </ContentControl>
             <ContentControl IsVisible="{Binding IsSmart}">
                 <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="6">

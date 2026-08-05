@@ -1,0 +1,120 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Paperbunkr.App.ViewModels"
+             xmlns:models="using:Paperbunkr.App.Models"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="900" d:DesignHeight="400"
+             x:Class="Paperbunkr.App.Views.DetailTabs"
+             x:DataType="vm:DetailTabsViewModel">
+
+    <UserControl.Styles>
+        <Style Selector="Button.tab">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0,0,0,2" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+            <Setter Property="CornerRadius" Value="0" />
+            <Setter Property="Padding" Value="0,0,0,12" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="FontWeight" Value="Bold" />
+            <Setter Property="Foreground" Value="{StaticResource PbTextFaintBrush}" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style Selector="Button.tab.active">
+            <Setter Property="BorderBrush" Value="{StaticResource PbAccentBrush}" />
+            <Setter Property="Foreground" Value="{StaticResource PbTextBrush}" />
+        </Style>
+        <Style Selector="TextBlock.tabCount">
+            <Setter Property="FontFamily" Value="Consolas,monospace" />
+            <Setter Property="FontSize" Value="10.5" />
+            <Setter Property="Foreground" Value="{StaticResource PbTextFaintBrush}" />
+            <Setter Property="Background" Value="{StaticResource PbChromeBrush}" />
+            <Setter Property="Padding" Value="6,1" />
+        </Style>
+
+        <Style Selector="Border.issueTile">
+            <Setter Property="CornerRadius" Value="6" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="BorderBrush" Value="{StaticResource PbBorderBrush}" />
+            <Setter Property="Height" Value="168" />
+        </Style>
+    </UserControl.Styles>
+
+    <StackPanel>
+        <Border BorderBrush="{StaticResource PbBorderBrush}" BorderThickness="0,0,0,1" Margin="0,24,0,0">
+            <StackPanel Orientation="Horizontal" Spacing="22">
+                <Button Classes="tab" Classes.active="{Binding IsIssuesTab}" Command="{Binding GoIssuesCommand}">
+                    <StackPanel Orientation="Horizontal" Spacing="7">
+                        <TextBlock Text="Issues" />
+                        <TextBlock Classes="tabCount" Text="42" VerticalAlignment="Center" />
+                    </StackPanel>
+                </Button>
+                <Button Classes="tab" Classes.active="{Binding IsRelatedTab}" Command="{Binding GoRelatedCommand}">
+                    <StackPanel Orientation="Horizontal" Spacing="7">
+                        <TextBlock Text="Related" />
+                        <TextBlock Classes="tabCount" Text="4" VerticalAlignment="Center" />
+                    </StackPanel>
+                </Button>
+                <Button Classes="tab" Classes.active="{Binding IsDetailsTab}" Command="{Binding GoDetailsCommand}" Content="Details" />
+                <Button Classes="tab" Classes.active="{Binding IsActivityTab}" Command="{Binding GoActivityCommand}" Content="Activity" />
+            </StackPanel>
+        </Border>
+
+        <!-- Issues tab -->
+        <ItemsControl IsVisible="{Binding IsIssuesTab}" ItemsSource="{Binding Issues}" Margin="0,20,0,0">
+            <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="models:IssueCardSample">
+                    <Border Classes="issueTile" Width="120" Margin="0,0,16,16" Background="{Binding CoverBrush}">
+                        <TextBlock Text="{Binding Title}" FontSize="13" FontWeight="Black" Foreground="#FFFFF8EC"
+                                   VerticalAlignment="Bottom" Margin="9" />
+                    </Border>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+
+        <!-- Related tab -->
+        <ScrollViewer IsVisible="{Binding IsRelatedTab}" HorizontalScrollBarVisibility="Auto" Margin="0,20,0,0">
+            <ItemsControl ItemsSource="{Binding Related}">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate><StackPanel Orientation="Horizontal" Spacing="16" /></ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="models:RelatedSeriesSample">
+                        <StackPanel Width="126">
+                            <Border CornerRadius="6" BorderThickness="1" BorderBrush="{StaticResource PbBorderBrush}"
+                                    Height="189" Background="{Binding CoverBrush}">
+                                <TextBlock Text="{Binding Title}" FontSize="12" FontWeight="Black" Foreground="#FFFFF8EC"
+                                           VerticalAlignment="Bottom" Margin="8" TextWrapping="Wrap" />
+                            </Border>
+                            <TextBlock Text="{Binding Name}" FontSize="11.5" FontWeight="SemiBold"
+                                       Foreground="{StaticResource PbTextMutedBrush}" Margin="0,6,0,0" />
+                            <TextBlock Text="{Binding Note}" FontSize="10.5" Foreground="{StaticResource PbTextFaintBrush}" />
+                        </StackPanel>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </ScrollViewer>
+
+        <!-- Details tab -->
+        <Grid IsVisible="{Binding IsDetailsTab}" ColumnDefinitions="*,*" Margin="0,20,0,0">
+            <StackPanel Grid.Column="0" Margin="0,0,28,0">
+                <TextBlock Text="PUBLISHER" FontSize="10.5" Foreground="{StaticResource PbTextFaintBrush}" Margin="0,0,0,4" />
+                <TextBlock Text="Ashcombe Independent" FontSize="13" Foreground="{StaticResource PbTextBrush}" />
+            </StackPanel>
+            <StackPanel Grid.Column="1">
+                <TextBlock Text="READING MODE" FontSize="10.5" Foreground="{StaticResource PbTextFaintBrush}" Margin="0,0,0,4" />
+                <TextBlock Text="Left to Right" FontSize="13" Foreground="{StaticResource PbTextBrush}" />
+            </StackPanel>
+        </Grid>
+
+        <!-- Activity tab -->
+        <StackPanel IsVisible="{Binding IsActivityTab}" Margin="0,20,0,0" Spacing="4">
+            <TextBlock Text="Issue #12 marked read · 2 days ago" FontSize="12.5" Foreground="{StaticResource PbTextFaintBrush}" />
+            <TextBlock Text="Issue #11 marked read · 6 days ago" FontSize="12.5" Foreground="{StaticResource PbTextFaintBrush}" />
+            <TextBlock Text="Series added to library · 3 weeks ago" FontSize="12.5" Foreground="{StaticResource PbTextFaintBrush}" />
+        </StackPanel>
+    </StackPanel>
+</UserControl>

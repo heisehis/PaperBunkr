@@ -21,6 +21,7 @@
         <Color x:Key="PbAccentSoftColor">#29C9803F</Color>
         <Color x:Key="PbBadgeColor">#D7AC4C</Color>
         <Color x:Key="PbBadgeTextColor">#241505</Color>
+        <Color x:Key="PbSuccessColor">#5FA889</Color>
 
         <SolidColorBrush x:Key="PbBgBrush" Color="{StaticResource PbBgColor}" />
         <SolidColorBrush x:Key="PbChromeBrush" Color="{StaticResource PbChromeColor}" />
@@ -33,6 +34,7 @@
         <SolidColorBrush x:Key="PbAccentSoftBrush" Color="{StaticResource PbAccentSoftColor}" />
         <SolidColorBrush x:Key="PbBadgeBrush" Color="{StaticResource PbBadgeColor}" />
         <SolidColorBrush x:Key="PbBadgeTextBrush" Color="{StaticResource PbBadgeTextColor}" />
+        <SolidColorBrush x:Key="PbSuccessBrush" Color="{StaticResource PbSuccessColor}" />
 
         <x:Double x:Key="PbSpacingUnit">4</x:Double>
         <x:Double x:Key="PbRadius">7</x:Double>

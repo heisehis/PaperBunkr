@@ -1,0 +1,117 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Paperbunkr.App.ViewModels"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="900" d:DesignHeight="700"
+             x:Class="Paperbunkr.App.Views.SmartScreen"
+             x:DataType="vm:SmartScreenViewModel">
+
+    <UserControl.Styles>
+        <Style Selector="Button.headerAction">
+            <Setter Property="Padding" Value="10,5" />
+            <Setter Property="CornerRadius" Value="5" />
+            <Setter Property="FontSize" Value="11.5" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style Selector="Button.headerAction.ghost">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Foreground" Value="{StaticResource PbTextMutedBrush}" />
+        </Style>
+        <Style Selector="Button.headerAction.primary">
+            <Setter Property="Background" Value="{StaticResource PbAccentBrush}" />
+            <Setter Property="BorderBrush" Value="{StaticResource PbAccentBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Foreground" Value="{StaticResource PbBadgeTextBrush}" />
+        </Style>
+
+        <Style Selector="Border.chip">
+            <Setter Property="Background" Value="{StaticResource PbChromeBrush}" />
+            <Setter Property="BorderBrush" Value="#383D47" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="5" />
+            <Setter Property="Padding" Value="10,7" />
+        </Style>
+        <Style Selector="Border.chip TextBlock">
+            <Setter Property="FontSize" Value="12.5" />
+            <Setter Property="Foreground" Value="{StaticResource PbTextBrush}" />
+        </Style>
+        <Style Selector="TextBlock.andPill">
+            <Setter Property="FontSize" Value="10.5" />
+            <Setter Property="FontWeight" Value="Black" />
+            <Setter Property="Foreground" Value="{StaticResource PbAccentTextBrush}" />
+        </Style>
+    </UserControl.Styles>
+
+    <ScrollViewer>
+        <StackPanel>
+
+            <Grid ColumnDefinitions="*,Auto" Margin="28,20,28,16">
+                <StackPanel Grid.Column="0" VerticalAlignment="Bottom">
+                    <TextBlock Text="{Binding ListName}" FontSize="22" FontWeight="Bold" Foreground="{StaticResource PbTextBrush}" />
+                    <TextBlock Text="{Binding Subtitle}" FontSize="12.5" Foreground="{StaticResource PbTextFaintBrush}" Margin="0,4,0,0" />
+                </StackPanel>
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Bottom">
+                    <Button Classes="headerAction ghost" Content="Duplicate" />
+                    <Button Classes="headerAction primary" Content="Save" />
+                </StackPanel>
+            </Grid>
+            <Border BorderBrush="{StaticResource PbBorderBrush}" BorderThickness="0,0,0,1" Margin="0,0,0,24" />
+
+            <StackPanel MaxWidth="760" HorizontalAlignment="Left" Margin="28,0,28,40">
+
+                <Border Background="{StaticResource PbChromeBrush}" BorderBrush="{StaticResource PbBorderBrush}"
+                        BorderThickness="1" CornerRadius="999" Padding="12,6" HorizontalAlignment="Left" Margin="0,0,0,20">
+                    <StackPanel Orientation="Horizontal" Spacing="7">
+                        <Ellipse Width="7" Height="7" Fill="{StaticResource PbSuccessBrush}" VerticalAlignment="Center" />
+                        <TextBlock FontSize="12" Foreground="{StaticResource PbTextMutedBrush}">
+                            <Run Text="Currently matches " />
+                            <Run Text="{Binding MatchCountLabel}" FontFamily="Consolas,monospace" FontWeight="Bold" Foreground="{StaticResource PbTextBrush}" />
+                            <Run Text=" issues" />
+                        </TextBlock>
+                    </StackPanel>
+                </Border>
+
+                <Border Background="{StaticResource PbChromeBrush}" BorderBrush="{StaticResource PbBorderBrush}"
+                        BorderThickness="1" CornerRadius="7" Padding="16">
+                    <StackPanel>
+
+                        <Grid ColumnDefinitions="Auto,Auto,Auto,*,Auto" Margin="0,9">
+                            <Border Grid.Column="0" Classes="chip"><TextBlock Text="Genre" /></Border>
+                            <TextBlock Grid.Column="1" Text="is" FontSize="12.5" Foreground="{StaticResource PbTextFaintBrush}" VerticalAlignment="Center" Margin="10,0" />
+                            <Border Grid.Column="2" Classes="chip"><TextBlock Text="Horror" /></Border>
+                            <TextBlock Grid.Column="4" Text="✕" Foreground="{StaticResource PbTextFaintBrush}" VerticalAlignment="Center" />
+                        </Grid>
+                        <TextBlock Classes="andPill" Text="AND" HorizontalAlignment="Center" Margin="0,4" />
+
+                        <Grid ColumnDefinitions="Auto,Auto,Auto,*,Auto" Margin="0,9">
+                            <Border Grid.Column="0" Classes="chip"><TextBlock Text="Read" /></Border>
+                            <TextBlock Grid.Column="1" Text="is" FontSize="12.5" Foreground="{StaticResource PbTextFaintBrush}" VerticalAlignment="Center" Margin="10,0" />
+                            <Border Grid.Column="2" Classes="chip"><TextBlock Text="False" /></Border>
+                            <TextBlock Grid.Column="4" Text="✕" Foreground="{StaticResource PbTextFaintBrush}" VerticalAlignment="Center" />
+                        </Grid>
+                        <TextBlock Classes="andPill" Text="AND" HorizontalAlignment="Center" Margin="0,4" />
+
+                        <Grid ColumnDefinitions="Auto,Auto,Auto,*,Auto" Margin="0,9">
+                            <Border Grid.Column="0" Classes="chip"><TextBlock Text="Date Added" /></Border>
+                            <TextBlock Grid.Column="1" Text="within last" FontSize="12.5" Foreground="{StaticResource PbTextFaintBrush}" VerticalAlignment="Center" Margin="10,0" />
+                            <Border Grid.Column="2" Classes="chip"><TextBlock Text="90 days" /></Border>
+                            <TextBlock Grid.Column="4" Text="✕" Foreground="{StaticResource PbTextFaintBrush}" VerticalAlignment="Center" />
+                        </Grid>
+
+                        <TextBlock Text="+ Add condition" FontSize="12.5" FontWeight="Bold"
+                                   Foreground="{StaticResource PbAccentTextBrush}" Margin="0,12,0,0" Cursor="Hand" />
+                    </StackPanel>
+                </Border>
+
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="9" Margin="0,20,0,0">
+                    <Button Classes="headerAction ghost" Content="Cancel" Padding="14,8" />
+                    <Button Classes="headerAction primary" Content="Apply" Padding="14,8" />
+                </StackPanel>
+
+            </StackPanel>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

@@ -65,6 +65,13 @@
             <Setter Property="FontFamily" Value="Consolas,monospace" />
             <Setter Property="FontSize" Value="10.5" />
         </Style>
+
+        <Style Selector="Border.countBadge">
+            <Setter Property="Background" Value="#30353F" />
+            <Setter Property="CornerRadius" Value="8" />
+            <Setter Property="Padding" Value="6,1" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
     </Window.Styles>
 
     <DockPanel LastChildFill="True">
@@ -161,20 +168,91 @@
                         </Border>
                     </StackPanel>
 
-                    <!-- Smart Lists sidebar - placeholder (SmartSidebar.dc.html not yet handed off) -->
-                    <StackPanel IsVisible="{Binding IsSmart}" Spacing="2">
+                    <!-- Smart Lists sidebar (SmartSidebar.dc.html) -->
+                    <StackPanel IsVisible="{Binding IsSmart}" Spacing="1">
                         <TextBlock Text="Smart Lists" FontSize="16" FontWeight="Bold"
                                    Foreground="{StaticResource PbTextBrush}" Margin="8,0,8,14" />
-                        <TextBlock Text="Sidebar content pending design handoff." FontSize="12"
-                                   Foreground="{StaticResource PbTextFaintBrush}" TextWrapping="Wrap" Margin="8,0" />
+
+                        <Border Classes="sideItem"><Grid ColumnDefinitions="*,Auto">
+                            <TextBlock Grid.Column="0" Text="My Favorites" FontSize="13" Foreground="{StaticResource PbTextMutedBrush}" />
+                            <Border Grid.Column="1" Classes="countBadge"><TextBlock Classes="count" Text="64" Foreground="{StaticResource PbTextFaintBrush}" /></Border>
+                        </Grid></Border>
+                        <Border Classes="sideItem"><Grid ColumnDefinitions="*,Auto">
+                            <TextBlock Grid.Column="0" Text="Recently Added" FontSize="13" Foreground="{StaticResource PbTextMutedBrush}" />
+                            <Border Grid.Column="1" Classes="countBadge"><TextBlock Classes="count" Text="231" Foreground="{StaticResource PbTextFaintBrush}" /></Border>
+                        </Grid></Border>
+                        <Border Classes="sideItem"><Grid ColumnDefinitions="*,Auto">
+                            <TextBlock Grid.Column="0" Text="Reading" FontSize="13" Foreground="{StaticResource PbTextMutedBrush}" />
+                            <Border Grid.Column="1" Classes="countBadge"><TextBlock Classes="count" Text="18" Foreground="{StaticResource PbTextFaintBrush}" /></Border>
+                        </Grid></Border>
+                        <Border Classes="sideItem"><Grid ColumnDefinitions="*,Auto">
+                            <TextBlock Grid.Column="0" Text="Read" FontSize="13" Foreground="{StaticResource PbTextMutedBrush}" />
+                            <Border Grid.Column="1" Classes="countBadge"><TextBlock Classes="count" Text="1,204" Foreground="{StaticResource PbTextFaintBrush}" /></Border>
+                        </Grid></Border>
+                        <Border Classes="sideItem"><Grid ColumnDefinitions="*,Auto">
+                            <TextBlock Grid.Column="0" Text="Never Read" FontSize="13" Foreground="{StaticResource PbTextMutedBrush}" />
+                            <Border Grid.Column="1" Classes="countBadge"><TextBlock Classes="count" Text="579" Foreground="{StaticResource PbTextFaintBrush}" /></Border>
+                        </Grid></Border>
+
+                        <TextBlock Classes="sideHeading" Text="CUSTOM" Margin="8,12,8,6" />
+
+                        <Border Classes="sideItem active"><Grid ColumnDefinitions="*,Auto">
+                            <TextBlock Grid.Column="0" Text="Unread Salvage Noir" FontSize="13" FontWeight="Bold" Foreground="{StaticResource PbTextBrush}" />
+                            <TextBlock Grid.Column="1" Classes="count" Text="342" Foreground="{StaticResource PbAccentTextBrush}" VerticalAlignment="Center" />
+                        </Grid></Border>
+                        <Border Classes="sideItem"><Grid ColumnDefinitions="*,Auto">
+                            <TextBlock Grid.Column="0" Text="Complete Series Only" FontSize="13" Foreground="{StaticResource PbTextMutedBrush}" />
+                            <Border Grid.Column="1" Classes="countBadge"><TextBlock Classes="count" Text="96" Foreground="{StaticResource PbTextFaintBrush}" /></Border>
+                        </Grid></Border>
+
+                        <TextBlock Text="▾ Maintenance" FontSize="13" Foreground="{StaticResource PbTextMutedBrush}" Margin="8,7" />
+                        <StackPanel Margin="14,0,0,0" Spacing="0">
+                            <Border BorderBrush="{StaticResource PbBorderBrush}" BorderThickness="1,0,0,0" Padding="10,0,0,0">
+                                <StackPanel>
+                                    <Grid ColumnDefinitions="*,Auto" Margin="0,6,8,6">
+                                        <TextBlock Grid.Column="0" Text="Missing Files" FontSize="13" Foreground="{StaticResource PbTextMutedBrush}" />
+                                        <TextBlock Grid.Column="1" Classes="count" Text="23" Foreground="{StaticResource PbTextFaintBrush}" />
+                                    </Grid>
+                                    <Grid ColumnDefinitions="*,Auto" Margin="0,6,8,6">
+                                        <TextBlock Grid.Column="0" Text="Duplicate Candidates" FontSize="13" Foreground="{StaticResource PbTextMutedBrush}" />
+                                        <TextBlock Grid.Column="1" Classes="count" Text="7" Foreground="{StaticResource PbTextFaintBrush}" />
+                                    </Grid>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+
+                        <Border BorderThickness="1" BorderBrush="#383D47" CornerRadius="5" Margin="0,12,0,0" Padding="8">
+                            <TextBlock Text="+ New Smart List" FontSize="12" Foreground="{StaticResource PbTextFaintBrush}"
+                                       HorizontalAlignment="Center" />
+                        </Border>
                     </StackPanel>
 
-                    <!-- Reading Lists sidebar - placeholder (ReadingSidebar.dc.html not yet handed off) -->
-                    <StackPanel IsVisible="{Binding IsReading}" Spacing="2">
+                    <!-- Reading Lists sidebar (ReadingSidebar.dc.html) -->
+                    <StackPanel IsVisible="{Binding IsReading}" Spacing="1">
                         <TextBlock Text="Reading Lists" FontSize="16" FontWeight="Bold"
                                    Foreground="{StaticResource PbTextBrush}" Margin="8,0,8,14" />
-                        <TextBlock Text="Sidebar content pending design handoff." FontSize="12"
-                                   Foreground="{StaticResource PbTextFaintBrush}" TextWrapping="Wrap" Margin="8,0" />
+
+                        <Border Classes="sideItem active"><Grid ColumnDefinitions="*,Auto">
+                            <TextBlock Grid.Column="0" Text="Kilo Station: Signal War" FontSize="13" FontWeight="Bold" Foreground="{StaticResource PbTextBrush}" />
+                            <TextBlock Grid.Column="1" Classes="count" Text="16" Foreground="{StaticResource PbAccentTextBrush}" VerticalAlignment="Center" />
+                        </Grid></Border>
+                        <Border Classes="sideItem"><Grid ColumnDefinitions="*,Auto">
+                            <TextBlock Grid.Column="0" Text="Brass Horizon, reading order" FontSize="13" Foreground="{StaticResource PbTextMutedBrush}" TextTrimming="CharacterEllipsis" />
+                            <TextBlock Grid.Column="1" Classes="count" Text="42" Foreground="{StaticResource PbTextFaintBrush}" VerticalAlignment="Center" />
+                        </Grid></Border>
+                        <Border Classes="sideItem"><Grid ColumnDefinitions="*,Auto">
+                            <TextBlock Grid.Column="0" Text="Weekend: Nightshift Orchid" FontSize="13" Foreground="{StaticResource PbTextMutedBrush}" TextTrimming="CharacterEllipsis" />
+                            <TextBlock Grid.Column="1" Classes="count" Text="9" Foreground="{StaticResource PbTextFaintBrush}" VerticalAlignment="Center" />
+                        </Grid></Border>
+                        <Border Classes="sideItem"><Grid ColumnDefinitions="*,Auto">
+                            <TextBlock Grid.Column="0" Text="Ironclad Requiem — full run" FontSize="13" Foreground="{StaticResource PbTextMutedBrush}" TextTrimming="CharacterEllipsis" />
+                            <TextBlock Grid.Column="1" Classes="count" Text="61" Foreground="{StaticResource PbTextFaintBrush}" VerticalAlignment="Center" />
+                        </Grid></Border>
+
+                        <Border BorderThickness="1" BorderBrush="#383D47" CornerRadius="5" Margin="0,12,0,0" Padding="8">
+                            <TextBlock Text="+ New Reading List" FontSize="12" Foreground="{StaticResource PbTextFaintBrush}"
+                                       HorizontalAlignment="Center" />
+                        </Border>
                     </StackPanel>
 
                 </StackPanel>
@@ -197,29 +275,26 @@
                     </DataTemplate>
                 </ContentControl.ContentTemplate>
             </ContentControl>
-            <ContentControl IsVisible="{Binding IsSmart}">
-                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="6">
-                    <TextBlock Text="Smart Lists" FontSize="20" FontWeight="Bold"
-                               Foreground="{StaticResource PbTextBrush}" HorizontalAlignment="Center" />
-                    <TextBlock Text="Pending design handoff (SmartScreen.dc.html)." FontSize="13"
-                               Foreground="{StaticResource PbTextFaintBrush}" HorizontalAlignment="Center" />
-                </StackPanel>
+            <ContentControl IsVisible="{Binding IsSmart}" Content="{Binding Smart}">
+                <ContentControl.ContentTemplate>
+                    <DataTemplate x:DataType="vm:SmartScreenViewModel">
+                        <views:SmartScreen />
+                    </DataTemplate>
+                </ContentControl.ContentTemplate>
             </ContentControl>
-            <ContentControl IsVisible="{Binding IsReading}">
-                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="6">
-                    <TextBlock Text="Reading Lists" FontSize="20" FontWeight="Bold"
-                               Foreground="{StaticResource PbTextBrush}" HorizontalAlignment="Center" />
-                    <TextBlock Text="Pending design handoff (ReadingScreen.dc.html)." FontSize="13"
-                               Foreground="{StaticResource PbTextFaintBrush}" HorizontalAlignment="Center" />
-                </StackPanel>
+            <ContentControl IsVisible="{Binding IsReading}" Content="{Binding Reading}">
+                <ContentControl.ContentTemplate>
+                    <DataTemplate x:DataType="vm:ReadingScreenViewModel">
+                        <views:ReadingScreen />
+                    </DataTemplate>
+                </ContentControl.ContentTemplate>
             </ContentControl>
-            <ContentControl IsVisible="{Binding IsPlugin}">
-                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="6">
-                    <TextBlock Text="Duplicate Finder" FontSize="20" FontWeight="Bold"
-                               Foreground="{StaticResource PbTextBrush}" HorizontalAlignment="Center" />
-                    <TextBlock Text="Pending design handoff (PluginScreen.dc.html)." FontSize="13"
-                               Foreground="{StaticResource PbTextFaintBrush}" HorizontalAlignment="Center" />
-                </StackPanel>
+            <ContentControl IsVisible="{Binding IsPlugin}" Content="{Binding Plugin}">
+                <ContentControl.ContentTemplate>
+                    <DataTemplate x:DataType="vm:PluginScreenViewModel">
+                        <views:PluginScreen />
+                    </DataTemplate>
+                </ContentControl.ContentTemplate>
             </ContentControl>
             <ContentControl IsVisible="{Binding IsReader}" Content="{Binding Reader}">
                 <ContentControl.ContentTemplate>

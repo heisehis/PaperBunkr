@@ -34,7 +34,7 @@ public partial class DetailTabsViewModel : ViewModelBase
 
     public void LoadSeries(Series series)
     {
-        var coverBrush = SeriesCardSample.FromSeries(series).CoverBrush;
+        var coverBrush = SeriesCardSample.CoverBrushFor(series.Name);
 
         Issues.Clear();
         foreach (var issue in series.Issues.OrderByNumber())

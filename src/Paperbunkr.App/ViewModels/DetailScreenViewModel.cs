@@ -18,9 +18,10 @@ namespace Paperbunkr.App.ViewModels;
 /// </summary>
 public partial class DetailScreenViewModel : ViewModelBase
 {
-    public DetailScreenViewModel(Action goBack)
+    public DetailScreenViewModel(Action goBack, Action<int> goToReader)
     {
         _goBack = goBack;
+        _goToReader = goToReader;
         CoverBrush = SeriesCardSample.Gradient("#442a1c", "#c9803f");
         Tabs = new DetailTabsViewModel();
         Meta = new DetailMetaViewModel();
@@ -28,6 +29,8 @@ public partial class DetailScreenViewModel : ViewModelBase
     }
 
     private readonly Action _goBack;
+    private readonly Action<int> _goToReader;
+    private int? _continueIssueId;
 
     public DetailTabsViewModel Tabs { get; }
     public DetailMetaViewModel Meta { get; }
@@ -80,9 +83,13 @@ public partial class DetailScreenViewModel : ViewModelBase
             .Where(i => i.LastPageRead is null or 0)
             .OrderByNumber()
             .FirstOrDefault();
-        ContinueLabel = nextUnread is null
-            ? "Start Reading"
-            : $"Continue — Issue #{nextUnread.Number}";
+        var continueIssue = nextUnread ?? series.Issues.OrderByNumber().FirstOrDefault();
+        _continueIssueId = continueIssue?.Id;
+        ContinueLabel = continueIssue is null
+            ? "No Issues"
+            : nextUnread is null
+                ? $"Re-read — Issue #{continueIssue.Number}"
+                : $"Continue — Issue #{continueIssue.Number}";
 
         Tabs.LoadSeries(series);
         Meta.LoadSeries(series);
@@ -91,4 +98,13 @@ public partial class DetailScreenViewModel : ViewModelBase
 
     [RelayCommand]
     private void GoBack() => _goBack();
+
+    [RelayCommand]
+    private void Continue()
+    {
+        if (_continueIssueId is int issueId)
+        {
+            _goToReader(issueId);
+        }
+    }
 }

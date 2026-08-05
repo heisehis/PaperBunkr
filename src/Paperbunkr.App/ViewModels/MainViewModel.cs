@@ -12,7 +12,7 @@ public partial class MainViewModel : ViewModelBase
 {
     public MainViewModel()
     {
-        Library = new LibraryScreenViewModel(GoDetail);
+        Library = new LibraryScreenViewModel(GoDetailForSeries);
         Detail = new DetailScreenViewModel(GoLibrary);
         Reader = new ReaderScreenViewModel(GoDetail);
         Smart = new SmartScreenViewModel();
@@ -66,4 +66,10 @@ public partial class MainViewModel : ViewModelBase
     private void GoReader() => CurrentScreen = "reader";
 
     private void GoDetail() => CurrentScreen = "detail";
+
+    private void GoDetailForSeries(int seriesId)
+    {
+        Detail.LoadSeries(seriesId);
+        CurrentScreen = "detail";
+    }
 }

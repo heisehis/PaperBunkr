@@ -1,9 +1,11 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Paperbunkr.App.ViewModels"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d" d:DesignWidth="500" d:DesignHeight="100"
-             x:Class="Paperbunkr.App.Views.DetailMeta">
+             x:Class="Paperbunkr.App.Views.DetailMeta"
+             x:DataType="vm:DetailMetaViewModel">
 
     <UserControl.Styles>
         <Style Selector="TextBlock.metaLabel">
@@ -20,19 +22,19 @@
     <Grid RowDefinitions="Auto,Auto" ColumnDefinitions="*,*" Margin="0,20">
         <StackPanel Grid.Row="0" Grid.Column="0" Margin="0,0,28,14">
             <TextBlock Classes="metaLabel" Text="WRITER" />
-            <TextBlock Classes="metaValue" Text="Priya Kessler, Marisol Duarte" TextWrapping="Wrap" />
+            <TextBlock Classes="metaValue" Text="{Binding Writer}" TextWrapping="Wrap" />
         </StackPanel>
         <StackPanel Grid.Row="0" Grid.Column="1" Margin="0,0,0,14">
             <TextBlock Classes="metaLabel" Text="ARTIST" />
-            <TextBlock Classes="metaValue" Text="Owen Achterberg" TextWrapping="Wrap" />
+            <TextBlock Classes="metaValue" Text="{Binding Artist}" TextWrapping="Wrap" />
         </StackPanel>
         <StackPanel Grid.Row="1" Grid.Column="0" Margin="0,0,28,0">
             <TextBlock Classes="metaLabel" Text="COLORIST" />
-            <TextBlock Classes="metaValue" Text="Nadia Frome" TextWrapping="Wrap" />
+            <TextBlock Classes="metaValue" Text="{Binding Colorist}" TextWrapping="Wrap" />
         </StackPanel>
         <StackPanel Grid.Row="1" Grid.Column="1">
             <TextBlock Classes="metaLabel" Text="LETTERER" />
-            <TextBlock Classes="metaValue" Text="Cole Bannerman" TextWrapping="Wrap" />
+            <TextBlock Classes="metaValue" Text="{Binding Letterer}" TextWrapping="Wrap" />
         </StackPanel>
     </Grid>
 </UserControl>

@@ -96,8 +96,8 @@
                         <Button Classes="detailAction ghost" Content="Edit" />
                     </StackPanel>
 
-                    <views:DetailMeta />
-                    <views:DetailPills />
+                    <views:DetailMeta DataContext="{Binding Meta}" />
+                    <views:DetailPills DataContext="{Binding Pills}" />
                 </StackPanel>
             </Grid>
 

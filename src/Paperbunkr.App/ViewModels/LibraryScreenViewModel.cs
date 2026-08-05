@@ -18,9 +18,9 @@ namespace Paperbunkr.App.ViewModels;
 /// </summary>
 public partial class LibraryScreenViewModel : ViewModelBase
 {
-    private readonly Action _goDetail;
+    private readonly Action<int> _goDetail;
 
-    public LibraryScreenViewModel(Action goDetail)
+    public LibraryScreenViewModel(Action<int> goDetail)
     {
         _goDetail = goDetail;
         Covers = new ObservableCollection<SeriesCardSample>();
@@ -81,5 +81,11 @@ public partial class LibraryScreenViewModel : ViewModelBase
     private void ToggleDisplay() => ActiveDropdown = ActiveDropdown == "display" ? null : "display";
 
     [RelayCommand]
-    private void SelectCard(SeriesCardSample? card) => _goDetail();
+    private void SelectCard(SeriesCardSample? card)
+    {
+        if (card is not null)
+        {
+            _goDetail(card.SeriesId);
+        }
+    }
 }

@@ -1,0 +1,103 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Paperbunkr.App.ViewModels"
+             xmlns:models="using:Paperbunkr.App.Models"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="1000" d:DesignHeight="700"
+             x:Class="Paperbunkr.App.Views.ReaderScreen"
+             x:DataType="vm:ReaderScreenViewModel">
+
+    <UserControl.Resources>
+        <SolidColorBrush x:Key="ReaderBgBrush" Color="#0B0C0F" />
+        <SolidColorBrush x:Key="ReaderChromeBrush" Color="#15171C" />
+        <SolidColorBrush x:Key="ReaderRailBrush" Color="#101216" />
+        <SolidColorBrush x:Key="ReaderBorderBrush" Color="#24272E" />
+        <SolidColorBrush x:Key="ReaderTextBrush" Color="#E7E2D6" />
+        <SolidColorBrush x:Key="ReaderTextMutedBrush" Color="#8B8779" />
+        <SolidColorBrush x:Key="ReaderTrackBrush" Color="#2A2D34" />
+    </UserControl.Resources>
+
+    <UserControl.Styles>
+        <Style Selector="Border.thumb">
+            <Setter Property="Width" Value="80" />
+            <Setter Property="Height" Value="112" />
+            <Setter Property="CornerRadius" Value="4" />
+            <Setter Property="BorderThickness" Value="2" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+            <Setter Property="Margin" Value="0,0,0,8" />
+        </Style>
+        <Style Selector="Border.thumb.selected">
+            <Setter Property="BorderBrush" Value="{StaticResource PbAccentBrush}" />
+        </Style>
+    </UserControl.Styles>
+
+    <Grid RowDefinitions="Auto,*,Auto" Background="{StaticResource ReaderBgBrush}">
+
+        <!-- ============ Top toolbar ============ -->
+        <Border Grid.Row="0" Background="{StaticResource ReaderChromeBrush}" BorderBrush="{StaticResource ReaderBorderBrush}"
+                BorderThickness="0,0,0,1" Padding="18,10">
+            <Grid ColumnDefinitions="*,Auto,Auto">
+                <Button Grid.Column="0" Command="{Binding GoBackCommand}" Background="Transparent" BorderThickness="0"
+                        Padding="0" Cursor="Hand" HorizontalAlignment="Left">
+                    <StackPanel Orientation="Horizontal" Spacing="4">
+                        <TextBlock Text="{Binding BreadcrumbSeries, StringFormat='← {0}'}" FontSize="12"
+                                   Foreground="{StaticResource ReaderTextMutedBrush}" />
+                        <TextBlock Text="{Binding IssueTitle}" FontSize="12" FontWeight="Bold"
+                                   Foreground="{StaticResource ReaderTextBrush}" />
+                    </StackPanel>
+                </Button>
+
+                <Button Grid.Column="1" Content="{Binding ReadingModeLabel}" Background="#1E2127" BorderBrush="#33373F"
+                        BorderThickness="1" Foreground="{StaticResource ReaderTextBrush}" FontSize="12" FontWeight="SemiBold"
+                        Padding="10,6" CornerRadius="6" Margin="16,0" />
+
+                <TextBlock Grid.Column="2" Text="{Binding PageLabel}" FontFamily="Consolas,monospace" FontSize="12"
+                           Foreground="{StaticResource ReaderTextMutedBrush}" VerticalAlignment="Center" />
+            </Grid>
+        </Border>
+
+        <!-- ============ Body: thumbnail rail + page ============ -->
+        <Grid Grid.Row="1" ColumnDefinitions="96,*">
+
+            <Border Grid.Column="0" Background="{StaticResource ReaderRailBrush}" BorderBrush="{StaticResource ReaderBorderBrush}"
+                    BorderThickness="0,0,1,0">
+                <ScrollViewer Padding="8,10">
+                    <ItemsControl ItemsSource="{Binding Thumbnails}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="models:ReaderThumbnailSample">
+                                <Border Classes="thumb" Classes.selected="{Binding IsSelected}" Background="{Binding CoverBrush}" />
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+            </Border>
+
+            <Grid Grid.Column="1">
+                <Border Width="340" Height="510" CornerRadius="3" Background="{Binding CoverBrush}"
+                        BoxShadow="0 20 60 -20 #CC000000" HorizontalAlignment="Center" VerticalAlignment="Center">
+                    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8">
+                        <TextBlock Text="{Binding PageNumber}" FontFamily="Consolas,monospace" FontSize="38" FontWeight="Bold"
+                                   Foreground="#D9E7E2D6" HorizontalAlignment="Center" />
+                        <TextBlock Text="{Binding PageSubtitle}" FontSize="11" Foreground="#99E7E2D6"
+                                   HorizontalAlignment="Center" />
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </Grid>
+
+        <!-- ============ Bottom scrubber ============ -->
+        <Border Grid.Row="2" Background="{StaticResource ReaderChromeBrush}" BorderBrush="{StaticResource ReaderBorderBrush}"
+                BorderThickness="0,1,0,0" Padding="22,12">
+            <Grid ColumnDefinitions="Auto,*,Auto">
+                <TextBlock Grid.Column="0" Text="◀" Foreground="{StaticResource ReaderTextBrush}" VerticalAlignment="Center" Margin="0,0,14,0" />
+                <Border Grid.Column="1" Height="4" CornerRadius="2" Background="{StaticResource ReaderTrackBrush}">
+                    <Grid ColumnDefinitions="0.58*,0.42*">
+                        <Border Grid.Column="0" CornerRadius="2" Background="{StaticResource PbAccentBrush}" />
+                    </Grid>
+                </Border>
+                <TextBlock Grid.Column="2" Text="▶" Foreground="{StaticResource ReaderTextBrush}" VerticalAlignment="Center" Margin="14,0,0,0" />
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

@@ -221,13 +221,12 @@
                                Foreground="{StaticResource PbTextFaintBrush}" HorizontalAlignment="Center" />
                 </StackPanel>
             </ContentControl>
-            <ContentControl IsVisible="{Binding IsReader}">
-                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="6">
-                    <TextBlock Text="Reader" FontSize="20" FontWeight="Bold"
-                               Foreground="{StaticResource PbTextBrush}" HorizontalAlignment="Center" />
-                    <TextBlock Text="Pending design handoff (ReaderScreen.dc.html)." FontSize="13"
-                               Foreground="{StaticResource PbTextFaintBrush}" HorizontalAlignment="Center" />
-                </StackPanel>
+            <ContentControl IsVisible="{Binding IsReader}" Content="{Binding Reader}">
+                <ContentControl.ContentTemplate>
+                    <DataTemplate x:DataType="vm:ReaderScreenViewModel">
+                        <views:ReaderScreen />
+                    </DataTemplate>
+                </ContentControl.ContentTemplate>
             </ContentControl>
         </Grid>
 

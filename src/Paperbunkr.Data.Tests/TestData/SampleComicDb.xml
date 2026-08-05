@@ -1,0 +1,139 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ComicDatabase xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" Id="cce23fda-091d-4445-b087-57b18fef00a2">
+  <Books>
+    <Book Id="c7d99268-6bba-428b-9d5e-073b9dd1c3ea">
+      <Series>Astro Sentinels</Series>
+      <Number>1</Number>
+      <Volume>1</Volume>
+      <Writer>Jane Doe</Writer>
+      <Publisher>Bunker Comics</Publisher>
+      <Genre>Sci-Fi</Genre>
+      <Manga>No</Manga>
+      <Pages />
+    </Book>
+    <Book Id="857d7d2d-803c-4688-b1e8-ed6d30601e4e">
+      <Series>Astro Sentinels</Series>
+      <Number>2</Number>
+      <Volume>1</Volume>
+      <Writer>Jane Doe</Writer>
+      <Publisher>Bunker Comics</Publisher>
+      <Genre>Sci-Fi</Genre>
+      <Manga>No</Manga>
+      <Pages />
+    </Book>
+    <Book Id="84907baf-2bbe-407f-9d57-fb2559fba827">
+      <Series>Moonlit Blade</Series>
+      <Number>1</Number>
+      <Volume>1</Volume>
+      <Writer>Kenji Sato</Writer>
+      <Publisher>Paper Press</Publisher>
+      <Genre>Action</Genre>
+      <Manga>YesAndRightToLeft</Manga>
+      <Pages />
+      <SeriesComplete>Yes</SeriesComplete>
+    </Book>
+    <Book Id="f67aa2cd-e264-48fb-b0ca-8f4ad915625f">
+      <Series>Moonlit Blade</Series>
+      <Number>2</Number>
+      <Volume>1</Volume>
+      <Writer>Kenji Sato</Writer>
+      <Publisher>Paper Press</Publisher>
+      <Genre>Action</Genre>
+      <Manga>YesAndRightToLeft</Manga>
+      <Pages />
+      <SeriesComplete>Yes</SeriesComplete>
+    </Book>
+    <Book Id="cd5bbd99-3abf-4037-80a0-8434c2bf7ace">
+      <Series>Moonlit Blade</Series>
+      <Number>3</Number>
+      <Volume>1</Volume>
+      <Writer>Kenji Sato</Writer>
+      <Publisher>Paper Press</Publisher>
+      <Genre>Action</Genre>
+      <Manga>YesAndRightToLeft</Manga>
+      <Pages />
+      <SeriesComplete>Yes</SeriesComplete>
+    </Book>
+    <Book Id="7400527c-959d-43d9-875f-58dadacb1893">
+      <Series>Sunrise Diner</Series>
+      <Number>1</Number>
+      <Writer>Aiko Tanaka</Writer>
+      <Manga>Yes</Manga>
+      <Pages />
+    </Book>
+    <Book Id="f991a4a2-edef-4aa3-a835-c832e82ab6bf">
+      <Series>Forgotten Reels</Series>
+      <Number>1</Number>
+      <Pages />
+    </Book>
+  </Books>
+  <ComicLists>
+    <Item xsi:type="ComicLibraryListItem" Id="67699341-f044-4c39-a743-194412b1ef31" Name="Library">
+      <Display />
+    </Item>
+    <Item xsi:type="ComicListItemFolder" Id="80780547-bba4-4b85-8781-cbd73eb60051" Name="Smart Lists">
+      <Display />
+      <Items>
+        <Item xsi:type="ComicSmartListItem" Id="a1ee2e5a-24c4-4d16-abac-9f9a1183d67c" Name="My Favorites">
+          <Display />
+          <Matchers>
+            <ComicBookMatcher xsi:type="ComicBookRatingMatcher" MatchOperator="1">
+              <MatchValue>3</MatchValue>
+            </ComicBookMatcher>
+          </Matchers>
+        </Item>
+        <Item xsi:type="ComicSmartListItem" Id="8c7b352c-28c8-46b4-8348-8bf56c522e54" Name="Recently Added">
+          <Display />
+          <Matchers>
+            <ComicBookMatcher xsi:type="ComicBookAddedMatcher" MatchOperator="3">
+              <MatchValue>14</MatchValue>
+            </ComicBookMatcher>
+          </Matchers>
+        </Item>
+        <Item xsi:type="ComicSmartListItem" Id="7f556005-4c36-4fa8-ba9b-ee01b5b18cba" Name="Recently Read">
+          <Display />
+          <Matchers>
+            <ComicBookMatcher xsi:type="ComicBookOpenedMatcher" MatchOperator="3">
+              <MatchValue>14</MatchValue>
+            </ComicBookMatcher>
+          </Matchers>
+        </Item>
+        <Item xsi:type="ComicSmartListItem" Id="e9e9642e-3daa-4d81-9af8-11afb3811d97" Name="Never Read">
+          <Display />
+          <Matchers>
+            <ComicBookMatcher xsi:type="ComicBookReadPercentageMatcher" MatchOperator="2">
+              <MatchValue>10</MatchValue>
+            </ComicBookMatcher>
+          </Matchers>
+        </Item>
+        <Item xsi:type="ComicSmartListItem" Id="38db957c-7281-4649-82cb-5eb5079c1a6d" Name="Reading">
+          <Display />
+          <Matchers>
+            <ComicBookMatcher xsi:type="ComicBookReadPercentageMatcher" MatchOperator="3">
+              <MatchValue>10</MatchValue>
+              <MatchValue2>95</MatchValue2>
+            </ComicBookMatcher>
+          </Matchers>
+        </Item>
+        <Item xsi:type="ComicSmartListItem" Id="4b22c558-b140-4241-adb4-3bb29aa9d624" Name="Read">
+          <Display />
+          <Matchers>
+            <ComicBookMatcher xsi:type="ComicBookReadPercentageMatcher" MatchOperator="1">
+              <MatchValue>95</MatchValue>
+            </ComicBookMatcher>
+          </Matchers>
+        </Item>
+        <Item xsi:type="ComicSmartListItem" Id="01b3f8f6-1623-4083-9b4c-469b5fa99067" Name="Files to update">
+          <Display />
+          <Matchers>
+            <ComicBookMatcher xsi:type="ComicBookModifiedInfoMatcher">
+              <MatchValue />
+            </ComicBookMatcher>
+          </Matchers>
+        </Item>
+      </Items>
+    </Item>
+  </ComicLists>
+  <WatchFolders />
+  <BlackList />
+</ComicDatabase>

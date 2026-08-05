@@ -90,7 +90,11 @@ public class CeLibraryMigrator
             var (contentType, readingMode) = MapMangaField(books[0].Manga);
             series.ContentType = contentType;
             series.ReadingMode = readingMode;
-            if (books[0].Manga == MangaYesNo.Unknown)
+
+            // "Needs review" uses the same any-book-Unknown rule as Preview() (§14 step 5) - the
+            // series-level value above still comes from books[0] alone, but flagging for review
+            // has to catch any disagreement/uncertainty in the group, not just the first book.
+            if (books.Any(b => b.Manga == MangaYesNo.Unknown))
             {
                 guessedContentType++;
             }

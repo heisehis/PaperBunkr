@@ -225,6 +225,33 @@ public class CeLibraryMigratorTests : IDisposable
         Assert.Equal(1, result.SeriesWithGuessedContentType);
     }
 
+    [Fact]
+    public void Preview_AndMigrate_AgreeOnGuessedContentType_ForMixedMangaValuesWithinASeries()
+    {
+        // Regression test: Preview() and Migrate() must flag the same series as "guessed content
+        // type" even when only a LATER book in the group is Unknown - not just the first one.
+        // Series identity here is a flat string grouping (§6), so per-issue Manga tagging can
+        // genuinely disagree within one series; both counts feed the same §14 "Needs Review" queue
+        // and must not silently diverge.
+        var db = ComicDatabase.CreateNew();
+        db.Books.Add(new ComicBook { Series = "Mixed Signals", Number = "1", Manga = MangaYesNo.Yes });
+        db.Books.Add(new ComicBook { Series = "Mixed Signals", Number = "2", Manga = MangaYesNo.Unknown });
+        db.SaveXml(_xmlPath);
+
+        var loaded = CeLibraryMigrator.LoadFromXml(_xmlPath);
+        var migrator = new CeLibraryMigrator();
+
+        var preview = migrator.Preview(loaded);
+        Assert.Equal(1, preview.SeriesWithGuessedContentType);
+
+        var options = BuildContextOptions(_dbPath);
+        using var context = new PaperbunkrDbContext(options);
+        context.Database.EnsureCreated();
+        var result = migrator.Migrate(loaded, context);
+
+        Assert.Equal(1, result.SeriesWithGuessedContentType);
+    }
+
     [Theory]
     [InlineData(MangaYesNo.YesAndRightToLeft, ContentType.Manga, ReadingMode.RightToLeft)]
     [InlineData(MangaYesNo.Yes, ContentType.Manga, ReadingMode.LeftToRight)]

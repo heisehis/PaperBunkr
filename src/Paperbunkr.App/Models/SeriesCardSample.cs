@@ -14,6 +14,7 @@ public sealed class SeriesCardSample
     public required string Name { get; init; }
     public required string Sub { get; init; }
     public int UnreadCount { get; init; }
+    public bool HasUnread => UnreadCount > 0;
     public bool Missing { get; init; }
     public required IBrush CoverBrush { get; init; }
 

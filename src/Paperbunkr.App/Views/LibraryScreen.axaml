@@ -132,7 +132,7 @@
                             <StackPanel>
                                 <Border Classes="cover" Background="{Binding CoverBrush}">
                                     <Grid>
-                                        <Border IsVisible="{Binding UnreadCount}" Background="#B814161B"
+                                        <Border IsVisible="{Binding HasUnread}" Background="#B814161B"
                                                 CornerRadius="999" Padding="6,2" HorizontalAlignment="Right"
                                                 VerticalAlignment="Top" Margin="7">
                                             <TextBlock Text="{Binding UnreadCount}" FontFamily="Consolas,monospace"

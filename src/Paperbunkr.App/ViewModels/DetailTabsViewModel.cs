@@ -37,7 +37,7 @@ public partial class DetailTabsViewModel : ViewModelBase
         var coverBrush = SeriesCardSample.FromSeries(series).CoverBrush;
 
         Issues.Clear();
-        foreach (var issue in series.Issues.OrderBy(i => i.Id))
+        foreach (var issue in series.Issues.OrderByNumber())
         {
             Issues.Add(new IssueCardSample
             {

@@ -78,7 +78,7 @@ public partial class DetailScreenViewModel : ViewModelBase
 
         var nextUnread = series.Issues
             .Where(i => i.LastPageRead is null or 0)
-            .OrderBy(i => i.Id)
+            .OrderByNumber()
             .FirstOrDefault();
         ContinueLabel = nextUnread is null
             ? "Start Reading"

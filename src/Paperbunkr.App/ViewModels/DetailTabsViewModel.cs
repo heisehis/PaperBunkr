@@ -1,42 +1,65 @@
 using System.Collections.ObjectModel;
+using System.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Paperbunkr.App.Models;
+using Paperbunkr.Data.Entities;
 
 namespace Paperbunkr.App.ViewModels;
 
 /// <summary>
 /// Issues/Related/Details/Activity tab strip, ported from DetailTabs.dc.html (Claude Design
-/// project 43c40b25). Owns the sample issue/related data shown across those tabs.
+/// project 43c40b25). Populated from the real <see cref="Series"/> passed to
+/// <see cref="LoadSeries"/> rather than the wireframe's static sample data.
 /// </summary>
 public partial class DetailTabsViewModel : ViewModelBase
 {
     public DetailTabsViewModel()
     {
-        var brass = SeriesCardSample.Gradient("#442a1c", "#c9803f");
-
         Issues = new ObservableCollection<IssueCardSample>();
-        for (var i = 0; i < 8; i++)
-        {
-            Issues.Add(new IssueCardSample
-            {
-                CoverBrush = brass,
-                Title = $"#{i + 9}",
-                IsUnread = i % 3 == 0,
-            });
-        }
-
-        Related = new ObservableCollection<RelatedSeriesSample>
-        {
-            new() { CoverBrush = SeriesCardSample.Gradient("#26313f", "#4a6b8a"), Title = "KILO STATION", Name = "Kilo Station", Note = "Shared universe" },
-            new() { CoverBrush = SeriesCardSample.Gradient("#1f2a1c", "#5c8a4a"), Title = "IRONCLAD REQUIEM", Name = "Ironclad Requiem", Note = "Same writer" },
-            new() { CoverBrush = SeriesCardSample.Gradient("#3a2f45", "#8a4a2e"), Title = "THE CARTOGRAPHER'S VAULT", Name = "The Cartographer's Vault", Note = "Frequent crossover" },
-            new() { CoverBrush = SeriesCardSample.Gradient("#2a2333", "#6a5ca3"), Title = "PAPER MOTH", Name = "Paper Moth", Note = "Readers also liked" },
-        };
+        Related = new ObservableCollection<RelatedSeriesSample>();
     }
 
     public ObservableCollection<IssueCardSample> Issues { get; }
+
+    /// <summary>
+    /// Always empty for now - there's no "related series" data/schema yet (only DetailTabs.dc.html's
+    /// own sample content had this). Left genuinely empty rather than faked, since that's the real
+    /// state of the feature.
+    /// </summary>
     public ObservableCollection<RelatedSeriesSample> Related { get; }
+
+    public string Publisher { get; private set; } = "Unknown";
+    public string ReadingModeLabel { get; private set; } = "Left to Right";
+
+    public void LoadSeries(Series series)
+    {
+        var coverBrush = SeriesCardSample.FromSeries(series).CoverBrush;
+
+        Issues.Clear();
+        foreach (var issue in series.Issues.OrderBy(i => i.Id))
+        {
+            Issues.Add(new IssueCardSample
+            {
+                Title = string.IsNullOrWhiteSpace(issue.Number) ? "#?" : $"#{issue.Number}",
+                IsUnread = issue.LastPageRead is null or 0,
+                CoverBrush = coverBrush,
+            });
+        }
+
+        Publisher = string.IsNullOrWhiteSpace(series.Publisher) ? "Unknown" : series.Publisher;
+        ReadingModeLabel = series.ReadingMode switch
+        {
+            ReadingMode.RightToLeft => "Right to Left",
+            ReadingMode.VerticalContinuous => "Vertical (Continuous)",
+            ReadingMode.HorizontalContinuous => "Horizontal (Continuous)",
+            _ => "Left to Right",
+        };
+        OnPropertyChanged(nameof(Publisher));
+        OnPropertyChanged(nameof(ReadingModeLabel));
+
+        ActiveTab = "issues";
+    }
 
     [ObservableProperty]
     private string _activeTab = "issues";

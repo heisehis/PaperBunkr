@@ -1,4 +1,3 @@
-using System;
 using System.Linq;
 using Avalonia;
 using Avalonia.Media;
@@ -13,6 +12,7 @@ namespace Paperbunkr.App.Models;
 /// </summary>
 public sealed class SeriesCardSample
 {
+    public int SeriesId { get; init; }
     public required string Title { get; init; }
     public required string Name { get; init; }
     public required string Sub { get; init; }
@@ -47,13 +47,28 @@ public sealed class SeriesCardSample
         ("#332118", "#8a5a2e"),
     };
 
+    // string.GetHashCode() is randomized per process in .NET Core - not stable across app
+    // restarts, which would make the "same series, same color" property this palette pick
+    // relies on flip every launch. FNV-1a is a plain, stable, non-cryptographic hash.
+    private static uint StableHash(string value)
+    {
+        uint hash = 2166136261;
+        foreach (char c in value)
+        {
+            hash ^= c;
+            hash *= 16777619;
+        }
+        return hash;
+    }
+
     public static SeriesCardSample FromSeries(Series series)
     {
-        var (from, to) = s_palette[Math.Abs(series.Name.GetHashCode()) % s_palette.Length];
+        var (from, to) = s_palette[StableHash(series.Name) % (uint)s_palette.Length];
         int unreadCount = series.Issues.Count(i => i.LastPageRead is null or 0);
 
         return new SeriesCardSample
         {
+            SeriesId = series.Id,
             Title = series.Name.ToUpperInvariant(),
             Name = series.Name,
             Sub = $"{series.ContentType} · {series.Issues.Count} issues",

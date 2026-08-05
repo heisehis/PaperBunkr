@@ -75,7 +75,12 @@
             </ItemsControl.ItemTemplate>
         </ItemsControl>
 
-        <!-- Related tab -->
+        <!-- Related tab - no relatedness data/schema exists yet, so Related is always empty
+             (see DetailTabsViewModel.Related); the message shows, the carousel below just
+             renders nothing rather than being special-cased, so it's ready the day real
+             related-series data exists. -->
+        <TextBlock IsVisible="{Binding IsRelatedTab}" Text="No related series yet." FontSize="12.5"
+                   Foreground="{StaticResource PbTextFaintBrush}" Margin="0,20,0,0" />
         <ScrollViewer IsVisible="{Binding IsRelatedTab}" HorizontalScrollBarVisibility="Auto" Margin="0,20,0,0">
             <ItemsControl ItemsSource="{Binding Related}">
                 <ItemsControl.ItemsPanel>
@@ -102,19 +107,18 @@
         <Grid IsVisible="{Binding IsDetailsTab}" ColumnDefinitions="*,*" Margin="0,20,0,0">
             <StackPanel Grid.Column="0" Margin="0,0,28,0">
                 <TextBlock Text="PUBLISHER" FontSize="10.5" Foreground="{StaticResource PbTextFaintBrush}" Margin="0,0,0,4" />
-                <TextBlock Text="Ashcombe Independent" FontSize="13" Foreground="{StaticResource PbTextBrush}" />
+                <TextBlock Text="{Binding Publisher}" FontSize="13" Foreground="{StaticResource PbTextBrush}" />
             </StackPanel>
             <StackPanel Grid.Column="1">
                 <TextBlock Text="READING MODE" FontSize="10.5" Foreground="{StaticResource PbTextFaintBrush}" Margin="0,0,0,4" />
-                <TextBlock Text="Left to Right" FontSize="13" Foreground="{StaticResource PbTextBrush}" />
+                <TextBlock Text="{Binding ReadingModeLabel}" FontSize="13" Foreground="{StaticResource PbTextBrush}" />
             </StackPanel>
         </Grid>
 
-        <!-- Activity tab -->
+        <!-- Activity tab - no activity-log schema/feature exists yet, so this is left as a real
+             empty state rather than faked per-series log entries. -->
         <StackPanel IsVisible="{Binding IsActivityTab}" Margin="0,20,0,0" Spacing="4">
-            <TextBlock Text="Issue #12 marked read · 2 days ago" FontSize="12.5" Foreground="{StaticResource PbTextFaintBrush}" />
-            <TextBlock Text="Issue #11 marked read · 6 days ago" FontSize="12.5" Foreground="{StaticResource PbTextFaintBrush}" />
-            <TextBlock Text="Series added to library · 3 weeks ago" FontSize="12.5" Foreground="{StaticResource PbTextFaintBrush}" />
+            <TextBlock Text="No recent activity." FontSize="12.5" Foreground="{StaticResource PbTextFaintBrush}" />
         </StackPanel>
     </StackPanel>
 </UserControl>

@@ -1,9 +1,12 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Paperbunkr.App.ViewModels"
+             xmlns:sys="using:System"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d" d:DesignWidth="500" d:DesignHeight="220"
-             x:Class="Paperbunkr.App.Views.DetailPills">
+             x:Class="Paperbunkr.App.Views.DetailPills"
+             x:DataType="vm:DetailPillsViewModel">
 
     <UserControl.Styles>
         <Style Selector="TextBlock.pillGroupLabel">
@@ -38,25 +41,40 @@
 
             <StackPanel>
                 <TextBlock Classes="pillGroupLabel" Text="Teams" />
-                <WrapPanel Orientation="Horizontal" Margin="0,0,0,16">
-                    <Border Classes="tagPill highlight" Margin="0,0,8,0"><TextBlock Classes="tagText" Text="Deep Vault Consortium" /></Border>
-                    <Border Classes="tagPill highlight" Margin="0,0,8,0"><TextBlock Classes="tagText" Text="Meridian Watch" /></Border>
-                </WrapPanel>
+                <ItemsControl ItemsSource="{Binding Teams}" Margin="0,0,0,16">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="sys:String">
+                            <Border Classes="tagPill highlight" Margin="0,0,8,0"><TextBlock Classes="tagText" Text="{Binding}" /></Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
 
                 <TextBlock Classes="pillGroupLabel" Text="Locations" />
-                <WrapPanel Orientation="Horizontal" Margin="0,0,0,16">
-                    <Border Classes="tagPill" Margin="0,0,8,0"><TextBlock Classes="tagText" Text="The Hollow Line" /></Border>
-                    <Border Classes="tagPill" Margin="0,0,8,0"><TextBlock Classes="tagText" Text="Port Ashcombe" /></Border>
-                    <Border Classes="tagPill" Margin="0,0,8,0"><TextBlock Classes="tagText" Text="Kilo Station Ring" /></Border>
-                </WrapPanel>
+                <ItemsControl ItemsSource="{Binding Locations}" Margin="0,0,0,16">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="sys:String">
+                            <Border Classes="tagPill" Margin="0,0,8,0"><TextBlock Classes="tagText" Text="{Binding}" /></Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
 
                 <TextBlock Classes="pillGroupLabel" Text="Genres &amp; Concepts" />
-                <WrapPanel Orientation="Horizontal">
-                    <Border Classes="tagPill" Margin="0,0,8,0"><TextBlock Classes="tagText" Text="Salvage Noir" /></Border>
-                    <Border Classes="tagPill" Margin="0,0,8,0"><TextBlock Classes="tagText" Text="Post-Collapse" /></Border>
-                    <Border Classes="tagPill" Margin="0,0,8,0"><TextBlock Classes="tagText" Text="Found Family" /></Border>
-                    <Border Classes="tagPill" Margin="0,0,8,0"><TextBlock Classes="tagText" Text="Signal Ghosts" /></Border>
-                </WrapPanel>
+                <ItemsControl ItemsSource="{Binding Genres}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="sys:String">
+                            <Border Classes="tagPill" Margin="0,0,8,0"><TextBlock Classes="tagText" Text="{Binding}" /></Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
             </StackPanel>
         </Border>
     </StackPanel>

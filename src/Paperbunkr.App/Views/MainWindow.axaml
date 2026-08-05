@@ -3,20 +3,234 @@
         xmlns:vm="using:Paperbunkr.App.ViewModels"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
+        mc:Ignorable="d" d:DesignWidth="1200" d:DesignHeight="760"
         x:Class="Paperbunkr.App.Views.MainWindow"
         x:DataType="vm:MainViewModel"
         Icon="/Assets/avalonia-logo.ico"
-        Title="Paperbunkr">
+        Title="Paperbunkr"
+        Width="1200" Height="760"
+        Background="{StaticResource PbBgBrush}">
 
     <Design.DataContext>
-        <!-- This only sets the DataContext for the previewer in an IDE,
-             to set the actual DataContext for runtime, set the DataContext property in code (look at App.axaml.cs) -->
         <vm:MainViewModel />
     </Design.DataContext>
 
-    <TextBlock Text="{Binding Greeting}"
-               HorizontalAlignment="Center"
-               VerticalAlignment="Center" />
+    <Window.Styles>
+        <!-- Rail nav button: 44x44, rounded, active state = accent-soft fill + accent text -->
+        <Style Selector="Button.rail">
+            <Setter Property="Width" Value="44" />
+            <Setter Property="Height" Value="44" />
+            <Setter Property="Margin" Value="0,0,0,2" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="CornerRadius" Value="7" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+            <Setter Property="Foreground" Value="{StaticResource PbTextFaintBrush}" />
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+        </Style>
+        <Style Selector="Button.rail:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="{StaticResource PbAccentSoftBrush}" />
+        </Style>
+        <Style Selector="Button.rail.active">
+            <Setter Property="Background" Value="{StaticResource PbAccentSoftBrush}" />
+            <Setter Property="Foreground" Value="{StaticResource PbAccentTextBrush}" />
+            <Setter Property="FontWeight" Value="Bold" />
+        </Style>
+        <Style Selector="Button.rail.plugin">
+            <Setter Property="BorderBrush" Value="{StaticResource PbBorderBrush}" />
+        </Style>
 
+        <!-- Sidebar nav row -->
+        <Style Selector="Border.sideItem">
+            <Setter Property="CornerRadius" Value="4" />
+            <Setter Property="Padding" Value="8,7" />
+            <Setter Property="Background" Value="Transparent" />
+        </Style>
+        <Style Selector="Border.sideItem.active">
+            <Setter Property="Background" Value="{StaticResource PbAccentSoftBrush}" />
+        </Style>
+
+        <Style Selector="TextBlock.sideHeading">
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="FontWeight" Value="Bold" />
+            <Setter Property="LetterSpacing" Value="1" />
+            <Setter Property="Foreground" Value="{StaticResource PbTextFaintBrush}" />
+        </Style>
+
+        <Style Selector="TextBlock.count">
+            <Setter Property="FontFamily" Value="Consolas,monospace" />
+            <Setter Property="FontSize" Value="10.5" />
+        </Style>
+    </Window.Styles>
+
+    <DockPanel LastChildFill="True">
+
+        <!-- ============ Rail nav (64px) ============ -->
+        <Border DockPanel.Dock="Left" Width="64" Background="{StaticResource PbChromeBrush}"
+                BorderBrush="{StaticResource PbBorderBrush}" BorderThickness="0,0,1,0">
+            <Grid RowDefinitions="Auto,*,Auto" Margin="0,14,0,10">
+
+                <StackPanel Grid.Row="0" HorizontalAlignment="Center" Spacing="2">
+                    <Border Width="26" Height="26" CornerRadius="6" BorderThickness="1.5"
+                            BorderBrush="{StaticResource PbAccentBrush}" Margin="0,0,0,12" />
+
+                    <Button Classes="rail" Classes.active="{Binding IsLibrary}"
+                            Command="{Binding GoLibraryCommand}" Content="Li"
+                            ToolTip.Tip="Library" />
+                    <Button Classes="rail" Classes.active="{Binding IsSmart}"
+                            Command="{Binding GoSmartCommand}" Content="Sm"
+                            ToolTip.Tip="Smart Lists" />
+                    <Button Classes="rail" Classes.active="{Binding IsReading}"
+                            Command="{Binding GoReadingCommand}" Content="Rd"
+                            ToolTip.Tip="Reading Lists" />
+
+                    <Border Width="28" Height="1" Background="{StaticResource PbBorderBrush}" Margin="0,8" />
+
+                    <Grid>
+                        <Button Classes="rail plugin" Classes.active="{Binding IsPlugin}"
+                                Command="{Binding GoPluginCommand}" Content="Pl"
+                                ToolTip.Tip="Duplicate Finder (plugin)" />
+                        <Border Width="14" Height="14" CornerRadius="7" Background="{StaticResource PbBadgeBrush}"
+                                HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-4,-4,0"
+                                IsHitTestVisible="False">
+                            <TextBlock Text="7" FontSize="9" FontWeight="Bold" Foreground="{StaticResource PbBadgeTextBrush}"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                    </Grid>
+                </StackPanel>
+
+                <Button Grid.Row="2" Classes="rail" Classes.active="{Binding IsReader}"
+                        Command="{Binding GoReaderCommand}" Content="Rx"
+                        ToolTip.Tip="Reader" HorizontalAlignment="Center" />
+            </Grid>
+        </Border>
+
+        <!-- ============ Contextual sidebar (236px) ============ -->
+        <Border DockPanel.Dock="Left" Width="236" Background="{StaticResource PbChromeBrush}"
+                BorderBrush="{StaticResource PbBorderBrush}" BorderThickness="0,0,1,0"
+                IsVisible="{Binding ShowContextualSidebar}">
+            <ScrollViewer Padding="12,18">
+                <StackPanel Spacing="2">
+
+                    <!-- Library sidebar content -->
+                    <StackPanel IsVisible="{Binding IsLibrary}" Spacing="2">
+                        <TextBlock Text="Library" FontSize="16" FontWeight="Bold"
+                                   Foreground="{StaticResource PbTextBrush}" Margin="8,0,8,14" />
+
+                        <Border Classes="sideItem active">
+                            <Grid ColumnDefinitions="8,*,Auto">
+                                <Border Grid.Column="0" Width="8" Height="8" CornerRadius="2"
+                                        Background="{StaticResource PbAccentTextBrush}" VerticalAlignment="Center" />
+                                <TextBlock Grid.Column="1" Text="All Series" Margin="9,0,0,0" FontSize="13"
+                                           FontWeight="Bold" Foreground="{StaticResource PbTextBrush}" VerticalAlignment="Center" />
+                                <TextBlock Grid.Column="2" Classes="count" Text="1,847"
+                                           Foreground="{StaticResource PbAccentTextBrush}" VerticalAlignment="Center" />
+                            </Grid>
+                        </Border>
+
+                        <Border Classes="sideItem">
+                            <Grid ColumnDefinitions="8,*,Auto">
+                                <Border Grid.Column="0" Width="8" Height="8" CornerRadius="2"
+                                        Background="{StaticResource PbTextFaintBrush}" VerticalAlignment="Center" />
+                                <TextBlock Grid.Column="1" Text="Collections" Margin="9,0,0,0" FontSize="13"
+                                           Foreground="{StaticResource PbTextMutedBrush}" VerticalAlignment="Center" />
+                                <TextBlock Grid.Column="2" Classes="count" Text="12"
+                                           Foreground="{StaticResource PbTextFaintBrush}" VerticalAlignment="Center" />
+                            </Grid>
+                        </Border>
+
+                        <Border Height="1" Background="{StaticResource PbBorderBrush}" Margin="0,12" />
+
+                        <TextBlock Classes="sideHeading" Text="CONTENT TYPE" Margin="8,0,8,6" />
+
+                        <Border Classes="sideItem">
+                            <Grid ColumnDefinitions="*,Auto">
+                                <TextBlock Grid.Column="0" Text="Comic" FontSize="13" Foreground="{StaticResource PbTextMutedBrush}" />
+                                <TextBlock Grid.Column="1" Classes="count" Text="1,120" Foreground="{StaticResource PbTextFaintBrush}" />
+                            </Grid>
+                        </Border>
+                        <Border Classes="sideItem">
+                            <Grid ColumnDefinitions="*,Auto">
+                                <TextBlock Grid.Column="0" Text="Manga" FontSize="13" Foreground="{StaticResource PbTextMutedBrush}" />
+                                <TextBlock Grid.Column="1" Classes="count" Text="402" Foreground="{StaticResource PbTextFaintBrush}" />
+                            </Grid>
+                        </Border>
+                    </StackPanel>
+
+                    <!-- Smart Lists sidebar - placeholder (SmartSidebar.dc.html not yet handed off) -->
+                    <StackPanel IsVisible="{Binding IsSmart}" Spacing="2">
+                        <TextBlock Text="Smart Lists" FontSize="16" FontWeight="Bold"
+                                   Foreground="{StaticResource PbTextBrush}" Margin="8,0,8,14" />
+                        <TextBlock Text="Sidebar content pending design handoff." FontSize="12"
+                                   Foreground="{StaticResource PbTextFaintBrush}" TextWrapping="Wrap" Margin="8,0" />
+                    </StackPanel>
+
+                    <!-- Reading Lists sidebar - placeholder (ReadingSidebar.dc.html not yet handed off) -->
+                    <StackPanel IsVisible="{Binding IsReading}" Spacing="2">
+                        <TextBlock Text="Reading Lists" FontSize="16" FontWeight="Bold"
+                                   Foreground="{StaticResource PbTextBrush}" Margin="8,0,8,14" />
+                        <TextBlock Text="Sidebar content pending design handoff." FontSize="12"
+                                   Foreground="{StaticResource PbTextFaintBrush}" TextWrapping="Wrap" Margin="8,0" />
+                    </StackPanel>
+
+                </StackPanel>
+            </ScrollViewer>
+        </Border>
+
+        <!-- ============ Main content ============ -->
+        <Grid>
+            <ContentControl IsVisible="{Binding IsLibrary}">
+                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="6">
+                    <TextBlock Text="Library" FontSize="20" FontWeight="Bold"
+                               Foreground="{StaticResource PbTextBrush}" HorizontalAlignment="Center" />
+                    <TextBlock Text="Series grid pending design handoff (LibraryScreen.dc.html)." FontSize="13"
+                               Foreground="{StaticResource PbTextFaintBrush}" HorizontalAlignment="Center" />
+                </StackPanel>
+            </ContentControl>
+            <ContentControl IsVisible="{Binding IsDetail}">
+                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="6">
+                    <TextBlock Text="Series Detail" FontSize="20" FontWeight="Bold"
+                               Foreground="{StaticResource PbTextBrush}" HorizontalAlignment="Center" />
+                    <TextBlock Text="Pending design handoff (DetailScreen.dc.html)." FontSize="13"
+                               Foreground="{StaticResource PbTextFaintBrush}" HorizontalAlignment="Center" />
+                </StackPanel>
+            </ContentControl>
+            <ContentControl IsVisible="{Binding IsSmart}">
+                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="6">
+                    <TextBlock Text="Smart Lists" FontSize="20" FontWeight="Bold"
+                               Foreground="{StaticResource PbTextBrush}" HorizontalAlignment="Center" />
+                    <TextBlock Text="Pending design handoff (SmartScreen.dc.html)." FontSize="13"
+                               Foreground="{StaticResource PbTextFaintBrush}" HorizontalAlignment="Center" />
+                </StackPanel>
+            </ContentControl>
+            <ContentControl IsVisible="{Binding IsReading}">
+                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="6">
+                    <TextBlock Text="Reading Lists" FontSize="20" FontWeight="Bold"
+                               Foreground="{StaticResource PbTextBrush}" HorizontalAlignment="Center" />
+                    <TextBlock Text="Pending design handoff (ReadingScreen.dc.html)." FontSize="13"
+                               Foreground="{StaticResource PbTextFaintBrush}" HorizontalAlignment="Center" />
+                </StackPanel>
+            </ContentControl>
+            <ContentControl IsVisible="{Binding IsPlugin}">
+                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="6">
+                    <TextBlock Text="Duplicate Finder" FontSize="20" FontWeight="Bold"
+                               Foreground="{StaticResource PbTextBrush}" HorizontalAlignment="Center" />
+                    <TextBlock Text="Pending design handoff (PluginScreen.dc.html)." FontSize="13"
+                               Foreground="{StaticResource PbTextFaintBrush}" HorizontalAlignment="Center" />
+                </StackPanel>
+            </ContentControl>
+            <ContentControl IsVisible="{Binding IsReader}">
+                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="6">
+                    <TextBlock Text="Reader" FontSize="20" FontWeight="Bold"
+                               Foreground="{StaticResource PbTextBrush}" HorizontalAlignment="Center" />
+                    <TextBlock Text="Pending design handoff (ReaderScreen.dc.html)." FontSize="13"
+                               Foreground="{StaticResource PbTextFaintBrush}" HorizontalAlignment="Center" />
+                </StackPanel>
+            </ContentControl>
+        </Grid>
+
+    </DockPanel>
 </Window>

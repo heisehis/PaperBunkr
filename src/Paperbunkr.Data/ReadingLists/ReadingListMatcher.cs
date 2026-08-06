@@ -1,0 +1,111 @@
+using Microsoft.EntityFrameworkCore;
+using Paperbunkr.Data.Entities;
+
+namespace Paperbunkr.Data.ReadingLists;
+
+/// <summary>
+/// Resolves a reading-list entry's match key (Series/Number/Volume/Year/Format) against the
+/// library — shared by CBL import, CSV import, and the manual "Add Issue" search
+/// (docs/superpowers/specs/2026-08-06-reading-lists-design.md §3). Series+Number match
+/// case-insensitively; Volume/Year/Format narrow only when a series+number pair is ambiguous —
+/// same shape as CE's own <c>ComicInfo.SeriesEquals</c>-based matching and CBLManager's
+/// <c>ArcMatcher.FuzzyMatch</c>, confirmed via both sources rather than invented. Evaluated
+/// in-memory over the materialized issue set, matching the same architecture choice
+/// <c>SmartListQueryBuilder</c> made (and for the same reason — personal-library scale, avoids
+/// SQL-translation risk for string comparisons).
+/// </summary>
+public static class ReadingListMatcher
+{
+    /// <summary>Read-only lookup — used by the manual "Add Issue" search, which only ever offers issues already in the library.</summary>
+    public static Issue? FindExisting(
+        PaperbunkrDbContext context, string seriesName, string number, int? volume = null, int? year = null, string? format = null)
+    {
+        var candidates = context.Issues
+            .Include(i => i.Series)
+            .AsEnumerable()
+            .Where(i => i.Series is not null
+                && string.Equals(i.Series.Name, seriesName, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(i.Number, number, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        return Narrow(candidates, volume, year, format).FirstOrDefault();
+    }
+
+    /// <summary>
+    /// Used by CBL/CSV import: falls back to creating the <see cref="Series"/> (if needed) and a
+    /// placeholder <see cref="Issue"/> (<see cref="Issue.FileIsMissing"/> and
+    /// <see cref="Issue.IsPlaceholder"/> both true) when <see cref="FindExisting"/> comes back empty.
+    /// </summary>
+    public static Issue ResolveOrCreatePlaceholder(
+        PaperbunkrDbContext context, string seriesName, string number, int? volume = null, int? year = null, string? format = null)
+    {
+        var existing = FindExisting(context, seriesName, number, volume, year, format);
+        if (existing is not null)
+        {
+            return existing;
+        }
+
+        var series = context.Series.FirstOrDefault(s => s.Name.ToLower() == seriesName.ToLower())
+            ?? CreateSeries(context, seriesName);
+
+        var placeholder = new Issue
+        {
+            SeriesId = series.Id,
+            Number = number,
+            Volume = volume,
+            Year = year,
+            Format = format,
+            FileIsMissing = true,
+            IsPlaceholder = true,
+        };
+        context.Issues.Add(placeholder);
+        context.SaveChanges();
+        return placeholder;
+    }
+
+    private static Series CreateSeries(PaperbunkrDbContext context, string seriesName)
+    {
+        var series = new Series { Name = seriesName, SortName = seriesName };
+        context.Series.Add(series);
+        context.SaveChanges();
+        return series;
+    }
+
+    private static IEnumerable<Issue> Narrow(List<Issue> candidates, int? volume, int? year, string? format)
+    {
+        if (candidates.Count <= 1)
+        {
+            return candidates;
+        }
+
+        var narrowed = candidates;
+        if (volume is int v)
+        {
+            var byVolume = narrowed.Where(i => i.Volume == v).ToList();
+            if (byVolume.Count > 0)
+            {
+                narrowed = byVolume;
+            }
+        }
+
+        if (narrowed.Count > 1 && year is int y)
+        {
+            var byYear = narrowed.Where(i => i.Year.HasValue && Math.Abs(i.Year.Value - y) <= 1).ToList();
+            if (byYear.Count > 0)
+            {
+                narrowed = byYear;
+            }
+        }
+
+        if (narrowed.Count > 1 && !string.IsNullOrEmpty(format))
+        {
+            var byFormat = narrowed.Where(i => string.Equals(i.Format, format, StringComparison.OrdinalIgnoreCase)).ToList();
+            if (byFormat.Count > 0)
+            {
+                narrowed = byFormat;
+            }
+        }
+
+        return narrowed;
+    }
+}

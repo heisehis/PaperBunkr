@@ -169,4 +169,14 @@ public class Issue
     public string? BookStore { get; set; }
 
     public List<IssueCustomValue> CustomValues { get; set; } = new();
+
+    /// <summary>
+    /// True when this row was auto-created to stand in for an unmatched Reading List import row
+    /// (docs/superpowers/specs/2026-08-06-reading-lists-design.md §2), not a real book the user
+    /// added — distinguishes that from a real book the user separately flagged
+    /// <see cref="FileIsMissing"/> for. Adapted from CBLManager's <c>PlaceholderTagKey</c> custom-
+    /// value workaround (needed there only because CE's plugin API had no free metadata slot on a
+    /// book); a real column here since Paperbunkr owns its schema.
+    /// </summary>
+    public bool IsPlaceholder { get; set; }
 }

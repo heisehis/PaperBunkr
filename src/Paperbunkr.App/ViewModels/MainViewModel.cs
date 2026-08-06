@@ -1,5 +1,6 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Paperbunkr.App.Services;
 
 namespace Paperbunkr.App.ViewModels;
 
@@ -16,7 +17,7 @@ public partial class MainViewModel : ViewModelBase
         Detail = new DetailScreenViewModel(GoLibrary, GoReaderForIssue);
         Reader = new ReaderScreenViewModel(GoDetail);
         Smart = new SmartScreenViewModel();
-        Reading = new ReadingScreenViewModel();
+        Reading = new ReadingScreenViewModel(new FilePickerService());
         Plugin = new PluginScreenViewModel();
     }
 
@@ -61,7 +62,11 @@ public partial class MainViewModel : ViewModelBase
     }
 
     [RelayCommand]
-    private void GoReading() => CurrentScreen = "reading";
+    private void GoReading()
+    {
+        Reading.EnsureListLoaded();
+        CurrentScreen = "reading";
+    }
 
     [RelayCommand]
     private void GoPlugin() => CurrentScreen = "plugin";

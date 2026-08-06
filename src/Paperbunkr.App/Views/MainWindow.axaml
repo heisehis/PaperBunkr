@@ -255,31 +255,31 @@
                         </Border>
                     </StackPanel>
 
-                    <!-- Reading Lists sidebar (ReadingSidebar.dc.html) -->
+                    <!-- Reading Lists sidebar (ReadingSidebar.dc.html), wired to real ReadingList data -->
                     <StackPanel IsVisible="{Binding IsReading}" Spacing="1">
                         <TextBlock Text="Reading Lists" FontSize="16" FontWeight="Bold"
                                    Foreground="{StaticResource PbTextBrush}" Margin="8,0,8,14" />
 
-                        <Border Classes="sideItem active"><Grid ColumnDefinitions="*,Auto">
-                            <TextBlock Grid.Column="0" Text="Kilo Station: Signal War" FontSize="13" FontWeight="Bold" Foreground="{StaticResource PbTextBrush}" />
-                            <TextBlock Grid.Column="1" Classes="count" Text="16" Foreground="{StaticResource PbAccentTextBrush}" VerticalAlignment="Center" />
-                        </Grid></Border>
-                        <Border Classes="sideItem"><Grid ColumnDefinitions="*,Auto">
-                            <TextBlock Grid.Column="0" Text="Brass Horizon, reading order" FontSize="13" Foreground="{StaticResource PbTextMutedBrush}" TextTrimming="CharacterEllipsis" />
-                            <TextBlock Grid.Column="1" Classes="count" Text="42" Foreground="{StaticResource PbTextFaintBrush}" VerticalAlignment="Center" />
-                        </Grid></Border>
-                        <Border Classes="sideItem"><Grid ColumnDefinitions="*,Auto">
-                            <TextBlock Grid.Column="0" Text="Weekend: Nightshift Orchid" FontSize="13" Foreground="{StaticResource PbTextMutedBrush}" TextTrimming="CharacterEllipsis" />
-                            <TextBlock Grid.Column="1" Classes="count" Text="9" Foreground="{StaticResource PbTextFaintBrush}" VerticalAlignment="Center" />
-                        </Grid></Border>
-                        <Border Classes="sideItem"><Grid ColumnDefinitions="*,Auto">
-                            <TextBlock Grid.Column="0" Text="Ironclad Requiem — full run" FontSize="13" Foreground="{StaticResource PbTextMutedBrush}" TextTrimming="CharacterEllipsis" />
-                            <TextBlock Grid.Column="1" Classes="count" Text="61" Foreground="{StaticResource PbTextFaintBrush}" VerticalAlignment="Center" />
-                        </Grid></Border>
+                        <ItemsControl x:Name="ReadingLists" ItemsSource="{Binding Reading.Lists}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="models:ReadingListSummary">
+                                    <Button Classes="sideItemButton" Classes.active="{Binding IsActive}"
+                                            Command="{Binding #ReadingLists.((vm:MainViewModel)DataContext).Reading.SelectListCommand}"
+                                            CommandParameter="{Binding}">
+                                        <Grid ColumnDefinitions="*,Auto">
+                                            <TextBlock Grid.Column="0" Classes="sideItemLabel" Text="{Binding Name}" FontSize="13"
+                                                       Foreground="{StaticResource PbTextMutedBrush}" TextTrimming="CharacterEllipsis" />
+                                            <Border Grid.Column="1" Classes="countBadge"><TextBlock Classes="count" Text="{Binding TotalCount}" Foreground="{StaticResource PbTextFaintBrush}" /></Border>
+                                        </Grid>
+                                    </Button>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
 
                         <Border BorderThickness="1" BorderBrush="#383D47" CornerRadius="5" Margin="0,12,0,0" Padding="8">
-                            <TextBlock Text="+ New Reading List" FontSize="12" Foreground="{StaticResource PbTextFaintBrush}"
-                                       HorizontalAlignment="Center" />
+                            <Button Classes="sideItemButton" HorizontalContentAlignment="Center"
+                                    Command="{Binding Reading.CreateNewCommand}"
+                                    Content="+ New Reading List" FontSize="12" Foreground="{StaticResource PbTextFaintBrush}" />
                         </Border>
                     </StackPanel>
 

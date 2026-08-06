@@ -23,6 +23,10 @@ public class PaperbunkrDbContext : DbContext
 
     public DbSet<SmartListCondition> SmartListConditions => Set<SmartListCondition>();
 
+    public DbSet<ReadingList> ReadingLists => Set<ReadingList>();
+
+    public DbSet<ReadingListItem> ReadingListItems => Set<ReadingListItem>();
+
     public PaperbunkrDbContext(DbContextOptions<PaperbunkrDbContext> options)
         : base(options)
     {
@@ -121,6 +125,32 @@ public class PaperbunkrDbContext : DbContext
             builder.Property(c => c.Field).HasConversion<string>().HasMaxLength(32);
             builder.Property(c => c.Operator).HasConversion<string>().HasMaxLength(32);
             builder.HasIndex(c => c.SmartListId);
+        });
+
+        modelBuilder.Entity<ReadingList>(builder =>
+        {
+            builder.HasKey(r => r.Id);
+            builder.Property(r => r.Name).IsRequired();
+
+            builder.HasMany(r => r.Items)
+                .WithOne(i => i.ReadingList)
+                .HasForeignKey(i => i.ReadingListId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<ReadingListItem>(builder =>
+        {
+            builder.HasKey(i => i.Id);
+            builder.HasIndex(i => i.ReadingListId);
+
+            // An Issue can appear in many reading lists (and more than once within the same
+            // list, e.g. a crossover issue revisited later) - Restrict, not Cascade, so deleting
+            // an Issue can't silently cascade-delete unrelated reading lists; callers must remove
+            // the item explicitly first.
+            builder.HasOne(i => i.Issue)
+                .WithMany()
+                .HasForeignKey(i => i.IssueId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
     }
 

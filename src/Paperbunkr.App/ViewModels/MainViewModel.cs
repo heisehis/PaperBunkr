@@ -13,7 +13,7 @@ public partial class MainViewModel : ViewModelBase
     public MainViewModel()
     {
         Library = new LibraryScreenViewModel(GoDetailForSeries);
-        Detail = new DetailScreenViewModel(GoLibrary);
+        Detail = new DetailScreenViewModel(GoLibrary, GoReaderForIssue);
         Reader = new ReaderScreenViewModel(GoDetail);
         Smart = new SmartScreenViewModel();
         Reading = new ReadingScreenViewModel();
@@ -63,7 +63,11 @@ public partial class MainViewModel : ViewModelBase
     private void GoPlugin() => CurrentScreen = "plugin";
 
     [RelayCommand]
-    private void GoReader() => CurrentScreen = "reader";
+    private void GoReader()
+    {
+        Reader.EnsureIssueLoaded();
+        CurrentScreen = "reader";
+    }
 
     private void GoDetail() => CurrentScreen = "detail";
 
@@ -71,5 +75,11 @@ public partial class MainViewModel : ViewModelBase
     {
         Detail.LoadSeries(seriesId);
         CurrentScreen = "detail";
+    }
+
+    private void GoReaderForIssue(int issueId)
+    {
+        Reader.LoadIssue(issueId);
+        CurrentScreen = "reader";
     }
 }

@@ -91,11 +91,9 @@
                 BorderThickness="0,1,0,0" Padding="22,12">
             <Grid ColumnDefinitions="Auto,*,Auto">
                 <TextBlock Grid.Column="0" Text="◀" Foreground="{StaticResource ReaderTextBrush}" VerticalAlignment="Center" Margin="0,0,14,0" />
-                <Border Grid.Column="1" Height="4" CornerRadius="2" Background="{StaticResource ReaderTrackBrush}">
-                    <Grid ColumnDefinitions="0.58*,0.42*">
-                        <Border Grid.Column="0" CornerRadius="2" Background="{StaticResource PbAccentBrush}" />
-                    </Grid>
-                </Border>
+                <ProgressBar Grid.Column="1" Height="4" CornerRadius="2" Minimum="0" Maximum="1"
+                             Value="{Binding ProgressFraction}" Background="{StaticResource ReaderTrackBrush}"
+                             Foreground="{StaticResource PbAccentBrush}" VerticalAlignment="Center" />
                 <TextBlock Grid.Column="2" Text="▶" Foreground="{StaticResource ReaderTextBrush}" VerticalAlignment="Center" Margin="14,0,0,0" />
             </Grid>
         </Border>

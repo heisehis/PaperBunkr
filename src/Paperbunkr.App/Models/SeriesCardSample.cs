@@ -61,9 +61,16 @@ public sealed class SeriesCardSample
         return hash;
     }
 
+    /// <summary>The same deterministic per-series-name cover gradient <see cref="FromSeries"/> uses,
+    /// exposed standalone for screens (e.g. Reader) that need just the color, not a full card.</summary>
+    public static IBrush CoverBrushFor(string seriesName)
+    {
+        var (from, to) = s_palette[StableHash(seriesName) % (uint)s_palette.Length];
+        return Gradient(from, to);
+    }
+
     public static SeriesCardSample FromSeries(Series series)
     {
-        var (from, to) = s_palette[StableHash(series.Name) % (uint)s_palette.Length];
         int unreadCount = series.Issues.Count(i => i.LastPageRead is null or 0);
 
         return new SeriesCardSample
@@ -74,7 +81,7 @@ public sealed class SeriesCardSample
             Sub = $"{series.ContentType} · {series.Issues.Count} issues",
             UnreadCount = unreadCount,
             Missing = series.Issues.Any(i => i.FileIsMissing),
-            CoverBrush = Gradient(from, to),
+            CoverBrush = CoverBrushFor(series.Name),
         };
     }
 }

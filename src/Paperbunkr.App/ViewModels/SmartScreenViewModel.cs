@@ -81,11 +81,17 @@ public partial class SmartScreenViewModel : ViewModelBase
         RefreshSidebar();
     }
 
-    /// <summary>Called on first navigation to the Smart screen with no list explicitly picked yet — opens the first custom list, falling back to the first list overall.</summary>
+    /// <summary>
+    /// Called on every navigation to the Smart screen. Re-loads the already-active list (so match
+    /// counts and results reflect whatever changed elsewhere - e.g. a CE migration - since the
+    /// last visit) or, on first visit, opens the first custom list, falling back to the first list
+    /// overall.
+    /// </summary>
     public void EnsureListLoaded()
     {
-        if (_activeSmartListId is not null)
+        if (_activeSmartListId is int activeId)
         {
+            LoadSmartList(activeId);
             return;
         }
 

@@ -96,10 +96,16 @@ public partial class ReadingScreenViewModel : ViewModelBase
         RefreshSidebar();
     }
 
+    /// <summary>
+    /// Called on every navigation to the Reading screen. Re-loads the already-active list (so it
+    /// reflects whatever changed elsewhere - e.g. a CE migration - since the last visit) or, on
+    /// first visit, opens the first reading list.
+    /// </summary>
     public void EnsureListLoaded()
     {
-        if (_activeReadingListId is not null)
+        if (_activeReadingListId is int activeId)
         {
+            LoadReadingList(activeId);
             return;
         }
 

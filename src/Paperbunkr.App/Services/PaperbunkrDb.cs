@@ -23,53 +23,28 @@ public static class PaperbunkrDb
         return new PaperbunkrDbContext(options);
     }
 
-    /// <summary>
-    /// Applies pending migrations (creating the SQLite file on first run) and, if the library is
-    /// empty, seeds it with demo data - the same series the wireframe's sample covers used, now
-    /// as real persisted rows instead of hardcoded ViewModel data. Call once at startup.
-    /// </summary>
-    public static void EnsureCreatedAndSeeded()
+    /// <summary>Applies pending migrations (creating the SQLite file on first run) and seeds the built-in system smart lists. The only DB-prep entry point - no demo/placeholder data is ever seeded, so the library only ever contains what the user actually migrates or adds.</summary>
+    public static void EnsureCreated()
     {
         using var context = CreateContext();
         context.Database.Migrate();
-
         SeedSystemSmartLists(context);
+    }
 
-        if (context.Series.Any())
-        {
-            return;
-        }
-
-        foreach (var seed in DemoSeries)
-        {
-            var series = new Series
-            {
-                Name = seed.Name,
-                SortName = seed.Name,
-                ContentType = seed.ContentType,
-            };
-
-            for (int i = 0; i < seed.UnreadCount; i++)
-            {
-                series.Issues.Add(new Issue { Number = (i + 1).ToString(), LastPageRead = null });
-            }
-
-            // A handful of already-read issues too, so series aren't just a bare unread count.
-            int readIssues = seed.UnreadCount == 0 ? 3 : Math.Min(seed.UnreadCount, 3);
-            for (int i = 0; i < readIssues; i++)
-            {
-                series.Issues.Add(new Issue { Number = $"R{i + 1}", LastPageRead = 1 });
-            }
-
-            if (seed.HasMissingIssue && series.Issues.Count > 0)
-            {
-                series.Issues[0].FileIsMissing = true;
-            }
-
-            context.Series.Add(series);
-        }
-
-        context.SaveChanges();
+    /// <summary>
+    /// Called by App.axaml.cs to decide fresh-install routing, so it must apply pending
+    /// migrations itself first. On a genuinely fresh SQLite file (first launch ever, or the db
+    /// was deleted) there's no <c>Series</c> table yet, and querying it without migrating first
+    /// throws (confirmed empirically: SqliteException "no such table: Series"), which would
+    /// otherwise crash startup before the fresh-install routing ever runs. <c>Database.Migrate()</c>
+    /// is idempotent, so the later explicit call to it in <see cref="EnsureCreated"/> is a safe
+    /// no-op.
+    /// </summary>
+    public static bool HasAnySeries()
+    {
+        using var context = CreateContext();
+        context.Database.Migrate();
+        return context.Series.Any();
     }
 
     /// <summary>
@@ -114,20 +89,4 @@ public static class PaperbunkrDb
 
         context.SaveChanges();
     }
-
-    private static readonly (string Name, ContentType ContentType, int UnreadCount, bool HasMissingIssue)[] DemoSeries =
-    {
-        ("The Cartographer's Vault", ContentType.Comic, 5, false),
-        ("Nightshift Orchid", ContentType.Manga, 2, false),
-        ("Brass Horizon", ContentType.Comic, 0, true),
-        ("Kilo Station", ContentType.Comic, 14, false),
-        ("The Sovereign's Cage", ContentType.Manhwa, 9, false),
-        ("Ironclad Requiem", ContentType.Comic, 0, false),
-        ("Paper Moth", ContentType.Manga, 1, false),
-        ("Ninth Hour Blade", ContentType.Manhua, 31, true),
-        ("Ashlight", ContentType.Manhwa, 0, false),
-        ("The Last Cartel", ContentType.Comic, 12, false),
-        ("Iron Loom", ContentType.Manga, 0, false),
-        ("Vanta Reach", ContentType.Manga, 3, false),
-    };
 }

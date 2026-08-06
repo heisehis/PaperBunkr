@@ -1,3 +1,4 @@
+using System.IO;
 using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
@@ -18,12 +19,25 @@ public partial class App : Application
     {
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
-            PaperbunkrDb.EnsureCreatedAndSeeded();
+            // No demo/placeholder data is ever seeded (see PaperbunkrDb.EnsureCreated) - checked
+            // only to decide whether to auto-open the migration overlay on a fresh install with a
+            // detected CE library (docs/superpowers/specs/2026-08-06-migration-ux-design.md §B).
+            bool isFreshInstall = !PaperbunkrDb.HasAnySeries();
+            bool defaultCePathFound = File.Exists(MigrationViewModel.GetDefaultCePath());
+            bool offerFirstRunMigration = isFreshInstall && defaultCePathFound;
 
+            PaperbunkrDb.EnsureCreated();
+
+            var mainViewModel = new MainViewModel();
             desktop.MainWindow = new MainWindow
             {
-                DataContext = new MainViewModel(),
+                DataContext = mainViewModel,
             };
+
+            if (offerFirstRunMigration)
+            {
+                mainViewModel.OpenMigrationOverlayCommand.Execute(null);
+            }
         }
 
         base.OnFrameworkInitializationCompleted();

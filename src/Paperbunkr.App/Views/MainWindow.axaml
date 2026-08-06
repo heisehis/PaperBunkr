@@ -97,6 +97,7 @@
         </Style>
     </Window.Styles>
 
+    <Grid>
     <DockPanel LastChildFill="True">
 
         <!-- ============ Rail nav (64px) ============ -->
@@ -130,6 +131,16 @@
                             <TextBlock Text="7" FontSize="9" FontWeight="Bold" Foreground="{StaticResource PbBadgeTextBrush}"
                                        HorizontalAlignment="Center" VerticalAlignment="Center" />
                         </Border>
+                    </Grid>
+
+                    <Grid>
+                        <Button Classes="rail plugin" Classes.active="{Binding IsMigrationOverlayOpen}"
+                                Command="{Binding OpenMigrationOverlayCommand}" Content="Mg"
+                                ToolTip.Tip="Migrate from ComicRack CE / Needs Review" />
+                        <Border Width="10" Height="10" CornerRadius="5" Background="{StaticResource PbAccentBrush}"
+                                HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-3,-3,0"
+                                IsHitTestVisible="False"
+                                IsVisible="{Binding Migration.NeedsReview.HasPendingItems}" />
                     </Grid>
                 </StackPanel>
 
@@ -334,4 +345,16 @@
         </Grid>
 
     </DockPanel>
+
+    <!-- ============ Migration overlay (docs/superpowers/specs/2026-08-06-migration-ux-design.md §B) ============ -->
+    <Border IsVisible="{Binding IsMigrationOverlayOpen}" Background="#B0000000">
+        <Grid HorizontalAlignment="Center" VerticalAlignment="Center">
+            <views:MigrationOverlay DataContext="{Binding Migration}" />
+            <Button Classes="rail" Content="✕" Width="28" Height="28" FontSize="13"
+                    HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-14,-14,0"
+                    Background="{StaticResource PbChromeBrush}" BorderBrush="{StaticResource PbBorderBrush}" BorderThickness="1"
+                    Command="{Binding CloseMigrationOverlayCommand}" ToolTip.Tip="Close" />
+        </Grid>
+    </Border>
+    </Grid>
 </Window>

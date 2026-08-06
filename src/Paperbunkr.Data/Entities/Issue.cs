@@ -179,4 +179,13 @@ public class Issue
     /// book); a real column here since Paperbunkr owns its schema.
     /// </summary>
     public bool IsPlaceholder { get; set; }
+
+    /// <summary>
+    /// True once the user has dismissed this issue's missing-file state from the Needs Review
+    /// queue ("I know this one's missing, stop asking") without relinking or removing it
+    /// (docs/superpowers/specs/2026-08-06-migration-ux-polish-design.md §2). Review-queue concept
+    /// only - the system "Missing Files" smart list ignores this and still shows every missing
+    /// file when browsed directly.
+    /// </summary>
+    public bool MissingAcknowledged { get; set; }
 }

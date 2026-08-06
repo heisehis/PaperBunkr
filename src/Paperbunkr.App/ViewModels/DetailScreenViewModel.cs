@@ -31,10 +31,19 @@ public partial class DetailScreenViewModel : ViewModelBase
     private readonly Action _goBack;
     private readonly Action<int> _goToReader;
     private int? _continueIssueId;
+    private int? _seriesId;
+    private bool _isLoadingSeries;
 
     public DetailTabsViewModel Tabs { get; }
     public DetailMetaViewModel Meta { get; }
     public DetailPillsViewModel Pills { get; }
+
+    /// <summary>
+    /// docs/superpowers/specs/2026-08-06-migration-ux-design.md §A: a plain manual picker, real
+    /// but not the eventual §7/§9 scraper-driven classification flow (which doesn't exist yet
+    /// anywhere in the app) - what lets a Needs Review "content type" item actually get resolved.
+    /// </summary>
+    public ContentType[] ContentTypeOptions { get; } = Enum.GetValues<ContentType>();
 
     [ObservableProperty]
     private IBrush _coverBrush;
@@ -46,7 +55,25 @@ public partial class DetailScreenViewModel : ViewModelBase
     private string _coverTitle = string.Empty;
 
     [ObservableProperty]
-    private string _contentTypeLabel = string.Empty;
+    private ContentType _selectedContentType;
+
+    partial void OnSelectedContentTypeChanged(ContentType value)
+    {
+        if (_isLoadingSeries || _seriesId is not int seriesId)
+        {
+            return;
+        }
+
+        using var context = PaperbunkrDb.CreateContext();
+        var series = context.Series.Find(seriesId);
+        if (series is null)
+        {
+            return;
+        }
+
+        series.ContentType = value;
+        context.SaveChanges();
+    }
 
     [ObservableProperty]
     private string _statusLabel = string.Empty;
@@ -70,11 +97,14 @@ public partial class DetailScreenViewModel : ViewModelBase
             return;
         }
 
+        _isLoadingSeries = true;
+        _seriesId = seriesId;
+
         var card = SeriesCardSample.FromSeries(series);
         CoverBrush = card.CoverBrush;
         SeriesTitle = series.Name;
         CoverTitle = series.Name.ToUpperInvariant();
-        ContentTypeLabel = series.ContentType.ToString();
+        SelectedContentType = series.ContentType;
         StatusLabel = series.IsComplete ? "Complete" : "Ongoing";
         IssueCountLabel = $"{series.Issues.Count} Issues";
         Summary = string.IsNullOrWhiteSpace(series.Summary) ? "No summary available." : series.Summary;
@@ -105,6 +135,8 @@ public partial class DetailScreenViewModel : ViewModelBase
         Tabs.LoadSeries(series);
         Meta.LoadSeries(series);
         Pills.LoadSeries(series);
+
+        _isLoadingSeries = false;
     }
 
     [RelayCommand]

@@ -1,0 +1,265 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Paperbunkr.App.ViewModels"
+             xmlns:models="using:Paperbunkr.App.Models"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="600" d:DesignHeight="600"
+             x:Class="Paperbunkr.App.Views.MigrationOverlay"
+             x:DataType="vm:MigrationOverlayViewModel">
+
+    <UserControl.Resources>
+        <DataTemplate x:Key="ConflictRowTemplate" x:DataType="vm:SeriesConflictRowViewModel">
+            <Border BorderBrush="{StaticResource PbBorderBrush}" BorderThickness="1" CornerRadius="6" Padding="12,10" Margin="0,0,0,8">
+                <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto">
+                    <StackPanel Grid.Row="0" Grid.Column="0" Orientation="Horizontal" Spacing="6">
+                        <TextBlock Text="{Binding IncomingName}" FontWeight="SemiBold" Foreground="{StaticResource PbTextBrush}" FontSize="13" />
+                        <TextBlock Text="↔" Foreground="{StaticResource PbTextFaintBrush}" />
+                        <TextBlock Text="{Binding MatchedName}" FontWeight="SemiBold" Foreground="{StaticResource PbTextBrush}" FontSize="13" />
+                    </StackPanel>
+                    <TextBlock Grid.Row="1" Grid.Column="0" Text="{Binding SimilarityLabel}" FontSize="11.5" Foreground="{StaticResource PbTextFaintBrush}" Margin="0,3,0,0" />
+
+                    <StackPanel Grid.Row="0" Grid.RowSpan="2" Grid.Column="1" Orientation="Horizontal" Spacing="6"
+                                VerticalAlignment="Center" IsVisible="{Binding !IsResolved}">
+                        <Button Classes="pillAction" Content="Merge" Command="{Binding MergeCommand}" />
+                        <Button Classes="pillAction ghost" Content="Keep Separate" Command="{Binding KeepSeparateCommand}" />
+                    </StackPanel>
+                    <TextBlock Grid.Row="0" Grid.RowSpan="2" Grid.Column="1" Text="{Binding ResolutionLabel}"
+                               Foreground="{StaticResource PbAccentTextBrush}" FontSize="12" FontWeight="SemiBold"
+                               VerticalAlignment="Center" IsVisible="{Binding IsResolved}" />
+                </Grid>
+            </Border>
+        </DataTemplate>
+
+        <DataTemplate x:Key="MissingFileRowTemplate" x:DataType="vm:MissingFileRowViewModel">
+            <Border BorderBrush="{StaticResource PbBorderBrush}" BorderThickness="1" CornerRadius="6" Padding="12,10" Margin="0,0,0,8">
+                <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto">
+                    <TextBlock Grid.Column="0" Text="{Binding DisplayLabel}" FontSize="13" Foreground="{StaticResource PbTextMutedBrush}"
+                               VerticalAlignment="Center" />
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
+                        <Button Classes="rowAction" Content="Relink…" Command="{Binding RelinkCommand}" />
+                        <Button Classes="rowAction" Content="Dismiss" Command="{Binding DismissCommand}" />
+                        <Button Classes="rowAction destructive" Content="{Binding RemoveLabel}" Command="{Binding RemoveCommand}" />
+                    </StackPanel>
+                </Grid>
+            </Border>
+        </DataTemplate>
+    </UserControl.Resources>
+
+    <UserControl.Styles>
+        <Style Selector="Button.pillAction">
+            <Setter Property="Padding" Value="12,6" />
+            <Setter Property="CornerRadius" Value="5" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Background" Value="{StaticResource PbAccentBrush}" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Foreground" Value="{StaticResource PbBadgeTextBrush}" />
+        </Style>
+        <Style Selector="Button.pillAction.ghost">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderBrush" Value="{StaticResource PbBorderBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Foreground" Value="{StaticResource PbTextMutedBrush}" />
+        </Style>
+        <Style Selector="Button.primaryWide">
+            <Setter Property="Padding" Value="14,10" />
+            <Setter Property="CornerRadius" Value="6" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Background" Value="{StaticResource PbAccentBrush}" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Foreground" Value="{StaticResource PbBadgeTextBrush}" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+        </Style>
+        <Style Selector="TextBlock.statLabel">
+            <Setter Property="FontSize" Value="12.5" />
+            <Setter Property="Foreground" Value="{StaticResource PbTextMutedBrush}" />
+        </Style>
+        <Style Selector="TextBlock.statValue">
+            <Setter Property="FontSize" Value="20" />
+            <Setter Property="FontWeight" Value="Bold" />
+            <Setter Property="Foreground" Value="{StaticResource PbTextBrush}" />
+        </Style>
+        <Style Selector="TextBlock.sectionHeading">
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="FontWeight" Value="Bold" />
+            <Setter Property="Foreground" Value="{StaticResource PbTextBrush}" />
+            <Setter Property="Margin" Value="0,14,0,8" />
+        </Style>
+        <Style Selector="Button.rowAction">
+            <Setter Property="Padding" Value="10,5" />
+            <Setter Property="CornerRadius" Value="5" />
+            <Setter Property="FontSize" Value="11.5" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderBrush" Value="{StaticResource PbBorderBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Foreground" Value="{StaticResource PbTextMutedBrush}" />
+        </Style>
+        <Style Selector="Button.rowAction.destructive">
+            <Setter Property="Foreground" Value="#E06060" />
+            <Setter Property="BorderBrush" Value="#E06060" />
+        </Style>
+    </UserControl.Styles>
+
+    <Border Width="580" MaxHeight="640" CornerRadius="10" Background="{StaticResource PbBgBrush}"
+            BorderBrush="{StaticResource PbBorderBrush}" BorderThickness="1">
+        <DockPanel LastChildFill="True">
+
+            <!-- Header: title + Migrate/Needs Review tabs -->
+            <StackPanel DockPanel.Dock="Top" Margin="20,18,20,0">
+                <TextBlock Text="ComicRack CE Migration" FontSize="17" FontWeight="Bold" Foreground="{StaticResource PbTextBrush}" />
+                <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,12,0,0">
+                    <Button Classes="rail" Classes.active="{Binding IsMigrateMode}" Content="Migrate"
+                            Width="90" Height="30" FontSize="12" Command="{Binding SwitchToMigrateCommand}" />
+                    <Button Classes="rail" Classes.active="{Binding IsReviewMode}" Content="Needs Review"
+                            Width="110" Height="30" FontSize="12" Command="{Binding SwitchToReviewCommand}" />
+                </StackPanel>
+                <Border Height="1" Background="{StaticResource PbBorderBrush}" Margin="0,14,0,0" />
+            </StackPanel>
+
+            <ScrollViewer Padding="20,16,20,20">
+                <StackPanel>
+
+                    <!-- ============ Migrate mode ============ -->
+                    <StackPanel IsVisible="{Binding IsMigrateMode}">
+
+                        <!-- Locate -->
+                        <StackPanel IsVisible="{Binding Migration.IsLocate}" Spacing="12">
+                            <TextBlock Text="Locate your ComicRack CE library" FontWeight="SemiBold" Foreground="{StaticResource PbTextBrush}" />
+                            <TextBlock Text="Found the default CE install" Foreground="{StaticResource PbAccentTextBrush}" FontSize="12.5"
+                                       IsVisible="{Binding Migration.DefaultPathFound}" />
+                            <Grid ColumnDefinitions="*,Auto">
+                                <TextBox Grid.Column="0" Text="{Binding Migration.SelectedPath}" PlaceholderText="Path to ComicDb.xml" />
+                                <Button Grid.Column="1" Content="Browse…" Margin="8,0,0,0" Command="{Binding Migration.BrowseCommand}" />
+                            </Grid>
+                            <TextBlock Text="{Binding Migration.ErrorMessage}" Foreground="#E06060" FontSize="12.5"
+                                       IsVisible="{Binding Migration.HasErrorMessage}" />
+                            <Button Classes="primaryWide" Content="Scan" Command="{Binding Migration.ScanCommand}" HorizontalAlignment="Left" />
+                        </StackPanel>
+
+                        <!-- Preview -->
+                        <StackPanel IsVisible="{Binding Migration.IsPreview}" Spacing="14">
+                            <TextBlock Text="Here's what will be imported" FontWeight="SemiBold" Foreground="{StaticResource PbTextBrush}" />
+                            <StackPanel Orientation="Horizontal" Spacing="28">
+                                <StackPanel>
+                                    <TextBlock Classes="statValue" Text="{Binding Migration.SeriesCountLabel}" />
+                                    <TextBlock Classes="statLabel" Text="Series" />
+                                </StackPanel>
+                                <StackPanel>
+                                    <TextBlock Classes="statValue" Text="{Binding Migration.IssueCountLabel}" />
+                                    <TextBlock Classes="statLabel" Text="Issues" />
+                                </StackPanel>
+                                <StackPanel>
+                                    <TextBlock Classes="statValue" Text="{Binding Migration.GuessedContentTypeLabel}" />
+                                    <TextBlock Classes="statLabel" Text="Guessed content type" />
+                                </StackPanel>
+                            </StackPanel>
+                            <TextBlock Text="Possible duplicate series names were found - you'll review them next."
+                                       Foreground="{StaticResource PbTextMutedBrush}" FontSize="12.5" TextWrapping="Wrap"
+                                       IsVisible="{Binding Migration.HasConflicts}" />
+                            <Button Classes="primaryWide" Content="Continue" Command="{Binding Migration.ContinueFromPreviewCommand}" HorizontalAlignment="Left" />
+                        </StackPanel>
+
+                        <!-- Conflicts -->
+                        <StackPanel IsVisible="{Binding Migration.IsConflicts}" Spacing="10">
+                            <TextBlock Text="Possible duplicate series" FontWeight="SemiBold" Foreground="{StaticResource PbTextBrush}" />
+                            <TextBlock Text="Merge names that are the same series, or keep them separate. Anything left unresolved is safe - it lands in Needs Review, nothing is blocked."
+                                       Foreground="{StaticResource PbTextMutedBrush}" FontSize="12" TextWrapping="Wrap" />
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <Button Classes="rowAction" Content="Keep All Separate" Command="{Binding Migration.KeepAllSeparateCommand}" />
+                                <Button Classes="rowAction" Content="Merge All Above 90%" Command="{Binding Migration.MergeAllAboveNinetyCommand}" />
+                            </StackPanel>
+                            <ItemsControl ItemsSource="{Binding Migration.Conflicts}" ItemTemplate="{StaticResource ConflictRowTemplate}" />
+                            <Button Classes="primaryWide" Content="Continue" Command="{Binding Migration.ContinueFromConflictsCommand}" HorizontalAlignment="Left" />
+                        </StackPanel>
+
+                        <!-- Commit -->
+                        <StackPanel IsVisible="{Binding Migration.IsCommit}" Spacing="14">
+                            <TextBlock Text="Ready to migrate" FontWeight="SemiBold" Foreground="{StaticResource PbTextBrush}" />
+                            <TextBlock Text="Your ComicRack CE install is never modified - this only writes into Paperbunkr's library, and it's always safe to re-run."
+                                       Foreground="{StaticResource PbTextMutedBrush}" FontSize="12.5" TextWrapping="Wrap" />
+                            <Button Classes="primaryWide" Content="Start Migration" Command="{Binding Migration.CommitCommand}"
+                                    HorizontalAlignment="Left" IsEnabled="{Binding !Migration.IsBusy}" />
+                            <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding Migration.IsBusy}">
+                                <ProgressBar IsIndeterminate="True" Width="140" Height="6" />
+                                <TextBlock Text="Migrating…" FontSize="12.5" Foreground="{StaticResource PbTextMutedBrush}" />
+                            </StackPanel>
+                        </StackPanel>
+
+                        <!-- Results -->
+                        <StackPanel IsVisible="{Binding Migration.IsResults}" Spacing="14">
+                            <TextBlock Text="Migration complete" FontWeight="SemiBold" Foreground="{StaticResource PbTextBrush}" />
+                            <StackPanel Orientation="Horizontal" Spacing="28">
+                                <StackPanel>
+                                    <TextBlock Classes="statValue" Text="{Binding Migration.SeriesCreatedLabel}" />
+                                    <TextBlock Classes="statLabel" Text="Series created" />
+                                </StackPanel>
+                                <StackPanel>
+                                    <TextBlock Classes="statValue" Text="{Binding Migration.IssuesCreatedLabel}" />
+                                    <TextBlock Classes="statLabel" Text="Issues added" />
+                                </StackPanel>
+                                <StackPanel>
+                                    <TextBlock Classes="statValue" Text="{Binding Migration.SeriesMergedLabel}" />
+                                    <TextBlock Classes="statLabel" Text="Series merged" />
+                                </StackPanel>
+                                <StackPanel>
+                                    <TextBlock Classes="statValue" Text="{Binding Migration.ConflictsPendingLabel}" />
+                                    <TextBlock Classes="statLabel" Text="Left for review" />
+                                </StackPanel>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Spacing="10">
+                                <Button Classes="primaryWide" Content="View Needs Review" Command="{Binding SwitchToReviewCommand}" />
+                                <Button Content="Migrate Again" Command="{Binding SwitchToMigrateCommand}" />
+                            </StackPanel>
+                        </StackPanel>
+
+                    </StackPanel>
+
+                    <!-- ============ Needs Review mode ============ -->
+                    <StackPanel IsVisible="{Binding IsReviewMode}" Spacing="4">
+                        <TextBlock Text="You're all caught up" FontWeight="SemiBold" Foreground="{StaticResource PbTextBrush}"
+                                   IsVisible="{Binding !NeedsReview.HasPendingItems}" Margin="0,10" />
+
+                        <StackPanel IsVisible="{Binding NeedsReview.HasContentTypeItems}">
+                            <TextBlock Classes="sectionHeading" Text="Content Type" />
+                            <ItemsControl ItemsSource="{Binding NeedsReview.ContentTypeItems}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="models:SeriesReviewItem">
+                                        <Button Classes="sideItemButton" HorizontalAlignment="Stretch"
+                                                Command="{Binding $parent[ItemsControl].((vm:MigrationOverlayViewModel)DataContext).NeedsReview.OpenSeriesDetailCommand}"
+                                                CommandParameter="{Binding}">
+                                            <Grid ColumnDefinitions="*,Auto">
+                                                <TextBlock Grid.Column="0" Text="{Binding SeriesName}" FontSize="13" Foreground="{StaticResource PbTextMutedBrush}" />
+                                                <TextBlock Grid.Column="1" Text="Unknown" FontSize="11.5" Foreground="{StaticResource PbTextFaintBrush}" />
+                                            </Grid>
+                                        </Button>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+
+                        <StackPanel IsVisible="{Binding NeedsReview.HasMissingFileItems}">
+                            <TextBlock Classes="sectionHeading" Text="Missing Files" />
+                            <ItemsControl ItemsSource="{Binding NeedsReview.MissingFileItems}" ItemTemplate="{StaticResource MissingFileRowTemplate}" />
+                        </StackPanel>
+
+                        <StackPanel IsVisible="{Binding NeedsReview.HasSeriesConflictItems}">
+                            <TextBlock Classes="sectionHeading" Text="Series Conflicts" />
+                            <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,0,0,10">
+                                <Button Classes="rowAction" Content="Keep All Separate" Command="{Binding NeedsReview.KeepAllSeparateCommand}" />
+                                <Button Classes="rowAction" Content="Merge All Above 90%" Command="{Binding NeedsReview.MergeAllAboveNinetyCommand}" />
+                            </StackPanel>
+                            <ItemsControl ItemsSource="{Binding NeedsReview.SeriesConflicts}" ItemTemplate="{StaticResource ConflictRowTemplate}" />
+                        </StackPanel>
+
+                    </StackPanel>
+
+                </StackPanel>
+            </ScrollViewer>
+        </DockPanel>
+    </Border>
+</UserControl>

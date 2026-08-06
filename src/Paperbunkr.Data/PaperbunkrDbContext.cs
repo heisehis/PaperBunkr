@@ -27,6 +27,8 @@ public class PaperbunkrDbContext : DbContext
 
     public DbSet<ReadingListItem> ReadingListItems => Set<ReadingListItem>();
 
+    public DbSet<SeriesConflict> SeriesConflicts => Set<SeriesConflict>();
+
     public PaperbunkrDbContext(DbContextOptions<PaperbunkrDbContext> options)
         : base(options)
     {
@@ -151,6 +153,34 @@ public class PaperbunkrDbContext : DbContext
                 .WithMany()
                 .HasForeignKey(i => i.IssueId)
                 .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<SeriesConflict>(builder =>
+        {
+            builder.HasKey(c => c.Id);
+            builder.Property(c => c.IncomingName).IsRequired();
+            builder.Property(c => c.MatchedName).IsRequired();
+            builder.Property(c => c.Status).HasConversion<string>().HasMaxLength(32);
+            builder.HasIndex(c => c.Status);
+
+            // All three Series references are optional (see SeriesConflict's doc comment) and
+            // informational only - SetNull so a conflict row survives (with a dangling reference
+            // cleared) if the series it points at is later deleted through some other path, rather
+            // than blocking that delete with an FK violation.
+            builder.HasOne(c => c.ExistingSeries)
+                .WithMany()
+                .HasForeignKey(c => c.ExistingSeriesId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            builder.HasOne(c => c.SeriesA)
+                .WithMany()
+                .HasForeignKey(c => c.SeriesAId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            builder.HasOne(c => c.SeriesB)
+                .WithMany()
+                .HasForeignKey(c => c.SeriesBId)
+                .OnDelete(DeleteBehavior.SetNull);
         });
     }
 

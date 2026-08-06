@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Paperbunkr.Data;
 
@@ -10,9 +11,11 @@ using Paperbunkr.Data;
 namespace Paperbunkr.Data.Migrations
 {
     [DbContext(typeof(PaperbunkrDbContext))]
-    partial class PaperbunkrDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260806141552_AddSeriesConflicts")]
+    partial class AddSeriesConflicts
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "8.0.10");
@@ -169,9 +172,6 @@ namespace Paperbunkr.Data.Migrations
 
                     b.Property<string>("MainCharacterOrTeam")
                         .HasColumnType("TEXT");
-
-                    b.Property<bool>("MissingAcknowledged")
-                        .HasColumnType("INTEGER");
 
                     b.Property<int?>("Month")
                         .HasColumnType("INTEGER");

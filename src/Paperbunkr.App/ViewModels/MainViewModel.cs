@@ -19,6 +19,7 @@ public partial class MainViewModel : ViewModelBase
         Smart = new SmartScreenViewModel();
         Reading = new ReadingScreenViewModel(new FilePickerService());
         Plugin = new PluginScreenViewModel();
+        Migration = new MigrationOverlayViewModel(new FilePickerService(), OpenSeriesDetailFromReview);
     }
 
     public LibraryScreenViewModel Library { get; }
@@ -27,6 +28,10 @@ public partial class MainViewModel : ViewModelBase
     public SmartScreenViewModel Smart { get; }
     public ReadingScreenViewModel Reading { get; }
     public PluginScreenViewModel Plugin { get; }
+    public MigrationOverlayViewModel Migration { get; }
+
+    [ObservableProperty]
+    private bool _isMigrationOverlayOpen;
 
     [ObservableProperty]
     private string _currentScreen = "library";
@@ -70,6 +75,26 @@ public partial class MainViewModel : ViewModelBase
 
     [RelayCommand]
     private void GoPlugin() => CurrentScreen = "plugin";
+
+    [RelayCommand]
+    private void OpenMigrationOverlay()
+    {
+        Migration.Open();
+        IsMigrationOverlayOpen = true;
+    }
+
+    [RelayCommand]
+    private void CloseMigrationOverlay()
+    {
+        IsMigrationOverlayOpen = false;
+        Library.LoadFromDatabase();
+    }
+
+    private void OpenSeriesDetailFromReview(int seriesId)
+    {
+        IsMigrationOverlayOpen = false;
+        GoDetailForSeries(seriesId);
+    }
 
     [RelayCommand]
     private void GoReader()

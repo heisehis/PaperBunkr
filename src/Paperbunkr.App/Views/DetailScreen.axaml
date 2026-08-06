@@ -27,6 +27,20 @@
             <Setter Property="FontWeight" Value="Bold" />
         </Style>
 
+        <!-- Real editable Content Type picker (docs/superpowers/specs/2026-08-06-migration-ux-design.md
+             §A), sized/colored to sit alongside the other metaPill badges. -->
+        <Style Selector="ComboBox.contentTypePicker">
+            <Setter Property="Background" Value="{StaticResource PbAccentSoftBrush}" />
+            <Setter Property="BorderBrush" Value="{StaticResource PbAccentBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="999" />
+            <Setter Property="Padding" Value="9,1" />
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="FontWeight" Value="Bold" />
+            <Setter Property="Foreground" Value="{StaticResource PbAccentTextBrush}" />
+            <Setter Property="MinHeight" Value="0" />
+        </Style>
+
         <Style Selector="Button.detailAction">
             <Setter Property="Padding" Value="14,8" />
             <Setter Property="CornerRadius" Value="5" />
@@ -77,8 +91,8 @@
 
                 <StackPanel Grid.Column="1" Margin="26,0,0,0">
                     <StackPanel Orientation="Horizontal" Spacing="7" Margin="0,0,0,16">
-                        <Border Classes="metaPill accent"><TextBlock Classes="metaPillText" Text="{Binding ContentTypeLabel}"
-                                Foreground="{StaticResource PbAccentTextBrush}" /></Border>
+                        <ComboBox Classes="contentTypePicker" ItemsSource="{Binding ContentTypeOptions}"
+                                  SelectedItem="{Binding SelectedContentType}" ToolTip.Tip="Content Type" />
                         <Border Classes="metaPill muted"><TextBlock Classes="metaPillText" Text="{Binding StatusLabel}"
                                 Foreground="{StaticResource PbTextFaintBrush}" /></Border>
                         <Border Classes="metaPill muted"><TextBlock Classes="metaPillText" Text="{Binding IssueCountLabel}"

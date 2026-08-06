@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" Version="6.0.0" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.8.0" />
+    <PackageReference Include="xunit" Version="2.5.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.5.3" />
+    <!-- Bootstraps a real (windowless) Avalonia platform once per test assembly (TestAppBuilder.cs)
+         - needed because Avalonia.Media.Imaging.Bitmap construction requires
+         IPlatformRenderInterface to be registered, which only happens once an AppBuilder has run. -->
+    <PackageReference Include="Avalonia.Headless" Version="12.1.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Paperbunkr.App\Paperbunkr.App.csproj" />
+  </ItemGroup>
+
+</Project>

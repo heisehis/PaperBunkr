@@ -54,7 +54,11 @@ public partial class MainViewModel : ViewModelBase
     private void GoLibrary() => CurrentScreen = "library";
 
     [RelayCommand]
-    private void GoSmart() => CurrentScreen = "smart";
+    private void GoSmart()
+    {
+        Smart.EnsureListLoaded();
+        CurrentScreen = "smart";
+    }
 
     [RelayCommand]
     private void GoReading() => CurrentScreen = "reading";

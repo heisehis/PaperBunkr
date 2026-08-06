@@ -165,33 +165,36 @@ Implemented as a dedicated method, `DuplicateIssueIds(DbContext) : HashSet<int>`
 
 ## 7. Query engine
 
+**Revised during implementation:** evaluated in memory (`Func<Issue,T>` selectors over a materialized `ctx.Issues.Include(i => i.Series).Include(i => i.CustomValues).ToList()`), not as `IQueryable<Issue>` translated to SQL as originally sketched here. This is a deliberate refinement, not a shortcut — CE's own matcher system (`IMatcher<ComicBook>`) has always worked exactly this way, evaluating in-memory over the fully-loaded library (docs/onboarding.md §5: "no indexing, no partial writes"), so this is the more CE-faithful architecture, not a compromise. It also sidesteps real SQL-translation risk across ~70 heterogeneous fields (enum equality, CE's exact clamped `ReadPercentage` formula, `FileSize` MB conversion) that would otherwise need careful `Expression`-tree construction. At a personal-library scale (thousands, not millions, of issues) the performance difference is immaterial.
+
 ```csharp
 public static class SmartListQueryBuilder
 {
-    public static IQueryable<Issue> Build(PaperbunkrDbContext ctx, SmartList list)
+    public static List<Issue> Build(PaperbunkrDbContext ctx, SmartList list)
     {
-        var query = ctx.Issues.Include(i => i.Series).AsQueryable();
+        var issues = ctx.Issues.Include(i => i.Series).Include(i => i.CustomValues).ToList();
+        HashSet<int>? duplicateIds = list.Conditions.Any(c => c.Field == SmartListField.Duplicate)
+            ? DuplicateIssueIds(issues) : null;
+
+        IEnumerable<Issue> result = issues;
         foreach (var condition in list.Conditions.OrderBy(c => c.SortOrder))
         {
-            query = condition.Field == SmartListField.Duplicate
-                ? ApplyDuplicateFilter(ctx, query)
-                : ApplyCondition(query, condition);
+            result = result.Where(i => Evaluate(i, condition, duplicateIds));
         }
-        return query;
+        return result.ToList();
     }
-    // ApplyCondition switches on the field's SmartListDataType (4 cases, not 70),
-    // looks up the field's Selector from SmartListCatalog, and delegates to one of
-    // four typed evaluators (Text/Number/Toggle/Date) that build the .Where() clause
-    // from Operator + Value(+Value2).
+    // Evaluate switches on the field's SmartListDataType (4 cases, not 70), looks up the
+    // field's selector from SmartListCatalog, and delegates to one of four typed evaluators
+    // (Text/Number/Toggle/Date) that apply Operator + Value(+Value2).
 }
 ```
 
-This one builder powers the live match-count badge, the actual filtered issue list, and every system smart list — no special-casing except `Duplicate` (§6).
+This one builder powers the live match-count badge, the actual filtered issue list, and every system smart list — no special-casing except `Duplicate` (§6) and `CustomValue` (§4).
 
 ## 8. UI wiring
 
 - **Sidebar** (`MainWindow.axaml` "CUSTOM" section + built-ins section): binds to `ObservableCollection<SmartListSummary>` (`Name`, `MatchCount`), queried live via `SmartListQueryBuilder` when the Smart screen is shown. `+ New Smart List` creates a blank custom `SmartList` and navigates to it.
-- **`SmartScreenViewModel(int smartListId)`**: loads the `SmartList` and its `Conditions` for binding; `MatchCountLabel` recomputes reactively as conditions change. `+ Add condition` appends a blank `SmartListCondition` (field picker defaults to `SeriesName`); `✕` removes one; each row's operator dropdown filters to the selected field's `SmartListDataType`. `Save` persists via EF Core; `Cancel` reverts; `Duplicate` clones into a new custom list. System lists render conditions read-only.
+- **`SmartScreenViewModel.LoadSmartList(int)`/`EnsureListLoaded()`**: matches the existing `ReaderScreenViewModel.LoadIssue`/`EnsureIssueLoaded` convention — loads the `SmartList` and its `Conditions` for binding; `MatchCountLabel` recomputes reactively as conditions change. `+ Add condition` appends a blank `SmartListCondition` (field picker defaults to `SeriesName`); `✕` removes one; each row's operator dropdown filters to the selected field's `SmartListDataType`. `Save` persists via EF Core; `Cancel` reverts; `Duplicate` clones into a new custom list. System lists render conditions read-only.
 
 ## 9. Testing
 

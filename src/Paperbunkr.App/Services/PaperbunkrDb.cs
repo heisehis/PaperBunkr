@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using Microsoft.EntityFrameworkCore;
 using Paperbunkr.Data;
@@ -32,6 +33,8 @@ public static class PaperbunkrDb
         using var context = CreateContext();
         context.Database.Migrate();
 
+        SeedSystemSmartLists(context);
+
         if (context.Series.Any())
         {
             return;
@@ -64,6 +67,49 @@ public static class PaperbunkrDb
             }
 
             context.Series.Add(series);
+        }
+
+        context.SaveChanges();
+    }
+
+    /// <summary>
+    /// Seeds the built-in system smart lists (docs/superpowers/specs/2026-08-06-smart-lists-design.md
+    /// §5), idempotent on <c>IsSystem</c> rows already existing. Every rule value is taken directly
+    /// from ComicRackCE's actual default-list source (<c>ComicLibrary.cs</c>/
+    /// <c>EngineConfiguration.cs</c>), not invented — see the spec for citations.
+    /// </summary>
+    private static void SeedSystemSmartLists(PaperbunkrDbContext context)
+    {
+        if (context.SmartLists.Any(s => s.IsSystem))
+        {
+            return;
+        }
+
+        var systemLists = new (string Name, SmartListField Field, SmartListOperator Operator, string Value, string? Value2)[]
+        {
+            ("My Favorites", SmartListField.Rating, SmartListOperator.GreaterThan, "3", null),
+            ("Recently Added", SmartListField.Added, SmartListOperator.WithinLastDays, "14", null),
+            ("Recently Read", SmartListField.Opened, SmartListOperator.WithinLastDays, "14", null),
+            ("Never Read", SmartListField.ReadPercentage, SmartListOperator.LessThan, "10", null),
+            ("Reading", SmartListField.ReadPercentage, SmartListOperator.InRange, "10", "95"),
+            ("Read", SmartListField.ReadPercentage, SmartListOperator.GreaterThan, "95", null),
+            ("Missing Files", SmartListField.IsMissing, SmartListOperator.Is, "true", null),
+            ("Duplicate Candidates", SmartListField.Duplicate, SmartListOperator.Is, "true", null),
+        };
+
+        int sortOrder = 0;
+        foreach (var (name, field, op, value, value2) in systemLists)
+        {
+            context.SmartLists.Add(new SmartList
+            {
+                Name = name,
+                IsSystem = true,
+                SortOrder = sortOrder++,
+                Conditions = new List<SmartListCondition>
+                {
+                    new() { Field = field, Operator = op, Value = value, Value2 = value2, SortOrder = 0 },
+                },
+            });
         }
 
         context.SaveChanges();

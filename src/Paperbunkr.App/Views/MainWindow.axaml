@@ -2,6 +2,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:Paperbunkr.App.ViewModels"
         xmlns:views="using:Paperbunkr.App.Views"
+        xmlns:models="using:Paperbunkr.App.Models"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d" d:DesignWidth="1200" d:DesignHeight="760"
@@ -52,6 +53,28 @@
         </Style>
         <Style Selector="Border.sideItem.active">
             <Setter Property="Background" Value="{StaticResource PbAccentSoftBrush}" />
+        </Style>
+
+        <!-- Clickable sidebar row (real Smart List selection needs a Command, unlike the static
+             library sidebar rows above) styled to match Border.sideItem's look. -->
+        <Style Selector="Button.sideItemButton">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="CornerRadius" Value="4" />
+            <Setter Property="Padding" Value="8,7" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style Selector="Button.sideItemButton:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="{StaticResource PbAccentSoftBrush}" />
+        </Style>
+        <Style Selector="Button.sideItemButton.active /template/ ContentPresenter">
+            <Setter Property="Background" Value="{StaticResource PbAccentSoftBrush}" />
+        </Style>
+        <Style Selector="Button.sideItemButton.active TextBlock.sideItemLabel">
+            <Setter Property="FontWeight" Value="Bold" />
+            <Setter Property="Foreground" Value="{StaticResource PbTextBrush}" />
         </Style>
 
         <Style Selector="TextBlock.sideHeading">
@@ -168,62 +191,67 @@
                         </Border>
                     </StackPanel>
 
-                    <!-- Smart Lists sidebar (SmartSidebar.dc.html) -->
+                    <!-- Smart Lists sidebar (SmartSidebar.dc.html), wired to real SmartList data -->
                     <StackPanel IsVisible="{Binding IsSmart}" Spacing="1">
                         <TextBlock Text="Smart Lists" FontSize="16" FontWeight="Bold"
                                    Foreground="{StaticResource PbTextBrush}" Margin="8,0,8,14" />
 
-                        <Border Classes="sideItem"><Grid ColumnDefinitions="*,Auto">
-                            <TextBlock Grid.Column="0" Text="My Favorites" FontSize="13" Foreground="{StaticResource PbTextMutedBrush}" />
-                            <Border Grid.Column="1" Classes="countBadge"><TextBlock Classes="count" Text="64" Foreground="{StaticResource PbTextFaintBrush}" /></Border>
-                        </Grid></Border>
-                        <Border Classes="sideItem"><Grid ColumnDefinitions="*,Auto">
-                            <TextBlock Grid.Column="0" Text="Recently Added" FontSize="13" Foreground="{StaticResource PbTextMutedBrush}" />
-                            <Border Grid.Column="1" Classes="countBadge"><TextBlock Classes="count" Text="231" Foreground="{StaticResource PbTextFaintBrush}" /></Border>
-                        </Grid></Border>
-                        <Border Classes="sideItem"><Grid ColumnDefinitions="*,Auto">
-                            <TextBlock Grid.Column="0" Text="Reading" FontSize="13" Foreground="{StaticResource PbTextMutedBrush}" />
-                            <Border Grid.Column="1" Classes="countBadge"><TextBlock Classes="count" Text="18" Foreground="{StaticResource PbTextFaintBrush}" /></Border>
-                        </Grid></Border>
-                        <Border Classes="sideItem"><Grid ColumnDefinitions="*,Auto">
-                            <TextBlock Grid.Column="0" Text="Read" FontSize="13" Foreground="{StaticResource PbTextMutedBrush}" />
-                            <Border Grid.Column="1" Classes="countBadge"><TextBlock Classes="count" Text="1,204" Foreground="{StaticResource PbTextFaintBrush}" /></Border>
-                        </Grid></Border>
-                        <Border Classes="sideItem"><Grid ColumnDefinitions="*,Auto">
-                            <TextBlock Grid.Column="0" Text="Never Read" FontSize="13" Foreground="{StaticResource PbTextMutedBrush}" />
-                            <Border Grid.Column="1" Classes="countBadge"><TextBlock Classes="count" Text="579" Foreground="{StaticResource PbTextFaintBrush}" /></Border>
-                        </Grid></Border>
+                        <ItemsControl x:Name="BuiltInSmartLists" ItemsSource="{Binding Smart.BuiltInLists}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="models:SmartListSummary">
+                                    <Button Classes="sideItemButton" Classes.active="{Binding IsActive}"
+                                            Command="{Binding #BuiltInSmartLists.((vm:MainViewModel)DataContext).Smart.SelectListCommand}"
+                                            CommandParameter="{Binding}">
+                                        <Grid ColumnDefinitions="*,Auto">
+                                            <TextBlock Grid.Column="0" Classes="sideItemLabel" Text="{Binding Name}" FontSize="13" Foreground="{StaticResource PbTextMutedBrush}" />
+                                            <Border Grid.Column="1" Classes="countBadge"><TextBlock Classes="count" Text="{Binding MatchCount}" Foreground="{StaticResource PbTextFaintBrush}" /></Border>
+                                        </Grid>
+                                    </Button>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
 
                         <TextBlock Classes="sideHeading" Text="CUSTOM" Margin="8,12,8,6" />
 
-                        <Border Classes="sideItem active"><Grid ColumnDefinitions="*,Auto">
-                            <TextBlock Grid.Column="0" Text="Unread Salvage Noir" FontSize="13" FontWeight="Bold" Foreground="{StaticResource PbTextBrush}" />
-                            <TextBlock Grid.Column="1" Classes="count" Text="342" Foreground="{StaticResource PbAccentTextBrush}" VerticalAlignment="Center" />
-                        </Grid></Border>
-                        <Border Classes="sideItem"><Grid ColumnDefinitions="*,Auto">
-                            <TextBlock Grid.Column="0" Text="Complete Series Only" FontSize="13" Foreground="{StaticResource PbTextMutedBrush}" />
-                            <Border Grid.Column="1" Classes="countBadge"><TextBlock Classes="count" Text="96" Foreground="{StaticResource PbTextFaintBrush}" /></Border>
-                        </Grid></Border>
+                        <ItemsControl x:Name="CustomSmartLists" ItemsSource="{Binding Smart.CustomLists}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="models:SmartListSummary">
+                                    <Button Classes="sideItemButton" Classes.active="{Binding IsActive}"
+                                            Command="{Binding #CustomSmartLists.((vm:MainViewModel)DataContext).Smart.SelectListCommand}"
+                                            CommandParameter="{Binding}">
+                                        <Grid ColumnDefinitions="*,Auto">
+                                            <TextBlock Grid.Column="0" Classes="sideItemLabel" Text="{Binding Name}" FontSize="13" Foreground="{StaticResource PbTextMutedBrush}" />
+                                            <Border Grid.Column="1" Classes="countBadge"><TextBlock Classes="count" Text="{Binding MatchCount}" Foreground="{StaticResource PbTextFaintBrush}" /></Border>
+                                        </Grid>
+                                    </Button>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
 
                         <TextBlock Text="▾ Maintenance" FontSize="13" Foreground="{StaticResource PbTextMutedBrush}" Margin="8,7" />
                         <StackPanel Margin="14,0,0,0" Spacing="0">
                             <Border BorderBrush="{StaticResource PbBorderBrush}" BorderThickness="1,0,0,0" Padding="10,0,0,0">
-                                <StackPanel>
-                                    <Grid ColumnDefinitions="*,Auto" Margin="0,6,8,6">
-                                        <TextBlock Grid.Column="0" Text="Missing Files" FontSize="13" Foreground="{StaticResource PbTextMutedBrush}" />
-                                        <TextBlock Grid.Column="1" Classes="count" Text="23" Foreground="{StaticResource PbTextFaintBrush}" />
-                                    </Grid>
-                                    <Grid ColumnDefinitions="*,Auto" Margin="0,6,8,6">
-                                        <TextBlock Grid.Column="0" Text="Duplicate Candidates" FontSize="13" Foreground="{StaticResource PbTextMutedBrush}" />
-                                        <TextBlock Grid.Column="1" Classes="count" Text="7" Foreground="{StaticResource PbTextFaintBrush}" />
-                                    </Grid>
-                                </StackPanel>
+                                <ItemsControl x:Name="MaintenanceSmartLists" ItemsSource="{Binding Smart.MaintenanceLists}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="models:SmartListSummary">
+                                            <Button Classes="sideItemButton" Classes.active="{Binding IsActive}"
+                                                    Command="{Binding #MaintenanceSmartLists.((vm:MainViewModel)DataContext).Smart.SelectListCommand}"
+                                                    CommandParameter="{Binding}">
+                                                <Grid ColumnDefinitions="*,Auto">
+                                                    <TextBlock Grid.Column="0" Classes="sideItemLabel" Text="{Binding Name}" FontSize="13" Foreground="{StaticResource PbTextMutedBrush}" />
+                                                    <TextBlock Grid.Column="1" Classes="count" Text="{Binding MatchCount}" Foreground="{StaticResource PbTextFaintBrush}" />
+                                                </Grid>
+                                            </Button>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
                             </Border>
                         </StackPanel>
 
                         <Border BorderThickness="1" BorderBrush="#383D47" CornerRadius="5" Margin="0,12,0,0" Padding="8">
-                            <TextBlock Text="+ New Smart List" FontSize="12" Foreground="{StaticResource PbTextFaintBrush}"
-                                       HorizontalAlignment="Center" />
+                            <Button Classes="sideItemButton" HorizontalContentAlignment="Center"
+                                    Command="{Binding Smart.CreateNewCommand}"
+                                    Content="+ New Smart List" FontSize="12" Foreground="{StaticResource PbTextFaintBrush}" />
                         </Border>
                     </StackPanel>
 

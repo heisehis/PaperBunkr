@@ -20,8 +20,13 @@ subscribes and recomputes display mode from `Tabs.SelectedIssueIds.Count`:
 - **0 or 2+ selected → "series" mode** - today's existing aggregate behavior, unchanged.
 - **exactly 1 selected → "issue" mode** - that one issue's own data.
 
-Series title, summary, status pill, and issue-count pill stay series-level in both modes (per
-explicit decision) - you're still browsing that series, just focusing one issue's cover/credits.
+Series title, status pill, and issue-count pill stay series-level in both modes - you're still
+browsing that series, just focusing one issue's cover/credits. **Revised after live manual
+verification**: the description (`Summary`) was originally scoped to stay series-level too, but
+seeing it in the running app made clear that was wrong - `Issue.Summary` is a real, distinct field,
+and leaving the description static while the cover/credits/pills all switched around it looked
+broken, not deliberate. `Summary` now switches with the same series/issue-mode logic as everything
+else in §2/§3.
 
 ## 2. Cover
 

@@ -1,0 +1,20 @@
+{
+  "name": "Default",
+  "colors": {
+    "bg": "#14161B",
+    "chrome": "#1C1F26",
+    "border": "#2A2E37",
+    "text": "#ECE7DB",
+    "textMuted": "#B3ADA0",
+    "textFaint": "#77726A",
+    "accent": "#C9803F",
+    "accentText": "#E0995A",
+    "accentSoft": "#29C9803F",
+    "badge": "#D7AC4C",
+    "badgeText": "#241505",
+    "success": "#5FA889"
+  },
+  "spacingUnit": 4,
+  "radius": 7,
+  "icons": {}
+}

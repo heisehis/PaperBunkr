@@ -12,6 +12,12 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- CoverThumbnailService's internal test-injection constructor (docs/superpowers/specs/
+         2026-08-06-cover-thumbnails-design.md §2) needs this. -->
+    <InternalsVisibleTo Include="Paperbunkr.App.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- Native 7z.dll (LGPL, the redistributable 7-Zip library itself, not ComicRackCE's own
          code) - CBZ/CBR both default to EngineConfiguration.CbEngines.SevenZip, which loads this
          via NativeInterop.ResolveNativeAssetPath's {baseDir}/x64/ search

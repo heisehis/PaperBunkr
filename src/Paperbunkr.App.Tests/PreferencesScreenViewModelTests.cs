@@ -1,0 +1,462 @@
+using Microsoft.EntityFrameworkCore;
+using Paperbunkr.App.Services;
+using Paperbunkr.App.ViewModels;
+using Paperbunkr.Data;
+
+namespace Paperbunkr.App.Tests;
+
+/// <summary>
+/// Exercises <see cref="PreferencesScreenViewModel"/> (docs/superpowers/specs/2026-08-07-preferences-skin-system-design.md
+/// §5) against a real <see cref="SkinService"/> pointed at a temp skins folder + in-memory-database
+/// context factory, same isolation approach as <see cref="SkinServiceTests"/>. Joins
+/// <see cref="AvaloniaTestCollection"/> since skin selection touches Application resources.
+/// </summary>
+[Collection(nameof(AvaloniaTestCollection))]
+public class PreferencesScreenViewModelTests : IDisposable
+{
+    private readonly string _originalInstalledDirectory;
+    private readonly string _originalExtractedDirectory;
+    private readonly string _dbPath;
+    private readonly DbContextOptions<PaperbunkrDbContext> _dbOptions;
+
+    public PreferencesScreenViewModelTests()
+    {
+        _originalInstalledDirectory = SkinPaths.InstalledDirectory;
+        _originalExtractedDirectory = SkinPaths.ExtractedDirectory;
+
+        string root = Path.Combine(Path.GetTempPath(), $"paperbunkr_prefsvm_test_{Guid.NewGuid():N}");
+        SkinPaths.InstalledDirectory = Path.Combine(root, "skins");
+        SkinPaths.ExtractedDirectory = Path.Combine(root, "skins-extracted");
+
+        _dbPath = Path.Combine(Path.GetTempPath(), $"paperbunkr_prefsvm_db_test_{Guid.NewGuid():N}.db");
+        _dbOptions = new DbContextOptionsBuilder<PaperbunkrDbContext>().UseSqlite($"Data Source={_dbPath}").Options;
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        context.Database.EnsureCreated();
+    }
+
+    public void Dispose()
+    {
+        SkinPaths.InstalledDirectory = _originalInstalledDirectory;
+        SkinPaths.ExtractedDirectory = _originalExtractedDirectory;
+
+        Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
+        try
+        {
+            if (File.Exists(_dbPath)) File.Delete(_dbPath);
+        }
+        catch (IOException)
+        {
+        }
+    }
+
+    private PreferencesScreenViewModel CreateViewModel(IFilePickerService? filePicker = null, IShellFileAssociation? shell = null)
+    {
+        var skinService = new SkinService(() => new PaperbunkrDbContext(_dbOptions));
+        var scanner = new LibraryFolderScanner(() => new PaperbunkrDbContext(_dbOptions));
+        var fileAssociationService = new FileAssociationService(shell ?? new FakeShellFileAssociation());
+        var backupService = new BackupService(() => new PaperbunkrDbContext(_dbOptions));
+        return new PreferencesScreenViewModel(
+            skinService,
+            filePicker ?? new NoOpFilePicker(),
+            scanner,
+            fileAssociationService,
+            backupService,
+            () => new PaperbunkrDbContext(_dbOptions));
+    }
+
+    [Fact]
+    public void GoAppearance_SetsActiveTabFlag()
+    {
+        var vm = CreateViewModel();
+
+        vm.GoAppearanceCommand.Execute(null);
+
+        Assert.True(vm.IsAppearanceTab);
+    }
+
+    [Fact]
+    public void EnsureLoaded_PopulatesSkinsAndFontsOnce()
+    {
+        var vm = CreateViewModel();
+
+        vm.EnsureLoaded();
+        int skinCountAfterFirstLoad = vm.Skins.Count;
+        vm.EnsureLoaded();
+
+        Assert.Single(vm.Skins);
+        Assert.Equal(skinCountAfterFirstLoad, vm.Skins.Count);
+        Assert.Contains("System Default", vm.FontFamilies);
+        Assert.Equal("System Default", vm.SelectedFontFamily);
+    }
+
+    [Fact]
+    public void SelectSkin_AppliesSkin_AndRefreshesActiveFlag()
+    {
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+        var defaultSkin = vm.Skins[0];
+
+        vm.SelectSkinCommand.Execute(defaultSkin);
+
+        Assert.True(vm.Skins[0].IsActive);
+    }
+
+    [Fact]
+    public void SelectedFontFamily_Change_PersistsToAppSettings()
+    {
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+
+        vm.SelectedFontFamily = "Consolas";
+
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        Assert.Equal("Consolas", context.GetOrCreateAppSettings().SelectedFontFamily);
+    }
+
+    [Fact]
+    public void GoBehavior_SetsActiveTabFlag()
+    {
+        var vm = CreateViewModel();
+
+        vm.GoBehaviorCommand.Execute(null);
+
+        Assert.True(vm.IsBehaviorTab);
+        Assert.False(vm.IsAppearanceTab);
+    }
+
+    [Fact]
+    public void EnsureLoaded_PopulatesBehaviorFlagsFromAppSettings()
+    {
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            var settings = context.GetOrCreateAppSettings();
+            settings.OpenLastPage = false;
+            settings.AutoNavigateComics = false;
+            context.SaveChanges();
+        }
+
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+
+        Assert.False(vm.OpenLastPage);
+        Assert.False(vm.AutoNavigateComics);
+    }
+
+    [Fact]
+    public void TogglingBehaviorFlags_PersistsToAppSettings()
+    {
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+
+        vm.OpenLastPage = false;
+        vm.AutoNavigateComics = false;
+
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        var settings = context.GetOrCreateAppSettings();
+        Assert.False(settings.OpenLastPage);
+        Assert.False(settings.AutoNavigateComics);
+    }
+
+    [Fact]
+    public void GoReader_SetsActiveTabFlag()
+    {
+        var vm = CreateViewModel();
+
+        vm.GoReaderCommand.Execute(null);
+
+        Assert.True(vm.IsReaderTab);
+        Assert.False(vm.IsAppearanceTab);
+    }
+
+    [Fact]
+    public void EnsureLoaded_PopulatesReverseRtlNavigationFromAppSettings()
+    {
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            context.GetOrCreateAppSettings().ReverseRtlNavigation = false;
+            context.SaveChanges();
+        }
+
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+
+        Assert.False(vm.ReverseRtlNavigation);
+    }
+
+    [Fact]
+    public void TogglingReverseRtlNavigation_PersistsToAppSettings()
+    {
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+
+        vm.ReverseRtlNavigation = false;
+
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        Assert.False(context.GetOrCreateAppSettings().ReverseRtlNavigation);
+    }
+
+    [Fact]
+    public void BrowseForSkin_UserCancels_LeavesErrorUntouched()
+    {
+        var vm = CreateViewModel(new NoOpFilePicker());
+        vm.EnsureLoaded();
+
+        vm.BrowseForSkinCommand.Execute(null);
+
+        Assert.False(vm.HasInstallSkinError);
+    }
+
+    [Fact]
+    public void GoLibraries_SetsActiveTabFlag()
+    {
+        var vm = CreateViewModel();
+
+        vm.GoLibrariesCommand.Execute(null);
+
+        Assert.True(vm.IsLibrariesTab);
+    }
+
+    [Fact]
+    public void AddVirtualTag_CreatesAndSelectsNewTag()
+    {
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+
+        vm.AddVirtualTagCommand.Execute(null);
+
+        Assert.Single(vm.VirtualTags);
+        Assert.True(vm.HasSelectedVirtualTag);
+        Assert.Equal("New Tag", vm.VirtualTagName);
+    }
+
+    [Fact]
+    public void EditingSelectedVirtualTag_PersistsAndUpdatesPreview()
+    {
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+        vm.AddVirtualTagCommand.Execute(null);
+
+        vm.VirtualTagName = "Series + Number";
+        vm.VirtualTagCaptionFormat = "{Series} #{Number}";
+
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            var tag = Assert.Single(context.VirtualTagDefinitions);
+            Assert.Equal("Series + Number", tag.Name);
+            Assert.Equal("{Series} #{Number}", tag.CaptionFormat);
+        }
+
+        Assert.Equal("Sample Series #1", vm.VirtualTagPreview);
+    }
+
+    [Fact]
+    public void DeleteVirtualTag_RemovesItAndClearsSelection()
+    {
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+        vm.AddVirtualTagCommand.Execute(null);
+
+        vm.DeleteVirtualTagCommand.Execute(null);
+
+        Assert.Empty(vm.VirtualTags);
+        Assert.False(vm.HasSelectedVirtualTag);
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        Assert.Empty(context.VirtualTagDefinitions);
+    }
+
+    [Fact]
+    public async Task AddFolder_UserPicksFolder_PersistsAndRefreshesList()
+    {
+        var picker = new StubFilePicker { FolderToReturn = @"C:\Comics" };
+        var vm = CreateViewModel(picker);
+        vm.EnsureLoaded();
+
+        await vm.AddFolderCommand.ExecuteAsync(null);
+
+        Assert.Single(vm.WatchedFolders);
+        Assert.Equal(@"C:\Comics", vm.WatchedFolders[0].Path);
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        Assert.Single(context.WatchedFolders);
+    }
+
+    [Fact]
+    public async Task AddFolder_UserCancels_DoesNotAdd()
+    {
+        var vm = CreateViewModel(new StubFilePicker { FolderToReturn = null });
+        vm.EnsureLoaded();
+
+        await vm.AddFolderCommand.ExecuteAsync(null);
+
+        Assert.Empty(vm.WatchedFolders);
+    }
+
+    [Fact]
+    public void RemoveFolder_DeletesItFromListAndDatabase()
+    {
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            context.WatchedFolders.Add(new Paperbunkr.Data.Entities.WatchedFolder { Path = @"C:\Comics" });
+            context.SaveChanges();
+        }
+
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+        var folder = vm.WatchedFolders[0];
+
+        vm.RemoveFolderCommand.Execute(folder);
+
+        Assert.Empty(vm.WatchedFolders);
+        using var verify = new PaperbunkrDbContext(_dbOptions);
+        Assert.Empty(verify.WatchedFolders);
+    }
+
+    [Fact]
+    public async Task ScanNow_ReportsResultInScanStatus()
+    {
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+
+        await vm.ScanNowCommand.ExecuteAsync(null);
+
+        Assert.Equal("No new issues found.", vm.ScanStatus);
+        Assert.False(vm.IsScanning);
+    }
+
+    [Fact]
+    public void GoAdvanced_SetsActiveTabFlag()
+    {
+        var vm = CreateViewModel();
+
+        vm.GoAdvancedCommand.Execute(null);
+
+        Assert.True(vm.IsAdvancedTab);
+    }
+
+    [Fact]
+    public void EnsureLoaded_PopulatesFileAssociations_NoneAssociatedInitially()
+    {
+        var vm = CreateViewModel();
+
+        vm.EnsureLoaded();
+
+        Assert.NotEmpty(vm.FileAssociations);
+        Assert.All(vm.FileAssociations, f => Assert.False(f.IsAssociated));
+    }
+
+    [Fact]
+    public void ToggleFileAssociation_RegistersThroughToShell_AndRefreshesList()
+    {
+        var shell = new FakeShellFileAssociation();
+        var vm = CreateViewModel(shell: shell);
+        vm.EnsureLoaded();
+        var format = vm.FileAssociations[0];
+
+        vm.ToggleFileAssociationCommand.Execute(format);
+
+        Assert.True(vm.FileAssociations[0].IsAssociated);
+        Assert.True(shell.RefreshCalled);
+    }
+
+    [Fact]
+    public void ChangingBackupsToKeep_PersistsToAppSettings()
+    {
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+
+        vm.BackupsToKeep = 10;
+
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        Assert.Equal(10, context.GetOrCreateAppSettings().BackupsToKeep);
+    }
+
+    [Fact]
+    public void BackupNow_CreatesBackupRow_AndSetsStatus()
+    {
+        string? originalOverride = PaperbunkrDbContext.DatabasePathOverride;
+        string backupRoot = Path.Combine(Path.GetTempPath(), $"paperbunkr_prefsvm_backups_{Guid.NewGuid():N}");
+        PaperbunkrDbContext.DatabasePathOverride = _dbPath;
+        try
+        {
+            var vm = CreateViewModel();
+            vm.EnsureLoaded();
+            vm.BackupLocation = backupRoot;
+
+            vm.BackupNowCommand.Execute(null);
+
+            Assert.Equal("Backup created.", vm.BackupStatus);
+            Assert.Single(vm.Backups);
+        }
+        finally
+        {
+            PaperbunkrDbContext.DatabasePathOverride = originalOverride;
+            try { if (Directory.Exists(backupRoot)) Directory.Delete(backupRoot, recursive: true); } catch (IOException) { }
+        }
+    }
+
+    [Fact]
+    public void BackupRow_Restore_RequiresTwoClicks()
+    {
+        string? originalOverride = PaperbunkrDbContext.DatabasePathOverride;
+        string backupRoot = Path.Combine(Path.GetTempPath(), $"paperbunkr_prefsvm_backups_{Guid.NewGuid():N}");
+        PaperbunkrDbContext.DatabasePathOverride = _dbPath;
+        try
+        {
+            var vm = CreateViewModel();
+            vm.EnsureLoaded();
+            vm.BackupLocation = backupRoot;
+            vm.BackupNowCommand.Execute(null);
+            var row = vm.Backups[0];
+
+            row.RestoreCommand.Execute(null);
+            Assert.Equal("Confirm restore?", row.RestoreLabel);
+            Assert.Equal("Backup created.", vm.BackupStatus);
+
+            row.RestoreCommand.Execute(null);
+            Assert.Equal("Restored — restart Paperbunkr for the change to take effect.", vm.BackupStatus);
+        }
+        finally
+        {
+            PaperbunkrDbContext.DatabasePathOverride = originalOverride;
+            try { if (Directory.Exists(backupRoot)) Directory.Delete(backupRoot, recursive: true); } catch (IOException) { }
+        }
+    }
+
+    private sealed class FakeShellFileAssociation : IShellFileAssociation
+    {
+        private readonly HashSet<(string TypeId, string Extension)> _registered = new();
+
+        public bool RefreshCalled { get; private set; }
+
+        public bool IsRegistered(string typeId, string extension) => _registered.Contains((typeId, extension));
+
+        public void Register(string typeId, string extension, string displayName, string appPath) => _registered.Add((typeId, extension));
+
+        public void Unregister(string typeId, string extension) => _registered.Remove((typeId, extension));
+
+        public void RefreshShell() => RefreshCalled = true;
+    }
+
+    private sealed class NoOpFilePicker : IFilePickerService
+    {
+        public Task<string?> PickOpenFileAsync(string title, string extension, string extensionLabel) => Task.FromResult<string?>(null);
+
+        public Task<string?> PickSaveFileAsync(string title, string suggestedFileName, string extension, string extensionLabel) => Task.FromResult<string?>(null);
+
+        public Task<string?> PickFolderAsync(string title) => Task.FromResult<string?>(null);
+
+        public Task SetClipboardTextAsync(string text) => Task.CompletedTask;
+    }
+
+    private sealed class StubFilePicker : IFilePickerService
+    {
+        public string? FolderToReturn { get; set; }
+
+        public Task<string?> PickOpenFileAsync(string title, string extension, string extensionLabel) => Task.FromResult<string?>(null);
+
+        public Task<string?> PickSaveFileAsync(string title, string suggestedFileName, string extension, string extensionLabel) => Task.FromResult<string?>(null);
+
+        public Task<string?> PickFolderAsync(string title) => Task.FromResult(FolderToReturn);
+
+        public Task SetClipboardTextAsync(string text) => Task.CompletedTask;
+    }
+}

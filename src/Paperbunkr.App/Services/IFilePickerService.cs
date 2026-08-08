@@ -16,5 +16,8 @@ public interface IFilePickerService
     /// <summary>Returns the chosen save path, or null if the user cancelled.</summary>
     Task<string?> PickSaveFileAsync(string title, string suggestedFileName, string extension, string extensionLabel);
 
+    /// <summary>Returns the picked folder's local path, or null if the user cancelled.</summary>
+    Task<string?> PickFolderAsync(string title);
+
     Task SetClipboardTextAsync(string text);
 }

@@ -18,17 +18,17 @@
         <Style Selector="Button.headerAction.ghost">
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="BorderThickness" Value="0" />
-            <Setter Property="Foreground" Value="{StaticResource PbTextMutedBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
         </Style>
         <Style Selector="Button.headerAction.primary">
-            <Setter Property="Background" Value="{StaticResource PbAccentBrush}" />
-            <Setter Property="BorderBrush" Value="{StaticResource PbAccentBrush}" />
+            <Setter Property="Background" Value="{DynamicResource PbAccentBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
             <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="Foreground" Value="{StaticResource PbBadgeTextBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource PbBadgeTextBrush}" />
         </Style>
 
         <Style Selector="ComboBox.conditionPicker">
-            <Setter Property="Background" Value="{StaticResource PbChromeBrush}" />
+            <Setter Property="Background" Value="{DynamicResource PbChromeBrush}" />
             <Setter Property="BorderBrush" Value="#383D47" />
             <Setter Property="BorderThickness" Value="1" />
             <Setter Property="CornerRadius" Value="5" />
@@ -37,7 +37,7 @@
             <Setter Property="MinWidth" Value="120" />
         </Style>
         <Style Selector="TextBox.conditionValue">
-            <Setter Property="Background" Value="{StaticResource PbChromeBrush}" />
+            <Setter Property="Background" Value="{DynamicResource PbChromeBrush}" />
             <Setter Property="BorderBrush" Value="#383D47" />
             <Setter Property="BorderThickness" Value="1" />
             <Setter Property="CornerRadius" Value="5" />
@@ -52,40 +52,40 @@
 
             <Grid ColumnDefinitions="*,Auto" Margin="28,20,28,16">
                 <StackPanel Grid.Column="0" VerticalAlignment="Bottom">
-                    <TextBlock Text="{Binding ListName}" FontSize="22" FontWeight="Bold" Foreground="{StaticResource PbTextBrush}" />
-                    <TextBlock Text="{Binding Subtitle}" FontSize="12.5" Foreground="{StaticResource PbTextFaintBrush}" Margin="0,4,0,0" />
+                    <TextBlock Text="{Binding ListName}" FontSize="22" FontWeight="Bold" Foreground="{DynamicResource PbTextBrush}" />
+                    <TextBlock Text="{Binding Subtitle}" FontSize="12.5" Foreground="{DynamicResource PbTextFaintBrush}" Margin="0,4,0,0" />
                 </StackPanel>
                 <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Bottom">
                     <Button Classes="headerAction ghost" Content="Duplicate" Command="{Binding DuplicateCommand}" />
                     <Button Classes="headerAction primary" Content="Save" Command="{Binding SaveCommand}" IsVisible="{Binding !IsReadOnly}" />
                 </StackPanel>
             </Grid>
-            <Border BorderBrush="{StaticResource PbBorderBrush}" BorderThickness="0,0,0,1" Margin="0,0,0,24" />
+            <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,0,0,1" Margin="0,0,0,24" />
 
             <StackPanel MaxWidth="760" HorizontalAlignment="Left" Margin="28,0,28,40">
 
-                <Border Background="{StaticResource PbChromeBrush}" BorderBrush="{StaticResource PbBorderBrush}"
+                <Border Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}"
                         BorderThickness="1" CornerRadius="999" Padding="12,6" HorizontalAlignment="Left" Margin="0,0,0,20">
                     <StackPanel Orientation="Horizontal" Spacing="7">
-                        <Ellipse Width="7" Height="7" Fill="{StaticResource PbSuccessBrush}" VerticalAlignment="Center" />
-                        <TextBlock FontSize="12" Foreground="{StaticResource PbTextMutedBrush}">
+                        <Ellipse Width="7" Height="7" Fill="{DynamicResource PbSuccessBrush}" VerticalAlignment="Center" />
+                        <TextBlock FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}">
                             <Run Text="Currently matches " />
-                            <Run Text="{Binding MatchCountLabel}" FontFamily="Consolas,monospace" FontWeight="Bold" Foreground="{StaticResource PbTextBrush}" />
+                            <Run Text="{Binding MatchCountLabel}" FontFamily="Consolas,monospace" FontWeight="Bold" Foreground="{DynamicResource PbTextBrush}" />
                             <Run Text=" issues" />
                         </TextBlock>
                     </StackPanel>
                 </Border>
 
-                <Border Background="{StaticResource PbChromeBrush}" BorderBrush="{StaticResource PbBorderBrush}"
+                <Border Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}"
                         BorderThickness="1" CornerRadius="7" Padding="16">
                     <StackPanel>
                         <TextBlock Text="Match ALL of the following:" FontSize="11.5" FontWeight="Bold"
-                                   Foreground="{StaticResource PbTextFaintBrush}" Margin="0,0,0,10" />
+                                   Foreground="{DynamicResource PbTextFaintBrush}" Margin="0,0,0,10" />
 
                         <ItemsControl ItemsSource="{Binding Conditions}">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate x:DataType="vm:SmartListConditionViewModel">
-                                    <Border BorderBrush="{StaticResource PbBorderBrush}" BorderThickness="0,0,0,1" Padding="0,9">
+                                    <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,0,0,1" Padding="0,9">
                                         <StackPanel Orientation="Horizontal" Spacing="8">
                                             <ComboBox Classes="conditionPicker" ItemsSource="{Binding FieldOptions}"
                                                       SelectedItem="{Binding SelectedField}"
@@ -102,7 +102,7 @@
                                             <TextBox Classes="conditionValue" Text="{Binding Value}" IsVisible="{Binding !IsDuplicateField}"
                                                       IsReadOnly="{Binding $parent[UserControl].((vm:SmartScreenViewModel)DataContext).IsReadOnly}" />
 
-                                            <TextBlock Text="and" FontSize="12.5" Foreground="{StaticResource PbTextFaintBrush}"
+                                            <TextBlock Text="and" FontSize="12.5" Foreground="{DynamicResource PbTextFaintBrush}"
                                                        VerticalAlignment="Center" IsVisible="{Binding ShowValue2}" />
                                             <TextBox Classes="conditionValue" Width="90" Text="{Binding Value2}" IsVisible="{Binding ShowValue2}"
                                                       IsReadOnly="{Binding $parent[UserControl].((vm:SmartScreenViewModel)DataContext).IsReadOnly}" />
@@ -117,7 +117,7 @@
 
                         <Button Classes="headerAction ghost" Content="+ Add condition" Command="{Binding AddConditionCommand}"
                                 HorizontalAlignment="Left" Padding="0" Margin="0,12,0,0"
-                                Foreground="{StaticResource PbAccentTextBrush}" IsVisible="{Binding !IsReadOnly}" />
+                                Foreground="{DynamicResource PbAccentTextBrush}" IsVisible="{Binding !IsReadOnly}" />
                     </StackPanel>
                 </Border>
 

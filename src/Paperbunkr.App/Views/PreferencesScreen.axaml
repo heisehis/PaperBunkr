@@ -1,0 +1,367 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Paperbunkr.App.ViewModels"
+             xmlns:models="using:Paperbunkr.App.Models"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="900" d:DesignHeight="760"
+             x:Class="Paperbunkr.App.Views.PreferencesScreen"
+             x:DataType="vm:PreferencesScreenViewModel">
+
+    <UserControl.Styles>
+        <Style Selector="Button.headerAction">
+            <Setter Property="Padding" Value="14,8" />
+            <Setter Property="CornerRadius" Value="5" />
+            <Setter Property="FontSize" Value="12.5" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style Selector="Button.headerAction.ghost">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
+        </Style>
+        <Style Selector="Button.headerAction.primary">
+            <Setter Property="Background" Value="{DynamicResource PbAccentBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Foreground" Value="{DynamicResource PbBadgeTextBrush}" />
+        </Style>
+
+        <Style Selector="Button.prefTab">
+            <Setter Property="Padding" Value="14,9" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0,0,0,2" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+            <Setter Property="CornerRadius" Value="0" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style Selector="Button.prefTab.active">
+            <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextBrush}" />
+            <Setter Property="FontWeight" Value="Bold" />
+        </Style>
+
+        <Style Selector="Border.groupBox">
+            <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="7" />
+            <Setter Property="ClipToBounds" Value="True" />
+        </Style>
+        <Style Selector="Border.groupHeader">
+            <Setter Property="Background" Value="{DynamicResource PbChromeBrush}" />
+            <Setter Property="Padding" Value="14,11" />
+        </Style>
+
+        <Style Selector="Button.sideItemButton">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="CornerRadius" Value="0" />
+            <Setter Property="Padding" Value="14,10" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style Selector="Button.sideItemButton:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource PbAccentSoftBrush}" />
+        </Style>
+        <Style Selector="Border.skinRow">
+            <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
+            <Setter Property="BorderThickness" Value="0,1,0,0" />
+        </Style>
+    </UserControl.Styles>
+
+    <ScrollViewer>
+        <StackPanel>
+
+            <Grid Margin="28,20,28,16">
+                <StackPanel VerticalAlignment="Bottom">
+                    <TextBlock Text="Preferences" FontSize="22" FontWeight="Bold" Foreground="{DynamicResource PbTextBrush}" />
+                    <TextBlock Text="App settings and appearance" FontSize="12.5" Foreground="{DynamicResource PbTextFaintBrush}" Margin="0,4,0,0" />
+                </StackPanel>
+            </Grid>
+            <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,0,0,1" />
+
+            <!-- Tab strip - Appearance, Behavior, Libraries, Reader, and Advanced are real today; Scripts confirmed a dead end, no tab -->
+            <StackPanel Orientation="Horizontal" Margin="28,0,28,0">
+                <Button Classes="prefTab" Classes.active="{Binding IsAppearanceTab}"
+                        Command="{Binding GoAppearanceCommand}" Content="Appearance" />
+                <Button Classes="prefTab" Classes.active="{Binding IsBehaviorTab}"
+                        Command="{Binding GoBehaviorCommand}" Content="Behavior" />
+                <Button Classes="prefTab" Classes.active="{Binding IsLibrariesTab}"
+                        Command="{Binding GoLibrariesCommand}" Content="Libraries" />
+                <Button Classes="prefTab" Classes.active="{Binding IsReaderTab}"
+                        Command="{Binding GoReaderCommand}" Content="Reader" />
+                <Button Classes="prefTab" Classes.active="{Binding IsAdvancedTab}"
+                        Command="{Binding GoAdvancedCommand}" Content="Advanced" />
+            </StackPanel>
+            <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,0,0,1" Margin="0,0,0,24" />
+
+            <StackPanel IsVisible="{Binding IsAppearanceTab}" Margin="28,0,28,40" Spacing="20">
+
+                <!-- Skins -->
+                <Border Classes="groupBox">
+                    <StackPanel>
+                        <Border Classes="groupHeader">
+                            <TextBlock Text="Skins" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
+                        </Border>
+                        <ItemsControl x:Name="SkinsList" ItemsSource="{Binding Skins}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="models:SkinSummary">
+                                    <Border Classes="skinRow">
+                                        <Button Classes="sideItemButton"
+                                                Command="{Binding #SkinsList.((vm:PreferencesScreenViewModel)DataContext).SelectSkinCommand}"
+                                                CommandParameter="{Binding}">
+                                            <Grid ColumnDefinitions="*,Auto">
+                                                <TextBlock Grid.Column="0" Text="{Binding Name}" FontSize="13"
+                                                           Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
+                                                <TextBlock Grid.Column="1" Text="Active" IsVisible="{Binding IsActive}"
+                                                           FontSize="11" FontWeight="Bold" Foreground="{DynamicResource PbAccentTextBrush}"
+                                                           VerticalAlignment="Center" />
+                                            </Grid>
+                                        </Button>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </Border>
+
+                <!-- Install Skin -->
+                <Border Classes="groupBox">
+                    <StackPanel>
+                        <Border Classes="groupHeader">
+                            <TextBlock Text="Install Skin" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
+                        </Border>
+                        <StackPanel Margin="14" Spacing="10">
+                            <StackPanel Orientation="Horizontal" Spacing="10">
+                                <Button Classes="headerAction primary" Content="Browse…" Command="{Binding BrowseForSkinCommand}" />
+                                <Button Classes="headerAction ghost" Content="Open Skins Folder" Command="{Binding OpenSkinsFolderCommand}" />
+                            </StackPanel>
+                            <TextBlock Text="{Binding InstallSkinError}" IsVisible="{Binding HasInstallSkinError}"
+                                       Foreground="#D96C6C" FontSize="12" TextWrapping="Wrap" />
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <!-- Font -->
+                <Border Classes="groupBox">
+                    <StackPanel>
+                        <Border Classes="groupHeader">
+                            <TextBlock Text="Font" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
+                        </Border>
+                        <StackPanel Margin="14">
+                            <ComboBox ItemsSource="{Binding FontFamilies}" SelectedItem="{Binding SelectedFontFamily}" Width="280" />
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <!-- Future - visibly-disabled placeholder, room to grow -->
+                <Border Classes="groupBox" Opacity="0.5">
+                    <StackPanel>
+                        <Border Classes="groupHeader">
+                            <TextBlock Text="Future" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
+                        </Border>
+                        <StackPanel Margin="14">
+                            <TextBlock Text="Cover Shape — coming soon" FontSize="12.5" Foreground="{DynamicResource PbTextFaintBrush}" />
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+            </StackPanel>
+
+            <StackPanel IsVisible="{Binding IsBehaviorTab}" Margin="28,0,28,40" Spacing="20">
+
+                <Border Classes="groupBox">
+                    <StackPanel>
+                        <Border Classes="groupHeader">
+                            <TextBlock Text="Reading" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
+                        </Border>
+                        <StackPanel Margin="14" Spacing="12">
+                            <CheckBox IsChecked="{Binding OpenLastPage}" Foreground="{DynamicResource PbTextBrush}" FontSize="13"
+                                      Content="Resume issues where you left off" />
+                            <CheckBox IsChecked="{Binding AutoNavigateComics}" Foreground="{DynamicResource PbTextBrush}" FontSize="13"
+                                      Content="Reading past the last page opens the next issue" />
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+            </StackPanel>
+
+            <StackPanel IsVisible="{Binding IsReaderTab}" Margin="28,0,28,40" Spacing="20">
+
+                <Border Classes="groupBox">
+                    <StackPanel>
+                        <Border Classes="groupHeader">
+                            <TextBlock Text="Right to Left" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
+                        </Border>
+                        <StackPanel Margin="14" Spacing="12">
+                            <CheckBox IsChecked="{Binding ReverseRtlNavigation}" Foreground="{DynamicResource PbTextBrush}" FontSize="13"
+                                      Content="Reverse left/right page-turn direction for right-to-left books" />
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+            </StackPanel>
+
+            <StackPanel IsVisible="{Binding IsLibrariesTab}" Margin="28,0,28,40" Spacing="20">
+
+                <!-- Book Folders -->
+                <Border Classes="groupBox">
+                    <StackPanel>
+                        <Border Classes="groupHeader">
+                            <TextBlock Text="Book Folders" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
+                        </Border>
+                        <ItemsControl x:Name="WatchedFoldersList" ItemsSource="{Binding WatchedFolders}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="models:WatchedFolderSummary">
+                                    <Border Classes="skinRow">
+                                        <Grid ColumnDefinitions="*,Auto,Auto" Margin="14,10">
+                                            <TextBlock Grid.Column="0" Text="{Binding Path}" FontSize="13" TextTrimming="CharacterEllipsis"
+                                                       Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
+                                            <Button Grid.Column="1" Classes="headerAction ghost" Content="Open" Margin="0,0,6,0"
+                                                    Command="{Binding #WatchedFoldersList.((vm:PreferencesScreenViewModel)DataContext).OpenFolderCommand}"
+                                                    CommandParameter="{Binding}" />
+                                            <Button Grid.Column="2" Classes="headerAction ghost" Content="Remove"
+                                                    Command="{Binding #WatchedFoldersList.((vm:PreferencesScreenViewModel)DataContext).RemoveFolderCommand}"
+                                                    CommandParameter="{Binding}" />
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <StackPanel Margin="14" Spacing="10">
+                            <StackPanel Orientation="Horizontal" Spacing="10">
+                                <Button Classes="headerAction primary" Content="Add Folder…" Command="{Binding AddFolderCommand}" />
+                                <Button Classes="headerAction ghost" Content="Scan Now" Command="{Binding ScanNowCommand}"
+                                        IsEnabled="{Binding !IsScanning}" />
+                            </StackPanel>
+                            <TextBlock Text="{Binding ScanStatus}" FontSize="12" Foreground="{DynamicResource PbTextFaintBrush}" />
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <!-- Virtual Tags -->
+                <Border Classes="groupBox">
+                    <StackPanel>
+                        <Border Classes="groupHeader">
+                            <TextBlock Text="Virtual Tags" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
+                        </Border>
+                        <ItemsControl x:Name="VirtualTagsList" ItemsSource="{Binding VirtualTags}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="models:VirtualTagSummary">
+                                    <Border Classes="skinRow">
+                                        <Button Classes="sideItemButton"
+                                                Command="{Binding #VirtualTagsList.((vm:PreferencesScreenViewModel)DataContext).SelectVirtualTagCommand}"
+                                                CommandParameter="{Binding}">
+                                            <Grid ColumnDefinitions="*,Auto">
+                                                <TextBlock Grid.Column="0" Text="{Binding Name}" FontSize="13"
+                                                           Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
+                                                <TextBlock Grid.Column="1" Text="Off" IsVisible="{Binding !IsEnabled}"
+                                                           FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" />
+                                            </Grid>
+                                        </Button>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                        <StackPanel Margin="14" Spacing="10">
+                            <Button Classes="headerAction ghost" Content="+ Add Virtual Tag" Command="{Binding AddVirtualTagCommand}"
+                                    HorizontalAlignment="Left" />
+
+                            <StackPanel IsVisible="{Binding HasSelectedVirtualTag}" Spacing="10" Margin="0,10,0,0">
+                                <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,1,0,0" Margin="0,0,0,4" />
+                                <TextBlock Text="Name" FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" />
+                                <TextBox Text="{Binding VirtualTagName}" Width="320" HorizontalAlignment="Left" />
+
+                                <TextBlock Text="Caption Format (e.g. {Series} #{Number})" FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" />
+                                <TextBox Text="{Binding VirtualTagCaptionFormat}" Width="320" HorizontalAlignment="Left" />
+
+                                <CheckBox IsChecked="{Binding VirtualTagIsEnabled}" Foreground="{DynamicResource PbTextBrush}" FontSize="13" Content="Enabled" />
+
+                                <TextBlock Text="Preview" FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" />
+                                <TextBlock Text="{Binding VirtualTagPreview}" FontFamily="Consolas,monospace" FontSize="13"
+                                           Foreground="{DynamicResource PbAccentTextBrush}" />
+
+                                <Button Classes="headerAction ghost" Content="Delete Tag" Command="{Binding DeleteVirtualTagCommand}"
+                                        HorizontalAlignment="Left" Margin="0,6,0,0" />
+                            </StackPanel>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+            </StackPanel>
+
+            <StackPanel IsVisible="{Binding IsAdvancedTab}" Margin="28,0,28,40" Spacing="20">
+
+                <!-- File Association -->
+                <Border Classes="groupBox">
+                    <StackPanel>
+                        <Border Classes="groupHeader">
+                            <TextBlock Text="File Association" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
+                        </Border>
+                        <ItemsControl x:Name="FileAssociationsList" ItemsSource="{Binding FileAssociations}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="models:FileAssociationSummary">
+                                    <CheckBox IsChecked="{Binding IsAssociated, Mode=OneWay}"
+                                              Command="{Binding #FileAssociationsList.((vm:PreferencesScreenViewModel)DataContext).ToggleFileAssociationCommand}"
+                                              CommandParameter="{Binding}"
+                                              Padding="14,7" Margin="0">
+                                        <StackPanel Orientation="Horizontal" Spacing="6">
+                                            <TextBlock Text="{Binding Name}" FontSize="12.5" Foreground="{DynamicResource PbTextBrush}" />
+                                            <TextBlock Text="{Binding ExtensionList}" FontSize="11" FontFamily="Consolas,monospace"
+                                                       Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" />
+                                        </StackPanel>
+                                    </CheckBox>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </Border>
+
+                <!-- Backup Manager -->
+                <Border Classes="groupBox">
+                    <StackPanel>
+                        <Border Classes="groupHeader">
+                            <TextBlock Text="Backup Manager" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
+                        </Border>
+                        <StackPanel Margin="14" Spacing="10">
+                            <TextBlock Text="Backup Location" FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" />
+                            <StackPanel Orientation="Horizontal" Spacing="10">
+                                <TextBox Text="{Binding BackupLocation}" Width="320" IsReadOnly="True" />
+                                <Button Classes="headerAction ghost" Content="Browse…" Command="{Binding BrowseBackupLocationCommand}" />
+                            </StackPanel>
+
+                            <TextBlock Text="Backups to Keep" FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" Margin="0,6,0,0" />
+                            <NumericUpDown Value="{Binding BackupsToKeep}" Minimum="0" Maximum="99" Width="120" HorizontalAlignment="Left" />
+
+                            <Button Classes="headerAction primary" Content="Backup Now" Command="{Binding BackupNowCommand}"
+                                    HorizontalAlignment="Left" Margin="0,6,0,0" />
+                            <TextBlock Text="{Binding BackupStatus}" FontSize="12" Foreground="{DynamicResource PbTextFaintBrush}" />
+                        </StackPanel>
+
+                        <ItemsControl ItemsSource="{Binding Backups}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:BackupRowViewModel">
+                                    <Border Classes="skinRow">
+                                        <Grid ColumnDefinitions="*,Auto" Margin="14,10">
+                                            <TextBlock Grid.Column="0" Text="{Binding FileName}" FontSize="13" FontFamily="Consolas,monospace"
+                                                       Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                                            <Button Grid.Column="1" Classes="headerAction ghost" Content="{Binding RestoreLabel}"
+                                                    Command="{Binding RestoreCommand}" />
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </Border>
+
+            </StackPanel>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

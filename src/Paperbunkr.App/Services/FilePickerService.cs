@@ -49,6 +49,23 @@ public class FilePickerService : IFilePickerService
         return file?.TryGetLocalPath();
     }
 
+    public async Task<string?> PickFolderAsync(string title)
+    {
+        var topLevel = GetTopLevel();
+        if (topLevel is null)
+        {
+            return null;
+        }
+
+        var folders = await topLevel.StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
+        {
+            Title = title,
+            AllowMultiple = false,
+        });
+
+        return folders.Count > 0 ? folders[0].TryGetLocalPath() : null;
+    }
+
     public async Task SetClipboardTextAsync(string text)
     {
         var clipboard = GetTopLevel()?.Clipboard;

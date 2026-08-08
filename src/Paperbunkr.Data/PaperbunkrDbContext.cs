@@ -1,3 +1,4 @@
+using System.Linq;
 using Microsoft.EntityFrameworkCore;
 using Paperbunkr.Data.Entities;
 
@@ -29,9 +30,33 @@ public class PaperbunkrDbContext : DbContext
 
     public DbSet<SeriesConflict> SeriesConflicts => Set<SeriesConflict>();
 
+    public DbSet<AppSettings> AppSettings => Set<AppSettings>();
+
+    public DbSet<VirtualTagDefinition> VirtualTagDefinitions => Set<VirtualTagDefinition>();
+
+    public DbSet<WatchedFolder> WatchedFolders => Set<WatchedFolder>();
+
     public PaperbunkrDbContext(DbContextOptions<PaperbunkrDbContext> options)
         : base(options)
     {
+    }
+
+    /// <summary>
+    /// Returns the singleton <see cref="Entities.AppSettings"/> row (<c>Id</c> always 1), creating
+    /// it on first access - mirrors how <c>PaperbunkrDb.EnsureCreated</c> seeds the system smart
+    /// lists idempotently.
+    /// </summary>
+    public AppSettings GetOrCreateAppSettings()
+    {
+        var settings = AppSettings.FirstOrDefault(a => a.Id == 1);
+        if (settings is null)
+        {
+            settings = new AppSettings();
+            AppSettings.Add(settings);
+            SaveChanges();
+        }
+
+        return settings;
     }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -182,11 +207,49 @@ public class PaperbunkrDbContext : DbContext
                 .HasForeignKey(c => c.SeriesBId)
                 .OnDelete(DeleteBehavior.SetNull);
         });
+
+        // Singleton row (Id always 1) - one app-wide config record, not a generic key-value store.
+        modelBuilder.Entity<AppSettings>(builder =>
+        {
+            builder.HasKey(a => a.Id);
+            builder.Property(a => a.ActiveSkinKey).IsRequired().HasDefaultValue("default");
+            builder.Property(a => a.OpenLastPage).HasDefaultValue(true);
+            builder.Property(a => a.AutoNavigateComics).HasDefaultValue(true);
+            builder.Property(a => a.BackupsToKeep).HasDefaultValue(5);
+            builder.Property(a => a.ReverseRtlNavigation).HasDefaultValue(true);
+        });
+
+        modelBuilder.Entity<VirtualTagDefinition>(builder =>
+        {
+            builder.HasKey(v => v.Id);
+            builder.Property(v => v.Name).IsRequired();
+        });
+
+        modelBuilder.Entity<WatchedFolder>(builder =>
+        {
+            builder.HasKey(w => w.Id);
+            builder.Property(w => w.Path).IsRequired();
+            builder.HasIndex(w => w.Path).IsUnique();
+        });
     }
+
+    /// <summary>
+    /// Test-only redirect for <see cref="GetDefaultDatabasePath"/> - mutable so tests can point
+    /// every <c>PaperbunkrDb.CreateContext()</c> call (App-side ViewModels have no injected
+    /// context-factory seam, unlike <c>SkinService</c>/<c>CoverThumbnailService</c>) at a temp
+    /// SQLite file instead of the real per-user database. Never set this outside a test's own
+    /// constructor/teardown.
+    /// </summary>
+    public static string? DatabasePathOverride { get; set; }
 
     /// <summary>Default SQLite file location convention: %AppData%\Paperbunkr\paperbunkr.db.</summary>
     public static string GetDefaultDatabasePath()
     {
+        if (DatabasePathOverride is not null)
+        {
+            return DatabasePathOverride;
+        }
+
         string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
         string dir = Path.Combine(appData, "Paperbunkr");
         Directory.CreateDirectory(dir);

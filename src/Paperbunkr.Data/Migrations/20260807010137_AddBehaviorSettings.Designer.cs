@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Paperbunkr.Data;
 
@@ -10,9 +11,11 @@ using Paperbunkr.Data;
 namespace Paperbunkr.Data.Migrations
 {
     [DbContext(typeof(PaperbunkrDbContext))]
-    partial class PaperbunkrDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260807010137_AddBehaviorSettings")]
+    partial class AddBehaviorSettings
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "8.0.10");
@@ -49,20 +52,7 @@ namespace Paperbunkr.Data.Migrations
                         .HasColumnType("INTEGER")
                         .HasDefaultValue(true);
 
-                    b.Property<string>("BackupLocation")
-                        .HasColumnType("TEXT");
-
-                    b.Property<int>("BackupsToKeep")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER")
-                        .HasDefaultValue(5);
-
                     b.Property<bool>("OpenLastPage")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER")
-                        .HasDefaultValue(true);
-
-                    b.Property<bool>("ReverseRtlNavigation")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER")
                         .HasDefaultValue(true);
@@ -572,49 +562,6 @@ namespace Paperbunkr.Data.Migrations
                         .IsUnique();
 
                     b.ToTable("TrackingLinks");
-                });
-
-            modelBuilder.Entity("Paperbunkr.Data.Entities.VirtualTagDefinition", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("CaptionFormat")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<bool>("IsEnabled")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<int>("SortOrder")
-                        .HasColumnType("INTEGER");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("VirtualTagDefinitions");
-                });
-
-            modelBuilder.Entity("Paperbunkr.Data.Entities.WatchedFolder", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("Path")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("Path")
-                        .IsUnique();
-
-                    b.ToTable("WatchedFolders");
                 });
 
             modelBuilder.Entity("CategorySeries", b =>

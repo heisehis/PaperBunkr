@@ -46,5 +46,28 @@
 
     <Application.Styles>
         <FluentTheme />
+
+        <!-- Preferences > Appearance > Font override (docs/superpowers/specs/
+             2026-08-07-preferences-skin-system-design.md §3) - a genuine global override via
+             DynamicResource, not just the title bar. PbFontFamily is absent by default (no
+             override); SkinService.ApplyFont sets/removes it live. -->
+        <Style Selector="TextBlock">
+            <Setter Property="FontFamily" Value="{DynamicResource PbFontFamily}" />
+        </Style>
+        <Style Selector="Button">
+            <Setter Property="FontFamily" Value="{DynamicResource PbFontFamily}" />
+        </Style>
+        <Style Selector="TextBox">
+            <Setter Property="FontFamily" Value="{DynamicResource PbFontFamily}" />
+        </Style>
+        <Style Selector="ComboBox">
+            <Setter Property="FontFamily" Value="{DynamicResource PbFontFamily}" />
+        </Style>
+        <Style Selector="ComboBoxItem">
+            <Setter Property="FontFamily" Value="{DynamicResource PbFontFamily}" />
+        </Style>
+        <Style Selector="MenuItem">
+            <Setter Property="FontFamily" Value="{DynamicResource PbFontFamily}" />
+        </Style>
     </Application.Styles>
 </Application>

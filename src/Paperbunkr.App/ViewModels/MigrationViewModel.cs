@@ -107,6 +107,21 @@ public partial class MigrationViewModel : ViewModelBase
     [ObservableProperty]
     private string _conflictsPendingLabel = "0";
 
+    [ObservableProperty]
+    private bool _isGeneratingCovers;
+
+    [ObservableProperty]
+    private int _coverGenerationDone;
+
+    [ObservableProperty]
+    private int _coverGenerationTotal;
+
+    public double CoverGenerationFraction => CoverGenerationTotal > 0 ? (double)CoverGenerationDone / CoverGenerationTotal : 0;
+
+    partial void OnCoverGenerationDoneChanged(int value) => OnPropertyChanged(nameof(CoverGenerationFraction));
+
+    partial void OnCoverGenerationTotalChanged(int value) => OnPropertyChanged(nameof(CoverGenerationFraction));
+
     /// <summary>Resets the flow back to Locate, re-checking for the default CE install path. Called on first open and whenever the overlay reopens in Migrate mode.</summary>
     public void ResetToLocate()
     {
@@ -228,6 +243,38 @@ public partial class MigrationViewModel : ViewModelBase
 
         Stage = MigrationStage.Results;
         _onCompleted?.Invoke();
+    }
+
+    /// <summary>
+    /// "Generate Covers" step offered right after a migration commits, when hundreds of new
+    /// covers are needed at once (docs/superpowers/specs/2026-08-06-cover-thumbnails-design.md
+    /// §2). Same shape as <c>LibraryScreenViewModel.GenerateCovers</c>.
+    /// </summary>
+    [RelayCommand]
+    private async Task GenerateCovers()
+    {
+        if (IsGeneratingCovers)
+        {
+            return;
+        }
+
+        IsGeneratingCovers = true;
+        CoverGenerationDone = 0;
+        CoverGenerationTotal = 0;
+        var progress = new Progress<(int Done, int Total)>(p =>
+        {
+            CoverGenerationDone = p.Done;
+            CoverGenerationTotal = p.Total;
+        });
+
+        try
+        {
+            await new CoverThumbnailService().GenerateAllAsync(progress);
+        }
+        finally
+        {
+            IsGeneratingCovers = false;
+        }
     }
 
     /// <summary>

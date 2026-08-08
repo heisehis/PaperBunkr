@@ -27,6 +27,7 @@ public partial class App : Application
             bool offerFirstRunMigration = isFreshInstall && defaultCePathFound;
 
             PaperbunkrDb.EnsureCreated();
+            new SkinService().ApplyPersistedSettings();
 
             var mainViewModel = new MainViewModel();
             desktop.MainWindow = new MainWindow

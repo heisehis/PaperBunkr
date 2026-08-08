@@ -1,0 +1,126 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Paperbunkr.App.ViewModels"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="900" d:DesignHeight="760"
+             x:Class="Paperbunkr.App.Views.BulkIssuePropertiesScreen"
+             x:DataType="vm:BulkIssuePropertiesScreenViewModel">
+
+    <UserControl.Styles>
+        <Style Selector="Button.headerAction">
+            <Setter Property="Padding" Value="14,8" />
+            <Setter Property="CornerRadius" Value="5" />
+            <Setter Property="FontSize" Value="12.5" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style Selector="Button.headerAction.ghost">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
+        </Style>
+        <Style Selector="Button.headerAction.primary">
+            <Setter Property="Background" Value="{DynamicResource PbAccentBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Foreground" Value="{DynamicResource PbBadgeTextBrush}" />
+        </Style>
+
+        <Style Selector="Border.groupBox">
+            <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="7" />
+            <Setter Property="ClipToBounds" Value="True" />
+        </Style>
+        <Style Selector="Border.groupHeader">
+            <Setter Property="Background" Value="{DynamicResource PbChromeBrush}" />
+            <Setter Property="Padding" Value="14,11" />
+        </Style>
+
+        <Style Selector="Button.star">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="2" />
+            <Setter Property="FontSize" Value="18" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextFaintBrush}" />
+        </Style>
+        <Style Selector="Button.star.filled">
+            <Setter Property="Foreground" Value="{DynamicResource PbAccentBrush}" />
+        </Style>
+    </UserControl.Styles>
+
+    <UserControl.Resources>
+        <DataTemplate x:Key="FieldRowTemplate" x:DataType="vm:BulkFieldViewModel">
+            <Grid ColumnDefinitions="Auto,160,*" Margin="0,0,0,10">
+                <CheckBox Grid.Column="0" IsChecked="{Binding IsStaged}" VerticalAlignment="Center" Margin="0,0,8,0" />
+                <TextBlock Grid.Column="1" Text="{Binding Label}" FontSize="12.5" Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
+
+                <TextBox Grid.Column="2" Text="{Binding Value}" IsVisible="{Binding IsTextKind}" />
+
+                <CheckBox Grid.Column="2" IsChecked="{Binding BoolValue}" IsVisible="{Binding IsBooleanKind}"
+                          Content="Yes" Foreground="{DynamicResource PbTextBrush}" FontSize="13" />
+
+                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="2" IsVisible="{Binding IsRatingKind}">
+                    <Button Classes="star" Classes.filled="{Binding Star1}" Content="★" Command="{Binding SetStar1Command}" />
+                    <Button Classes="star" Classes.filled="{Binding Star2}" Content="★" Command="{Binding SetStar2Command}" />
+                    <Button Classes="star" Classes.filled="{Binding Star3}" Content="★" Command="{Binding SetStar3Command}" />
+                    <Button Classes="star" Classes.filled="{Binding Star4}" Content="★" Command="{Binding SetStar4Command}" />
+                    <Button Classes="star" Classes.filled="{Binding Star5}" Content="★" Command="{Binding SetStar5Command}" />
+                </StackPanel>
+            </Grid>
+        </DataTemplate>
+    </UserControl.Resources>
+
+    <ScrollViewer>
+        <StackPanel>
+
+            <Grid Margin="28,20,28,16" ColumnDefinitions="*,Auto">
+                <StackPanel Grid.Column="0" VerticalAlignment="Bottom">
+                    <TextBlock Text="Edit Issues" FontSize="22" FontWeight="Bold" Foreground="{DynamicResource PbTextBrush}" />
+                    <TextBlock Text="{Binding HeaderLabel}" FontSize="12.5" Foreground="{DynamicResource PbTextFaintBrush}" Margin="0,4,0,0" />
+                    <TextBlock Text="Only checked fields are applied - leave a field unchecked to keep every issue's own value."
+                               FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" Margin="0,4,0,0" />
+                </StackPanel>
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10" VerticalAlignment="Bottom">
+                    <Button Classes="headerAction ghost" Content="Cancel" Command="{Binding CancelCommand}" />
+                    <Button Classes="headerAction primary" Content="Apply" Command="{Binding SaveCommand}" />
+                </StackPanel>
+            </Grid>
+            <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,0,0,1" Margin="0,0,0,24" />
+
+            <StackPanel Margin="28,0,28,40" Spacing="20">
+
+                <Border Classes="groupBox">
+                    <StackPanel>
+                        <Border Classes="groupHeader">
+                            <TextBlock Text="Main" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
+                        </Border>
+                        <ItemsControl Margin="14" ItemsSource="{Binding MainFields}" ItemTemplate="{StaticResource FieldRowTemplate}" />
+                    </StackPanel>
+                </Border>
+
+                <Border Classes="groupBox">
+                    <StackPanel>
+                        <Border Classes="groupHeader">
+                            <TextBlock Text="Artists" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
+                        </Border>
+                        <ItemsControl Margin="14" ItemsSource="{Binding ArtistFields}" ItemTemplate="{StaticResource FieldRowTemplate}" />
+                    </StackPanel>
+                </Border>
+
+                <Border Classes="groupBox">
+                    <StackPanel>
+                        <Border Classes="groupHeader">
+                            <TextBlock Text="Plot &amp; Notes" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
+                        </Border>
+                        <ItemsControl Margin="14" ItemsSource="{Binding PlotNotesFields}" ItemTemplate="{StaticResource FieldRowTemplate}" />
+                    </StackPanel>
+                </Border>
+
+            </StackPanel>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

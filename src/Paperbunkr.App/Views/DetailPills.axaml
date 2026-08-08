@@ -12,32 +12,32 @@
         <Style Selector="TextBlock.pillGroupLabel">
             <Setter Property="FontSize" Value="12.5" />
             <Setter Property="FontWeight" Value="Bold" />
-            <Setter Property="Foreground" Value="{StaticResource PbTextMutedBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
             <Setter Property="Margin" Value="0,0,0,10" />
         </Style>
         <Style Selector="Border.tagPill">
-            <Setter Property="Background" Value="{StaticResource PbChromeBrush}" />
-            <Setter Property="BorderBrush" Value="{StaticResource PbBorderBrush}" />
+            <Setter Property="Background" Value="{DynamicResource PbChromeBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
             <Setter Property="BorderThickness" Value="1" />
             <Setter Property="CornerRadius" Value="999" />
             <Setter Property="Padding" Value="12,5" />
         </Style>
         <Style Selector="Border.tagPill.highlight">
             <Setter Property="Background" Value="#24D7AC4C" />
-            <Setter Property="BorderBrush" Value="{StaticResource PbBadgeBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource PbBadgeBrush}" />
         </Style>
         <Style Selector="TextBlock.tagText">
             <Setter Property="FontSize" Value="12" />
             <Setter Property="FontWeight" Value="SemiBold" />
-            <Setter Property="Foreground" Value="{StaticResource PbTextMutedBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
         </Style>
         <Style Selector="Border.tagPill.highlight TextBlock.tagText">
-            <Setter Property="Foreground" Value="{StaticResource PbBadgeBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource PbBadgeBrush}" />
         </Style>
     </UserControl.Styles>
 
     <StackPanel Margin="0,20,0,0">
-        <Border BorderBrush="{StaticResource PbBorderBrush}" BorderThickness="0,1,0,0" Padding="0,16,0,0">
+        <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,1,0,0" Padding="0,16,0,0">
 
             <StackPanel>
                 <TextBlock Classes="pillGroupLabel" Text="Teams" />

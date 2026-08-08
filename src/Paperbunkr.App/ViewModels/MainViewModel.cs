@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Paperbunkr.App.Services;
@@ -14,20 +15,31 @@ public partial class MainViewModel : ViewModelBase
     public MainViewModel()
     {
         Library = new LibraryScreenViewModel(GoDetailForSeries);
-        Detail = new DetailScreenViewModel(GoLibrary, GoReaderForIssue);
+        Detail = new DetailScreenViewModel(GoLibrary, GoReaderForIssue, GoIssuePropertiesForIssue, GoBulkIssuePropertiesForIssues);
         Reader = new ReaderScreenViewModel(GoDetail);
+        IssueProperties = new IssuePropertiesScreenViewModel(GoDetailAfterIssueEdit);
+        BulkIssueProperties = new BulkIssuePropertiesScreenViewModel(GoDetailAfterIssueEdit);
         Smart = new SmartScreenViewModel();
         Reading = new ReadingScreenViewModel(new FilePickerService());
         Plugin = new PluginScreenViewModel();
+        Preferences = new PreferencesScreenViewModel(
+            new SkinService(),
+            new FilePickerService(),
+            new LibraryFolderScanner(),
+            new FileAssociationService(),
+            new BackupService());
         Migration = new MigrationOverlayViewModel(new FilePickerService(), OpenSeriesDetailFromReview);
     }
 
     public LibraryScreenViewModel Library { get; }
     public DetailScreenViewModel Detail { get; }
     public ReaderScreenViewModel Reader { get; }
+    public IssuePropertiesScreenViewModel IssueProperties { get; }
+    public BulkIssuePropertiesScreenViewModel BulkIssueProperties { get; }
     public SmartScreenViewModel Smart { get; }
     public ReadingScreenViewModel Reading { get; }
     public PluginScreenViewModel Plugin { get; }
+    public PreferencesScreenViewModel Preferences { get; }
     public MigrationOverlayViewModel Migration { get; }
 
     [ObservableProperty]
@@ -41,7 +53,10 @@ public partial class MainViewModel : ViewModelBase
     public bool IsSmart => CurrentScreen == "smart";
     public bool IsReading => CurrentScreen == "reading";
     public bool IsPlugin => CurrentScreen == "plugin";
+    public bool IsPreferences => CurrentScreen == "preferences";
     public bool IsReader => CurrentScreen == "reader";
+    public bool IsIssueProperties => CurrentScreen == "issueProperties";
+    public bool IsBulkIssueProperties => CurrentScreen == "bulkIssueProperties";
 
     public bool ShowContextualSidebar => IsLibrary || IsSmart || IsReading;
 
@@ -52,7 +67,10 @@ public partial class MainViewModel : ViewModelBase
         OnPropertyChanged(nameof(IsSmart));
         OnPropertyChanged(nameof(IsReading));
         OnPropertyChanged(nameof(IsPlugin));
+        OnPropertyChanged(nameof(IsPreferences));
         OnPropertyChanged(nameof(IsReader));
+        OnPropertyChanged(nameof(IsIssueProperties));
+        OnPropertyChanged(nameof(IsBulkIssueProperties));
         OnPropertyChanged(nameof(ShowContextualSidebar));
     }
 
@@ -75,6 +93,13 @@ public partial class MainViewModel : ViewModelBase
 
     [RelayCommand]
     private void GoPlugin() => CurrentScreen = "plugin";
+
+    [RelayCommand]
+    private void GoPreferences()
+    {
+        Preferences.EnsureLoaded();
+        CurrentScreen = "preferences";
+    }
 
     [RelayCommand]
     private void OpenMigrationOverlay()
@@ -105,6 +130,18 @@ public partial class MainViewModel : ViewModelBase
 
     private void GoDetail() => CurrentScreen = "detail";
 
+    /// <summary>
+    /// Distinct from the plain <see cref="GoDetail"/> Reader uses - the properties editor may have
+    /// changed the currently-loaded series' data (e.g. an issue's <c>Number</c>, which the Issues
+    /// tab tile label is derived from), so the Detail screen needs a real reload, not just a
+    /// screen-visibility flip back to already-stale state.
+    /// </summary>
+    private void GoDetailAfterIssueEdit()
+    {
+        Detail.ReloadCurrentSeries();
+        CurrentScreen = "detail";
+    }
+
     private void GoDetailForSeries(int seriesId)
     {
         Detail.LoadSeries(seriesId);
@@ -115,5 +152,17 @@ public partial class MainViewModel : ViewModelBase
     {
         Reader.LoadIssue(issueId);
         CurrentScreen = "reader";
+    }
+
+    private void GoIssuePropertiesForIssue(int issueId)
+    {
+        IssueProperties.Load(issueId);
+        CurrentScreen = "issueProperties";
+    }
+
+    private void GoBulkIssuePropertiesForIssues(IReadOnlyList<int> issueIds)
+    {
+        BulkIssueProperties.Load(issueIds);
+        CurrentScreen = "bulkIssueProperties";
     }
 }

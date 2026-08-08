@@ -1,6 +1,7 @@
 using System;
 using System.Collections.ObjectModel;
 using System.Linq;
+using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.EntityFrameworkCore;
@@ -80,12 +81,79 @@ public partial class LibraryScreenViewModel : ViewModelBase
     [RelayCommand]
     private void ToggleDisplay() => ActiveDropdown = ActiveDropdown == "display" ? null : "display";
 
+    [ObservableProperty]
+    private LibraryViewMode _viewMode = LibraryViewMode.Grid;
+
+    public bool IsGridView => ViewMode == LibraryViewMode.Grid;
+    public bool IsListView => ViewMode == LibraryViewMode.List;
+
+    partial void OnViewModeChanged(LibraryViewMode value)
+    {
+        OnPropertyChanged(nameof(IsGridView));
+        OnPropertyChanged(nameof(IsListView));
+    }
+
+    [RelayCommand]
+    private void ShowGridView() => ViewMode = LibraryViewMode.Grid;
+
+    [RelayCommand]
+    private void ShowListView() => ViewMode = LibraryViewMode.List;
+
     [RelayCommand]
     private void SelectCard(SeriesCardSample? card)
     {
         if (card is not null)
         {
             _goDetail(card.SeriesId);
+        }
+    }
+
+    [ObservableProperty]
+    private bool _isGeneratingCovers;
+
+    [ObservableProperty]
+    private int _coverGenerationDone;
+
+    [ObservableProperty]
+    private int _coverGenerationTotal;
+
+    public double CoverGenerationFraction => CoverGenerationTotal > 0 ? (double)CoverGenerationDone / CoverGenerationTotal : 0;
+
+    partial void OnCoverGenerationDoneChanged(int value) => OnPropertyChanged(nameof(CoverGenerationFraction));
+
+    partial void OnCoverGenerationTotalChanged(int value) => OnPropertyChanged(nameof(CoverGenerationFraction));
+
+    /// <summary>
+    /// Generates real cover art for every issue that doesn't have one cached yet
+    /// (docs/superpowers/specs/2026-08-06-cover-thumbnails-design.md §2). Reloads the library
+    /// afterward - CoverImageCache doesn't cache misses, so newly generated thumbnails show up
+    /// immediately.
+    /// </summary>
+    [RelayCommand]
+    private async Task GenerateCovers()
+    {
+        if (IsGeneratingCovers)
+        {
+            return;
+        }
+
+        IsGeneratingCovers = true;
+        CoverGenerationDone = 0;
+        CoverGenerationTotal = 0;
+        var progress = new Progress<(int Done, int Total)>(p =>
+        {
+            CoverGenerationDone = p.Done;
+            CoverGenerationTotal = p.Total;
+        });
+
+        try
+        {
+            await new CoverThumbnailService().GenerateAllAsync(progress);
+        }
+        finally
+        {
+            IsGeneratingCovers = false;
+            LoadFromDatabase();
         }
     }
 }

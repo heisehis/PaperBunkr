@@ -1,7 +1,10 @@
+using System;
 using System.Collections.Generic;
 using System.Drawing.Imaging;
 using System.IO;
 using System.Linq;
+using Avalonia;
+using Avalonia.Media.Imaging;
 using cYo.Projects.ComicRack.Engine.IO.Provider;
 using AvaloniaBitmap = Avalonia.Media.Imaging.Bitmap;
 using GdiBitmap = System.Drawing.Bitmap;
@@ -19,8 +22,11 @@ namespace Paperbunkr.App.Services;
 /// </summary>
 public class PageImageDecoder : IPageImageDecoder
 {
+    private const int ThumbnailLongestEdge = 200; // rail tiles render at 80x112 (ReaderScreen.axaml Border.thumb) — headroom for HiDPI
+
     private readonly ImageProvider _provider;
     private readonly Dictionary<int, AvaloniaBitmap> _cache = new();
+    private readonly Dictionary<int, AvaloniaBitmap> _thumbnailCache = new();
 
     private PageImageDecoder(ImageProvider provider)
     {
@@ -77,6 +83,31 @@ public class PageImageDecoder : IPageImageDecoder
     }
 
     /// <summary>
+    /// Independent of <see cref="GetPage"/>'s 3-page full-res cache/eviction window - decodes via
+    /// the same <see cref="Decode"/> path but immediately downsizes, and caches every thumbnail
+    /// for the currently open issue (cheap at thumbnail size, unlike full-res pages).
+    /// </summary>
+    public AvaloniaBitmap GetThumbnail(int pageIndex)
+    {
+        if (_thumbnailCache.TryGetValue(pageIndex, out var cached))
+        {
+            return cached;
+        }
+
+        using AvaloniaBitmap full = Decode(pageIndex);
+        var size = full.PixelSize;
+        int longest = Math.Max(size.Width, size.Height);
+        double scale = longest > 0 ? Math.Min(1.0, (double)ThumbnailLongestEdge / longest) : 1.0;
+        var target = new PixelSize(
+            Math.Max(1, (int)Math.Round(size.Width * scale)),
+            Math.Max(1, (int)Math.Round(size.Height * scale)));
+
+        var thumbnail = full.CreateScaledBitmap(target, BitmapInterpolationMode.HighQuality);
+        _thumbnailCache[pageIndex] = thumbnail;
+        return thumbnail;
+    }
+
+    /// <summary>
     /// Tries the raw-bytes path first — works directly for standard JPEG/PNG pages via Avalonia's
     /// own Skia-based decoder, no System.Drawing involved. Falls back to the engine's own
     /// System.Drawing.Bitmap decode (used for exotic formats its codec providers handle specially
@@ -123,6 +154,14 @@ public class PageImageDecoder : IPageImageDecoder
         }
 
         _cache.Clear();
+
+        foreach (var bitmap in _thumbnailCache.Values)
+        {
+            bitmap.Dispose();
+        }
+
+        _thumbnailCache.Clear();
+
         _provider.Dispose();
     }
 }

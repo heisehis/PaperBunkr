@@ -27,9 +27,10 @@
             <Setter Property="BorderThickness" Value="2" />
             <Setter Property="BorderBrush" Value="Transparent" />
             <Setter Property="Margin" Value="0,0,0,8" />
+            <Setter Property="ClipToBounds" Value="True" />
         </Style>
         <Style Selector="Border.thumb.selected">
-            <Setter Property="BorderBrush" Value="{StaticResource PbAccentBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
         </Style>
     </UserControl.Styles>
 
@@ -67,7 +68,9 @@
                     <ItemsControl ItemsSource="{Binding Thumbnails}">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate x:DataType="models:ReaderThumbnailSample">
-                                <Border Classes="thumb" Classes.selected="{Binding IsSelected}" Background="{Binding CoverBrush}" />
+                                <Border Classes="thumb" Classes.selected="{Binding IsSelected}" Background="{Binding CoverBrush}">
+                                    <Image Source="{Binding CoverImage}" Stretch="UniformToFill" />
+                                </Border>
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
@@ -76,8 +79,8 @@
 
             <Grid Grid.Column="1">
                 <views:PageCanvas Page="{Binding CurrentPage}"
-                                  PreviousPageCommand="{Binding PreviousPageCommand}"
-                                  NextPageCommand="{Binding NextPageCommand}"
+                                  LeftCommand="{Binding GoLeftCommand}"
+                                  RightCommand="{Binding GoRightCommand}"
                                   IsVisible="{Binding !HasError}" />
 
                 <Border IsVisible="{Binding HasError}" Width="400" CornerRadius="8"
@@ -93,13 +96,13 @@
         <Border Grid.Row="2" Background="{StaticResource ReaderChromeBrush}" BorderBrush="{StaticResource ReaderBorderBrush}"
                 BorderThickness="0,1,0,0" Padding="22,12">
             <Grid ColumnDefinitions="Auto,*,Auto">
-                <Button Grid.Column="0" Content="◀" Command="{Binding PreviousPageCommand}" Background="Transparent"
+                <Button Grid.Column="0" Content="◀" Command="{Binding GoLeftCommand}" Background="Transparent"
                         BorderThickness="0" Padding="0" Cursor="Hand" Foreground="{StaticResource ReaderTextBrush}"
                         VerticalAlignment="Center" Margin="0,0,14,0" />
                 <ProgressBar Grid.Column="1" Height="4" CornerRadius="2" Minimum="0" Maximum="1"
                              Value="{Binding ProgressFraction}" Background="{StaticResource ReaderTrackBrush}"
-                             Foreground="{StaticResource PbAccentBrush}" VerticalAlignment="Center" />
-                <Button Grid.Column="2" Content="▶" Command="{Binding NextPageCommand}" Background="Transparent"
+                             Foreground="{DynamicResource PbAccentBrush}" VerticalAlignment="Center" />
+                <Button Grid.Column="2" Content="▶" Command="{Binding GoRightCommand}" Background="Transparent"
                         BorderThickness="0" Padding="0" Cursor="Hand" Foreground="{StaticResource ReaderTextBrush}"
                         VerticalAlignment="Center" Margin="14,0,0,0" />
             </Grid>

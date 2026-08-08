@@ -1,8 +1,10 @@
 using System;
 using System.Collections.ObjectModel;
 using System.Linq;
+using System.Threading.Tasks;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
+using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.EntityFrameworkCore;
@@ -30,8 +32,11 @@ public partial class ReaderScreenViewModel : ViewModelBase
 
     private readonly Action _goBack;
     private int? _loadedIssueId;
+    private int? _loadedSeriesId;
     private IPageImageDecoder? _decoder;
     private int _currentPageIndex;
+    private int _loadGeneration;
+    private bool _isRightToLeft;
 
     public ReaderScreenViewModel(Action goBack)
     {
@@ -94,11 +99,23 @@ public partial class ReaderScreenViewModel : ViewModelBase
         }
     }
 
-    private void Load(Issue issue, Series series, PaperbunkrDbContext context)
+    /// <summary>
+    /// Loads an issue. <paramref name="forcedStartPage"/> is set only by
+    /// <see cref="NavigateToAdjacentIssue"/> - crossing an issue boundary always lands on a
+    /// specific page (0 going forward, the last page going backward) regardless of the
+    /// <c>OpenLastPage</c> preference, which only governs *reopening* an issue from elsewhere
+    /// (Detail's Continue button, the rail nav). Passing <see cref="int.MaxValue"/> is a
+    /// deliberate "clamp to the last page" sentinel - the real page count isn't known until after
+    /// the decoder opens below.
+    /// </summary>
+    private void Load(Issue issue, Series series, PaperbunkrDbContext context, int? forcedStartPage = null)
     {
+        int generation = ++_loadGeneration;
+
         _decoder?.Dispose();
         _decoder = null;
         _loadedIssueId = issue.Id;
+        _loadedSeriesId = series.Id;
 
         CoverBrush = SeriesCardSample.CoverBrushFor(series.Name);
         BreadcrumbSeries = $"Library / {series.Name} /";
@@ -107,6 +124,7 @@ public partial class ReaderScreenViewModel : ViewModelBase
             : $"Issue #{issue.Number} — {issue.Title}";
 
         var readingMode = issue.ReadingModeOverride ?? series.ReadingMode;
+        _isRightToLeft = readingMode == ReadingMode.RightToLeft && context.GetOrCreateAppSettings().ReverseRtlNavigation;
         ReadingModeLabel = readingMode switch
         {
             ReadingMode.RightToLeft => "Right to Left ▾",
@@ -142,7 +160,15 @@ public partial class ReaderScreenViewModel : ViewModelBase
             ErrorMessage = "This issue has no file linked yet.";
         }
 
-        _currentPageIndex = Math.Clamp(issue.LastPageRead ?? 0, 0, pageCount - 1);
+        if (forcedStartPage is int forced)
+        {
+            _currentPageIndex = Math.Clamp(forced, 0, pageCount - 1);
+        }
+        else
+        {
+            bool openLastPage = context.GetOrCreateAppSettings().OpenLastPage;
+            _currentPageIndex = Math.Clamp(openLastPage ? issue.LastPageRead ?? 0 : 0, 0, pageCount - 1);
+        }
 
         PageLabel = $"PAGE {_currentPageIndex + 1} / {pageCount}";
         ProgressFraction = pageCount > 1 ? (double)_currentPageIndex / (pageCount - 1) : 0;
@@ -162,6 +188,56 @@ public partial class ReaderScreenViewModel : ViewModelBase
         OnPropertyChanged(nameof(ProgressFraction));
 
         RefreshCurrentPage();
+        StartThumbnailGeneration(generation, thumbnailCount);
+    }
+
+    /// <summary>
+    /// Real per-page rail thumbnails (docs/superpowers/specs/2026-08-06-cover-thumbnails-design.md
+    /// §4), decoded lazily on a background thread rather than eagerly on <see cref="Load"/> - an
+    /// eager synchronous decode of up to <see cref="MaxThumbnails"/> pages would be a real, visible
+    /// hang on a large issue, exactly what the reader canvas's virtualization principle exists to
+    /// avoid. <paramref name="generation"/> guards against a stale background pass from a
+    /// previously-open issue clobbering a newer one after the user flips issues quickly.
+    /// </summary>
+    private void StartThumbnailGeneration(int generation, int thumbnailCount)
+    {
+        var decoder = _decoder;
+        if (decoder is null)
+        {
+            return;
+        }
+
+        _ = Task.Run(() =>
+        {
+            for (int page = 0; page < thumbnailCount; page++)
+            {
+                if (generation != _loadGeneration)
+                {
+                    return;
+                }
+
+                Bitmap? thumb;
+                try
+                {
+                    thumb = decoder.GetThumbnail(page);
+                }
+                catch
+                {
+                    thumb = null; // one bad page doesn't break the rest — same contract as GetPage
+                }
+
+                Dispatcher.UIThread.Post(() =>
+                {
+                    if (generation != _loadGeneration || page >= Thumbnails.Count)
+                    {
+                        return;
+                    }
+
+                    var existing = Thumbnails[page];
+                    Thumbnails[page] = new ReaderThumbnailSample { CoverBrush = CoverBrush, CoverImage = thumb, IsSelected = existing.IsSelected };
+                });
+            }
+        });
     }
 
     private void RefreshCurrentPage()
@@ -207,7 +283,8 @@ public partial class ReaderScreenViewModel : ViewModelBase
         int thumbnailCount = Thumbnails.Count;
         for (int page = 0; page < thumbnailCount; page++)
         {
-            Thumbnails[page] = new ReaderThumbnailSample { CoverBrush = CoverBrush, IsSelected = page == _currentPageIndex };
+            var existing = Thumbnails[page];
+            Thumbnails[page] = new ReaderThumbnailSample { CoverBrush = CoverBrush, CoverImage = existing.CoverImage, IsSelected = page == _currentPageIndex };
         }
 
         RefreshCurrentPage();
@@ -222,10 +299,98 @@ public partial class ReaderScreenViewModel : ViewModelBase
     }
 
     [RelayCommand]
-    private void PreviousPage() => GoToPage(_currentPageIndex - 1);
+    private void PreviousPage()
+    {
+        if (_currentPageIndex > 0)
+        {
+            GoToPage(_currentPageIndex - 1);
+            return;
+        }
+
+        NavigateToAdjacentIssue(forward: false);
+    }
 
     [RelayCommand]
-    private void NextPage() => GoToPage(_currentPageIndex + 1);
+    private void NextPage()
+    {
+        if (_decoder is not null && _currentPageIndex < _decoder.PageCount - 1)
+        {
+            GoToPage(_currentPageIndex + 1);
+            return;
+        }
+
+        NavigateToAdjacentIssue(forward: true);
+    }
+
+    /// <summary>
+    /// Spatial commands (docs/superpowers/specs/2026-08-07-reader-rtl-navigation-design.md §3) -
+    /// bound to <see cref="Views.PageCanvas.LeftCommand"/>/<see cref="Views.PageCanvas.RightCommand"/>
+    /// and the bottom scrubber's ◀/▶ buttons, which are always spatial (left key/click, right
+    /// key/click) regardless of reading direction. <see cref="PreviousPage"/>/<see cref="NextPage"/>
+    /// themselves keep their plain forward/backward page-index semantics unchanged.
+    /// </summary>
+    [RelayCommand]
+    private void GoLeft()
+    {
+        if (_isRightToLeft)
+        {
+            NextPage();
+        }
+        else
+        {
+            PreviousPage();
+        }
+    }
+
+    [RelayCommand]
+    private void GoRight()
+    {
+        if (_isRightToLeft)
+        {
+            PreviousPage();
+        }
+        else
+        {
+            NextPage();
+        }
+    }
+
+    /// <summary>
+    /// "Reading beyond the start or end opens the next Book" (docs/superpowers/specs/
+    /// 2026-08-07-preferences-behavior-tab-design.md §3), gated by <c>AutoNavigateComics</c>.
+    /// Forward lands on the next issue's first page; backward lands on the previous issue's
+    /// *last* page, so backward reading flows continuously instead of restarting each issue.
+    /// No-ops at either end of the series, or when the setting is off - same as today's clamp.
+    /// </summary>
+    private void NavigateToAdjacentIssue(bool forward)
+    {
+        if (_loadedSeriesId is not int seriesId || _loadedIssueId is not int currentIssueId)
+        {
+            return;
+        }
+
+        using var context = PaperbunkrDb.CreateContext();
+        if (!context.GetOrCreateAppSettings().AutoNavigateComics)
+        {
+            return;
+        }
+
+        var series = context.Series.Include(s => s.Issues).FirstOrDefault(s => s.Id == seriesId);
+        var orderedIssues = series?.Issues.OrderByNumber().ToList();
+        int index = orderedIssues?.FindIndex(i => i.Id == currentIssueId) ?? -1;
+        if (series is null || orderedIssues is null || index < 0)
+        {
+            return;
+        }
+
+        int adjacentIndex = forward ? index + 1 : index - 1;
+        if (adjacentIndex < 0 || adjacentIndex >= orderedIssues.Count)
+        {
+            return;
+        }
+
+        Load(orderedIssues[adjacentIndex], series, context, forcedStartPage: forward ? 0 : int.MaxValue);
+    }
 
     [RelayCommand]
     private void GoBack() => _goBack();

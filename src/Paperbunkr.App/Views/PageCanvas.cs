@@ -10,20 +10,22 @@ namespace Paperbunkr.App.Views;
 /// <summary>
 /// The Reader screen's page canvas (docs/superpowers/specs/2026-08-06-reader-canvas-alpha-design.md
 /// §4/§6). Renders <see cref="Page"/> via <see cref="ReaderPageDrawOperation"/>; clicking the
-/// left/right half or pressing Left/Right invokes <see cref="PreviousPageCommand"/>/
-/// <see cref="NextPageCommand"/> - bound from XAML like every other command in this codebase,
-/// rather than a code-behind event the ViewModel would need to subscribe to.
+/// left/right half or pressing Left/Right invokes <see cref="LeftCommand"/>/<see cref="RightCommand"/>
+/// - bound from XAML like every other command in this codebase, rather than a code-behind event
+/// the ViewModel would need to subscribe to. Named spatially, not semantically ("Previous"/"Next"),
+/// per docs/superpowers/specs/2026-08-07-reader-rtl-navigation-design.md §3 - which physical side
+/// means "forward" depends on reading direction, and PageCanvas itself has no opinion on that.
 /// </summary>
 public class PageCanvas : Control
 {
     public static readonly StyledProperty<Bitmap?> PageProperty =
         AvaloniaProperty.Register<PageCanvas, Bitmap?>(nameof(Page));
 
-    public static readonly StyledProperty<ICommand?> PreviousPageCommandProperty =
-        AvaloniaProperty.Register<PageCanvas, ICommand?>(nameof(PreviousPageCommand));
+    public static readonly StyledProperty<ICommand?> LeftCommandProperty =
+        AvaloniaProperty.Register<PageCanvas, ICommand?>(nameof(LeftCommand));
 
-    public static readonly StyledProperty<ICommand?> NextPageCommandProperty =
-        AvaloniaProperty.Register<PageCanvas, ICommand?>(nameof(NextPageCommand));
+    public static readonly StyledProperty<ICommand?> RightCommandProperty =
+        AvaloniaProperty.Register<PageCanvas, ICommand?>(nameof(RightCommand));
 
     static PageCanvas()
     {
@@ -37,16 +39,16 @@ public class PageCanvas : Control
         set => SetValue(PageProperty, value);
     }
 
-    public ICommand? PreviousPageCommand
+    public ICommand? LeftCommand
     {
-        get => GetValue(PreviousPageCommandProperty);
-        set => SetValue(PreviousPageCommandProperty, value);
+        get => GetValue(LeftCommandProperty);
+        set => SetValue(LeftCommandProperty, value);
     }
 
-    public ICommand? NextPageCommand
+    public ICommand? RightCommand
     {
-        get => GetValue(NextPageCommandProperty);
-        set => SetValue(NextPageCommandProperty, value);
+        get => GetValue(RightCommandProperty);
+        set => SetValue(RightCommandProperty, value);
     }
 
     public override void Render(DrawingContext context)
@@ -65,11 +67,11 @@ public class PageCanvas : Control
     protected override void OnKeyDown(KeyEventArgs e)
     {
         base.OnKeyDown(e);
-        if (e.Key == Key.Left && TryExecute(PreviousPageCommand))
+        if (e.Key == Key.Left && TryExecute(LeftCommand))
         {
             e.Handled = true;
         }
-        else if (e.Key == Key.Right && TryExecute(NextPageCommand))
+        else if (e.Key == Key.Right && TryExecute(RightCommand))
         {
             e.Handled = true;
         }
@@ -77,7 +79,7 @@ public class PageCanvas : Control
 
     private void InvokeZoneCommand(double x)
     {
-        var command = x < Bounds.Width / 2 ? PreviousPageCommand : NextPageCommand;
+        var command = x < Bounds.Width / 2 ? LeftCommand : RightCommand;
         TryExecute(command);
     }
 

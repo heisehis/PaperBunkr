@@ -19,18 +19,18 @@
         <Style Selector="Button.headerAction.ghost">
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="BorderThickness" Value="0" />
-            <Setter Property="Foreground" Value="{StaticResource PbTextMutedBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
         </Style>
         <Style Selector="Button.headerAction.secondary">
-            <Setter Property="Background" Value="{StaticResource PbChromeBrush}" />
+            <Setter Property="Background" Value="{DynamicResource PbChromeBrush}" />
             <Setter Property="BorderBrush" Value="#383D47" />
             <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="Foreground" Value="{StaticResource PbTextBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextBrush}" />
         </Style>
 
         <Style Selector="Border.statCard">
-            <Setter Property="Background" Value="{StaticResource PbChromeBrush}" />
-            <Setter Property="BorderBrush" Value="{StaticResource PbBorderBrush}" />
+            <Setter Property="Background" Value="{DynamicResource PbChromeBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
             <Setter Property="BorderThickness" Value="1" />
             <Setter Property="CornerRadius" Value="7" />
             <Setter Property="Padding" Value="16,12" />
@@ -43,7 +43,7 @@
         </Style>
         <Style Selector="TextBlock.statLabel">
             <Setter Property="FontSize" Value="10.5" />
-            <Setter Property="Foreground" Value="{StaticResource PbTextFaintBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextFaintBrush}" />
             <Setter Property="Margin" Value="0,2,0,0" />
         </Style>
 
@@ -53,7 +53,7 @@
         </Style>
 
         <Style Selector="TextBox.searchBox">
-            <Setter Property="Background" Value="{StaticResource PbChromeBrush}" />
+            <Setter Property="Background" Value="{DynamicResource PbChromeBrush}" />
             <Setter Property="BorderBrush" Value="#383D47" />
             <Setter Property="BorderThickness" Value="1" />
             <Setter Property="CornerRadius" Value="5" />
@@ -67,8 +67,8 @@
 
             <Grid ColumnDefinitions="*,Auto" Margin="28,20,28,16">
                 <StackPanel Grid.Column="0" VerticalAlignment="Bottom">
-                    <TextBlock Text="{Binding ListName}" FontSize="22" FontWeight="Bold" Foreground="{StaticResource PbTextBrush}" />
-                    <TextBlock Text="{Binding Subtitle}" FontSize="12.5" Foreground="{StaticResource PbTextFaintBrush}" Margin="0,4,0,0" />
+                    <TextBlock Text="{Binding ListName}" FontSize="22" FontWeight="Bold" Foreground="{DynamicResource PbTextBrush}" />
+                    <TextBlock Text="{Binding Subtitle}" FontSize="12.5" Foreground="{DynamicResource PbTextFaintBrush}" Margin="0,4,0,0" />
                 </StackPanel>
                 <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Bottom">
                     <Button Classes="headerAction ghost" Content="Copy as Text" Command="{Binding CopyAsTextCommand}" />
@@ -76,26 +76,26 @@
                             ToolTip.Tip="Requires an external story-arc source — deferred to a future pass" />
                 </StackPanel>
             </Grid>
-            <Border BorderBrush="{StaticResource PbBorderBrush}" BorderThickness="0,0,0,1" Margin="0,0,0,24" />
+            <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,0,0,1" Margin="0,0,0,24" />
 
             <StackPanel MaxWidth="820" HorizontalAlignment="Left" Margin="28,0,28,40">
 
-                <Border Background="{StaticResource PbAccentSoftBrush}" CornerRadius="5" Padding="10,7" Margin="0,0,0,16"
+                <Border Background="{DynamicResource PbAccentSoftBrush}" CornerRadius="5" Padding="10,7" Margin="0,0,0,16"
                         IsVisible="{Binding HasStatusMessage}">
-                    <TextBlock Text="{Binding StatusMessage}" FontSize="12" Foreground="{StaticResource PbTextBrush}" />
+                    <TextBlock Text="{Binding StatusMessage}" FontSize="12" Foreground="{DynamicResource PbTextBrush}" />
                 </Border>
 
                 <StackPanel Orientation="Horizontal" Spacing="10" Margin="0,0,0,22">
                     <Border Classes="statCard">
-                        <StackPanel><TextBlock Classes="statNumber" Text="{Binding TotalIssues}" Foreground="{StaticResource PbTextBrush}" />
+                        <StackPanel><TextBlock Classes="statNumber" Text="{Binding TotalIssues}" Foreground="{DynamicResource PbTextBrush}" />
                             <TextBlock Classes="statLabel" Text="TOTAL ISSUES" /></StackPanel>
                     </Border>
                     <Border Classes="statCard">
-                        <StackPanel><TextBlock Classes="statNumber" Text="{Binding OwnedIssues}" Foreground="{StaticResource PbSuccessBrush}" />
+                        <StackPanel><TextBlock Classes="statNumber" Text="{Binding OwnedIssues}" Foreground="{DynamicResource PbSuccessBrush}" />
                             <TextBlock Classes="statLabel" Text="OWNED" /></StackPanel>
                     </Border>
                     <Border Classes="statCard">
-                        <StackPanel><TextBlock Classes="statNumber" Text="{Binding MissingIssues}" Foreground="{StaticResource PbBadgeBrush}" />
+                        <StackPanel><TextBlock Classes="statNumber" Text="{Binding MissingIssues}" Foreground="{DynamicResource PbBadgeBrush}" />
                             <TextBlock Classes="statLabel" Text="MISSING" /></StackPanel>
                     </Border>
                 </StackPanel>
@@ -121,9 +121,9 @@
                 <ItemsControl ItemsSource="{Binding SearchResults}" Margin="0,0,0,20">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate x:DataType="models:IssueSearchResult">
-                            <Border Classes="issueRow" Background="{StaticResource PbChromeBrush}" Margin="0,0,0,4">
+                            <Border Classes="issueRow" Background="{DynamicResource PbChromeBrush}" Margin="0,0,0,4">
                                 <Grid ColumnDefinitions="*,Auto">
-                                    <TextBlock Grid.Column="0" Text="{Binding DisplayLabel}" FontSize="13" Foreground="{StaticResource PbTextBrush}" VerticalAlignment="Center" />
+                                    <TextBlock Grid.Column="0" Text="{Binding DisplayLabel}" FontSize="13" Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
                                     <Button Grid.Column="1" Classes="headerAction secondary" Content="+ Add"
                                             Command="{Binding $parent[ItemsControl].((vm:ReadingScreenViewModel)DataContext).AddIssueCommand}"
                                             CommandParameter="{Binding}" />
@@ -137,7 +137,7 @@
                     <ItemsControl.ItemTemplate>
                         <DataTemplate x:DataType="vm:ReadingListGroupViewModel">
                             <StackPanel Margin="0,0,0,22">
-                                <TextBlock Text="{Binding Label}" FontSize="11" Foreground="{StaticResource PbTextFaintBrush}"
+                                <TextBlock Text="{Binding Label}" FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}"
                                            Margin="2,0,0,8" IsVisible="{Binding HasLabel}" />
                                 <ItemsControl ItemsSource="{Binding Rows}">
                                     <ItemsControl.ItemTemplate>
@@ -145,15 +145,15 @@
                                             <Border Classes="issueRow">
                                                 <Grid ColumnDefinitions="30,30,*,Auto,Auto,Auto,Auto">
                                                     <TextBlock Grid.Column="0" Text="{Binding Number}" FontFamily="Consolas,monospace"
-                                                               FontSize="11" Foreground="{StaticResource PbTextFaintBrush}" VerticalAlignment="Center" />
+                                                               FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" />
                                                     <Border Grid.Column="1" Width="30" Height="42" CornerRadius="3"
                                                             Background="#264A6B8A" VerticalAlignment="Center" />
                                                     <TextBlock Grid.Column="2" Text="{Binding Name}" FontSize="13"
-                                                               Foreground="{StaticResource PbTextBrush}" VerticalAlignment="Center" Margin="12,0" />
+                                                               Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" Margin="12,0" />
                                                     <TextBlock Grid.Column="3" IsVisible="{Binding IsOwned}" Text="✓ Owned"
-                                                               FontSize="11" FontWeight="Bold" Foreground="{StaticResource PbSuccessBrush}" VerticalAlignment="Center" Margin="0,0,10,0" />
+                                                               FontSize="11" FontWeight="Bold" Foreground="{DynamicResource PbSuccessBrush}" VerticalAlignment="Center" Margin="0,0,10,0" />
                                                     <TextBlock Grid.Column="3" IsVisible="{Binding IsMissing}" Text="⚠ Missing"
-                                                               FontSize="11" FontWeight="Bold" Foreground="{StaticResource PbBadgeBrush}" VerticalAlignment="Center" Margin="0,0,10,0" />
+                                                               FontSize="11" FontWeight="Bold" Foreground="{DynamicResource PbBadgeBrush}" VerticalAlignment="Center" Margin="0,0,10,0" />
                                                     <Button Grid.Column="4" Classes="headerAction ghost" Content="↑" Command="{Binding MoveUpCommand}" />
                                                     <Button Grid.Column="5" Classes="headerAction ghost" Content="↓" Command="{Binding MoveDownCommand}" />
                                                     <Button Grid.Column="6" Classes="headerAction ghost" Content="✕" Command="{Binding RemoveCommand}" />

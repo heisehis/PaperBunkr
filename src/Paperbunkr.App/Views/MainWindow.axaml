@@ -128,17 +128,9 @@
 
                     <Border Width="28" Height="1" Background="{DynamicResource PbBorderBrush}" Margin="0,8" />
 
-                    <Grid>
-                        <Button Classes="rail plugin" Classes.active="{Binding IsPlugin}"
-                                Command="{Binding GoPluginCommand}" Content="Pl"
-                                ToolTip.Tip="Duplicate Finder (plugin)" />
-                        <Border Width="14" Height="14" CornerRadius="7" Background="{DynamicResource PbBadgeBrush}"
-                                HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-4,-4,0"
-                                IsHitTestVisible="False">
-                            <TextBlock Text="7" FontSize="9" FontWeight="Bold" Foreground="{DynamicResource PbBadgeTextBrush}"
-                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
-                        </Border>
-                    </Grid>
+                    <Button Classes="rail plugin" Classes.active="{Binding IsPlugin}"
+                            Command="{Binding GoPluginCommand}" Content="Pl"
+                            ToolTip.Tip="Plugins" />
 
                     <Grid>
                         <Button Classes="rail plugin" Classes.active="{Binding IsMigrationOverlayOpen}"

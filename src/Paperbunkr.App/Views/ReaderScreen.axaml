@@ -78,10 +78,13 @@
             </Border>
 
             <Grid Grid.Column="1">
-                <views:PageCanvas Page="{Binding CurrentPage}"
+                <views:PageCanvas x:Name="PageCanvasControl"
+                                  Page="{Binding CurrentPage}"
                                   LeftCommand="{Binding GoLeftCommand}"
                                   RightCommand="{Binding GoRightCommand}"
                                   HighQualityDisplay="{Binding HighQualityPageDisplay}"
+                                  LeftKey="{Binding PageTurnLeftKey}"
+                                  RightKey="{Binding PageTurnRightKey}"
                                   IsVisible="{Binding !HasError}" />
 
                 <Border IsVisible="{Binding HasError}" Width="400" CornerRadius="8"

@@ -65,7 +65,7 @@
                 </ItemsControl>
 
                 <TextBlock Classes="pillGroupLabel" Text="Genres &amp; Concepts" />
-                <ItemsControl ItemsSource="{Binding Genres}">
+                <ItemsControl ItemsSource="{Binding Genres}" Margin="0,0,0,16">
                     <ItemsControl.ItemsPanel>
                         <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
                     </ItemsControl.ItemsPanel>
@@ -75,6 +75,20 @@
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
+
+                <StackPanel IsVisible="{Binding HasVirtualTags}">
+                    <TextBlock Classes="pillGroupLabel" Text="Virtual Tags" />
+                    <ItemsControl ItemsSource="{Binding VirtualTags}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="sys:String">
+                                <Border Classes="tagPill highlight" Margin="0,0,8,0"><TextBlock Classes="tagText" Text="{Binding}" /></Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
             </StackPanel>
         </Border>
     </StackPanel>

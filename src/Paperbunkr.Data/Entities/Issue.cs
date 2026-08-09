@@ -4,10 +4,19 @@ namespace Paperbunkr.Data.Entities;
 /// A single comic/manga issue file — ported concept from ComicRackCE's <c>ComicBook</c> (which
 /// itself extends <c>ComicInfo</c>, the ComicInfo.xml-standard metadata carrier; see
 /// src/Paperbunkr.Engine/ComicBook.cs and ComicInfo.cs). Retargeted per docs/onboarding.md §6:
-/// gains a <see cref="SeriesId"/> FK now that Series is a first-class entity, drops the fields
-/// promoted to series-level (Series name itself, Publisher/Genre/Summary duplicate, and the
-/// per-issue <c>SeriesComplete</c>/<c>Manga</c> flags — see <see cref="Series"/>), and adds
-/// <see cref="StoryArcNumber"/> and <see cref="ReadingModeOverride"/>, both new.
+/// gains a <see cref="SeriesId"/> FK now that Series is a first-class entity, and drops the
+/// per-issue <c>SeriesComplete</c>/<c>Manga</c> flags (genuinely series-only, no per-issue
+/// equivalent — see <see cref="Series"/>) plus adds <see cref="StoryArcNumber"/> and
+/// <see cref="ReadingModeOverride"/>, both new.
+///
+/// <see cref="Publisher"/>/<see cref="Genre"/> below were originally meant to be dropped as
+/// series-level duplicates too, per that same onboarding.md §6 plan — reintroduced once the Issue
+/// Properties/Bulk editors (docs/superpowers/specs/2026-08-07-bulk-issue-editing-design.md) made
+/// per-issue editing of them a real feature, matching CE's own <c>ComicBook</c> shape (both are
+/// real per-issue ComicInfo.xml fields there too). <see cref="Series.Genre"/>/
+/// <see cref="Series.Publisher"/> still exist (populated once at CE-migration time) but are no
+/// longer the source of truth once an issue has its own value — see
+/// <c>SmartListCatalog.TextSelectors</c>.
 /// </summary>
 public class Issue
 {

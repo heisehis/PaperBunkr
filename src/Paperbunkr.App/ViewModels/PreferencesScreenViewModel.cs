@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Linq;
@@ -31,6 +32,7 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     private readonly LibraryFolderScanner _libraryScanner;
     private readonly FileAssociationService _fileAssociationService;
     private readonly BackupService _backupService;
+    private readonly KeyBindingService _keyBindingService;
     private readonly Func<PaperbunkrDbContext> _contextFactory;
     private bool _isLoaded;
     private bool _suppressFontApply;
@@ -45,8 +47,9 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         IFilePickerService filePicker,
         LibraryFolderScanner libraryScanner,
         FileAssociationService fileAssociationService,
-        BackupService backupService)
-        : this(skinService, filePicker, libraryScanner, fileAssociationService, backupService, PaperbunkrDb.CreateContext)
+        BackupService backupService,
+        KeyBindingService keyBindingService)
+        : this(skinService, filePicker, libraryScanner, fileAssociationService, backupService, keyBindingService, PaperbunkrDb.CreateContext)
     {
     }
 
@@ -57,6 +60,7 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         LibraryFolderScanner libraryScanner,
         FileAssociationService fileAssociationService,
         BackupService backupService,
+        KeyBindingService keyBindingService,
         Func<PaperbunkrDbContext> contextFactory)
     {
         _skinService = skinService;
@@ -64,6 +68,7 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         _libraryScanner = libraryScanner;
         _fileAssociationService = fileAssociationService;
         _backupService = backupService;
+        _keyBindingService = keyBindingService;
         _contextFactory = contextFactory;
         Skins = new ObservableCollection<SkinSummary>();
         FontFamilies = new ObservableCollection<string>();
@@ -71,6 +76,7 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         WatchedFolders = new ObservableCollection<WatchedFolderSummary>();
         FileAssociations = new ObservableCollection<FileAssociationSummary>();
         Backups = new ObservableCollection<BackupRowViewModel>();
+        KeyBindings = new ObservableCollection<KeyBindingRowViewModel>();
     }
 
     private static Issue SampleIssue() => new()
@@ -115,6 +121,16 @@ public partial class PreferencesScreenViewModel : ViewModelBase
 
     [ObservableProperty]
     private bool _highQualityPageDisplay;
+
+    /// <summary>Every registered <see cref="KeyboardCommandRegistry"/> command, data-driven so a future command needs no Preferences-side change - see <see cref="KeyboardCommandRegistry"/>'s remarks.</summary>
+    public ObservableCollection<KeyBindingRowViewModel> KeyBindings { get; }
+
+    [ObservableProperty]
+    private string? _keyBindingConflictError;
+
+    public bool HasKeyBindingConflictError => !string.IsNullOrEmpty(KeyBindingConflictError);
+
+    partial void OnKeyBindingConflictErrorChanged(string? value) => OnPropertyChanged(nameof(HasKeyBindingConflictError));
 
     [ObservableProperty]
     private string? _installSkinError;
@@ -198,6 +214,40 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         BackupsToKeep = _backupService.GetBackupsToKeep();
         _suppressBackupSettingsApply = false;
         RefreshBackups();
+
+        RefreshKeyBindings();
+    }
+
+    // ===================== Keyboard Shortcuts (docs/alpha-roadmap.md P5 follow-up) =====================
+
+    private void RefreshKeyBindings()
+    {
+        KeyBindings.Clear();
+        foreach (var (command, currentKey) in _keyBindingService.GetAllBindings())
+        {
+            KeyBindings.Add(new KeyBindingRowViewModel(command, currentKey, _keyBindingService, RecomputeKeyBindingConflict));
+        }
+
+        RecomputeKeyBindingConflict();
+    }
+
+    /// <summary>
+    /// Soft validation, not a hard block - the row already persisted its new key by the time this
+    /// runs (matches every other Preferences toggle's immediate-persist behavior). Only same-group
+    /// collisions matter (e.g. Reader.PageTurnLeft/Right sharing a key would break navigation);
+    /// commands in different groups are never active at the same time, so a cross-group repeat
+    /// isn't actually a conflict.
+    /// </summary>
+    private void RecomputeKeyBindingConflict()
+    {
+        var conflict = KeyBindings
+            .GroupBy(r => r.Group)
+            .SelectMany(g => g.GroupBy(r => r.SelectedKey.Key))
+            .FirstOrDefault(g => g.Count() > 1);
+
+        KeyBindingConflictError = conflict is null
+            ? null
+            : $"\"{conflict.First().SelectedKey.Label}\" is assigned to more than one {conflict.First().Group} shortcut.";
     }
 
     private void RefreshSkins()

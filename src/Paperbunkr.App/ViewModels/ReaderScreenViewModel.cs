@@ -2,6 +2,7 @@ using System;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Threading.Tasks;
+using Avalonia.Input;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Threading;
@@ -29,6 +30,11 @@ public partial class ReaderScreenViewModel : ViewModelBase
     // is specifically about not decoding pages that aren't needed) - still lightweight color-swatch
     // placeholders, just with correct count/selection tracking the real current page now.
     private const int MaxThumbnails = 200;
+
+    // No injected context-factory seam needed here (unlike SkinService/CoverThumbnailService) -
+    // KeyBindingService's own default ctor already goes through PaperbunkrDb.CreateContext(),
+    // which PaperbunkrDbContext.DatabasePathOverride already redirects in tests.
+    private readonly KeyBindingService _keyBindings = new();
 
     private readonly Action _goBack;
     private int? _loadedIssueId;
@@ -59,6 +65,12 @@ public partial class ReaderScreenViewModel : ViewModelBase
 
     [ObservableProperty]
     private bool _highQualityPageDisplay = true;
+
+    [ObservableProperty]
+    private Key _pageTurnLeftKey = Key.Left;
+
+    [ObservableProperty]
+    private Key _pageTurnRightKey = Key.Right;
 
     [ObservableProperty]
     private string? _errorMessage;
@@ -130,6 +142,8 @@ public partial class ReaderScreenViewModel : ViewModelBase
         var appSettings = context.GetOrCreateAppSettings();
         _isRightToLeft = readingMode == ReadingMode.RightToLeft && appSettings.ReverseRtlNavigation;
         HighQualityPageDisplay = appSettings.HighQualityPageDisplay;
+        PageTurnLeftKey = _keyBindings.GetKey(context, KeyboardCommandRegistry.ReaderPageTurnLeft);
+        PageTurnRightKey = _keyBindings.GetKey(context, KeyboardCommandRegistry.ReaderPageTurnRight);
         ReadingModeLabel = readingMode switch
         {
             ReadingMode.RightToLeft => "Right to Left ▾",

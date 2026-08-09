@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -34,6 +35,7 @@ public partial class SmartScreenViewModel : ViewModelBase
 
     private int? _activeSmartListId;
     private SmartList? _workingList;
+    private IReadOnlyList<VirtualTagOption> _virtualTagOptions = [];
 
     public ObservableCollection<SmartListSummary> BuiltInLists { get; }
     public ObservableCollection<SmartListSummary> MaintenanceLists { get; }
@@ -71,10 +73,16 @@ public partial class SmartScreenViewModel : ViewModelBase
             ? "Built-in smart list · read-only"
             : "Custom smart list · updates live as your library changes";
 
+        _virtualTagOptions = context.VirtualTagDefinitions
+            .Where(t => t.IsEnabled)
+            .OrderBy(t => t.SortOrder)
+            .Select(t => new VirtualTagOption(t.Id, t.Name))
+            .ToList();
+
         Conditions.Clear();
         foreach (var condition in list.Conditions.OrderBy(c => c.SortOrder))
         {
-            Conditions.Add(new SmartListConditionViewModel(condition, RemoveCondition, RecomputeMatchCount));
+            Conditions.Add(new SmartListConditionViewModel(condition, RemoveCondition, RecomputeMatchCount, _virtualTagOptions));
         }
 
         RecomputeMatchCount();
@@ -172,7 +180,7 @@ public partial class SmartScreenViewModel : ViewModelBase
             SortOrder = _workingList.Conditions.Count,
         };
         _workingList.Conditions.Add(condition);
-        Conditions.Add(new SmartListConditionViewModel(condition, RemoveCondition, RecomputeMatchCount));
+        Conditions.Add(new SmartListConditionViewModel(condition, RemoveCondition, RecomputeMatchCount, _virtualTagOptions));
         RecomputeMatchCount();
     }
 
@@ -211,6 +219,7 @@ public partial class SmartScreenViewModel : ViewModelBase
                 Value = condition.Value,
                 Value2 = condition.Value2,
                 CustomValueName = condition.CustomValueName,
+                VirtualTagId = condition.VirtualTagId,
                 SortOrder = sortOrder++,
             });
         }
@@ -249,6 +258,7 @@ public partial class SmartScreenViewModel : ViewModelBase
                 Value = c.Value,
                 Value2 = c.Value2,
                 CustomValueName = c.CustomValueName,
+                VirtualTagId = c.VirtualTagId,
                 SortOrder = i,
             }).ToList(),
         };

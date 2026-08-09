@@ -36,6 +36,8 @@ public class PaperbunkrDbContext : DbContext
 
     public DbSet<WatchedFolder> WatchedFolders => Set<WatchedFolder>();
 
+    public DbSet<KeyBinding> KeyBindings => Set<KeyBinding>();
+
     public PaperbunkrDbContext(DbContextOptions<PaperbunkrDbContext> options)
         : base(options)
     {
@@ -231,6 +233,14 @@ public class PaperbunkrDbContext : DbContext
             builder.HasKey(w => w.Id);
             builder.Property(w => w.Path).IsRequired();
             builder.HasIndex(w => w.Path).IsUnique();
+        });
+
+        modelBuilder.Entity<KeyBinding>(builder =>
+        {
+            builder.HasKey(k => k.Id);
+            builder.Property(k => k.CommandId).IsRequired();
+            builder.Property(k => k.Key).IsRequired();
+            builder.HasIndex(k => k.CommandId).IsUnique();
         });
     }
 

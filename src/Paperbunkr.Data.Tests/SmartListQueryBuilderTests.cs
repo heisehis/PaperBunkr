@@ -25,6 +25,8 @@ public class SmartListQueryBuilderTests : IDisposable
     private readonly int _issueMetaDupAId;
     private readonly int _issueMetaDupBId;
     private readonly int _issuePathDupId;
+    private readonly int _enabledTagId;
+    private readonly int _disabledTagId;
 
     public SmartListQueryBuilderTests()
     {
@@ -46,27 +48,29 @@ public class SmartListQueryBuilderTests : IDisposable
         _context.SaveChanges();
         _seriesAId = seriesA.Id;
 
-        var issueRead = new Issue { SeriesId = seriesA.Id, Number = "1", PageCount = 100, LastPageRead = 99 };
-        var issueReading = new Issue { SeriesId = seriesA.Id, Number = "2", PageCount = 100, LastPageRead = 50 };
-        var issueNeverRead = new Issue { SeriesId = seriesA.Id, Number = "3", PageCount = 100, LastPageRead = null };
-        var issueFavorite = new Issue { SeriesId = seriesA.Id, Number = "4", Rating = 4 };
-        var issueMissing = new Issue { SeriesId = seriesA.Id, Number = "5", FileIsMissing = true };
-        var issueRecentlyAdded = new Issue { SeriesId = seriesA.Id, Number = "6", AddedTime = DateTime.Now.AddDays(-1) };
-        var issueOldAdded = new Issue { SeriesId = seriesA.Id, Number = "7", AddedTime = DateTime.Now.AddDays(-40) };
+        // Genre/Publisher set on every issue here too (not just seriesA) - SmartListCatalog reads
+        // the issue-level value (P3 audit fix), matching what Issue Properties/Bulk actually edit.
+        var issueRead = new Issue { SeriesId = seriesA.Id, Number = "1", PageCount = 100, LastPageRead = 99, Genre = "Horror", Publisher = "Acme" };
+        var issueReading = new Issue { SeriesId = seriesA.Id, Number = "2", PageCount = 100, LastPageRead = 50, Genre = "Horror", Publisher = "Acme" };
+        var issueNeverRead = new Issue { SeriesId = seriesA.Id, Number = "3", PageCount = 100, LastPageRead = null, Genre = "Horror", Publisher = "Acme" };
+        var issueFavorite = new Issue { SeriesId = seriesA.Id, Number = "4", Rating = 4, Genre = "Horror", Publisher = "Acme" };
+        var issueMissing = new Issue { SeriesId = seriesA.Id, Number = "5", FileIsMissing = true, Genre = "Horror", Publisher = "Acme" };
+        var issueRecentlyAdded = new Issue { SeriesId = seriesA.Id, Number = "6", AddedTime = DateTime.Now.AddDays(-1), Genre = "Horror", Publisher = "Acme" };
+        var issueOldAdded = new Issue { SeriesId = seriesA.Id, Number = "7", AddedTime = DateTime.Now.AddDays(-40), Genre = "Horror", Publisher = "Acme" };
 
         // Metadata duplicates: same Series/Format/Count/Number/Volume/LanguageISO/Year/Month/Day, different files.
         var issueMetaDupA = new Issue
         {
             SeriesId = seriesA.Id, Number = "10", Format = "CBZ", LanguageISO = "en", Year = 2020, Month = 1, Day = 1,
-            FilePath = @"C:\lib\a10.cbz",
+            FilePath = @"C:\lib\a10.cbz", Genre = "Horror", Publisher = "Acme",
         };
         var issueMetaDupB = new Issue
         {
             SeriesId = seriesA.Id, Number = "10", Format = "CBZ", LanguageISO = "en", Year = 2020, Month = 1, Day = 1,
-            FilePath = @"C:\lib\a10_alt.cbz",
+            FilePath = @"C:\lib\a10_alt.cbz", Genre = "Horror", Publisher = "Acme",
         };
         // Path duplicate: shares issueMetaDupA's exact FilePath but different metadata.
-        var issuePathDup = new Issue { SeriesId = seriesA.Id, Number = "99", FilePath = @"C:\lib\a10.cbz" };
+        var issuePathDup = new Issue { SeriesId = seriesA.Id, Number = "99", FilePath = @"C:\lib\a10.cbz", Genre = "Horror", Publisher = "Acme" };
 
         _context.Issues.AddRange(
             issueRead, issueReading, issueNeverRead, issueFavorite, issueMissing,
@@ -83,6 +87,13 @@ public class SmartListQueryBuilderTests : IDisposable
         _issueMetaDupAId = issueMetaDupA.Id;
         _issueMetaDupBId = issueMetaDupB.Id;
         _issuePathDupId = issuePathDup.Id;
+
+        var enabledTag = new VirtualTagDefinition { Name = "Series Tag", CaptionFormat = "{Series}", IsEnabled = true };
+        var disabledTag = new VirtualTagDefinition { Name = "Off Tag", CaptionFormat = "{Series}", IsEnabled = false };
+        _context.VirtualTagDefinitions.AddRange(enabledTag, disabledTag);
+        _context.SaveChanges();
+        _enabledTagId = enabledTag.Id;
+        _disabledTagId = disabledTag.Id;
     }
 
     public void Dispose()
@@ -104,14 +115,17 @@ public class SmartListQueryBuilderTests : IDisposable
     private static SmartListCondition Cond(SmartListField field, SmartListOperator op, string value, string? value2 = null) =>
         new() { Field = field, Operator = op, Value = value, Value2 = value2 };
 
+    private static SmartListCondition VirtualTagCond(int? virtualTagId, SmartListOperator op, string value) =>
+        new() { Field = SmartListField.VirtualTag, VirtualTagId = virtualTagId, Operator = op, Value = value };
+
     // --- Text evaluator ---
 
     [Fact]
-    public void Text_Contains_MatchesSeriesGenre()
+    public void Text_Contains_MatchesPerIssueGenre()
     {
         var list = ListOf(Cond(SmartListField.Genre, SmartListOperator.Contains, "Horr"));
         var result = SmartListQueryBuilder.Build(_context, list);
-        Assert.Equal(10, result.Count); // every issue belongs to the one Horror series
+        Assert.Equal(10, result.Count); // every issue's own Genre is "Horror"
     }
 
     [Fact]
@@ -122,6 +136,29 @@ public class SmartListQueryBuilderTests : IDisposable
 
         var noMatch = ListOf(Cond(SmartListField.Publisher, SmartListOperator.Is, "Acme Comics"));
         Assert.Empty(SmartListQueryBuilder.Build(_context, noMatch));
+    }
+
+    /// <summary>
+    /// P3 audit regression test (docs/alpha-roadmap.md) - Genre/Publisher used to read
+    /// <c>Issue.Series.Genre</c>/<c>Publisher</c>, so an issue-level edit via Issue
+    /// Properties/Bulk (the actual real editors for these fields) never showed up in Smart List
+    /// filtering. Diverges one issue's own Genre from its series' Genre to prove the selector
+    /// reads the issue's value, not the series'.
+    /// </summary>
+    [Fact]
+    public void Genre_ReadsIssueLevelValue_NotStaleSeriesLevelValue()
+    {
+        var series = new Series { Name = "Beta", Genre = "Comedy" }; // series-level says Comedy...
+        _context.Series.Add(series);
+        var issue = new Issue { Series = series, Number = "1", Genre = "Horror" }; // ...but this issue was edited to Horror
+        _context.Issues.Add(issue);
+        _context.SaveChanges();
+
+        var matchesIssueValue = ListOf(Cond(SmartListField.Genre, SmartListOperator.Is, "Horror"));
+        Assert.Contains(issue.Id, SmartListQueryBuilder.Build(_context, matchesIssueValue).Select(i => i.Id));
+
+        var wouldMatchStaleSeriesValue = ListOf(Cond(SmartListField.Genre, SmartListOperator.Is, "Comedy"));
+        Assert.DoesNotContain(issue.Id, SmartListQueryBuilder.Build(_context, wouldMatchStaleSeriesValue).Select(i => i.Id));
     }
 
     [Fact]
@@ -203,6 +240,33 @@ public class SmartListQueryBuilderTests : IDisposable
         var ids = SmartListQueryBuilder.Build(_context, list).Select(i => i.Id).ToHashSet();
         Assert.Contains(_issueRecentlyAddedId, ids);
         Assert.DoesNotContain(_issueOldAddedId, ids);
+    }
+
+    // --- Virtual Tag evaluator (Alpha to-do P2 - not in CE, see SmartListField.VirtualTag) ---
+
+    [Fact]
+    public void VirtualTag_EvaluatesTemplateAgainstIssueAndMatchesAsText()
+    {
+        var list = ListOf(VirtualTagCond(_enabledTagId, SmartListOperator.Is, "Alpha"));
+        var result = SmartListQueryBuilder.Build(_context, list);
+        Assert.Equal(10, result.Count); // every issue's Series is "Alpha", so {Series} evaluates to "Alpha" for all
+    }
+
+    [Fact]
+    public void VirtualTag_DisabledTag_NeverMatches()
+    {
+        var list = ListOf(VirtualTagCond(_disabledTagId, SmartListOperator.Is, "Alpha"));
+        Assert.Empty(SmartListQueryBuilder.Build(_context, list));
+    }
+
+    [Fact]
+    public void VirtualTag_UnsetOrUnknownId_NeverMatches()
+    {
+        var unset = ListOf(VirtualTagCond(null, SmartListOperator.Is, "Alpha"));
+        Assert.Empty(SmartListQueryBuilder.Build(_context, unset));
+
+        var unknown = ListOf(VirtualTagCond(-1, SmartListOperator.Is, "Alpha"));
+        Assert.Empty(SmartListQueryBuilder.Build(_context, unknown));
     }
 
     // --- Built-in system lists (docs/superpowers/specs/2026-08-06-smart-lists-design.md §5) ---

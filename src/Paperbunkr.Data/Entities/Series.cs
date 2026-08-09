@@ -22,8 +22,10 @@ public class Series
     /// <summary>Series-level completion flag. Replaces CE's per-issue <c>SeriesComplete</c>.</summary>
     public bool IsComplete { get; set; }
 
+    /// <summary>Populated once at CE-migration time. Not the current source of truth for filtering/display — see <see cref="Issue.Publisher"/>.</summary>
     public string? Publisher { get; set; }
 
+    /// <summary>Populated once at CE-migration time. Not the current source of truth for filtering/display — see <see cref="Issue.Genre"/>.</summary>
     public string? Genre { get; set; }
 
     public string? Summary { get; set; }

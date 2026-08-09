@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Paperbunkr.Data;
 
@@ -10,9 +11,11 @@ using Paperbunkr.Data;
 namespace Paperbunkr.Data.Migrations
 {
     [DbContext(typeof(PaperbunkrDbContext))]
-    partial class PaperbunkrDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260809022741_AddVirtualTagIdToSmartListCondition")]
+    partial class AddVirtualTagIdToSmartListCondition
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "8.0.10");
@@ -331,28 +334,6 @@ namespace Paperbunkr.Data.Migrations
                     b.HasIndex("IssueId", "Name");
 
                     b.ToTable("IssueCustomValues");
-                });
-
-            modelBuilder.Entity("Paperbunkr.Data.Entities.KeyBinding", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("CommandId")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Key")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("CommandId")
-                        .IsUnique();
-
-                    b.ToTable("KeyBindings");
                 });
 
             modelBuilder.Entity("Paperbunkr.Data.Entities.ReadingList", b =>

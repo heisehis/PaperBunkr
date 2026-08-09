@@ -123,8 +123,15 @@ public static class SmartListCatalog
         new Dictionary<SmartListField, Func<Issue, string>>
         {
             [SmartListField.SeriesName] = i => i.Series?.Name ?? string.Empty,
-            [SmartListField.Genre] = i => i.Series?.Genre ?? string.Empty,
-            [SmartListField.Publisher] = i => i.Series?.Publisher ?? string.Empty,
+
+            // Deliberately i.Genre/i.Publisher, not i.Series?.Genre/Publisher (P3 audit,
+            // docs/alpha-roadmap.md) - both are real per-issue fields the Issue Properties/Bulk
+            // editors actually write to (BulkFieldRegistry), same bug class as the Detail Pills
+            // fix. The Series-level columns still exist (populated once at CE-migration time,
+            // ContentType/ReadingMode/SeriesComplete have no per-issue equivalent to be stale
+            // against) but are no longer the source of truth once an issue has its own value.
+            [SmartListField.Genre] = i => i.Genre ?? string.Empty,
+            [SmartListField.Publisher] = i => i.Publisher ?? string.Empty,
             [SmartListField.ContentType] = i => i.Series?.ContentType.ToString() ?? string.Empty,
             [SmartListField.ReadingMode] = i => i.Series?.ReadingMode.ToString() ?? string.Empty,
 

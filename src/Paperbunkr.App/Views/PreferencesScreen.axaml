@@ -217,6 +217,39 @@
                     </StackPanel>
                 </Border>
 
+                <!-- Keyboard Shortcuts (docs/alpha-roadmap.md P5 follow-up) - data-driven off
+                     KeyboardCommandRegistry, so a future remappable command just needs a new
+                     registry entry, not a XAML change. Only Reader commands exist today; this row
+                     list groups by KeyBindingRowViewModel.Group so it stays correct if/when a
+                     non-Reader command is registered, without needing its own Preferences tab. -->
+                <Border Classes="groupBox">
+                    <StackPanel>
+                        <Border Classes="groupHeader">
+                            <TextBlock Text="Keyboard Shortcuts" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
+                        </Border>
+                        <StackPanel Margin="14" Spacing="10">
+                            <TextBlock Text="{Binding KeyBindingConflictError}" IsVisible="{Binding HasKeyBindingConflictError}"
+                                       Foreground="#D96C6C" FontSize="12" TextWrapping="Wrap" />
+
+                            <ItemsControl ItemsSource="{Binding KeyBindings}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:KeyBindingRowViewModel">
+                                        <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,4">
+                                            <TextBlock Grid.Column="0" Text="{Binding Label}" FontSize="13" VerticalAlignment="Center"
+                                                       Foreground="{DynamicResource PbTextBrush}" />
+                                            <ComboBox Grid.Column="1" ItemsSource="{Binding Options}"
+                                                      SelectedItem="{Binding SelectedKey}" Width="150" />
+                                        </Grid>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+
+                            <TextBlock Text="Also everywhere: Tab / Shift+Tab moves focus, Enter or Space activates the focused control, Esc cancels or closes the current editor."
+                                       FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" Margin="0,6,0,0" />
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
             </StackPanel>
 
             <StackPanel IsVisible="{Binding IsLibrariesTab}" Margin="28,0,28,40" Spacing="20">

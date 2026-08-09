@@ -17,6 +17,13 @@
         <vm:MainViewModel />
     </Design.DataContext>
 
+    <!-- P5 (docs/alpha-roadmap.md) - single app-wide Esc-to-close/cancel binding, routed through
+         MainViewModel.EscapeCommand rather than per-screen handlers since none of Migration/Issue
+         Properties/Bulk Editing are real Windows/Popups with native dialog-Escape behavior. -->
+    <Window.KeyBindings>
+        <KeyBinding Gesture="Escape" Command="{Binding EscapeCommand}" />
+    </Window.KeyBindings>
+
     <Window.Styles>
         <!-- Rail nav button: 44x44, rounded, active state = accent-soft fill + accent text -->
         <Style Selector="Button.rail">

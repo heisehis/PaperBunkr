@@ -31,4 +31,24 @@ public partial class DetailTabs : UserControl
             viewModel.ToggleIssueSelection(issue, e.KeyModifiers.HasFlag(KeyModifiers.Shift));
         }
     }
+
+    /// <summary>
+    /// Keyboard equivalent of <see cref="OnIssueTilePointerPressed"/> (P5, docs/alpha-roadmap.md) -
+    /// Enter/Space toggles the focused tile, Shift held extends the range exactly like a
+    /// shift-click does, since <see cref="DetailTabsViewModel.ToggleIssueSelection"/> already
+    /// takes that as a plain bool and doesn't care where it came from.
+    /// </summary>
+    private void OnIssueTileKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.Key != Key.Enter && e.Key != Key.Space)
+        {
+            return;
+        }
+
+        if (sender is Border { DataContext: IssueCardSample issue } && DataContext is DetailTabsViewModel viewModel)
+        {
+            viewModel.ToggleIssueSelection(issue, e.KeyModifiers.HasFlag(KeyModifiers.Shift));
+            e.Handled = true;
+        }
+    }
 }

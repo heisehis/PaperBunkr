@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Paperbunkr.Data.Entities;
+using Paperbunkr.Data.VirtualTags;
 
 namespace Paperbunkr.Data.SmartLists;
 
@@ -22,10 +23,17 @@ public static class SmartListQueryBuilder
             ? DuplicateIssueIds(issues)
             : null;
 
+        // Disabled tags are excluded, not just unpicklable in the rule-builder UI - a condition
+        // saved against a tag that's since been disabled in Preferences stops matching too,
+        // consistent with the Detail-screen pills surface also only showing enabled tags.
+        Dictionary<int, VirtualTagDefinition>? virtualTags = list.Conditions.Any(c => c.Field == SmartListField.VirtualTag)
+            ? ctx.VirtualTagDefinitions.Where(v => v.IsEnabled).ToDictionary(v => v.Id)
+            : null;
+
         IEnumerable<Issue> result = issues;
         foreach (var condition in list.Conditions.OrderBy(c => c.SortOrder))
         {
-            result = result.Where(i => Evaluate(i, condition, duplicateIds));
+            result = result.Where(i => Evaluate(i, condition, duplicateIds, virtualTags));
         }
 
         return result.ToList();
@@ -33,7 +41,7 @@ public static class SmartListQueryBuilder
 
     public static int MatchCount(PaperbunkrDbContext ctx, SmartList list) => Build(ctx, list).Count;
 
-    private static bool Evaluate(Issue issue, SmartListCondition condition, HashSet<int>? duplicateIds)
+    private static bool Evaluate(Issue issue, SmartListCondition condition, HashSet<int>? duplicateIds, Dictionary<int, VirtualTagDefinition>? virtualTags)
     {
         if (condition.Field == SmartListField.Duplicate)
         {
@@ -44,6 +52,11 @@ public static class SmartListQueryBuilder
         if (condition.Field == SmartListField.CustomValue)
         {
             return EvaluateCustomValue(issue, condition);
+        }
+
+        if (condition.Field == SmartListField.VirtualTag)
+        {
+            return EvaluateVirtualTag(issue, condition, virtualTags);
         }
 
         var definition = SmartListCatalog.Definitions[condition.Field];
@@ -122,6 +135,23 @@ public static class SmartListQueryBuilder
     {
         var match = issue.CustomValues.FirstOrDefault(cv => cv.Name == c.CustomValueName);
         return match is not null && EvaluateText(match.Value, c);
+    }
+
+    /// <summary>
+    /// A disabled/deleted tag (id no longer in <paramref name="virtualTags"/>) never matches -
+    /// same "nothing to compare" contract as <see cref="EvaluateCustomValue"/> and
+    /// <see cref="EvaluateDate"/>'s unset-date case, rather than throwing on stale references left
+    /// behind after a tag is disabled or removed in Preferences.
+    /// </summary>
+    private static bool EvaluateVirtualTag(Issue issue, SmartListCondition c, Dictionary<int, VirtualTagDefinition>? virtualTags)
+    {
+        if (c.VirtualTagId is not int id || virtualTags is null || !virtualTags.TryGetValue(id, out var tag))
+        {
+            return false;
+        }
+
+        string value = VirtualTagTemplateEvaluator.Evaluate(tag.CaptionFormat, issue, issue.Series);
+        return EvaluateText(value, c);
     }
 
     /// <summary>

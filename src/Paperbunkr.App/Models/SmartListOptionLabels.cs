@@ -15,6 +15,12 @@ public readonly record struct OperatorOption(SmartListOperator Operator, string 
     public override string ToString() => Label;
 }
 
+/// <summary>Picker option for <see cref="SmartListField.VirtualTag"/> conditions — one per enabled <c>VirtualTagDefinition</c>.</summary>
+public readonly record struct VirtualTagOption(int Id, string Name)
+{
+    public override string ToString() => Name;
+}
+
 /// <summary>Human-readable operator labels, grouped by the data types that offer them (spec §3).</summary>
 public static class SmartListOperatorLabels
 {

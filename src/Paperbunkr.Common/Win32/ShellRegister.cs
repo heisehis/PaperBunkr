@@ -58,6 +58,30 @@ namespace cYo.Common.Win32
 
 		public static RegistryKey ClassesRoot => Registry.ClassesRoot;
 
+		/// <summary>
+		/// Base of the writable classes hive. Every write in this class used to go straight through
+		/// <see cref="ClassesRoot"/> (<c>HKEY_CLASSES_ROOT</c>), which - contrary to what its merged
+		/// read view might suggest - requires admin elevation to CREATE a new key: .NET's
+		/// <c>RegistryKey.CreateSubKey</c> resolves that write to the underlying
+		/// <c>HKEY_LOCAL_MACHINE\SOFTWARE\Classes</c>, not a per-user location, and does not get the
+		/// legacy UAC registry-virtualization fallback once an app manifest declares any
+		/// <c>requestedExecutionLevel</c> (ComicRackCE's own app.manifest does, at "asInvoker" - see
+		/// its comment on that element). Confirmed live: a non-elevated write via
+		/// <see cref="ClassesRoot"/> throws <see cref="UnauthorizedAccessException"/>
+		/// ("Access to the registry key 'HKEY_CLASSES_ROOT\...' is denied"), which crashed
+		/// Paperbunkr's Preferences &gt; Advanced file-association toggle - CE's own equivalent
+		/// (<see cref="Paperbunkr.Engine.IO.Provider.FileFormat.RegisterShell"/>, not currently wired
+		/// into Paperbunkr's UI) wraps this in a bare <c>catch</c> so it fails silently instead of
+		/// crashing, but silent failure isn't better - either way the feature just doesn't work
+		/// without elevation. <c>HKEY_CURRENT_USER\Software\Classes</c> is the standard per-user
+		/// equivalent: no elevation needed, and it's merged into the effective
+		/// <c>HKEY_CLASSES_ROOT</c> read view (winning over HKLM on conflicts), so every read in this
+		/// class can stay exactly as-is - only the write targets change.
+		/// </summary>
+		private static RegistryKey ClassesRootWritable => Registry.CurrentUser;
+
+		private static string WritablePath(string subkey) => @"Software\Classes\" + subkey;
+
 		public static bool CanRegisterShell
 		{
 			get
@@ -66,10 +90,10 @@ namespace cYo.Common.Win32
 				{
 					return result != 0;
 				}
-				string subkey = Guid.NewGuid().ToString();
+				string subkey = WritablePath(Guid.NewGuid().ToString());
 				try
 				{
-					using (ClassesRoot.CreateSubKey(subkey))
+					using (ClassesRootWritable.CreateSubKey(subkey))
 					{
 					}
 					result = 1;
@@ -84,7 +108,7 @@ namespace cYo.Common.Win32
 				{
 					try
 					{
-						ClassesRoot.DeleteSubKey(subkey);
+						ClassesRootWritable.DeleteSubKey(subkey);
 					}
 					catch
 					{
@@ -100,11 +124,11 @@ namespace cYo.Common.Win32
 
 		public static void RegisterFileOpen(string typeId, string docExtension, string docName, string appPath, string iconPath)
 		{
-			using (RegistryKey registryKey = ClassesRoot.CreateSubKey(docExtension))
+			using (RegistryKey registryKey = ClassesRootWritable.CreateSubKey(WritablePath(docExtension)))
 			{
 				registryKey.SetValue(null, typeId);
 			}
-			using (RegistryKey registryKey2 = Registry.ClassesRoot.CreateSubKey(typeId))
+			using (RegistryKey registryKey2 = ClassesRootWritable.CreateSubKey(WritablePath(typeId)))
 			{
 				registryKey2.SetValue(null, docName);
 				using (RegistryKey registryKey3 = registryKey2.CreateSubKey("DefaultIcon"))
@@ -129,7 +153,7 @@ namespace cYo.Common.Win32
 		{
 			if (IsFileOpenRegistered(typeId, docExtension))
 			{
-				using (RegistryKey registryKey = Registry.ClassesRoot.OpenSubKey(docExtension, true))
+				using (RegistryKey registryKey = ClassesRootWritable.OpenSubKey(WritablePath(docExtension), true))
 				{
 					registryKey?.SetValue(null, string.Empty);
 				}
@@ -159,17 +183,17 @@ namespace cYo.Common.Win32
 		public static void RegisterFileOpenWith(string docExtension, string appPath, string friendlyName, string typeId)
 		{
 			string fileName = Path.GetFileName(appPath);
-			using (RegistryKey registryKey = ClassesRoot.CreateSubKey(docExtension + "\\OpenWithProgIds"))
+			using (RegistryKey registryKey = ClassesRootWritable.CreateSubKey(WritablePath(docExtension + "\\OpenWithProgIds")))
 			{
 				registryKey?.SetValue(typeId, string.Empty);
 			}
-			using (RegistryKey registryKey2 = ClassesRoot.CreateSubKey("Applications\\" + fileName + "\\shell\\Open"))
+			using (RegistryKey registryKey2 = ClassesRootWritable.CreateSubKey(WritablePath("Applications\\" + fileName + "\\shell\\Open")))
 			{
 				if (!string.IsNullOrEmpty(friendlyName))
 				{
 					registryKey2.SetValue("FriendlyAppName", friendlyName);
 				}
-				using (RegistryKey registryKey3 = ClassesRoot.CreateSubKey("command"))
+				using (RegistryKey registryKey3 = ClassesRootWritable.CreateSubKey(WritablePath("command")))
 				{
 					registryKey3.SetValue(null, "\"" + appPath + "\" \"%1\"");
 				}
@@ -186,8 +210,8 @@ namespace cYo.Common.Win32
 		public static void UnregisterFileOpenWith(string docExtension, string appPath, string typeId)
 		{
 			string fileName = Path.GetFileName(appPath);
-			Registry.ClassesRoot.DeleteSubKeyTree(docExtension + "\\OpenWithList\\" + fileName, false); //Delete any old entries
-			using (RegistryKey registryKey = ClassesRoot.OpenSubKey(docExtension + "\\OpenWithProgIds", true))
+			ClassesRootWritable.DeleteSubKeyTree(WritablePath(docExtension + "\\OpenWithList\\" + fileName), false); //Delete any old entries
+			using (RegistryKey registryKey = ClassesRootWritable.OpenSubKey(WritablePath(docExtension + "\\OpenWithProgIds"), true))
 			{
 				registryKey?.DeleteValue(typeId, false);
 			}
@@ -215,7 +239,7 @@ namespace cYo.Common.Win32
 		public static void RegisterFileCommand(string docExtension, string verbName, string menuText, string appPath, string commandParameters)
 		{
 			verbName = verbName.Replace("&", "");
-			using (RegistryKey registryKey = ClassesRoot.CreateSubKey(docExtension + "\\Shell\\" + verbName))
+			using (RegistryKey registryKey = ClassesRootWritable.CreateSubKey(WritablePath(docExtension + "\\Shell\\" + verbName)))
 			{
 				registryKey.SetValue(string.Empty, menuText);
 				using (RegistryKey registryKey2 = registryKey.CreateSubKey("command"))

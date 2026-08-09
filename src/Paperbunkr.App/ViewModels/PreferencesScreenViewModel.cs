@@ -681,10 +681,27 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         }
     }
 
+    /// <summary>
+    /// Defense-in-depth on top of the real fix (<c>ShellRegister</c> now writes to
+    /// <c>HKEY_CURRENT_USER\Software\Classes</c> instead of the elevation-requiring
+    /// <c>HKEY_CLASSES_ROOT</c>, which is what was actually crashing this - see that file's
+    /// <c>ClassesRootWritable</c> doc comment). Kept as a real try/catch with user-visible feedback
+    /// rather than CE's own bare <c>catch</c> swallow (<see cref="Paperbunkr.Engine.IO.Provider.FileFormat.RegisterShell"/>)
+    /// - a locked-down machine (group policy, antivirus) could still deny this even from HKCU, and
+    /// silently doing nothing would be as confusing as crashing.
+    /// </summary>
     [RelayCommand]
     private void ToggleFileAssociation(FileAssociationSummary format)
     {
-        _fileAssociationService.SetAssociated(format.Name, !format.IsAssociated);
+        try
+        {
+            _fileAssociationService.SetAssociated(format.Name, !format.IsAssociated);
+        }
+        catch (Exception ex)
+        {
+            _showToast("Couldn't update file association", ex.Message);
+        }
+
         RefreshFileAssociations();
     }
 

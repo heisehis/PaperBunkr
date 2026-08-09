@@ -315,15 +315,24 @@ public partial class ReaderScreenViewModel : ViewModelBase
                     thumb = null; // one bad page doesn't break the rest — same contract as GetPage
                 }
 
+                // Real bug found in production: `page` is the shared `for`-loop control variable -
+                // every closure below was capturing it BY REFERENCE, not by value. The background
+                // loop races far ahead of the UI thread draining its dispatcher queue (decoding a
+                // 130x200 thumbnail takes microseconds), so by the time a given Post finally ran,
+                // `page` had already advanced past whatever value this iteration meant to write -
+                // scrambling thumbnails onto later/duplicate tiles and leaving page 0 (which every
+                // subsequent iteration raced past before its own Post ever got a turn) permanently
+                // unwritten. `capturedPage` gives each closure its own iteration-local snapshot.
+                int capturedPage = page;
                 Dispatcher.UIThread.Post(() =>
                 {
-                    if (generation != _loadGeneration || page >= Thumbnails.Count)
+                    if (generation != _loadGeneration || capturedPage >= Thumbnails.Count)
                     {
                         return;
                     }
 
-                    var existing = Thumbnails[page];
-                    Thumbnails[page] = new ReaderThumbnailSample { CoverBrush = CoverBrush, CoverImage = thumb, IsSelected = existing.IsSelected };
+                    var existing = Thumbnails[capturedPage];
+                    Thumbnails[capturedPage] = new ReaderThumbnailSample { CoverBrush = CoverBrush, CoverImage = thumb, IsSelected = existing.IsSelected };
                 });
             }
         });

@@ -85,4 +85,38 @@ public class PageImageDecoderTests : IDisposable
             Assert.NotNull(bitmap);
         }
     }
+
+    /// <summary>
+    /// Regression test for a real bug: ReaderScreenViewModel.RefreshCurrentPage() calls GetPage on
+    /// the UI thread for the just-opened issue's current page (almost always page 0) at the same
+    /// moment its background thumbnail-generation task calls GetThumbnail for page 0 too - both
+    /// hitting the same unsynchronized archive read, leaving the Reader's first thumbnail blank
+    /// (the resulting exception was swallowed and rendered as no image). Fires GetPage/GetThumbnail
+    /// concurrently across every page - not just page 0, since navigating while thumbnails are
+    /// still generating races the same way - and asserts every decode succeeds with real pixels.
+    /// </summary>
+    [Fact]
+    public async Task GetPageAndGetThumbnail_CalledConcurrently_BothSucceedForEveryPage()
+    {
+        CbzFixture.Create(_cbzPath, pageCount: 8);
+        using var decoder = PageImageDecoder.TryOpen(_cbzPath)!;
+
+        var tasks = new List<Task>();
+        for (int i = 0; i < decoder.PageCount; i++)
+        {
+            int page = i;
+            tasks.Add(Task.Run(() =>
+            {
+                var bitmap = decoder.GetPage(page);
+                Assert.True(bitmap.PixelSize.Width > 0 && bitmap.PixelSize.Height > 0);
+            }));
+            tasks.Add(Task.Run(() =>
+            {
+                var thumb = decoder.GetThumbnail(page);
+                Assert.True(thumb.PixelSize.Width > 0 && thumb.PixelSize.Height > 0);
+            }));
+        }
+
+        await Task.WhenAll(tasks);
+    }
 }

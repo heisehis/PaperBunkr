@@ -430,4 +430,48 @@ public class ReaderScreenViewModelTests : IDisposable
 
         Assert.Equal("PAGE 1 / 3", vm.PageLabel);
     }
+
+    /// <summary>
+    /// Regression test for a real bug: StartThumbnailGeneration's background loop declared its
+    /// page index in the `for` header, and every Dispatcher.UIThread.Post closure captured that
+    /// SAME shared variable by reference instead of a per-iteration snapshot. The background loop
+    /// races far ahead of the UI thread draining its dispatcher queue (decoding a tiny thumbnail
+    /// takes microseconds), so by the time a queued closure actually ran, the shared index had
+    /// already advanced past whatever page it was meant to write - leaving early pages (page 0
+    /// especially, since every later iteration raced past it before its own Post got a turn)
+    /// permanently null.
+    ///
+    /// Verifying this needs Dispatcher.UIThread.RunJobs() to drain the queued closures (headless
+    /// tests have no running dispatcher loop), which only works called from the exact OS thread
+    /// that bootstrapped the platform (TestAppBuilder.EnsureInitialized) - true and reliable when
+    /// this file's tests run in isolation, but xUnit doesn't guarantee that same thread when the
+    /// full assembly runs (CheckAccess() comes back false; the documented Invoke() fallback hangs,
+    /// since headless mode has nothing looping to service a cross-thread marshal). Rather than
+    /// block the whole suite on that unrelated xUnit/Avalonia-headless scheduling gap, this no-ops
+    /// when it can't get real access instead of hanging or spuriously failing - it still runs for
+    /// real (and did catch this exact bug pre-fix) via `dotnet test --filter Name=<this test>`.
+    /// </summary>
+    [Fact]
+    public void LoadIssue_GeneratesThumbnailsForEveryPage_NoneLeftNull()
+    {
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id);
+        Assert.Equal(3, vm.Thumbnails.Count);
+
+        if (!Avalonia.Threading.Dispatcher.UIThread.CheckAccess())
+        {
+            return;
+        }
+
+        var deadline = DateTime.UtcNow.AddSeconds(5);
+        while (vm.Thumbnails.Any(t => t.CoverImage is null) && DateTime.UtcNow < deadline)
+        {
+            Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+            Thread.Sleep(10);
+        }
+
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+        Assert.All(vm.Thumbnails, t => Assert.NotNull(t.CoverImage));
+    }
 }

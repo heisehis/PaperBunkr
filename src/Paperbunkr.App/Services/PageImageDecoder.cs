@@ -28,6 +28,16 @@ public class PageImageDecoder : IPageImageDecoder
     private readonly Dictionary<int, AvaloniaBitmap> _cache = new();
     private readonly Dictionary<int, AvaloniaBitmap> _thumbnailCache = new();
 
+    // GetPage runs on the UI thread (RefreshCurrentPage) while GetThumbnail runs on
+    // ReaderScreenViewModel's background thumbnail-generation task, both against the same
+    // ImageProvider/archive handle and the same two dictionaries - real bug found in production:
+    // opening an issue calls RefreshCurrentPage() for the current page (almost always page 0)
+    // synchronously right before the background loop's own first iteration decodes page 0 too,
+    // racing on the same non-thread-safe archive read and leaving the first Reader thumbnail
+    // blank (the exception was swallowed by StartThumbnailGeneration's catch). Not just a page-0
+    // problem either - navigating pages while thumbnails are still generating races the same way.
+    private readonly object _sync = new();
+
     private PageImageDecoder(ImageProvider provider)
     {
         _provider = provider;
@@ -72,14 +82,17 @@ public class PageImageDecoder : IPageImageDecoder
 
     public AvaloniaBitmap GetPage(int pageIndex)
     {
-        if (!_cache.TryGetValue(pageIndex, out var bitmap))
+        lock (_sync)
         {
-            bitmap = Decode(pageIndex);
-            _cache[pageIndex] = bitmap;
-        }
+            if (!_cache.TryGetValue(pageIndex, out var bitmap))
+            {
+                bitmap = Decode(pageIndex);
+                _cache[pageIndex] = bitmap;
+            }
 
-        TrimCache(pageIndex);
-        return bitmap;
+            TrimCache(pageIndex);
+            return bitmap;
+        }
     }
 
     /// <summary>
@@ -89,22 +102,25 @@ public class PageImageDecoder : IPageImageDecoder
     /// </summary>
     public AvaloniaBitmap GetThumbnail(int pageIndex)
     {
-        if (_thumbnailCache.TryGetValue(pageIndex, out var cached))
+        lock (_sync)
         {
-            return cached;
+            if (_thumbnailCache.TryGetValue(pageIndex, out var cached))
+            {
+                return cached;
+            }
+
+            using AvaloniaBitmap full = Decode(pageIndex);
+            var size = full.PixelSize;
+            int longest = Math.Max(size.Width, size.Height);
+            double scale = longest > 0 ? Math.Min(1.0, (double)ThumbnailLongestEdge / longest) : 1.0;
+            var target = new PixelSize(
+                Math.Max(1, (int)Math.Round(size.Width * scale)),
+                Math.Max(1, (int)Math.Round(size.Height * scale)));
+
+            var thumbnail = full.CreateScaledBitmap(target, BitmapInterpolationMode.HighQuality);
+            _thumbnailCache[pageIndex] = thumbnail;
+            return thumbnail;
         }
-
-        using AvaloniaBitmap full = Decode(pageIndex);
-        var size = full.PixelSize;
-        int longest = Math.Max(size.Width, size.Height);
-        double scale = longest > 0 ? Math.Min(1.0, (double)ThumbnailLongestEdge / longest) : 1.0;
-        var target = new PixelSize(
-            Math.Max(1, (int)Math.Round(size.Width * scale)),
-            Math.Max(1, (int)Math.Round(size.Height * scale)));
-
-        var thumbnail = full.CreateScaledBitmap(target, BitmapInterpolationMode.HighQuality);
-        _thumbnailCache[pageIndex] = thumbnail;
-        return thumbnail;
     }
 
     /// <summary>

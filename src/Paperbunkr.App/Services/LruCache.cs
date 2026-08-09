@@ -5,13 +5,25 @@ namespace Paperbunkr.App.Services;
 
 /// <summary>
 /// Generic bounded cache with least-recently-used eviction - once <c>capacity</c> is exceeded,
-/// adding a new entry evicts (and, if <typeparamref name="TValue"/> is <see cref="IDisposable"/>,
-/// disposes) whichever entry was least recently touched. Extracted out of
+/// adding a new entry drops whichever entry was least recently touched. Extracted out of
 /// <see cref="CoverImageCache"/>, which previously cached decoded cover <c>Bitmap</c>s for the
 /// entire app session with no eviction at all - real usage against a real-sized library grew that
 /// unbounded (observed: 220MB at launch to 1.4GB after a few minutes of normal browsing). Not
 /// thread-safe - every current caller runs on the UI thread already, matching
 /// <see cref="CoverImageCache"/>'s own existing assumption.
+///
+/// Eviction does NOT call <see cref="IDisposable.Dispose"/> on the dropped value, even though an
+/// earlier version of this class did. <see cref="CoverImageCache.Get"/> hands out the exact same
+/// <c>Bitmap</c> instance it stores here, and callers (<c>SeriesCardSample</c>,
+/// <c>SmartScreenViewModel</c>, <c>DetailTabsViewModel</c>, etc.) bind it straight into a
+/// long-lived view-model property - the cache has no way to know whether that Bitmap is still
+/// live in the visual tree when it gets evicted. Real repro: browse a large library (2000+
+/// issues) until eviction kicks in, then open Smart Lists - a still-displayed <c>Image</c> gets
+/// remeasured against a Bitmap this cache had already disposed, throwing
+/// <c>ObjectDisposedException</c> out of <c>Image.MeasureOverride</c> and crashing the app. Only
+/// dropping the cache's own strong reference (not disposing) keeps the *entry count* bounded,
+/// which was the actual goal - the underlying native bitmap still gets reclaimed once nothing
+/// else references it, just via GC instead of an eager (and unsafe) explicit Dispose.
 /// </summary>
 public sealed class LruCache<TKey, TValue> where TKey : notnull
 {
@@ -81,9 +93,6 @@ public sealed class LruCache<TKey, TValue> where TKey : notnull
 
         _recencyOrder.RemoveLast();
         _recencyNodes.Remove(lru.Value);
-        if (_values.Remove(lru.Value, out var evicted) && evicted is IDisposable disposable)
-        {
-            disposable.Dispose();
-        }
+        _values.Remove(lru.Value);
     }
 }

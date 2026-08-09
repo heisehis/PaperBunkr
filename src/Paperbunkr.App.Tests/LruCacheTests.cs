@@ -62,8 +62,13 @@ public class LruCacheTests
     }
 
     [Fact]
-    public void Add_ExceedingCapacity_DisposesEvictedValue()
+    public void Add_ExceedingCapacity_DoesNotDisposeEvictedValue()
     {
+        // CoverImageCache hands out the same Bitmap instance it stores here, and callers bind it
+        // straight into a long-lived view-model property - eviction can't safely assume nothing
+        // else still references it. A real crash (ObjectDisposedException out of
+        // Image.MeasureOverride, opening Smart Lists after Library had evicted entries still
+        // shown on-screen) is what proved the old dispose-on-evict behavior unsafe.
         var cache = new LruCache<int, TrackedDisposable>(capacity: 1);
         var first = new TrackedDisposable();
         var second = new TrackedDisposable();
@@ -71,7 +76,7 @@ public class LruCacheTests
 
         cache.Add(2, second);
 
-        Assert.True(first.IsDisposed);
+        Assert.False(first.IsDisposed, "evicted value may still be referenced elsewhere and must not be force-disposed");
         Assert.False(second.IsDisposed);
     }
 

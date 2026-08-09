@@ -12,7 +12,10 @@ namespace Paperbunkr.App.Services;
 /// library disproved that: browsing Library + several Detail screens + Generate Covers grew the
 /// process from ~220MB at launch to ~1.4GB within a few minutes. 1000 entries is generous headroom
 /// over a large library's Library-grid working set (371 series observed in that same session) -
-/// bounds total session growth without evicting mid-browse for typical libraries.
+/// bounds total session growth without evicting mid-browse for typical libraries. Eviction only
+/// drops this cache's own reference - it does not dispose the evicted Bitmap, since a still-live
+/// Image control elsewhere in the app may still be bound to it (see LruCache's doc comment for the
+/// real crash that caused this).
 ///
 /// Misses are deliberately NOT cached: a series looked up before "Generate Covers" runs would
 /// otherwise permanently remember "no thumbnail" even after the file appears on disk. A cheap

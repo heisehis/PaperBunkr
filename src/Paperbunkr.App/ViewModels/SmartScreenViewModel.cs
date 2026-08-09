@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
@@ -20,12 +21,16 @@ namespace Paperbunkr.App.ViewModels;
 /// </summary>
 public partial class SmartScreenViewModel : ViewModelBase
 {
-    public SmartScreenViewModel()
+    private readonly Action<int> _goToSeries;
+
+    public SmartScreenViewModel(Action<int> goToSeries)
     {
+        _goToSeries = goToSeries;
         BuiltInLists = new ObservableCollection<SmartListSummary>();
         MaintenanceLists = new ObservableCollection<SmartListSummary>();
         CustomLists = new ObservableCollection<SmartListSummary>();
         Conditions = new ObservableCollection<SmartListConditionViewModel>();
+        Results = new ObservableCollection<IssueCardSample>();
         RefreshSidebar();
     }
 
@@ -41,6 +46,21 @@ public partial class SmartScreenViewModel : ViewModelBase
     public ObservableCollection<SmartListSummary> MaintenanceLists { get; }
     public ObservableCollection<SmartListSummary> CustomLists { get; }
     public ObservableCollection<SmartListConditionViewModel> Conditions { get; }
+
+    /// <summary>
+    /// The list's actual matched issues (docs/superpowers/specs/
+    /// 2026-08-09-smart-lists-results-view-design.md) - previously only <see cref="MatchCountLabel"/>
+    /// was kept, even though <see cref="SmartListQueryBuilder.Build"/> always computed the full set.
+    /// </summary>
+    public ObservableCollection<IssueCardSample> Results { get; }
+
+    /// <summary>
+    /// XAML's compiled-binding <c>!</c> negation needs a real <see langword="bool"/> - <c>Results</c>
+    /// itself has no bindable <c>Count</c>-as-bool, so this exists purely for the empty-state
+    /// <c>IsVisible</c> toggle, raised manually in <see cref="RecomputeMatchCount"/> since
+    /// <see cref="ObservableCollection{T}"/> doesn't raise property-changed for a derived property.
+    /// </summary>
+    public bool HasResults => Results.Count > 0;
 
     [ObservableProperty]
     private string _listName = string.Empty;
@@ -159,9 +179,37 @@ public partial class SmartScreenViewModel : ViewModelBase
 
         using var context = PaperbunkrDb.CreateContext();
         // Evaluates the in-memory (possibly unsaved) working conditions against the live library,
-        // so the badge updates as the user edits, before Save persists anything.
+        // so the results/count update as the user edits, before Save persists anything. One
+        // Build() call backs both Results and MatchCountLabel - MatchCount(ctx, list) is just
+        // Build(ctx, list).Count, so calling it separately would evaluate the query twice.
         var transient = new SmartList { Conditions = _workingList.Conditions };
-        MatchCountLabel = SmartListQueryBuilder.MatchCount(context, transient).ToString();
+        var matched = SmartListQueryBuilder.Build(context, transient);
+
+        Results.Clear();
+        foreach (var issue in matched)
+        {
+            Results.Add(new IssueCardSample
+            {
+                Id = issue.Id,
+                SeriesId = issue.SeriesId,
+                Title = string.IsNullOrWhiteSpace(issue.Number) ? "#?" : $"#{issue.Number}",
+                IsUnread = issue.LastPageRead is null or 0,
+                CoverBrush = SeriesCardSample.CoverBrushFor(issue.Series!.Name),
+                CoverImage = CoverImageCache.Get(issue.Id),
+            });
+        }
+
+        MatchCountLabel = Results.Count.ToString();
+        OnPropertyChanged(nameof(HasResults));
+    }
+
+    [RelayCommand]
+    private void SelectResult(IssueCardSample? issue)
+    {
+        if (issue is not null)
+        {
+            _goToSeries(issue.SeriesId);
+        }
     }
 
     [RelayCommand]

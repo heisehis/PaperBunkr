@@ -19,7 +19,7 @@ public partial class MainViewModel : ViewModelBase
         Reader = new ReaderScreenViewModel(GoDetail);
         IssueProperties = new IssuePropertiesScreenViewModel(GoDetailAfterIssueEdit);
         BulkIssueProperties = new BulkIssuePropertiesScreenViewModel(GoDetailAfterIssueEdit);
-        Smart = new SmartScreenViewModel();
+        Smart = new SmartScreenViewModel(GoDetailForSeries);
         Reading = new ReadingScreenViewModel(new FilePickerService());
         Plugin = new PluginScreenViewModel();
         Preferences = new PreferencesScreenViewModel(

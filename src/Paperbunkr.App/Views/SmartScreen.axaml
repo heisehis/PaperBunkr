@@ -1,6 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Paperbunkr.App.ViewModels"
+             xmlns:models="using:Paperbunkr.App.Models"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d" d:DesignWidth="900" d:DesignHeight="700"
@@ -44,6 +45,25 @@
             <Setter Property="FontSize" Value="12.5" />
             <Setter Property="Padding" Value="10,5" />
             <Setter Property="MinWidth" Value="120" />
+        </Style>
+
+        <!-- Matches Button.card in LibraryScreen.axaml - transparent hit-target wrapper. -->
+        <Style Selector="Button.resultCard">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+
+        <!-- Matches Border.issueTile in DetailTabs.axaml exactly (docs/superpowers/specs/
+             2026-08-09-smart-lists-results-view-design.md) - same visual, no selection state since
+             results here are read-only/click-to-navigate. -->
+        <Style Selector="Border.resultTile">
+            <Setter Property="CornerRadius" Value="6" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
+            <Setter Property="Height" Value="168" />
+            <Setter Property="ClipToBounds" Value="True" />
         </Style>
     </UserControl.Styles>
 
@@ -130,6 +150,32 @@
                     <Button Classes="headerAction ghost" Content="Cancel" Padding="14,8" Command="{Binding CancelCommand}" />
                     <Button Classes="headerAction primary" Content="Apply" Padding="14,8" Command="{Binding SaveCommand}" />
                 </StackPanel>
+
+                <TextBlock Text="No issues match this list yet." FontSize="12.5" Margin="0,32,0,0"
+                           Foreground="{DynamicResource PbTextFaintBrush}"
+                           IsVisible="{Binding !HasResults}" />
+
+                <ItemsControl x:Name="ResultsList" ItemsSource="{Binding Results}" Margin="0,32,0,0"
+                              IsVisible="{Binding HasResults}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="models:IssueCardSample">
+                            <Button Classes="resultCard" Width="120" Margin="0,0,16,16"
+                                    Command="{Binding #ResultsList.((vm:SmartScreenViewModel)DataContext).SelectResultCommand}"
+                                    CommandParameter="{Binding}">
+                                <Border Classes="resultTile" Background="{Binding CoverBrush}">
+                                    <Grid>
+                                        <Image Source="{Binding CoverImage}" Stretch="UniformToFill" />
+                                        <TextBlock Text="{Binding Title}" FontSize="13" FontWeight="Black" Foreground="#FFFFF8EC"
+                                                   VerticalAlignment="Bottom" Margin="9" />
+                                    </Grid>
+                                </Border>
+                            </Button>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
 
             </StackPanel>
         </StackPanel>

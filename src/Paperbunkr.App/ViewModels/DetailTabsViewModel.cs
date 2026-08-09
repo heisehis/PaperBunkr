@@ -68,6 +68,7 @@ public partial class DetailTabsViewModel : ViewModelBase
             Issues.Add(new IssueCardSample
             {
                 Id = issue.Id,
+                SeriesId = series.Id,
                 Title = string.IsNullOrWhiteSpace(issue.Number) ? "#?" : $"#{issue.Number}",
                 IsUnread = issue.LastPageRead is null or 0,
                 CoverBrush = coverBrush,

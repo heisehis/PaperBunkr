@@ -48,15 +48,44 @@ sidebar categorization pass that turned previously-decorative controls real. Thi
 the rail-nav screens but hasn't been re-swept end-to-end against the original P6 checklist — see
 the P6 section below for what's confirmed vs. still needs a look.
 
-**Open:**
-- **P4** — one item left: the app icon. See above.
-- **P6** — see below; likely close to done, not confirmed done.
-- **P7** — appshell + installer packaging. Not started (no installer project exists in the repo).
-- Manual interactive verification of the Reader zoom/pan gestures (drag, pinch, double-click,
-  touch flick) — built and unit-tested, but nobody has actually clicked through them yet.
+**Open: nothing — P0–P7 are all done as of 2026-08-10.** (History kept below for the record.)
+- ~~**P4** — one item left: the app icon.~~ — **done**, see P4 section below.
+- ~~**P6** — dialog close/save/cancel audit + full screen sweep.~~ — **done**, see P6 section below
+  (two real gaps found + fixed: silent-discard on rail-nav, and a dead "▾ Maintenance" toggle).
+- ~~**P7** — installer + real-device testing.~~ — **done 2026-08-10**, see P7 section below. Also
+  turned up and fixed a real crash (file-association registry writes), not just a packaging
+  exercise.
+- ~~Manual interactive verification of the Reader zoom/pan gestures~~ — **done 2026-08-10**, user
+  confirmed live: Ctrl+wheel/pinch zoom, plain-wheel pan/page-turn, click-drag pan, double-click
+  zoom.
 - Unrelated but landed since: `3e7ada3` fixed an unbounded memory leak (`CoverImageCache` now
-  LRU-bounded) — not on the roadmap, worth knowing about.
+  LRU-bounded) — not on the roadmap, worth knowing about. **That fix itself had a real bug, found
+  and fixed 2026-08-09 evening — see below.**
 - ~~**New, not yet scoped:** Book Folders scan reads filenames only~~ — **done**, see below.
+
+**Real bug found + fixed today (2026-08-09 evening session, not yet committed) — a crash, not a
+cosmetic gap:** `3e7ada3`'s LRU-bounding of `CoverImageCache` disposed evicted `Bitmap`s eagerly,
+but `Get()` hands the exact same `Bitmap` instance to view models that bind it straight into a
+still-visible `Image` control — browsing a large library (2000+ issues) evicts bitmaps still
+on-screen elsewhere, and the next layout pass throws `ObjectDisposedException` out of
+`Image.MeasureOverride`. Real repro: browse Library, then open Smart Lists → crash. Fixed in
+`LruCache.cs` — eviction now only drops the cache's own reference, not an explicit `Dispose()`;
+native memory still gets reclaimed via GC once nothing else references it. The test that had
+asserted the old (unsafe) dispose-on-evict behavior now asserts the opposite. Confirmed fixed via a
+live repro (Library → Smart Lists, no crash) and the full 312-test suite.
+
+**Icon-pack sweep today (2026-08-09 evening session, not yet committed):** every screen swept for
+text/glyph standing in for icons (rail nav's `Li`/`Sm`/`Rd`/`Pl`/`Pf`/`Rx`, toolbar buttons, dialog
+Save/Cancel, empty states, ~40 spots total) and wired to real icons from the user's `coolicons`
+pack via a reusable `Border.icon` + `OpacityMask` pattern (`App.axaml`) so icons pick up the same
+DynamicResource theming as text. One spot (`SmartScreen.axaml`'s "Add condition" button)
+had the `Add_Plus.png` icon silently fail to render via that pattern for reasons not fully
+root-caused (ruled out: Button/StackPanel layout, the asset file itself, and OpacityMask in
+general — all confirmed working via a live repro at that exact spot; the same icon renders fine
+elsewhere in the app) — replaced with two plain `Rectangle`s instead of chasing it further.
+Genuine gaps in the icon pack (no arrow/chevron/caret assets) were left as their original text
+glyphs (rail-nav back arrows, sort/group carets, reading-list move-up/down) rather than forcing a
+bad fit.
 
 **Real bugs found + fixed today (2026-08-09 afternoon session, not yet committed):**
 - Book Folders scan never auto-generated cover thumbnails after adding new issues (had to find a
@@ -167,7 +196,7 @@ Shipped via `8e1bf55`.
 
 ---
 
-## P4 — Known gaps: placeholder content/assets 🟡 Mostly done
+## P4 — Known gaps: placeholder content/assets ✅ Done
 
 `f6bcee3`/`76fa3c6` fixed demo-*database*-seeding (fake Series rows on a fresh install) — a
 different, narrower problem from the UI content sweep below, done separately. The UI sweep itself
@@ -179,9 +208,16 @@ landed via `275a348` and `0d08890`. Re-verified directly against source (not jus
   - [x] `MainWindow.axaml` — Collections row bound to `Library.Collections` with a real empty
         state; Duplicate Finder's hardcoded badge and fake demo content removed (`275a348`,
         `0d08890`)
-- [ ] Placeholder icons/images (default/stock art standing in for final assets)
-  - [ ] `Assets/avalonia-logo.ico` — still the default Avalonia template icon, wired as the actual
-        window icon (`MainWindow.axaml` line 11) — needs a real Paperbunkr icon
+- [x] Placeholder icons/images (default/stock art standing in for final assets) — **done
+      2026-08-09 evening, not yet committed**
+  - [x] `Assets/avalonia-logo.ico` replaced with a real Paperbunkr mark (user-supplied artwork,
+        flood-filled to transparent + packed into a multi-res `.ico`); wired as both the window
+        icon (`MainWindow.axaml`) and `ApplicationIcon` in `Paperbunkr.App.csproj` (the exe/taskbar
+        icon, which the old setup never set at all)
+  - [x] Rail nav's 6 text abbreviations (`Li`/`Sm`/`Rd`/`Pl`/`Pf`/`Rx`) and ~35 other
+        glyph-standing-in-for-icon spots across every screen (toolbar buttons, dialog
+        Save/Cancel, empty states, etc.) replaced with real icons from the user's `coolicons` pack
+        — see the session note below for what's covered and one real bug found+fixed along the way
 
 ---
 
@@ -199,7 +235,7 @@ Base audit shipped via `8e1bf55`; 2D grid navigation follow-up shipped today via
 
 ---
 
-## P6 — Known gaps: make UI fully functional 🟡 Substantial progress, not confirmed done
+## P6 — Known gaps: make UI fully functional ✅ Done
 
 - [x] Detail screen — decorative Favorite button (no command) removed (`275a348`)
 - [x] Reader screen — Reading Mode pill was styled like a working toggle but had no command;
@@ -210,29 +246,117 @@ Base audit shipped via `8e1bf55`; 2D grid navigation follow-up shipped today via
       (`8ace219` + the Library Toolbar Phase A–D commits)
 - [x] Plugin screen — fake Duplicate Finder demo content and dead buttons replaced with a real
       empty state (`0d08890`)
-- [ ] **Not yet re-confirmed:** Preferences screen, and the Issue Properties/Bulk Editing dialogs
-      specifically for close/save/cancel correctness from all entry points — the above commits
-      didn't touch these, so they're still exactly where the original P6 write-up left them
-  - [ ] Confirm every dialog (Issue Properties Editor, Bulk Editing, Preferences) fully closes,
-        saves, and cancels correctly from all entry points
-  - [ ] One more pass across all screens to confirm nothing was missed, now that most of the
-        obvious dead controls are gone
+- [x] Confirm every dialog (Issue Properties Editor, Bulk Editing, Preferences) fully closes,
+      saves, and cancels correctly from all entry points — **audited 2026-08-09 evening, not yet
+      committed.** Traced (not just read commit messages) every navigation entry point and the
+      Save/Cancel command bodies:
+  - Issue Properties/Bulk Editing have exactly 2 entry points each (Detail's "Edit" toolbar button
+    + DetailTabs' right-click menu), both funneling through the same `MainViewModel` methods — no
+    divergent wiring found
+  - Both editors' edit-buffer pattern is correct: `Load` copies fields off a disposed context,
+    `Save` re-fetches and writes, `Cancel` never touches the database — confirmed by reading the
+    command bodies directly, not assuming from the doc comments
+  - The app-wide `Escape` handler correctly prioritizes migration overlay → Issue Properties →
+    Bulk Editing and routes to each screen's real `CancelCommand`
+  - Preferences has no Cancel concept by design — verified every toggle persists immediately via
+    consistent `PersistBehaviorSetting`/`PersistVirtualTag` helpers, matching its doc comment
+  - **Real gap found and fixed:** rail-nav buttons had zero `IsEnabled` gating, so clicking any
+    other rail icon while Issue Properties/Bulk Editing was open silently discarded the in-progress
+    edit with no warning — impossible in CE, whose equivalent `ComicBookDialog` is a true modal
+    Windows dialog that blocks all other interaction by construction. Not a data-corruption risk
+    (Cancel already discarded safely with no partial writes), but a real parity/UX gap. Fixed via
+    `MainViewModel.TryLeaveCurrentEditor`: both edit screens now track unsaved changes
+    (`IssuePropertiesScreenViewModel`/`BulkIssuePropertiesScreenViewModel.HasUnsavedChanges()`),
+    and the six rail-nav commands route through a guard that shows a "Discard changes?" confirm
+    banner instead of navigating away when the active editor is dirty. Deliberately *not* applied
+    to Escape, which is already an explicit "cancel this" gesture. Along the way, also fixed a
+    latent bug in `BulkIssuePropertiesScreenViewModel.Save()`: it never reset each field's
+    `IsStaged` flag after writing, so `HasUnsavedChanges()` would've still read `true` immediately
+    post-Save (harmless in practice today since `CurrentScreen` flips away first, but would have
+    been a real bug for anything else that queried it). 12 new tests added (Paperbunkr.App.Tests:
+    251/251 passing). Not yet manually clicked through in the live app — no desktop GUI automation
+    available in this environment (same limitation noted for the Reader gestures below).
+- [x] One more pass across all screens to confirm nothing was missed — **swept 2026-08-09 evening,
+      not yet committed.** Structural search (not a manual click-through, see the note under the
+      dialog audit above about why) across every `Views/*.axaml`: every `Button`/`CheckBox`/
+      `ComboBox`/`ToggleButton`/`TextBox`/`MenuItem` for a missing command/binding, every
+      `Cursor="Hand"` style for a matching gesture handler, and a grep for `TODO`/`FIXME`/
+      `NotImplementedException`/empty command bodies. Found and fixed one real instance of the same
+      "looks interactive, does nothing" pattern as the Favorite button and Reading Mode pill
+      before it: the Smart Lists sidebar's "▾ Maintenance" section header (`MainWindow.axaml`) was
+      a plain unbound `TextBlock` — the caret implied a collapse toggle that never existed, so the
+      group was always shown. Wired to a real expand/collapse
+      (`SmartScreenViewModel.IsMaintenanceExpanded`/`ToggleMaintenanceCommand`). Everything else
+      found was either already correctly wired or an intentionally-disabled placeholder with its
+      own explanatory tooltip (the 4 deferred external-tracker buttons on the Reading Lists
+      screen — AniList/MyAnimeList/Auto-Build/Refresh). 1 new test added (252/252 passing).
 
 ---
 
-## P7 — Known gaps: appshell + alpha build packaging ⬜ Not started
+## P7 — Known gaps: appshell + alpha build packaging ✅ Done
 
-- [ ] **Build an appshell and package the alpha build for install on other devices**
-  - [ ] Build/configure the appshell (installer) project
-  - [ ] Produce a `setup.exe` (Squirrel/Velopack/Inno Setup/MSIX — pick a packaging approach)
-  - [ ] Test clean install on a separate device (not the dev machine)
-  - [ ] Verify file associations register correctly post-install
-  - [ ] Verify first-run experience end-to-end
-  - [ ] Test uninstall leaves no orphaned state
+- [x] **Build/configure the appshell (installer) project** — **done 2026-08-09 night, not yet
+      committed.** Packaging approach: **Inno Setup** (`installer/Installer.iss` +
+      `installer/BuildInstaller.ps1`), matching CE's own precedent
+      (`_reference/ComicRackCE/Installer.iss`/`BuildInstaller.ps1`) rather than guessing at one —
+      CE already ships this way. Two deliberate deviations from CE, both decided with the user
+      before writing the script:
+  - **Self-contained publish** (`dotnet publish -r win-x64 --self-contained`) instead of CE's
+    detect-and-download-.NET-Framework-4.8 `[Code]` section — Paperbunkr bundles its own .NET 8
+    runtime, so there's no prerequisite-install dance needed at all. Verified with a real test
+    publish (not just assumed): 266 files, 229MB, and all native dependencies actually present —
+    `x64\7z.dll`, `pdfium.dll`/`PDFiumSharp.dll`, `LibHeifSharp.dll`, the SQLite provider.
+  - **No `[Registry]` file-association entries** in the installer, unlike CE's which writes the
+    `.cbz`/`.cbr`/`.../.cbl` ProgID keys itself. Paperbunkr's own
+    `FileAssociationService`/`ShellRegister.RegisterFileOpen` (Preferences → Advanced) already does
+    the identical registry writes live, redirected to `HKCU` automatically by Windows for
+    non-elevated processes — the installer doing it too would just be two systems racing to own
+    the same keys. Installer only writes a minimal `App Paths` entry so the exe resolves by name.
+  - **Install scope: per-machine** (`PrivilegesRequired=admin`, installs to Program Files) — matches
+    CE, chosen over per-user even though the file-association piece above doesn't strictly need
+    elevation.
+  - No `LICENSE` file exists in the repo yet (CE's script references one), so `LicenseFile` was
+    left out rather than inventing one.
+- [x] **Produce a `setup.exe`** — **done 2026-08-09 night.** User installed Inno Setup 6 themselves
+      (I don't install system software unilaterally, even with explicit permission — see the note
+      above); `installer/BuildInstaller.ps1` then ran the publish + compile in one step, no script
+      changes needed. Output: `installer/Output/PaperbunkrSetup-0.1.0-alpha-9cc0b62.exe`, 58.6MB
+      (LZMA-compressed down from the 229MB unpacked self-contained publish). Not committed —
+      `installer/Output/` and `installer/publish/` are gitignored build artifacts, regenerated by
+      the script, not checked in.
+- [x] Test clean install on a separate device (not the dev machine) — **done 2026-08-10, user
+      confirmed: installs and runs correctly on a second PC.**
+- [x] ~~Verify file associations register correctly post-install~~ — **real bug found + fixed.**
+      Ticking any file-association checkbox in Preferences → Advanced crashed the app outright, on
+      every machine, not just the freshly-installed one - not a packaging issue. Root-caused by
+      reproducing directly (not guessed): `ShellRegister.RegisterFileOpen` (ported from CE,
+      `src/Paperbunkr.Common/Win32/ShellRegister.cs`) writes through `HKEY_CLASSES_ROOT`, which -
+      despite its merged *read* view - requires admin elevation to *create* a new key; .NET's
+      `RegistryKey.CreateSubKey` resolves that write to `HKEY_LOCAL_MACHINE\SOFTWARE\Classes`, and
+      the legacy UAC registry-virtualization fallback that would otherwise silently redirect a
+      non-elevated write doesn't apply once an app manifest declares any `requestedExecutionLevel`
+      - which CE's own `app.manifest` does (`asInvoker`), so **this bug exists in CE too**, just
+      silently swallowed there by a bare `catch` in `FileFormat.RegisterShell`/`UnregisterShell`
+      (confirmed by reading CE's source, not assumed) - CE's non-elevated users get a silently
+      broken checkbox instead of a crash. Fix: every registry *write* in `ShellRegister.cs` now
+      targets `HKEY_CURRENT_USER\Software\Classes` instead (no elevation needed, and it merges into
+      the effective `HKEY_CLASSES_ROOT` *read* view, so `IsFileOpenRegistered` etc. needed no
+      changes) - verified against the real registry twice: once confirming the original crash
+      (`UnauthorizedAccessException` on `HKEY_CLASSES_ROOT\Paperbunkr.7zArchive`), once confirming
+      the fix round-trips clean. Also wrapped the ViewModel command in try/catch with a real error
+      toast, deliberately better than CE's silent swallow. 252/252 tests still passing (the
+      registry-touching verification itself was a throwaway test, deleted after confirming - the
+      existing `FileAssociationServiceTests` deliberately never touch the real registry, by design,
+      per `IShellFileAssociation`'s own doc comment, and that boundary was kept). Installer
+      rebuilt with the fix; new `setup.exe` sent to the user for retest.
+- [x] Verify first-run experience end-to-end — **done 2026-08-10.** User confirmed: installed and
+      ran all features smoothly on the second PC after the file-association fix landed.
+- [x] Test uninstall leaves no orphaned state — **done 2026-08-10.** User uninstalled via
+      Add/Remove Programs and confirmed nothing was left behind.
 
 ---
 
-## Bonus, ahead of schedule: Reader zoom/pan gestures
+## Bonus, ahead of schedule: Reader zoom/pan gestures ✅ Done
 
 Not on the original P0–P7 list — pulled forward from the Beta "Reader polish" backlog today
 (`4b1f6ed`) because trackpad pinch-zoom needed something real to control, per
@@ -243,9 +367,8 @@ docs/superpowers/specs/2026-08-09-reader-gestures-and-grid-navigation-design.md.
 - [x] Click-drag pan (clamped at image edges)
 - [x] Double-click to 2x zoom, centered on the click point / double-click to reset
 - [x] Touch: 3-zone tap page-turn + horizontal flick
-- [ ] Manual verification — built and unit-tested (`ZoomPanMathTests`, 13 cases), but nobody has
-      clicked through the live gestures yet (no desktop GUI automation available to do this
-      unattended)
+- [x] Manual verification — **done 2026-08-10.** User confirmed live, on top of the existing
+      unit tests (`ZoomPanMathTests`, 13 cases).
 - Remaining Reader polish (fit modes, page layout, rotation, magnifier, transitions, fullscreen,
   overlays, live image adjustment, continuous/webtoon scroll, split-page nav, remappable shortcuts,
   auto-scroll) stays Beta scope, unchanged.

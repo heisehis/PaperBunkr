@@ -138,7 +138,7 @@
                     <DataTemplate x:DataType="models:SeriesCardSample">
                         <Button Classes="card" Width="150" Margin="0,0,20,20"
                                 Command="{Binding #CoversList.((vm:LibraryScreenViewModel)DataContext).SelectCardCommand}"
-                                CommandParameter="{Binding}">
+                                CommandParameter="{Binding}" KeyDown="OnCardKeyDown">
                             <StackPanel>
                                 <Border Classes="cover" Background="{Binding CoverBrush}">
                                     <Grid>

@@ -36,18 +36,27 @@ public partial class DetailTabs : UserControl
     /// Keyboard equivalent of <see cref="OnIssueTilePointerPressed"/> (P5, docs/alpha-roadmap.md) -
     /// Enter/Space toggles the focused tile, Shift held extends the range exactly like a
     /// shift-click does, since <see cref="DetailTabsViewModel.ToggleIssueSelection"/> already
-    /// takes that as a plain bool and doesn't care where it came from.
+    /// takes that as a plain bool and doesn't care where it came from. Other arrow/Home/End keys
+    /// delegate to <see cref="GridKeyboardNavigation"/> for spatial 2D movement through the
+    /// <c>WrapPanel</c>-backed issue grid (docs/superpowers/specs/
+    /// 2026-08-09-reader-gestures-and-grid-navigation-design.md).
     /// </summary>
     private void OnIssueTileKeyDown(object? sender, KeyEventArgs e)
     {
-        if (e.Key != Key.Enter && e.Key != Key.Space)
+        if (sender is not Border { DataContext: IssueCardSample issue } || DataContext is not DetailTabsViewModel viewModel)
         {
             return;
         }
 
-        if (sender is Border { DataContext: IssueCardSample issue } && DataContext is DetailTabsViewModel viewModel)
+        if (e.Key == Key.Enter || e.Key == Key.Space)
         {
             viewModel.ToggleIssueSelection(issue, e.KeyModifiers.HasFlag(KeyModifiers.Shift));
+            e.Handled = true;
+            return;
+        }
+
+        if (GridKeyboardNavigation.TryHandleArrowKey(IssuesList, issue, e.Key))
+        {
             e.Handled = true;
         }
     }

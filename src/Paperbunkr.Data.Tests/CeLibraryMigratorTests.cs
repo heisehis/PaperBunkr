@@ -198,11 +198,17 @@ public class CeLibraryMigratorTests : IDisposable
 
         var loaded = CeLibraryMigrator.LoadFromXml(_xmlPath);
         var migrator = new CeLibraryMigrator();
-        var preview = migrator.Preview(loaded);
+
+        var options = BuildContextOptions(_dbPath);
+        using var context = new PaperbunkrDbContext(options);
+        context.Database.EnsureCreated();
+
+        var preview = migrator.Preview(loaded, context);
 
         Assert.Equal(4, preview.SeriesCount);
         Assert.Equal(7, preview.IssueCount);
         Assert.Equal(1, preview.SeriesWithGuessedContentType);
+        Assert.Empty(context.Series);
     }
 
     [Fact]
@@ -241,12 +247,15 @@ public class CeLibraryMigratorTests : IDisposable
         var loaded = CeLibraryMigrator.LoadFromXml(_xmlPath);
         var migrator = new CeLibraryMigrator();
 
-        var preview = migrator.Preview(loaded);
-        Assert.Equal(1, preview.SeriesWithGuessedContentType);
-
         var options = BuildContextOptions(_dbPath);
+        using (var previewContext = new PaperbunkrDbContext(options))
+        {
+            previewContext.Database.EnsureCreated();
+            var preview = migrator.Preview(loaded, previewContext);
+            Assert.Equal(1, preview.SeriesWithGuessedContentType);
+        }
+
         using var context = new PaperbunkrDbContext(options);
-        context.Database.EnsureCreated();
         var result = migrator.Migrate(loaded, context);
 
         Assert.Equal(1, result.SeriesWithGuessedContentType);
@@ -262,5 +271,183 @@ public class CeLibraryMigratorTests : IDisposable
         var (contentType, readingMode) = CeLibraryMigrator.MapMangaField(manga);
         Assert.Equal(expectedContentType, contentType);
         Assert.Equal(expectedReadingMode, readingMode);
+    }
+
+    [Fact]
+    public void Migrate_ReRun_IsIdempotentAndSyncsOnlyNewIssues()
+    {
+        var source = BuildSampleDatabase();
+        source.SaveXml(_xmlPath);
+        var loaded = CeLibraryMigrator.LoadFromXml(_xmlPath);
+
+        var options = BuildContextOptions(_dbPath);
+        var migrator = new CeLibraryMigrator();
+
+        using (var context = new PaperbunkrDbContext(options))
+        {
+            context.Database.EnsureCreated();
+            migrator.Migrate(loaded, context);
+        }
+
+        // Simulate re-running migration after adding one more issue in CE to an existing series.
+        string secondXmlPath = Path.Combine(Path.GetTempPath(), $"paperbunkr_test_{Guid.NewGuid():N}.xml");
+        try
+        {
+            var updated = BuildSampleDatabase();
+            updated.Books.Add(new ComicBook
+            {
+                Series = "Astro Sentinels",
+                Number = "3",
+                Volume = 1,
+                Writer = "Jane Doe",
+                Publisher = "Bunker Comics",
+                Genre = "Sci-Fi",
+                Manga = MangaYesNo.No,
+            });
+            updated.SaveXml(secondXmlPath);
+            var reloaded = CeLibraryMigrator.LoadFromXml(secondXmlPath);
+
+            using var context = new PaperbunkrDbContext(options);
+            var result = migrator.Migrate(reloaded, context);
+
+            Assert.Equal(0, result.SeriesCreated);
+            Assert.Equal(1, result.IssuesCreated);
+            Assert.Equal(1, result.SeriesMerged);
+
+            Assert.Equal(4, context.Series.Count());
+            Assert.Equal(8, context.Issues.Count());
+
+            var astro = context.Series.Include(s => s.Issues).Single(s => s.Name == "Astro Sentinels");
+            Assert.Equal(3, astro.Issues.Count);
+        }
+        finally
+        {
+            if (File.Exists(secondXmlPath))
+            {
+                File.Delete(secondXmlPath);
+            }
+        }
+    }
+
+    [Fact]
+    public void Preview_ReportsFuzzyConflictCandidate_ForNearDuplicateSeriesNames()
+    {
+        var db = ComicDatabase.CreateNew();
+        db.Books.Add(new ComicBook { Series = "Silver City", Number = "1", Manga = MangaYesNo.No });
+        db.Books.Add(new ComicBook { Series = "Silver Citi", Number = "1", Manga = MangaYesNo.No });
+        db.SaveXml(_xmlPath);
+
+        var loaded = CeLibraryMigrator.LoadFromXml(_xmlPath);
+        var migrator = new CeLibraryMigrator();
+
+        var options = BuildContextOptions(_dbPath);
+        using var context = new PaperbunkrDbContext(options);
+        context.Database.EnsureCreated();
+
+        var preview = migrator.Preview(loaded, context);
+
+        Assert.Equal(2, preview.SeriesCount);
+        var candidate = Assert.Single(preview.ConflictCandidates);
+        Assert.True(candidate.Similarity >= SeriesNameMatcher.SimilarityThreshold);
+    }
+
+    [Fact]
+    public void Migrate_WithMergeGroupsOption_CombinesConflictingSeriesIntoOne()
+    {
+        var db = ComicDatabase.CreateNew();
+        db.Books.Add(new ComicBook { Series = "Silver City", Number = "1", Manga = MangaYesNo.No });
+        db.Books.Add(new ComicBook { Series = "Silver Citi", Number = "1", Manga = MangaYesNo.No });
+        db.SaveXml(_xmlPath);
+
+        var loaded = CeLibraryMigrator.LoadFromXml(_xmlPath);
+        var migrator = new CeLibraryMigrator();
+
+        var dbOptions = BuildContextOptions(_dbPath);
+        using var context = new PaperbunkrDbContext(dbOptions);
+        context.Database.EnsureCreated();
+
+        var migrationOptions = new MigrationOptions
+        {
+            MergeGroups = new List<List<string>> { new() { "Silver City", "Silver Citi" } },
+        };
+
+        var result = migrator.Migrate(loaded, context, migrationOptions);
+
+        Assert.Equal(1, result.SeriesCreated);
+        Assert.Equal(2, result.IssuesCreated);
+        Assert.Equal(0, result.ConflictsPending);
+        Assert.Empty(context.SeriesConflicts);
+
+        var series = Assert.Single(context.Series.Include(s => s.Issues));
+        Assert.Equal("Silver City", series.Name);
+        Assert.Equal(2, series.Issues.Count);
+    }
+
+    [Fact]
+    public void Migrate_WithNoConflictDecision_WritesPendingSeriesConflict()
+    {
+        var db = ComicDatabase.CreateNew();
+        db.Books.Add(new ComicBook { Series = "Silver City", Number = "1", Manga = MangaYesNo.No });
+        db.Books.Add(new ComicBook { Series = "Silver Citi", Number = "1", Manga = MangaYesNo.No });
+        db.SaveXml(_xmlPath);
+
+        var loaded = CeLibraryMigrator.LoadFromXml(_xmlPath);
+        var migrator = new CeLibraryMigrator();
+
+        var dbOptions = BuildContextOptions(_dbPath);
+        using var context = new PaperbunkrDbContext(dbOptions);
+        context.Database.EnsureCreated();
+
+        var result = migrator.Migrate(loaded, context);
+
+        Assert.Equal(2, result.SeriesCreated);
+        Assert.Equal(1, result.ConflictsPending);
+
+        var conflict = Assert.Single(context.SeriesConflicts);
+        Assert.Equal(SeriesConflictStatus.Pending, conflict.Status);
+        Assert.Equal(2, context.Series.Count());
+    }
+
+    [Fact]
+    public void Migrate_WithMergeIntoExistingOption_FoldsIncomingSeriesIntoTargetAndSkipsConflictRow()
+    {
+        var dbOptions = BuildContextOptions(_dbPath);
+
+        int existingSeriesId;
+        using (var context = new PaperbunkrDbContext(dbOptions))
+        {
+            context.Database.EnsureCreated();
+            var existing = new Series { Name = "Silver City", SortName = "Silver City" };
+            existing.Issues.Add(new Issue { Number = "1" });
+            context.Series.Add(existing);
+            context.SaveChanges();
+            existingSeriesId = existing.Id;
+        }
+
+        var db = ComicDatabase.CreateNew();
+        db.Books.Add(new ComicBook { Series = "Silver Citi", Number = "2", Manga = MangaYesNo.No });
+        db.SaveXml(_xmlPath);
+        var loaded = CeLibraryMigrator.LoadFromXml(_xmlPath);
+        var migrator = new CeLibraryMigrator();
+
+        using var migrateContext = new PaperbunkrDbContext(dbOptions);
+        var migrationOptions = new MigrationOptions
+        {
+            MergeIntoExisting = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["Silver Citi"] = existingSeriesId,
+            },
+        };
+
+        var result = migrator.Migrate(loaded, migrateContext, migrationOptions);
+
+        Assert.Equal(0, result.SeriesCreated);
+        Assert.Equal(1, result.SeriesMerged);
+        Assert.Equal(1, result.IssuesCreated);
+        Assert.Equal(0, result.ConflictsPending);
+        Assert.Empty(migrateContext.SeriesConflicts);
+
+        var series = Assert.Single(migrateContext.Series.Include(s => s.Issues));
+        Assert.Equal(2, series.Issues.Count);
     }
 }

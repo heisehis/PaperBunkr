@@ -1,0 +1,256 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Paperbunkr.App.ViewModels"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="900" d:DesignHeight="760"
+             x:Class="Paperbunkr.App.Views.IssuePropertiesScreen"
+             x:DataType="vm:IssuePropertiesScreenViewModel">
+
+    <UserControl.Styles>
+        <Style Selector="Button.headerAction">
+            <Setter Property="Padding" Value="14,8" />
+            <Setter Property="CornerRadius" Value="5" />
+            <Setter Property="FontSize" Value="12.5" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style Selector="Button.headerAction.ghost">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
+        </Style>
+        <Style Selector="Button.headerAction.primary">
+            <Setter Property="Background" Value="{DynamicResource PbAccentBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Foreground" Value="{DynamicResource PbBadgeTextBrush}" />
+        </Style>
+
+        <Style Selector="Button.ipTab">
+            <Setter Property="Padding" Value="14,9" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0,0,0,2" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+            <Setter Property="CornerRadius" Value="0" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style Selector="Button.ipTab.active">
+            <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextBrush}" />
+            <Setter Property="FontWeight" Value="Bold" />
+        </Style>
+
+        <Style Selector="Border.groupBox">
+            <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="7" />
+            <Setter Property="ClipToBounds" Value="True" />
+        </Style>
+        <Style Selector="Border.groupHeader">
+            <Setter Property="Background" Value="{DynamicResource PbChromeBrush}" />
+            <Setter Property="Padding" Value="14,11" />
+        </Style>
+
+        <Style Selector="TextBlock.fieldLabel">
+            <Setter Property="FontSize" Value="10.5" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextFaintBrush}" />
+            <Setter Property="Margin" Value="0,0,0,4" />
+        </Style>
+        <Style Selector="StackPanel.field">
+            <Setter Property="Width" Value="240" />
+            <Setter Property="Margin" Value="0,0,16,16" />
+        </Style>
+
+        <Style Selector="Button.star">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="2" />
+            <Setter Property="FontSize" Value="20" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextFaintBrush}" />
+        </Style>
+        <Style Selector="Button.star.filled">
+            <Setter Property="Foreground" Value="{DynamicResource PbAccentBrush}" />
+        </Style>
+    </UserControl.Styles>
+
+    <ScrollViewer>
+        <StackPanel>
+
+            <Grid Margin="28,20,28,16" ColumnDefinitions="*,Auto">
+                <StackPanel Grid.Column="0" VerticalAlignment="Bottom">
+                    <TextBlock Text="Edit Issue" FontSize="22" FontWeight="Bold" Foreground="{DynamicResource PbTextBrush}" />
+                    <TextBlock Text="{Binding HeaderLabel}" FontSize="12.5" Foreground="{DynamicResource PbTextFaintBrush}" Margin="0,4,0,0" />
+                </StackPanel>
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10" VerticalAlignment="Bottom">
+                    <Button Classes="headerAction ghost" Content="Cancel" Command="{Binding CancelCommand}" />
+                    <Button Classes="headerAction primary" Content="Save" Command="{Binding SaveCommand}" />
+                </StackPanel>
+            </Grid>
+            <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,0,0,1" />
+
+            <!-- Tab strip -->
+            <StackPanel Orientation="Horizontal" Margin="28,0,28,0">
+                <Button Classes="ipTab" Classes.active="{Binding IsSummaryTab}"
+                        Command="{Binding GoSummaryCommand}" Content="Summary" />
+                <Button Classes="ipTab" Classes.active="{Binding IsDetailsTab}"
+                        Command="{Binding GoDetailsCommand}" Content="Details" />
+                <Button Classes="ipTab" Classes.active="{Binding IsPlotNotesTab}"
+                        Command="{Binding GoPlotNotesCommand}" Content="Plot &amp; Notes" />
+            </StackPanel>
+            <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,0,0,1" Margin="0,0,0,24" />
+
+            <!-- ===================== Summary tab ===================== -->
+            <StackPanel IsVisible="{Binding IsSummaryTab}" Margin="28,0,28,40" Spacing="20">
+
+                <Border Classes="groupBox">
+                    <StackPanel>
+                        <Border Classes="groupHeader">
+                            <TextBlock Text="Overview" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
+                        </Border>
+                        <Grid ColumnDefinitions="120,*" Margin="14">
+                            <Border Grid.Column="0" Width="120" Height="168" CornerRadius="6" ClipToBounds="True" Background="{Binding CoverBrush}">
+                                <Image Source="{Binding CoverImage}" Stretch="UniformToFill" />
+                            </Border>
+                            <StackPanel Grid.Column="1" Margin="20,0,0,0" Spacing="10">
+                                <StackPanel>
+                                    <TextBlock Classes="fieldLabel" Text="TYPE" />
+                                    <TextBlock Text="{Binding TypeLabel}" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
+                                </StackPanel>
+                                <StackPanel>
+                                    <TextBlock Classes="fieldLabel" Text="FILE PATH" />
+                                    <TextBlock Text="{Binding FilePathLabel}" FontSize="12.5" Foreground="{DynamicResource PbTextBrush}" TextWrapping="Wrap" />
+                                </StackPanel>
+                                <StackPanel>
+                                    <TextBlock Classes="fieldLabel" Text="PAGE COUNT" />
+                                    <TextBlock Text="{Binding PageCountLabel}" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
+                                </StackPanel>
+                            </StackPanel>
+                        </Grid>
+                    </StackPanel>
+                </Border>
+
+                <Border Classes="groupBox">
+                    <StackPanel>
+                        <Border Classes="groupHeader">
+                            <TextBlock Text="Ratings" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
+                        </Border>
+                        <StackPanel Margin="14" Spacing="16">
+                            <StackPanel>
+                                <TextBlock Classes="fieldLabel" Text="MY RATING" />
+                                <StackPanel Orientation="Horizontal" Spacing="2">
+                                    <Button Classes="star" Classes.filled="{Binding MyRatingStar1}" Content="★" Command="{Binding SetMyRating1Command}" />
+                                    <Button Classes="star" Classes.filled="{Binding MyRatingStar2}" Content="★" Command="{Binding SetMyRating2Command}" />
+                                    <Button Classes="star" Classes.filled="{Binding MyRatingStar3}" Content="★" Command="{Binding SetMyRating3Command}" />
+                                    <Button Classes="star" Classes.filled="{Binding MyRatingStar4}" Content="★" Command="{Binding SetMyRating4Command}" />
+                                    <Button Classes="star" Classes.filled="{Binding MyRatingStar5}" Content="★" Command="{Binding SetMyRating5Command}" />
+                                </StackPanel>
+                            </StackPanel>
+                            <StackPanel>
+                                <TextBlock Classes="fieldLabel" Text="COMMUNITY RATING" />
+                                <StackPanel Orientation="Horizontal" Spacing="2">
+                                    <Button Classes="star" Classes.filled="{Binding CommunityRatingStar1}" Content="★" Command="{Binding SetCommunityRating1Command}" />
+                                    <Button Classes="star" Classes.filled="{Binding CommunityRatingStar2}" Content="★" Command="{Binding SetCommunityRating2Command}" />
+                                    <Button Classes="star" Classes.filled="{Binding CommunityRatingStar3}" Content="★" Command="{Binding SetCommunityRating3Command}" />
+                                    <Button Classes="star" Classes.filled="{Binding CommunityRatingStar4}" Content="★" Command="{Binding SetCommunityRating4Command}" />
+                                    <Button Classes="star" Classes.filled="{Binding CommunityRatingStar5}" Content="★" Command="{Binding SetCommunityRating5Command}" />
+                                </StackPanel>
+                            </StackPanel>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+            </StackPanel>
+
+            <!-- ===================== Details tab ===================== -->
+            <StackPanel IsVisible="{Binding IsDetailsTab}" Margin="28,0,28,40" Spacing="20">
+                <Border Classes="groupBox">
+                    <StackPanel>
+                        <Border Classes="groupHeader">
+                            <TextBlock Text="Details" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
+                        </Border>
+                        <WrapPanel Margin="14,14,0,0">
+                            <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="NUMBER" /><TextBox Text="{Binding Number}" /></StackPanel>
+                            <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="VOLUME" /><TextBox Text="{Binding VolumeText}" /></StackPanel>
+                            <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="COUNT" /><TextBox Text="{Binding CountText}" /></StackPanel>
+                            <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="TITLE" /><TextBox Text="{Binding Title}" /></StackPanel>
+                            <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="ALTERNATE SERIES" /><TextBox Text="{Binding AlternateSeries}" /></StackPanel>
+                            <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="ALTERNATE NUMBER" /><TextBox Text="{Binding AlternateNumber}" /></StackPanel>
+                            <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="STORY ARC" /><TextBox Text="{Binding StoryArc}" /></StackPanel>
+                            <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="STORY ARC NUMBER" /><TextBox Text="{Binding StoryArcNumber}" /></StackPanel>
+                            <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="SERIES GROUP" /><TextBox Text="{Binding SeriesGroup}" /></StackPanel>
+                            <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="PUBLISHER" /><TextBox Text="{Binding Publisher}" /></StackPanel>
+                            <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="IMPRINT" /><TextBox Text="{Binding Imprint}" /></StackPanel>
+                            <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="FORMAT" /><TextBox Text="{Binding Format}" /></StackPanel>
+                            <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="YEAR" /><TextBox Text="{Binding YearText}" /></StackPanel>
+                            <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="MONTH" /><TextBox Text="{Binding MonthText}" /></StackPanel>
+                            <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="DAY" /><TextBox Text="{Binding DayText}" /></StackPanel>
+                            <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="GENRE" /><TextBox Text="{Binding Genre}" /></StackPanel>
+                            <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="TAGS" /><TextBox Text="{Binding Tags}" /></StackPanel>
+                            <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="WRITER" /><TextBox Text="{Binding Writer}" /></StackPanel>
+                            <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="PENCILLER" /><TextBox Text="{Binding Penciller}" /></StackPanel>
+                            <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="INKER" /><TextBox Text="{Binding Inker}" /></StackPanel>
+                            <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="COLORIST" /><TextBox Text="{Binding Colorist}" /></StackPanel>
+                            <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="LETTERER" /><TextBox Text="{Binding Letterer}" /></StackPanel>
+                            <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="COVER ARTIST" /><TextBox Text="{Binding CoverArtist}" /></StackPanel>
+                            <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="EDITOR" /><TextBox Text="{Binding Editor}" /></StackPanel>
+                            <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="TRANSLATOR" /><TextBox Text="{Binding Translator}" /></StackPanel>
+                            <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="AGE RATING" /><TextBox Text="{Binding AgeRating}" /></StackPanel>
+                            <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="LANGUAGE (ISO)" /><TextBox Text="{Binding LanguageIso}" /></StackPanel>
+                            <StackPanel Classes="field">
+                                <TextBlock Classes="fieldLabel" Text="BLACK AND WHITE" />
+                                <CheckBox IsChecked="{Binding BlackAndWhite}" Content="Yes" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
+                            </StackPanel>
+                        </WrapPanel>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+
+            <!-- ===================== Plot & Notes tab ===================== -->
+            <StackPanel IsVisible="{Binding IsPlotNotesTab}" Margin="28,0,28,40" Spacing="20">
+                <Border Classes="groupBox">
+                    <StackPanel>
+                        <Border Classes="groupHeader">
+                            <TextBlock Text="Plot" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
+                        </Border>
+                        <WrapPanel Margin="14,14,0,0">
+                            <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="CHARACTERS" /><TextBox Text="{Binding Characters}" /></StackPanel>
+                            <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="TEAMS" /><TextBox Text="{Binding Teams}" /></StackPanel>
+                            <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="MAIN CHARACTER OR TEAM" /><TextBox Text="{Binding MainCharacterOrTeam}" /></StackPanel>
+                            <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="LOCATIONS" /><TextBox Text="{Binding Locations}" /></StackPanel>
+                            <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="WEB" /><TextBox Text="{Binding Web}" /></StackPanel>
+                            <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="SCAN INFORMATION" /><TextBox Text="{Binding ScanInformation}" /></StackPanel>
+                        </WrapPanel>
+                    </StackPanel>
+                </Border>
+
+                <Border Classes="groupBox">
+                    <StackPanel>
+                        <Border Classes="groupHeader">
+                            <TextBlock Text="Notes" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
+                        </Border>
+                        <StackPanel Margin="14" Spacing="14">
+                            <StackPanel>
+                                <TextBlock Classes="fieldLabel" Text="SUMMARY" />
+                                <TextBox Text="{Binding Summary}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="80" />
+                            </StackPanel>
+                            <StackPanel>
+                                <TextBlock Classes="fieldLabel" Text="NOTES" />
+                                <TextBox Text="{Binding Notes}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="80" />
+                            </StackPanel>
+                            <StackPanel>
+                                <TextBlock Classes="fieldLabel" Text="REVIEW" />
+                                <TextBox Text="{Binding Review}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="80" />
+                            </StackPanel>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

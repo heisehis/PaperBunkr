@@ -1,0 +1,20 @@
+{
+  "name": "Windows 11",
+  "colors": {
+    "bg": "#F3F3F3",
+    "chrome": "#FFFFFF",
+    "border": "#E0E0E0",
+    "text": "#1A1A1A",
+    "textMuted": "#6B6B6B",
+    "textFaint": "#8A8A8A",
+    "accent": "#0078D4",
+    "accentText": "#005FB8",
+    "accentSoft": "#1F0078D4",
+    "badge": "#FFB900",
+    "badgeText": "#1A1A1A",
+    "success": "#107C10"
+  },
+  "spacingUnit": 4,
+  "radius": 8,
+  "icons": {}
+}

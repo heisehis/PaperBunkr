@@ -1,6 +1,8 @@
 using System.Linq;
 using Avalonia;
 using Avalonia.Media;
+using Avalonia.Media.Imaging;
+using Paperbunkr.App.Services;
 using Paperbunkr.Data.Entities;
 
 namespace Paperbunkr.App.Models;
@@ -20,6 +22,13 @@ public sealed class SeriesCardSample
     public bool HasUnread => UnreadCount > 0;
     public bool Missing { get; init; }
     public required IBrush CoverBrush { get; init; }
+
+    /// <summary>
+    /// Real decoded cover art (docs/superpowers/specs/2026-08-06-cover-thumbnails-design.md §3),
+    /// null until "Generate Covers" has processed this series' cover issue. <see cref="CoverBrush"/>
+    /// is the fallback the UI shows underneath while this is null.
+    /// </summary>
+    public Bitmap? CoverImage { get; init; }
 
     public static IBrush Gradient(string fromHex, string toHex) => new LinearGradientBrush
     {
@@ -73,6 +82,9 @@ public sealed class SeriesCardSample
     {
         int unreadCount = series.Issues.Count(i => i.LastPageRead is null or 0);
 
+        var coverIssue = series.Issues.FirstOrDefault(i => i.Id == series.CoverIssueId)
+            ?? series.Issues.OrderByNumber().FirstOrDefault();
+
         return new SeriesCardSample
         {
             SeriesId = series.Id,
@@ -82,6 +94,7 @@ public sealed class SeriesCardSample
             UnreadCount = unreadCount,
             Missing = series.Issues.Any(i => i.FileIsMissing),
             CoverBrush = CoverBrushFor(series.Name),
+            CoverImage = coverIssue is not null ? CoverImageCache.Get(coverIssue.Id) : null,
         };
     }
 }

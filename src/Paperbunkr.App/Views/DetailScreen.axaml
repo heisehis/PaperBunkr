@@ -15,16 +15,30 @@
             <Setter Property="Padding" Value="9,3" />
         </Style>
         <Style Selector="Border.metaPill.accent">
-            <Setter Property="Background" Value="{StaticResource PbAccentSoftBrush}" />
-            <Setter Property="BorderBrush" Value="{StaticResource PbAccentBrush}" />
+            <Setter Property="Background" Value="{DynamicResource PbAccentSoftBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
         </Style>
         <Style Selector="Border.metaPill.muted">
             <Setter Property="Background" Value="Transparent" />
-            <Setter Property="BorderBrush" Value="{StaticResource PbBorderBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
         </Style>
         <Style Selector="TextBlock.metaPillText">
             <Setter Property="FontSize" Value="11" />
             <Setter Property="FontWeight" Value="Bold" />
+        </Style>
+
+        <!-- Real editable Content Type picker (docs/superpowers/specs/2026-08-06-migration-ux-design.md
+             §A), sized/colored to sit alongside the other metaPill badges. -->
+        <Style Selector="ComboBox.contentTypePicker">
+            <Setter Property="Background" Value="{DynamicResource PbAccentSoftBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="999" />
+            <Setter Property="Padding" Value="9,1" />
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="FontWeight" Value="Bold" />
+            <Setter Property="Foreground" Value="{DynamicResource PbAccentTextBrush}" />
+            <Setter Property="MinHeight" Value="0" />
         </Style>
 
         <Style Selector="Button.detailAction">
@@ -35,28 +49,28 @@
             <Setter Property="Cursor" Value="Hand" />
         </Style>
         <Style Selector="Button.detailAction.primary">
-            <Setter Property="Background" Value="{StaticResource PbAccentBrush}" />
-            <Setter Property="BorderBrush" Value="{StaticResource PbAccentBrush}" />
+            <Setter Property="Background" Value="{DynamicResource PbAccentBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
             <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="Foreground" Value="{StaticResource PbBadgeTextBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource PbBadgeTextBrush}" />
         </Style>
         <Style Selector="Button.detailAction.secondary">
-            <Setter Property="Background" Value="{StaticResource PbChromeBrush}" />
-            <Setter Property="BorderBrush" Value="{StaticResource PbBorderBrush}" />
+            <Setter Property="Background" Value="{DynamicResource PbChromeBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
             <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="Foreground" Value="{StaticResource PbTextBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextBrush}" />
         </Style>
         <Style Selector="Button.detailAction.ghost">
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="BorderThickness" Value="0" />
-            <Setter Property="Foreground" Value="{StaticResource PbTextMutedBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
         </Style>
 
         <Style Selector="Button.backLink">
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="BorderThickness" Value="0" />
             <Setter Property="Padding" Value="0" />
-            <Setter Property="Foreground" Value="{StaticResource PbTextFaintBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextFaintBrush}" />
             <Setter Property="FontSize" Value="12.5" />
             <Setter Property="FontWeight" Value="SemiBold" />
             <Setter Property="Cursor" Value="Hand" />
@@ -69,31 +83,34 @@
             <Button Classes="backLink" Command="{Binding GoBackCommand}" Content="← Back to Library" Margin="0,0,0,18" />
 
             <Grid ColumnDefinitions="190,*">
-                <Border Grid.Column="0" CornerRadius="10" BorderThickness="1" BorderBrush="{StaticResource PbBorderBrush}"
-                        Background="{Binding CoverBrush}" Height="285" VerticalAlignment="Top">
-                    <TextBlock Text="{Binding CoverTitle}" FontSize="19" FontWeight="Black" Foreground="#FFFFF8EC"
-                               VerticalAlignment="Bottom" Margin="16" TextWrapping="Wrap" />
+                <Border Grid.Column="0" CornerRadius="10" BorderThickness="1" BorderBrush="{DynamicResource PbBorderBrush}"
+                        Background="{Binding CoverBrush}" Height="285" VerticalAlignment="Top" ClipToBounds="True">
+                    <Grid>
+                        <Image Source="{Binding CoverImage}" Stretch="UniformToFill" />
+                        <TextBlock Text="{Binding CoverTitle}" FontSize="19" FontWeight="Black" Foreground="#FFFFF8EC"
+                                   VerticalAlignment="Bottom" Margin="16" TextWrapping="Wrap" />
+                    </Grid>
                 </Border>
 
                 <StackPanel Grid.Column="1" Margin="26,0,0,0">
                     <StackPanel Orientation="Horizontal" Spacing="7" Margin="0,0,0,16">
-                        <Border Classes="metaPill accent"><TextBlock Classes="metaPillText" Text="{Binding ContentTypeLabel}"
-                                Foreground="{StaticResource PbAccentTextBrush}" /></Border>
+                        <ComboBox Classes="contentTypePicker" ItemsSource="{Binding ContentTypeOptions}"
+                                  SelectedItem="{Binding SelectedContentType}" ToolTip.Tip="Content Type" />
                         <Border Classes="metaPill muted"><TextBlock Classes="metaPillText" Text="{Binding StatusLabel}"
-                                Foreground="{StaticResource PbTextFaintBrush}" /></Border>
+                                Foreground="{DynamicResource PbTextFaintBrush}" /></Border>
                         <Border Classes="metaPill muted"><TextBlock Classes="metaPillText" Text="{Binding IssueCountLabel}"
-                                Foreground="{StaticResource PbTextFaintBrush}" /></Border>
+                                Foreground="{DynamicResource PbTextFaintBrush}" /></Border>
                     </StackPanel>
 
                     <TextBlock Text="{Binding SeriesTitle}" FontSize="26" FontWeight="Bold"
-                               Foreground="{StaticResource PbTextBrush}" Margin="0,0,0,4" />
-                    <TextBlock Text="{Binding Summary}" FontSize="13" Foreground="{StaticResource PbTextMutedBrush}"
+                               Foreground="{DynamicResource PbTextBrush}" Margin="0,0,0,4" />
+                    <TextBlock Text="{Binding Summary}" FontSize="13" Foreground="{DynamicResource PbTextMutedBrush}"
                                TextWrapping="Wrap" Margin="0,0,0,14" />
 
                     <StackPanel Orientation="Horizontal" Spacing="9" Margin="0,0,0,4">
                         <Button Classes="detailAction primary" Content="{Binding ContinueLabel}" Command="{Binding ContinueCommand}" />
                         <Button Classes="detailAction secondary" Content="Favorite" />
-                        <Button Classes="detailAction ghost" Content="Edit" />
+                        <Button Classes="detailAction ghost" Content="{Binding EditButtonLabel}" Command="{Binding EditCommand}" IsEnabled="{Binding CanEdit}" />
                     </StackPanel>
 
                     <views:DetailMeta DataContext="{Binding Meta}" />

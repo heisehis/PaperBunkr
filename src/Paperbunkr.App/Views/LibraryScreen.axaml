@@ -11,9 +11,9 @@
     <UserControl.Styles>
         <Style Selector="Button.toolbarPill">
             <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="BorderBrush" Value="{StaticResource PbBorderBrush}" />
-            <Setter Property="Background" Value="{StaticResource PbChromeBrush}" />
-            <Setter Property="Foreground" Value="{StaticResource PbTextMutedBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
+            <Setter Property="Background" Value="{DynamicResource PbChromeBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
             <Setter Property="CornerRadius" Value="999" />
             <Setter Property="Padding" Value="12,6" />
             <Setter Property="FontSize" Value="12" />
@@ -21,14 +21,14 @@
             <Setter Property="Cursor" Value="Hand" />
         </Style>
         <Style Selector="Button.toolbarPill.open">
-            <Setter Property="BorderBrush" Value="{StaticResource PbAccentBrush}" />
-            <Setter Property="Background" Value="{StaticResource PbAccentSoftBrush}" />
-            <Setter Property="Foreground" Value="{StaticResource PbAccentTextBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
+            <Setter Property="Background" Value="{DynamicResource PbAccentSoftBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource PbAccentTextBrush}" />
         </Style>
 
         <Style Selector="Border.dropdown">
-            <Setter Property="Background" Value="{StaticResource PbChromeBrush}" />
-            <Setter Property="BorderBrush" Value="{StaticResource PbBorderBrush}" />
+            <Setter Property="Background" Value="{DynamicResource PbChromeBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
             <Setter Property="BorderThickness" Value="1" />
             <Setter Property="CornerRadius" Value="7" />
             <Setter Property="Padding" Value="14" />
@@ -36,7 +36,7 @@
         </Style>
         <Style Selector="TextBlock.dropdownRow">
             <Setter Property="FontSize" Value="12.5" />
-            <Setter Property="Foreground" Value="{StaticResource PbTextMutedBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
             <Setter Property="Margin" Value="0,3" />
         </Style>
 
@@ -51,21 +51,22 @@
         <Style Selector="Border.cover">
             <Setter Property="CornerRadius" Value="7" />
             <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="BorderBrush" Value="{StaticResource PbBorderBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
             <Setter Property="BoxShadow" Value="0 8 24 -12 #80000000" />
             <Setter Property="Height" Value="216" />
+            <Setter Property="ClipToBounds" Value="True" />
         </Style>
     </UserControl.Styles>
 
     <Grid RowDefinitions="Auto,*">
 
         <!-- ============ Toolbar (pills variant) ============ -->
-        <Border Grid.Row="0" Padding="24,14" BorderBrush="{StaticResource PbBorderBrush}" BorderThickness="0,0,0,1">
+        <Border Grid.Row="0" Padding="24,14" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,0,0,1">
           <Panel>
             <StackPanel Orientation="Horizontal" Spacing="8">
-                <Border MaxWidth="260" Background="{StaticResource PbChromeBrush}" BorderBrush="{StaticResource PbBorderBrush}"
+                <Border MaxWidth="260" Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}"
                         BorderThickness="1" CornerRadius="5" Padding="10,7" HorizontalAlignment="Stretch" Width="260">
-                    <TextBlock Text="Search all series…" FontSize="12.5" Foreground="{StaticResource PbTextFaintBrush}" />
+                    <TextBlock Text="Search all series…" FontSize="12.5" Foreground="{DynamicResource PbTextFaintBrush}" />
                 </Border>
 
                 <Button x:Name="FilterButton" Classes="toolbarPill" Classes.open="{Binding IsFilterOpen}"
@@ -74,6 +75,15 @@
                         Command="{Binding ToggleSortCommand}" Content="Sort: Recently Added ▾" />
                 <Button x:Name="DisplayButton" Classes="toolbarPill" Classes.open="{Binding IsDisplayOpen}"
                         Command="{Binding ToggleDisplayCommand}" Content="Display ▾" />
+                <Button Classes="toolbarPill" Classes.open="{Binding IsGridView}"
+                        Command="{Binding ShowGridViewCommand}" Content="Grid" />
+                <Button Classes="toolbarPill" Classes.open="{Binding IsListView}"
+                        Command="{Binding ShowListViewCommand}" Content="List" />
+                <Button Classes="toolbarPill" Content="Generate Covers" Command="{Binding GenerateCoversCommand}"
+                        IsEnabled="{Binding !IsGeneratingCovers}" />
+                <ProgressBar IsVisible="{Binding IsGeneratingCovers}" Minimum="0" Maximum="1"
+                             Value="{Binding CoverGenerationFraction}" Width="100" Height="4" CornerRadius="2"
+                             VerticalAlignment="Center" />
             </StackPanel>
 
             <Popup PlacementTarget="{Binding #FilterButton}" Placement="BottomEdgeAlignedLeft" VerticalOffset="6"
@@ -82,7 +92,7 @@
                     <StackPanel>
                         <TextBlock Classes="dropdownRow" Text="Unread only" />
                         <TextBlock Classes="dropdownRow" Text="Missing issues" />
-                        <TextBlock Classes="dropdownRow" Text="Tracked series ✓" Foreground="{StaticResource PbTextBrush}" />
+                        <TextBlock Classes="dropdownRow" Text="Tracked series ✓" Foreground="{DynamicResource PbTextBrush}" />
                     </StackPanel>
                 </Border>
             </Popup>
@@ -91,7 +101,7 @@
                    IsOpen="{Binding IsSortOpen}" IsLightDismissEnabled="True">
                 <Border Classes="dropdown" Width="190">
                     <StackPanel>
-                        <TextBlock Classes="dropdownRow" Text="Recently Added" FontWeight="Bold" Foreground="{StaticResource PbAccentTextBrush}" />
+                        <TextBlock Classes="dropdownRow" Text="Recently Added" FontWeight="Bold" Foreground="{DynamicResource PbAccentTextBrush}" />
                         <TextBlock Classes="dropdownRow" Text="Title A–Z" />
                         <TextBlock Classes="dropdownRow" Text="Unread count" />
                     </StackPanel>
@@ -102,9 +112,9 @@
                    IsOpen="{Binding IsDisplayOpen}" IsLightDismissEnabled="True">
                 <Border Classes="dropdown" Width="210">
                     <StackPanel>
-                        <TextBlock Classes="dropdownRow" Text="Grid density" Foreground="{StaticResource PbTextBrush}" Margin="0,0,0,4" />
-                        <Border Height="3" CornerRadius="2" Background="{StaticResource PbBorderBrush}" Margin="0,0,0,10">
-                            <Border Height="3" CornerRadius="2" Background="{StaticResource PbAccentBrush}"
+                        <TextBlock Classes="dropdownRow" Text="Grid density" Foreground="{DynamicResource PbTextBrush}" Margin="0,0,0,4" />
+                        <Border Height="3" CornerRadius="2" Background="{DynamicResource PbBorderBrush}" Margin="0,0,0,10">
+                            <Border Height="3" CornerRadius="2" Background="{DynamicResource PbAccentBrush}"
                                     HorizontalAlignment="Left" Width="90" />
                         </Border>
                         <TextBlock Classes="dropdownRow" Text="Unread count ✓" />
@@ -117,7 +127,7 @@
         </Border>
 
         <!-- ============ Series grid ============ -->
-        <ScrollViewer Grid.Row="1">
+        <ScrollViewer Grid.Row="1" IsVisible="{Binding IsGridView}">
             <ItemsControl x:Name="CoversList" ItemsSource="{Binding Covers}" Margin="24,22,24,40">
                 <ItemsControl.ItemsPanel>
                     <ItemsPanelTemplate>
@@ -132,6 +142,7 @@
                             <StackPanel>
                                 <Border Classes="cover" Background="{Binding CoverBrush}">
                                     <Grid>
+                                        <Image Source="{Binding CoverImage}" Stretch="UniformToFill" />
                                         <Border IsVisible="{Binding HasUnread}" Background="#B814161B"
                                                 CornerRadius="999" Padding="6,2" HorizontalAlignment="Right"
                                                 VerticalAlignment="Top" Margin="7">
@@ -144,11 +155,43 @@
                                     </Grid>
                                 </Border>
                                 <TextBlock Text="{Binding Name}" FontSize="12.5" FontWeight="SemiBold"
-                                           Foreground="{StaticResource PbTextBrush}" TextTrimming="CharacterEllipsis"
+                                           Foreground="{DynamicResource PbTextBrush}" TextTrimming="CharacterEllipsis"
                                            Margin="0,8,0,0" />
-                                <TextBlock Text="{Binding Sub}" FontSize="11" Foreground="{StaticResource PbTextFaintBrush}"
+                                <TextBlock Text="{Binding Sub}" FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}"
                                            Margin="0,1,0,0" />
                             </StackPanel>
+                        </Button>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </ScrollViewer>
+
+        <!-- ============ Series list ============ -->
+        <ScrollViewer Grid.Row="1" IsVisible="{Binding IsListView}">
+            <ItemsControl x:Name="CoversListRows" ItemsSource="{Binding Covers}" Margin="24,18,24,40">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="models:SeriesCardSample">
+                        <Button Classes="card" HorizontalAlignment="Stretch" Margin="0,0,0,8"
+                                Command="{Binding #CoversListRows.((vm:LibraryScreenViewModel)DataContext).SelectCardCommand}"
+                                CommandParameter="{Binding}">
+                            <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1" CornerRadius="6" Padding="10">
+                                <Grid ColumnDefinitions="44,*,Auto">
+                                    <Border Grid.Column="0" CornerRadius="4" Width="44" Height="63"
+                                            Background="{Binding CoverBrush}" ClipToBounds="True">
+                                        <Image Source="{Binding CoverImage}" Stretch="UniformToFill" />
+                                    </Border>
+                                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="12,0">
+                                        <TextBlock Text="{Binding Name}" FontSize="13" FontWeight="SemiBold"
+                                                   Foreground="{DynamicResource PbTextBrush}" TextTrimming="CharacterEllipsis" />
+                                        <TextBlock Text="{Binding Sub}" FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" Margin="0,2,0,0" />
+                                    </StackPanel>
+                                    <Border Grid.Column="2" IsVisible="{Binding HasUnread}" Background="{DynamicResource PbAccentSoftBrush}"
+                                            CornerRadius="999" Padding="8,3" VerticalAlignment="Center">
+                                        <TextBlock Text="{Binding UnreadCount}" FontFamily="Consolas,monospace" FontSize="11"
+                                                   FontWeight="Bold" Foreground="{DynamicResource PbAccentTextBrush}" />
+                                    </Border>
+                                </Grid>
+                            </Border>
                         </Button>
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>

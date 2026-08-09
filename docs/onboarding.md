@@ -18,6 +18,7 @@
 13. [Skin/theme system](#13-skinstheme-system)
 14. [Migration UX](#14-migration-ux)
 15. [Open items](#15-open-items)
+16. [Release staging: Alpha & Beta](#16-release-staging-alpha--beta)
 
 ---
 
@@ -237,3 +238,24 @@ All items below were resolved in a dedicated pass (`paperbunkr_open_items_resolv
 
 **Still genuinely open:**
 - **Retarget spike (§4) has not been run yet** — this container has no .NET SDK and no network access to install one; this remains a Claude Code task, and the one everything else's scope estimate depends on being confirmed for real.
+
+## 16. Release staging: Alpha & Beta
+
+**Alpha — core read+library loop runs locally.** Everything else deferred. Concretely:
+- Retarget spike (§4) complete, engine compiling clean on net8
+- SQLite/EF Core (§5) operational with basic CRUD — schema in place (§6), but `ContentType`/`ReadingMode` can sit at their `Unknown`/`LeftToRight` defaults; no classification pipeline required
+- Reader canvas (§8): **one** reading mode working end-to-end — paged `LeftToRight`, the simplest case — proving the decode/dispose/virtualization pipeline actually works. Continuous/webtoon rendering explicitly deferred to Beta.
+- Migration (§14): detection, dry-run scan, and commit (steps 1–4) — enough to get a real library in for testing. The "Needs Review" queue (step 5) can be stubbed; it's a completeness feature, not a functionality one.
+- Library browsing UI: functional, not necessarily wireframe-polished yet
+- **Explicitly not in Alpha:** content-type classification (§7), manga metadata scraping (§9), plugin API (§10) beyond what's needed for the host itself to run, CBL/reading-list convergence (§11), skin system (§13) beyond one hardcoded default theme — no `.crpck` loading yet
+
+**Beta — feature-complete for outside testers.** Everything deferred from Alpha, plus:
+- Full reader canvas including continuous/webtoon modes and double-page spread heuristics
+- Content-type classification pipeline (§7) and manga metadata scraping (§9) live
+- Plugin API v2 (§10) functional against at least one real test plugin
+- CBL Manager / scraper convergence (§11) operating as core reading-list functionality
+- Skin system (§13) with the `windows_11` reference skin installable and loadable
+- Wireframe-driven UI (§12) across all five screens, not just Library
+- Full migration UX including the "Needs Review" queue
+
+**One thing worth naming rather than letting slide:** this split defers the single highest-risk, most novel piece of the whole project — continuous/webtoon rendering and its documented memory-management failure mode (§8) — all the way to Beta. That's a reasonable sequencing call (get *something* reading before tackling the hardest rendering problem), but it means Alpha doesn't actually validate the part most likely to go wrong. Worth considering a narrow, throwaway memory-safety spike of the `CompositionCustomVisualHandler` canvas *during* Alpha — not full webtoon feature completeness, just proving the dispose/purge strategy from §8 actually holds under a tall image — rather than discovering that risk for the first time when Beta is already underway and harder to unwind.

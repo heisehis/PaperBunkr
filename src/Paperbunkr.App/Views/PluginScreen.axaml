@@ -19,28 +19,28 @@
         <Style Selector="Button.headerAction.ghost">
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="BorderThickness" Value="0" />
-            <Setter Property="Foreground" Value="{StaticResource PbTextMutedBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
         </Style>
         <Style Selector="Button.headerAction.primary">
-            <Setter Property="Background" Value="{StaticResource PbAccentBrush}" />
-            <Setter Property="BorderBrush" Value="{StaticResource PbAccentBrush}" />
+            <Setter Property="Background" Value="{DynamicResource PbAccentBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
             <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="Foreground" Value="{StaticResource PbBadgeTextBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource PbBadgeTextBrush}" />
         </Style>
 
         <Style Selector="Border.groupBox">
-            <Setter Property="BorderBrush" Value="{StaticResource PbBorderBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
             <Setter Property="BorderThickness" Value="1" />
             <Setter Property="CornerRadius" Value="7" />
             <Setter Property="Margin" Value="0,0,0,14" />
             <Setter Property="ClipToBounds" Value="True" />
         </Style>
         <Style Selector="Border.groupHeader">
-            <Setter Property="Background" Value="{StaticResource PbChromeBrush}" />
+            <Setter Property="Background" Value="{DynamicResource PbChromeBrush}" />
             <Setter Property="Padding" Value="14,11" />
         </Style>
         <Style Selector="Border.dupItemRow">
-            <Setter Property="BorderBrush" Value="{StaticResource PbBorderBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
             <Setter Property="BorderThickness" Value="0,1,0,0" />
             <Setter Property="Padding" Value="14,10" />
         </Style>
@@ -54,8 +54,8 @@
             <Setter Property="StrokeThickness" Value="1.5" />
         </Style>
         <Style Selector="Ellipse.dupRadio.keep">
-            <Setter Property="Fill" Value="{StaticResource PbSuccessBrush}" />
-            <Setter Property="Stroke" Value="{StaticResource PbSuccessBrush}" />
+            <Setter Property="Fill" Value="{DynamicResource PbSuccessBrush}" />
+            <Setter Property="Stroke" Value="{DynamicResource PbSuccessBrush}" />
         </Style>
     </UserControl.Styles>
 
@@ -66,25 +66,25 @@
                 <StackPanel Grid.Column="0" VerticalAlignment="Bottom">
                     <Border BorderBrush="#383D47" BorderThickness="1" CornerRadius="999" Padding="9,3"
                             HorizontalAlignment="Left" Margin="0,0,0,10">
-                        <TextBlock Text="{Binding PluginBadge}" FontSize="10.5" FontWeight="Bold" Foreground="{StaticResource PbTextFaintBrush}" />
+                        <TextBlock Text="{Binding PluginBadge}" FontSize="10.5" FontWeight="Bold" Foreground="{DynamicResource PbTextFaintBrush}" />
                     </Border>
-                    <TextBlock Text="Duplicate Finder" FontSize="22" FontWeight="Bold" Foreground="{StaticResource PbTextBrush}" />
-                    <TextBlock Text="{Binding LastScanLabel}" FontSize="12.5" Foreground="{StaticResource PbTextFaintBrush}" Margin="0,4,0,0" />
+                    <TextBlock Text="Duplicate Finder" FontSize="22" FontWeight="Bold" Foreground="{DynamicResource PbTextBrush}" />
+                    <TextBlock Text="{Binding LastScanLabel}" FontSize="12.5" Foreground="{DynamicResource PbTextFaintBrush}" Margin="0,4,0,0" />
                 </StackPanel>
                 <Button Grid.Column="1" Classes="headerAction primary" Content="Scan Library" VerticalAlignment="Bottom" />
             </Grid>
-            <Border BorderBrush="{StaticResource PbBorderBrush}" BorderThickness="0,0,0,1" Margin="0,0,0,24" />
+            <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,0,0,1" Margin="0,0,0,24" />
 
             <StackPanel Margin="28,0,28,40">
 
-                <Border Background="{StaticResource PbChromeBrush}" BorderBrush="{StaticResource PbBorderBrush}"
+                <Border Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}"
                         BorderThickness="1" CornerRadius="7" Padding="18,16" Margin="0,0,0,26">
                     <StackPanel Orientation="Horizontal" Spacing="14">
                         <TextBlock Text="{Binding GroupCount}" FontFamily="Consolas,monospace" FontSize="24" FontWeight="Bold"
-                                   Foreground="{StaticResource PbBadgeBrush}" VerticalAlignment="Center" />
+                                   Foreground="{DynamicResource PbBadgeBrush}" VerticalAlignment="Center" />
                         <StackPanel VerticalAlignment="Center">
-                            <TextBlock Text="duplicate groups found across" FontSize="11.5" Foreground="{StaticResource PbTextFaintBrush}" />
-                            <TextBlock Text="3 series" FontSize="13" FontWeight="Bold" Foreground="{StaticResource PbTextBrush}" />
+                            <TextBlock Text="duplicate groups found across" FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" />
+                            <TextBlock Text="3 series" FontSize="13" FontWeight="Bold" Foreground="{DynamicResource PbTextBrush}" />
                         </StackPanel>
                     </StackPanel>
                 </Border>
@@ -96,9 +96,9 @@
                                 <StackPanel>
                                     <Border Classes="groupHeader">
                                         <StackPanel Orientation="Horizontal" Spacing="10">
-                                            <TextBlock Text="{Binding Title}" FontSize="12.5" FontWeight="Bold" Foreground="{StaticResource PbTextBrush}" />
+                                            <TextBlock Text="{Binding Title}" FontSize="12.5" FontWeight="Bold" Foreground="{DynamicResource PbTextBrush}" />
                                             <TextBlock Text="{Binding Note, StringFormat='— {0}'}" FontFamily="Consolas,monospace"
-                                                       FontSize="11.5" Foreground="{StaticResource PbTextFaintBrush}" />
+                                                       FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" />
                                         </StackPanel>
                                     </Border>
                                     <ItemsControl ItemsSource="{Binding Items}">
@@ -111,8 +111,8 @@
                                                                 Background="#442A1C" VerticalAlignment="Center" Margin="12,0" />
                                                         <StackPanel Grid.Column="2" VerticalAlignment="Center">
                                                             <TextBlock Text="{Binding FileName}" FontFamily="Consolas,monospace" FontSize="12.5"
-                                                                       Foreground="{StaticResource PbTextBrush}" />
-                                                            <TextBlock Text="{Binding Info}" FontSize="11" Foreground="{StaticResource PbTextFaintBrush}" />
+                                                                       Foreground="{DynamicResource PbTextBrush}" />
+                                                            <TextBlock Text="{Binding Info}" FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" />
                                                         </StackPanel>
                                                     </Grid>
                                                 </Border>

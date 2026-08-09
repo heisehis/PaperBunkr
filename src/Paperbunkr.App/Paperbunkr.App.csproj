@@ -12,6 +12,20 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- CoverThumbnailService's internal test-injection constructor (docs/superpowers/specs/
+         2026-08-06-cover-thumbnails-design.md §2) needs this. -->
+    <InternalsVisibleTo Include="Paperbunkr.App.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Native 7z.dll (LGPL, the redistributable 7-Zip library itself, not ComicRackCE's own
+         code) - CBZ/CBR both default to EngineConfiguration.CbEngines.SevenZip, which loads this
+         via NativeInterop.ResolveNativeAssetPath's {baseDir}/x64/ search
+         (docs/superpowers/specs/2026-08-06-reader-canvas-alpha-design.md §1). -->
+    <Content Include="x64\7z.dll" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Avalonia" Version="12.1.1" />
     <PackageReference Include="Avalonia.Desktop" Version="12.1.1" />
     <PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.1" />

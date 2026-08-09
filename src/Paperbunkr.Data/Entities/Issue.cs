@@ -116,4 +116,76 @@ public class Issue
     public bool FileIsMissing { get; set; }
 
     public string? CustomThumbnailKey { get; set; }
+
+    // --- fields added for Smart Lists CE-parity (docs/superpowers/specs/2026-08-06-smart-lists-design.md) ---
+
+    /// <summary>CE: <c>ComicBook.Checked</c> — arbitrary user-toggleable mark, unrelated to read state.</summary>
+    public bool Checked { get; set; }
+
+    /// <summary>
+    /// CE: <c>ComicInfo.MainCharacterOrTeam</c>. A genuine ComicInfo.xml-standard field that was
+    /// missed in the original port of this class — not a new-for-Paperbunkr concept.
+    /// </summary>
+    public string? MainCharacterOrTeam { get; set; }
+
+    /// <summary>CE: <c>ComicBook.Rating</c> ("My Rating"). Drives the Favorites smart list (Rating &gt; 3).</summary>
+    public float? Rating { get; set; }
+
+    public float? CommunityRating { get; set; }
+
+    public string? ISBN { get; set; }
+
+    public string? ScanInformation { get; set; }
+
+    public bool BlackAndWhite { get; set; }
+
+    /// <summary>CE: <c>ComicBook.FileSize</c>, bytes.</summary>
+    public long? FileSize { get; set; }
+
+    public DateTime? FileModifiedTime { get; set; }
+
+    public DateTime? FileCreationTime { get; set; }
+
+    /// <summary>CE: <c>ComicBook.NewPages</c> — count of pages added since last read.</summary>
+    public int? NewPages { get; set; }
+
+    // --- "book collection" fields (CE: ComicBook.Book*) — no editor UI yet, smart-list-only
+    // until a dedicated Book Collection panel is built as a separate future feature. ---
+
+    public string? BookAge { get; set; }
+
+    public string? BookCollectionStatus { get; set; }
+
+    public string? BookCondition { get; set; }
+
+    public string? BookLocation { get; set; }
+
+    public string? BookNotes { get; set; }
+
+    public string? BookOwner { get; set; }
+
+    public float? BookPrice { get; set; }
+
+    public string? BookStore { get; set; }
+
+    public List<IssueCustomValue> CustomValues { get; set; } = new();
+
+    /// <summary>
+    /// True when this row was auto-created to stand in for an unmatched Reading List import row
+    /// (docs/superpowers/specs/2026-08-06-reading-lists-design.md §2), not a real book the user
+    /// added — distinguishes that from a real book the user separately flagged
+    /// <see cref="FileIsMissing"/> for. Adapted from CBLManager's <c>PlaceholderTagKey</c> custom-
+    /// value workaround (needed there only because CE's plugin API had no free metadata slot on a
+    /// book); a real column here since Paperbunkr owns its schema.
+    /// </summary>
+    public bool IsPlaceholder { get; set; }
+
+    /// <summary>
+    /// True once the user has dismissed this issue's missing-file state from the Needs Review
+    /// queue ("I know this one's missing, stop asking") without relinking or removing it
+    /// (docs/superpowers/specs/2026-08-06-migration-ux-polish-design.md §2). Review-queue concept
+    /// only - the system "Missing Files" smart list ignores this and still shows every missing
+    /// file when browsed directly.
+    /// </summary>
+    public bool MissingAcknowledged { get; set; }
 }

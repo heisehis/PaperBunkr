@@ -17,31 +17,37 @@
             <Setter Property="Padding" Value="0,0,0,12" />
             <Setter Property="FontSize" Value="13" />
             <Setter Property="FontWeight" Value="Bold" />
-            <Setter Property="Foreground" Value="{StaticResource PbTextFaintBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextFaintBrush}" />
             <Setter Property="Cursor" Value="Hand" />
         </Style>
         <Style Selector="Button.tab.active">
-            <Setter Property="BorderBrush" Value="{StaticResource PbAccentBrush}" />
-            <Setter Property="Foreground" Value="{StaticResource PbTextBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextBrush}" />
         </Style>
         <Style Selector="TextBlock.tabCount">
             <Setter Property="FontFamily" Value="Consolas,monospace" />
             <Setter Property="FontSize" Value="10.5" />
-            <Setter Property="Foreground" Value="{StaticResource PbTextFaintBrush}" />
-            <Setter Property="Background" Value="{StaticResource PbChromeBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextFaintBrush}" />
+            <Setter Property="Background" Value="{DynamicResource PbChromeBrush}" />
             <Setter Property="Padding" Value="6,1" />
         </Style>
 
         <Style Selector="Border.issueTile">
             <Setter Property="CornerRadius" Value="6" />
             <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="BorderBrush" Value="{StaticResource PbBorderBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
             <Setter Property="Height" Value="168" />
+            <Setter Property="ClipToBounds" Value="True" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style Selector="Border.issueTile.selected">
+            <Setter Property="BorderThickness" Value="2" />
+            <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
         </Style>
     </UserControl.Styles>
 
     <StackPanel>
-        <Border BorderBrush="{StaticResource PbBorderBrush}" BorderThickness="0,0,0,1" Margin="0,24,0,0">
+        <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,0,0,1" Margin="0,24,0,0">
             <StackPanel Orientation="Horizontal" Spacing="22">
                 <Button Classes="tab" Classes.active="{Binding IsIssuesTab}" Command="{Binding GoIssuesCommand}">
                     <StackPanel Orientation="Horizontal" Spacing="7">
@@ -61,15 +67,26 @@
         </Border>
 
         <!-- Issues tab -->
-        <ItemsControl IsVisible="{Binding IsIssuesTab}" ItemsSource="{Binding Issues}" Margin="0,20,0,0">
+        <ItemsControl x:Name="IssuesList" IsVisible="{Binding IsIssuesTab}" ItemsSource="{Binding Issues}" Margin="0,20,0,0">
             <ItemsControl.ItemsPanel>
                 <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
             </ItemsControl.ItemsPanel>
             <ItemsControl.ItemTemplate>
                 <DataTemplate x:DataType="models:IssueCardSample">
-                    <Border Classes="issueTile" Width="120" Margin="0,0,16,16" Background="{Binding CoverBrush}">
-                        <TextBlock Text="{Binding Title}" FontSize="13" FontWeight="Black" Foreground="#FFFFF8EC"
-                                   VerticalAlignment="Bottom" Margin="9" />
+                    <Border Classes="issueTile" Classes.selected="{Binding IsSelected}" Width="120" Margin="0,0,16,16"
+                            Background="{Binding CoverBrush}" PointerPressed="OnIssueTilePointerPressed">
+                        <Border.ContextMenu>
+                            <ContextMenu>
+                                <MenuItem Header="Edit Properties"
+                                          Command="{Binding #IssuesList.((vm:DetailTabsViewModel)DataContext).EditIssuePropertiesCommand}"
+                                          CommandParameter="{Binding}" />
+                            </ContextMenu>
+                        </Border.ContextMenu>
+                        <Grid>
+                            <Image Source="{Binding CoverImage}" Stretch="UniformToFill" />
+                            <TextBlock Text="{Binding Title}" FontSize="13" FontWeight="Black" Foreground="#FFFFF8EC"
+                                       VerticalAlignment="Bottom" Margin="9" />
+                        </Grid>
                     </Border>
                 </DataTemplate>
             </ItemsControl.ItemTemplate>
@@ -80,7 +97,7 @@
              renders nothing rather than being special-cased, so it's ready the day real
              related-series data exists. -->
         <TextBlock IsVisible="{Binding IsRelatedTab}" Text="No related series yet." FontSize="12.5"
-                   Foreground="{StaticResource PbTextFaintBrush}" Margin="0,20,0,0" />
+                   Foreground="{DynamicResource PbTextFaintBrush}" Margin="0,20,0,0" />
         <ScrollViewer IsVisible="{Binding IsRelatedTab}" HorizontalScrollBarVisibility="Auto" Margin="0,20,0,0">
             <ItemsControl ItemsSource="{Binding Related}">
                 <ItemsControl.ItemsPanel>
@@ -89,14 +106,14 @@
                 <ItemsControl.ItemTemplate>
                     <DataTemplate x:DataType="models:RelatedSeriesSample">
                         <StackPanel Width="126">
-                            <Border CornerRadius="6" BorderThickness="1" BorderBrush="{StaticResource PbBorderBrush}"
+                            <Border CornerRadius="6" BorderThickness="1" BorderBrush="{DynamicResource PbBorderBrush}"
                                     Height="189" Background="{Binding CoverBrush}">
                                 <TextBlock Text="{Binding Title}" FontSize="12" FontWeight="Black" Foreground="#FFFFF8EC"
                                            VerticalAlignment="Bottom" Margin="8" TextWrapping="Wrap" />
                             </Border>
                             <TextBlock Text="{Binding Name}" FontSize="11.5" FontWeight="SemiBold"
-                                       Foreground="{StaticResource PbTextMutedBrush}" Margin="0,6,0,0" />
-                            <TextBlock Text="{Binding Note}" FontSize="10.5" Foreground="{StaticResource PbTextFaintBrush}" />
+                                       Foreground="{DynamicResource PbTextMutedBrush}" Margin="0,6,0,0" />
+                            <TextBlock Text="{Binding Note}" FontSize="10.5" Foreground="{DynamicResource PbTextFaintBrush}" />
                         </StackPanel>
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>
@@ -106,19 +123,21 @@
         <!-- Details tab -->
         <Grid IsVisible="{Binding IsDetailsTab}" ColumnDefinitions="*,*" Margin="0,20,0,0">
             <StackPanel Grid.Column="0" Margin="0,0,28,0">
-                <TextBlock Text="PUBLISHER" FontSize="10.5" Foreground="{StaticResource PbTextFaintBrush}" Margin="0,0,0,4" />
-                <TextBlock Text="{Binding Publisher}" FontSize="13" Foreground="{StaticResource PbTextBrush}" />
+                <TextBlock Text="PUBLISHER" FontSize="10.5" Foreground="{DynamicResource PbTextFaintBrush}" Margin="0,0,0,4" />
+                <TextBlock Text="{Binding Publisher}" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
             </StackPanel>
             <StackPanel Grid.Column="1">
-                <TextBlock Text="READING MODE" FontSize="10.5" Foreground="{StaticResource PbTextFaintBrush}" Margin="0,0,0,4" />
-                <TextBlock Text="{Binding ReadingModeLabel}" FontSize="13" Foreground="{StaticResource PbTextBrush}" />
+                <TextBlock Text="READING MODE" FontSize="10.5" Foreground="{DynamicResource PbTextFaintBrush}" Margin="0,0,0,4" />
+                <Button Command="{Binding ToggleReadingModeCommand}" Content="{Binding ReadingModeLabel}"
+                        Background="Transparent" BorderThickness="0" Padding="0" Cursor="Hand"
+                        HorizontalAlignment="Left" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
             </StackPanel>
         </Grid>
 
         <!-- Activity tab - no activity-log schema/feature exists yet, so this is left as a real
              empty state rather than faked per-series log entries. -->
         <StackPanel IsVisible="{Binding IsActivityTab}" Margin="0,20,0,0" Spacing="4">
-            <TextBlock Text="No recent activity." FontSize="12.5" Foreground="{StaticResource PbTextFaintBrush}" />
+            <TextBlock Text="No recent activity." FontSize="12.5" Foreground="{DynamicResource PbTextFaintBrush}" />
         </StackPanel>
     </StackPanel>
 </UserControl>

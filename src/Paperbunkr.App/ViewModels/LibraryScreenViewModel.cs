@@ -59,6 +59,9 @@ public partial class LibraryScreenViewModel : ViewModelBase
 
     public bool HasCollections => Collections.Count > 0;
 
+    /// <summary>P6 fix (docs/alpha-todo.md) - none of the 7 display modes had a "no series match" empty state; a zero-result search/filter combination just rendered a blank area.</summary>
+    public bool HasAnyResults => Covers.Count > 0 || Groups.Count > 0;
+
     /// <summary>
     /// Reloads everything from the database: the sidebar's <see cref="ContentTypes"/>/
     /// <see cref="Collections"/> summaries (always full, unfiltered counts) and <see cref="Covers"/>
@@ -159,6 +162,7 @@ public partial class LibraryScreenViewModel : ViewModelBase
 
         OnPropertyChanged(nameof(IsAllSeriesActive));
         OnPropertyChanged(nameof(HasCollections));
+        OnPropertyChanged(nameof(HasAnyResults));
     }
 
     /// <summary>Sorts by <see cref="SortField"/>/<see cref="SortDirection"/> - Series-level aggregates already computed on each <see cref="SeriesCardSample"/>, not re-derived from the Issue entities here.</summary>

@@ -465,4 +465,29 @@ public class LibraryScreenViewModelTests : IDisposable
         Assert.Null(card.ContinueReadingIssueId);
         Assert.False(card.HasContinueReading);
     }
+
+    [Fact]
+    public void HasAnyResults_FalseWhenSearchMatchesNothing()
+    {
+        CreateSeriesWithIssue("Some Series");
+        var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { });
+        Assert.True(vm.HasAnyResults);
+
+        vm.SearchQuery = "nothing matches this";
+
+        Assert.Empty(vm.Covers);
+        Assert.False(vm.HasAnyResults);
+    }
+
+    [Fact]
+    public void HasAnyResults_TrueWhenGroupedResultsExist_EvenThoughCoversIsEmpty()
+    {
+        CreateSeriesWithIssue("Some Series");
+        var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { });
+
+        vm.GroupField = LibraryGroupField.ContentType;
+
+        Assert.Empty(vm.Covers); // grouped mode populates Groups, not Covers
+        Assert.True(vm.HasAnyResults);
+    }
 }

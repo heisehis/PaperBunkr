@@ -171,19 +171,11 @@ public partial class ReaderScreenViewModel : ViewModelBase
             ? $"Issue #{issue.Number}"
             : $"Issue #{issue.Number} — {issue.Title}";
 
-        var readingMode = issue.ReadingModeOverride ?? series.ReadingMode;
         var appSettings = context.GetOrCreateAppSettings();
-        _isRightToLeft = readingMode == ReadingMode.RightToLeft && appSettings.ReverseRtlNavigation;
         HighQualityPageDisplay = appSettings.HighQualityPageDisplay;
         PageTurnLeftKey = _keyBindings.GetKey(context, KeyboardCommandRegistry.ReaderPageTurnLeft);
         PageTurnRightKey = _keyBindings.GetKey(context, KeyboardCommandRegistry.ReaderPageTurnRight);
-        ReadingModeLabel = readingMode switch
-        {
-            ReadingMode.RightToLeft => "Right to Left ▾",
-            ReadingMode.VerticalContinuous => "Vertical (Continuous) ▾",
-            ReadingMode.HorizontalContinuous => "Horizontal (Continuous) ▾",
-            _ => "Left to Right ▾",
-        };
+        UpdateReadingModeState(issue.ReadingModeOverride ?? series.ReadingMode, appSettings.ReverseRtlNavigation);
 
         ErrorMessage = null;
         ZoomLevel = 1.0;
@@ -236,12 +228,56 @@ public partial class ReaderScreenViewModel : ViewModelBase
         OnPropertyChanged(nameof(CoverBrush));
         OnPropertyChanged(nameof(BreadcrumbSeries));
         OnPropertyChanged(nameof(IssueTitle));
-        OnPropertyChanged(nameof(ReadingModeLabel));
         OnPropertyChanged(nameof(PageLabel));
         OnPropertyChanged(nameof(ProgressFraction));
 
         RefreshCurrentPage();
         StartThumbnailGeneration(generation, thumbnailCount);
+    }
+
+    /// <summary>Shared by <see cref="Load"/> and <see cref="ToggleReadingMode"/> so the label/spatial-flip switch can't drift apart between the two.</summary>
+    private void UpdateReadingModeState(ReadingMode effectiveMode, bool reverseRtlNavigation)
+    {
+        _isRightToLeft = effectiveMode == ReadingMode.RightToLeft && reverseRtlNavigation;
+        ReadingModeLabel = effectiveMode switch
+        {
+            ReadingMode.RightToLeft => "Right to Left ▾",
+            ReadingMode.VerticalContinuous => "Vertical (Continuous) ▾",
+            ReadingMode.HorizontalContinuous => "Horizontal (Continuous) ▾",
+            _ => "Left to Right ▾",
+        };
+        OnPropertyChanged(nameof(ReadingModeLabel));
+    }
+
+    /// <summary>
+    /// P6 fix (docs/alpha-todo.md) - this pill was previously non-interactive, styled identically to
+    /// the working toggle in <see cref="DetailTabsViewModel"/> (which this mirrors: a binary
+    /// LTR/RTL flip, not a full mode picker - <see cref="ReadingMode.VerticalContinuous"/>/
+    /// <see cref="ReadingMode.HorizontalContinuous"/> collapse to <see cref="ReadingMode.RightToLeft"/>
+    /// same as there, per docs/superpowers/specs/2026-08-07-reader-rtl-navigation-design.md §5).
+    /// Writes <c>Series.ReadingMode</c>, not <c>Issue.ReadingModeOverride</c> - nothing in this app
+    /// writes that field yet, it stays dormant.
+    /// </summary>
+    [RelayCommand]
+    private void ToggleReadingMode()
+    {
+        if (_loadedSeriesId is not int seriesId)
+        {
+            return;
+        }
+
+        using var context = PaperbunkrDb.CreateContext();
+        var series = context.Series.FirstOrDefault(s => s.Id == seriesId);
+        if (series is null)
+        {
+            return;
+        }
+
+        series.ReadingMode = series.ReadingMode == ReadingMode.RightToLeft ? ReadingMode.LeftToRight : ReadingMode.RightToLeft;
+        context.SaveChanges();
+
+        var issue = _loadedIssueId is int issueId ? context.Issues.Find(issueId) : null;
+        UpdateReadingModeState(issue?.ReadingModeOverride ?? series.ReadingMode, context.GetOrCreateAppSettings().ReverseRtlNavigation);
     }
 
     /// <summary>
@@ -348,6 +384,27 @@ public partial class ReaderScreenViewModel : ViewModelBase
         {
             issue.LastPageRead = _currentPageIndex;
             context.SaveChanges();
+        }
+    }
+
+    /// <summary>
+    /// P6 fix (docs/alpha-todo.md) - the thumbnail rail rendered <c>Border.thumb.selected</c>
+    /// styling implying click-to-jump, but nothing wired a click to <see cref="GoToPage"/>.
+    /// <see cref="Thumbnails"/>' index already *is* the page index (populated by a straight
+    /// <c>for</c> loop in <see cref="Load"/>), so this just needs the clicked sample's position.
+    /// </summary>
+    [RelayCommand]
+    private void SelectThumbnail(ReaderThumbnailSample? thumbnail)
+    {
+        if (thumbnail is null)
+        {
+            return;
+        }
+
+        int index = Thumbnails.IndexOf(thumbnail);
+        if (index >= 0)
+        {
+            GoToPage(index);
         }
     }
 

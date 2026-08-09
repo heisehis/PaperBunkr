@@ -1,7 +1,9 @@
 using System;
 using System.ComponentModel;
 using Avalonia.Controls;
+using Avalonia.Input;
 using Avalonia.Threading;
+using Paperbunkr.App.Models;
 using Paperbunkr.App.ViewModels;
 
 namespace Paperbunkr.App.Views;
@@ -52,5 +54,14 @@ public partial class ReaderScreen : UserControl
         // synchronously here would target a not-yet-effectively-visible control and silently
         // no-op - the same failure mode as the bug this fixes.
         Dispatcher.UIThread.Post(() => PageCanvasControl.Focus());
+    }
+
+    /// <summary>P6 fix (docs/alpha-todo.md) - click-to-jump on the thumbnail rail.</summary>
+    private void OnThumbnailPointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (sender is Border { DataContext: ReaderThumbnailSample thumbnail } && DataContext is ReaderScreenViewModel viewModel)
+        {
+            viewModel.SelectThumbnailCommand.Execute(thumbnail);
+        }
     }
 }

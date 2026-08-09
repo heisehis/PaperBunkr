@@ -375,4 +375,59 @@ public class ReaderScreenViewModelTests : IDisposable
         Assert.Equal(0, vm.PanOffsetX);
         Assert.Equal(0, vm.PanOffsetY);
     }
+
+    [Fact]
+    public void ToggleReadingModeCommand_FlipsSeriesReadingMode_AndUpdatesLabel()
+    {
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id);
+        Assert.Equal("Left to Right ▾", vm.ReadingModeLabel);
+
+        vm.ToggleReadingModeCommand.Execute(null);
+        Assert.Equal("Right to Left ▾", vm.ReadingModeLabel);
+
+        using (var context = PaperbunkrDb.CreateContext())
+        {
+            Assert.Equal(ReadingMode.RightToLeft, context.Series.First(s => s.Id == _seriesId).ReadingMode);
+        }
+
+        vm.ToggleReadingModeCommand.Execute(null);
+        Assert.Equal("Left to Right ▾", vm.ReadingModeLabel);
+    }
+
+    [Fact]
+    public void ToggleReadingModeCommand_AlsoFlipsSpatialGoLeftGoRight()
+    {
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id);
+
+        vm.ToggleReadingModeCommand.Execute(null); // now Right to Left
+
+        vm.GoLeftCommand.Execute(null);
+        Assert.Equal("PAGE 2 / 3", vm.PageLabel); // spatial Left now advances, matching GoLeftGoRight_RightToLeft_AreFlipped
+    }
+
+    [Fact]
+    public void SelectThumbnailCommand_JumpsToClickedPage()
+    {
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id);
+        Assert.Equal("PAGE 1 / 3", vm.PageLabel);
+
+        vm.SelectThumbnailCommand.Execute(vm.Thumbnails[2]);
+
+        Assert.Equal("PAGE 3 / 3", vm.PageLabel);
+    }
+
+    [Fact]
+    public void SelectThumbnailCommand_StaleThumbnail_NoOps()
+    {
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id);
+        var staleThumbnail = new ReaderThumbnailSample { CoverBrush = vm.CoverBrush };
+
+        vm.SelectThumbnailCommand.Execute(staleThumbnail);
+
+        Assert.Equal("PAGE 1 / 3", vm.PageLabel);
+    }
 }

@@ -695,5 +695,12 @@
             </ItemsControl>
         </Border>
 
+        <!-- P6 fix (docs/alpha-todo.md): none of the 7 display modes had a "no series match" empty
+             state - a zero-result search/filter combination (or an empty library) just rendered a
+             blank area below the toolbar. -->
+        <TextBlock Grid.Row="1" IsVisible="{Binding !HasAnyResults}" Text="No series match your filters."
+                   FontSize="13" Foreground="{DynamicResource PbTextFaintBrush}"
+                   HorizontalAlignment="Center" VerticalAlignment="Center" />
+
     </Grid>
 </UserControl>

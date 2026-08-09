@@ -109,7 +109,6 @@
 
                     <StackPanel Orientation="Horizontal" Spacing="9" Margin="0,0,0,4">
                         <Button Classes="detailAction primary" Content="{Binding ContinueLabel}" Command="{Binding ContinueCommand}" />
-                        <Button Classes="detailAction secondary" Content="Favorite" />
                         <Button Classes="detailAction ghost" Content="{Binding EditButtonLabel}" Command="{Binding EditCommand}" IsEnabled="{Binding CanEdit}" />
                     </StackPanel>
 

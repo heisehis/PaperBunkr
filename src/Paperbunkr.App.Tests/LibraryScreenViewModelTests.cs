@@ -1,3 +1,4 @@
+using Paperbunkr.App.Models;
 using Paperbunkr.App.Services;
 using Paperbunkr.App.ViewModels;
 using Paperbunkr.Data;
@@ -152,5 +153,34 @@ public class LibraryScreenViewModelTests : IDisposable
         Assert.Equal(2, vm.Covers.Count);
         Assert.True(vm.IsAllSeriesActive);
         Assert.All(vm.ContentTypes, c => Assert.False(c.IsActive));
+    }
+
+    [Fact]
+    public void SetViewMode_UpdatesIsXProperties()
+    {
+        var vm = new LibraryScreenViewModel(goDetail: _ => { });
+
+        vm.SetViewModeCommand.Execute(LibraryViewMode.Tiles);
+
+        Assert.True(vm.IsTilesView);
+        Assert.False(vm.IsComfortableGrid);
+        Assert.False(vm.IsCompactGrid);
+        Assert.False(vm.IsCoverOnlyGrid);
+        Assert.False(vm.IsPanoramaGrid);
+        Assert.False(vm.IsListView);
+        Assert.False(vm.IsDetailsView);
+        Assert.Equal("Tiles", vm.DisplayModeLabel);
+    }
+
+    [Fact]
+    public void GridDensity_ClampsToRange()
+    {
+        var vm = new LibraryScreenViewModel(goDetail: _ => { });
+
+        vm.GridDensity = 5.0;
+        Assert.Equal(1.6, vm.GridDensity);
+
+        vm.GridDensity = 0.1;
+        Assert.Equal(0.6, vm.GridDensity);
     }
 }

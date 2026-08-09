@@ -171,22 +171,87 @@ public partial class LibraryScreenViewModel : ViewModelBase
     private void ToggleDisplay() => ActiveDropdown = ActiveDropdown == "display" ? null : "display";
 
     [ObservableProperty]
-    private LibraryViewMode _viewMode = LibraryViewMode.Grid;
+    private LibraryViewMode _viewMode = LibraryViewMode.ComfortableGrid;
 
-    public bool IsGridView => ViewMode == LibraryViewMode.Grid;
+    public bool IsCompactGrid => ViewMode == LibraryViewMode.CompactGrid;
+    public bool IsComfortableGrid => ViewMode == LibraryViewMode.ComfortableGrid;
+    public bool IsCoverOnlyGrid => ViewMode == LibraryViewMode.CoverOnlyGrid;
+    public bool IsPanoramaGrid => ViewMode == LibraryViewMode.PanoramaGrid;
     public bool IsListView => ViewMode == LibraryViewMode.List;
+    public bool IsDetailsView => ViewMode == LibraryViewMode.Details;
+    public bool IsTilesView => ViewMode == LibraryViewMode.Tiles;
 
     partial void OnViewModeChanged(LibraryViewMode value)
     {
-        OnPropertyChanged(nameof(IsGridView));
+        OnPropertyChanged(nameof(IsCompactGrid));
+        OnPropertyChanged(nameof(IsComfortableGrid));
+        OnPropertyChanged(nameof(IsCoverOnlyGrid));
+        OnPropertyChanged(nameof(IsPanoramaGrid));
         OnPropertyChanged(nameof(IsListView));
+        OnPropertyChanged(nameof(IsDetailsView));
+        OnPropertyChanged(nameof(IsTilesView));
+        OnPropertyChanged(nameof(DisplayModeLabel));
     }
 
     [RelayCommand]
-    private void ShowGridView() => ViewMode = LibraryViewMode.Grid;
+    private void SetViewMode(LibraryViewMode mode) => ViewMode = mode;
 
-    [RelayCommand]
-    private void ShowListView() => ViewMode = LibraryViewMode.List;
+    public string DisplayModeLabel => ViewMode switch
+    {
+        LibraryViewMode.CompactGrid => "Compact grid",
+        LibraryViewMode.ComfortableGrid => "Comfortable grid",
+        LibraryViewMode.CoverOnlyGrid => "Cover-only grid",
+        LibraryViewMode.PanoramaGrid => "Panorama grid",
+        LibraryViewMode.List => "List",
+        LibraryViewMode.Details => "Details",
+        LibraryViewMode.Tiles => "Tiles",
+        _ => "Display",
+    };
+
+    private double _gridDensity = 1.0;
+
+    /// <summary>
+    /// Width/height multiplier for the fixed-box grid-family modes (Compact/Comfortable/Cover-only/
+    /// Tiles), replacing the toolbar's previously-fake "Grid density" slider (docs/superpowers/specs/
+    /// 2026-08-09-library-toolbar-design.md Phase A). Panorama grid is deliberately exempt - its
+    /// width is already computed per-cover from the real aspect ratio (see
+    /// <see cref="SeriesCardSample.PanoramaWidth"/>); layering a second independent multiplier on
+    /// top would need re-deriving that value against a changing height, which isn't worth the
+    /// complexity for what's otherwise a density knob for the fixed-box modes.
+    /// </summary>
+    public double GridDensity
+    {
+        get => _gridDensity;
+        set
+        {
+            double clamped = Math.Clamp(value, 0.6, 1.6);
+            if (SetProperty(ref _gridDensity, clamped))
+            {
+                OnPropertyChanged(nameof(CompactCardWidth));
+                OnPropertyChanged(nameof(CompactCardHeight));
+                OnPropertyChanged(nameof(ComfortableCardWidth));
+                OnPropertyChanged(nameof(ComfortableCardHeight));
+                OnPropertyChanged(nameof(CoverOnlyCardWidth));
+                OnPropertyChanged(nameof(CoverOnlyCardHeight));
+                OnPropertyChanged(nameof(TilesThumbWidth));
+                OnPropertyChanged(nameof(TilesThumbHeight));
+                OnPropertyChanged(nameof(TilesCardWidth));
+            }
+        }
+    }
+
+    public double CompactCardWidth => 110 * GridDensity;
+    public double CompactCardHeight => 160 * GridDensity;
+    public double ComfortableCardWidth => 150 * GridDensity;
+    public double ComfortableCardHeight => 216 * GridDensity;
+    public double CoverOnlyCardWidth => 150 * GridDensity;
+    public double CoverOnlyCardHeight => 216 * GridDensity;
+    public double TilesThumbWidth => 48 * GridDensity;
+    public double TilesThumbHeight => 68 * GridDensity;
+    public double TilesCardWidth => 260 * GridDensity;
+
+    /// <summary>Panorama grid's fixed tile height - XAML binds here rather than a hardcoded literal, so this and <see cref="SeriesCardSample.PanoramaWidth"/>'s own height math can't drift apart.</summary>
+    public double PanoramaCardHeight => SeriesCardSample.PanoramaHeight;
 
     [RelayCommand]
     private void SelectCard(SeriesCardSample? card)

@@ -53,10 +53,203 @@
             <Setter Property="BorderThickness" Value="1" />
             <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
             <Setter Property="BoxShadow" Value="0 8 24 -12 #80000000" />
-            <Setter Property="Height" Value="216" />
             <Setter Property="ClipToBounds" Value="True" />
         </Style>
+
+        <!-- Display dropdown's 7 mode-select rows -->
+        <Style Selector="Button.modeOption">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="6,5" />
+            <Setter Property="CornerRadius" Value="5" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="HorizontalContentAlignment" Value="Left" />
+            <Setter Property="FontSize" Value="12.5" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style Selector="Button.modeOption.active">
+            <Setter Property="Background" Value="{DynamicResource PbAccentSoftBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource PbAccentTextBrush}" />
+            <Setter Property="FontWeight" Value="Bold" />
+        </Style>
     </UserControl.Styles>
+
+    <UserControl.Resources>
+        <DataTemplate x:Key="CompactGridItemTemplate" x:DataType="models:SeriesCardSample">
+            <Button Classes="card" Margin="0,0,14,14"
+                    Width="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).CompactCardWidth}"
+                    Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SelectCardCommand}"
+                    CommandParameter="{Binding}" KeyDown="OnCardKeyDown">
+                <Border Classes="cover" Background="{Binding CoverBrush}"
+                        Height="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).CompactCardHeight}">
+                    <Grid>
+                        <Image Source="{Binding CoverImage}" Stretch="UniformToFill" />
+                        <Border IsVisible="{Binding HasUnread}" Background="#B814161B" CornerRadius="999" Padding="5,1"
+                                HorizontalAlignment="Right" VerticalAlignment="Top" Margin="5">
+                            <TextBlock Text="{Binding UnreadCount}" FontFamily="Consolas,monospace" FontSize="9"
+                                       FontWeight="Bold" Foreground="White" />
+                        </Border>
+                        <TextBlock Text="{Binding Title}" TextWrapping="Wrap" TextTrimming="CharacterEllipsis" MaxLines="2"
+                                   FontSize="11" FontWeight="Black" Foreground="#FFFFF8EC" VerticalAlignment="Bottom"
+                                   Margin="7,0,7,7" LineHeight="12" />
+                    </Grid>
+                </Border>
+            </Button>
+        </DataTemplate>
+
+        <DataTemplate x:Key="ComfortableGridItemTemplate" x:DataType="models:SeriesCardSample">
+            <Button Classes="card" Margin="0,0,20,20"
+                    Width="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ComfortableCardWidth}"
+                    Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SelectCardCommand}"
+                    CommandParameter="{Binding}" KeyDown="OnCardKeyDown">
+                <StackPanel>
+                    <Border Classes="cover" Background="{Binding CoverBrush}"
+                            Height="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ComfortableCardHeight}">
+                        <Grid>
+                            <Image Source="{Binding CoverImage}" Stretch="UniformToFill" />
+                            <Border IsVisible="{Binding HasUnread}" Background="#B814161B"
+                                    CornerRadius="999" Padding="6,2" HorizontalAlignment="Right"
+                                    VerticalAlignment="Top" Margin="7">
+                                <TextBlock Text="{Binding UnreadCount}" FontFamily="Consolas,monospace"
+                                           FontSize="10" FontWeight="Bold" Foreground="White" />
+                            </Border>
+                            <TextBlock Text="{Binding Title}" TextWrapping="Wrap" FontSize="14" FontWeight="Black"
+                                       Foreground="#FFFFF8EC" VerticalAlignment="Bottom"
+                                       Margin="10,0,10,12" LineHeight="16" />
+                        </Grid>
+                    </Border>
+                    <TextBlock Text="{Binding Name}" FontSize="12.5" FontWeight="SemiBold"
+                               Foreground="{DynamicResource PbTextBrush}" TextTrimming="CharacterEllipsis"
+                               Margin="0,8,0,0" />
+                    <TextBlock Text="{Binding Sub}" FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}"
+                               Margin="0,1,0,0" />
+                </StackPanel>
+            </Button>
+        </DataTemplate>
+
+        <DataTemplate x:Key="CoverOnlyGridItemTemplate" x:DataType="models:SeriesCardSample">
+            <Button Classes="card" Margin="0,0,20,20"
+                    Width="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).CoverOnlyCardWidth}"
+                    Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SelectCardCommand}"
+                    CommandParameter="{Binding}" KeyDown="OnCardKeyDown">
+                <Border Classes="cover" Background="{Binding CoverBrush}"
+                        Height="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).CoverOnlyCardHeight}">
+                    <Grid>
+                        <Image Source="{Binding CoverImage}" Stretch="UniformToFill" />
+                        <Border IsVisible="{Binding HasUnread}" Background="#B814161B"
+                                CornerRadius="999" Padding="6,2" HorizontalAlignment="Right"
+                                VerticalAlignment="Top" Margin="7">
+                            <TextBlock Text="{Binding UnreadCount}" FontFamily="Consolas,monospace"
+                                       FontSize="10" FontWeight="Bold" Foreground="White" />
+                        </Border>
+                        <TextBlock Text="{Binding Title}" TextWrapping="Wrap" FontSize="14" FontWeight="Black"
+                                   Foreground="#FFFFF8EC" VerticalAlignment="Bottom"
+                                   Margin="10,0,10,12" LineHeight="16" />
+                    </Grid>
+                </Border>
+            </Button>
+        </DataTemplate>
+
+        <DataTemplate x:Key="PanoramaGridItemTemplate" x:DataType="models:SeriesCardSample">
+            <Button Classes="card" Margin="0,0,20,20" Width="{Binding PanoramaWidth}"
+                    Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SelectCardCommand}"
+                    CommandParameter="{Binding}" KeyDown="OnCardKeyDown">
+                <StackPanel>
+                    <Border Classes="cover" Background="{Binding CoverBrush}"
+                            Height="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PanoramaCardHeight}">
+                        <Grid>
+                            <!-- Uniform (not UniformToFill) - the box is already sized to this cover's own
+                                 aspect ratio, so nothing gets cropped; only extreme clamped outliers letterbox. -->
+                            <Image Source="{Binding CoverImage}" Stretch="Uniform" />
+                            <Border IsVisible="{Binding HasUnread}" Background="#B814161B"
+                                    CornerRadius="999" Padding="6,2" HorizontalAlignment="Right"
+                                    VerticalAlignment="Top" Margin="7">
+                                <TextBlock Text="{Binding UnreadCount}" FontFamily="Consolas,monospace"
+                                           FontSize="10" FontWeight="Bold" Foreground="White" />
+                            </Border>
+                        </Grid>
+                    </Border>
+                    <TextBlock Text="{Binding Name}" FontSize="12.5" FontWeight="SemiBold"
+                               Foreground="{DynamicResource PbTextBrush}" TextTrimming="CharacterEllipsis"
+                               Margin="0,8,0,0" />
+                    <TextBlock Text="{Binding Sub}" FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}"
+                               Margin="0,1,0,0" />
+                </StackPanel>
+            </Button>
+        </DataTemplate>
+
+        <DataTemplate x:Key="ListItemTemplate" x:DataType="models:SeriesCardSample">
+            <Button Classes="card" HorizontalAlignment="Stretch" Margin="0,0,0,8"
+                    Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SelectCardCommand}"
+                    CommandParameter="{Binding}">
+                <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1" CornerRadius="6" Padding="10">
+                    <Grid ColumnDefinitions="44,*,Auto">
+                        <Border Grid.Column="0" CornerRadius="4" Width="44" Height="63"
+                                Background="{Binding CoverBrush}" ClipToBounds="True">
+                            <Image Source="{Binding CoverImage}" Stretch="UniformToFill" />
+                        </Border>
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="12,0">
+                            <TextBlock Text="{Binding Name}" FontSize="13" FontWeight="SemiBold"
+                                       Foreground="{DynamicResource PbTextBrush}" TextTrimming="CharacterEllipsis" />
+                            <TextBlock Text="{Binding Sub}" FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" Margin="0,2,0,0" />
+                        </StackPanel>
+                        <Border Grid.Column="2" IsVisible="{Binding HasUnread}" Background="{DynamicResource PbAccentSoftBrush}"
+                                CornerRadius="999" Padding="8,3" VerticalAlignment="Center">
+                            <TextBlock Text="{Binding UnreadCount}" FontFamily="Consolas,monospace" FontSize="11"
+                                       FontWeight="Bold" Foreground="{DynamicResource PbAccentTextBrush}" />
+                        </Border>
+                    </Grid>
+                </Border>
+            </Button>
+        </DataTemplate>
+
+        <DataTemplate x:Key="DetailsItemTemplate" x:DataType="models:SeriesCardSample">
+            <Button Classes="card" HorizontalAlignment="Stretch" Margin="0,0,0,4"
+                    Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SelectCardCommand}"
+                    CommandParameter="{Binding}">
+                <Grid ColumnDefinitions="52,*,110,70,70,140" Margin="0,6">
+                    <Border Grid.Column="0" Width="36" Height="50" CornerRadius="3" Background="{Binding CoverBrush}" ClipToBounds="True">
+                        <Image Source="{Binding CoverImage}" Stretch="UniformToFill" />
+                    </Border>
+                    <TextBlock Grid.Column="1" Text="{Binding Name}" FontSize="12.5" Foreground="{DynamicResource PbTextBrush}"
+                               VerticalAlignment="Center" Margin="10,0,0,0" TextTrimming="CharacterEllipsis" />
+                    <TextBlock Grid.Column="2" Text="{Binding ContentTypeLabel}" FontSize="12"
+                               Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
+                    <TextBlock Grid.Column="3" Text="{Binding IssueCount}" FontFamily="Consolas,monospace" FontSize="12"
+                               Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
+                    <TextBlock Grid.Column="4" Text="{Binding UnreadCount}" FontFamily="Consolas,monospace" FontSize="12"
+                               Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
+                    <TextBlock Grid.Column="5" Text="{Binding Publisher}" FontSize="12" Foreground="{DynamicResource PbTextFaintBrush}"
+                               VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                </Grid>
+            </Button>
+        </DataTemplate>
+
+        <DataTemplate x:Key="TilesItemTemplate" x:DataType="models:SeriesCardSample">
+            <Button Classes="card" Margin="0,0,14,10"
+                    Width="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).TilesCardWidth}"
+                    Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SelectCardCommand}"
+                    CommandParameter="{Binding}">
+                <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1" CornerRadius="6" Padding="8">
+                    <Grid ColumnDefinitions="Auto,*">
+                        <Border Grid.Column="0" CornerRadius="4"
+                                Width="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).TilesThumbWidth}"
+                                Height="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).TilesThumbHeight}"
+                                Background="{Binding CoverBrush}" ClipToBounds="True">
+                            <Image Source="{Binding CoverImage}" Stretch="UniformToFill" />
+                        </Border>
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="10,0,0,0">
+                            <TextBlock Text="{Binding Name}" FontSize="12.5" FontWeight="SemiBold"
+                                       Foreground="{DynamicResource PbTextBrush}" TextTrimming="CharacterEllipsis" />
+                            <TextBlock Text="{Binding Sub}" FontSize="10.5" Foreground="{DynamicResource PbTextFaintBrush}"
+                                       Margin="0,2,0,0" TextTrimming="CharacterEllipsis" />
+                        </StackPanel>
+                    </Grid>
+                </Border>
+            </Button>
+        </DataTemplate>
+    </UserControl.Resources>
 
     <Grid RowDefinitions="Auto,*">
 
@@ -74,11 +267,7 @@
                 <Button x:Name="SortButton" Classes="toolbarPill" Classes.open="{Binding IsSortOpen}"
                         Command="{Binding ToggleSortCommand}" Content="Sort: Recently Added ▾" />
                 <Button x:Name="DisplayButton" Classes="toolbarPill" Classes.open="{Binding IsDisplayOpen}"
-                        Command="{Binding ToggleDisplayCommand}" Content="Display ▾" />
-                <Button Classes="toolbarPill" Classes.open="{Binding IsGridView}"
-                        Command="{Binding ShowGridViewCommand}" Content="Grid" />
-                <Button Classes="toolbarPill" Classes.open="{Binding IsListView}"
-                        Command="{Binding ShowListViewCommand}" Content="List" />
+                        Command="{Binding ToggleDisplayCommand}" Content="{Binding DisplayModeLabel, StringFormat='Display: {0} ▾'}" />
                 <Button Classes="toolbarPill" Content="Generate Covers" Command="{Binding GenerateCoversCommand}"
                         IsEnabled="{Binding !IsGeneratingCovers}" />
                 <ProgressBar IsVisible="{Binding IsGeneratingCovers}" Minimum="0" Maximum="1"
@@ -110,91 +299,95 @@
 
             <Popup PlacementTarget="{Binding #DisplayButton}" Placement="BottomEdgeAlignedRight" VerticalOffset="6"
                    IsOpen="{Binding IsDisplayOpen}" IsLightDismissEnabled="True">
-                <Border Classes="dropdown" Width="210">
-                    <StackPanel>
+                <Border Classes="dropdown" Width="220">
+                    <StackPanel Spacing="1">
+                        <TextBlock Classes="dropdownRow" Text="Display mode" Foreground="{DynamicResource PbTextBrush}" Margin="0,0,0,4" />
+                        <Button Classes="modeOption" Classes.active="{Binding IsCompactGrid}" Content="Compact grid"
+                                Command="{Binding SetViewModeCommand}" CommandParameter="{x:Static models:LibraryViewMode.CompactGrid}" />
+                        <Button Classes="modeOption" Classes.active="{Binding IsComfortableGrid}" Content="Comfortable grid"
+                                Command="{Binding SetViewModeCommand}" CommandParameter="{x:Static models:LibraryViewMode.ComfortableGrid}" />
+                        <Button Classes="modeOption" Classes.active="{Binding IsCoverOnlyGrid}" Content="Cover-only grid"
+                                Command="{Binding SetViewModeCommand}" CommandParameter="{x:Static models:LibraryViewMode.CoverOnlyGrid}" />
+                        <Button Classes="modeOption" Classes.active="{Binding IsPanoramaGrid}" Content="Panorama comfortable grid"
+                                Command="{Binding SetViewModeCommand}" CommandParameter="{x:Static models:LibraryViewMode.PanoramaGrid}" />
+                        <Button Classes="modeOption" Classes.active="{Binding IsListView}" Content="List"
+                                Command="{Binding SetViewModeCommand}" CommandParameter="{x:Static models:LibraryViewMode.List}" />
+                        <Button Classes="modeOption" Classes.active="{Binding IsDetailsView}" Content="Details"
+                                Command="{Binding SetViewModeCommand}" CommandParameter="{x:Static models:LibraryViewMode.Details}" />
+                        <Button Classes="modeOption" Classes.active="{Binding IsTilesView}" Content="Tiles"
+                                Command="{Binding SetViewModeCommand}" CommandParameter="{x:Static models:LibraryViewMode.Tiles}" />
+
+                        <Border Height="1" Background="{DynamicResource PbBorderBrush}" Margin="0,10" />
+
                         <TextBlock Classes="dropdownRow" Text="Grid density" Foreground="{DynamicResource PbTextBrush}" Margin="0,0,0,4" />
-                        <Border Height="3" CornerRadius="2" Background="{DynamicResource PbBorderBrush}" Margin="0,0,0,10">
-                            <Border Height="3" CornerRadius="2" Background="{DynamicResource PbAccentBrush}"
-                                    HorizontalAlignment="Left" Width="90" />
-                        </Border>
-                        <TextBlock Classes="dropdownRow" Text="Unread count ✓" />
-                        <TextBlock Classes="dropdownRow" Text="Missing indicator ✓" />
-                        <TextBlock Classes="dropdownRow" Text="Content type ✓" />
+                        <Slider Minimum="0.6" Maximum="1.6" Value="{Binding GridDensity}" />
                     </StackPanel>
                 </Border>
             </Popup>
           </Panel>
         </Border>
 
-        <!-- ============ Series grid ============ -->
-        <ScrollViewer Grid.Row="1" IsVisible="{Binding IsGridView}">
-            <ItemsControl x:Name="CoversList" ItemsSource="{Binding Covers}" Margin="24,22,24,40">
+        <!-- ============ Compact grid ============ -->
+        <ScrollViewer Grid.Row="1" IsVisible="{Binding IsCompactGrid}">
+            <ItemsControl ItemsSource="{Binding Covers}" ItemTemplate="{StaticResource CompactGridItemTemplate}" Margin="24,22,24,40">
                 <ItemsControl.ItemsPanel>
-                    <ItemsPanelTemplate>
-                        <WrapPanel Orientation="Horizontal" />
-                    </ItemsPanelTemplate>
+                    <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
                 </ItemsControl.ItemsPanel>
-                <ItemsControl.ItemTemplate>
-                    <DataTemplate x:DataType="models:SeriesCardSample">
-                        <Button Classes="card" Width="150" Margin="0,0,20,20"
-                                Command="{Binding #CoversList.((vm:LibraryScreenViewModel)DataContext).SelectCardCommand}"
-                                CommandParameter="{Binding}" KeyDown="OnCardKeyDown">
-                            <StackPanel>
-                                <Border Classes="cover" Background="{Binding CoverBrush}">
-                                    <Grid>
-                                        <Image Source="{Binding CoverImage}" Stretch="UniformToFill" />
-                                        <Border IsVisible="{Binding HasUnread}" Background="#B814161B"
-                                                CornerRadius="999" Padding="6,2" HorizontalAlignment="Right"
-                                                VerticalAlignment="Top" Margin="7">
-                                            <TextBlock Text="{Binding UnreadCount}" FontFamily="Consolas,monospace"
-                                                       FontSize="10" FontWeight="Bold" Foreground="White" />
-                                        </Border>
-                                        <TextBlock Text="{Binding Title}" TextWrapping="Wrap" FontSize="14" FontWeight="Black"
-                                                   Foreground="#FFFFF8EC" VerticalAlignment="Bottom"
-                                                   Margin="10,0,10,12" LineHeight="16" />
-                                    </Grid>
-                                </Border>
-                                <TextBlock Text="{Binding Name}" FontSize="12.5" FontWeight="SemiBold"
-                                           Foreground="{DynamicResource PbTextBrush}" TextTrimming="CharacterEllipsis"
-                                           Margin="0,8,0,0" />
-                                <TextBlock Text="{Binding Sub}" FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}"
-                                           Margin="0,1,0,0" />
-                            </StackPanel>
-                        </Button>
-                    </DataTemplate>
-                </ItemsControl.ItemTemplate>
             </ItemsControl>
         </ScrollViewer>
 
-        <!-- ============ Series list ============ -->
+        <!-- ============ Comfortable grid ============ -->
+        <ScrollViewer Grid.Row="1" IsVisible="{Binding IsComfortableGrid}">
+            <ItemsControl ItemsSource="{Binding Covers}" ItemTemplate="{StaticResource ComfortableGridItemTemplate}" Margin="24,22,24,40">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+            </ItemsControl>
+        </ScrollViewer>
+
+        <!-- ============ Cover-only grid ============ -->
+        <ScrollViewer Grid.Row="1" IsVisible="{Binding IsCoverOnlyGrid}">
+            <ItemsControl ItemsSource="{Binding Covers}" ItemTemplate="{StaticResource CoverOnlyGridItemTemplate}" Margin="24,22,24,40">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+            </ItemsControl>
+        </ScrollViewer>
+
+        <!-- ============ Panorama comfortable grid ============ -->
+        <ScrollViewer Grid.Row="1" IsVisible="{Binding IsPanoramaGrid}">
+            <ItemsControl ItemsSource="{Binding Covers}" ItemTemplate="{StaticResource PanoramaGridItemTemplate}" Margin="24,22,24,40">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+            </ItemsControl>
+        </ScrollViewer>
+
+        <!-- ============ List ============ -->
         <ScrollViewer Grid.Row="1" IsVisible="{Binding IsListView}">
-            <ItemsControl x:Name="CoversListRows" ItemsSource="{Binding Covers}" Margin="24,18,24,40">
-                <ItemsControl.ItemTemplate>
-                    <DataTemplate x:DataType="models:SeriesCardSample">
-                        <Button Classes="card" HorizontalAlignment="Stretch" Margin="0,0,0,8"
-                                Command="{Binding #CoversListRows.((vm:LibraryScreenViewModel)DataContext).SelectCardCommand}"
-                                CommandParameter="{Binding}">
-                            <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1" CornerRadius="6" Padding="10">
-                                <Grid ColumnDefinitions="44,*,Auto">
-                                    <Border Grid.Column="0" CornerRadius="4" Width="44" Height="63"
-                                            Background="{Binding CoverBrush}" ClipToBounds="True">
-                                        <Image Source="{Binding CoverImage}" Stretch="UniformToFill" />
-                                    </Border>
-                                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="12,0">
-                                        <TextBlock Text="{Binding Name}" FontSize="13" FontWeight="SemiBold"
-                                                   Foreground="{DynamicResource PbTextBrush}" TextTrimming="CharacterEllipsis" />
-                                        <TextBlock Text="{Binding Sub}" FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" Margin="0,2,0,0" />
-                                    </StackPanel>
-                                    <Border Grid.Column="2" IsVisible="{Binding HasUnread}" Background="{DynamicResource PbAccentSoftBrush}"
-                                            CornerRadius="999" Padding="8,3" VerticalAlignment="Center">
-                                        <TextBlock Text="{Binding UnreadCount}" FontFamily="Consolas,monospace" FontSize="11"
-                                                   FontWeight="Bold" Foreground="{DynamicResource PbAccentTextBrush}" />
-                                    </Border>
-                                </Grid>
-                            </Border>
-                        </Button>
-                    </DataTemplate>
-                </ItemsControl.ItemTemplate>
+            <ItemsControl ItemsSource="{Binding Covers}" ItemTemplate="{StaticResource ListItemTemplate}" Margin="24,18,24,40" />
+        </ScrollViewer>
+
+        <!-- ============ Details ============ -->
+        <DockPanel Grid.Row="1" IsVisible="{Binding IsDetailsView}" Margin="24,18,24,0">
+            <Grid DockPanel.Dock="Top" ColumnDefinitions="52,*,110,70,70,140" Margin="0,0,16,8">
+                <TextBlock Grid.Column="1" Text="Name" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource PbTextFaintBrush}" Margin="10,0,0,0" />
+                <TextBlock Grid.Column="2" Text="Content Type" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource PbTextFaintBrush}" />
+                <TextBlock Grid.Column="3" Text="Issues" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource PbTextFaintBrush}" />
+                <TextBlock Grid.Column="4" Text="Unread" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource PbTextFaintBrush}" />
+                <TextBlock Grid.Column="5" Text="Publisher" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource PbTextFaintBrush}" />
+            </Grid>
+            <ScrollViewer>
+                <ItemsControl ItemsSource="{Binding Covers}" ItemTemplate="{StaticResource DetailsItemTemplate}" Margin="0,0,0,40" />
+            </ScrollViewer>
+        </DockPanel>
+
+        <!-- ============ Tiles ============ -->
+        <ScrollViewer Grid.Row="1" IsVisible="{Binding IsTilesView}">
+            <ItemsControl ItemsSource="{Binding Covers}" ItemTemplate="{StaticResource TilesItemTemplate}" Margin="24,18,24,40">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
             </ItemsControl>
         </ScrollViewer>
 

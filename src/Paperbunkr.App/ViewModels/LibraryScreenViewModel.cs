@@ -21,13 +21,15 @@ namespace Paperbunkr.App.ViewModels;
 public partial class LibraryScreenViewModel : ViewModelBase
 {
     private readonly Action<int> _goDetail;
+    private readonly Action<int> _goReaderForIssue;
 
     private ContentType? _activeContentType;
     private int? _activeCategoryId;
 
-    public LibraryScreenViewModel(Action<int> goDetail)
+    public LibraryScreenViewModel(Action<int> goDetail, Action<int> goReaderForIssue)
     {
         _goDetail = goDetail;
+        _goReaderForIssue = goReaderForIssue;
         Covers = new ObservableCollection<SeriesCardSample>();
         ContentTypes = new ObservableCollection<ContentTypeSummary>();
         Collections = new ObservableCollection<CategorySummary>();
@@ -440,6 +442,31 @@ public partial class LibraryScreenViewModel : ViewModelBase
         if (card is not null)
         {
             _goDetail(card.SeriesId);
+        }
+    }
+
+    /// <summary>Overlay toggles (docs/superpowers/specs/2026-08-09-library-toolbar-design.md Phase D) - session-only state, matching the existing (already-unpersisted) ViewMode/Sort/Group precedent. Persisting these is Beta-scoped (Saved Workspaces/List Layouts).</summary>
+    [ObservableProperty]
+    private bool _showUnreadBadge = true;
+
+    [ObservableProperty]
+    private bool _showPublisherBadge;
+
+    [ObservableProperty]
+    private bool _showLanguageBadge;
+
+    [ObservableProperty]
+    private bool _useLanguageIcon;
+
+    [ObservableProperty]
+    private bool _showContinueReadingButton;
+
+    [RelayCommand]
+    private void ContinueReading(SeriesCardSample? card)
+    {
+        if (card?.ContinueReadingIssueId is int issueId)
+        {
+            _goReaderForIssue(issueId);
         }
     }
 

@@ -37,6 +37,16 @@ public sealed class SeriesCardSample
     public DateTime? LastOpenedTime { get; init; }
     public long TotalFileSize { get; init; }
 
+    /// <summary>Cover issue's <c>LanguageISO</c> (docs/superpowers/specs/2026-08-09-library-toolbar-design.md Phase D overlay toggle) - raw ISO code, e.g. "en"/"ja".</summary>
+    public string? LanguageIso { get; init; }
+
+    /// <summary>First unread issue in reading order, or <see langword="null"/> if every issue is read - backs the Continue Reading overlay button.</summary>
+    public int? ContinueReadingIssueId { get; init; }
+
+    public bool HasContinueReading => ContinueReadingIssueId is not null;
+    public bool HasPublisher => !string.IsNullOrWhiteSpace(Publisher);
+    public bool HasLanguage => !string.IsNullOrWhiteSpace(LanguageIso);
+
     /// <summary>
     /// Panorama grid's per-series tile width (docs/superpowers/specs/
     /// 2026-08-09-library-toolbar-design.md Phase A) - computed from the real cover bitmap's
@@ -141,6 +151,8 @@ public sealed class SeriesCardSample
             LastAddedTime = series.Issues.Select(i => i.AddedTime).Max(),
             LastOpenedTime = series.Issues.Select(i => i.OpenedTime).Max(),
             TotalFileSize = series.Issues.Sum(i => i.FileSize ?? 0),
+            LanguageIso = coverIssue?.LanguageISO,
+            ContinueReadingIssueId = series.Issues.OrderByNumber().FirstOrDefault(i => i.LastPageRead is null or 0)?.Id,
         };
     }
 }

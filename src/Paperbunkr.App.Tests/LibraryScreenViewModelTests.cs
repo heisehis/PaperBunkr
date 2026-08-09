@@ -103,7 +103,7 @@ public class LibraryScreenViewModelTests : IDisposable
         CreateSeries("Comic Two", ContentType.Comic);
         CreateSeries("Manga One", ContentType.Manga);
 
-        var vm = new LibraryScreenViewModel(goDetail: _ => { });
+        var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { });
 
         Assert.Equal(2, vm.ContentTypes.Count); // only Comic + Manga - no Manhua/Manhwa/Unknown rows
         Assert.Equal(2, vm.ContentTypes.Single(c => c.ContentType == ContentType.Comic).Count);
@@ -116,7 +116,7 @@ public class LibraryScreenViewModelTests : IDisposable
         int seriesId = CreateSeries("Series A", ContentType.Comic);
         CreateCategoryWithSeries("Favorites", seriesId);
 
-        var vm = new LibraryScreenViewModel(goDetail: _ => { });
+        var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { });
 
         var collection = Assert.Single(vm.Collections);
         Assert.Equal("Favorites", collection.Name);
@@ -129,7 +129,7 @@ public class LibraryScreenViewModelTests : IDisposable
     {
         CreateSeries("Series A", ContentType.Comic);
 
-        var vm = new LibraryScreenViewModel(goDetail: _ => { });
+        var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { });
 
         Assert.Empty(vm.Collections);
         Assert.False(vm.HasCollections);
@@ -140,7 +140,7 @@ public class LibraryScreenViewModelTests : IDisposable
     {
         CreateSeries("Comic One", ContentType.Comic);
         CreateSeries("Manga One", ContentType.Manga);
-        var vm = new LibraryScreenViewModel(goDetail: _ => { });
+        var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { });
         var mangaBucket = vm.ContentTypes.Single(c => c.ContentType == ContentType.Manga);
 
         vm.SelectContentTypeCommand.Execute(mangaBucket);
@@ -158,7 +158,7 @@ public class LibraryScreenViewModelTests : IDisposable
         int seriesAId = CreateSeries("Series A", ContentType.Comic);
         CreateSeries("Series B", ContentType.Comic);
         CreateCategoryWithSeries("Favorites", seriesAId);
-        var vm = new LibraryScreenViewModel(goDetail: _ => { });
+        var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { });
         var favorites = vm.Collections.Single();
 
         vm.SelectCollectionCommand.Execute(favorites);
@@ -174,7 +174,7 @@ public class LibraryScreenViewModelTests : IDisposable
     {
         CreateSeries("Comic One", ContentType.Comic);
         CreateSeries("Manga One", ContentType.Manga);
-        var vm = new LibraryScreenViewModel(goDetail: _ => { });
+        var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { });
         vm.SelectContentTypeCommand.Execute(vm.ContentTypes.Single(c => c.ContentType == ContentType.Manga));
         Assert.Single(vm.Covers);
 
@@ -188,7 +188,7 @@ public class LibraryScreenViewModelTests : IDisposable
     [Fact]
     public void SetViewMode_UpdatesIsXProperties()
     {
-        var vm = new LibraryScreenViewModel(goDetail: _ => { });
+        var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { });
 
         vm.SetViewModeCommand.Execute(LibraryViewMode.Tiles);
 
@@ -205,7 +205,7 @@ public class LibraryScreenViewModelTests : IDisposable
     [Fact]
     public void GridDensity_ClampsToRange()
     {
-        var vm = new LibraryScreenViewModel(goDetail: _ => { });
+        var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { });
 
         vm.GridDensity = 5.0;
         Assert.Equal(1.6, vm.GridDensity);
@@ -219,7 +219,7 @@ public class LibraryScreenViewModelTests : IDisposable
     {
         CreateSeriesWithIssue("Amazing Spider-Man", publisher: "Marvel");
         CreateSeriesWithIssue("Batman", publisher: "DC", genre: "Noir");
-        var vm = new LibraryScreenViewModel(goDetail: _ => { });
+        var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { });
 
         vm.SearchQuery = "spider";
         Assert.Equal("Amazing Spider-Man", Assert.Single(vm.Covers).Name);
@@ -239,7 +239,7 @@ public class LibraryScreenViewModelTests : IDisposable
     {
         CreateSeriesWithIssue("Read Series", lastPageRead: 5);
         CreateSeriesWithIssue("Unread Series", lastPageRead: null);
-        var vm = new LibraryScreenViewModel(goDetail: _ => { });
+        var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { });
 
         vm.FilterUnreadOnly = true;
 
@@ -251,7 +251,7 @@ public class LibraryScreenViewModelTests : IDisposable
     {
         CreateSeriesWithIssue("Has All Files", fileIsMissing: false);
         CreateSeriesWithIssue("Missing A File", fileIsMissing: true);
-        var vm = new LibraryScreenViewModel(goDetail: _ => { });
+        var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { });
 
         vm.FilterMissingIssues = true;
 
@@ -264,7 +264,7 @@ public class LibraryScreenViewModelTests : IDisposable
         int trackedId = CreateSeriesWithIssue("Tracked Series");
         CreateSeriesWithIssue("Untracked Series");
         AddTrackingLink(trackedId);
-        var vm = new LibraryScreenViewModel(goDetail: _ => { });
+        var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { });
 
         vm.FilterTrackedOnly = true;
 
@@ -278,7 +278,7 @@ public class LibraryScreenViewModelTests : IDisposable
         CreateSeriesWithIssue("Marvel Villain", publisher: "Marvel", lastPageRead: 3); // read - excluded by unread filter
         CreateSeriesWithIssue("DC Hero", publisher: "DC", lastPageRead: null); // excluded by search text
         AddTrackingLink(trackedId);
-        var vm = new LibraryScreenViewModel(goDetail: _ => { });
+        var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { });
 
         vm.SearchQuery = "marvel";
         vm.FilterUnreadOnly = true;
@@ -292,7 +292,7 @@ public class LibraryScreenViewModelTests : IDisposable
     {
         CreateSeriesWithIssue("Zebra");
         CreateSeriesWithIssue("Apple");
-        var vm = new LibraryScreenViewModel(goDetail: _ => { });
+        var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { });
 
         vm.SortField = LibrarySortField.Name;
         vm.SortDirection = SortDirection.Ascending;
@@ -305,7 +305,7 @@ public class LibraryScreenViewModelTests : IDisposable
     {
         CreateSeriesWithIssue("Older", addedTime: new DateTime(2026, 1, 1));
         CreateSeriesWithIssue("Newer", addedTime: new DateTime(2026, 6, 1));
-        var vm = new LibraryScreenViewModel(goDetail: _ => { });
+        var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { });
 
         vm.SortField = LibrarySortField.DateAdded; // default direction: Descending
         Assert.Equal(new[] { "Newer", "Older" }, vm.Covers.Select(c => c.Name));
@@ -316,7 +316,7 @@ public class LibraryScreenViewModelTests : IDisposable
     {
         CreateSeriesWithIssue("Read Long Ago", openedTime: new DateTime(2026, 1, 1));
         CreateSeriesWithIssue("Read Recently", openedTime: new DateTime(2026, 6, 1));
-        var vm = new LibraryScreenViewModel(goDetail: _ => { });
+        var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { });
 
         vm.SortField = LibrarySortField.LastRead;
         Assert.Equal(new[] { "Read Recently", "Read Long Ago" }, vm.Covers.Select(c => c.Name));
@@ -327,7 +327,7 @@ public class LibraryScreenViewModelTests : IDisposable
     {
         CreateSeriesWithIssue("Small", fileSize: 100);
         CreateSeriesWithIssue("Large", fileSize: 900);
-        var vm = new LibraryScreenViewModel(goDetail: _ => { });
+        var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { });
 
         vm.SortField = LibrarySortField.Size;
         Assert.Equal(new[] { "Large", "Small" }, vm.Covers.Select(c => c.Name));
@@ -344,7 +344,7 @@ public class LibraryScreenViewModelTests : IDisposable
             context.SaveChanges();
         }
 
-        var vm = new LibraryScreenViewModel(goDetail: _ => { });
+        var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { });
         vm.SortField = LibrarySortField.IssueCount;
 
         Assert.Equal(new[] { "Two Issues", "One Issue" }, vm.Covers.Select(c => c.Name));
@@ -355,7 +355,7 @@ public class LibraryScreenViewModelTests : IDisposable
     {
         CreateSeriesWithIssue("Fully Read", lastPageRead: 5);
         CreateSeriesWithIssue("Unread", lastPageRead: null);
-        var vm = new LibraryScreenViewModel(goDetail: _ => { });
+        var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { });
 
         vm.SortField = LibrarySortField.UnreadCount;
 
@@ -367,7 +367,7 @@ public class LibraryScreenViewModelTests : IDisposable
     {
         CreateSeriesWithIssue("Marvel Book", publisher: "Marvel");
         CreateSeriesWithIssue("DC Book", publisher: "DC");
-        var vm = new LibraryScreenViewModel(goDetail: _ => { });
+        var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { });
 
         vm.SortField = LibrarySortField.Publisher;
         vm.SortDirection = SortDirection.Ascending;
@@ -380,7 +380,7 @@ public class LibraryScreenViewModelTests : IDisposable
     {
         CreateSeriesWithIssue("A Comic", contentType: ContentType.Comic);
         CreateSeriesWithIssue("A Manga", contentType: ContentType.Manga);
-        var vm = new LibraryScreenViewModel(goDetail: _ => { });
+        var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { });
 
         vm.GroupField = LibraryGroupField.ContentType;
 
@@ -398,7 +398,7 @@ public class LibraryScreenViewModelTests : IDisposable
     {
         CreateSeriesWithIssue("Marvel Book", publisher: "Marvel");
         CreateSeriesWithIssue("DC Book", publisher: "DC");
-        var vm = new LibraryScreenViewModel(goDetail: _ => { });
+        var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { });
 
         vm.GroupField = LibraryGroupField.Publisher;
 
@@ -410,7 +410,7 @@ public class LibraryScreenViewModelTests : IDisposable
     {
         CreateSeriesWithIssue("Batman");
         CreateSeriesWithIssue("Superman");
-        var vm = new LibraryScreenViewModel(goDetail: _ => { });
+        var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { });
 
         vm.GroupField = LibraryGroupField.Alphabetical;
 
@@ -422,7 +422,7 @@ public class LibraryScreenViewModelTests : IDisposable
     {
         CreateSeriesWithIssue("Zebra Comic", contentType: ContentType.Comic);
         CreateSeriesWithIssue("Apple Comic", contentType: ContentType.Comic);
-        var vm = new LibraryScreenViewModel(goDetail: _ => { });
+        var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { });
 
         vm.SortField = LibrarySortField.Name;
         vm.SortDirection = SortDirection.Ascending;
@@ -430,5 +430,39 @@ public class LibraryScreenViewModelTests : IDisposable
 
         var group = Assert.Single(vm.Groups);
         Assert.Equal(new[] { "Apple Comic", "Zebra Comic" }, group.Items.Select(c => c.Name));
+    }
+
+    [Fact]
+    public void ContinueReadingCommand_NavigatesToFirstUnreadIssue()
+    {
+        int seriesId = CreateSeriesWithIssue("Ongoing Series", lastPageRead: 10); // issue "1", already read
+        int unreadIssueId;
+        using (var context = PaperbunkrDb.CreateContext())
+        {
+            var unreadIssue = new Issue { SeriesId = seriesId, Number = "2", LastPageRead = null };
+            context.Issues.Add(unreadIssue);
+            context.SaveChanges();
+            unreadIssueId = unreadIssue.Id;
+        }
+
+        int? navigatedIssueId = null;
+        var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: id => navigatedIssueId = id);
+        var card = vm.Covers.Single();
+
+        vm.ContinueReadingCommand.Execute(card);
+
+        Assert.Equal(unreadIssueId, navigatedIssueId);
+    }
+
+    [Fact]
+    public void ContinueReadingIssueId_NullWhenAllIssuesRead()
+    {
+        CreateSeriesWithIssue("Fully Read Series", lastPageRead: 10);
+        var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { });
+
+        var card = vm.Covers.Single();
+
+        Assert.Null(card.ContinueReadingIssueId);
+        Assert.False(card.HasContinueReading);
     }
 }

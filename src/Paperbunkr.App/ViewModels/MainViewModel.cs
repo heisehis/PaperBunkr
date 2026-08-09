@@ -14,7 +14,7 @@ public partial class MainViewModel : ViewModelBase
 {
     public MainViewModel()
     {
-        Library = new LibraryScreenViewModel(GoDetailForSeries);
+        Library = new LibraryScreenViewModel(GoDetailForSeries, GoReaderForIssue);
         Detail = new DetailScreenViewModel(GoLibrary, GoReaderForIssue, GoIssuePropertiesForIssue, GoBulkIssuePropertiesForIssues);
         Reader = new ReaderScreenViewModel(GoDetail);
         IssueProperties = new IssuePropertiesScreenViewModel(GoDetailAfterIssueEdit);

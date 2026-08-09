@@ -82,6 +82,21 @@
             <Setter Property="Foreground" Value="{DynamicResource PbTextBrush}" />
             <Setter Property="Margin" Value="0,0,0,10" />
         </Style>
+
+        <!-- Continue Reading overlay button (docs/superpowers/specs/2026-08-09-library-toolbar-design.md Phase D) -->
+        <Style Selector="Button.continueReading">
+            <Setter Property="Width" Value="32" />
+            <Setter Property="Height" Value="32" />
+            <Setter Property="CornerRadius" Value="999" />
+            <Setter Property="Background" Value="#B814161B" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Foreground" Value="White" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="Padding" Value="3,0,0,0" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
     </UserControl.Styles>
 
     <UserControl.Resources>
@@ -94,10 +109,36 @@
                         Height="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).CompactCardHeight}">
                     <Grid>
                         <Image Source="{Binding CoverImage}" Stretch="UniformToFill" />
-                        <Border IsVisible="{Binding HasUnread}" Background="#B814161B" CornerRadius="999" Padding="5,1"
-                                HorizontalAlignment="Right" VerticalAlignment="Top" Margin="5">
-                            <TextBlock Text="{Binding UnreadCount}" FontFamily="Consolas,monospace" FontSize="9"
-                                       FontWeight="Bold" Foreground="White" />
+                        <Border IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowUnreadBadge}">
+                            <Border IsVisible="{Binding HasUnread}" Background="#B814161B" CornerRadius="999" Padding="5,1"
+                                    HorizontalAlignment="Right" VerticalAlignment="Top" Margin="5">
+                                <TextBlock Text="{Binding UnreadCount}" FontFamily="Consolas,monospace" FontSize="9"
+                                           FontWeight="Bold" Foreground="White" />
+                            </Border>
+                        </Border>
+                        <Border IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowPublisherBadge}">
+                            <Border IsVisible="{Binding HasPublisher}" Background="#B814161B" CornerRadius="999" Padding="5,1"
+                                    HorizontalAlignment="Left" VerticalAlignment="Top" Margin="5">
+                                <TextBlock Text="{Binding Publisher}" FontSize="8" FontWeight="Bold" Foreground="White"
+                                           MaxWidth="60" TextTrimming="CharacterEllipsis" />
+                            </Border>
+                        </Border>
+                        <Border IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowLanguageBadge}">
+                            <Border IsVisible="{Binding HasLanguage}" Background="#B814161B" CornerRadius="999" Padding="5,1"
+                                    HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="5">
+                                <Panel>
+                                    <TextBlock Text="{Binding LanguageIso}" FontSize="8" FontWeight="Bold" Foreground="White"
+                                               IsVisible="{Binding !$parent[UserControl].((vm:LibraryScreenViewModel)DataContext).UseLanguageIcon}" />
+                                    <TextBlock Text="🌐" FontSize="8" Foreground="White"
+                                               IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).UseLanguageIcon}" />
+                                </Panel>
+                            </Border>
+                        </Border>
+                        <Border IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowContinueReadingButton}">
+                            <Button Classes="continueReading" Width="24" Height="24" FontSize="10" IsVisible="{Binding HasContinueReading}"
+                                    Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ContinueReadingCommand}"
+                                    CommandParameter="{Binding}" Content="▶"
+                                    HorizontalAlignment="Center" VerticalAlignment="Center" />
                         </Border>
                         <TextBlock Text="{Binding Title}" TextWrapping="Wrap" TextTrimming="CharacterEllipsis" MaxLines="2"
                                    FontSize="11" FontWeight="Black" Foreground="#FFFFF8EC" VerticalAlignment="Bottom"
@@ -117,11 +158,37 @@
                             Height="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ComfortableCardHeight}">
                         <Grid>
                             <Image Source="{Binding CoverImage}" Stretch="UniformToFill" />
-                            <Border IsVisible="{Binding HasUnread}" Background="#B814161B"
-                                    CornerRadius="999" Padding="6,2" HorizontalAlignment="Right"
-                                    VerticalAlignment="Top" Margin="7">
-                                <TextBlock Text="{Binding UnreadCount}" FontFamily="Consolas,monospace"
-                                           FontSize="10" FontWeight="Bold" Foreground="White" />
+                            <Border IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowUnreadBadge}">
+                                <Border IsVisible="{Binding HasUnread}" Background="#B814161B"
+                                        CornerRadius="999" Padding="6,2" HorizontalAlignment="Right"
+                                        VerticalAlignment="Top" Margin="7">
+                                    <TextBlock Text="{Binding UnreadCount}" FontFamily="Consolas,monospace"
+                                               FontSize="10" FontWeight="Bold" Foreground="White" />
+                                </Border>
+                            </Border>
+                            <Border IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowPublisherBadge}">
+                                <Border IsVisible="{Binding HasPublisher}" Background="#B814161B" CornerRadius="999" Padding="6,2"
+                                        HorizontalAlignment="Left" VerticalAlignment="Top" Margin="7">
+                                    <TextBlock Text="{Binding Publisher}" FontSize="9" FontWeight="Bold" Foreground="White"
+                                               MaxWidth="70" TextTrimming="CharacterEllipsis" />
+                                </Border>
+                            </Border>
+                            <Border IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowLanguageBadge}">
+                                <Border IsVisible="{Binding HasLanguage}" Background="#B814161B" CornerRadius="999" Padding="6,2"
+                                        HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="7,7,7,34">
+                                    <Panel>
+                                        <TextBlock Text="{Binding LanguageIso}" FontSize="9" FontWeight="Bold" Foreground="White"
+                                                   IsVisible="{Binding !$parent[UserControl].((vm:LibraryScreenViewModel)DataContext).UseLanguageIcon}" />
+                                        <TextBlock Text="🌐" FontSize="9" Foreground="White"
+                                                   IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).UseLanguageIcon}" />
+                                    </Panel>
+                                </Border>
+                            </Border>
+                            <Border IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowContinueReadingButton}">
+                                <Button Classes="continueReading" IsVisible="{Binding HasContinueReading}"
+                                        Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ContinueReadingCommand}"
+                                        CommandParameter="{Binding}" Content="▶"
+                                        HorizontalAlignment="Center" VerticalAlignment="Center" />
                             </Border>
                             <TextBlock Text="{Binding Title}" TextWrapping="Wrap" FontSize="14" FontWeight="Black"
                                        Foreground="#FFFFF8EC" VerticalAlignment="Bottom"
@@ -146,11 +213,37 @@
                         Height="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).CoverOnlyCardHeight}">
                     <Grid>
                         <Image Source="{Binding CoverImage}" Stretch="UniformToFill" />
-                        <Border IsVisible="{Binding HasUnread}" Background="#B814161B"
-                                CornerRadius="999" Padding="6,2" HorizontalAlignment="Right"
-                                VerticalAlignment="Top" Margin="7">
-                            <TextBlock Text="{Binding UnreadCount}" FontFamily="Consolas,monospace"
-                                       FontSize="10" FontWeight="Bold" Foreground="White" />
+                        <Border IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowUnreadBadge}">
+                            <Border IsVisible="{Binding HasUnread}" Background="#B814161B"
+                                    CornerRadius="999" Padding="6,2" HorizontalAlignment="Right"
+                                    VerticalAlignment="Top" Margin="7">
+                                <TextBlock Text="{Binding UnreadCount}" FontFamily="Consolas,monospace"
+                                           FontSize="10" FontWeight="Bold" Foreground="White" />
+                            </Border>
+                        </Border>
+                        <Border IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowPublisherBadge}">
+                            <Border IsVisible="{Binding HasPublisher}" Background="#B814161B" CornerRadius="999" Padding="6,2"
+                                    HorizontalAlignment="Left" VerticalAlignment="Top" Margin="7">
+                                <TextBlock Text="{Binding Publisher}" FontSize="9" FontWeight="Bold" Foreground="White"
+                                           MaxWidth="70" TextTrimming="CharacterEllipsis" />
+                            </Border>
+                        </Border>
+                        <Border IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowLanguageBadge}">
+                            <Border IsVisible="{Binding HasLanguage}" Background="#B814161B" CornerRadius="999" Padding="6,2"
+                                    HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="7,7,7,34">
+                                <Panel>
+                                    <TextBlock Text="{Binding LanguageIso}" FontSize="9" FontWeight="Bold" Foreground="White"
+                                               IsVisible="{Binding !$parent[UserControl].((vm:LibraryScreenViewModel)DataContext).UseLanguageIcon}" />
+                                    <TextBlock Text="🌐" FontSize="9" Foreground="White"
+                                               IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).UseLanguageIcon}" />
+                                </Panel>
+                            </Border>
+                        </Border>
+                        <Border IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowContinueReadingButton}">
+                            <Button Classes="continueReading" IsVisible="{Binding HasContinueReading}"
+                                    Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ContinueReadingCommand}"
+                                    CommandParameter="{Binding}" Content="▶"
+                                    HorizontalAlignment="Center" VerticalAlignment="Center" />
                         </Border>
                         <TextBlock Text="{Binding Title}" TextWrapping="Wrap" FontSize="14" FontWeight="Black"
                                    Foreground="#FFFFF8EC" VerticalAlignment="Bottom"
@@ -171,11 +264,37 @@
                             <!-- Uniform (not UniformToFill) - the box is already sized to this cover's own
                                  aspect ratio, so nothing gets cropped; only extreme clamped outliers letterbox. -->
                             <Image Source="{Binding CoverImage}" Stretch="Uniform" />
-                            <Border IsVisible="{Binding HasUnread}" Background="#B814161B"
-                                    CornerRadius="999" Padding="6,2" HorizontalAlignment="Right"
-                                    VerticalAlignment="Top" Margin="7">
-                                <TextBlock Text="{Binding UnreadCount}" FontFamily="Consolas,monospace"
-                                           FontSize="10" FontWeight="Bold" Foreground="White" />
+                            <Border IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowUnreadBadge}">
+                                <Border IsVisible="{Binding HasUnread}" Background="#B814161B"
+                                        CornerRadius="999" Padding="6,2" HorizontalAlignment="Right"
+                                        VerticalAlignment="Top" Margin="7">
+                                    <TextBlock Text="{Binding UnreadCount}" FontFamily="Consolas,monospace"
+                                               FontSize="10" FontWeight="Bold" Foreground="White" />
+                                </Border>
+                            </Border>
+                            <Border IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowPublisherBadge}">
+                                <Border IsVisible="{Binding HasPublisher}" Background="#B814161B" CornerRadius="999" Padding="6,2"
+                                        HorizontalAlignment="Left" VerticalAlignment="Top" Margin="7">
+                                    <TextBlock Text="{Binding Publisher}" FontSize="9" FontWeight="Bold" Foreground="White"
+                                               MaxWidth="70" TextTrimming="CharacterEllipsis" />
+                                </Border>
+                            </Border>
+                            <Border IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowLanguageBadge}">
+                                <Border IsVisible="{Binding HasLanguage}" Background="#B814161B" CornerRadius="999" Padding="6,2"
+                                        HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="7">
+                                    <Panel>
+                                        <TextBlock Text="{Binding LanguageIso}" FontSize="9" FontWeight="Bold" Foreground="White"
+                                                   IsVisible="{Binding !$parent[UserControl].((vm:LibraryScreenViewModel)DataContext).UseLanguageIcon}" />
+                                        <TextBlock Text="🌐" FontSize="9" Foreground="White"
+                                                   IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).UseLanguageIcon}" />
+                                    </Panel>
+                                </Border>
+                            </Border>
+                            <Border IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowContinueReadingButton}">
+                                <Button Classes="continueReading" IsVisible="{Binding HasContinueReading}"
+                                        Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ContinueReadingCommand}"
+                                        CommandParameter="{Binding}" Content="▶"
+                                        HorizontalAlignment="Center" VerticalAlignment="Center" />
                             </Border>
                         </Grid>
                     </Border>
@@ -203,10 +322,12 @@
                                        Foreground="{DynamicResource PbTextBrush}" TextTrimming="CharacterEllipsis" />
                             <TextBlock Text="{Binding Sub}" FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" Margin="0,2,0,0" />
                         </StackPanel>
-                        <Border Grid.Column="2" IsVisible="{Binding HasUnread}" Background="{DynamicResource PbAccentSoftBrush}"
-                                CornerRadius="999" Padding="8,3" VerticalAlignment="Center">
-                            <TextBlock Text="{Binding UnreadCount}" FontFamily="Consolas,monospace" FontSize="11"
-                                       FontWeight="Bold" Foreground="{DynamicResource PbAccentTextBrush}" />
+                        <Border Grid.Column="2" IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowUnreadBadge}">
+                            <Border IsVisible="{Binding HasUnread}" Background="{DynamicResource PbAccentSoftBrush}"
+                                    CornerRadius="999" Padding="8,3" VerticalAlignment="Center">
+                                <TextBlock Text="{Binding UnreadCount}" FontFamily="Consolas,monospace" FontSize="11"
+                                           FontWeight="Bold" Foreground="{DynamicResource PbAccentTextBrush}" />
+                            </Border>
                         </Border>
                     </Grid>
                 </Border>
@@ -361,6 +482,15 @@
 
                         <TextBlock Classes="dropdownRow" Text="Grid density" Foreground="{DynamicResource PbTextBrush}" Margin="0,0,0,4" />
                         <Slider Minimum="0.6" Maximum="1.6" Value="{Binding GridDensity}" />
+
+                        <Border Height="1" Background="{DynamicResource PbBorderBrush}" Margin="0,10" />
+
+                        <TextBlock Classes="dropdownRow" Text="Overlay" Foreground="{DynamicResource PbTextBrush}" Margin="0,0,0,4" />
+                        <CheckBox Content="Unread badge" FontSize="12.5" IsChecked="{Binding ShowUnreadBadge}" />
+                        <CheckBox Content="Publisher badge" FontSize="12.5" IsChecked="{Binding ShowPublisherBadge}" />
+                        <CheckBox Content="Language badge" FontSize="12.5" IsChecked="{Binding ShowLanguageBadge}" />
+                        <CheckBox Content="Use language icon" FontSize="12.5" IsChecked="{Binding UseLanguageIcon}" />
+                        <CheckBox Content="Continue reading button" FontSize="12.5" IsChecked="{Binding ShowContinueReadingButton}" />
                     </StackPanel>
                 </Border>
             </Popup>

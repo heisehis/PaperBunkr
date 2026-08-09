@@ -58,6 +58,9 @@ public partial class ReaderScreenViewModel : ViewModelBase
     private Bitmap? _currentPage;
 
     [ObservableProperty]
+    private bool _highQualityPageDisplay = true;
+
+    [ObservableProperty]
     private string? _errorMessage;
 
     public bool HasError => !string.IsNullOrEmpty(ErrorMessage);
@@ -124,7 +127,9 @@ public partial class ReaderScreenViewModel : ViewModelBase
             : $"Issue #{issue.Number} — {issue.Title}";
 
         var readingMode = issue.ReadingModeOverride ?? series.ReadingMode;
-        _isRightToLeft = readingMode == ReadingMode.RightToLeft && context.GetOrCreateAppSettings().ReverseRtlNavigation;
+        var appSettings = context.GetOrCreateAppSettings();
+        _isRightToLeft = readingMode == ReadingMode.RightToLeft && appSettings.ReverseRtlNavigation;
+        HighQualityPageDisplay = appSettings.HighQualityPageDisplay;
         ReadingModeLabel = readingMode switch
         {
             ReadingMode.RightToLeft => "Right to Left ▾",
@@ -166,7 +171,7 @@ public partial class ReaderScreenViewModel : ViewModelBase
         }
         else
         {
-            bool openLastPage = context.GetOrCreateAppSettings().OpenLastPage;
+            bool openLastPage = appSettings.OpenLastPage;
             _currentPageIndex = Math.Clamp(openLastPage ? issue.LastPageRead ?? 0 : 0, 0, pageCount - 1);
         }
 

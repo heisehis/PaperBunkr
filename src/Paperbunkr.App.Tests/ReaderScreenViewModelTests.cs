@@ -90,6 +90,13 @@ public class ReaderScreenViewModelTests : IDisposable
         context.SaveChanges();
     }
 
+    private static void SetHighQualityPageDisplay(bool value)
+    {
+        using var context = PaperbunkrDb.CreateContext();
+        context.GetOrCreateAppSettings().HighQualityPageDisplay = value;
+        context.SaveChanges();
+    }
+
     private void SetSeriesReadingMode(ReadingMode mode)
     {
         using var context = PaperbunkrDb.CreateContext();
@@ -225,6 +232,19 @@ public class ReaderScreenViewModelTests : IDisposable
 
         vm.GoLeftCommand.Execute(null);
         Assert.Equal("PAGE 1 / 3", vm.PageLabel);
+    }
+
+    [Fact]
+    public void HighQualityPageDisplay_DefaultsTrue_AndReflectsAppSettingsOnLoad()
+    {
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id);
+        Assert.True(vm.HighQualityPageDisplay);
+
+        SetHighQualityPageDisplay(false);
+        vm.LoadIssue(_issue1Id);
+
+        Assert.False(vm.HighQualityPageDisplay);
     }
 
     [Fact]

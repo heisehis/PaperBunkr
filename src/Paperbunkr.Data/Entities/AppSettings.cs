@@ -37,4 +37,11 @@ public class AppSettings
     /// nothing observable at all.
     /// </summary>
     public bool ReverseRtlNavigation { get; set; } = true;
+
+    /// <summary>
+    /// Whether pages are scaled to fit the canvas using high-quality (bicubic) interpolation, or
+    /// faster/lower-quality scaling. CE default: true (<c>ImageDisplayOptions.HighQuality</c>,
+    /// on by default).
+    /// </summary>
+    public bool HighQualityPageDisplay { get; set; } = true;
 }

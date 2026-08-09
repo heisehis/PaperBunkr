@@ -217,6 +217,7 @@ public class PaperbunkrDbContext : DbContext
             builder.Property(a => a.AutoNavigateComics).HasDefaultValue(true);
             builder.Property(a => a.BackupsToKeep).HasDefaultValue(5);
             builder.Property(a => a.ReverseRtlNavigation).HasDefaultValue(true);
+            builder.Property(a => a.HighQualityPageDisplay).HasDefaultValue(true);
         });
 
         modelBuilder.Entity<VirtualTagDefinition>(builder =>

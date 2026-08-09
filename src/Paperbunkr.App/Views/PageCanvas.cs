@@ -27,9 +27,13 @@ public class PageCanvas : Control
     public static readonly StyledProperty<ICommand?> RightCommandProperty =
         AvaloniaProperty.Register<PageCanvas, ICommand?>(nameof(RightCommand));
 
+    public static readonly StyledProperty<bool> HighQualityDisplayProperty =
+        AvaloniaProperty.Register<PageCanvas, bool>(nameof(HighQualityDisplay), defaultValue: true);
+
     static PageCanvas()
     {
         AffectsRender<PageCanvas>(PageProperty);
+        AffectsRender<PageCanvas>(HighQualityDisplayProperty);
         FocusableProperty.OverrideDefaultValue<PageCanvas>(true);
     }
 
@@ -51,10 +55,16 @@ public class PageCanvas : Control
         set => SetValue(RightCommandProperty, value);
     }
 
+    public bool HighQualityDisplay
+    {
+        get => GetValue(HighQualityDisplayProperty);
+        set => SetValue(HighQualityDisplayProperty, value);
+    }
+
     public override void Render(DrawingContext context)
     {
         base.Render(context);
-        context.Custom(new ReaderPageDrawOperation(new Rect(Bounds.Size), Page));
+        context.Custom(new ReaderPageDrawOperation(new Rect(Bounds.Size), Page, HighQualityDisplay));
     }
 
     protected override void OnPointerPressed(PointerPressedEventArgs e)

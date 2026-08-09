@@ -44,6 +44,7 @@ public class AppSettingsTests : IDisposable
         Assert.True(settings.OpenLastPage);
         Assert.True(settings.AutoNavigateComics);
         Assert.True(settings.ReverseRtlNavigation);
+        Assert.True(settings.HighQualityPageDisplay);
     }
 
     [Fact]
@@ -53,6 +54,7 @@ public class AppSettingsTests : IDisposable
         settings.OpenLastPage = false;
         settings.AutoNavigateComics = false;
         settings.ReverseRtlNavigation = false;
+        settings.HighQualityPageDisplay = false;
         _context.SaveChanges();
 
         using var freshContext = new PaperbunkrDbContext(_options);
@@ -61,6 +63,7 @@ public class AppSettingsTests : IDisposable
         Assert.False(reloaded.OpenLastPage);
         Assert.False(reloaded.AutoNavigateComics);
         Assert.False(reloaded.ReverseRtlNavigation);
+        Assert.False(reloaded.HighQualityPageDisplay);
     }
 
     [Fact]

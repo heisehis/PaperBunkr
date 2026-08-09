@@ -196,6 +196,33 @@ public class PreferencesScreenViewModelTests : IDisposable
     }
 
     [Fact]
+    public void EnsureLoaded_PopulatesHighQualityPageDisplayFromAppSettings()
+    {
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            context.GetOrCreateAppSettings().HighQualityPageDisplay = false;
+            context.SaveChanges();
+        }
+
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+
+        Assert.False(vm.HighQualityPageDisplay);
+    }
+
+    [Fact]
+    public void TogglingHighQualityPageDisplay_PersistsToAppSettings()
+    {
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+
+        vm.HighQualityPageDisplay = false;
+
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        Assert.False(context.GetOrCreateAppSettings().HighQualityPageDisplay);
+    }
+
+    [Fact]
     public void BrowseForSkin_UserCancels_LeavesErrorUntouched()
     {
         var vm = CreateViewModel(new NoOpFilePicker());

@@ -114,6 +114,9 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     private bool _reverseRtlNavigation;
 
     [ObservableProperty]
+    private bool _highQualityPageDisplay;
+
+    [ObservableProperty]
     private string? _installSkinError;
 
     public bool HasInstallSkinError => !string.IsNullOrEmpty(InstallSkinError);
@@ -176,6 +179,7 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         OpenLastPage = settings.OpenLastPage;
         AutoNavigateComics = settings.AutoNavigateComics;
         ReverseRtlNavigation = settings.ReverseRtlNavigation;
+        HighQualityPageDisplay = settings.HighQualityPageDisplay;
         _suppressBehaviorApply = false;
 
         var firstIssue = context.Issues.Include(i => i.Series).OrderBy(i => i.Id).FirstOrDefault();
@@ -227,6 +231,8 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     partial void OnAutoNavigateComicsChanged(bool value) => PersistBehaviorSetting(s => s.AutoNavigateComics = value);
 
     partial void OnReverseRtlNavigationChanged(bool value) => PersistBehaviorSetting(s => s.ReverseRtlNavigation = value);
+
+    partial void OnHighQualityPageDisplayChanged(bool value) => PersistBehaviorSetting(s => s.HighQualityPageDisplay = value);
 
     private void PersistBehaviorSetting(Action<AppSettings> apply)
     {

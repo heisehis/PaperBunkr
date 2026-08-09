@@ -205,6 +205,18 @@
                     </StackPanel>
                 </Border>
 
+                <Border Classes="groupBox">
+                    <StackPanel>
+                        <Border Classes="groupHeader">
+                            <TextBlock Text="Display" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
+                        </Border>
+                        <StackPanel Margin="14" Spacing="12">
+                            <CheckBox IsChecked="{Binding HighQualityPageDisplay}" Foreground="{DynamicResource PbTextBrush}" FontSize="13"
+                                      Content="High quality page display (smoother scaling, more CPU)" />
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
             </StackPanel>
 
             <StackPanel IsVisible="{Binding IsLibrariesTab}" Margin="28,0,28,40" Spacing="20">

@@ -81,6 +81,7 @@
                 <views:PageCanvas Page="{Binding CurrentPage}"
                                   LeftCommand="{Binding GoLeftCommand}"
                                   RightCommand="{Binding GoRightCommand}"
+                                  HighQualityDisplay="{Binding HighQualityPageDisplay}"
                                   IsVisible="{Binding !HasError}" />
 
                 <Border IsVisible="{Binding HasError}" Width="400" CornerRadius="8"

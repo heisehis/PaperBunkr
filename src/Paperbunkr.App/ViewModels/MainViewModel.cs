@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -28,9 +29,20 @@ public partial class MainViewModel : ViewModelBase
             new LibraryFolderScanner(),
             new FileAssociationService(),
             new BackupService(),
-            new KeyBindingService());
+            new KeyBindingService(),
+            ShowToast);
         Migration = new MigrationOverlayViewModel(new FilePickerService(), OpenSeriesDetailFromReview);
     }
+
+    /// <summary>
+    /// Toast plumbing (P6 follow-up) - kept as a plain event on this shell ViewModel rather than a
+    /// singleton/static service, since the actual <c>WindowNotificationManager</c> can only be
+    /// created once a real <c>Window</c> exists, which happens after this ViewModel is constructed
+    /// (see App.axaml.cs). <see cref="Views.MainWindow"/> subscribes once its own DataContext is set.
+    /// </summary>
+    public event Action<string, string>? ToastRequested;
+
+    private void ShowToast(string title, string message) => ToastRequested?.Invoke(title, message);
 
     public LibraryScreenViewModel Library { get; }
     public DetailScreenViewModel Detail { get; }

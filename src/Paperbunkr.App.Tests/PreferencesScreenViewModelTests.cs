@@ -1,4 +1,6 @@
+using Avalonia.Input;
 using Microsoft.EntityFrameworkCore;
+using Paperbunkr.App.Models;
 using Paperbunkr.App.Services;
 using Paperbunkr.App.ViewModels;
 using Paperbunkr.Data;
@@ -55,12 +57,14 @@ public class PreferencesScreenViewModelTests : IDisposable
         var scanner = new LibraryFolderScanner(() => new PaperbunkrDbContext(_dbOptions));
         var fileAssociationService = new FileAssociationService(shell ?? new FakeShellFileAssociation());
         var backupService = new BackupService(() => new PaperbunkrDbContext(_dbOptions));
+        var keyBindingService = new KeyBindingService(() => new PaperbunkrDbContext(_dbOptions));
         return new PreferencesScreenViewModel(
             skinService,
             filePicker ?? new NoOpFilePicker(),
             scanner,
             fileAssociationService,
             backupService,
+            keyBindingService,
             () => new PaperbunkrDbContext(_dbOptions));
     }
 
@@ -220,6 +224,49 @@ public class PreferencesScreenViewModelTests : IDisposable
 
         using var context = new PaperbunkrDbContext(_dbOptions);
         Assert.False(context.GetOrCreateAppSettings().HighQualityPageDisplay);
+    }
+
+    [Fact]
+    public void EnsureLoaded_PopulatesKeyBindings_OneRowPerRegisteredCommand()
+    {
+        var vm = CreateViewModel();
+
+        vm.EnsureLoaded();
+
+        Assert.Equal(KeyboardCommandRegistry.Commands.Count, vm.KeyBindings.Count);
+        Assert.Contains(vm.KeyBindings, r => r.CommandId == KeyboardCommandRegistry.ReaderPageTurnLeft && r.SelectedKey.Key == Key.Left);
+        Assert.Contains(vm.KeyBindings, r => r.CommandId == KeyboardCommandRegistry.ReaderPageTurnRight && r.SelectedKey.Key == Key.Right);
+    }
+
+    [Fact]
+    public void ChangingKeyBindingRow_PersistsThroughKeyBindingService()
+    {
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+        var row = vm.KeyBindings.Single(r => r.CommandId == KeyboardCommandRegistry.ReaderPageTurnLeft);
+
+        row.SelectedKey = row.Options.Single(o => o.Key == Key.J);
+
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        Assert.Equal("J", context.KeyBindings.Single(k => k.CommandId == KeyboardCommandRegistry.ReaderPageTurnLeft).Key);
+    }
+
+    [Fact]
+    public void AssigningSameKeyToBothReaderBindings_SetsConflictError()
+    {
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+        var left = vm.KeyBindings.Single(r => r.CommandId == KeyboardCommandRegistry.ReaderPageTurnLeft);
+        var right = vm.KeyBindings.Single(r => r.CommandId == KeyboardCommandRegistry.ReaderPageTurnRight);
+
+        left.SelectedKey = left.Options.Single(o => o.Key == Key.J);
+        right.SelectedKey = right.Options.Single(o => o.Key == Key.J);
+
+        Assert.True(vm.HasKeyBindingConflictError);
+
+        // Resolving it clears the error again.
+        right.SelectedKey = right.Options.Single(o => o.Key == Key.K);
+        Assert.False(vm.HasKeyBindingConflictError);
     }
 
     [Fact]

@@ -10,11 +10,13 @@ namespace Paperbunkr.App.Views;
 /// <summary>
 /// The Reader screen's page canvas (docs/superpowers/specs/2026-08-06-reader-canvas-alpha-design.md
 /// §4/§6). Renders <see cref="Page"/> via <see cref="ReaderPageDrawOperation"/>; clicking the
-/// left/right half or pressing Left/Right invokes <see cref="LeftCommand"/>/<see cref="RightCommand"/>
-/// - bound from XAML like every other command in this codebase, rather than a code-behind event
-/// the ViewModel would need to subscribe to. Named spatially, not semantically ("Previous"/"Next"),
-/// per docs/superpowers/specs/2026-08-07-reader-rtl-navigation-design.md §3 - which physical side
-/// means "forward" depends on reading direction, and PageCanvas itself has no opinion on that.
+/// left/right half or pressing <see cref="LeftKey"/>/<see cref="RightKey"/> (remappable via
+/// Preferences, default the physical Left/Right arrows) invokes <see cref="LeftCommand"/>/
+/// <see cref="RightCommand"/> - bound from XAML like every other command in this codebase, rather
+/// than a code-behind event the ViewModel would need to subscribe to. Named spatially, not
+/// semantically ("Previous"/"Next"), per docs/superpowers/specs/
+/// 2026-08-07-reader-rtl-navigation-design.md §3 - which physical side means "forward" depends on
+/// reading direction, and PageCanvas itself has no opinion on that.
 /// </summary>
 public class PageCanvas : Control
 {
@@ -29,6 +31,12 @@ public class PageCanvas : Control
 
     public static readonly StyledProperty<bool> HighQualityDisplayProperty =
         AvaloniaProperty.Register<PageCanvas, bool>(nameof(HighQualityDisplay), defaultValue: true);
+
+    public static readonly StyledProperty<Key> LeftKeyProperty =
+        AvaloniaProperty.Register<PageCanvas, Key>(nameof(LeftKey), defaultValue: Key.Left);
+
+    public static readonly StyledProperty<Key> RightKeyProperty =
+        AvaloniaProperty.Register<PageCanvas, Key>(nameof(RightKey), defaultValue: Key.Right);
 
     static PageCanvas()
     {
@@ -61,6 +69,20 @@ public class PageCanvas : Control
         set => SetValue(HighQualityDisplayProperty, value);
     }
 
+    /// <summary>Remappable via Preferences &gt; Reader &gt; Keyboard Shortcuts (docs/alpha-roadmap.md P5 follow-up). Defaults to the physical Left arrow.</summary>
+    public Key LeftKey
+    {
+        get => GetValue(LeftKeyProperty);
+        set => SetValue(LeftKeyProperty, value);
+    }
+
+    /// <summary>See <see cref="LeftKey"/>. Defaults to the physical Right arrow.</summary>
+    public Key RightKey
+    {
+        get => GetValue(RightKeyProperty);
+        set => SetValue(RightKeyProperty, value);
+    }
+
     public override void Render(DrawingContext context)
     {
         base.Render(context);
@@ -77,11 +99,11 @@ public class PageCanvas : Control
     protected override void OnKeyDown(KeyEventArgs e)
     {
         base.OnKeyDown(e);
-        if (e.Key == Key.Left && TryExecute(LeftCommand))
+        if (e.Key == LeftKey && TryExecute(LeftCommand))
         {
             e.Handled = true;
         }
-        else if (e.Key == Key.Right && TryExecute(RightCommand))
+        else if (e.Key == RightKey && TryExecute(RightCommand))
         {
             e.Handled = true;
         }

@@ -27,7 +27,8 @@ public partial class MainViewModel : ViewModelBase
             new FilePickerService(),
             new LibraryFolderScanner(),
             new FileAssociationService(),
-            new BackupService());
+            new BackupService(),
+            new KeyBindingService());
         Migration = new MigrationOverlayViewModel(new FilePickerService(), OpenSeriesDetailFromReview);
     }
 
@@ -164,5 +165,31 @@ public partial class MainViewModel : ViewModelBase
     {
         BulkIssueProperties.Load(issueIds);
         CurrentScreen = "bulkIssueProperties";
+    }
+
+    /// <summary>
+    /// Esc-to-close/cancel (P5, docs/alpha-roadmap.md), routed here rather than per-screen
+    /// KeyDown handlers so there's exactly one place that knows what "the current dialog" is -
+    /// none of Migration/Issue Properties/Bulk Editing are real Avalonia Windows/Popups (they're
+    /// all screen-swaps or an overlay within the single MainWindow), so there's no native
+    /// dialog-Escape behavior to inherit. Preferences has no Cancel concept (every toggle
+    /// persists immediately, docs/superpowers/specs/2026-08-07-preferences-skin-system-design.md)
+    /// so it's deliberately not in this list - Esc there would have nothing meaningful to cancel.
+    /// </summary>
+    [RelayCommand]
+    private void Escape()
+    {
+        if (IsMigrationOverlayOpen)
+        {
+            CloseMigrationOverlay();
+        }
+        else if (IsIssueProperties)
+        {
+            IssueProperties.CancelCommand.Execute(null);
+        }
+        else if (IsBulkIssueProperties)
+        {
+            BulkIssueProperties.CancelCommand.Execute(null);
+        }
     }
 }

@@ -83,6 +83,8 @@
                                   LeftCommand="{Binding GoLeftCommand}"
                                   RightCommand="{Binding GoRightCommand}"
                                   HighQualityDisplay="{Binding HighQualityPageDisplay}"
+                                  LeftKey="{Binding PageTurnLeftKey}"
+                                  RightKey="{Binding PageTurnRightKey}"
                                   IsVisible="{Binding !HasError}" />
 
                 <Border IsVisible="{Binding HasError}" Width="400" CornerRadius="8"

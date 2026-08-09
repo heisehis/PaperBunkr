@@ -44,6 +44,14 @@
             <Setter Property="BorderThickness" Value="2" />
             <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
         </Style>
+        <!-- P5 (docs/alpha-roadmap.md) - visible keyboard-focus indicator. Border has no built-in
+             FluentTheme focus adorner the way Button does, so this is explicit. :focus-visible
+             (not :focus) so a plain pointer click doesn't flash the ring too - matches how the
+             rest of the app never shows a focus ring on mouse interaction. -->
+        <Style Selector="Border.issueTile:focus-visible">
+            <Setter Property="BorderThickness" Value="2" />
+            <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
+        </Style>
     </UserControl.Styles>
 
     <StackPanel>
@@ -74,7 +82,8 @@
             <ItemsControl.ItemTemplate>
                 <DataTemplate x:DataType="models:IssueCardSample">
                     <Border Classes="issueTile" Classes.selected="{Binding IsSelected}" Width="120" Margin="0,0,16,16"
-                            Background="{Binding CoverBrush}" PointerPressed="OnIssueTilePointerPressed">
+                            Background="{Binding CoverBrush}" Focusable="True"
+                            PointerPressed="OnIssueTilePointerPressed" KeyDown="OnIssueTileKeyDown">
                         <Border.ContextMenu>
                             <ContextMenu>
                                 <MenuItem Header="Edit Properties"

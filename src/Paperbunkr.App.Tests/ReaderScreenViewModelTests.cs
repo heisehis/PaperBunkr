@@ -1,4 +1,6 @@
+using Avalonia.Input;
 using Microsoft.EntityFrameworkCore;
+using Paperbunkr.App.Models;
 using Paperbunkr.App.Services;
 using Paperbunkr.App.ViewModels;
 using Paperbunkr.Data;
@@ -96,6 +98,9 @@ public class ReaderScreenViewModelTests : IDisposable
         context.GetOrCreateAppSettings().HighQualityPageDisplay = value;
         context.SaveChanges();
     }
+
+    private static void SetPageTurnLeftKey(Key key) =>
+        new KeyBindingService().SetKey(KeyboardCommandRegistry.ReaderPageTurnLeft, key);
 
     private void SetSeriesReadingMode(ReadingMode mode)
     {
@@ -245,6 +250,21 @@ public class ReaderScreenViewModelTests : IDisposable
         vm.LoadIssue(_issue1Id);
 
         Assert.False(vm.HighQualityPageDisplay);
+    }
+
+    [Fact]
+    public void PageTurnKeys_DefaultToArrowKeys_AndReflectRemappingOnLoad()
+    {
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id);
+        Assert.Equal(Key.Left, vm.PageTurnLeftKey);
+        Assert.Equal(Key.Right, vm.PageTurnRightKey);
+
+        SetPageTurnLeftKey(Key.J);
+        vm.LoadIssue(_issue1Id);
+
+        Assert.Equal(Key.J, vm.PageTurnLeftKey);
+        Assert.Equal(Key.Right, vm.PageTurnRightKey); // untouched
     }
 
     [Fact]

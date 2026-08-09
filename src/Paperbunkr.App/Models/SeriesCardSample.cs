@@ -32,6 +32,11 @@ public sealed class SeriesCardSample
     public bool Missing { get; init; }
     public required IBrush CoverBrush { get; init; }
 
+    /// <summary>Series-level sort aggregates (docs/superpowers/specs/2026-08-09-library-toolbar-design.md Phase C) - computed once here, not recomputed per sort click.</summary>
+    public DateTime? LastAddedTime { get; init; }
+    public DateTime? LastOpenedTime { get; init; }
+    public long TotalFileSize { get; init; }
+
     /// <summary>
     /// Panorama grid's per-series tile width (docs/superpowers/specs/
     /// 2026-08-09-library-toolbar-design.md Phase A) - computed from the real cover bitmap's
@@ -132,6 +137,10 @@ public sealed class SeriesCardSample
             CoverBrush = CoverBrushFor(series.Name),
             CoverImage = coverImage,
             PanoramaWidth = ComputePanoramaWidth(aspectRatio),
+            // LINQ's nullable Max() returns null for an all-null or empty sequence rather than throwing.
+            LastAddedTime = series.Issues.Select(i => i.AddedTime).Max(),
+            LastOpenedTime = series.Issues.Select(i => i.OpenedTime).Max(),
+            TotalFileSize = series.Issues.Sum(i => i.FileSize ?? 0),
         };
     }
 }

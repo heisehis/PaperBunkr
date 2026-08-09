@@ -31,6 +31,7 @@ public partial class LibraryScreenViewModel : ViewModelBase
         Covers = new ObservableCollection<SeriesCardSample>();
         ContentTypes = new ObservableCollection<ContentTypeSummary>();
         Collections = new ObservableCollection<CategorySummary>();
+        Groups = new ObservableCollection<SeriesCardGroup>();
         LoadFromDatabase();
     }
 
@@ -45,6 +46,9 @@ public partial class LibraryScreenViewModel : ViewModelBase
 
     /// <summary>Real <c>Category</c> rows ("Collections") - empty today since nothing creates them yet; that's Beta-scoped. See spec above.</summary>
     public ObservableCollection<CategorySummary> Collections { get; }
+
+    /// <summary>Populated instead of <see cref="Covers"/> when <see cref="IsGrouped"/> - see <see cref="LoadFromDatabase"/>.</summary>
+    public ObservableCollection<SeriesCardGroup> Groups { get; }
 
     [ObservableProperty]
     private int _allSeriesCount;
@@ -132,15 +136,74 @@ public partial class LibraryScreenViewModel : ViewModelBase
             filtered = filtered.Where(s => s.TrackingLinks.Count > 0);
         }
 
+        var cards = SortCards(filtered.Select(SeriesCardSample.FromSeries).ToList());
+
         Covers.Clear();
-        foreach (var s in filtered)
+        Groups.Clear();
+        if (IsGrouped)
         {
-            Covers.Add(SeriesCardSample.FromSeries(s));
+            foreach (var group in GroupCards(cards))
+            {
+                Groups.Add(group);
+            }
+        }
+        else
+        {
+            foreach (var card in cards)
+            {
+                Covers.Add(card);
+            }
         }
 
         OnPropertyChanged(nameof(IsAllSeriesActive));
         OnPropertyChanged(nameof(HasCollections));
     }
+
+    /// <summary>Sorts by <see cref="SortField"/>/<see cref="SortDirection"/> - Series-level aggregates already computed on each <see cref="SeriesCardSample"/>, not re-derived from the Issue entities here.</summary>
+    private List<SeriesCardSample> SortCards(List<SeriesCardSample> cards)
+    {
+        IOrderedEnumerable<SeriesCardSample> ordered = SortField switch
+        {
+            LibrarySortField.Name => cards.OrderBy(c => c.Name, StringComparer.OrdinalIgnoreCase),
+            LibrarySortField.DateAdded => cards.OrderBy(c => c.LastAddedTime),
+            LibrarySortField.LastRead => cards.OrderBy(c => c.LastOpenedTime),
+            LibrarySortField.Size => cards.OrderBy(c => c.TotalFileSize),
+            LibrarySortField.IssueCount => cards.OrderBy(c => c.IssueCount),
+            LibrarySortField.UnreadCount => cards.OrderBy(c => c.UnreadCount),
+            LibrarySortField.Publisher => cards.OrderBy(c => c.Publisher, StringComparer.OrdinalIgnoreCase),
+            _ => cards.OrderBy(c => c.Name, StringComparer.OrdinalIgnoreCase),
+        };
+
+        var result = ordered.ToList();
+        if (SortDirection == SortDirection.Descending)
+        {
+            result.Reverse();
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Partitions already-sorted <paramref name="cards"/> into <see cref="SeriesCardGroup"/>s -
+    /// LINQ's GroupBy preserves each group's internal element order, so Sort's order survives
+    /// intact within every group without any extra work here.
+    /// </summary>
+    private IEnumerable<SeriesCardGroup> GroupCards(List<SeriesCardSample> cards) => GroupField switch
+    {
+        LibraryGroupField.ContentType => cards
+            .GroupBy(c => c.ContentTypeLabel)
+            .OrderBy(g => Enum.Parse<ContentType>(g.Key))
+            .Select(g => new SeriesCardGroup { Header = g.Key, Items = new ObservableCollection<SeriesCardSample>(g) }),
+        LibraryGroupField.Publisher => cards
+            .GroupBy(c => string.IsNullOrWhiteSpace(c.Publisher) ? "Unknown" : c.Publisher)
+            .OrderBy(g => g.Key, StringComparer.OrdinalIgnoreCase)
+            .Select(g => new SeriesCardGroup { Header = g.Key, Items = new ObservableCollection<SeriesCardSample>(g) }),
+        LibraryGroupField.Alphabetical => cards
+            .GroupBy(c => c.Name.Length > 0 && char.IsAsciiLetter(c.Name[0]) ? char.ToUpperInvariant(c.Name[0]).ToString() : "#")
+            .OrderBy(g => g.Key, StringComparer.OrdinalIgnoreCase)
+            .Select(g => new SeriesCardGroup { Header = g.Key, Items = new ObservableCollection<SeriesCardSample>(g) }),
+        _ => Enumerable.Empty<SeriesCardGroup>(),
+    };
 
     [RelayCommand]
     private void SelectAllSeries()
@@ -205,16 +268,68 @@ public partial class LibraryScreenViewModel : ViewModelBase
     partial void OnFilterTrackedOnlyChanged(bool value) => LoadFromDatabase();
 
     [ObservableProperty]
+    private LibrarySortField _sortField = LibrarySortField.DateAdded;
+
+    partial void OnSortFieldChanged(LibrarySortField value)
+    {
+        OnPropertyChanged(nameof(ShowAlphabetIndex));
+        OnPropertyChanged(nameof(SortLabel));
+        LoadFromDatabase();
+    }
+
+    [ObservableProperty]
+    private SortDirection _sortDirection = SortDirection.Descending;
+
+    partial void OnSortDirectionChanged(SortDirection value)
+    {
+        OnPropertyChanged(nameof(SortLabel));
+        LoadFromDatabase();
+    }
+
+    [RelayCommand]
+    private void ToggleSortDirection() =>
+        SortDirection = SortDirection == SortDirection.Ascending ? SortDirection.Descending : SortDirection.Ascending;
+
+    public string SortLabel => SortField switch
+    {
+        LibrarySortField.Name => "Name",
+        LibrarySortField.DateAdded => "Date Added",
+        LibrarySortField.LastRead => "Last Read",
+        LibrarySortField.Size => "Size",
+        LibrarySortField.IssueCount => "Issue Count",
+        LibrarySortField.UnreadCount => "Unread Count",
+        LibrarySortField.Publisher => "Publisher",
+        _ => "Sort",
+    } + (SortDirection == SortDirection.Ascending ? " ↑" : " ↓");
+
+    [ObservableProperty]
+    private LibraryGroupField _groupField = LibraryGroupField.None;
+
+    public bool IsGrouped => GroupField != LibraryGroupField.None;
+
+    partial void OnGroupFieldChanged(LibraryGroupField value)
+    {
+        OnPropertyChanged(nameof(IsGrouped));
+        OnPropertyChanged(nameof(ShowAlphabetIndex));
+        LoadFromDatabase();
+    }
+
+    /// <summary>A-Z indexer only means something against an alphabetically-ordered, ungrouped flat list (docs/superpowers/specs/2026-08-09-library-toolbar-design.md Phase C).</summary>
+    public bool ShowAlphabetIndex => SortField == LibrarySortField.Name && !IsGrouped;
+
+    [ObservableProperty]
     private string? _activeDropdown;
 
     public bool IsFilterOpen => ActiveDropdown == "filter";
     public bool IsSortOpen => ActiveDropdown == "sort";
+    public bool IsGroupOpen => ActiveDropdown == "group";
     public bool IsDisplayOpen => ActiveDropdown == "display";
 
     partial void OnActiveDropdownChanged(string? value)
     {
         OnPropertyChanged(nameof(IsFilterOpen));
         OnPropertyChanged(nameof(IsSortOpen));
+        OnPropertyChanged(nameof(IsGroupOpen));
         OnPropertyChanged(nameof(IsDisplayOpen));
     }
 
@@ -225,7 +340,16 @@ public partial class LibraryScreenViewModel : ViewModelBase
     private void ToggleSort() => ActiveDropdown = ActiveDropdown == "sort" ? null : "sort";
 
     [RelayCommand]
+    private void ToggleGroup() => ActiveDropdown = ActiveDropdown == "group" ? null : "group";
+
+    [RelayCommand]
     private void ToggleDisplay() => ActiveDropdown = ActiveDropdown == "display" ? null : "display";
+
+    [RelayCommand]
+    private void SetSortField(LibrarySortField field) => SortField = field;
+
+    [RelayCommand]
+    private void SetGroupField(LibraryGroupField field) => GroupField = field;
 
     [ObservableProperty]
     private LibraryViewMode _viewMode = LibraryViewMode.ComfortableGrid;

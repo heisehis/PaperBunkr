@@ -52,14 +52,25 @@ public class LibraryScreenViewModelTests : IDisposable
         return series.Id;
     }
 
-    private static int CreateSeriesWithIssue(string name, bool fileIsMissing = false, int? lastPageRead = null, string? publisher = null, string? genre = null)
+    private static int CreateSeriesWithIssue(string name, bool fileIsMissing = false, int? lastPageRead = null,
+        string? publisher = null, string? genre = null, ContentType contentType = ContentType.Comic,
+        DateTime? addedTime = null, DateTime? openedTime = null, long? fileSize = null)
     {
         using var context = PaperbunkrDb.CreateContext();
-        var series = new Series { Name = name, ContentType = ContentType.Comic, Publisher = publisher, Genre = genre };
+        var series = new Series { Name = name, ContentType = contentType, Publisher = publisher, Genre = genre };
         context.Series.Add(series);
         context.SaveChanges();
 
-        context.Issues.Add(new Issue { SeriesId = series.Id, Number = "1", FileIsMissing = fileIsMissing, LastPageRead = lastPageRead });
+        context.Issues.Add(new Issue
+        {
+            SeriesId = series.Id,
+            Number = "1",
+            FileIsMissing = fileIsMissing,
+            LastPageRead = lastPageRead,
+            AddedTime = addedTime,
+            OpenedTime = openedTime,
+            FileSize = fileSize,
+        });
         context.SaveChanges();
         return series.Id;
     }
@@ -274,5 +285,150 @@ public class LibraryScreenViewModelTests : IDisposable
         vm.FilterTrackedOnly = true;
 
         Assert.Equal("Marvel Hero", Assert.Single(vm.Covers).Name);
+    }
+
+    [Fact]
+    public void SortField_Name_OrdersAlphabetically()
+    {
+        CreateSeriesWithIssue("Zebra");
+        CreateSeriesWithIssue("Apple");
+        var vm = new LibraryScreenViewModel(goDetail: _ => { });
+
+        vm.SortField = LibrarySortField.Name;
+        vm.SortDirection = SortDirection.Ascending;
+
+        Assert.Equal(new[] { "Apple", "Zebra" }, vm.Covers.Select(c => c.Name));
+    }
+
+    [Fact]
+    public void SortField_DateAdded_OrdersByMostRecentIssueAddedTime()
+    {
+        CreateSeriesWithIssue("Older", addedTime: new DateTime(2026, 1, 1));
+        CreateSeriesWithIssue("Newer", addedTime: new DateTime(2026, 6, 1));
+        var vm = new LibraryScreenViewModel(goDetail: _ => { });
+
+        vm.SortField = LibrarySortField.DateAdded; // default direction: Descending
+        Assert.Equal(new[] { "Newer", "Older" }, vm.Covers.Select(c => c.Name));
+    }
+
+    [Fact]
+    public void SortField_LastRead_OrdersByMostRecentIssueOpenedTime()
+    {
+        CreateSeriesWithIssue("Read Long Ago", openedTime: new DateTime(2026, 1, 1));
+        CreateSeriesWithIssue("Read Recently", openedTime: new DateTime(2026, 6, 1));
+        var vm = new LibraryScreenViewModel(goDetail: _ => { });
+
+        vm.SortField = LibrarySortField.LastRead;
+        Assert.Equal(new[] { "Read Recently", "Read Long Ago" }, vm.Covers.Select(c => c.Name));
+    }
+
+    [Fact]
+    public void SortField_Size_OrdersByTotalFileSize()
+    {
+        CreateSeriesWithIssue("Small", fileSize: 100);
+        CreateSeriesWithIssue("Large", fileSize: 900);
+        var vm = new LibraryScreenViewModel(goDetail: _ => { });
+
+        vm.SortField = LibrarySortField.Size;
+        Assert.Equal(new[] { "Large", "Small" }, vm.Covers.Select(c => c.Name));
+    }
+
+    [Fact]
+    public void SortField_IssueCount_OrdersByIssueCount()
+    {
+        CreateSeriesWithIssue("One Issue");
+        int twoIssueId = CreateSeriesWithIssue("Two Issues");
+        using (var context = PaperbunkrDb.CreateContext())
+        {
+            context.Issues.Add(new Issue { SeriesId = twoIssueId, Number = "2" });
+            context.SaveChanges();
+        }
+
+        var vm = new LibraryScreenViewModel(goDetail: _ => { });
+        vm.SortField = LibrarySortField.IssueCount;
+
+        Assert.Equal(new[] { "Two Issues", "One Issue" }, vm.Covers.Select(c => c.Name));
+    }
+
+    [Fact]
+    public void SortField_UnreadCount_OrdersByUnreadCount()
+    {
+        CreateSeriesWithIssue("Fully Read", lastPageRead: 5);
+        CreateSeriesWithIssue("Unread", lastPageRead: null);
+        var vm = new LibraryScreenViewModel(goDetail: _ => { });
+
+        vm.SortField = LibrarySortField.UnreadCount;
+
+        Assert.Equal(new[] { "Unread", "Fully Read" }, vm.Covers.Select(c => c.Name));
+    }
+
+    [Fact]
+    public void SortField_Publisher_OrdersAlphabeticallyByPublisher()
+    {
+        CreateSeriesWithIssue("Marvel Book", publisher: "Marvel");
+        CreateSeriesWithIssue("DC Book", publisher: "DC");
+        var vm = new LibraryScreenViewModel(goDetail: _ => { });
+
+        vm.SortField = LibrarySortField.Publisher;
+        vm.SortDirection = SortDirection.Ascending;
+
+        Assert.Equal(new[] { "DC Book", "Marvel Book" }, vm.Covers.Select(c => c.Name));
+    }
+
+    [Fact]
+    public void GroupField_ContentType_PartitionsIntoGroups()
+    {
+        CreateSeriesWithIssue("A Comic", contentType: ContentType.Comic);
+        CreateSeriesWithIssue("A Manga", contentType: ContentType.Manga);
+        var vm = new LibraryScreenViewModel(goDetail: _ => { });
+
+        vm.GroupField = LibraryGroupField.ContentType;
+
+        Assert.True(vm.IsGrouped);
+        Assert.Empty(vm.Covers);
+        Assert.Equal(2, vm.Groups.Count);
+        Assert.Equal("Comic", vm.Groups[0].Header);
+        Assert.Equal("A Comic", Assert.Single(vm.Groups[0].Items).Name);
+        Assert.Equal("Manga", vm.Groups[1].Header);
+        Assert.Equal("A Manga", Assert.Single(vm.Groups[1].Items).Name);
+    }
+
+    [Fact]
+    public void GroupField_Publisher_PartitionsIntoGroups()
+    {
+        CreateSeriesWithIssue("Marvel Book", publisher: "Marvel");
+        CreateSeriesWithIssue("DC Book", publisher: "DC");
+        var vm = new LibraryScreenViewModel(goDetail: _ => { });
+
+        vm.GroupField = LibraryGroupField.Publisher;
+
+        Assert.Equal(new[] { "DC", "Marvel" }, vm.Groups.Select(g => g.Header));
+    }
+
+    [Fact]
+    public void GroupField_Alphabetical_PartitionsByFirstLetter()
+    {
+        CreateSeriesWithIssue("Batman");
+        CreateSeriesWithIssue("Superman");
+        var vm = new LibraryScreenViewModel(goDetail: _ => { });
+
+        vm.GroupField = LibraryGroupField.Alphabetical;
+
+        Assert.Equal(new[] { "B", "S" }, vm.Groups.Select(g => g.Header));
+    }
+
+    [Fact]
+    public void Sort_AppliesWithinGroups_NotJustAcrossThem()
+    {
+        CreateSeriesWithIssue("Zebra Comic", contentType: ContentType.Comic);
+        CreateSeriesWithIssue("Apple Comic", contentType: ContentType.Comic);
+        var vm = new LibraryScreenViewModel(goDetail: _ => { });
+
+        vm.SortField = LibrarySortField.Name;
+        vm.SortDirection = SortDirection.Ascending;
+        vm.GroupField = LibraryGroupField.ContentType;
+
+        var group = Assert.Single(vm.Groups);
+        Assert.Equal(new[] { "Apple Comic", "Zebra Comic" }, group.Items.Select(c => c.Name));
     }
 }

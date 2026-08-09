@@ -2,6 +2,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Paperbunkr.App.ViewModels"
              xmlns:models="using:Paperbunkr.App.Models"
+             xmlns:conv="using:Avalonia.Data.Converters"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d" d:DesignWidth="900" d:DesignHeight="700"
@@ -72,6 +73,14 @@
             <Setter Property="Background" Value="{DynamicResource PbAccentSoftBrush}" />
             <Setter Property="Foreground" Value="{DynamicResource PbAccentTextBrush}" />
             <Setter Property="FontWeight" Value="Bold" />
+        </Style>
+
+        <!-- Group section header (docs/superpowers/specs/2026-08-09-library-toolbar-design.md Phase C) -->
+        <Style Selector="TextBlock.groupHeader">
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="FontWeight" Value="Bold" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextBrush}" />
+            <Setter Property="Margin" Value="0,0,0,10" />
         </Style>
     </UserControl.Styles>
 
@@ -262,7 +271,9 @@
                 <Button x:Name="FilterButton" Classes="toolbarPill" Classes.open="{Binding IsFilterOpen}"
                         Command="{Binding ToggleFilterCommand}" Content="Filter ▾" />
                 <Button x:Name="SortButton" Classes="toolbarPill" Classes.open="{Binding IsSortOpen}"
-                        Command="{Binding ToggleSortCommand}" Content="Sort: Recently Added ▾" />
+                        Command="{Binding ToggleSortCommand}" Content="{Binding SortLabel, StringFormat='Sort: {0} ▾'}" />
+                <Button x:Name="GroupButton" Classes="toolbarPill" Classes.open="{Binding IsGroupOpen}"
+                        Command="{Binding ToggleGroupCommand}" Content="{Binding GroupField, StringFormat='Group: {0} ▾'}" />
                 <Button x:Name="DisplayButton" Classes="toolbarPill" Classes.open="{Binding IsDisplayOpen}"
                         Command="{Binding ToggleDisplayCommand}" Content="{Binding DisplayModeLabel, StringFormat='Display: {0} ▾'}" />
                 <Button Classes="toolbarPill" Content="Generate Covers" Command="{Binding GenerateCoversCommand}"
@@ -286,10 +297,42 @@
             <Popup PlacementTarget="{Binding #SortButton}" Placement="BottomEdgeAlignedLeft" VerticalOffset="6"
                    IsOpen="{Binding IsSortOpen}" IsLightDismissEnabled="True">
                 <Border Classes="dropdown" Width="190">
-                    <StackPanel>
-                        <TextBlock Classes="dropdownRow" Text="Recently Added" FontWeight="Bold" Foreground="{DynamicResource PbAccentTextBrush}" />
-                        <TextBlock Classes="dropdownRow" Text="Title A–Z" />
-                        <TextBlock Classes="dropdownRow" Text="Unread count" />
+                    <StackPanel Spacing="1">
+                        <Button Classes="modeOption" Classes.active="{Binding SortField, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static models:LibrarySortField.Name}}"
+                                Content="Name" Command="{Binding SetSortFieldCommand}" CommandParameter="{x:Static models:LibrarySortField.Name}" />
+                        <Button Classes="modeOption" Classes.active="{Binding SortField, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static models:LibrarySortField.DateAdded}}"
+                                Content="Date Added" Command="{Binding SetSortFieldCommand}" CommandParameter="{x:Static models:LibrarySortField.DateAdded}" />
+                        <Button Classes="modeOption" Classes.active="{Binding SortField, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static models:LibrarySortField.LastRead}}"
+                                Content="Last Read" Command="{Binding SetSortFieldCommand}" CommandParameter="{x:Static models:LibrarySortField.LastRead}" />
+                        <Button Classes="modeOption" Classes.active="{Binding SortField, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static models:LibrarySortField.Size}}"
+                                Content="Size" Command="{Binding SetSortFieldCommand}" CommandParameter="{x:Static models:LibrarySortField.Size}" />
+                        <Button Classes="modeOption" Classes.active="{Binding SortField, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static models:LibrarySortField.IssueCount}}"
+                                Content="Issue Count" Command="{Binding SetSortFieldCommand}" CommandParameter="{x:Static models:LibrarySortField.IssueCount}" />
+                        <Button Classes="modeOption" Classes.active="{Binding SortField, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static models:LibrarySortField.UnreadCount}}"
+                                Content="Unread Count" Command="{Binding SetSortFieldCommand}" CommandParameter="{x:Static models:LibrarySortField.UnreadCount}" />
+                        <Button Classes="modeOption" Classes.active="{Binding SortField, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static models:LibrarySortField.Publisher}}"
+                                Content="Publisher" Command="{Binding SetSortFieldCommand}" CommandParameter="{x:Static models:LibrarySortField.Publisher}" />
+
+                        <Border Height="1" Background="{DynamicResource PbBorderBrush}" Margin="0,10" />
+
+                        <Button Classes="modeOption" Content="{Binding SortDirection, StringFormat='Direction: {0}'}"
+                                Command="{Binding ToggleSortDirectionCommand}" />
+                    </StackPanel>
+                </Border>
+            </Popup>
+
+            <Popup PlacementTarget="{Binding #GroupButton}" Placement="BottomEdgeAlignedLeft" VerticalOffset="6"
+                   IsOpen="{Binding IsGroupOpen}" IsLightDismissEnabled="True">
+                <Border Classes="dropdown" Width="190">
+                    <StackPanel Spacing="1">
+                        <Button Classes="modeOption" Classes.active="{Binding GroupField, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static models:LibraryGroupField.None}}"
+                                Content="None" Command="{Binding SetGroupFieldCommand}" CommandParameter="{x:Static models:LibraryGroupField.None}" />
+                        <Button Classes="modeOption" Classes.active="{Binding GroupField, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static models:LibraryGroupField.ContentType}}"
+                                Content="Content Type" Command="{Binding SetGroupFieldCommand}" CommandParameter="{x:Static models:LibraryGroupField.ContentType}" />
+                        <Button Classes="modeOption" Classes.active="{Binding GroupField, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static models:LibraryGroupField.Publisher}}"
+                                Content="Publisher" Command="{Binding SetGroupFieldCommand}" CommandParameter="{x:Static models:LibraryGroupField.Publisher}" />
+                        <Button Classes="modeOption" Classes.active="{Binding GroupField, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static models:LibraryGroupField.Alphabetical}}"
+                                Content="Alphabetical" Command="{Binding SetGroupFieldCommand}" CommandParameter="{x:Static models:LibraryGroupField.Alphabetical}" />
                     </StackPanel>
                 </Border>
             </Popup>
@@ -326,43 +369,124 @@
 
         <!-- ============ Compact grid ============ -->
         <ScrollViewer x:Name="CompactScrollViewer" Grid.Row="1" IsVisible="{Binding IsCompactGrid}">
-            <ItemsControl ItemsSource="{Binding Covers}" ItemTemplate="{StaticResource CompactGridItemTemplate}" Margin="24,22,24,40">
-                <ItemsControl.ItemsPanel>
-                    <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
-                </ItemsControl.ItemsPanel>
-            </ItemsControl>
+            <Grid>
+                <ItemsControl IsVisible="{Binding !IsGrouped}" ItemsSource="{Binding Covers}"
+                              ItemTemplate="{StaticResource CompactGridItemTemplate}" Margin="24,22,24,40">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                </ItemsControl>
+                <ItemsControl IsVisible="{Binding IsGrouped}" ItemsSource="{Binding Groups}" Margin="24,22,24,40">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="models:SeriesCardGroup">
+                            <StackPanel Margin="0,0,0,18">
+                                <TextBlock Text="{Binding Header}" Classes="groupHeader" />
+                                <ItemsControl ItemsSource="{Binding Items}" ItemTemplate="{StaticResource CompactGridItemTemplate}">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                </ItemsControl>
+                            </StackPanel>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </Grid>
         </ScrollViewer>
 
         <!-- ============ Comfortable grid ============ -->
         <ScrollViewer x:Name="ComfortableScrollViewer" Grid.Row="1" IsVisible="{Binding IsComfortableGrid}">
-            <ItemsControl ItemsSource="{Binding Covers}" ItemTemplate="{StaticResource ComfortableGridItemTemplate}" Margin="24,22,24,40">
-                <ItemsControl.ItemsPanel>
-                    <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
-                </ItemsControl.ItemsPanel>
-            </ItemsControl>
+            <Grid>
+                <ItemsControl IsVisible="{Binding !IsGrouped}" ItemsSource="{Binding Covers}"
+                              ItemTemplate="{StaticResource ComfortableGridItemTemplate}" Margin="24,22,24,40">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                </ItemsControl>
+                <ItemsControl IsVisible="{Binding IsGrouped}" ItemsSource="{Binding Groups}" Margin="24,22,24,40">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="models:SeriesCardGroup">
+                            <StackPanel Margin="0,0,0,18">
+                                <TextBlock Text="{Binding Header}" Classes="groupHeader" />
+                                <ItemsControl ItemsSource="{Binding Items}" ItemTemplate="{StaticResource ComfortableGridItemTemplate}">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                </ItemsControl>
+                            </StackPanel>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </Grid>
         </ScrollViewer>
 
         <!-- ============ Cover-only grid ============ -->
         <ScrollViewer x:Name="CoverOnlyScrollViewer" Grid.Row="1" IsVisible="{Binding IsCoverOnlyGrid}">
-            <ItemsControl ItemsSource="{Binding Covers}" ItemTemplate="{StaticResource CoverOnlyGridItemTemplate}" Margin="24,22,24,40">
-                <ItemsControl.ItemsPanel>
-                    <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
-                </ItemsControl.ItemsPanel>
-            </ItemsControl>
+            <Grid>
+                <ItemsControl IsVisible="{Binding !IsGrouped}" ItemsSource="{Binding Covers}"
+                              ItemTemplate="{StaticResource CoverOnlyGridItemTemplate}" Margin="24,22,24,40">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                </ItemsControl>
+                <ItemsControl IsVisible="{Binding IsGrouped}" ItemsSource="{Binding Groups}" Margin="24,22,24,40">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="models:SeriesCardGroup">
+                            <StackPanel Margin="0,0,0,18">
+                                <TextBlock Text="{Binding Header}" Classes="groupHeader" />
+                                <ItemsControl ItemsSource="{Binding Items}" ItemTemplate="{StaticResource CoverOnlyGridItemTemplate}">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                </ItemsControl>
+                            </StackPanel>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </Grid>
         </ScrollViewer>
 
         <!-- ============ Panorama comfortable grid ============ -->
         <ScrollViewer x:Name="PanoramaScrollViewer" Grid.Row="1" IsVisible="{Binding IsPanoramaGrid}">
-            <ItemsControl ItemsSource="{Binding Covers}" ItemTemplate="{StaticResource PanoramaGridItemTemplate}" Margin="24,22,24,40">
-                <ItemsControl.ItemsPanel>
-                    <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
-                </ItemsControl.ItemsPanel>
-            </ItemsControl>
+            <Grid>
+                <ItemsControl IsVisible="{Binding !IsGrouped}" ItemsSource="{Binding Covers}"
+                              ItemTemplate="{StaticResource PanoramaGridItemTemplate}" Margin="24,22,24,40">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                </ItemsControl>
+                <ItemsControl IsVisible="{Binding IsGrouped}" ItemsSource="{Binding Groups}" Margin="24,22,24,40">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="models:SeriesCardGroup">
+                            <StackPanel Margin="0,0,0,18">
+                                <TextBlock Text="{Binding Header}" Classes="groupHeader" />
+                                <ItemsControl ItemsSource="{Binding Items}" ItemTemplate="{StaticResource PanoramaGridItemTemplate}">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                </ItemsControl>
+                            </StackPanel>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </Grid>
         </ScrollViewer>
 
         <!-- ============ List ============ -->
         <ScrollViewer x:Name="ListScrollViewer" Grid.Row="1" IsVisible="{Binding IsListView}">
-            <ItemsControl ItemsSource="{Binding Covers}" ItemTemplate="{StaticResource ListItemTemplate}" Margin="24,18,24,40" />
+            <Grid>
+                <ItemsControl IsVisible="{Binding !IsGrouped}" ItemsSource="{Binding Covers}"
+                              ItemTemplate="{StaticResource ListItemTemplate}" Margin="24,18,24,40" />
+                <ItemsControl IsVisible="{Binding IsGrouped}" ItemsSource="{Binding Groups}" Margin="24,18,24,40">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="models:SeriesCardGroup">
+                            <StackPanel Margin="0,0,0,18">
+                                <TextBlock Text="{Binding Header}" Classes="groupHeader" />
+                                <ItemsControl ItemsSource="{Binding Items}" ItemTemplate="{StaticResource ListItemTemplate}" />
+                            </StackPanel>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </Grid>
         </ScrollViewer>
 
         <!-- ============ Details ============ -->
@@ -375,24 +499,55 @@
                 <TextBlock Grid.Column="5" Text="Publisher" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource PbTextFaintBrush}" />
             </Grid>
             <ScrollViewer x:Name="DetailsScrollViewer">
-                <ItemsControl ItemsSource="{Binding Covers}" ItemTemplate="{StaticResource DetailsItemTemplate}" Margin="0,0,0,40" />
+                <Grid>
+                    <ItemsControl IsVisible="{Binding !IsGrouped}" ItemsSource="{Binding Covers}"
+                                  ItemTemplate="{StaticResource DetailsItemTemplate}" Margin="0,0,0,40" />
+                    <ItemsControl IsVisible="{Binding IsGrouped}" ItemsSource="{Binding Groups}" Margin="0,0,0,40">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="models:SeriesCardGroup">
+                                <StackPanel Margin="0,0,0,14">
+                                    <TextBlock Text="{Binding Header}" Classes="groupHeader" />
+                                    <ItemsControl ItemsSource="{Binding Items}" ItemTemplate="{StaticResource DetailsItemTemplate}" />
+                                </StackPanel>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </Grid>
             </ScrollViewer>
         </DockPanel>
 
         <!-- ============ Tiles ============ -->
         <ScrollViewer x:Name="TilesScrollViewer" Grid.Row="1" IsVisible="{Binding IsTilesView}">
-            <ItemsControl ItemsSource="{Binding Covers}" ItemTemplate="{StaticResource TilesItemTemplate}" Margin="24,18,24,40">
-                <ItemsControl.ItemsPanel>
-                    <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
-                </ItemsControl.ItemsPanel>
-            </ItemsControl>
+            <Grid>
+                <ItemsControl IsVisible="{Binding !IsGrouped}" ItemsSource="{Binding Covers}"
+                              ItemTemplate="{StaticResource TilesItemTemplate}" Margin="24,18,24,40">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                </ItemsControl>
+                <ItemsControl IsVisible="{Binding IsGrouped}" ItemsSource="{Binding Groups}" Margin="24,18,24,40">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="models:SeriesCardGroup">
+                            <StackPanel Margin="0,0,0,18">
+                                <TextBlock Text="{Binding Header}" Classes="groupHeader" />
+                                <ItemsControl ItemsSource="{Binding Items}" ItemTemplate="{StaticResource TilesItemTemplate}">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                </ItemsControl>
+                            </StackPanel>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </Grid>
         </ScrollViewer>
 
         <!-- ============ A-Z jump indexer ============ -->
         <!-- Approximate scroll-to-letter (docs/superpowers/specs/2026-08-09-library-toolbar-design.md
              Phase B) - no virtualized ListBox backs this grid, so there's no real ScrollIntoView;
-             LibraryScreen.axaml.cs estimates a row-based offset instead. -->
-        <Border Grid.Row="1" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,4,0"
+             LibraryScreen.axaml.cs estimates a row-based offset instead. Only meaningful against an
+             alphabetically-sorted, ungrouped flat list (Phase C's ShowAlphabetIndex). -->
+        <Border Grid.Row="1" IsVisible="{Binding ShowAlphabetIndex}" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,4,0"
                 Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}"
                 BorderThickness="1" CornerRadius="10" Padding="2,6">
             <ItemsControl ItemsSource="{Binding AlphabetIndexLetters}">

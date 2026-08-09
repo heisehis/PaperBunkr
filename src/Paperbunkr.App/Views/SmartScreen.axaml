@@ -95,6 +95,11 @@
                                                      Text="{Binding CustomValueName}" IsVisible="{Binding IsCustomValueField}"
                                                      IsReadOnly="{Binding $parent[UserControl].((vm:SmartScreenViewModel)DataContext).IsReadOnly}" />
 
+                                            <ComboBox Classes="conditionPicker" Width="150" PlaceholderText="virtual tag"
+                                                      ItemsSource="{Binding VirtualTagOptions}" SelectedItem="{Binding SelectedVirtualTag}"
+                                                      IsVisible="{Binding IsVirtualTagField}"
+                                                      IsEnabled="{Binding !$parent[UserControl].((vm:SmartScreenViewModel)DataContext).IsReadOnly}" />
+
                                             <ComboBox Classes="conditionPicker" ItemsSource="{Binding OperatorOptions}"
                                                       SelectedItem="{Binding SelectedOperator}" IsVisible="{Binding !IsDuplicateField}"
                                                       IsEnabled="{Binding !$parent[UserControl].((vm:SmartScreenViewModel)DataContext).IsReadOnly}" />

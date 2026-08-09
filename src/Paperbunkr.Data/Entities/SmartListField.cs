@@ -96,4 +96,13 @@ public enum SmartListField
     // Special-cased — not evaluated via SmartListCatalog's flat selector table
     CustomValue,
     Duplicate,
+
+    /// <summary>
+    /// Not in CE at all — CE's fixed VirtualTag01..20 WinForms-reflection-panel scheme was
+    /// deliberately not ported (see <c>VirtualTagDefinition</c>). References one user-defined
+    /// <c>VirtualTagDefinition</c> by id (<see cref="SmartListCondition.VirtualTagId"/>, same
+    /// per-condition-argument shape as <see cref="CustomValue"/>) and matches its evaluated
+    /// caption as text.
+    /// </summary>
+    VirtualTag,
 }

@@ -25,5 +25,8 @@ public class SmartListCondition
     /// <summary>Only populated when <see cref="Field"/> is <see cref="SmartListField.CustomValue"/> — the custom-value name to match, matching CE's 2-argument <c>ComicBookCustomValuesMatcher</c>.</summary>
     public string? CustomValueName { get; set; }
 
+    /// <summary>Only populated when <see cref="Field"/> is <see cref="SmartListField.VirtualTag"/> — the <see cref="VirtualTagDefinition.Id"/> to evaluate and match.</summary>
+    public int? VirtualTagId { get; set; }
+
     public int SortOrder { get; set; }
 }

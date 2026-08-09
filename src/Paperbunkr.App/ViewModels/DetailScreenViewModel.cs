@@ -151,9 +151,11 @@ public partial class DetailScreenViewModel : ViewModelBase
                 ? $"Re-read — Issue #{continueIssue.Number}"
                 : $"Continue — Issue #{continueIssue.Number}";
 
+        var enabledVirtualTags = context.VirtualTagDefinitions.Where(t => t.IsEnabled).OrderBy(t => t.SortOrder).ToList();
+
         Tabs.LoadSeries(series);
         Meta.LoadSeries(series);
-        Pills.LoadSeries(series);
+        Pills.LoadSeries(series, enabledVirtualTags);
 
         _isLoadingSeries = false;
         RaiseEditStateChanged();
@@ -190,11 +192,12 @@ public partial class DetailScreenViewModel : ViewModelBase
         }
 
         using var context = PaperbunkrDb.CreateContext();
+        var enabledVirtualTags = context.VirtualTagDefinitions.Where(t => t.IsEnabled).OrderBy(t => t.SortOrder).ToList();
 
         if (Tabs.SelectedIssueIds.Count == 1)
         {
             int issueId = Tabs.SelectedIssueIds.Single();
-            var issue = context.Issues.FirstOrDefault(i => i.Id == issueId);
+            var issue = context.Issues.Include(i => i.Series).FirstOrDefault(i => i.Id == issueId);
             if (issue is null)
             {
                 return;
@@ -203,7 +206,7 @@ public partial class DetailScreenViewModel : ViewModelBase
             CoverImage = CoverImageCache.Get(issue.Id);
             Summary = string.IsNullOrWhiteSpace(issue.Summary) ? "No summary available." : issue.Summary;
             Meta.LoadIssue(issue);
-            Pills.LoadIssue(issue);
+            Pills.LoadIssue(issue, enabledVirtualTags);
         }
         else
         {
@@ -216,7 +219,7 @@ public partial class DetailScreenViewModel : ViewModelBase
             CoverImage = _seriesCoverImage;
             Summary = _seriesSummary;
             Meta.LoadSeries(series);
-            Pills.LoadSeries(series);
+            Pills.LoadSeries(series, enabledVirtualTags);
         }
 
         RaiseEditStateChanged();

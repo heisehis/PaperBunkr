@@ -52,4 +52,70 @@ public class DetailPillsViewModelTests
         Assert.Equal(new[] { "Justice League" }, vm.Teams);
         Assert.Equal(new[] { "Gotham City" }, vm.Locations);
     }
+
+    [Fact]
+    public void LoadSeries_NoVirtualTagsPassed_HasVirtualTagsIsFalse()
+    {
+        var vm = new DetailPillsViewModel();
+        var series = new Series { Name = "Test Series" };
+        series.Issues.Add(new Issue());
+
+        vm.LoadSeries(series);
+
+        Assert.Empty(vm.VirtualTags);
+        Assert.False(vm.HasVirtualTags);
+    }
+
+    [Fact]
+    public void LoadSeries_EvaluatesVirtualTagsAcrossIssues_DedupedWholeCaption()
+    {
+        var vm = new DetailPillsViewModel();
+        var series = new Series { Name = "Vandal Savage" };
+        series.Issues.Add(new Issue { Number = "1", Writer = "Alan Moore" });
+        series.Issues.Add(new Issue { Number = "2", Writer = "Alan Moore" }); // same writer -> same caption, deduped
+
+        var tags = new[]
+        {
+            new VirtualTagDefinition { Id = 1, Name = "By Writer", CaptionFormat = "By {Writer}", IsEnabled = true },
+        };
+
+        vm.LoadSeries(series, tags);
+
+        Assert.Equal(new[] { "By Alan Moore" }, vm.VirtualTags);
+        Assert.True(vm.HasVirtualTags);
+    }
+
+    [Fact]
+    public void LoadIssue_EvaluatesVirtualTagsAgainstOwnSeriesAndIssue()
+    {
+        var vm = new DetailPillsViewModel();
+        var series = new Series { Name = "Kilo Station" };
+        var issue = new Issue { Number = "12", Series = series };
+
+        var tags = new[]
+        {
+            new VirtualTagDefinition { Id = 1, Name = "Series+Number", CaptionFormat = "{Series} #{Number}", IsEnabled = true },
+        };
+
+        vm.LoadIssue(issue, tags);
+
+        Assert.Equal(new[] { "Kilo Station #12" }, vm.VirtualTags);
+    }
+
+    [Fact]
+    public void LoadIssue_VirtualTagEvaluatesToEmpty_IsSkipped()
+    {
+        var vm = new DetailPillsViewModel();
+        var issue = new Issue { Number = "1" }; // no Series, no Writer
+
+        var tags = new[]
+        {
+            new VirtualTagDefinition { Id = 1, Name = "By Writer", CaptionFormat = "{Writer}", IsEnabled = true },
+        };
+
+        vm.LoadIssue(issue, tags);
+
+        Assert.Empty(vm.VirtualTags);
+        Assert.False(vm.HasVirtualTags);
+    }
 }

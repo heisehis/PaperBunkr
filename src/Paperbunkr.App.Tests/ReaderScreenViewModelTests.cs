@@ -283,4 +283,96 @@ public class ReaderScreenViewModelTests : IDisposable
         Assert.Equal("PAGE 1 / 2", vm.PageLabel);
         Assert.Contains("#2", vm.IssueTitle);
     }
+
+    [Fact]
+    public void ZoomLevel_DefaultsTo1()
+    {
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id);
+
+        Assert.Equal(1.0, vm.ZoomLevel);
+    }
+
+    [Fact]
+    public void ZoomLevel_ClampsAboveMax_To4()
+    {
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id);
+
+        vm.ZoomLevel = 10;
+
+        Assert.Equal(4.0, vm.ZoomLevel);
+    }
+
+    [Fact]
+    public void ZoomLevel_ClampsBelowMin_To1()
+    {
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id);
+
+        vm.ZoomLevel = 0.2;
+
+        Assert.Equal(1.0, vm.ZoomLevel);
+    }
+
+    [Fact]
+    public void ZoomLevel_SetToMin_ResetsPanOffsetToZeroZero()
+    {
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id);
+        vm.ZoomLevel = 2.5;
+        vm.PanOffsetX = 40;
+        vm.PanOffsetY = -10;
+
+        vm.ZoomLevel = 1.0;
+
+        Assert.Equal(0, vm.PanOffsetX);
+        Assert.Equal(0, vm.PanOffsetY);
+    }
+
+    [Fact]
+    public void PanOffset_DefaultsToZeroZero()
+    {
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id);
+
+        Assert.Equal(0, vm.PanOffsetX);
+        Assert.Equal(0, vm.PanOffsetY);
+    }
+
+    [Fact]
+    public void Load_ResetsZoomAndPan_OnReopeningAnAlreadyZoomedIssue()
+    {
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id);
+        vm.ZoomLevel = 2.5;
+        vm.PanOffsetX = 40;
+        vm.PanOffsetY = -10;
+
+        vm.LoadIssue(_issue1Id);
+
+        Assert.Equal(1.0, vm.ZoomLevel);
+        Assert.Equal(0, vm.PanOffsetX);
+        Assert.Equal(0, vm.PanOffsetY);
+    }
+
+    [Fact]
+    public void NextPage_AcrossIssueBoundary_ResetsZoomAndPan()
+    {
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id);
+        vm.NextPageCommand.Execute(null);
+        vm.NextPageCommand.Execute(null);
+        Assert.Equal("PAGE 3 / 3", vm.PageLabel);
+        vm.ZoomLevel = 2.5;
+        vm.PanOffsetX = 40;
+        vm.PanOffsetY = -10;
+
+        vm.NextPageCommand.Execute(null);
+
+        Assert.Contains("#2", vm.IssueTitle);
+        Assert.Equal(1.0, vm.ZoomLevel);
+        Assert.Equal(0, vm.PanOffsetX);
+        Assert.Equal(0, vm.PanOffsetY);
+    }
 }

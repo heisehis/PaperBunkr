@@ -75,6 +75,39 @@ public partial class ReaderScreenViewModel : ViewModelBase
     [ObservableProperty]
     private string? _errorMessage;
 
+    private double _zoomLevel = 1.0;
+
+    /// <summary>
+    /// Hand-written rather than <c>[ObservableProperty]</c> (like <see cref="CoverBrush"/>/
+    /// <see cref="BreadcrumbSeries"/> already are in this file) because it needs custom
+    /// clamp-then-cascade logic the source generator can't express: this setter is the single
+    /// mechanism satisfying "resets to fit" everywhere - <see cref="Load"/> and
+    /// <see cref="Views.PageCanvas"/>'s double-click-reset path both just set
+    /// <c>ZoomLevel = 1.0</c>, and the cascade zeroes pan for both, so neither caller separately
+    /// zeroes pan. Range constants are duplicated in <see cref="Views.ZoomPanMath"/> rather than
+    /// referenced from here, to avoid a ViewModels -&gt; Views dependency this codebase's binding
+    /// direction doesn't otherwise have.
+    /// </summary>
+    public double ZoomLevel
+    {
+        get => _zoomLevel;
+        set
+        {
+            double clamped = Math.Clamp(value, 1.0, 4.0);
+            if (SetProperty(ref _zoomLevel, clamped) && clamped == 1.0)
+            {
+                PanOffsetX = 0;
+                PanOffsetY = 0;
+            }
+        }
+    }
+
+    [ObservableProperty]
+    private double _panOffsetX;
+
+    [ObservableProperty]
+    private double _panOffsetY;
+
     public bool HasError => !string.IsNullOrEmpty(ErrorMessage);
 
     partial void OnErrorMessageChanged(string? value) => OnPropertyChanged(nameof(HasError));
@@ -153,6 +186,7 @@ public partial class ReaderScreenViewModel : ViewModelBase
         };
 
         ErrorMessage = null;
+        ZoomLevel = 1.0;
         int pageCount = issue.PageCount is > 0 ? issue.PageCount.Value : 1;
 
         if (!string.IsNullOrEmpty(issue.FilePath))

@@ -85,6 +85,9 @@
                                   HighQualityDisplay="{Binding HighQualityPageDisplay}"
                                   LeftKey="{Binding PageTurnLeftKey}"
                                   RightKey="{Binding PageTurnRightKey}"
+                                  ZoomLevel="{Binding ZoomLevel}"
+                                  PanOffsetX="{Binding PanOffsetX}"
+                                  PanOffsetY="{Binding PanOffsetY}"
                                   IsVisible="{Binding !HasError}" />
 
                 <Border IsVisible="{Binding HasError}" Width="400" CornerRadius="8"

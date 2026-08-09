@@ -105,15 +105,27 @@
         <Border Grid.Row="2" Background="{StaticResource ReaderChromeBrush}" BorderBrush="{StaticResource ReaderBorderBrush}"
                 BorderThickness="0,1,0,0" Padding="22,12">
             <Grid ColumnDefinitions="Auto,*,Auto">
-                <Button Grid.Column="0" Content="◀" Command="{Binding GoLeftCommand}" Background="Transparent"
-                        BorderThickness="0" Padding="0" Cursor="Hand" Foreground="{StaticResource ReaderTextBrush}"
-                        VerticalAlignment="Center" Margin="0,0,14,0" />
+                <Button Grid.Column="0" Command="{Binding GoLeftCommand}" Background="Transparent"
+                        BorderThickness="0" Padding="0" Cursor="Hand"
+                        VerticalAlignment="Center" Margin="0,0,14,0" ToolTip.Tip="Previous page">
+                    <Border Classes="icon" Width="14" Height="14" Background="{StaticResource ReaderTextBrush}">
+                        <Border.OpacityMask>
+                            <ImageBrush Source="/Assets/Icons/Skip_Back.png" Stretch="Uniform" />
+                        </Border.OpacityMask>
+                    </Border>
+                </Button>
                 <ProgressBar Grid.Column="1" Height="4" CornerRadius="2" Minimum="0" Maximum="1"
                              Value="{Binding ProgressFraction}" Background="{StaticResource ReaderTrackBrush}"
                              Foreground="{DynamicResource PbAccentBrush}" VerticalAlignment="Center" />
-                <Button Grid.Column="2" Content="▶" Command="{Binding GoRightCommand}" Background="Transparent"
-                        BorderThickness="0" Padding="0" Cursor="Hand" Foreground="{StaticResource ReaderTextBrush}"
-                        VerticalAlignment="Center" Margin="14,0,0,0" />
+                <Button Grid.Column="2" Command="{Binding GoRightCommand}" Background="Transparent"
+                        BorderThickness="0" Padding="0" Cursor="Hand"
+                        VerticalAlignment="Center" Margin="14,0,0,0" ToolTip.Tip="Next page">
+                    <Border Classes="icon" Width="14" Height="14" Background="{StaticResource ReaderTextBrush}">
+                        <Border.OpacityMask>
+                            <ImageBrush Source="/Assets/Icons/Skip_Forward.png" Stretch="Uniform" />
+                        </Border.OpacityMask>
+                    </Border>
+                </Button>
             </Grid>
         </Border>
     </Grid>

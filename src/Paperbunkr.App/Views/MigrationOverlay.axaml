@@ -130,14 +130,35 @@
                         <!-- Locate -->
                         <StackPanel IsVisible="{Binding Migration.IsLocate}" Spacing="12">
                             <TextBlock Text="Locate your ComicRack CE library" FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}" />
-                            <TextBlock Text="Found the default CE install" Foreground="{DynamicResource PbAccentTextBrush}" FontSize="12.5"
-                                       IsVisible="{Binding Migration.DefaultPathFound}" />
+                            <StackPanel Orientation="Horizontal" Spacing="5" IsVisible="{Binding Migration.DefaultPathFound}">
+                                <Border Classes="icon" Width="13" Height="13" Background="{DynamicResource PbAccentTextBrush}">
+                                    <Border.OpacityMask>
+                                        <ImageBrush Source="/Assets/Icons/Circle_Check.png" Stretch="Uniform" />
+                                    </Border.OpacityMask>
+                                </Border>
+                                <TextBlock Text="Found the default CE install" Foreground="{DynamicResource PbAccentTextBrush}" FontSize="12.5" />
+                            </StackPanel>
                             <Grid ColumnDefinitions="*,Auto">
                                 <TextBox Grid.Column="0" Text="{Binding Migration.SelectedPath}" PlaceholderText="Path to ComicDb.xml" />
-                                <Button Grid.Column="1" Content="Browse…" Margin="8,0,0,0" Command="{Binding Migration.BrowseCommand}" />
+                                <Button Grid.Column="1" Margin="8,0,0,0" Command="{Binding Migration.BrowseCommand}">
+                                    <StackPanel Orientation="Horizontal" Spacing="5">
+                                        <Border Classes="icon" Width="13" Height="13">
+                                            <Border.OpacityMask>
+                                                <ImageBrush Source="/Assets/Icons/Folder_Open.png" Stretch="Uniform" />
+                                            </Border.OpacityMask>
+                                        </Border>
+                                        <TextBlock Text="Browse…" />
+                                    </StackPanel>
+                                </Button>
                             </Grid>
-                            <TextBlock Text="{Binding Migration.ErrorMessage}" Foreground="#E06060" FontSize="12.5"
-                                       IsVisible="{Binding Migration.HasErrorMessage}" />
+                            <StackPanel Orientation="Horizontal" Spacing="5" IsVisible="{Binding Migration.HasErrorMessage}">
+                                <Border Classes="icon" Width="13" Height="13" Background="#E06060">
+                                    <Border.OpacityMask>
+                                        <ImageBrush Source="/Assets/Icons/Circle_Warning.png" Stretch="Uniform" />
+                                    </Border.OpacityMask>
+                                </Border>
+                                <TextBlock Text="{Binding Migration.ErrorMessage}" Foreground="#E06060" FontSize="12.5" />
+                            </StackPanel>
                             <Button Classes="primaryWide" Content="Scan" Command="{Binding Migration.ScanCommand}" HorizontalAlignment="Left" />
                         </StackPanel>
 

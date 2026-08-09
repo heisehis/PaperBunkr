@@ -76,8 +76,26 @@
                     <TextBlock Text="{Binding Subtitle}" FontSize="12.5" Foreground="{DynamicResource PbTextFaintBrush}" Margin="0,4,0,0" />
                 </StackPanel>
                 <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Bottom">
-                    <Button Classes="headerAction ghost" Content="Duplicate" Command="{Binding DuplicateCommand}" />
-                    <Button Classes="headerAction primary" Content="Save" Command="{Binding SaveCommand}" IsVisible="{Binding !IsReadOnly}" />
+                    <Button Classes="headerAction ghost" Command="{Binding DuplicateCommand}">
+                        <StackPanel Orientation="Horizontal" Spacing="5">
+                            <Border Classes="icon" Width="12" Height="12">
+                                <Border.OpacityMask>
+                                    <ImageBrush Source="/Assets/Icons/Copy.png" Stretch="Uniform" />
+                                </Border.OpacityMask>
+                            </Border>
+                            <TextBlock Text="Duplicate" />
+                        </StackPanel>
+                    </Button>
+                    <Button Classes="headerAction primary" Command="{Binding SaveCommand}" IsVisible="{Binding !IsReadOnly}">
+                        <StackPanel Orientation="Horizontal" Spacing="5">
+                            <Border Classes="icon" Width="12" Height="12" Background="{DynamicResource PbBadgeTextBrush}">
+                                <Border.OpacityMask>
+                                    <ImageBrush Source="/Assets/Icons/Save.png" Stretch="Uniform" />
+                                </Border.OpacityMask>
+                            </Border>
+                            <TextBlock Text="Save" />
+                        </StackPanel>
+                    </Button>
                 </StackPanel>
             </Grid>
             <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,0,0,1" Margin="0,0,0,24" />
@@ -132,28 +150,72 @@
                                             <TextBox Classes="conditionValue" Width="90" Text="{Binding Value2}" IsVisible="{Binding ShowValue2}"
                                                       IsReadOnly="{Binding $parent[UserControl].((vm:SmartScreenViewModel)DataContext).IsReadOnly}" />
 
-                                            <Button Classes="headerAction ghost" Content="✕" Command="{Binding RemoveCommand}"
-                                                    IsVisible="{Binding !$parent[UserControl].((vm:SmartScreenViewModel)DataContext).IsReadOnly}" />
+                                            <Button Classes="headerAction ghost" Command="{Binding RemoveCommand}" ToolTip.Tip="Remove condition"
+                                                    IsVisible="{Binding !$parent[UserControl].((vm:SmartScreenViewModel)DataContext).IsReadOnly}">
+                                                <Border Classes="icon" Width="13" Height="13">
+                                                    <Border.OpacityMask>
+                                                        <ImageBrush Source="/Assets/Icons/Remove_Minus_Circle.png" Stretch="Uniform" />
+                                                    </Border.OpacityMask>
+                                                </Border>
+                                            </Button>
                                         </StackPanel>
                                     </Border>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
 
-                        <Button Classes="headerAction ghost" Content="+ Add condition" Command="{Binding AddConditionCommand}"
+                        <Button Classes="headerAction ghost" Command="{Binding AddConditionCommand}"
                                 HorizontalAlignment="Left" Padding="0" Margin="0,12,0,0"
-                                Foreground="{DynamicResource PbAccentTextBrush}" IsVisible="{Binding !IsReadOnly}" />
+                                Foreground="{DynamicResource PbAccentTextBrush}" IsVisible="{Binding !IsReadOnly}">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <!-- Plain crossed bars, not the Add_Plus.png OpacityMask used elsewhere for
+                                     "add" actions - that pattern silently failed to render in this one spot
+                                     (confirmed via a live repro: a plain solid-color Border in the same slot
+                                     rendered fine, so it's specific to OpacityMask+ImageBrush here, not
+                                     StackPanel/Button layout) and wasn't worth chasing further. Two Rectangles
+                                     avoid the whole ImageBrush/OpacityMask path. -->
+                                <Grid Width="10" Height="10" VerticalAlignment="Center">
+                                    <Rectangle Width="10" Height="1.6" Fill="{DynamicResource PbAccentTextBrush}" VerticalAlignment="Center" />
+                                    <Rectangle Width="1.6" Height="10" Fill="{DynamicResource PbAccentTextBrush}" HorizontalAlignment="Center" />
+                                </Grid>
+                                <TextBlock Text="Add condition" />
+                            </StackPanel>
+                        </Button>
                     </StackPanel>
                 </Border>
 
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="9" Margin="0,20,0,0" IsVisible="{Binding !IsReadOnly}">
-                    <Button Classes="headerAction ghost" Content="Cancel" Padding="14,8" Command="{Binding CancelCommand}" />
-                    <Button Classes="headerAction primary" Content="Apply" Padding="14,8" Command="{Binding SaveCommand}" />
+                    <Button Classes="headerAction ghost" Padding="14,8" Command="{Binding CancelCommand}">
+                        <StackPanel Orientation="Horizontal" Spacing="5">
+                            <Border Classes="icon" Width="12" Height="12">
+                                <Border.OpacityMask>
+                                    <ImageBrush Source="/Assets/Icons/Close_Circle.png" Stretch="Uniform" />
+                                </Border.OpacityMask>
+                            </Border>
+                            <TextBlock Text="Cancel" />
+                        </StackPanel>
+                    </Button>
+                    <Button Classes="headerAction primary" Padding="14,8" Command="{Binding SaveCommand}">
+                        <StackPanel Orientation="Horizontal" Spacing="5">
+                            <Border Classes="icon" Width="12" Height="12" Background="{DynamicResource PbBadgeTextBrush}">
+                                <Border.OpacityMask>
+                                    <ImageBrush Source="/Assets/Icons/Save.png" Stretch="Uniform" />
+                                </Border.OpacityMask>
+                            </Border>
+                            <TextBlock Text="Apply" />
+                        </StackPanel>
+                    </Button>
                 </StackPanel>
 
-                <TextBlock Text="No issues match this list yet." FontSize="12.5" Margin="0,32,0,0"
-                           Foreground="{DynamicResource PbTextFaintBrush}"
-                           IsVisible="{Binding !HasResults}" />
+                <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,32,0,0" IsVisible="{Binding !HasResults}">
+                    <Border Classes="icon" Width="13" Height="13">
+                        <Border.OpacityMask>
+                            <ImageBrush Source="/Assets/Icons/Search_Magnifying_Glass.png" Stretch="Uniform" />
+                        </Border.OpacityMask>
+                    </Border>
+                    <TextBlock Text="No issues match this list yet." FontSize="12.5"
+                               Foreground="{DynamicResource PbTextFaintBrush}" />
+                </StackPanel>
 
                 <ItemsControl x:Name="ResultsList" ItemsSource="{Binding Results}" Margin="0,32,0,0"
                               IsVisible="{Binding HasResults}">

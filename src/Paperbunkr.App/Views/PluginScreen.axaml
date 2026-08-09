@@ -11,6 +11,11 @@
          - a genuine empty state, same treatment as Detail's Related/Activity tabs, rather than the
          fake "Duplicate Finder" demo content this screen used to ship. -->
     <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="6" MaxWidth="360">
+        <Border Classes="icon" Width="40" Height="40" Margin="0,0,0,10" HorizontalAlignment="Center">
+            <Border.OpacityMask>
+                <ImageBrush Source="/Assets/Icons/Puzzle.png" Stretch="Uniform" />
+            </Border.OpacityMask>
+        </Border>
         <TextBlock Text="Plugins" FontSize="22" FontWeight="Bold" Foreground="{DynamicResource PbTextBrush}"
                    HorizontalAlignment="Center" />
         <TextBlock Text="No plugins installed yet." FontSize="13" Foreground="{DynamicResource PbTextMutedBrush}"

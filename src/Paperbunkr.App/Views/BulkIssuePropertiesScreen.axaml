@@ -43,12 +43,15 @@
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="BorderThickness" Value="0" />
             <Setter Property="Padding" Value="2" />
-            <Setter Property="FontSize" Value="18" />
             <Setter Property="Cursor" Value="Hand" />
-            <Setter Property="Foreground" Value="{DynamicResource PbTextFaintBrush}" />
         </Style>
-        <Style Selector="Button.star.filled">
-            <Setter Property="Foreground" Value="{DynamicResource PbAccentBrush}" />
+        <Style Selector="Button.star Border.icon">
+            <Setter Property="Width" Value="15" />
+            <Setter Property="Height" Value="15" />
+            <Setter Property="Background" Value="{DynamicResource PbTextFaintBrush}" />
+        </Style>
+        <Style Selector="Button.star.filled Border.icon">
+            <Setter Property="Background" Value="{DynamicResource PbAccentBrush}" />
         </Style>
     </UserControl.Styles>
 
@@ -64,11 +67,11 @@
                           Content="Yes" Foreground="{DynamicResource PbTextBrush}" FontSize="13" />
 
                 <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="2" IsVisible="{Binding IsRatingKind}">
-                    <Button Classes="star" Classes.filled="{Binding Star1}" Content="★" Command="{Binding SetStar1Command}" />
-                    <Button Classes="star" Classes.filled="{Binding Star2}" Content="★" Command="{Binding SetStar2Command}" />
-                    <Button Classes="star" Classes.filled="{Binding Star3}" Content="★" Command="{Binding SetStar3Command}" />
-                    <Button Classes="star" Classes.filled="{Binding Star4}" Content="★" Command="{Binding SetStar4Command}" />
-                    <Button Classes="star" Classes.filled="{Binding Star5}" Content="★" Command="{Binding SetStar5Command}" />
+                    <Button Classes="star" Classes.filled="{Binding Star1}" Command="{Binding SetStar1Command}"><Border Classes="icon"><Border.OpacityMask><ImageBrush Source="/Assets/Icons/Star.png" Stretch="Uniform" /></Border.OpacityMask></Border></Button>
+                    <Button Classes="star" Classes.filled="{Binding Star2}" Command="{Binding SetStar2Command}"><Border Classes="icon"><Border.OpacityMask><ImageBrush Source="/Assets/Icons/Star.png" Stretch="Uniform" /></Border.OpacityMask></Border></Button>
+                    <Button Classes="star" Classes.filled="{Binding Star3}" Command="{Binding SetStar3Command}"><Border Classes="icon"><Border.OpacityMask><ImageBrush Source="/Assets/Icons/Star.png" Stretch="Uniform" /></Border.OpacityMask></Border></Button>
+                    <Button Classes="star" Classes.filled="{Binding Star4}" Command="{Binding SetStar4Command}"><Border Classes="icon"><Border.OpacityMask><ImageBrush Source="/Assets/Icons/Star.png" Stretch="Uniform" /></Border.OpacityMask></Border></Button>
+                    <Button Classes="star" Classes.filled="{Binding Star5}" Command="{Binding SetStar5Command}"><Border Classes="icon"><Border.OpacityMask><ImageBrush Source="/Assets/Icons/Star.png" Stretch="Uniform" /></Border.OpacityMask></Border></Button>
                 </StackPanel>
             </Grid>
         </DataTemplate>
@@ -85,8 +88,26 @@
                                FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" Margin="0,4,0,0" />
                 </StackPanel>
                 <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10" VerticalAlignment="Bottom">
-                    <Button Classes="headerAction ghost" Content="Cancel" Command="{Binding CancelCommand}" />
-                    <Button Classes="headerAction primary" Content="Apply" Command="{Binding SaveCommand}" />
+                    <Button Classes="headerAction ghost" Command="{Binding CancelCommand}">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <Border Classes="icon" Background="{DynamicResource PbTextMutedBrush}">
+                                <Border.OpacityMask>
+                                    <ImageBrush Source="/Assets/Icons/Close_Circle.png" Stretch="Uniform" />
+                                </Border.OpacityMask>
+                            </Border>
+                            <TextBlock Text="Cancel" />
+                        </StackPanel>
+                    </Button>
+                    <Button Classes="headerAction primary" Command="{Binding SaveCommand}">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <Border Classes="icon" Background="{DynamicResource PbBadgeTextBrush}">
+                                <Border.OpacityMask>
+                                    <ImageBrush Source="/Assets/Icons/Save.png" Stretch="Uniform" />
+                                </Border.OpacityMask>
+                            </Border>
+                            <TextBlock Text="Apply" />
+                        </StackPanel>
+                    </Button>
                 </StackPanel>
             </Grid>
             <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,0,0,1" Margin="0,0,0,24" />

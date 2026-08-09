@@ -69,5 +69,16 @@
         <Style Selector="MenuItem">
             <Setter Property="FontFamily" Value="{DynamicResource PbFontFamily}" />
         </Style>
+
+        <!-- coolicons pack (Downloads/coolicons, flat white-on-transparent PNGs under
+             Assets/Icons/) rendered as an OpacityMask so each icon can still be tinted via a
+             DynamicResource brush instead of being stuck one flat baked-in color. Default 14px
+             + muted-text tint; override Width/Height/Background per instance (local values win
+             over style setters) wherever a screen needs a different size or state color. -->
+        <Style Selector="Border.icon">
+            <Setter Property="Width" Value="14" />
+            <Setter Property="Height" Value="14" />
+            <Setter Property="Background" Value="{DynamicResource PbTextMutedBrush}" />
+        </Style>
     </Application.Styles>
 </Application>

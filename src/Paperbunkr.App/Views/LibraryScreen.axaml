@@ -26,6 +26,14 @@
             <Setter Property="Background" Value="{DynamicResource PbAccentSoftBrush}" />
             <Setter Property="Foreground" Value="{DynamicResource PbAccentTextBrush}" />
         </Style>
+        <Style Selector="Button.toolbarPill Border.icon">
+            <Setter Property="Width" Value="12" />
+            <Setter Property="Height" Value="12" />
+            <Setter Property="Background" Value="{DynamicResource PbTextMutedBrush}" />
+        </Style>
+        <Style Selector="Button.toolbarPill.open Border.icon">
+            <Setter Property="Background" Value="{DynamicResource PbAccentTextBrush}" />
+        </Style>
 
         <Style Selector="Border.dropdown">
             <Setter Property="Background" Value="{DynamicResource PbChromeBrush}" />
@@ -97,6 +105,11 @@
             <Setter Property="Padding" Value="3,0,0,0" />
             <Setter Property="Cursor" Value="Hand" />
         </Style>
+        <Style Selector="Button.continueReading Border.icon">
+            <Setter Property="Width" Value="12" />
+            <Setter Property="Height" Value="12" />
+            <Setter Property="Background" Value="White" />
+        </Style>
     </UserControl.Styles>
 
     <UserControl.Resources>
@@ -129,16 +142,22 @@
                                 <Panel>
                                     <TextBlock Text="{Binding LanguageIso}" FontSize="8" FontWeight="Bold" Foreground="White"
                                                IsVisible="{Binding !$parent[UserControl].((vm:LibraryScreenViewModel)DataContext).UseLanguageIcon}" />
-                                    <TextBlock Text="🌐" FontSize="8" Foreground="White"
-                                               IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).UseLanguageIcon}" />
+                                    <Border Classes="icon" Width="8" Height="8" Background="White"
+                                            IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).UseLanguageIcon}">
+                                        <Border.OpacityMask><ImageBrush Source="/Assets/Icons/Globe.png" Stretch="Uniform" /></Border.OpacityMask>
+                                    </Border>
                                 </Panel>
                             </Border>
                         </Border>
                         <Border IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowContinueReadingButton}">
-                            <Button Classes="continueReading" Width="24" Height="24" FontSize="10" IsVisible="{Binding HasContinueReading}"
+                            <Button Classes="continueReading" Width="24" Height="24" IsVisible="{Binding HasContinueReading}"
                                     Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ContinueReadingCommand}"
-                                    CommandParameter="{Binding}" Content="▶"
-                                    HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                    CommandParameter="{Binding}"
+                                    HorizontalAlignment="Center" VerticalAlignment="Center">
+                                <Border Classes="icon">
+                                    <Border.OpacityMask><ImageBrush Source="/Assets/Icons/Play.png" Stretch="Uniform" /></Border.OpacityMask>
+                                </Border>
+                            </Button>
                         </Border>
                         <TextBlock Text="{Binding Title}" TextWrapping="Wrap" TextTrimming="CharacterEllipsis" MaxLines="2"
                                    FontSize="11" FontWeight="Black" Foreground="#FFFFF8EC" VerticalAlignment="Bottom"
@@ -179,16 +198,22 @@
                                     <Panel>
                                         <TextBlock Text="{Binding LanguageIso}" FontSize="9" FontWeight="Bold" Foreground="White"
                                                    IsVisible="{Binding !$parent[UserControl].((vm:LibraryScreenViewModel)DataContext).UseLanguageIcon}" />
-                                        <TextBlock Text="🌐" FontSize="9" Foreground="White"
-                                                   IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).UseLanguageIcon}" />
+                                        <Border Classes="icon" Width="9" Height="9" Background="White"
+                                                IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).UseLanguageIcon}">
+                                            <Border.OpacityMask><ImageBrush Source="/Assets/Icons/Globe.png" Stretch="Uniform" /></Border.OpacityMask>
+                                        </Border>
                                     </Panel>
                                 </Border>
                             </Border>
                             <Border IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowContinueReadingButton}">
                                 <Button Classes="continueReading" IsVisible="{Binding HasContinueReading}"
                                         Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ContinueReadingCommand}"
-                                        CommandParameter="{Binding}" Content="▶"
-                                        HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                        CommandParameter="{Binding}"
+                                        HorizontalAlignment="Center" VerticalAlignment="Center">
+                                    <Border Classes="icon">
+                                        <Border.OpacityMask><ImageBrush Source="/Assets/Icons/Play.png" Stretch="Uniform" /></Border.OpacityMask>
+                                    </Border>
+                                </Button>
                             </Border>
                             <TextBlock Text="{Binding Title}" TextWrapping="Wrap" FontSize="14" FontWeight="Black"
                                        Foreground="#FFFFF8EC" VerticalAlignment="Bottom"
@@ -234,16 +259,22 @@
                                 <Panel>
                                     <TextBlock Text="{Binding LanguageIso}" FontSize="9" FontWeight="Bold" Foreground="White"
                                                IsVisible="{Binding !$parent[UserControl].((vm:LibraryScreenViewModel)DataContext).UseLanguageIcon}" />
-                                    <TextBlock Text="🌐" FontSize="9" Foreground="White"
-                                               IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).UseLanguageIcon}" />
+                                    <Border Classes="icon" Width="9" Height="9" Background="White"
+                                            IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).UseLanguageIcon}">
+                                        <Border.OpacityMask><ImageBrush Source="/Assets/Icons/Globe.png" Stretch="Uniform" /></Border.OpacityMask>
+                                    </Border>
                                 </Panel>
                             </Border>
                         </Border>
                         <Border IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowContinueReadingButton}">
                             <Button Classes="continueReading" IsVisible="{Binding HasContinueReading}"
                                     Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ContinueReadingCommand}"
-                                    CommandParameter="{Binding}" Content="▶"
-                                    HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                    CommandParameter="{Binding}"
+                                    HorizontalAlignment="Center" VerticalAlignment="Center">
+                                <Border Classes="icon">
+                                    <Border.OpacityMask><ImageBrush Source="/Assets/Icons/Play.png" Stretch="Uniform" /></Border.OpacityMask>
+                                </Border>
+                            </Button>
                         </Border>
                         <TextBlock Text="{Binding Title}" TextWrapping="Wrap" FontSize="14" FontWeight="Black"
                                    Foreground="#FFFFF8EC" VerticalAlignment="Bottom"
@@ -285,16 +316,22 @@
                                     <Panel>
                                         <TextBlock Text="{Binding LanguageIso}" FontSize="9" FontWeight="Bold" Foreground="White"
                                                    IsVisible="{Binding !$parent[UserControl].((vm:LibraryScreenViewModel)DataContext).UseLanguageIcon}" />
-                                        <TextBlock Text="🌐" FontSize="9" Foreground="White"
-                                                   IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).UseLanguageIcon}" />
+                                        <Border Classes="icon" Width="9" Height="9" Background="White"
+                                                IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).UseLanguageIcon}">
+                                            <Border.OpacityMask><ImageBrush Source="/Assets/Icons/Globe.png" Stretch="Uniform" /></Border.OpacityMask>
+                                        </Border>
                                     </Panel>
                                 </Border>
                             </Border>
                             <Border IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowContinueReadingButton}">
                                 <Button Classes="continueReading" IsVisible="{Binding HasContinueReading}"
                                         Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ContinueReadingCommand}"
-                                        CommandParameter="{Binding}" Content="▶"
-                                        HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                        CommandParameter="{Binding}"
+                                        HorizontalAlignment="Center" VerticalAlignment="Center">
+                                    <Border Classes="icon">
+                                        <Border.OpacityMask><ImageBrush Source="/Assets/Icons/Play.png" Stretch="Uniform" /></Border.OpacityMask>
+                                    </Border>
+                                </Button>
                             </Border>
                         </Grid>
                     </Border>
@@ -390,13 +427,33 @@
                 <TextBox Width="260" Text="{Binding SearchQuery}" Watermark="Search all series…" FontSize="12.5" />
 
                 <Button x:Name="FilterButton" Classes="toolbarPill" Classes.open="{Binding IsFilterOpen}"
-                        Command="{Binding ToggleFilterCommand}" Content="Filter ▾" />
+                        Command="{Binding ToggleFilterCommand}">
+                    <StackPanel Orientation="Horizontal" Spacing="5">
+                        <Border Classes="icon"><Border.OpacityMask><ImageBrush Source="/Assets/Icons/Filter.png" Stretch="Uniform" /></Border.OpacityMask></Border>
+                        <TextBlock Text="Filter ▾" />
+                    </StackPanel>
+                </Button>
                 <Button x:Name="SortButton" Classes="toolbarPill" Classes.open="{Binding IsSortOpen}"
-                        Command="{Binding ToggleSortCommand}" Content="{Binding SortLabel, StringFormat='Sort: {0} ▾'}" />
+                        Command="{Binding ToggleSortCommand}">
+                    <StackPanel Orientation="Horizontal" Spacing="5">
+                        <Border Classes="icon"><Border.OpacityMask><ImageBrush Source="/Assets/Icons/Sort_Ascending.png" Stretch="Uniform" /></Border.OpacityMask></Border>
+                        <TextBlock Text="{Binding SortLabel, StringFormat='Sort: {0} ▾'}" />
+                    </StackPanel>
+                </Button>
                 <Button x:Name="GroupButton" Classes="toolbarPill" Classes.open="{Binding IsGroupOpen}"
-                        Command="{Binding ToggleGroupCommand}" Content="{Binding GroupField, StringFormat='Group: {0} ▾'}" />
+                        Command="{Binding ToggleGroupCommand}">
+                    <StackPanel Orientation="Horizontal" Spacing="5">
+                        <Border Classes="icon"><Border.OpacityMask><ImageBrush Source="/Assets/Icons/Layers.png" Stretch="Uniform" /></Border.OpacityMask></Border>
+                        <TextBlock Text="{Binding GroupField, StringFormat='Group: {0} ▾'}" />
+                    </StackPanel>
+                </Button>
                 <Button x:Name="DisplayButton" Classes="toolbarPill" Classes.open="{Binding IsDisplayOpen}"
-                        Command="{Binding ToggleDisplayCommand}" Content="{Binding DisplayModeLabel, StringFormat='Display: {0} ▾'}" />
+                        Command="{Binding ToggleDisplayCommand}">
+                    <StackPanel Orientation="Horizontal" Spacing="5">
+                        <Border Classes="icon"><Border.OpacityMask><ImageBrush Source="/Assets/Icons/Window.png" Stretch="Uniform" /></Border.OpacityMask></Border>
+                        <TextBlock Text="{Binding DisplayModeLabel, StringFormat='Display: {0} ▾'}" />
+                    </StackPanel>
+                </Button>
             </StackPanel>
 
             <Popup PlacementTarget="{Binding #FilterButton}" Placement="BottomEdgeAlignedLeft" VerticalOffset="6"
@@ -693,9 +750,15 @@
         <!-- P6 fix (docs/alpha-todo.md): none of the 7 display modes had a "no series match" empty
              state - a zero-result search/filter combination (or an empty library) just rendered a
              blank area below the toolbar. -->
-        <TextBlock Grid.Row="1" IsVisible="{Binding !HasAnyResults}" Text="No series match your filters."
-                   FontSize="13" Foreground="{DynamicResource PbTextFaintBrush}"
-                   HorizontalAlignment="Center" VerticalAlignment="Center" />
+        <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="6" IsVisible="{Binding !HasAnyResults}"
+                    HorizontalAlignment="Center" VerticalAlignment="Center">
+            <Border Classes="icon" Width="13" Height="13">
+                <Border.OpacityMask>
+                    <ImageBrush Source="/Assets/Icons/Info.png" Stretch="Uniform" />
+                </Border.OpacityMask>
+            </Border>
+            <TextBlock Text="No series match your filters." FontSize="13" Foreground="{DynamicResource PbTextFaintBrush}" />
+        </StackPanel>
 
     </Grid>
 </UserControl>

@@ -138,11 +138,29 @@
                         </Border>
                         <StackPanel Margin="14" Spacing="10">
                             <StackPanel Orientation="Horizontal" Spacing="10">
-                                <Button Classes="headerAction primary" Content="Browse…" Command="{Binding BrowseForSkinCommand}" />
-                                <Button Classes="headerAction ghost" Content="Open Skins Folder" Command="{Binding OpenSkinsFolderCommand}" />
+                                <Button Classes="headerAction primary" Command="{Binding BrowseForSkinCommand}">
+                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                        <Border Classes="icon" Background="{DynamicResource PbBadgeTextBrush}">
+                                            <Border.OpacityMask><ImageBrush Source="/Assets/Icons/Folder_Open.png" Stretch="Uniform" /></Border.OpacityMask>
+                                        </Border>
+                                        <TextBlock Text="Browse…" />
+                                    </StackPanel>
+                                </Button>
+                                <Button Classes="headerAction ghost" Command="{Binding OpenSkinsFolderCommand}">
+                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                        <Border Classes="icon">
+                                            <Border.OpacityMask><ImageBrush Source="/Assets/Icons/Folder_Open.png" Stretch="Uniform" /></Border.OpacityMask>
+                                        </Border>
+                                        <TextBlock Text="Open Skins Folder" />
+                                    </StackPanel>
+                                </Button>
                             </StackPanel>
-                            <TextBlock Text="{Binding InstallSkinError}" IsVisible="{Binding HasInstallSkinError}"
-                                       Foreground="#D96C6C" FontSize="12" TextWrapping="Wrap" />
+                            <StackPanel Orientation="Horizontal" Spacing="5" IsVisible="{Binding HasInstallSkinError}">
+                                <Border Classes="icon" Width="12" Height="12" Background="#D96C6C">
+                                    <Border.OpacityMask><ImageBrush Source="/Assets/Icons/Circle_Warning.png" Stretch="Uniform" /></Border.OpacityMask>
+                                </Border>
+                                <TextBlock Text="{Binding InstallSkinError}" Foreground="#D96C6C" FontSize="12" TextWrapping="Wrap" />
+                            </StackPanel>
                         </StackPanel>
                     </StackPanel>
                 </Border>
@@ -228,8 +246,12 @@
                             <TextBlock Text="Keyboard Shortcuts" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
                         </Border>
                         <StackPanel Margin="14" Spacing="10">
-                            <TextBlock Text="{Binding KeyBindingConflictError}" IsVisible="{Binding HasKeyBindingConflictError}"
-                                       Foreground="#D96C6C" FontSize="12" TextWrapping="Wrap" />
+                            <StackPanel Orientation="Horizontal" Spacing="5" IsVisible="{Binding HasKeyBindingConflictError}">
+                                <Border Classes="icon" Width="12" Height="12" Background="#D96C6C">
+                                    <Border.OpacityMask><ImageBrush Source="/Assets/Icons/Circle_Warning.png" Stretch="Uniform" /></Border.OpacityMask>
+                                </Border>
+                                <TextBlock Text="{Binding KeyBindingConflictError}" Foreground="#D96C6C" FontSize="12" TextWrapping="Wrap" />
+                            </StackPanel>
 
                             <ItemsControl ItemsSource="{Binding KeyBindings}">
                                 <ItemsControl.ItemTemplate>
@@ -267,12 +289,26 @@
                                         <Grid ColumnDefinitions="*,Auto,Auto" Margin="14,10">
                                             <TextBlock Grid.Column="0" Text="{Binding Path}" FontSize="13" TextTrimming="CharacterEllipsis"
                                                        Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
-                                            <Button Grid.Column="1" Classes="headerAction ghost" Content="Open" Margin="0,0,6,0"
+                                            <Button Grid.Column="1" Classes="headerAction ghost" Margin="0,0,6,0"
                                                     Command="{Binding #WatchedFoldersList.((vm:PreferencesScreenViewModel)DataContext).OpenFolderCommand}"
-                                                    CommandParameter="{Binding}" />
-                                            <Button Grid.Column="2" Classes="headerAction ghost" Content="Remove"
+                                                    CommandParameter="{Binding}">
+                                                <StackPanel Orientation="Horizontal" Spacing="5">
+                                                    <Border Classes="icon" Width="11" Height="11">
+                                                        <Border.OpacityMask><ImageBrush Source="/Assets/Icons/Folder_Open.png" Stretch="Uniform" /></Border.OpacityMask>
+                                                    </Border>
+                                                    <TextBlock Text="Open" />
+                                                </StackPanel>
+                                            </Button>
+                                            <Button Grid.Column="2" Classes="headerAction ghost"
                                                     Command="{Binding #WatchedFoldersList.((vm:PreferencesScreenViewModel)DataContext).RemoveFolderCommand}"
-                                                    CommandParameter="{Binding}" />
+                                                    CommandParameter="{Binding}">
+                                                <StackPanel Orientation="Horizontal" Spacing="5">
+                                                    <Border Classes="icon" Width="11" Height="11">
+                                                        <Border.OpacityMask><ImageBrush Source="/Assets/Icons/Trash_Empty.png" Stretch="Uniform" /></Border.OpacityMask>
+                                                    </Border>
+                                                    <TextBlock Text="Remove" />
+                                                </StackPanel>
+                                            </Button>
                                         </Grid>
                                     </Border>
                                 </DataTemplate>
@@ -280,14 +316,42 @@
                         </ItemsControl>
                         <StackPanel Margin="14" Spacing="10">
                             <StackPanel Orientation="Horizontal" Spacing="10">
-                                <Button Classes="headerAction primary" Content="Add Folder…" Command="{Binding AddFolderCommand}" />
-                                <Button Classes="headerAction ghost" Content="Scan Now" Command="{Binding ScanNowCommand}"
-                                        IsEnabled="{Binding !IsScanning}" />
-                                <Button Classes="headerAction ghost" Content="Generate Covers" Command="{Binding GenerateCoversCommand}"
-                                        IsEnabled="{Binding !IsGeneratingCovers}" />
-                                <Button Classes="headerAction ghost" Content="Sync Metadata" Command="{Binding SyncMetadataCommand}"
+                                <Button Classes="headerAction primary" Command="{Binding AddFolderCommand}">
+                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                        <Border Classes="icon" Background="{DynamicResource PbBadgeTextBrush}">
+                                            <Border.OpacityMask><ImageBrush Source="/Assets/Icons/Folder_Add.png" Stretch="Uniform" /></Border.OpacityMask>
+                                        </Border>
+                                        <TextBlock Text="Add Folder…" />
+                                    </StackPanel>
+                                </Button>
+                                <Button Classes="headerAction ghost" Command="{Binding ScanNowCommand}"
+                                        IsEnabled="{Binding !IsScanning}">
+                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                        <Border Classes="icon">
+                                            <Border.OpacityMask><ImageBrush Source="/Assets/Icons/Folder_Search.png" Stretch="Uniform" /></Border.OpacityMask>
+                                        </Border>
+                                        <TextBlock Text="Scan Now" />
+                                    </StackPanel>
+                                </Button>
+                                <Button Classes="headerAction ghost" Command="{Binding GenerateCoversCommand}"
+                                        IsEnabled="{Binding !IsGeneratingCovers}">
+                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                        <Border Classes="icon">
+                                            <Border.OpacityMask><ImageBrush Source="/Assets/Icons/Book.png" Stretch="Uniform" /></Border.OpacityMask>
+                                        </Border>
+                                        <TextBlock Text="Generate Covers" />
+                                    </StackPanel>
+                                </Button>
+                                <Button Classes="headerAction ghost" Command="{Binding SyncMetadataCommand}"
                                         IsEnabled="{Binding !IsSyncingMetadata}"
-                                        ToolTip.Tip="Re-reads embedded ComicInfo.xml for issues already in the library and fills in any blank fields" />
+                                        ToolTip.Tip="Re-reads embedded ComicInfo.xml for issues already in the library and fills in any blank fields">
+                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                        <Border Classes="icon">
+                                            <Border.OpacityMask><ImageBrush Source="/Assets/Icons/Loading.png" Stretch="Uniform" /></Border.OpacityMask>
+                                        </Border>
+                                        <TextBlock Text="Sync Metadata" />
+                                    </StackPanel>
+                                </Button>
                             </StackPanel>
                             <TextBlock Text="{Binding ScanStatus}" FontSize="12" Foreground="{DynamicResource PbTextFaintBrush}" />
                         </StackPanel>
@@ -304,7 +368,14 @@
                             <TextBlock Text="Import your existing ComicRack Community Edition library - series, issues, and metadata."
                                        FontSize="12" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" />
                             <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                                <Button Classes="headerAction primary" Content="Migrate…" Command="{Binding OpenMigrationCommand}" />
+                                <Button Classes="headerAction primary" Command="{Binding OpenMigrationCommand}">
+                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                        <Border Classes="icon" Background="{DynamicResource PbBadgeTextBrush}">
+                                            <Border.OpacityMask><ImageBrush Source="/Assets/Icons/Cloud_Upload.png" Stretch="Uniform" /></Border.OpacityMask>
+                                        </Border>
+                                        <TextBlock Text="Migrate…" />
+                                    </StackPanel>
+                                </Button>
                                 <Border Width="10" Height="10" CornerRadius="5" Background="{DynamicResource PbAccentBrush}"
                                         IsVisible="{Binding Migration.NeedsReview.HasPendingItems}"
                                         ToolTip.Tip="You have pending series conflicts to review" />
@@ -339,8 +410,15 @@
                         </ItemsControl>
 
                         <StackPanel Margin="14" Spacing="10">
-                            <Button Classes="headerAction ghost" Content="+ Add Virtual Tag" Command="{Binding AddVirtualTagCommand}"
-                                    HorizontalAlignment="Left" />
+                            <Button Classes="headerAction ghost" Command="{Binding AddVirtualTagCommand}"
+                                    HorizontalAlignment="Left">
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <Border Classes="icon" Width="11" Height="11">
+                                        <Border.OpacityMask><ImageBrush Source="/Assets/Icons/Add_Plus.png" Stretch="Uniform" /></Border.OpacityMask>
+                                    </Border>
+                                    <TextBlock Text="Add Virtual Tag" />
+                                </StackPanel>
+                            </Button>
 
                             <StackPanel IsVisible="{Binding HasSelectedVirtualTag}" Spacing="10" Margin="0,10,0,0">
                                 <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,1,0,0" Margin="0,0,0,4" />
@@ -356,8 +434,15 @@
                                 <TextBlock Text="{Binding VirtualTagPreview}" FontFamily="Consolas,monospace" FontSize="13"
                                            Foreground="{DynamicResource PbAccentTextBrush}" />
 
-                                <Button Classes="headerAction ghost" Content="Delete Tag" Command="{Binding DeleteVirtualTagCommand}"
-                                        HorizontalAlignment="Left" Margin="0,6,0,0" />
+                                <Button Classes="headerAction ghost" Command="{Binding DeleteVirtualTagCommand}"
+                                        HorizontalAlignment="Left" Margin="0,6,0,0">
+                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                        <Border Classes="icon" Width="11" Height="11">
+                                            <Border.OpacityMask><ImageBrush Source="/Assets/Icons/Trash_Empty.png" Stretch="Uniform" /></Border.OpacityMask>
+                                        </Border>
+                                        <TextBlock Text="Delete Tag" />
+                                    </StackPanel>
+                                </Button>
                             </StackPanel>
                         </StackPanel>
                     </StackPanel>
@@ -402,14 +487,28 @@
                             <TextBlock Text="Backup Location" FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" />
                             <StackPanel Orientation="Horizontal" Spacing="10">
                                 <TextBox Text="{Binding BackupLocation}" Width="320" IsReadOnly="True" />
-                                <Button Classes="headerAction ghost" Content="Browse…" Command="{Binding BrowseBackupLocationCommand}" />
+                                <Button Classes="headerAction ghost" Command="{Binding BrowseBackupLocationCommand}">
+                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                        <Border Classes="icon" Width="11" Height="11">
+                                            <Border.OpacityMask><ImageBrush Source="/Assets/Icons/Folder_Open.png" Stretch="Uniform" /></Border.OpacityMask>
+                                        </Border>
+                                        <TextBlock Text="Browse…" />
+                                    </StackPanel>
+                                </Button>
                             </StackPanel>
 
                             <TextBlock Text="Backups to Keep" FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" Margin="0,6,0,0" />
                             <NumericUpDown Value="{Binding BackupsToKeep}" Minimum="0" Maximum="99" Width="120" HorizontalAlignment="Left" />
 
-                            <Button Classes="headerAction primary" Content="Backup Now" Command="{Binding BackupNowCommand}"
-                                    HorizontalAlignment="Left" Margin="0,6,0,0" />
+                            <Button Classes="headerAction primary" Command="{Binding BackupNowCommand}"
+                                    HorizontalAlignment="Left" Margin="0,6,0,0">
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <Border Classes="icon" Background="{DynamicResource PbBadgeTextBrush}">
+                                        <Border.OpacityMask><ImageBrush Source="/Assets/Icons/Archive.png" Stretch="Uniform" /></Border.OpacityMask>
+                                    </Border>
+                                    <TextBlock Text="Backup Now" />
+                                </StackPanel>
+                            </Button>
                             <TextBlock Text="{Binding BackupStatus}" FontSize="12" Foreground="{DynamicResource PbTextFaintBrush}" />
                         </StackPanel>
 
@@ -420,8 +519,14 @@
                                         <Grid ColumnDefinitions="*,Auto" Margin="14,10">
                                             <TextBlock Grid.Column="0" Text="{Binding FileName}" FontSize="13" FontFamily="Consolas,monospace"
                                                        Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
-                                            <Button Grid.Column="1" Classes="headerAction ghost" Content="{Binding RestoreLabel}"
-                                                    Command="{Binding RestoreCommand}" />
+                                            <Button Grid.Column="1" Classes="headerAction ghost" Command="{Binding RestoreCommand}">
+                                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                                    <Border Classes="icon" Width="11" Height="11">
+                                                        <Border.OpacityMask><ImageBrush Source="/Assets/Icons/Undo.png" Stretch="Uniform" /></Border.OpacityMask>
+                                                    </Border>
+                                                    <TextBlock Text="{Binding RestoreLabel}" />
+                                                </StackPanel>
+                                            </Button>
                                         </Grid>
                                     </Border>
                                 </DataTemplate>

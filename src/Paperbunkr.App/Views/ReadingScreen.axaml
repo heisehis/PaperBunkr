@@ -71,9 +71,27 @@
                     <TextBlock Text="{Binding Subtitle}" FontSize="12.5" Foreground="{DynamicResource PbTextFaintBrush}" Margin="0,4,0,0" />
                 </StackPanel>
                 <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Bottom">
-                    <Button Classes="headerAction ghost" Content="Copy as Text" Command="{Binding CopyAsTextCommand}" />
-                    <Button Classes="headerAction secondary" Content="Refresh" IsEnabled="False"
-                            ToolTip.Tip="Requires an external story-arc source — deferred to a future pass" />
+                    <Button Classes="headerAction ghost" Command="{Binding CopyAsTextCommand}">
+                        <StackPanel Orientation="Horizontal" Spacing="5">
+                            <Border Classes="icon" Width="11" Height="11">
+                                <Border.OpacityMask>
+                                    <ImageBrush Source="/Assets/Icons/Copy.png" Stretch="Uniform" />
+                                </Border.OpacityMask>
+                            </Border>
+                            <TextBlock Text="Copy as Text" />
+                        </StackPanel>
+                    </Button>
+                    <Button Classes="headerAction secondary" IsEnabled="False"
+                            ToolTip.Tip="Requires an external story-arc source — deferred to a future pass">
+                        <StackPanel Orientation="Horizontal" Spacing="5">
+                            <Border Classes="icon" Width="11" Height="11">
+                                <Border.OpacityMask>
+                                    <ImageBrush Source="/Assets/Icons/Loading.png" Stretch="Uniform" />
+                                </Border.OpacityMask>
+                            </Border>
+                            <TextBlock Text="Refresh" />
+                        </StackPanel>
+                    </Button>
                 </StackPanel>
             </Grid>
             <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,0,0,1" Margin="0,0,0,24" />
@@ -86,7 +104,14 @@
 
                 <Border Background="{DynamicResource PbAccentSoftBrush}" CornerRadius="5" Padding="10,7" Margin="0,0,0,16"
                         IsVisible="{Binding HasStatusMessage}">
-                    <TextBlock Text="{Binding StatusMessage}" FontSize="12" Foreground="{DynamicResource PbTextBrush}" />
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <Border Classes="icon" Width="13" Height="13" Background="{DynamicResource PbTextBrush}">
+                            <Border.OpacityMask>
+                                <ImageBrush Source="/Assets/Icons/Info.png" Stretch="Uniform" />
+                            </Border.OpacityMask>
+                        </Border>
+                        <TextBlock Text="{Binding StatusMessage}" FontSize="12" Foreground="{DynamicResource PbTextBrush}" />
+                    </StackPanel>
                 </Border>
 
                 <StackPanel Orientation="Horizontal" Spacing="10" Margin="0,0,0,22">
@@ -105,10 +130,38 @@
                 </StackPanel>
 
                 <WrapPanel Margin="0,0,0,20">
-                    <Button Classes="headerAction secondary" Content="Import .CBL" Margin="0,0,8,8" Command="{Binding ImportCblCommand}" />
-                    <Button Classes="headerAction secondary" Content="Import .CSV" Margin="0,0,8,8" Command="{Binding ImportCsvCommand}" />
-                    <Button Classes="headerAction secondary" Content="Export .CBL" Margin="0,0,8,8" Command="{Binding ExportCblCommand}" />
-                    <Button Classes="headerAction secondary" Content="Export as Text" Margin="0,0,8,8" Command="{Binding ExportAsTextCommand}" />
+                    <Button Classes="headerAction secondary" Margin="0,0,8,8" Command="{Binding ImportCblCommand}">
+                        <StackPanel Orientation="Horizontal" Spacing="5">
+                            <Border Classes="icon" Width="11" Height="11" Background="{DynamicResource PbTextBrush}">
+                                <Border.OpacityMask><ImageBrush Source="/Assets/Icons/File_Upload.png" Stretch="Uniform" /></Border.OpacityMask>
+                            </Border>
+                            <TextBlock Text="Import .CBL" />
+                        </StackPanel>
+                    </Button>
+                    <Button Classes="headerAction secondary" Margin="0,0,8,8" Command="{Binding ImportCsvCommand}">
+                        <StackPanel Orientation="Horizontal" Spacing="5">
+                            <Border Classes="icon" Width="11" Height="11" Background="{DynamicResource PbTextBrush}">
+                                <Border.OpacityMask><ImageBrush Source="/Assets/Icons/File_Upload.png" Stretch="Uniform" /></Border.OpacityMask>
+                            </Border>
+                            <TextBlock Text="Import .CSV" />
+                        </StackPanel>
+                    </Button>
+                    <Button Classes="headerAction secondary" Margin="0,0,8,8" Command="{Binding ExportCblCommand}">
+                        <StackPanel Orientation="Horizontal" Spacing="5">
+                            <Border Classes="icon" Width="11" Height="11" Background="{DynamicResource PbTextBrush}">
+                                <Border.OpacityMask><ImageBrush Source="/Assets/Icons/File_Download.png" Stretch="Uniform" /></Border.OpacityMask>
+                            </Border>
+                            <TextBlock Text="Export .CBL" />
+                        </StackPanel>
+                    </Button>
+                    <Button Classes="headerAction secondary" Margin="0,0,8,8" Command="{Binding ExportAsTextCommand}">
+                        <StackPanel Orientation="Horizontal" Spacing="5">
+                            <Border Classes="icon" Width="11" Height="11" Background="{DynamicResource PbTextBrush}">
+                                <Border.OpacityMask><ImageBrush Source="/Assets/Icons/File_Download.png" Stretch="Uniform" /></Border.OpacityMask>
+                            </Border>
+                            <TextBlock Text="Export as Text" />
+                        </StackPanel>
+                    </Button>
                     <Button Classes="headerAction secondary" Content="AniList" Margin="0,0,8,8" IsEnabled="False"
                             ToolTip.Tip="External tracker import — deferred to a future pass" />
                     <Button Classes="headerAction secondary" Content="MyAnimeList" Margin="0,0,8,8" IsEnabled="False"
@@ -120,7 +173,14 @@
                 <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,20">
                     <TextBox Grid.Column="0" Classes="searchBox" Watermark="Search your library by series or number…"
                               Text="{Binding SearchQuery}" />
-                    <Button Grid.Column="1" Classes="headerAction secondary" Content="Search" Margin="8,0,0,0" Command="{Binding SearchCommand}" />
+                    <Button Grid.Column="1" Classes="headerAction secondary" Margin="8,0,0,0" Command="{Binding SearchCommand}">
+                        <StackPanel Orientation="Horizontal" Spacing="5">
+                            <Border Classes="icon" Width="11" Height="11" Background="{DynamicResource PbTextBrush}">
+                                <Border.OpacityMask><ImageBrush Source="/Assets/Icons/Search_Magnifying_Glass.png" Stretch="Uniform" /></Border.OpacityMask>
+                            </Border>
+                            <TextBlock Text="Search" />
+                        </StackPanel>
+                    </Button>
                 </Grid>
                 <ItemsControl ItemsSource="{Binding SearchResults}" Margin="0,0,0,20">
                     <ItemsControl.ItemTemplate>
@@ -128,9 +188,16 @@
                             <Border Classes="issueRow" Background="{DynamicResource PbChromeBrush}" Margin="0,0,0,4">
                                 <Grid ColumnDefinitions="*,Auto">
                                     <TextBlock Grid.Column="0" Text="{Binding DisplayLabel}" FontSize="13" Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
-                                    <Button Grid.Column="1" Classes="headerAction secondary" Content="+ Add"
+                                    <Button Grid.Column="1" Classes="headerAction secondary"
                                             Command="{Binding $parent[ItemsControl].((vm:ReadingScreenViewModel)DataContext).AddIssueCommand}"
-                                            CommandParameter="{Binding}" />
+                                            CommandParameter="{Binding}">
+                                        <StackPanel Orientation="Horizontal" Spacing="5">
+                                            <Border Classes="icon" Width="10" Height="10" Background="{DynamicResource PbTextBrush}">
+                                                <Border.OpacityMask><ImageBrush Source="/Assets/Icons/Add_Plus.png" Stretch="Uniform" /></Border.OpacityMask>
+                                            </Border>
+                                            <TextBlock Text="Add" />
+                                        </StackPanel>
+                                    </Button>
                                 </Grid>
                             </Border>
                         </DataTemplate>
@@ -154,13 +221,25 @@
                                                             Background="#264A6B8A" VerticalAlignment="Center" />
                                                     <TextBlock Grid.Column="2" Text="{Binding Name}" FontSize="13"
                                                                Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" Margin="12,0" />
-                                                    <TextBlock Grid.Column="3" IsVisible="{Binding IsOwned}" Text="✓ Owned"
-                                                               FontSize="11" FontWeight="Bold" Foreground="{DynamicResource PbSuccessBrush}" VerticalAlignment="Center" Margin="0,0,10,0" />
-                                                    <TextBlock Grid.Column="3" IsVisible="{Binding IsMissing}" Text="⚠ Missing"
-                                                               FontSize="11" FontWeight="Bold" Foreground="{DynamicResource PbBadgeBrush}" VerticalAlignment="Center" Margin="0,0,10,0" />
+                                                    <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="4" IsVisible="{Binding IsOwned}" VerticalAlignment="Center" Margin="0,0,10,0">
+                                                        <Border Classes="icon" Width="10" Height="10" Background="{DynamicResource PbSuccessBrush}">
+                                                            <Border.OpacityMask><ImageBrush Source="/Assets/Icons/Check.png" Stretch="Uniform" /></Border.OpacityMask>
+                                                        </Border>
+                                                        <TextBlock Text="Owned" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource PbSuccessBrush}" />
+                                                    </StackPanel>
+                                                    <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="4" IsVisible="{Binding IsMissing}" VerticalAlignment="Center" Margin="0,0,10,0">
+                                                        <Border Classes="icon" Width="10" Height="10" Background="{DynamicResource PbBadgeBrush}">
+                                                            <Border.OpacityMask><ImageBrush Source="/Assets/Icons/Triangle_Warning.png" Stretch="Uniform" /></Border.OpacityMask>
+                                                        </Border>
+                                                        <TextBlock Text="Missing" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource PbBadgeBrush}" />
+                                                    </StackPanel>
                                                     <Button Grid.Column="4" Classes="headerAction ghost" Content="↑" Command="{Binding MoveUpCommand}" />
                                                     <Button Grid.Column="5" Classes="headerAction ghost" Content="↓" Command="{Binding MoveDownCommand}" />
-                                                    <Button Grid.Column="6" Classes="headerAction ghost" Content="✕" Command="{Binding RemoveCommand}" />
+                                                    <Button Grid.Column="6" Classes="headerAction ghost" Command="{Binding RemoveCommand}" ToolTip.Tip="Remove">
+                                                        <Border Classes="icon" Width="11" Height="11">
+                                                            <Border.OpacityMask><ImageBrush Source="/Assets/Icons/Trash_Empty.png" Stretch="Uniform" /></Border.OpacityMask>
+                                                        </Border>
+                                                    </Button>
                                                 </Grid>
                                             </Border>
                                         </DataTemplate>

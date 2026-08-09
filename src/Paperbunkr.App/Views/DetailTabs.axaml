@@ -88,7 +88,15 @@
                             <ContextMenu>
                                 <MenuItem Header="Edit Properties"
                                           Command="{Binding #IssuesList.((vm:DetailTabsViewModel)DataContext).EditIssuePropertiesCommand}"
-                                          CommandParameter="{Binding}" />
+                                          CommandParameter="{Binding}">
+                                    <MenuItem.Icon>
+                                        <Border Classes="icon" Width="13" Height="13">
+                                            <Border.OpacityMask>
+                                                <ImageBrush Source="/Assets/Icons/Edit_Pencil.png" Stretch="Uniform" />
+                                            </Border.OpacityMask>
+                                        </Border>
+                                    </MenuItem.Icon>
+                                </MenuItem>
                             </ContextMenu>
                         </Border.ContextMenu>
                         <Grid>

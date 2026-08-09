@@ -33,6 +33,7 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     private readonly FileAssociationService _fileAssociationService;
     private readonly BackupService _backupService;
     private readonly KeyBindingService _keyBindingService;
+    private readonly Action<string, string> _showToast;
     private readonly Func<PaperbunkrDbContext> _contextFactory;
     private bool _isLoaded;
     private bool _suppressFontApply;
@@ -48,8 +49,9 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         LibraryFolderScanner libraryScanner,
         FileAssociationService fileAssociationService,
         BackupService backupService,
-        KeyBindingService keyBindingService)
-        : this(skinService, filePicker, libraryScanner, fileAssociationService, backupService, keyBindingService, PaperbunkrDb.CreateContext)
+        KeyBindingService keyBindingService,
+        Action<string, string> showToast)
+        : this(skinService, filePicker, libraryScanner, fileAssociationService, backupService, keyBindingService, showToast, PaperbunkrDb.CreateContext)
     {
     }
 
@@ -61,6 +63,7 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         FileAssociationService fileAssociationService,
         BackupService backupService,
         KeyBindingService keyBindingService,
+        Action<string, string> showToast,
         Func<PaperbunkrDbContext> contextFactory)
     {
         _skinService = skinService;
@@ -69,6 +72,7 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         _fileAssociationService = fileAssociationService;
         _backupService = backupService;
         _keyBindingService = keyBindingService;
+        _showToast = showToast;
         _contextFactory = contextFactory;
         Skins = new ObservableCollection<SkinSummary>();
         FontFamilies = new ObservableCollection<string>();
@@ -530,6 +534,11 @@ public partial class PreferencesScreenViewModel : ViewModelBase
             ScanStatus = result.IssuesAdded == 0
                 ? "No new issues found."
                 : $"Added {result.IssuesAdded} issue{(result.IssuesAdded == 1 ? "" : "s")} across {result.SeriesTouched} series.";
+
+            // Toast alongside the inline ScanStatus text (P6 follow-up) - scanning can take a
+            // while on a large folder, and the inline status is easy to miss if the user's
+            // navigated to a different screen while it runs.
+            _showToast("Scan complete", ScanStatus);
         }
         finally
         {

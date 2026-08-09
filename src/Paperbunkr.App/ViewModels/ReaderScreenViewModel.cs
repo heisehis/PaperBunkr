@@ -75,6 +75,39 @@ public partial class ReaderScreenViewModel : ViewModelBase
     [ObservableProperty]
     private string? _errorMessage;
 
+    private double _zoomLevel = 1.0;
+
+    /// <summary>
+    /// Hand-written rather than <c>[ObservableProperty]</c> (like <see cref="CoverBrush"/>/
+    /// <see cref="BreadcrumbSeries"/> already are in this file) because it needs custom
+    /// clamp-then-cascade logic the source generator can't express: this setter is the single
+    /// mechanism satisfying "resets to fit" everywhere - <see cref="Load"/> and
+    /// <see cref="Views.PageCanvas"/>'s double-click-reset path both just set
+    /// <c>ZoomLevel = 1.0</c>, and the cascade zeroes pan for both, so neither caller separately
+    /// zeroes pan. Range constants are duplicated in <see cref="Views.ZoomPanMath"/> rather than
+    /// referenced from here, to avoid a ViewModels -&gt; Views dependency this codebase's binding
+    /// direction doesn't otherwise have.
+    /// </summary>
+    public double ZoomLevel
+    {
+        get => _zoomLevel;
+        set
+        {
+            double clamped = Math.Clamp(value, 1.0, 4.0);
+            if (SetProperty(ref _zoomLevel, clamped) && clamped == 1.0)
+            {
+                PanOffsetX = 0;
+                PanOffsetY = 0;
+            }
+        }
+    }
+
+    [ObservableProperty]
+    private double _panOffsetX;
+
+    [ObservableProperty]
+    private double _panOffsetY;
+
     public bool HasError => !string.IsNullOrEmpty(ErrorMessage);
 
     partial void OnErrorMessageChanged(string? value) => OnPropertyChanged(nameof(HasError));
@@ -138,21 +171,14 @@ public partial class ReaderScreenViewModel : ViewModelBase
             ? $"Issue #{issue.Number}"
             : $"Issue #{issue.Number} — {issue.Title}";
 
-        var readingMode = issue.ReadingModeOverride ?? series.ReadingMode;
         var appSettings = context.GetOrCreateAppSettings();
-        _isRightToLeft = readingMode == ReadingMode.RightToLeft && appSettings.ReverseRtlNavigation;
         HighQualityPageDisplay = appSettings.HighQualityPageDisplay;
         PageTurnLeftKey = _keyBindings.GetKey(context, KeyboardCommandRegistry.ReaderPageTurnLeft);
         PageTurnRightKey = _keyBindings.GetKey(context, KeyboardCommandRegistry.ReaderPageTurnRight);
-        ReadingModeLabel = readingMode switch
-        {
-            ReadingMode.RightToLeft => "Right to Left ▾",
-            ReadingMode.VerticalContinuous => "Vertical (Continuous) ▾",
-            ReadingMode.HorizontalContinuous => "Horizontal (Continuous) ▾",
-            _ => "Left to Right ▾",
-        };
+        UpdateReadingModeState(issue.ReadingModeOverride ?? series.ReadingMode, appSettings.ReverseRtlNavigation);
 
         ErrorMessage = null;
+        ZoomLevel = 1.0;
         int pageCount = issue.PageCount is > 0 ? issue.PageCount.Value : 1;
 
         if (!string.IsNullOrEmpty(issue.FilePath))
@@ -202,12 +228,56 @@ public partial class ReaderScreenViewModel : ViewModelBase
         OnPropertyChanged(nameof(CoverBrush));
         OnPropertyChanged(nameof(BreadcrumbSeries));
         OnPropertyChanged(nameof(IssueTitle));
-        OnPropertyChanged(nameof(ReadingModeLabel));
         OnPropertyChanged(nameof(PageLabel));
         OnPropertyChanged(nameof(ProgressFraction));
 
         RefreshCurrentPage();
         StartThumbnailGeneration(generation, thumbnailCount);
+    }
+
+    /// <summary>Shared by <see cref="Load"/> and <see cref="ToggleReadingMode"/> so the label/spatial-flip switch can't drift apart between the two.</summary>
+    private void UpdateReadingModeState(ReadingMode effectiveMode, bool reverseRtlNavigation)
+    {
+        _isRightToLeft = effectiveMode == ReadingMode.RightToLeft && reverseRtlNavigation;
+        ReadingModeLabel = effectiveMode switch
+        {
+            ReadingMode.RightToLeft => "Right to Left ▾",
+            ReadingMode.VerticalContinuous => "Vertical (Continuous) ▾",
+            ReadingMode.HorizontalContinuous => "Horizontal (Continuous) ▾",
+            _ => "Left to Right ▾",
+        };
+        OnPropertyChanged(nameof(ReadingModeLabel));
+    }
+
+    /// <summary>
+    /// P6 fix (docs/alpha-todo.md) - this pill was previously non-interactive, styled identically to
+    /// the working toggle in <see cref="DetailTabsViewModel"/> (which this mirrors: a binary
+    /// LTR/RTL flip, not a full mode picker - <see cref="ReadingMode.VerticalContinuous"/>/
+    /// <see cref="ReadingMode.HorizontalContinuous"/> collapse to <see cref="ReadingMode.RightToLeft"/>
+    /// same as there, per docs/superpowers/specs/2026-08-07-reader-rtl-navigation-design.md §5).
+    /// Writes <c>Series.ReadingMode</c>, not <c>Issue.ReadingModeOverride</c> - nothing in this app
+    /// writes that field yet, it stays dormant.
+    /// </summary>
+    [RelayCommand]
+    private void ToggleReadingMode()
+    {
+        if (_loadedSeriesId is not int seriesId)
+        {
+            return;
+        }
+
+        using var context = PaperbunkrDb.CreateContext();
+        var series = context.Series.FirstOrDefault(s => s.Id == seriesId);
+        if (series is null)
+        {
+            return;
+        }
+
+        series.ReadingMode = series.ReadingMode == ReadingMode.RightToLeft ? ReadingMode.LeftToRight : ReadingMode.RightToLeft;
+        context.SaveChanges();
+
+        var issue = _loadedIssueId is int issueId ? context.Issues.Find(issueId) : null;
+        UpdateReadingModeState(issue?.ReadingModeOverride ?? series.ReadingMode, context.GetOrCreateAppSettings().ReverseRtlNavigation);
     }
 
     /// <summary>
@@ -314,6 +384,27 @@ public partial class ReaderScreenViewModel : ViewModelBase
         {
             issue.LastPageRead = _currentPageIndex;
             context.SaveChanges();
+        }
+    }
+
+    /// <summary>
+    /// P6 fix (docs/alpha-todo.md) - the thumbnail rail rendered <c>Border.thumb.selected</c>
+    /// styling implying click-to-jump, but nothing wired a click to <see cref="GoToPage"/>.
+    /// <see cref="Thumbnails"/>' index already *is* the page index (populated by a straight
+    /// <c>for</c> loop in <see cref="Load"/>), so this just needs the clicked sample's position.
+    /// </summary>
+    [RelayCommand]
+    private void SelectThumbnail(ReaderThumbnailSample? thumbnail)
+    {
+        if (thumbnail is null)
+        {
+            return;
+        }
+
+        int index = Thumbnails.IndexOf(thumbnail);
+        if (index >= 0)
+        {
+            GoToPage(index);
         }
     }
 

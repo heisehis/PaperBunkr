@@ -53,17 +53,6 @@
         </Style>
 
         <!-- Sidebar nav row -->
-        <Style Selector="Border.sideItem">
-            <Setter Property="CornerRadius" Value="4" />
-            <Setter Property="Padding" Value="8,7" />
-            <Setter Property="Background" Value="Transparent" />
-        </Style>
-        <Style Selector="Border.sideItem.active">
-            <Setter Property="Background" Value="{DynamicResource PbAccentSoftBrush}" />
-        </Style>
-
-        <!-- Clickable sidebar row (real Smart List selection needs a Command, unlike the static
-             library sidebar rows above) styled to match Border.sideItem's look. -->
         <Style Selector="Button.sideItemButton">
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="BorderThickness" Value="0" />
@@ -128,17 +117,9 @@
 
                     <Border Width="28" Height="1" Background="{DynamicResource PbBorderBrush}" Margin="0,8" />
 
-                    <Grid>
-                        <Button Classes="rail plugin" Classes.active="{Binding IsPlugin}"
-                                Command="{Binding GoPluginCommand}" Content="Pl"
-                                ToolTip.Tip="Duplicate Finder (plugin)" />
-                        <Border Width="14" Height="14" CornerRadius="7" Background="{DynamicResource PbBadgeBrush}"
-                                HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-4,-4,0"
-                                IsHitTestVisible="False">
-                            <TextBlock Text="7" FontSize="9" FontWeight="Bold" Foreground="{DynamicResource PbBadgeTextBrush}"
-                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
-                        </Border>
-                    </Grid>
+                    <Button Classes="rail plugin" Classes.active="{Binding IsPlugin}"
+                            Command="{Binding GoPluginCommand}" Content="Pl"
+                            ToolTip.Tip="Plugins" />
 
                     <Grid>
                         <Button Classes="rail plugin" Classes.active="{Binding IsMigrationOverlayOpen}"
@@ -174,44 +155,54 @@
                         <TextBlock Text="Library" FontSize="16" FontWeight="Bold"
                                    Foreground="{DynamicResource PbTextBrush}" Margin="8,0,8,14" />
 
-                        <Border Classes="sideItem active">
+                        <Button Classes="sideItemButton" Classes.active="{Binding Library.IsAllSeriesActive}"
+                                Command="{Binding Library.SelectAllSeriesCommand}">
                             <Grid ColumnDefinitions="8,*,Auto">
                                 <Border Grid.Column="0" Width="8" Height="8" CornerRadius="2"
                                         Background="{DynamicResource PbAccentTextBrush}" VerticalAlignment="Center" />
-                                <TextBlock Grid.Column="1" Text="All Series" Margin="9,0,0,0" FontSize="13"
-                                           FontWeight="Bold" Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
-                                <TextBlock Grid.Column="2" Classes="count" Text="{Binding Library.AllSeriesCount}"
-                                           Foreground="{DynamicResource PbAccentTextBrush}" VerticalAlignment="Center" />
-                            </Grid>
-                        </Border>
-
-                        <Border Classes="sideItem">
-                            <Grid ColumnDefinitions="8,*,Auto">
-                                <Border Grid.Column="0" Width="8" Height="8" CornerRadius="2"
-                                        Background="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" />
-                                <TextBlock Grid.Column="1" Text="Collections" Margin="9,0,0,0" FontSize="13"
+                                <TextBlock Grid.Column="1" Classes="sideItemLabel" Text="All Series" Margin="9,0,0,0" FontSize="13"
                                            Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
-                                <TextBlock Grid.Column="2" Classes="count" Text="12"
+                                <TextBlock Grid.Column="2" Classes="count" Text="{Binding Library.AllSeriesCount}"
                                            Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" />
                             </Grid>
-                        </Border>
+                        </Button>
+
+                        <TextBlock Classes="sideHeading" Text="COLLECTIONS" Margin="8,12,8,6" />
+                        <TextBlock Text="No collections yet." FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}"
+                                   Margin="8,0,8,4" IsVisible="{Binding !Library.HasCollections}" />
+                        <ItemsControl x:Name="LibraryCollections" ItemsSource="{Binding Library.Collections}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="models:CategorySummary">
+                                    <Button Classes="sideItemButton" Classes.active="{Binding IsActive}"
+                                            Command="{Binding #LibraryCollections.((vm:MainViewModel)DataContext).Library.SelectCollectionCommand}"
+                                            CommandParameter="{Binding}">
+                                        <Grid ColumnDefinitions="*,Auto">
+                                            <TextBlock Grid.Column="0" Classes="sideItemLabel" Text="{Binding Name}" FontSize="13" Foreground="{DynamicResource PbTextMutedBrush}" />
+                                            <TextBlock Grid.Column="1" Classes="count" Text="{Binding Count}" Foreground="{DynamicResource PbTextFaintBrush}" />
+                                        </Grid>
+                                    </Button>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
 
                         <Border Height="1" Background="{DynamicResource PbBorderBrush}" Margin="0,12" />
 
                         <TextBlock Classes="sideHeading" Text="CONTENT TYPE" Margin="8,0,8,6" />
 
-                        <Border Classes="sideItem">
-                            <Grid ColumnDefinitions="*,Auto">
-                                <TextBlock Grid.Column="0" Text="Comic" FontSize="13" Foreground="{DynamicResource PbTextMutedBrush}" />
-                                <TextBlock Grid.Column="1" Classes="count" Text="{Binding Library.ComicCount}" Foreground="{DynamicResource PbTextFaintBrush}" />
-                            </Grid>
-                        </Border>
-                        <Border Classes="sideItem">
-                            <Grid ColumnDefinitions="*,Auto">
-                                <TextBlock Grid.Column="0" Text="Manga" FontSize="13" Foreground="{DynamicResource PbTextMutedBrush}" />
-                                <TextBlock Grid.Column="1" Classes="count" Text="{Binding Library.MangaCount}" Foreground="{DynamicResource PbTextFaintBrush}" />
-                            </Grid>
-                        </Border>
+                        <ItemsControl x:Name="LibraryContentTypes" ItemsSource="{Binding Library.ContentTypes}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="models:ContentTypeSummary">
+                                    <Button Classes="sideItemButton" Classes.active="{Binding IsActive}"
+                                            Command="{Binding #LibraryContentTypes.((vm:MainViewModel)DataContext).Library.SelectContentTypeCommand}"
+                                            CommandParameter="{Binding}">
+                                        <Grid ColumnDefinitions="*,Auto">
+                                            <TextBlock Grid.Column="0" Classes="sideItemLabel" Text="{Binding Name}" FontSize="13" Foreground="{DynamicResource PbTextMutedBrush}" />
+                                            <TextBlock Grid.Column="1" Classes="count" Text="{Binding Count}" Foreground="{DynamicResource PbTextFaintBrush}" />
+                                        </Grid>
+                                    </Button>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
                     </StackPanel>
 
                     <!-- Smart Lists sidebar (SmartSidebar.dc.html), wired to real SmartList data -->

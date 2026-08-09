@@ -283,4 +283,151 @@ public class ReaderScreenViewModelTests : IDisposable
         Assert.Equal("PAGE 1 / 2", vm.PageLabel);
         Assert.Contains("#2", vm.IssueTitle);
     }
+
+    [Fact]
+    public void ZoomLevel_DefaultsTo1()
+    {
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id);
+
+        Assert.Equal(1.0, vm.ZoomLevel);
+    }
+
+    [Fact]
+    public void ZoomLevel_ClampsAboveMax_To4()
+    {
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id);
+
+        vm.ZoomLevel = 10;
+
+        Assert.Equal(4.0, vm.ZoomLevel);
+    }
+
+    [Fact]
+    public void ZoomLevel_ClampsBelowMin_To1()
+    {
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id);
+
+        vm.ZoomLevel = 0.2;
+
+        Assert.Equal(1.0, vm.ZoomLevel);
+    }
+
+    [Fact]
+    public void ZoomLevel_SetToMin_ResetsPanOffsetToZeroZero()
+    {
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id);
+        vm.ZoomLevel = 2.5;
+        vm.PanOffsetX = 40;
+        vm.PanOffsetY = -10;
+
+        vm.ZoomLevel = 1.0;
+
+        Assert.Equal(0, vm.PanOffsetX);
+        Assert.Equal(0, vm.PanOffsetY);
+    }
+
+    [Fact]
+    public void PanOffset_DefaultsToZeroZero()
+    {
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id);
+
+        Assert.Equal(0, vm.PanOffsetX);
+        Assert.Equal(0, vm.PanOffsetY);
+    }
+
+    [Fact]
+    public void Load_ResetsZoomAndPan_OnReopeningAnAlreadyZoomedIssue()
+    {
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id);
+        vm.ZoomLevel = 2.5;
+        vm.PanOffsetX = 40;
+        vm.PanOffsetY = -10;
+
+        vm.LoadIssue(_issue1Id);
+
+        Assert.Equal(1.0, vm.ZoomLevel);
+        Assert.Equal(0, vm.PanOffsetX);
+        Assert.Equal(0, vm.PanOffsetY);
+    }
+
+    [Fact]
+    public void NextPage_AcrossIssueBoundary_ResetsZoomAndPan()
+    {
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id);
+        vm.NextPageCommand.Execute(null);
+        vm.NextPageCommand.Execute(null);
+        Assert.Equal("PAGE 3 / 3", vm.PageLabel);
+        vm.ZoomLevel = 2.5;
+        vm.PanOffsetX = 40;
+        vm.PanOffsetY = -10;
+
+        vm.NextPageCommand.Execute(null);
+
+        Assert.Contains("#2", vm.IssueTitle);
+        Assert.Equal(1.0, vm.ZoomLevel);
+        Assert.Equal(0, vm.PanOffsetX);
+        Assert.Equal(0, vm.PanOffsetY);
+    }
+
+    [Fact]
+    public void ToggleReadingModeCommand_FlipsSeriesReadingMode_AndUpdatesLabel()
+    {
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id);
+        Assert.Equal("Left to Right ▾", vm.ReadingModeLabel);
+
+        vm.ToggleReadingModeCommand.Execute(null);
+        Assert.Equal("Right to Left ▾", vm.ReadingModeLabel);
+
+        using (var context = PaperbunkrDb.CreateContext())
+        {
+            Assert.Equal(ReadingMode.RightToLeft, context.Series.First(s => s.Id == _seriesId).ReadingMode);
+        }
+
+        vm.ToggleReadingModeCommand.Execute(null);
+        Assert.Equal("Left to Right ▾", vm.ReadingModeLabel);
+    }
+
+    [Fact]
+    public void ToggleReadingModeCommand_AlsoFlipsSpatialGoLeftGoRight()
+    {
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id);
+
+        vm.ToggleReadingModeCommand.Execute(null); // now Right to Left
+
+        vm.GoLeftCommand.Execute(null);
+        Assert.Equal("PAGE 2 / 3", vm.PageLabel); // spatial Left now advances, matching GoLeftGoRight_RightToLeft_AreFlipped
+    }
+
+    [Fact]
+    public void SelectThumbnailCommand_JumpsToClickedPage()
+    {
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id);
+        Assert.Equal("PAGE 1 / 3", vm.PageLabel);
+
+        vm.SelectThumbnailCommand.Execute(vm.Thumbnails[2]);
+
+        Assert.Equal("PAGE 3 / 3", vm.PageLabel);
+    }
+
+    [Fact]
+    public void SelectThumbnailCommand_StaleThumbnail_NoOps()
+    {
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id);
+        var staleThumbnail = new ReaderThumbnailSample { CoverBrush = vm.CoverBrush };
+
+        vm.SelectThumbnailCommand.Execute(staleThumbnail);
+
+        Assert.Equal("PAGE 1 / 3", vm.PageLabel);
+    }
 }

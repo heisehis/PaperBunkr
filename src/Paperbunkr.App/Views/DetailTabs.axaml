@@ -60,13 +60,13 @@
                 <Button Classes="tab" Classes.active="{Binding IsIssuesTab}" Command="{Binding GoIssuesCommand}">
                     <StackPanel Orientation="Horizontal" Spacing="7">
                         <TextBlock Text="Issues" />
-                        <TextBlock Classes="tabCount" Text="42" VerticalAlignment="Center" />
+                        <TextBlock Classes="tabCount" Text="{Binding Issues.Count}" VerticalAlignment="Center" />
                     </StackPanel>
                 </Button>
                 <Button Classes="tab" Classes.active="{Binding IsRelatedTab}" Command="{Binding GoRelatedCommand}">
                     <StackPanel Orientation="Horizontal" Spacing="7">
                         <TextBlock Text="Related" />
-                        <TextBlock Classes="tabCount" Text="4" VerticalAlignment="Center" />
+                        <TextBlock Classes="tabCount" Text="{Binding Related.Count}" VerticalAlignment="Center" />
                     </StackPanel>
                 </Button>
                 <Button Classes="tab" Classes.active="{Binding IsDetailsTab}" Command="{Binding GoDetailsCommand}" Content="Details" />

@@ -78,7 +78,11 @@
             </Grid>
             <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,0,0,1" Margin="0,0,0,24" />
 
-            <StackPanel MaxWidth="820" HorizontalAlignment="Left" Margin="28,0,28,40">
+            <TextBlock Text="No reading lists yet — create one from the sidebar to get started." FontSize="13"
+                       Foreground="{DynamicResource PbTextFaintBrush}" Margin="28,0,28,40" TextWrapping="Wrap"
+                       IsVisible="{Binding HasNoReadingLists}" />
+
+            <StackPanel MaxWidth="820" HorizontalAlignment="Left" Margin="28,0,28,40" IsVisible="{Binding !HasNoReadingLists}">
 
                 <Border Background="{DynamicResource PbAccentSoftBrush}" CornerRadius="5" Padding="10,7" Margin="0,0,0,16"
                         IsVisible="{Binding HasStatusMessage}">

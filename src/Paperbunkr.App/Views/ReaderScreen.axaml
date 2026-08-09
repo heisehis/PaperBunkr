@@ -50,7 +50,8 @@
                     </StackPanel>
                 </Button>
 
-                <Button Grid.Column="1" Content="{Binding ReadingModeLabel}" Background="#1E2127" BorderBrush="#33373F"
+                <Button Grid.Column="1" Content="{Binding ReadingModeLabel}" Command="{Binding ToggleReadingModeCommand}"
+                        Background="#1E2127" BorderBrush="#33373F" Cursor="Hand"
                         BorderThickness="1" Foreground="{StaticResource ReaderTextBrush}" FontSize="12" FontWeight="SemiBold"
                         Padding="10,6" CornerRadius="6" Margin="16,0" />
 
@@ -68,7 +69,8 @@
                     <ItemsControl ItemsSource="{Binding Thumbnails}">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate x:DataType="models:ReaderThumbnailSample">
-                                <Border Classes="thumb" Classes.selected="{Binding IsSelected}" Background="{Binding CoverBrush}">
+                                <Border Classes="thumb" Classes.selected="{Binding IsSelected}" Background="{Binding CoverBrush}"
+                                        Cursor="Hand" PointerPressed="OnThumbnailPointerPressed">
                                     <Image Source="{Binding CoverImage}" Stretch="UniformToFill" />
                                 </Border>
                             </DataTemplate>
@@ -85,6 +87,9 @@
                                   HighQualityDisplay="{Binding HighQualityPageDisplay}"
                                   LeftKey="{Binding PageTurnLeftKey}"
                                   RightKey="{Binding PageTurnRightKey}"
+                                  ZoomLevel="{Binding ZoomLevel}"
+                                  PanOffsetX="{Binding PanOffsetX}"
+                                  PanOffsetY="{Binding PanOffsetY}"
                                   IsVisible="{Binding !HasError}" />
 
                 <Border IsVisible="{Binding HasError}" Width="400" CornerRadius="8"

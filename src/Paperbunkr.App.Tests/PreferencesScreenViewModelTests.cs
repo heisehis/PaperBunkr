@@ -51,7 +51,7 @@ public class PreferencesScreenViewModelTests : IDisposable
         }
     }
 
-    private PreferencesScreenViewModel CreateViewModel(IFilePickerService? filePicker = null, IShellFileAssociation? shell = null)
+    private PreferencesScreenViewModel CreateViewModel(IFilePickerService? filePicker = null, IShellFileAssociation? shell = null, Action<string, string>? showToast = null)
     {
         var skinService = new SkinService(() => new PaperbunkrDbContext(_dbOptions));
         var scanner = new LibraryFolderScanner(() => new PaperbunkrDbContext(_dbOptions));
@@ -65,6 +65,7 @@ public class PreferencesScreenViewModelTests : IDisposable
             fileAssociationService,
             backupService,
             keyBindingService,
+            showToast ?? ((_, _) => { }),
             () => new PaperbunkrDbContext(_dbOptions));
     }
 
@@ -394,6 +395,20 @@ public class PreferencesScreenViewModelTests : IDisposable
 
         Assert.Equal("No new issues found.", vm.ScanStatus);
         Assert.False(vm.IsScanning);
+    }
+
+    [Fact]
+    public async Task ScanNow_FiresToast_OnCompletion()
+    {
+        (string Title, string Message)? toast = null;
+        var vm = CreateViewModel(showToast: (title, message) => toast = (title, message));
+        vm.EnsureLoaded();
+
+        await vm.ScanNowCommand.ExecuteAsync(null);
+
+        Assert.NotNull(toast);
+        Assert.Equal("Scan complete", toast!.Value.Title);
+        Assert.Equal("No new issues found.", toast!.Value.Message);
     }
 
     [Fact]

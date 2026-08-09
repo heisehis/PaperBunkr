@@ -1,3 +1,4 @@
+using System;
 using System.Linq;
 using Avalonia;
 using Avalonia.Media;
@@ -14,14 +15,47 @@ namespace Paperbunkr.App.Models;
 /// </summary>
 public sealed class SeriesCardSample
 {
+    public const double PanoramaHeight = 146;
+    public const double PanoramaMinWidth = 110;
+    public const double PanoramaMaxWidth = 320;
+    public const double DefaultCoverAspectRatio = 2.0 / 3.0; // standard portrait comic cover
+
     public int SeriesId { get; init; }
     public required string Title { get; init; }
     public required string Name { get; init; }
     public required string Sub { get; init; }
+    public string? Publisher { get; init; }
+    public required string ContentTypeLabel { get; init; }
+    public int IssueCount { get; init; }
     public int UnreadCount { get; init; }
     public bool HasUnread => UnreadCount > 0;
     public bool Missing { get; init; }
     public required IBrush CoverBrush { get; init; }
+
+    /// <summary>Series-level sort aggregates (docs/superpowers/specs/2026-08-09-library-toolbar-design.md Phase C) - computed once here, not recomputed per sort click.</summary>
+    public DateTime? LastAddedTime { get; init; }
+    public DateTime? LastOpenedTime { get; init; }
+    public long TotalFileSize { get; init; }
+
+    /// <summary>Cover issue's <c>LanguageISO</c> (docs/superpowers/specs/2026-08-09-library-toolbar-design.md Phase D overlay toggle) - raw ISO code, e.g. "en"/"ja".</summary>
+    public string? LanguageIso { get; init; }
+
+    /// <summary>First unread issue in reading order, or <see langword="null"/> if every issue is read - backs the Continue Reading overlay button.</summary>
+    public int? ContinueReadingIssueId { get; init; }
+
+    public bool HasContinueReading => ContinueReadingIssueId is not null;
+    public bool HasPublisher => !string.IsNullOrWhiteSpace(Publisher);
+    public bool HasLanguage => !string.IsNullOrWhiteSpace(LanguageIso);
+
+    /// <summary>
+    /// Panorama grid's per-series tile width (docs/superpowers/specs/
+    /// 2026-08-09-library-toolbar-design.md Phase A) - computed from the real cover bitmap's
+    /// aspect ratio at a fixed <see cref="PanoramaHeight"/>, clamped so no cover renders absurdly
+    /// thin or wide. Landscape covers render wide, portrait covers render narrow, side by side in
+    /// the same row - not a single fixed crop box. Falls back to a standard portrait ratio before
+    /// a real cover's been generated; re-tunes automatically once one exists.
+    /// </summary>
+    public double PanoramaWidth { get; init; }
 
     /// <summary>
     /// Real decoded cover art (docs/superpowers/specs/2026-08-06-cover-thumbnails-design.md §3),
@@ -78,12 +112,26 @@ public sealed class SeriesCardSample
         return Gradient(from, to);
     }
 
+    /// <summary>
+    /// Pure clamp math backing <see cref="PanoramaWidth"/> (docs/superpowers/specs/
+    /// 2026-08-09-library-toolbar-design.md Phase A), extracted for direct testing the same way
+    /// <c>ZoomPanMath</c>/<c>GridKeyboardNavigation</c> already separate their pure geometry from
+    /// the Avalonia-bitmap-touching caller.
+    /// </summary>
+    public static double ComputePanoramaWidth(double aspectRatio) =>
+        Math.Clamp(aspectRatio * PanoramaHeight, PanoramaMinWidth, PanoramaMaxWidth);
+
     public static SeriesCardSample FromSeries(Series series)
     {
         int unreadCount = series.Issues.Count(i => i.LastPageRead is null or 0);
 
         var coverIssue = series.Issues.FirstOrDefault(i => i.Id == series.CoverIssueId)
             ?? series.Issues.OrderByNumber().FirstOrDefault();
+        var coverImage = coverIssue is not null ? CoverImageCache.Get(coverIssue.Id) : null;
+
+        double aspectRatio = coverImage is { } bmp && bmp.PixelSize.Height > 0
+            ? (double)bmp.PixelSize.Width / bmp.PixelSize.Height
+            : DefaultCoverAspectRatio;
 
         return new SeriesCardSample
         {
@@ -91,10 +139,20 @@ public sealed class SeriesCardSample
             Title = series.Name.ToUpperInvariant(),
             Name = series.Name,
             Sub = $"{series.ContentType} · {series.Issues.Count} issues",
+            Publisher = series.Publisher,
+            ContentTypeLabel = series.ContentType.ToString(),
+            IssueCount = series.Issues.Count,
             UnreadCount = unreadCount,
             Missing = series.Issues.Any(i => i.FileIsMissing),
             CoverBrush = CoverBrushFor(series.Name),
-            CoverImage = coverIssue is not null ? CoverImageCache.Get(coverIssue.Id) : null,
+            CoverImage = coverImage,
+            PanoramaWidth = ComputePanoramaWidth(aspectRatio),
+            // LINQ's nullable Max() returns null for an all-null or empty sequence rather than throwing.
+            LastAddedTime = series.Issues.Select(i => i.AddedTime).Max(),
+            LastOpenedTime = series.Issues.Select(i => i.OpenedTime).Max(),
+            TotalFileSize = series.Issues.Sum(i => i.FileSize ?? 0),
+            LanguageIso = coverIssue?.LanguageISO,
+            ContinueReadingIssueId = series.Issues.OrderByNumber().FirstOrDefault(i => i.LastPageRead is null or 0)?.Id,
         };
     }
 }

@@ -16,17 +16,26 @@ public sealed class ReaderPageDrawOperation : ICustomDrawOperation
 {
     private readonly Bitmap? _bitmap;
     private readonly bool _highQuality;
+    private readonly double _zoom;
+    private readonly double _panOffsetX;
+    private readonly double _panOffsetY;
 
     /// <summary>
     /// <paramref name="highQuality"/> backs Preferences &gt; Reader &gt; Display's "High quality
     /// page display" toggle (CE parity: <c>ImageDisplayOptions.HighQuality</c>, default on) -
     /// smoother vs. cheaper interpolation when a page is scaled to fit the canvas.
+    /// <paramref name="zoom"/>/<paramref name="panOffsetX"/>/<paramref name="panOffsetY"/> back
+    /// <see cref="PageCanvas"/>'s zoom/pan gestures (docs/superpowers/specs/
+    /// 2026-08-09-reader-gestures-and-grid-navigation-design.md).
     /// </summary>
-    public ReaderPageDrawOperation(Rect bounds, Bitmap? bitmap, bool highQuality = true)
+    public ReaderPageDrawOperation(Rect bounds, Bitmap? bitmap, bool highQuality = true, double zoom = 1.0, double panOffsetX = 0, double panOffsetY = 0)
     {
         Bounds = bounds;
         _bitmap = bitmap;
         _highQuality = highQuality;
+        _zoom = zoom;
+        _panOffsetX = panOffsetX;
+        _panOffsetY = panOffsetY;
     }
 
     public Rect Bounds { get; }
@@ -41,11 +50,17 @@ public sealed class ReaderPageDrawOperation : ICustomDrawOperation
         }
 
         var pixelSize = _bitmap.PixelSize;
-        double scale = Math.Min(Bounds.Width / pixelSize.Width, Bounds.Height / pixelSize.Height);
-        double width = pixelSize.Width * scale;
-        double height = pixelSize.Height * scale;
-        double x = Bounds.X + ((Bounds.Width - width) / 2);
-        double y = Bounds.Y + ((Bounds.Height - height) / 2);
+        double scale = ZoomPanMath.ComputeBaseScale(Bounds.Size, pixelSize);
+        double width = pixelSize.Width * scale * _zoom;
+        double height = pixelSize.Height * scale * _zoom;
+
+        // Re-clamp locally (draw-time only, not written back) so a window resize while
+        // zoomed+panned degrades gracefully instead of showing a stale offset until the next
+        // gesture event re-clamps the stored VM state.
+        var (panX, panY) = ZoomPanMath.ClampPan(Bounds.Size, pixelSize, _zoom, _panOffsetX, _panOffsetY);
+
+        double x = Bounds.X + ((Bounds.Width - width) / 2) + panX;
+        double y = Bounds.Y + ((Bounds.Height - height) / 2) + panY;
 
         var destRect = new Rect(x, y, width, height);
 

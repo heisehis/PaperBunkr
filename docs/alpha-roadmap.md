@@ -61,6 +61,9 @@ Editor, Bulk Editing, Detail Screen focus) is still **uncommitted** in the worki
 land in git — likely as several commits split by feature, mirroring the already-committed design
 specs — before an actual `alpha` git tag goes on this state.
 
+A prioritized, checkbox-tracked version of this release prep plus the known gaps above (P0–P7,
+sequenced by risk and user-facing impact) lives in [`alpha-todo.md`](alpha-todo.md).
+
 ## Beta backlog
 
 Pulled from `docs/ce-feature-inventory.md`'s full CE parity audit (2026-08-07), organized by area.
@@ -94,6 +97,17 @@ already has decorative UI stubbed for this), pluggable sort/group strategies, dr
 Recent/MRU + Quick Open overlay, reveal-in-Explorer, live folder-watch scanning (`FileSystemWatcher`,
 vs. today's scan-now only), file metadata write-back (edits saved into on-disk ComicInfo.xml/tags —
 real risk surface, mutates user files), fileless book entries (catalog a physical book with no file).
+
+### Reading Lists: story-arc auto-build (CBL Manager port)
+Currently-nonfunctional "AniList"/"MyAnimeList"/"Auto-Build from Tracked Arc" buttons on the
+Reading Lists screen — Paperbunkr's own `.cbl` import/export (`CblReadingListIO`) already works,
+but nothing powers arc auto-build. `_reference/CBLManager/` is a real, separate ComicRack CE
+plugin (not part of Paperbunkr, same reference/porting treatment as `_reference/ComicRackCE`) that
+already does this against real sources: ComicVine, Metron, Comic Book Reading Orders,
+ReadingOrders.com — auto-pulls an arc's issues in reading order, matches against the owned
+library, and adds fileless placeholders for what's missing. Note: those sources don't match
+Paperbunkr's current UI labels ("AniList"/"MyAnimeList") — needs its own brainstorm → design spec
+(source selection, credentials, matching logic) before implementation, not a quick wire-up.
 
 ### Remote/server library sharing
 Client (connect to another instance's shared library) + server (host, password-protected,

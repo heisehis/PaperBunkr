@@ -60,6 +60,11 @@ public partial class ReadingScreenViewModel : ViewModelBase
 
     partial void OnStatusMessageChanged(string? value) => OnPropertyChanged(nameof(HasStatusMessage));
 
+    /// <summary>Real empty states (P6, docs/alpha-todo.md) - previously a fresh install or a database with no reading lists just rendered a blank header and zeroed stat cards, with nothing telling the user what to do.</summary>
+    public bool HasNoReadingLists => Lists.Count == 0;
+
+    public bool HasNoItems => !HasNoReadingLists && Groups.Count == 0;
+
     [ObservableProperty]
     private string _searchQuery = string.Empty;
 
@@ -133,6 +138,9 @@ public partial class ReadingScreenViewModel : ViewModelBase
                 IsActive = list.Id == _activeReadingListId,
             });
         }
+
+        OnPropertyChanged(nameof(HasNoReadingLists));
+        OnPropertyChanged(nameof(HasNoItems));
     }
 
     private void MoveItemUp(ReadingListItemRowViewModel row) => Reorder(row, offset: -1);

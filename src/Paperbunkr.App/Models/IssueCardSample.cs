@@ -13,6 +13,14 @@ namespace Paperbunkr.App.Models;
 public sealed partial class IssueCardSample : ObservableObject
 {
     public int Id { get; init; }
+
+    /// <summary>
+    /// Owning series id. Unused by Detail's own Issues tab (already scoped to a single series when
+    /// it constructs these), but needed by the Smart Lists results grid (docs/superpowers/specs/
+    /// 2026-08-09-smart-lists-results-view-design.md), whose results span many series.
+    /// </summary>
+    public int SeriesId { get; init; }
+
     public required string Title { get; init; }
     public bool IsUnread { get; init; }
     public required IBrush CoverBrush { get; init; }

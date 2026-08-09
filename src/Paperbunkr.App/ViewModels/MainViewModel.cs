@@ -23,6 +23,7 @@ public partial class MainViewModel : ViewModelBase
         Smart = new SmartScreenViewModel(GoDetailForSeries);
         Reading = new ReadingScreenViewModel(new FilePickerService());
         Plugin = new PluginScreenViewModel();
+        Migration = new MigrationOverlayViewModel(new FilePickerService(), OpenSeriesDetailFromReview);
         Preferences = new PreferencesScreenViewModel(
             new SkinService(),
             new FilePickerService(),
@@ -30,8 +31,11 @@ public partial class MainViewModel : ViewModelBase
             new FileAssociationService(),
             new BackupService(),
             new KeyBindingService(),
-            ShowToast);
-        Migration = new MigrationOverlayViewModel(new FilePickerService(), OpenSeriesDetailFromReview);
+            ShowToast,
+            Migration,
+            OpenMigrationOverlay,
+            ShowProgressToast,
+            CloseProgressToast);
     }
 
     /// <summary>
@@ -43,6 +47,22 @@ public partial class MainViewModel : ViewModelBase
     public event Action<string, string>? ToastRequested;
 
     private void ShowToast(string title, string message) => ToastRequested?.Invoke(title, message);
+
+    /// <summary>
+    /// Live progress toast plumbing, same rationale as <see cref="ToastRequested"/> - a long-running
+    /// library action (Generate Covers, Sync Metadata) shows one via <see cref="ShowProgressToast"/>,
+    /// updates the same <see cref="ToastProgressViewModel"/> instance's Done/Total as it runs (the
+    /// shown toast is live-bound to it, so no re-show needed), then calls
+    /// <see cref="CloseProgressToast"/> when finished - typically followed by a normal
+    /// <see cref="ShowToast"/> completion message.
+    /// </summary>
+    public event Action<ToastProgressViewModel>? ProgressToastRequested;
+
+    public event Action<ToastProgressViewModel>? ProgressToastCloseRequested;
+
+    private void ShowProgressToast(ToastProgressViewModel toast) => ProgressToastRequested?.Invoke(toast);
+
+    private void CloseProgressToast(ToastProgressViewModel toast) => ProgressToastCloseRequested?.Invoke(toast);
 
     public LibraryScreenViewModel Library { get; }
     public DetailScreenViewModel Detail { get; }
@@ -88,7 +108,16 @@ public partial class MainViewModel : ViewModelBase
     }
 
     [RelayCommand]
-    private void GoLibrary() => CurrentScreen = "library";
+    private void GoLibrary()
+    {
+        // Unlike Smart/Reading's EnsureListLoaded (guarded, load-once), Library genuinely reloads
+        // every time - it's the one rail-nav screen with no lazy-load story yet, and the data can
+        // change from several places while the user is elsewhere (Book Folders scan, CE migration
+        // commit, Generate Covers). Reloading on every visit is simplest fix that covers all of
+        // those instead of special-casing each caller to remember to refresh Library itself.
+        Library.LoadFromDatabase();
+        CurrentScreen = "library";
+    }
 
     [RelayCommand]
     private void GoSmart()

@@ -18,40 +18,56 @@ public class PreferencesScreenViewModelTests : IDisposable
 {
     private readonly string _originalInstalledDirectory;
     private readonly string _originalExtractedDirectory;
+    private readonly string _originalThumbnailDirectory;
     private readonly string _dbPath;
     private readonly DbContextOptions<PaperbunkrDbContext> _dbOptions;
+    private readonly string _scanRoot;
 
     public PreferencesScreenViewModelTests()
     {
         _originalInstalledDirectory = SkinPaths.InstalledDirectory;
         _originalExtractedDirectory = SkinPaths.ExtractedDirectory;
+        _originalThumbnailDirectory = CoverThumbnailPaths.ThumbnailDirectory;
 
         string root = Path.Combine(Path.GetTempPath(), $"paperbunkr_prefsvm_test_{Guid.NewGuid():N}");
         SkinPaths.InstalledDirectory = Path.Combine(root, "skins");
         SkinPaths.ExtractedDirectory = Path.Combine(root, "skins-extracted");
+        CoverThumbnailPaths.ThumbnailDirectory = Path.Combine(root, "thumbs");
 
         _dbPath = Path.Combine(Path.GetTempPath(), $"paperbunkr_prefsvm_db_test_{Guid.NewGuid():N}.db");
         _dbOptions = new DbContextOptionsBuilder<PaperbunkrDbContext>().UseSqlite($"Data Source={_dbPath}").Options;
         using var context = new PaperbunkrDbContext(_dbOptions);
         context.Database.EnsureCreated();
+
+        _scanRoot = Path.Combine(root, "scan");
+        Directory.CreateDirectory(_scanRoot);
     }
 
     public void Dispose()
     {
         SkinPaths.InstalledDirectory = _originalInstalledDirectory;
         SkinPaths.ExtractedDirectory = _originalExtractedDirectory;
+        CoverThumbnailPaths.ThumbnailDirectory = _originalThumbnailDirectory;
 
         Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
         try
         {
             if (File.Exists(_dbPath)) File.Delete(_dbPath);
+            if (Directory.Exists(_scanRoot)) Directory.Delete(_scanRoot, recursive: true);
         }
         catch (IOException)
         {
         }
     }
 
-    private PreferencesScreenViewModel CreateViewModel(IFilePickerService? filePicker = null, IShellFileAssociation? shell = null, Action<string, string>? showToast = null)
+    private PreferencesScreenViewModel CreateViewModel(
+        IFilePickerService? filePicker = null,
+        IShellFileAssociation? shell = null,
+        Action<string, string>? showToast = null,
+        MigrationOverlayViewModel? migration = null,
+        Action? openMigration = null,
+        Action<ToastProgressViewModel>? showProgressToast = null,
+        Action<ToastProgressViewModel>? closeProgressToast = null)
     {
         var skinService = new SkinService(() => new PaperbunkrDbContext(_dbOptions));
         var scanner = new LibraryFolderScanner(() => new PaperbunkrDbContext(_dbOptions));
@@ -66,6 +82,10 @@ public class PreferencesScreenViewModelTests : IDisposable
             backupService,
             keyBindingService,
             showToast ?? ((_, _) => { }),
+            migration ?? new MigrationOverlayViewModel(filePicker ?? new NoOpFilePicker(), _ => { }),
+            openMigration ?? (() => { }),
+            showProgressToast ?? (_ => { }),
+            closeProgressToast ?? (_ => { }),
             () => new PaperbunkrDbContext(_dbOptions));
     }
 
@@ -412,6 +432,69 @@ public class PreferencesScreenViewModelTests : IDisposable
     }
 
     [Fact]
+    public async Task GenerateCoversCommand_ShowsThenClosesProgressToast_ThenFiresCompletionToast()
+    {
+        ToastProgressViewModel? shown = null;
+        ToastProgressViewModel? closed = null;
+        (string Title, string Message)? completionToast = null;
+        var vm = CreateViewModel(
+            showProgressToast: t => shown = t,
+            closeProgressToast: t => closed = t,
+            showToast: (title, message) => completionToast = (title, message));
+
+        await vm.GenerateCoversCommand.ExecuteAsync(null);
+
+        Assert.NotNull(shown);
+        Assert.Same(shown, closed); // same toast instance shown and closed, not a new one each time
+        Assert.False(vm.IsGeneratingCovers);
+        Assert.NotNull(completionToast);
+        Assert.Equal("Covers generated", completionToast!.Value.Title);
+    }
+
+    [Fact]
+    public async Task SyncMetadataCommand_ShowsThenClosesProgressToast_ThenFiresCompletionToast()
+    {
+        ToastProgressViewModel? shown = null;
+        ToastProgressViewModel? closed = null;
+        (string Title, string Message)? completionToast = null;
+        var vm = CreateViewModel(
+            showProgressToast: t => shown = t,
+            closeProgressToast: t => closed = t,
+            showToast: (title, message) => completionToast = (title, message));
+
+        await vm.SyncMetadataCommand.ExecuteAsync(null);
+
+        Assert.NotNull(shown);
+        Assert.Same(shown, closed);
+        Assert.False(vm.IsSyncingMetadata);
+        Assert.NotNull(completionToast);
+        Assert.Equal("Metadata sync complete", completionToast!.Value.Title);
+        Assert.Equal("No new metadata found.", completionToast!.Value.Message);
+    }
+
+    [Fact]
+    public async Task ScanNow_GeneratesCoverThumbnail_ForNewlyScannedIssue()
+    {
+        string cbzPath = Path.Combine(_scanRoot, "Kilo Station 012 (2021).cbz");
+        CbzFixture.Create(cbzPath, pageCount: 1);
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            context.WatchedFolders.Add(new Paperbunkr.Data.Entities.WatchedFolder { Path = _scanRoot });
+            context.SaveChanges();
+        }
+
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+
+        await vm.ScanNowCommand.ExecuteAsync(null);
+
+        Assert.Equal("Added 1 issue across 1 series.", vm.ScanStatus);
+        using var verifyContext = new PaperbunkrDbContext(_dbOptions);
+        var issue = Assert.Single(verifyContext.Issues);
+        Assert.True(File.Exists(CoverThumbnailPaths.GetCachePath(issue.Id)));
+    }
+
+    [Fact]
     public void GoAdvanced_SetsActiveTabFlag()
     {
         var vm = CreateViewModel();
@@ -419,6 +502,17 @@ public class PreferencesScreenViewModelTests : IDisposable
         vm.GoAdvancedCommand.Execute(null);
 
         Assert.True(vm.IsAdvancedTab);
+    }
+
+    [Fact]
+    public void OpenMigrationCommand_InvokesInjectedCallback()
+    {
+        bool called = false;
+        var vm = CreateViewModel(openMigration: () => called = true);
+
+        vm.OpenMigrationCommand.Execute(null);
+
+        Assert.True(called);
     }
 
     [Fact]

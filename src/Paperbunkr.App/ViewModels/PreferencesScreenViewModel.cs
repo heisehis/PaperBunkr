@@ -34,6 +34,9 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     private readonly BackupService _backupService;
     private readonly KeyBindingService _keyBindingService;
     private readonly Action<string, string> _showToast;
+    private readonly Action _openMigration;
+    private readonly Action<ToastProgressViewModel> _showProgressToast;
+    private readonly Action<ToastProgressViewModel> _closeProgressToast;
     private readonly Func<PaperbunkrDbContext> _contextFactory;
     private bool _isLoaded;
     private bool _suppressFontApply;
@@ -50,8 +53,12 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         FileAssociationService fileAssociationService,
         BackupService backupService,
         KeyBindingService keyBindingService,
-        Action<string, string> showToast)
-        : this(skinService, filePicker, libraryScanner, fileAssociationService, backupService, keyBindingService, showToast, PaperbunkrDb.CreateContext)
+        Action<string, string> showToast,
+        MigrationOverlayViewModel migration,
+        Action openMigration,
+        Action<ToastProgressViewModel> showProgressToast,
+        Action<ToastProgressViewModel> closeProgressToast)
+        : this(skinService, filePicker, libraryScanner, fileAssociationService, backupService, keyBindingService, showToast, migration, openMigration, showProgressToast, closeProgressToast, PaperbunkrDb.CreateContext)
     {
     }
 
@@ -64,6 +71,10 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         BackupService backupService,
         KeyBindingService keyBindingService,
         Action<string, string> showToast,
+        MigrationOverlayViewModel migration,
+        Action openMigration,
+        Action<ToastProgressViewModel> showProgressToast,
+        Action<ToastProgressViewModel> closeProgressToast,
         Func<PaperbunkrDbContext> contextFactory)
     {
         _skinService = skinService;
@@ -73,6 +84,10 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         _backupService = backupService;
         _keyBindingService = keyBindingService;
         _showToast = showToast;
+        Migration = migration;
+        _openMigration = openMigration;
+        _showProgressToast = showProgressToast;
+        _closeProgressToast = closeProgressToast;
         _contextFactory = contextFactory;
         Skins = new ObservableCollection<SkinSummary>();
         FontFamilies = new ObservableCollection<string>();
@@ -101,6 +116,22 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     public ObservableCollection<VirtualTagSummary> VirtualTags { get; }
 
     public ObservableCollection<WatchedFolderSummary> WatchedFolders { get; }
+
+    /// <summary>
+    /// The same <see cref="MigrationOverlayViewModel"/> instance <see cref="MainViewModel"/> owns -
+    /// exposed here so the Libraries tab's "Migrate from ComicRack CE" entry point (docs/superpowers/specs/
+    /// 2026-08-09-embedded-metadata-and-migration-relocation-design.md §2) can bind to
+    /// <c>Migration.NeedsReview.HasPendingItems</c> for its badge without duplicating that state.
+    /// </summary>
+    public MigrationOverlayViewModel Migration { get; }
+
+    /// <summary>
+    /// Opens the migration overlay, which still renders at the shell root (unchanged) - this just
+    /// relays to <see cref="MainViewModel"/>'s own open logic (<c>Migration.Open()</c> +
+    /// <c>IsMigrationOverlayOpen = true</c>), which this ViewModel has no direct way to set itself.
+    /// </summary>
+    [RelayCommand]
+    private void OpenMigration() => _openMigration();
 
     [ObservableProperty]
     private string _activeTab = "appearance";
@@ -531,9 +562,20 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         {
             var progress = new Progress<(int Done, int Total)>(p => ScanStatus = $"Scanning… {p.Done}/{p.Total}");
             var result = await _libraryScanner.ScanAllAsync(progress);
-            ScanStatus = result.IssuesAdded == 0
+            string summary = result.IssuesAdded == 0
                 ? "No new issues found."
                 : $"Added {result.IssuesAdded} issue{(result.IssuesAdded == 1 ? "" : "s")} across {result.SeriesTouched} series.";
+
+            if (result.IssuesAdded > 0)
+            {
+                // Newly-added issues have no cached cover yet - generate them now instead of
+                // leaving Library showing blank placeholders until someone finds the separate
+                // "Generate Covers" button on the Library screen (same pipeline it uses).
+                var coverProgress = new Progress<(int Done, int Total)>(p => ScanStatus = $"Generating covers… {p.Done}/{p.Total}");
+                await new CoverThumbnailService(_contextFactory).GenerateAllAsync(coverProgress);
+            }
+
+            ScanStatus = summary;
 
             // Toast alongside the inline ScanStatus text (P6 follow-up) - scanning can take a
             // while on a large folder, and the inline status is easy to miss if the user's
@@ -543,6 +585,86 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         finally
         {
             IsScanning = false;
+        }
+    }
+
+    [ObservableProperty]
+    private bool _isGeneratingCovers;
+
+    /// <summary>
+    /// Generates real cover art for every issue that doesn't have one cached yet
+    /// (docs/superpowers/specs/2026-08-06-cover-thumbnails-design.md §2). Moved here from the
+    /// Library screen (docs/superpowers/specs/2026-08-09-embedded-metadata-and-migration-relocation-design.md
+    /// follow-up), alongside Book Folders and Sync Metadata - all three are "populate my library"
+    /// actions. Progress now shows as a live toast rather than an inline bar (Library reloads its
+    /// own data on every visit already, so no explicit reload call is needed here).
+    /// </summary>
+    [RelayCommand]
+    private async Task GenerateCovers()
+    {
+        if (IsGeneratingCovers)
+        {
+            return;
+        }
+
+        IsGeneratingCovers = true;
+        var toast = new ToastProgressViewModel("Generating covers…");
+        _showProgressToast(toast);
+
+        try
+        {
+            var progress = new Progress<(int Done, int Total)>(p =>
+            {
+                toast.Done = p.Done;
+                toast.Total = p.Total;
+            });
+            await new CoverThumbnailService(_contextFactory).GenerateAllAsync(progress);
+        }
+        finally
+        {
+            IsGeneratingCovers = false;
+            _closeProgressToast(toast);
+            _showToast("Covers generated", $"Checked {toast.Total} issue{(toast.Total == 1 ? "" : "s")}.");
+        }
+    }
+
+    [ObservableProperty]
+    private bool _isSyncingMetadata;
+
+    /// <summary>
+    /// "Sync Metadata" - re-reads embedded ComicInfo.xml for every already-linked issue and fills
+    /// in currently-blank fields only. Moved here alongside Generate Covers, same rationale.
+    /// </summary>
+    [RelayCommand]
+    private async Task SyncMetadata()
+    {
+        if (IsSyncingMetadata)
+        {
+            return;
+        }
+
+        IsSyncingMetadata = true;
+        var toast = new ToastProgressViewModel("Syncing metadata…");
+        _showProgressToast(toast);
+
+        try
+        {
+            var progress = new Progress<(int Done, int Total)>(p =>
+            {
+                toast.Done = p.Done;
+                toast.Total = p.Total;
+            });
+            var result = await _libraryScanner.SyncMetadataAsync(progress);
+            _showToast(
+                "Metadata sync complete",
+                result.IssuesUpdated == 0
+                    ? "No new metadata found."
+                    : $"Updated {result.IssuesUpdated} issue{(result.IssuesUpdated == 1 ? "" : "s")}.");
+        }
+        finally
+        {
+            IsSyncingMetadata = false;
+            _closeProgressToast(toast);
         }
     }
 

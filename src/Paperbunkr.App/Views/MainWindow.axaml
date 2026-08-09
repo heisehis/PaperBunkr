@@ -120,16 +120,6 @@
                     <Button Classes="rail plugin" Classes.active="{Binding IsPlugin}"
                             Command="{Binding GoPluginCommand}" Content="Pl"
                             ToolTip.Tip="Plugins" />
-
-                    <Grid>
-                        <Button Classes="rail plugin" Classes.active="{Binding IsMigrationOverlayOpen}"
-                                Command="{Binding OpenMigrationOverlayCommand}" Content="Mg"
-                                ToolTip.Tip="Migrate from ComicRack CE / Needs Review" />
-                        <Border Width="10" Height="10" CornerRadius="5" Background="{DynamicResource PbAccentBrush}"
-                                HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-3,-3,0"
-                                IsHitTestVisible="False"
-                                IsVisible="{Binding Migration.NeedsReview.HasPendingItems}" />
-                    </Grid>
                 </StackPanel>
 
                 <StackPanel Grid.Row="2" HorizontalAlignment="Center" Spacing="2">

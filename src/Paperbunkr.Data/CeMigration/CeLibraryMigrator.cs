@@ -354,51 +354,75 @@ public class CeLibraryMigrator
 
     private static Issue MapIssue(ComicBook book)
     {
-        return new Issue
-        {
-            Title = NullIfEmpty(book.Title),
-            Number = NullIfEmpty(book.Number),
-            Count = book.Count > 0 ? book.Count : null,
-            Volume = book.Volume != 0 ? book.Volume : null,
-            AlternateSeries = NullIfEmpty(book.AlternateSeries),
-            AlternateNumber = NullIfEmpty(book.AlternateNumber),
-            StoryArc = NullIfEmpty(book.StoryArc),
-            // StoryArcNumber has no CE source field - confirmed absent entirely (§6) - left null.
-            SeriesGroup = NullIfEmpty(book.SeriesGroup),
-            Summary = NullIfEmpty(book.Summary),
-            Notes = NullIfEmpty(book.Notes),
-            Review = NullIfEmpty(book.Review),
-            Year = book.Year > 0 ? book.Year : null,
-            Month = book.Month > 0 ? book.Month : null,
-            Day = book.Day > 0 ? book.Day : null,
-            Writer = NullIfEmpty(book.Writer),
-            Penciller = NullIfEmpty(book.Penciller),
-            Inker = NullIfEmpty(book.Inker),
-            Colorist = NullIfEmpty(book.Colorist),
-            Letterer = NullIfEmpty(book.Letterer),
-            CoverArtist = NullIfEmpty(book.CoverArtist),
-            Editor = NullIfEmpty(book.Editor),
-            Translator = NullIfEmpty(book.Translator),
-            Publisher = NullIfEmpty(book.Publisher),
-            Imprint = NullIfEmpty(book.Imprint),
-            Genre = NullIfEmpty(book.Genre),
-            Web = NullIfEmpty(book.Web),
-            PageCount = book.PageCount > 0 ? book.PageCount : null,
-            LanguageISO = NullIfEmpty(book.LanguageISO),
-            Format = NullIfEmpty(book.Format),
-            AgeRating = NullIfEmpty(book.AgeRating),
-            Characters = NullIfEmpty(book.Characters),
-            Teams = NullIfEmpty(book.Teams),
-            Locations = NullIfEmpty(book.Locations),
-            Tags = NullIfEmpty(book.Tags),
-            FilePath = NullIfEmpty(book.FilePath),
-            AddedTime = book.AddedTime != DateTime.MinValue ? book.AddedTime : null,
-            ReleasedTime = book.ReleasedTime != DateTime.MinValue ? book.ReleasedTime : null,
-            OpenedTime = book.OpenedTime != DateTime.MinValue ? book.OpenedTime : null,
-            LastPageRead = book.LastPageRead,
-            FileIsMissing = book.FileIsMissing,
-            CustomThumbnailKey = NullIfEmpty(book.CustomThumbnailKey),
-        };
+        var issue = new Issue();
+        MapStoryFields(book, issue);
+
+        issue.FilePath = NullIfEmpty(book.FilePath);
+        issue.AddedTime = book.AddedTime != DateTime.MinValue ? book.AddedTime : null;
+        issue.ReleasedTime = book.ReleasedTime != DateTime.MinValue ? book.ReleasedTime : null;
+        issue.OpenedTime = book.OpenedTime != DateTime.MinValue ? book.OpenedTime : null;
+        issue.LastPageRead = book.LastPageRead;
+        issue.FileIsMissing = book.FileIsMissing;
+        issue.CustomThumbnailKey = NullIfEmpty(book.CustomThumbnailKey);
+
+        return issue;
+    }
+
+    /// <summary>
+    /// Maps the story-metadata fields that live on the base <see cref="ComicInfo"/> class - shared
+    /// between <see cref="MapIssue"/> (migration, given a full <see cref="ComicBook"/>) and
+    /// <see cref="Paperbunkr.App.Services.LibraryFolderScanner"/> (given just the <see cref="ComicInfo"/>
+    /// read from an archive's embedded ComicInfo.xml). Deliberately excludes the seven runtime
+    /// fields (<c>FilePath</c>, <c>AddedTime</c>, <c>ReleasedTime</c>, <c>OpenedTime</c>,
+    /// <c>LastPageRead</c>, <c>FileIsMissing</c>, <c>CustomThumbnailKey</c>) that only exist on
+    /// <see cref="ComicBook"/>, not <see cref="ComicInfo"/> - callers set those themselves.
+    /// </summary>
+    /// <param name="onlyIfBlank">
+    /// false (default, migration/new-scan behavior): every field is overwritten from
+    /// <paramref name="info"/>. true (docs/superpowers/specs/
+    /// 2026-08-09-embedded-metadata-and-migration-relocation-design.md follow-up, "Sync Metadata"):
+    /// a field is only set when <paramref name="issue"/>'s current value is blank - never clobbers
+    /// something already there, e.g. from a prior migration or a manual edit.
+    /// </param>
+    public static void MapStoryFields(ComicInfo info, Issue issue, bool onlyIfBlank = false)
+    {
+        T Pick<T>(T current, T incoming) => onlyIfBlank && current is not null ? current : incoming;
+
+        issue.Title = Pick(issue.Title, NullIfEmpty(info.Title));
+        issue.Number = Pick(issue.Number, NullIfEmpty(info.Number));
+        issue.Count = Pick(issue.Count, info.Count > 0 ? info.Count : null);
+        issue.Volume = Pick(issue.Volume, info.Volume != 0 ? info.Volume : null);
+        issue.AlternateSeries = Pick(issue.AlternateSeries, NullIfEmpty(info.AlternateSeries));
+        issue.AlternateNumber = Pick(issue.AlternateNumber, NullIfEmpty(info.AlternateNumber));
+        issue.StoryArc = Pick(issue.StoryArc, NullIfEmpty(info.StoryArc));
+        // StoryArcNumber has no CE source field - confirmed absent entirely (§6) - left null.
+        issue.SeriesGroup = Pick(issue.SeriesGroup, NullIfEmpty(info.SeriesGroup));
+        issue.Summary = Pick(issue.Summary, NullIfEmpty(info.Summary));
+        issue.Notes = Pick(issue.Notes, NullIfEmpty(info.Notes));
+        issue.Review = Pick(issue.Review, NullIfEmpty(info.Review));
+        issue.Year = Pick(issue.Year, info.Year > 0 ? info.Year : null);
+        issue.Month = Pick(issue.Month, info.Month > 0 ? info.Month : null);
+        issue.Day = Pick(issue.Day, info.Day > 0 ? info.Day : null);
+        issue.Writer = Pick(issue.Writer, NullIfEmpty(info.Writer));
+        issue.Penciller = Pick(issue.Penciller, NullIfEmpty(info.Penciller));
+        issue.Inker = Pick(issue.Inker, NullIfEmpty(info.Inker));
+        issue.Colorist = Pick(issue.Colorist, NullIfEmpty(info.Colorist));
+        issue.Letterer = Pick(issue.Letterer, NullIfEmpty(info.Letterer));
+        issue.CoverArtist = Pick(issue.CoverArtist, NullIfEmpty(info.CoverArtist));
+        issue.Editor = Pick(issue.Editor, NullIfEmpty(info.Editor));
+        issue.Translator = Pick(issue.Translator, NullIfEmpty(info.Translator));
+        issue.Publisher = Pick(issue.Publisher, NullIfEmpty(info.Publisher));
+        issue.Imprint = Pick(issue.Imprint, NullIfEmpty(info.Imprint));
+        issue.Genre = Pick(issue.Genre, NullIfEmpty(info.Genre));
+        issue.Web = Pick(issue.Web, NullIfEmpty(info.Web));
+        issue.PageCount = Pick(issue.PageCount, info.PageCount > 0 ? info.PageCount : null);
+        issue.LanguageISO = Pick(issue.LanguageISO, NullIfEmpty(info.LanguageISO));
+        issue.Format = Pick(issue.Format, NullIfEmpty(info.Format));
+        issue.AgeRating = Pick(issue.AgeRating, NullIfEmpty(info.AgeRating));
+        issue.Characters = Pick(issue.Characters, NullIfEmpty(info.Characters));
+        issue.Teams = Pick(issue.Teams, NullIfEmpty(info.Teams));
+        issue.Locations = Pick(issue.Locations, NullIfEmpty(info.Locations));
+        issue.Tags = Pick(issue.Tags, NullIfEmpty(info.Tags));
     }
 
     private static string? NullIfEmpty(string? value) => string.IsNullOrWhiteSpace(value) ? null : value;

@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using cYo.Projects.ComicRack.Engine;
 using cYo.Projects.ComicRack.Engine.IO.Provider;
 using Paperbunkr.Data;
+using Paperbunkr.Data.CeMigration;
 using Paperbunkr.Data.Entities;
 
 namespace Paperbunkr.App.Services;
@@ -14,12 +15,18 @@ namespace Paperbunkr.App.Services;
 /// <summary>Result of a completed <see cref="LibraryFolderScanner"/> run.</summary>
 public record LibraryFolderScanResult(int IssuesAdded, int SeriesTouched);
 
+/// <summary>Result of a completed <see cref="LibraryFolderScanner.SyncMetadataAsync"/> run.</summary>
+public record LibraryMetadataSyncResult(int IssuesUpdated);
+
 /// <summary>
 /// On-demand folder scan-and-import (docs/superpowers/specs/2026-08-07-preferences-libraries-tab-design.md
-/// §2) - Paperbunkr's first non-migration way to add comics to the library. v1 scope: filename
-/// parsing only (<see cref="ComicNameInfo.FromFilePath(string)"/>, the same parser CE itself uses
-/// by default), no embedded ComicInfo.xml reading and no live <c>FileSystemWatcher</c> auto-import
-/// - both real, deliberately deferred follow-ups once this on-demand path is proven.
+/// §2, embedded-metadata follow-up in docs/superpowers/specs/
+/// 2026-08-09-embedded-metadata-and-migration-relocation-design.md §1) - Paperbunkr's first
+/// non-migration way to add comics to the library. Reads embedded ComicInfo.xml when present (via
+/// the same <see cref="IInfoStorage"/> cast <c>ComicBook.RefreshInfoFromFile</c> uses internally) -
+/// embedded metadata wins per-field over <see cref="ComicNameInfo.FromFilePath(string)"/> filename
+/// parsing, which stays as the fallback for files with no embedded info or an unsupported format.
+/// No live <c>FileSystemWatcher</c> auto-import - still a real, deliberately deferred follow-up.
 /// </summary>
 public class LibraryFolderScanner
 {
@@ -81,7 +88,11 @@ public class LibraryFolderScanner
             try
             {
                 var nameInfo = ComicNameInfo.FromFilePath(file);
-                string seriesName = string.IsNullOrWhiteSpace(nameInfo.Series) ? "Unknown" : nameInfo.Series.Trim();
+                var embeddedInfo = TryReadEmbeddedInfo(file);
+
+                string seriesName = !string.IsNullOrWhiteSpace(embeddedInfo?.Series)
+                    ? embeddedInfo.Series.Trim()
+                    : (string.IsNullOrWhiteSpace(nameInfo.Series) ? "Unknown" : nameInfo.Series.Trim());
 
                 if (!seriesByName.TryGetValue(seriesName, out var series))
                 {
@@ -93,12 +104,21 @@ public class LibraryFolderScanner
                 var issue = new Issue
                 {
                     Series = series,
-                    Number = string.IsNullOrWhiteSpace(nameInfo.Number) ? null : nameInfo.Number,
-                    Volume = nameInfo.Volume > 0 ? nameInfo.Volume : null,
-                    Year = nameInfo.Year > 0 ? nameInfo.Year : null,
                     FilePath = file,
                     AddedTime = DateTime.UtcNow,
                 };
+
+                if (embeddedInfo is not null)
+                {
+                    CeLibraryMigrator.MapStoryFields(embeddedInfo, issue);
+                }
+
+                // Filename parsing fills in only what embedded metadata left blank - embedded wins
+                // per-field, not all-or-nothing.
+                issue.Number ??= string.IsNullOrWhiteSpace(nameInfo.Number) ? null : nameInfo.Number;
+                issue.Volume ??= nameInfo.Volume > 0 ? nameInfo.Volume : null;
+                issue.Year ??= nameInfo.Year > 0 ? nameInfo.Year : null;
+
                 series.Issues.Add(issue);
                 context.Issues.Add(issue);
 
@@ -115,5 +135,83 @@ public class LibraryFolderScanner
 
         context.SaveChanges();
         return new LibraryFolderScanResult(issuesAdded, seriesTouched.Count);
+    }
+
+    /// <summary>
+    /// "Sync Metadata" (docs/superpowers/specs/2026-08-09-embedded-metadata-and-migration-relocation-design.md
+    /// follow-up) - unlike <see cref="ScanAllAsync"/>, which only ever touches newly-discovered
+    /// files, this re-reads embedded ComicInfo.xml for every already-linked issue and fills in
+    /// currently-blank fields (<see cref="CeLibraryMigrator.MapStoryFields"/> with
+    /// <c>onlyIfBlank: true</c> - never overwrites a value that's already there, from migration or
+    /// a manual edit). Presence-based and safe to re-run, same "fills gaps, one bad file doesn't
+    /// stop the batch" contract as <see cref="CoverThumbnailService.GenerateAllAsync"/>.
+    /// </summary>
+    public async Task<LibraryMetadataSyncResult> SyncMetadataAsync(IProgress<(int Done, int Total)> progress, CancellationToken ct = default)
+    {
+        return await Task.Run(() => SyncMetadata(progress, ct), ct);
+    }
+
+    private LibraryMetadataSyncResult SyncMetadata(IProgress<(int Done, int Total)> progress, CancellationToken ct)
+    {
+        using var context = _contextFactory();
+
+        var issues = context.Issues.Where(i => i.FilePath != null).ToList();
+        int total = issues.Count;
+        int done = 0;
+        progress.Report((0, total));
+
+        foreach (var issue in issues)
+        {
+            ct.ThrowIfCancellationRequested();
+
+            try
+            {
+                if (File.Exists(issue.FilePath))
+                {
+                    var embeddedInfo = TryReadEmbeddedInfo(issue.FilePath!);
+                    if (embeddedInfo is not null)
+                    {
+                        CeLibraryMigrator.MapStoryFields(embeddedInfo, issue, onlyIfBlank: true);
+                    }
+                }
+            }
+            catch
+            {
+                // One bad file doesn't stop the batch - same contract as ScanAllAsync.
+            }
+
+            progress.Report((++done, total));
+        }
+
+        int issuesUpdated = context.ChangeTracker.Entries<Issue>().Count(e => e.State == Microsoft.EntityFrameworkCore.EntityState.Modified);
+        context.SaveChanges();
+        return new LibraryMetadataSyncResult(issuesUpdated);
+    }
+
+    /// <summary>
+    /// Reads embedded ComicInfo.xml via the archive reader's own <see cref="IInfoStorage"/>
+    /// implementation (the same one <c>ComicBook.RefreshInfoFromFile</c> uses internally) - the
+    /// same provider <see cref="PageImageDecoder"/> opens for page decoding, just a separate
+    /// short-lived open here since only metadata is needed. Returns null - never throws - for
+    /// anything that doesn't pan out: unsupported/dynamic formats, no embedded ComicInfo.xml,
+    /// or a malformed one. Callers fall back to filename parsing in every case.
+    /// </summary>
+    private static ComicInfo? TryReadEmbeddedInfo(string file)
+    {
+        try
+        {
+            using var provider = Providers.Readers.CreateSourceProvider(file);
+            if (provider is not IInfoStorage infoStorage)
+            {
+                return null;
+            }
+
+            provider.Open(async: false);
+            return infoStorage.LoadInfo(InfoLoadingMethod.Complete);
+        }
+        catch
+        {
+            return null;
+        }
     }
 }

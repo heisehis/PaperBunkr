@@ -397,11 +397,6 @@
                         Command="{Binding ToggleGroupCommand}" Content="{Binding GroupField, StringFormat='Group: {0} ▾'}" />
                 <Button x:Name="DisplayButton" Classes="toolbarPill" Classes.open="{Binding IsDisplayOpen}"
                         Command="{Binding ToggleDisplayCommand}" Content="{Binding DisplayModeLabel, StringFormat='Display: {0} ▾'}" />
-                <Button Classes="toolbarPill" Content="Generate Covers" Command="{Binding GenerateCoversCommand}"
-                        IsEnabled="{Binding !IsGeneratingCovers}" />
-                <ProgressBar IsVisible="{Binding IsGeneratingCovers}" Minimum="0" Maximum="1"
-                             Value="{Binding CoverGenerationFraction}" Width="100" Height="4" CornerRadius="2"
-                             VerticalAlignment="Center" />
             </StackPanel>
 
             <Popup PlacementTarget="{Binding #FilterButton}" Placement="BottomEdgeAlignedLeft" VerticalOffset="6"

@@ -87,4 +87,29 @@ public class MainViewModelTests : IDisposable
         Assert.True(vm.IsDetail);
         Assert.False(vm.IsBulkIssueProperties);
     }
+
+    /// <summary>
+    /// Regression test for a real bug: Library loads once at MainViewModel construction and never
+    /// again (unlike Smart/Reading, which reload via EnsureListLoaded on every navigation). Data
+    /// that lands after construction - a Book Folders scan, a CE migration commit reached via any
+    /// path other than the migration overlay's own "X" close button, a direct DB write - never
+    /// appeared until GoLibrary itself started reloading too.
+    /// </summary>
+    [Fact]
+    public void GoLibrary_ReloadsFromDatabase_PickingUpDataAddedAfterConstruction()
+    {
+        var vm = new MainViewModel();
+        Assert.Equal(0, vm.Library.AllSeriesCount);
+
+        var options = new DbContextOptionsBuilder<PaperbunkrDbContext>().UseSqlite($"Data Source={_dbPath}").Options;
+        using (var context = new PaperbunkrDbContext(options))
+        {
+            context.Series.Add(new Paperbunkr.Data.Entities.Series { Name = "Late-Arriving Series" });
+            context.SaveChanges();
+        }
+
+        vm.GoLibraryCommand.Execute(null);
+
+        Assert.Equal(1, vm.Library.AllSeriesCount);
+    }
 }

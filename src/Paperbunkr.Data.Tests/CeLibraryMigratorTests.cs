@@ -450,4 +450,37 @@ public class CeLibraryMigratorTests : IDisposable
         var series = Assert.Single(migrateContext.Series.Include(s => s.Issues));
         Assert.Equal(2, series.Issues.Count);
     }
+
+    [Fact]
+    public void MapStoryFields_OnlyIfBlank_PreservesExistingValues_FillsOnlyBlankOnes()
+    {
+        var info = new ComicInfo
+        {
+            Writer = "Incoming Writer",
+            Publisher = "Incoming Publisher",
+            Genre = "Incoming Genre",
+        };
+        var issue = new Issue
+        {
+            Writer = "Existing Writer",
+            Publisher = null,
+        };
+
+        CeLibraryMigrator.MapStoryFields(info, issue, onlyIfBlank: true);
+
+        Assert.Equal("Existing Writer", issue.Writer); // preserved, not overwritten
+        Assert.Equal("Incoming Publisher", issue.Publisher); // was blank, filled in
+        Assert.Equal("Incoming Genre", issue.Genre); // was blank, filled in
+    }
+
+    [Fact]
+    public void MapStoryFields_DefaultBehavior_AlwaysOverwrites()
+    {
+        var info = new ComicInfo { Writer = "Incoming Writer" };
+        var issue = new Issue { Writer = "Existing Writer" };
+
+        CeLibraryMigrator.MapStoryFields(info, issue);
+
+        Assert.Equal("Incoming Writer", issue.Writer); // default (onlyIfBlank: false) always overwrites
+    }
 }

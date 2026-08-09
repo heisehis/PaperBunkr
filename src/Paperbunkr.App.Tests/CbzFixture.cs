@@ -12,7 +12,13 @@ namespace Paperbunkr.App.Tests;
 /// </summary>
 internal static class CbzFixture
 {
-    public static string Create(string path, int pageCount)
+    /// <summary>
+    /// <paramref name="comicInfo"/> optionally embeds a real ComicInfo.xml entry (serialized via
+    /// the engine's own <c>ComicInfo.ToArray()</c>, the same writer CE itself uses), for tests
+    /// exercising embedded-metadata reading - same "generate via the real code path" precedent as
+    /// the rest of this fixture.
+    /// </summary>
+    public static string Create(string path, int pageCount, cYo.Projects.ComicRack.Engine.ComicInfo? comicInfo = null)
     {
         using var zip = ZipFile.Open(path, ZipArchiveMode.Create);
         var colors = new[] { Color.Firebrick, Color.SteelBlue, Color.Goldenrod, Color.SeaGreen, Color.Orchid };
@@ -28,6 +34,14 @@ internal static class CbzFixture
 
             using var entryStream = entry.Open();
             bitmap.Save(entryStream, ImageFormat.Png);
+        }
+
+        if (comicInfo is not null)
+        {
+            byte[] xml = comicInfo.ToArray();
+            var infoEntry = zip.CreateEntry("ComicInfo.xml", CompressionLevel.Fastest);
+            using var infoStream = infoEntry.Open();
+            infoStream.Write(xml, 0, xml.Length);
         }
 
         return path;

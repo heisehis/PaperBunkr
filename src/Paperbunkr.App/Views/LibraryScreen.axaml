@@ -257,10 +257,7 @@
         <Border Grid.Row="0" Padding="24,14" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,0,0,1">
           <Panel>
             <StackPanel Orientation="Horizontal" Spacing="8">
-                <Border MaxWidth="260" Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}"
-                        BorderThickness="1" CornerRadius="5" Padding="10,7" HorizontalAlignment="Stretch" Width="260">
-                    <TextBlock Text="Search all series…" FontSize="12.5" Foreground="{DynamicResource PbTextFaintBrush}" />
-                </Border>
+                <TextBox Width="260" Text="{Binding SearchQuery}" Watermark="Search all series…" FontSize="12.5" />
 
                 <Button x:Name="FilterButton" Classes="toolbarPill" Classes.open="{Binding IsFilterOpen}"
                         Command="{Binding ToggleFilterCommand}" Content="Filter ▾" />
@@ -278,10 +275,10 @@
             <Popup PlacementTarget="{Binding #FilterButton}" Placement="BottomEdgeAlignedLeft" VerticalOffset="6"
                    IsOpen="{Binding IsFilterOpen}" IsLightDismissEnabled="True">
                 <Border Classes="dropdown" Width="210">
-                    <StackPanel>
-                        <TextBlock Classes="dropdownRow" Text="Unread only" />
-                        <TextBlock Classes="dropdownRow" Text="Missing issues" />
-                        <TextBlock Classes="dropdownRow" Text="Tracked series ✓" Foreground="{DynamicResource PbTextBrush}" />
+                    <StackPanel Spacing="4">
+                        <CheckBox Content="Unread only" FontSize="12.5" IsChecked="{Binding FilterUnreadOnly}" />
+                        <CheckBox Content="Missing issues" FontSize="12.5" IsChecked="{Binding FilterMissingIssues}" />
+                        <CheckBox Content="Tracked series" FontSize="12.5" IsChecked="{Binding FilterTrackedOnly}" />
                     </StackPanel>
                 </Border>
             </Popup>
@@ -328,7 +325,7 @@
         </Border>
 
         <!-- ============ Compact grid ============ -->
-        <ScrollViewer Grid.Row="1" IsVisible="{Binding IsCompactGrid}">
+        <ScrollViewer x:Name="CompactScrollViewer" Grid.Row="1" IsVisible="{Binding IsCompactGrid}">
             <ItemsControl ItemsSource="{Binding Covers}" ItemTemplate="{StaticResource CompactGridItemTemplate}" Margin="24,22,24,40">
                 <ItemsControl.ItemsPanel>
                     <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
@@ -337,7 +334,7 @@
         </ScrollViewer>
 
         <!-- ============ Comfortable grid ============ -->
-        <ScrollViewer Grid.Row="1" IsVisible="{Binding IsComfortableGrid}">
+        <ScrollViewer x:Name="ComfortableScrollViewer" Grid.Row="1" IsVisible="{Binding IsComfortableGrid}">
             <ItemsControl ItemsSource="{Binding Covers}" ItemTemplate="{StaticResource ComfortableGridItemTemplate}" Margin="24,22,24,40">
                 <ItemsControl.ItemsPanel>
                     <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
@@ -346,7 +343,7 @@
         </ScrollViewer>
 
         <!-- ============ Cover-only grid ============ -->
-        <ScrollViewer Grid.Row="1" IsVisible="{Binding IsCoverOnlyGrid}">
+        <ScrollViewer x:Name="CoverOnlyScrollViewer" Grid.Row="1" IsVisible="{Binding IsCoverOnlyGrid}">
             <ItemsControl ItemsSource="{Binding Covers}" ItemTemplate="{StaticResource CoverOnlyGridItemTemplate}" Margin="24,22,24,40">
                 <ItemsControl.ItemsPanel>
                     <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
@@ -355,7 +352,7 @@
         </ScrollViewer>
 
         <!-- ============ Panorama comfortable grid ============ -->
-        <ScrollViewer Grid.Row="1" IsVisible="{Binding IsPanoramaGrid}">
+        <ScrollViewer x:Name="PanoramaScrollViewer" Grid.Row="1" IsVisible="{Binding IsPanoramaGrid}">
             <ItemsControl ItemsSource="{Binding Covers}" ItemTemplate="{StaticResource PanoramaGridItemTemplate}" Margin="24,22,24,40">
                 <ItemsControl.ItemsPanel>
                     <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
@@ -364,7 +361,7 @@
         </ScrollViewer>
 
         <!-- ============ List ============ -->
-        <ScrollViewer Grid.Row="1" IsVisible="{Binding IsListView}">
+        <ScrollViewer x:Name="ListScrollViewer" Grid.Row="1" IsVisible="{Binding IsListView}">
             <ItemsControl ItemsSource="{Binding Covers}" ItemTemplate="{StaticResource ListItemTemplate}" Margin="24,18,24,40" />
         </ScrollViewer>
 
@@ -377,19 +374,41 @@
                 <TextBlock Grid.Column="4" Text="Unread" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource PbTextFaintBrush}" />
                 <TextBlock Grid.Column="5" Text="Publisher" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource PbTextFaintBrush}" />
             </Grid>
-            <ScrollViewer>
+            <ScrollViewer x:Name="DetailsScrollViewer">
                 <ItemsControl ItemsSource="{Binding Covers}" ItemTemplate="{StaticResource DetailsItemTemplate}" Margin="0,0,0,40" />
             </ScrollViewer>
         </DockPanel>
 
         <!-- ============ Tiles ============ -->
-        <ScrollViewer Grid.Row="1" IsVisible="{Binding IsTilesView}">
+        <ScrollViewer x:Name="TilesScrollViewer" Grid.Row="1" IsVisible="{Binding IsTilesView}">
             <ItemsControl ItemsSource="{Binding Covers}" ItemTemplate="{StaticResource TilesItemTemplate}" Margin="24,18,24,40">
                 <ItemsControl.ItemsPanel>
                     <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
                 </ItemsControl.ItemsPanel>
             </ItemsControl>
         </ScrollViewer>
+
+        <!-- ============ A-Z jump indexer ============ -->
+        <!-- Approximate scroll-to-letter (docs/superpowers/specs/2026-08-09-library-toolbar-design.md
+             Phase B) - no virtualized ListBox backs this grid, so there's no real ScrollIntoView;
+             LibraryScreen.axaml.cs estimates a row-based offset instead. -->
+        <Border Grid.Row="1" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,4,0"
+                Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}"
+                BorderThickness="1" CornerRadius="10" Padding="2,6">
+            <ItemsControl ItemsSource="{Binding AlphabetIndexLetters}">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate><StackPanel Orientation="Vertical" /></ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="x:String">
+                        <Button Content="{Binding}" Click="OnAlphabetIndexLetterClick" Tag="{Binding}"
+                                Background="Transparent" BorderThickness="0" Padding="4,1" FontSize="9.5"
+                                Foreground="{DynamicResource PbTextFaintBrush}" Cursor="Hand"
+                                HorizontalContentAlignment="Center" HorizontalAlignment="Stretch" />
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </Border>
 
     </Grid>
 </UserControl>

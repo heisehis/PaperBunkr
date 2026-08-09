@@ -52,6 +52,25 @@ public class LibraryScreenViewModelTests : IDisposable
         return series.Id;
     }
 
+    private static int CreateSeriesWithIssue(string name, bool fileIsMissing = false, int? lastPageRead = null, string? publisher = null, string? genre = null)
+    {
+        using var context = PaperbunkrDb.CreateContext();
+        var series = new Series { Name = name, ContentType = ContentType.Comic, Publisher = publisher, Genre = genre };
+        context.Series.Add(series);
+        context.SaveChanges();
+
+        context.Issues.Add(new Issue { SeriesId = series.Id, Number = "1", FileIsMissing = fileIsMissing, LastPageRead = lastPageRead });
+        context.SaveChanges();
+        return series.Id;
+    }
+
+    private static void AddTrackingLink(int seriesId)
+    {
+        using var context = PaperbunkrDb.CreateContext();
+        context.TrackingLinks.Add(new TrackingLink { SeriesId = seriesId, Service = TrackingService.AniList, ExternalId = "123" });
+        context.SaveChanges();
+    }
+
     private static int CreateCategoryWithSeries(string name, params int[] seriesIds)
     {
         using var context = PaperbunkrDb.CreateContext();
@@ -182,5 +201,78 @@ public class LibraryScreenViewModelTests : IDisposable
 
         vm.GridDensity = 0.1;
         Assert.Equal(0.6, vm.GridDensity);
+    }
+
+    [Fact]
+    public void SearchQuery_FiltersByNamePublisherGenre()
+    {
+        CreateSeriesWithIssue("Amazing Spider-Man", publisher: "Marvel");
+        CreateSeriesWithIssue("Batman", publisher: "DC", genre: "Noir");
+        var vm = new LibraryScreenViewModel(goDetail: _ => { });
+
+        vm.SearchQuery = "spider";
+        Assert.Equal("Amazing Spider-Man", Assert.Single(vm.Covers).Name);
+
+        vm.SearchQuery = "marvel"; // matches Publisher, not Name
+        Assert.Equal("Amazing Spider-Man", Assert.Single(vm.Covers).Name);
+
+        vm.SearchQuery = "noir"; // matches Genre
+        Assert.Equal("Batman", Assert.Single(vm.Covers).Name);
+
+        vm.SearchQuery = "";
+        Assert.Equal(2, vm.Covers.Count);
+    }
+
+    [Fact]
+    public void FilterUnreadOnly_NarrowsCovers()
+    {
+        CreateSeriesWithIssue("Read Series", lastPageRead: 5);
+        CreateSeriesWithIssue("Unread Series", lastPageRead: null);
+        var vm = new LibraryScreenViewModel(goDetail: _ => { });
+
+        vm.FilterUnreadOnly = true;
+
+        Assert.Equal("Unread Series", Assert.Single(vm.Covers).Name);
+    }
+
+    [Fact]
+    public void FilterMissingIssues_NarrowsCovers()
+    {
+        CreateSeriesWithIssue("Has All Files", fileIsMissing: false);
+        CreateSeriesWithIssue("Missing A File", fileIsMissing: true);
+        var vm = new LibraryScreenViewModel(goDetail: _ => { });
+
+        vm.FilterMissingIssues = true;
+
+        Assert.Equal("Missing A File", Assert.Single(vm.Covers).Name);
+    }
+
+    [Fact]
+    public void FilterTrackedOnly_NarrowsCovers()
+    {
+        int trackedId = CreateSeriesWithIssue("Tracked Series");
+        CreateSeriesWithIssue("Untracked Series");
+        AddTrackingLink(trackedId);
+        var vm = new LibraryScreenViewModel(goDetail: _ => { });
+
+        vm.FilterTrackedOnly = true;
+
+        Assert.Equal("Tracked Series", Assert.Single(vm.Covers).Name);
+    }
+
+    [Fact]
+    public void CombinedSearchAndFilters_AllApplyTogether()
+    {
+        int trackedId = CreateSeriesWithIssue("Marvel Hero", publisher: "Marvel", lastPageRead: null);
+        CreateSeriesWithIssue("Marvel Villain", publisher: "Marvel", lastPageRead: 3); // read - excluded by unread filter
+        CreateSeriesWithIssue("DC Hero", publisher: "DC", lastPageRead: null); // excluded by search text
+        AddTrackingLink(trackedId);
+        var vm = new LibraryScreenViewModel(goDetail: _ => { });
+
+        vm.SearchQuery = "marvel";
+        vm.FilterUnreadOnly = true;
+        vm.FilterTrackedOnly = true;
+
+        Assert.Equal("Marvel Hero", Assert.Single(vm.Covers).Name);
     }
 }

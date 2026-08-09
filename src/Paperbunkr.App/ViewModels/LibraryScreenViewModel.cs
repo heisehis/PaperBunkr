@@ -36,6 +36,10 @@ public partial class LibraryScreenViewModel : ViewModelBase
 
     public ObservableCollection<SeriesCardSample> Covers { get; }
 
+    /// <summary>A-Z jump indexer's letters (docs/superpowers/specs/2026-08-09-library-toolbar-design.md Phase B) - "#" covers names that don't start with a letter.</summary>
+    public static IReadOnlyList<string> AlphabetIndexLetters { get; } =
+        Enumerable.Range('A', 26).Select(c => ((char)c).ToString()).Append("#").ToList();
+
     /// <summary>Every <see cref="ContentType"/> with at least one series, real counts, sidebar filter (docs/superpowers/specs/2026-08-09-library-sidebar-categorization-design.md).</summary>
     public ObservableCollection<ContentTypeSummary> ContentTypes { get; }
 
@@ -63,6 +67,7 @@ public partial class LibraryScreenViewModel : ViewModelBase
         var series = context.Series
             .Include(s => s.Issues)
             .Include(s => s.Categories)
+            .Include(s => s.TrackingLinks)
             .OrderBy(s => s.SortName ?? s.Name)
             .ToList();
 
@@ -101,6 +106,30 @@ public partial class LibraryScreenViewModel : ViewModelBase
         else if (_activeCategoryId is int categoryId)
         {
             filtered = filtered.Where(s => s.Categories.Any(c => c.Id == categoryId));
+        }
+
+        if (!string.IsNullOrWhiteSpace(SearchQuery))
+        {
+            string query = SearchQuery.Trim();
+            filtered = filtered.Where(s =>
+                s.Name.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+                (s.Publisher?.Contains(query, StringComparison.OrdinalIgnoreCase) ?? false) ||
+                (s.Genre?.Contains(query, StringComparison.OrdinalIgnoreCase) ?? false));
+        }
+
+        if (FilterUnreadOnly)
+        {
+            filtered = filtered.Where(s => s.Issues.Any(i => i.LastPageRead is null or 0));
+        }
+
+        if (FilterMissingIssues)
+        {
+            filtered = filtered.Where(s => s.Issues.Any(i => i.FileIsMissing));
+        }
+
+        if (FilterTrackedOnly)
+        {
+            filtered = filtered.Where(s => s.TrackingLinks.Count > 0);
         }
 
         Covers.Clear();
@@ -146,6 +175,34 @@ public partial class LibraryScreenViewModel : ViewModelBase
         _activeContentType = null;
         LoadFromDatabase();
     }
+
+    /// <summary>
+    /// Free-text search across Name/Publisher/Genre (docs/superpowers/specs/
+    /// 2026-08-09-library-toolbar-design.md Phase B) - not CE's full all-properties matcher sweep,
+    /// scoped to the real text fields worth searching. No debounce: requerying on every keystroke
+    /// matches how every other filter in this ViewModel already behaves (sidebar clicks, the 3
+    /// checkboxes below), and library sizes here are small enough that a plain SQLite query is
+    /// fast regardless.
+    /// </summary>
+    [ObservableProperty]
+    private string _searchQuery = string.Empty;
+
+    partial void OnSearchQueryChanged(string value) => LoadFromDatabase();
+
+    [ObservableProperty]
+    private bool _filterUnreadOnly;
+
+    partial void OnFilterUnreadOnlyChanged(bool value) => LoadFromDatabase();
+
+    [ObservableProperty]
+    private bool _filterMissingIssues;
+
+    partial void OnFilterMissingIssuesChanged(bool value) => LoadFromDatabase();
+
+    [ObservableProperty]
+    private bool _filterTrackedOnly;
+
+    partial void OnFilterTrackedOnlyChanged(bool value) => LoadFromDatabase();
 
     [ObservableProperty]
     private string? _activeDropdown;

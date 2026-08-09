@@ -56,6 +56,62 @@ the P6 section below for what's confirmed vs. still needs a look.
   touch flick) — built and unit-tested, but nobody has actually clicked through them yet.
 - Unrelated but landed since: `3e7ada3` fixed an unbounded memory leak (`CoverImageCache` now
   LRU-bounded) — not on the roadmap, worth knowing about.
+- ~~**New, not yet scoped:** Book Folders scan reads filenames only~~ — **done**, see below.
+
+**Real bugs found + fixed today (2026-08-09 afternoon session, not yet committed):**
+- Book Folders scan never auto-generated cover thumbnails after adding new issues (had to find a
+  separate manual "Generate Covers" button on the Library screen) — `ScanNow` in
+  `PreferencesScreenViewModel.cs` now runs the same cover-generation pass Migration/Library already
+  use, right after a scan finds new issues.
+- Library screen loaded its data once at app startup and never reloaded on navigation — Smart
+  Lists and Reading Lists already reload every visit, Library didn't. Surfaced as "migration
+  didn't populate the library": the CE migration engine itself was verified working correctly
+  (371 series / 2072 issues, tested directly against a real `ComicDb.xml`), but the Library screen
+  only refreshed via the migration overlay's own "✕" close button — any other way out (e.g. "View
+  Needs Review") left it showing stale pre-migration data. `MainViewModel.GoLibrary` now reloads
+  from the database on every visit, matching Smart/Reading's existing pattern.
+- `PageImageDecoder` had zero thread-safety: `RefreshCurrentPage()` (UI thread) and the Reader's
+  background thumbnail-generation task raced on the same unsynchronized archive reader and cache
+  dictionaries. Added a lock around `GetPage`/`GetThumbnail`.
+- Reader thumbnail rail: `StartThumbnailGeneration`'s background loop captured its `for`-loop page
+  index by reference in every `Dispatcher.UIThread.Post` closure instead of taking a per-iteration
+  snapshot — a classic C# closure-over-loop-variable bug. The background loop races far ahead of
+  the UI thread draining its queue, so queued closures read an already-advanced index by the time
+  they ran, scrambling thumbnails onto the wrong tiles and leaving early pages (page 0 especially)
+  permanently blank. This was the real cause of the blank-first-thumbnail report, not the
+  `PageImageDecoder` race above (that was a separate, real bug found first, fixed too, but not the
+  one actually causing the symptom — confirmed by instrumenting the code and reading a live trace
+  from a real repro rather than assuming the first fix was sufficient).
+- All four fixes have regression tests (301/301 passing); the closure-capture fix's test was
+  proven to fail 3/3 against the old code and pass 5/5 against the fix before being accepted.
+
+**Embedded ComicInfo.xml metadata + Migration relocation** (design spec:
+docs/superpowers/specs/2026-08-09-embedded-metadata-and-migration-relocation-design.md,
+2026-08-09 evening session, not yet committed):
+- Book Folders scan now reads embedded `ComicInfo.xml` via `IInfoStorage` (the mechanism already
+  existed in the ported Engine, just never wired into the App layer — the original spec's "needs
+  new archive-format plumbing" claim was wrong, confirmed with a real spike before writing the
+  design doc). Embedded metadata wins per-field over filename parsing; full field set via a new
+  shared `CeLibraryMigrator.MapStoryFields`, also used by Migration (behavior-preserving extract).
+- New "Sync Metadata" action (`LibraryFolderScanner.SyncMetadataAsync`) — re-reads embedded
+  ComicInfo.xml for issues *already* in the library and fills in currently-blank fields only,
+  never overwriting anything already set. Added because the first version above only ever touches
+  newly-scanned files; the user's real 2072-issue library was already fully migrated, so scanning
+  found nothing new. Verified against the real library: found 88 issues missing `Writer`, checked
+  5 of their actual files directly — all genuinely have an empty Writer field in the file itself
+  (the CE database had it from some other source, never written back), so "no new metadata found"
+  was confirmed correct, not a bug.
+- CE migration's entry point moved from its own rail-nav icon into Preferences → Libraries,
+  alongside Book Folders — the overlay itself is unchanged, just relocated.
+- Generate Covers and Sync Metadata also moved into Preferences → Libraries (from the Library
+  screen toolbar), next to Scan Now — all three "populate my library" actions in one place.
+- New reusable live-progress toast (`ToastProgressViewModel`/`ToastProgressView`) — shows title +
+  "X / Y comics" + a progress bar that updates in place via data binding while an action runs,
+  closed programmatically (`WindowNotificationManager.Close(content)`, confirmed to exist via
+  reflection before relying on it) when done, followed by a normal completion toast. Both Generate
+  Covers and Sync Metadata use it.
+- 312/312 tests passing; user confirmed all of the above working against their real library and
+  real app.
 
 **Housekeeping, not on the roadmap itself:**
 - Stale worktree `.claude/worktrees/quirky-borg-c5d364` (branch `claude/quirky-borg-c5d364`) —

@@ -5,3 +5,5 @@ obj/
 *.suo
 _reference/
 *.db
+installer/publish/
+installer/Output/

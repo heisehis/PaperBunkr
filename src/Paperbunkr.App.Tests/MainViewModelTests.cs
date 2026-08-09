@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Paperbunkr.App.ViewModels;
 using Paperbunkr.Data;
+using System.Linq;
 
 namespace Paperbunkr.App.Tests;
 
@@ -111,5 +112,95 @@ public class MainViewModelTests : IDisposable
         vm.GoLibraryCommand.Execute(null);
 
         Assert.Equal(1, vm.Library.AllSeriesCount);
+    }
+
+    /// <summary>
+    /// P6 follow-up (docs/alpha-todo.md): unlike CE's <c>ComicBookDialog</c> (a true modal that
+    /// blocks all other interaction by construction), Issue Properties/Bulk Editing here are just
+    /// screen-swaps within one window, so the rail nav stayed fully clickable mid-edit with no
+    /// warning until <see cref="MainViewModel.TryLeaveCurrentEditor"/> was added.
+    /// </summary>
+    [Fact]
+    public void GoLibrary_WithDirtyIssueProperties_PromptsInsteadOfNavigating()
+    {
+        var vm = new MainViewModel();
+        vm.CurrentScreen = "issueProperties";
+        vm.IssueProperties.Title = "Unsaved Edit";
+
+        vm.GoLibraryCommand.Execute(null);
+
+        Assert.True(vm.IsDiscardConfirmOpen);
+        Assert.True(vm.IsIssueProperties);
+        Assert.False(vm.IsLibrary);
+    }
+
+    [Fact]
+    public void GoLibrary_WithCleanIssueProperties_NavigatesImmediately_NoPrompt()
+    {
+        var vm = new MainViewModel();
+        vm.CurrentScreen = "issueProperties";
+
+        vm.GoLibraryCommand.Execute(null);
+
+        Assert.False(vm.IsDiscardConfirmOpen);
+        Assert.True(vm.IsLibrary);
+    }
+
+    [Fact]
+    public void ConfirmDiscard_RunsThePendingNavigation()
+    {
+        var vm = new MainViewModel();
+        vm.CurrentScreen = "issueProperties";
+        vm.IssueProperties.Title = "Unsaved Edit";
+        vm.GoLibraryCommand.Execute(null);
+        Assert.True(vm.IsDiscardConfirmOpen);
+
+        vm.ConfirmDiscardCommand.Execute(null);
+
+        Assert.False(vm.IsDiscardConfirmOpen);
+        Assert.True(vm.IsLibrary);
+    }
+
+    [Fact]
+    public void CancelDiscard_StaysPut_AndDropsThePendingNavigation()
+    {
+        var vm = new MainViewModel();
+        vm.CurrentScreen = "issueProperties";
+        vm.IssueProperties.Title = "Unsaved Edit";
+        vm.GoLibraryCommand.Execute(null);
+        Assert.True(vm.IsDiscardConfirmOpen);
+
+        vm.CancelDiscardCommand.Execute(null);
+
+        Assert.False(vm.IsDiscardConfirmOpen);
+        Assert.True(vm.IsIssueProperties);
+        Assert.False(vm.IsLibrary);
+    }
+
+    [Fact]
+    public void GoLibrary_WithDirtyBulkIssueProperties_PromptsInsteadOfNavigating()
+    {
+        var options = new DbContextOptionsBuilder<PaperbunkrDbContext>().UseSqlite($"Data Source={_dbPath}").Options;
+        int issueId;
+        using (var context = new PaperbunkrDbContext(options))
+        {
+            var series = new Paperbunkr.Data.Entities.Series { Name = "Test Series" };
+            context.Series.Add(series);
+            context.SaveChanges();
+            var issue = new Paperbunkr.Data.Entities.Issue { SeriesId = series.Id, Number = "1", Publisher = "DC Comics" };
+            context.Issues.Add(issue);
+            context.SaveChanges();
+            issueId = issue.Id;
+        }
+
+        var vm = new MainViewModel();
+        vm.BulkIssueProperties.Load(new[] { issueId });
+        vm.BulkIssueProperties.MainFields.Single(f => f.Label == "Publisher").Value = "Vertigo";
+        vm.CurrentScreen = "bulkIssueProperties";
+
+        vm.GoLibraryCommand.Execute(null);
+
+        Assert.True(vm.IsDiscardConfirmOpen);
+        Assert.True(vm.IsBulkIssueProperties);
     }
 }

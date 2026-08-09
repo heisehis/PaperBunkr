@@ -74,6 +74,18 @@ public partial class SmartScreenViewModel : ViewModelBase
     [ObservableProperty]
     private bool _isReadOnly;
 
+    /// <summary>
+    /// Sidebar "Maintenance" group expand/collapse (P6 follow-up, docs/alpha-todo.md) - the "▾"
+    /// caret next to that heading in MainWindow.axaml used to be a plain unbound TextBlock: it
+    /// looked like a working collapse toggle but did nothing at all, so the group was always shown
+    /// regardless. Real toggle now, matching the collapse affordance it always visually implied.
+    /// </summary>
+    [ObservableProperty]
+    private bool _isMaintenanceExpanded = true;
+
+    [RelayCommand]
+    private void ToggleMaintenance() => IsMaintenanceExpanded = !IsMaintenanceExpanded;
+
     /// <summary>Loads the given smart list into the rule builder and refreshes the sidebar's live counts.</summary>
     public void LoadSmartList(int smartListId)
     {

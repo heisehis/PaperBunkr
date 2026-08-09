@@ -145,5 +145,22 @@ public class SmartScreenViewModelTests : IDisposable
         Assert.Equal(seriesId, navigatedSeriesId);
     }
 
+    /// <summary>
+    /// P6 follow-up (docs/alpha-todo.md): the sidebar "▾ Maintenance" caret in MainWindow.axaml
+    /// used to be a plain unbound TextBlock that looked like a collapse toggle but did nothing.
+    /// </summary>
+    [Fact]
+    public void ToggleMaintenance_FlipsIsMaintenanceExpanded()
+    {
+        var vm = new SmartScreenViewModel(goToSeries: _ => { });
+        Assert.True(vm.IsMaintenanceExpanded);
+
+        vm.ToggleMaintenanceCommand.Execute(null);
+        Assert.False(vm.IsMaintenanceExpanded);
+
+        vm.ToggleMaintenanceCommand.Execute(null);
+        Assert.True(vm.IsMaintenanceExpanded);
+    }
+
     private static Color FirstStopColor(IBrush brush) => Assert.IsType<LinearGradientBrush>(brush).GradientStops[0].Color;
 }

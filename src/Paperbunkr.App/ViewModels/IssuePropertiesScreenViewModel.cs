@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
@@ -34,7 +35,40 @@ public partial class IssuePropertiesScreenViewModel : ViewModelBase
     {
         _goBack = goBack;
         _contextFactory = contextFactory;
+        PropertyChanged += (_, e) =>
+        {
+            if (_isLoading || e.PropertyName is null || NonDataProperties.Contains(e.PropertyName))
+            {
+                return;
+            }
+
+            _isDirty = true;
+        };
     }
+
+    /// <summary>
+    /// Properties the blanket dirty-tracking subscription above should ignore - tab navigation
+    /// (<see cref="ActiveTab"/> plus the three booleans <see cref="OnActiveTabChanged"/> derives
+    /// from it) isn't a data edit, and neither is <see cref="HasUnsavedChanges"/> itself needing to
+    /// re-trigger (it isn't an ObservableProperty, but listed here for clarity if that ever changes).
+    /// </summary>
+    private static readonly HashSet<string> NonDataProperties = new()
+    {
+        nameof(ActiveTab), nameof(IsSummaryTab), nameof(IsDetailsTab), nameof(IsPlotNotesTab),
+    };
+
+    /// <summary>
+    /// Blanket dirty-tracking (P6 follow-up, docs/alpha-todo.md) rather than a per-field snapshot
+    /// diff - there are ~30 buffered fields here, and every one of them mutating is equally "the
+    /// user made an edit" for the purposes of the unsaved-changes guard in
+    /// <see cref="MainViewModel"/>, so a single PropertyChanged subscription covers all of them
+    /// without having to keep a parallel list in sync. <see cref="ActiveTab"/> is excluded since
+    /// switching tabs isn't a data edit.
+    /// </summary>
+    private bool _isLoading;
+    private bool _isDirty;
+
+    public bool HasUnsavedChanges() => _isDirty;
 
     // ===================== Tab strip =====================
 
@@ -179,12 +213,14 @@ public partial class IssuePropertiesScreenViewModel : ViewModelBase
 
     public void Load(int issueId)
     {
+        _isLoading = true;
         _issueId = issueId;
 
         using var context = _contextFactory();
         var issue = context.Issues.Include(i => i.Series).FirstOrDefault(i => i.Id == issueId);
         if (issue is null)
         {
+            _isLoading = false;
             return;
         }
 
@@ -237,6 +273,8 @@ public partial class IssuePropertiesScreenViewModel : ViewModelBase
         Review = issue.Review ?? string.Empty;
 
         ActiveTab = "summary";
+        _isLoading = false;
+        _isDirty = false;
     }
 
     private static string? NullIfEmpty(string value) => string.IsNullOrWhiteSpace(value) ? null : value;
@@ -302,6 +340,7 @@ public partial class IssuePropertiesScreenViewModel : ViewModelBase
         issue.Review = NullIfEmpty(Review);
 
         context.SaveChanges();
+        _isDirty = false;
         _goBack();
     }
 

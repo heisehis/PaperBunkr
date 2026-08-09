@@ -41,6 +41,14 @@ public partial class BulkIssuePropertiesScreenViewModel : ViewModelBase
 
     private IEnumerable<BulkFieldViewModel> AllFields => MainFields.Concat(ArtistFields).Concat(PlotNotesFields);
 
+    /// <summary>
+    /// Reuses the existing per-field <see cref="BulkFieldViewModel.IsStaged"/> flag (already the
+    /// signal <see cref="Save"/> itself uses to decide what to write) rather than adding a second,
+    /// parallel dirty-tracking mechanism - unsaved-changes guard for <see cref="MainViewModel"/>
+    /// (P6 follow-up, docs/alpha-todo.md).
+    /// </summary>
+    public bool HasUnsavedChanges() => AllFields.Any(f => f.IsStaged);
+
     [ObservableProperty]
     private string _headerLabel = string.Empty;
 
@@ -99,8 +107,9 @@ public partial class BulkIssuePropertiesScreenViewModel : ViewModelBase
     {
         using var context = _contextFactory();
         var issues = context.Issues.Where(i => _issueIds.Contains(i.Id)).ToList();
+        var stagedFields = AllFields.Where(f => f.IsStaged).ToList();
 
-        foreach (var field in AllFields.Where(f => f.IsStaged))
+        foreach (var field in stagedFields)
         {
             if (field.Descriptor.IsListField)
             {
@@ -126,6 +135,15 @@ public partial class BulkIssuePropertiesScreenViewModel : ViewModelBase
         }
 
         context.SaveChanges();
+
+        // Matches IssuePropertiesScreenViewModel's _isDirty reset (P6 follow-up, docs/alpha-todo.md) -
+        // without this, HasUnsavedChanges() would still report true immediately post-Save, until the
+        // next Load() rebuilds the field list from scratch.
+        foreach (var field in stagedFields)
+        {
+            field.IsStaged = false;
+        }
+
         _goBack();
     }
 

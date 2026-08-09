@@ -108,7 +108,7 @@ public partial class MainViewModel : ViewModelBase
     }
 
     [RelayCommand]
-    private void GoLibrary()
+    private void GoLibrary() => TryLeaveCurrentEditor(() =>
     {
         // Unlike Smart/Reading's EnsureListLoaded (guarded, load-once), Library genuinely reloads
         // every time - it's the one rail-nav screen with no lazy-load story yet, and the data can
@@ -117,31 +117,31 @@ public partial class MainViewModel : ViewModelBase
         // those instead of special-casing each caller to remember to refresh Library itself.
         Library.LoadFromDatabase();
         CurrentScreen = "library";
-    }
+    });
 
     [RelayCommand]
-    private void GoSmart()
+    private void GoSmart() => TryLeaveCurrentEditor(() =>
     {
         Smart.EnsureListLoaded();
         CurrentScreen = "smart";
-    }
+    });
 
     [RelayCommand]
-    private void GoReading()
+    private void GoReading() => TryLeaveCurrentEditor(() =>
     {
         Reading.EnsureListLoaded();
         CurrentScreen = "reading";
-    }
+    });
 
     [RelayCommand]
-    private void GoPlugin() => CurrentScreen = "plugin";
+    private void GoPlugin() => TryLeaveCurrentEditor(() => CurrentScreen = "plugin");
 
     [RelayCommand]
-    private void GoPreferences()
+    private void GoPreferences() => TryLeaveCurrentEditor(() =>
     {
         Preferences.EnsureLoaded();
         CurrentScreen = "preferences";
-    }
+    });
 
     [RelayCommand]
     private void OpenMigrationOverlay()
@@ -164,10 +164,57 @@ public partial class MainViewModel : ViewModelBase
     }
 
     [RelayCommand]
-    private void GoReader()
+    private void GoReader() => TryLeaveCurrentEditor(() =>
     {
         Reader.EnsureIssueLoaded();
         CurrentScreen = "reader";
+    });
+
+    /// <summary>
+    /// Guards the six rail-nav destinations against silently discarding an in-progress Issue
+    /// Properties/Bulk Editing edit (P6 follow-up, docs/alpha-todo.md) - CE's equivalent
+    /// (<c>ComicBookDialog</c>) is a true modal Windows dialog that blocks all other interaction by
+    /// construction, but these screens are just screen-swaps within one window, so without this the
+    /// rail nav stays fully clickable mid-edit with no warning. Stashes <paramref name="navigate"/>
+    /// and opens the confirm banner instead of running it immediately when the active editor
+    /// reports unsaved changes; runs it straight through otherwise. Deliberately NOT applied to
+    /// <see cref="Escape"/> - pressing Escape is already an explicit "cancel this" gesture, not an
+    /// ambiguous navigation away from it.
+    /// </summary>
+    private void TryLeaveCurrentEditor(Action navigate)
+    {
+        bool hasUnsavedChanges = (IsIssueProperties && IssueProperties.HasUnsavedChanges())
+            || (IsBulkIssueProperties && BulkIssueProperties.HasUnsavedChanges());
+
+        if (!hasUnsavedChanges)
+        {
+            navigate();
+            return;
+        }
+
+        _pendingNavigation = navigate;
+        IsDiscardConfirmOpen = true;
+    }
+
+    private Action? _pendingNavigation;
+
+    [ObservableProperty]
+    private bool _isDiscardConfirmOpen;
+
+    [RelayCommand]
+    private void ConfirmDiscard()
+    {
+        IsDiscardConfirmOpen = false;
+        var navigate = _pendingNavigation;
+        _pendingNavigation = null;
+        navigate?.Invoke();
+    }
+
+    [RelayCommand]
+    private void CancelDiscard()
+    {
+        IsDiscardConfirmOpen = false;
+        _pendingNavigation = null;
     }
 
     private void GoDetail() => CurrentScreen = "detail";

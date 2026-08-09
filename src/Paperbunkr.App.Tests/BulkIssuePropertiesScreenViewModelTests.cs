@@ -164,4 +164,41 @@ public class BulkIssuePropertiesScreenViewModelTests : IDisposable
         Assert.True(wentBack);
         Assert.Equal("DC Comics", GetIssue(_issueAId).Publisher);
     }
+
+    /// <summary>
+    /// P6 follow-up (docs/alpha-todo.md): <see cref="MainViewModel.TryLeaveCurrentEditor"/> queries
+    /// this to decide whether to prompt before navigating away from an in-progress bulk edit.
+    /// </summary>
+    [Fact]
+    public void HasUnsavedChanges_FalseImmediatelyAfterLoad()
+    {
+        var vm = CreateViewModel();
+
+        vm.Load(new[] { _issueAId, _issueBId });
+
+        Assert.False(vm.HasUnsavedChanges());
+    }
+
+    [Fact]
+    public void HasUnsavedChanges_TrueAfterEditingAField()
+    {
+        var vm = CreateViewModel();
+        vm.Load(new[] { _issueAId, _issueBId });
+
+        vm.MainFields.Single(f => f.Label == "Publisher").Value = "Vertigo";
+
+        Assert.True(vm.HasUnsavedChanges());
+    }
+
+    [Fact]
+    public void HasUnsavedChanges_FalseAfterSave()
+    {
+        var vm = CreateViewModel();
+        vm.Load(new[] { _issueAId, _issueBId });
+        vm.MainFields.Single(f => f.Label == "Publisher").Value = "Vertigo";
+
+        vm.SaveCommand.Execute(null);
+
+        Assert.False(vm.HasUnsavedChanges());
+    }
 }

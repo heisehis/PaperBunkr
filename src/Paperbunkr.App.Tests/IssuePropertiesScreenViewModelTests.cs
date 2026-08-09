@@ -176,4 +176,53 @@ public class IssuePropertiesScreenViewModelTests : IDisposable
         Assert.True(vm.CommunityRatingStar2);
         Assert.False(vm.CommunityRatingStar3);
     }
+
+    /// <summary>
+    /// P6 follow-up (docs/alpha-todo.md): <see cref="MainViewModel.TryLeaveCurrentEditor"/> queries
+    /// this to decide whether to prompt before navigating away from an in-progress edit.
+    /// </summary>
+    [Fact]
+    public void HasUnsavedChanges_FalseImmediatelyAfterLoad()
+    {
+        var vm = new IssuePropertiesScreenViewModel(() => { }, () => new PaperbunkrDbContext(_dbOptions));
+
+        vm.Load(_issueId);
+
+        Assert.False(vm.HasUnsavedChanges());
+    }
+
+    [Fact]
+    public void HasUnsavedChanges_TrueAfterEditingAField()
+    {
+        var vm = new IssuePropertiesScreenViewModel(() => { }, () => new PaperbunkrDbContext(_dbOptions));
+        vm.Load(_issueId);
+
+        vm.Title = "Edited Title";
+
+        Assert.True(vm.HasUnsavedChanges());
+    }
+
+    [Fact]
+    public void HasUnsavedChanges_FalseAfterSave()
+    {
+        var vm = new IssuePropertiesScreenViewModel(() => { }, () => new PaperbunkrDbContext(_dbOptions));
+        vm.Load(_issueId);
+        vm.Title = "Edited Title";
+
+        vm.SaveCommand.Execute(null);
+
+        Assert.False(vm.HasUnsavedChanges());
+    }
+
+    [Fact]
+    public void HasUnsavedChanges_SwitchingTabsAloneDoesNotCount()
+    {
+        var vm = new IssuePropertiesScreenViewModel(() => { }, () => new PaperbunkrDbContext(_dbOptions));
+        vm.Load(_issueId);
+
+        vm.GoDetailsCommand.Execute(null);
+        vm.GoPlotNotesCommand.Execute(null);
+
+        Assert.False(vm.HasUnsavedChanges());
+    }
 }

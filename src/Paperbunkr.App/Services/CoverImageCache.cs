@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using System.IO;
 using Avalonia.Media.Imaging;
 
@@ -7,8 +6,13 @@ namespace Paperbunkr.App.Services;
 /// <summary>
 /// In-memory <see cref="Bitmap"/> cache over the on-disk cover thumbnail cache
 /// (docs/superpowers/specs/2026-08-06-cover-thumbnails-design.md §3) - avoids re-decoding the same
-/// JPEG from disk every time a card re-renders. Small enough (a few thousand ~400px thumbnails at
-/// most) to just stay resident for the app's lifetime, no eviction.
+/// JPEG from disk every time a card re-renders. Bounded via <see cref="LruCache{TKey,TValue}"/> -
+/// previously cached every decoded cover for the app's entire lifetime with no eviction at all,
+/// on the assumption of "a few thousand ~400px thumbnails at most". Real usage against a real
+/// library disproved that: browsing Library + several Detail screens + Generate Covers grew the
+/// process from ~220MB at launch to ~1.4GB within a few minutes. 1000 entries is generous headroom
+/// over a large library's Library-grid working set (371 series observed in that same session) -
+/// bounds total session growth without evicting mid-browse for typical libraries.
 ///
 /// Misses are deliberately NOT cached: a series looked up before "Generate Covers" runs would
 /// otherwise permanently remember "no thumbnail" even after the file appears on disk. A cheap
@@ -17,11 +21,13 @@ namespace Paperbunkr.App.Services;
 ///
 /// UI-thread-only - every current caller (<c>SeriesCardSample.FromSeries</c>,
 /// <c>DetailTabsViewModel.LoadSeries</c>, <c>DetailScreenViewModel.LoadSeries</c>) runs
-/// synchronously on the UI thread, so this dictionary isn't locked.
+/// synchronously on the UI thread, so this isn't locked (matches <see cref="LruCache{TKey,TValue}"/>'s own assumption).
 /// </summary>
 public static class CoverImageCache
 {
-    private static readonly Dictionary<int, Bitmap> _cache = new();
+    private const int MaxEntries = 1000;
+
+    private static readonly LruCache<int, Bitmap> _cache = new(MaxEntries);
 
     public static Bitmap? Get(int issueId)
     {
@@ -39,7 +45,7 @@ public static class CoverImageCache
         try
         {
             var bitmap = new Bitmap(path);
-            _cache[issueId] = bitmap;
+            _cache.Add(issueId, bitmap);
             return bitmap;
         }
         catch

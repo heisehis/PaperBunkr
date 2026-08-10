@@ -127,14 +127,30 @@ to prove against. Explicitly Beta-scoped from the start.
 Crash reporter dialog, minimize-to-tray, external "open with" app associations.
 *(Backup manager and file association are already shipped as part of Alpha's Advanced tab.)*
 
-### Novels: EPUB/PDF support (Phase 1 landed 2026-08-09, Phase 2/3 remaining)
+### Novels: EPUB/PDF support (Phase 1+2 landed 2026-08-09/10, Phase 3 remaining)
 Not a CE-parity item — ComicRackCE has no prose-reading equivalent, see the design spec's own
 CE-verification note. Design: docs/superpowers/specs/2026-08-09-novels-epub-pdf-support-design.md.
 **Phase 1 shipped** (independent `Book`/`BookSeries`/`BookBookmark`/`BookFolder` schema, `VersOne.Epub`-
 and raw-`pdfium`-text-API-backed parsers behind a shared `IBookTextSource`, folder-scan import with
 cover/metadata extraction, a Books nav section with a covers grid — no reader yet, verified via 17
 new xUnit tests against real synthetic EPUB/PDF fixtures plus a full migration-chain smoke test).
-**Phase 2 (reflowable text reader) and Phase 3 (resume position/bookmarks/search) not started.**
+
+**Phase 2 shipped, with one deliberate deviation from the original design spec §5: PDF reading was
+moved off the reflowable-text pipeline entirely.** EPUB got the real reflowable reader as designed
+(`BookPaginator` pure paragraph-fitting math + real Avalonia `TextLayout` measurement, immersive
+tap-to-reveal chrome, TOC drawer, font/theme sheet — size/family/line-spacing/theme). PDF was
+confirmed via manual testing against real e-book PDFs to be a poor fit for text-extraction reflow
+(exactly the risk §9.1 flagged going in — footnotes/columns/running headers interleaved
+unpredictably), so PDFs now open in a separate comic-panel-style reader instead
+(`PdfPageReaderScreenViewModel`), reusing `PageCanvas`/`PageImageDecoder`/`ZoomPanMath` directly -
+`PageCanvas` has zero Issue/comic coupling, so this was a straight port of the existing zoom/pan/
+page-turn interaction onto `Book`, not a new implementation. `PdfBookSource` (text extraction) is
+still used for import-time metadata only, not for reading.
+Two real bugs found via manual testing and fixed along the way: the reflow reader could get stuck
+permanently blank the first time it was ever shown (viewport size never reported - fixed with a
+`Loaded`-event fallback), and a chapter with zero paragraphs (a real EPUB's cover/title-page spine
+item) left it stuck showing nothing (fixed by skipping to the first chapter with content). 12 new
+tests. **Phase 3 (resume position/bookmarks/search) not started — picking up in a future session.**
 
 **Two real, pre-existing bugs found and fixed during manual testing against a real 1992-series
 library and real e-book files** (neither caused by this Novels work, both unrelated to it):

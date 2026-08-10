@@ -73,4 +73,57 @@ public class AppSettings
 
     /// <summary>Same rationale as <see cref="DefaultPageFitMode"/>, for the auto-rotate-landscape-pages default.</summary>
     public bool DefaultAutoRotate { get; set; }
+
+    /// <summary>
+    /// Magnifier zoom multiplier (docs/superpowers/specs/2026-08-10-reader-polish-continuous-
+    /// scroll-chrome-overlays-design.md §8). CE default 2.0 (<c>ComicDisplayControl.magnifierZoom</c>
+    /// field initializer, confirmed from source).
+    /// </summary>
+    public double MagnifierZoom { get; set; } = 2.0;
+
+    /// <summary>CE default 1.0 (<c>ComicDisplayControl.MagnifierOpacity</c>'s <c>[DefaultValue(1f)]</c>, fully opaque).</summary>
+    public double MagnifierOpacity { get; set; } = 1.0;
+
+    /// <summary>CE default 200 (<c>ComicDisplayControl.MagnifierSize</c>'s <c>[DefaultValue(typeof(Size), "200, 200")]</c> - square, one dimension stored).</summary>
+    public int MagnifierSizePixels { get; set; } = 200;
+
+    /// <summary>
+    /// Global default live image-adjustment values (docs/superpowers/specs/2026-08-10-reader-
+    /// polish-continuous-scroll-chrome-overlays-design.md §9), additive with
+    /// <see cref="Issue.BrightnessOverride"/>. Default 0 matches CE's <c>BitmapAdjustment.Empty</c>.
+    /// </summary>
+    public double DefaultBrightness { get; set; }
+
+    /// <summary>See <see cref="DefaultBrightness"/>.</summary>
+    public double DefaultContrast { get; set; }
+
+    /// <summary>See <see cref="DefaultBrightness"/>.</summary>
+    public double DefaultSaturation { get; set; }
+
+    /// <summary>See <see cref="DefaultBrightness"/>.</summary>
+    public double DefaultGamma { get; set; }
+
+    /// <summary>
+    /// Reader canvas background mode (docs/superpowers/specs/2026-08-10-reader-polish-continuous-
+    /// scroll-chrome-overlays-design.md §10). CE default <c>Color</c> (confirmed from
+    /// <c>DisplayWorkspace.cs</c>'s <c>[DefaultValue(ImageBackgroundMode.Color)]</c>).
+    /// </summary>
+    public ImageBackgroundMode ImageBackgroundMode { get; set; } = ImageBackgroundMode.Color;
+
+    /// <summary>CE default "WhiteSmoke" (<c>DisplayWorkspace.BackgroundColor</c>'s <c>[DefaultValue("WhiteSmoke")]</c>), a named color, hex or named string.</summary>
+    public string BackgroundColor { get; set; } = "WhiteSmoke";
+
+    /// <summary>CE default false (<c>DisplayWorkspace.PageMargin</c>'s <c>[DefaultValue(false)]</c>).</summary>
+    public bool PageMarginEnabled { get; set; }
+
+    /// <summary>CE default 0.05 (<c>DisplayWorkspace.PageMarginPercentWidth</c>'s <c>[DefaultValue(0.05f)]</c>).</summary>
+    public double PageMarginPercentWidth { get; set; } = 0.05;
+
+    /// <summary>
+    /// Whether the fullscreen scrubber/page-browser overlay (docs/superpowers/specs/2026-08-10-
+    /// reader-polish-continuous-scroll-chrome-overlays-design.md §7) is shown by default. Default
+    /// true - deliberately diverging from CE's own opt-in <c>InfoOverlays.None</c> default, since CE
+    /// has toolbar-based page nav as a fallback that Paperbunkr's fullscreen mode deliberately hides.
+    /// </summary>
+    public bool ShowScrubberOverlay { get; set; } = true;
 }

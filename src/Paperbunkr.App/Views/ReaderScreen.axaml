@@ -84,13 +84,28 @@
                     </StackPanel>
                 </Button>
 
-                <Button Grid.Column="1" Content="{Binding ReadingModeLabel}" Command="{Binding ToggleReadingModeCommand}"
+                <!-- Reading-mode picker: 4 options (docs/superpowers/specs/2026-08-10-reader-polish-continuous-scroll-chrome-overlays-design.md §4 - continuous mode needs a real way in, not just the binary LTR/RTL toggle) -->
+                <Button Grid.Column="1" Content="{Binding ReadingModeLabel}"
                         Background="#1E2127" BorderBrush="#33373F" Cursor="Hand"
                         BorderThickness="1" Foreground="{StaticResource ReaderTextBrush}" FontSize="12" FontWeight="SemiBold"
-                        Padding="10,6" CornerRadius="6" Margin="0,0,8,0" />
+                        Padding="10,6" CornerRadius="6" Margin="0,0,8,0">
+                    <Button.Flyout>
+                        <Flyout Placement="Bottom">
+                            <StackPanel Width="170">
+                                <Button Classes="flyoutRow" Content="Left to Right" Command="{Binding SetReadingModeCommand}" CommandParameter="{x:Static entities:ReadingMode.LeftToRight}" />
+                                <Button Classes="flyoutRow" Content="Right to Left" Command="{Binding SetReadingModeCommand}" CommandParameter="{x:Static entities:ReadingMode.RightToLeft}" />
+                                <Button Classes="flyoutRow" Content="Vertical (Continuous)" Command="{Binding SetReadingModeCommand}" CommandParameter="{x:Static entities:ReadingMode.VerticalContinuous}" />
+                                <Button Classes="flyoutRow" Content="Horizontal (Continuous)" Command="{Binding SetReadingModeCommand}" CommandParameter="{x:Static entities:ReadingMode.HorizontalContinuous}" />
+                                <Button Classes="flyoutRow" Content="Horizontal RTL (Continuous)" Command="{Binding SetReadingModeCommand}" CommandParameter="{x:Static entities:ReadingMode.HorizontalContinuousRightToLeft}" />
+                                <Button Classes="flyoutRow" Content="Webtoon" Command="{Binding SetReadingModeCommand}" CommandParameter="{x:Static entities:ReadingMode.Webtoon}" />
+                            </StackPanel>
+                        </Flyout>
+                    </Button.Flyout>
+                </Button>
 
-                <!-- Fit-mode picker (docs/superpowers/specs/2026-08-10-reader-polish-core-viewing-controls-design.md §5) -->
-                <Button Grid.Column="2" Classes="toolPill" Content="{Binding FitMode}" Margin="0,0,8,0" ToolTip.Tip="Fit mode">
+                <!-- Fit-mode picker (docs/superpowers/specs/2026-08-10-reader-polish-core-viewing-controls-design.md §5) - hidden in continuous mode, which has no fit-mode concept (spec §5). -->
+                <Button Grid.Column="2" Classes="toolPill" Content="{Binding FitMode}" Margin="0,0,8,0" ToolTip.Tip="Fit mode"
+                        IsVisible="{Binding !IsContinuousMode}">
                     <Button.Flyout>
                         <Flyout Placement="Bottom">
                             <StackPanel Width="150">
@@ -104,7 +119,7 @@
                     </Button.Flyout>
                 </Button>
 
-                <!-- Zoom control: -/percentage(preset flyout)/+ -->
+                <!-- Zoom control: -/percentage(preset flyout)/+, plus a direct slider (continuous mode's explicit ask, spec §5 - free zoom needs a non-gestural control too) -->
                 <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="2" Margin="0,0,8,0">
                     <Button Classes="toolIcon" Content="−" Command="{Binding ZoomOutCommand}" ToolTip.Tip="Zoom out" />
                     <Button Classes="toolPill" Content="{Binding ZoomLevel, StringFormat={}{0:P0}}" Padding="8,6" ToolTip.Tip="Zoom presets">
@@ -121,6 +136,8 @@
                         </Button.Flyout>
                     </Button>
                     <Button Classes="toolIcon" Content="+" Command="{Binding ZoomInCommand}" ToolTip.Tip="Zoom in" />
+                    <Slider IsVisible="{Binding IsContinuousMode}" Width="100" Minimum="0.5" Maximum="4" Value="{Binding ZoomLevel}"
+                            VerticalAlignment="Center" Margin="4,0,0,0" ToolTip.Tip="Zoom" />
                 </StackPanel>
 
                 <Button Grid.Column="4" Classes="toolIcon" Content="⟳" Command="{Binding RotateClockwiseCommand}" Margin="0,0,4,0" ToolTip.Tip="Rotate 90°" />
@@ -168,6 +185,10 @@
                                   ManualRotationDegrees="{Binding ManualRotationDegrees}"
                                   AutoRotate="{Binding AutoRotate}"
                                   WheelPanStep="{Binding MouseWheelSpeed}"
+                                  ReadingMode="{Binding EffectiveReadingMode}"
+                                  Decoder="{Binding Decoder}"
+                                  PageCount="{Binding PageCount}"
+                                  ScrollOffset="{Binding ScrollOffset}"
                                   IsVisible="{Binding !HasError}" />
 
                 <Border IsVisible="{Binding HasError}" Width="400" CornerRadius="8"

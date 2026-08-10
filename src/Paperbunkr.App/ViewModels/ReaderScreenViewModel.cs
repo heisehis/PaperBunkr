@@ -13,6 +13,7 @@ using Paperbunkr.App.Models;
 using Paperbunkr.App.Services;
 using Paperbunkr.Data;
 using Paperbunkr.Data.Entities;
+using SkiaSharp;
 
 namespace Paperbunkr.App.ViewModels;
 
@@ -44,6 +45,21 @@ public partial class ReaderScreenViewModel : ViewModelBase
     private int _loadGeneration;
     private bool _isRightToLeft;
 
+    /// <summary>
+    /// Periodic backstop against the documented Avalonia native-bitmap-memory growth risk (issue
+    /// #18498, docs/onboarding.md §8, docs/superpowers/specs/2026-08-10-reader-polish-continuous-
+    /// scroll-chrome-overlays-design.md §3) - GPU resource cache tuning (Program.cs) and immediate
+    /// disposal on eviction (PageDecodeService) are the primary mitigations, this is a backstop on
+    /// top of both. Started once, on the first <see cref="Load"/>, and left running for the app's
+    /// lifetime rather than "stopped on close": unlike a typical screen, this app's rail-nav screen
+    /// switcher never destroys the Reader screen/VM (docs/superpowers/specs/2026-08-06-reader-
+    /// canvas-alpha-design.md's ReaderScreen.axaml.cs comment) - it only toggles visibility - so
+    /// there's no real "close" event to stop on, and purging an idle Reader's already-small cache
+    /// periodically is harmless.
+    /// </summary>
+    private static readonly TimeSpan PurgeInterval = TimeSpan.FromSeconds(30);
+    private DispatcherTimer? _purgeTimer;
+
     public ReaderScreenViewModel(Action goBack)
     {
         _goBack = goBack;
@@ -59,6 +75,10 @@ public partial class ReaderScreenViewModel : ViewModelBase
     public string ReadingModeLabel { get; private set; } = "Left to Right";
     public string PageLabel { get; private set; } = string.Empty;
     public double ProgressFraction { get; private set; }
+
+    /// <summary>The raw effective mode (<c>Issue.ReadingModeOverride ?? Series.ReadingMode</c>), so <see cref="Views.PageCanvas"/> can pick its axis for continuous mode without re-deriving it from <see cref="ReadingModeLabel"/>'s display string.</summary>
+    [ObservableProperty]
+    private ReadingMode _effectiveReadingMode;
 
     [ObservableProperty]
     private Bitmap? _currentPage;
@@ -88,12 +108,22 @@ public partial class ReaderScreenViewModel : ViewModelBase
     /// referenced from here, to avoid a ViewModels -&gt; Views dependency this codebase's binding
     /// direction doesn't otherwise have.
     /// </summary>
+    /// <summary>
+    /// <paramref name="clamped"/>'s upper bound is mode-aware (docs/superpowers/specs/2026-08-10-
+    /// reader-polish-continuous-scroll-chrome-overlays-design.md §5): paged mode keeps the original
+    /// fixed 4.0 ceiling, continuous mode is unclamped upward ("zoom is free and unclamped upward
+    /// from that base... layered on top") - one setter, mode-aware, rather than a parallel property.
+    /// </summary>
     public double ZoomLevel
     {
         get => _zoomLevel;
         set
         {
-            double clamped = Math.Clamp(value, 1.0, 4.0);
+            // Continuous/webtoon mode: bounded 0.5x-4x (user direction, matching the toolbar zoom
+            // slider - supersedes the originally-scoped "unclamped upward"). Paged mode: unchanged 1x-4x.
+            double minZoom = IsContinuousMode ? 0.5 : 1.0;
+            double maxZoom = IsContinuousMode ? 4.0 : Views.ZoomPanMath.MaxZoom;
+            double clamped = Math.Clamp(value, minZoom, maxZoom);
             if (SetProperty(ref _zoomLevel, clamped) && clamped == 1.0)
             {
                 PanOffsetX = 0;
@@ -107,6 +137,38 @@ public partial class ReaderScreenViewModel : ViewModelBase
 
     [ObservableProperty]
     private double _panOffsetY;
+
+    /// <summary>
+    /// Continuous mode's scroll position, in stack space (docs/superpowers/specs/2026-08-10-reader-
+    /// polish-continuous-scroll-chrome-overlays-design.md §2/§5/§6) - the main-axis analog of
+    /// <see cref="PanOffsetX"/>/<see cref="PanOffsetY"/>, fed straight into
+    /// <see cref="Views.ReaderLayoutModel.ComputeContinuousLayout"/>. Session-only, resets to 0 on
+    /// every <see cref="Load"/>, same lifecycle as <see cref="ZoomLevel"/>.
+    /// </summary>
+    [ObservableProperty]
+    private double _scrollOffset;
+
+    /// <summary>
+    /// Computed off the currently-effective <see cref="Entities.ReadingMode"/> (docs/superpowers/
+    /// specs/2026-08-10-reader-polish-continuous-scroll-chrome-overlays-design.md §5) - gates the
+    /// fit-mode picker's visibility (continuous mode has no fit-mode concept, base scale always
+    /// fills the cross axis) and <see cref="ZoomLevel"/>'s clamp ceiling above.
+    /// </summary>
+    [ObservableProperty]
+    private bool _isContinuousMode;
+
+    /// <summary>
+    /// Exposed so <see cref="Views.PageCanvas"/> can pull whichever pages its continuous-mode layout
+    /// window needs (docs/superpowers/specs/2026-08-10-reader-polish-continuous-scroll-chrome-
+    /// overlays-design.md §4) - paged mode still only ever binds <see cref="CurrentPage"/> directly
+    /// and never touches this. Manually raised (not <c>[ObservableProperty]</c>) since it's
+    /// reassigned as a side effect of <see cref="Load"/> reopening <see cref="_decoder"/>, not
+    /// something set directly by a command.
+    /// </summary>
+    public IPageImageDecoder? Decoder => _decoder;
+
+    [ObservableProperty]
+    private int _pageCount;
 
     private const double ZoomStep = 0.25;
 
@@ -178,6 +240,13 @@ public partial class ReaderScreenViewModel : ViewModelBase
     {
         int generation = ++_loadGeneration;
 
+        if (_purgeTimer is null)
+        {
+            _purgeTimer = new DispatcherTimer { Interval = PurgeInterval };
+            _purgeTimer.Tick += (_, _) => SKGraphics.PurgeResourceCache();
+            _purgeTimer.Start();
+        }
+
         _decoder?.Dispose();
         _decoder = null;
         _loadedIssueId = issue.Id;
@@ -199,6 +268,7 @@ public partial class ReaderScreenViewModel : ViewModelBase
 
         ErrorMessage = null;
         ZoomLevel = 1.0;
+        ScrollOffset = 0;
         ManualRotationDegrees = 0;
         FitMode = issue.PageFitModeOverride ?? appSettings.DefaultPageFitMode;
         AutoRotate = issue.AutoRotateOverride ?? appSettings.DefaultAutoRotate;
@@ -206,7 +276,13 @@ public partial class ReaderScreenViewModel : ViewModelBase
 
         if (!string.IsNullOrEmpty(issue.FilePath))
         {
-            _decoder = PageImageDecoder.TryOpen(issue.FilePath);
+            // Continuous mode needs the two-tier/virtualized decoder (multiple pages concurrently
+            // visible); paged mode keeps its original ±1-window decoder, untouched (docs/
+            // superpowers/specs/2026-08-10-reader-polish-continuous-scroll-chrome-overlays-design.md
+            // §1's Stage 1 note - both implement IPageImageDecoder, so nothing downstream of this
+            // needs to know which one is active except the continuous-specific calls PageCanvas
+            // makes directly against PageDecodeService).
+            _decoder = IsContinuousMode ? PageDecodeService.TryOpen(issue.FilePath) : PageImageDecoder.TryOpen(issue.FilePath);
             if (_decoder is null)
             {
                 ErrorMessage = "Couldn't open this file — unsupported format or a damaged archive.";
@@ -227,6 +303,9 @@ public partial class ReaderScreenViewModel : ViewModelBase
         {
             ErrorMessage = "This issue has no file linked yet.";
         }
+
+        PageCount = pageCount;
+        OnPropertyChanged(nameof(Decoder));
 
         if (forcedStartPage is int forced)
         {
@@ -258,15 +337,20 @@ public partial class ReaderScreenViewModel : ViewModelBase
         StartThumbnailGeneration(generation, thumbnailCount);
     }
 
-    /// <summary>Shared by <see cref="Load"/> and <see cref="ToggleReadingMode"/> so the label/spatial-flip switch can't drift apart between the two.</summary>
+    /// <summary>Shared by <see cref="Load"/>, <see cref="ToggleReadingMode"/>, and <see cref="SetReadingMode"/> so the label/spatial-flip/continuous-mode switches can't drift apart between them.</summary>
     private void UpdateReadingModeState(ReadingMode effectiveMode, bool reverseRtlNavigation)
     {
         _isRightToLeft = effectiveMode == ReadingMode.RightToLeft && reverseRtlNavigation;
+        IsContinuousMode = effectiveMode is ReadingMode.VerticalContinuous or ReadingMode.HorizontalContinuous
+            or ReadingMode.HorizontalContinuousRightToLeft or ReadingMode.Webtoon;
+        EffectiveReadingMode = effectiveMode;
         ReadingModeLabel = effectiveMode switch
         {
             ReadingMode.RightToLeft => "Right to Left ▾",
             ReadingMode.VerticalContinuous => "Vertical (Continuous) ▾",
             ReadingMode.HorizontalContinuous => "Horizontal (Continuous) ▾",
+            ReadingMode.HorizontalContinuousRightToLeft => "Horizontal RTL (Continuous) ▾",
+            ReadingMode.Webtoon => "Webtoon ▾",
             _ => "Left to Right ▾",
         };
         OnPropertyChanged(nameof(ReadingModeLabel));
@@ -301,6 +385,49 @@ public partial class ReaderScreenViewModel : ViewModelBase
 
         var issue = _loadedIssueId is int issueId ? context.Issues.Find(issueId) : null;
         UpdateReadingModeState(issue?.ReadingModeOverride ?? series.ReadingMode, context.GetOrCreateAppSettings().ReverseRtlNavigation);
+    }
+
+    /// <summary>
+    /// The full 4-option picker <see cref="ToggleReadingMode"/> deliberately isn't (its own doc
+    /// comment: "a binary LTR/RTL flip, not a full mode picker") - needed so continuous mode
+    /// (docs/superpowers/specs/2026-08-10-reader-polish-continuous-scroll-chrome-overlays-design.md
+    /// §4/§5) is actually reachable at all, since nothing else in this app writes
+    /// <see cref="ReadingMode.VerticalContinuous"/>/<see cref="ReadingMode.HorizontalContinuous"/>.
+    /// Same <c>Series.ReadingMode</c> write target as <see cref="ToggleReadingMode"/>, not
+    /// <c>Issue.ReadingModeOverride</c>.
+    ///
+    /// Unlike <see cref="ToggleReadingMode"/> (which only ever flips between LeftToRight/
+    /// RightToLeft, never touching decoder choice), this can cross the paged/continuous boundary -
+    /// real bug found via manual testing: paged mode's <c>PageImageDecoder</c> and continuous
+    /// mode's <c>PageDecodeService</c> aren't interchangeable (the former's ±1-window eviction
+    /// disposes bitmaps out from under a continuous-mode layout pass that requests several pages in
+    /// one batch, producing a blank/corrupted screen), so switching modes has to reopen the decoder
+    /// via a full <see cref="LoadIssue"/>, not just flip the state flags in place. Resets zoom/pan/
+    /// scroll/current-page as a result - reasonable here since "position" itself means something
+    /// different across the paged/continuous boundary (a page index vs. a scroll offset), unlike
+    /// <see cref="ToggleReadingMode"/>'s LTR/RTL flip where preserving position makes sense.
+    /// </summary>
+    [RelayCommand]
+    private void SetReadingMode(ReadingMode mode)
+    {
+        if (_loadedSeriesId is not int seriesId || _loadedIssueId is not int issueId)
+        {
+            return;
+        }
+
+        using (var context = PaperbunkrDb.CreateContext())
+        {
+            var series = context.Series.FirstOrDefault(s => s.Id == seriesId);
+            if (series is null)
+            {
+                return;
+            }
+
+            series.ReadingMode = mode;
+            context.SaveChanges();
+        }
+
+        LoadIssue(issueId);
     }
 
     /// <summary>

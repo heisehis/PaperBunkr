@@ -6,7 +6,7 @@ namespace Paperbunkr.App.Views;
 
 /// <summary>
 /// Pure zoom/pan geometry shared by <see cref="PageCanvas"/> (gesture handling) and
-/// <see cref="ReaderPageDrawOperation"/> (render-time <c>destRect</c>), so pan-clamping and
+/// <see cref="ReaderPageVisualHandler"/> (render-time <c>destRect</c>), so pan-clamping and
 /// image-placement math can't drift apart. Per docs/superpowers/specs/
 /// 2026-08-09-reader-gestures-and-grid-navigation-design.md and (fit-mode/rotation)
 /// docs/superpowers/specs/2026-08-10-reader-polish-core-viewing-controls-design.md §2/§4.
@@ -18,7 +18,7 @@ namespace Paperbunkr.App.Views;
 /// <c>fitMode</c>/<c>fitOnlyIfOversized</c> default to <see cref="ImageFitMode.Fit"/>/<c>false</c>
 /// on every method - exactly reproduces this file's original always-<c>min(widthRatio,
 /// heightRatio)</c>-never-skip behavior, so the Novels PDF reader (which shares this exact math via
-/// <see cref="PageCanvas"/>/<see cref="ReaderPageDrawOperation"/> but has no fit-mode concept of its
+/// <see cref="PageCanvas"/>/<see cref="ReaderPageVisualHandler"/> but has no fit-mode concept of its
 /// own) needs zero changes.
 /// </summary>
 public static class ZoomPanMath
@@ -57,7 +57,15 @@ public static class ZoomPanMath
         };
     }
 
-    public static double ClampZoom(double zoom) => Math.Clamp(zoom, MinZoom, MaxZoom);
+    /// <summary>
+    /// <paramref name="minZoom"/>/<paramref name="maxZoom"/> default to paged mode's fixed 1x-4x
+    /// range, unchanged. Continuous/webtoon mode (docs/superpowers/specs/2026-08-10-reader-polish-
+    /// continuous-scroll-chrome-overlays-design.md §5, refined per user direction after initial
+    /// testing to a bounded 0.5x-4x range matching the toolbar zoom slider, rather than the
+    /// originally-scoped "unclamped upward") passes its own <c>PageCanvas.ContinuousMinZoom</c>/
+    /// <c>ContinuousMaxZoom</c> - one clamp implementation, not two.
+    /// </summary>
+    public static double ClampZoom(double zoom, double maxZoom = MaxZoom, double minZoom = MinZoom) => Math.Clamp(zoom, minZoom, maxZoom);
 
     /// <summary>
     /// Whether the current fit-mode/zoom combination makes the displayed content bigger than the

@@ -1,13 +1,10 @@
 using System;
 using System.Collections.Generic;
-using System.Drawing.Imaging;
-using System.IO;
 using System.Linq;
 using Avalonia;
 using Avalonia.Media.Imaging;
 using cYo.Projects.ComicRack.Engine.IO.Provider;
 using AvaloniaBitmap = Avalonia.Media.Imaging.Bitmap;
-using GdiBitmap = System.Drawing.Bitmap;
 
 namespace Paperbunkr.App.Services;
 
@@ -46,36 +43,8 @@ public class PageImageDecoder : IPageImageDecoder
     /// <summary>Opens the archive at <paramref name="filePath"/>, or returns null if it can't be opened at all (missing file, unsupported format, corrupt/empty archive).</summary>
     public static PageImageDecoder? TryOpen(string filePath)
     {
-        if (!File.Exists(filePath))
-        {
-            return null;
-        }
-
-        // CreateSourceProvider dispatches purely by file extension (FileFormat.Supports) - it
-        // doesn't itself check the file exists or is readable, hence the explicit check above.
-        var provider = Providers.Readers.CreateSourceProvider(filePath);
-        if (provider is null)
-        {
-            return null;
-        }
-
-        try
-        {
-            provider.Open(async: false);
-        }
-        catch
-        {
-            provider.Dispose();
-            return null;
-        }
-
-        if (provider.Count == 0)
-        {
-            provider.Dispose();
-            return null;
-        }
-
-        return new PageImageDecoder(provider);
+        var provider = PageDecodeCore.TryOpenProvider(filePath);
+        return provider is null ? null : new PageImageDecoder(provider);
     }
 
     public int PageCount => _provider.Count;
@@ -123,34 +92,8 @@ public class PageImageDecoder : IPageImageDecoder
         }
     }
 
-    /// <summary>
-    /// Tries the raw-bytes path first — works directly for standard JPEG/PNG pages via Avalonia's
-    /// own Skia-based decoder, no System.Drawing involved. Falls back to the engine's own
-    /// System.Drawing.Bitmap decode (used for exotic formats its codec providers handle specially
-    /// - WebP/HEIF/JPEG2000/JPEGXL) re-encoded to PNG for Avalonia to load.
-    /// </summary>
-    private AvaloniaBitmap Decode(int pageIndex)
-    {
-        try
-        {
-            byte[]? bytes = _provider.GetByteImage(pageIndex);
-            if (bytes is { Length: > 0 })
-            {
-                using var byteStream = new MemoryStream(bytes);
-                return new AvaloniaBitmap(byteStream);
-            }
-        }
-        catch
-        {
-            // Not a standard format Avalonia can decode directly - fall through.
-        }
-
-        using GdiBitmap gdiBitmap = _provider.GetImage(pageIndex);
-        using var pngStream = new MemoryStream();
-        gdiBitmap.Save(pngStream, ImageFormat.Png);
-        pngStream.Position = 0;
-        return new AvaloniaBitmap(pngStream);
-    }
+    /// <summary>Shared with <see cref="PageDecodeService"/> via <see cref="PageDecodeCore"/> - see there for the raw-bytes-then-GDI-fallback rationale.</summary>
+    private AvaloniaBitmap Decode(int pageIndex) => PageDecodeCore.Decode(_provider, pageIndex);
 
     private void TrimCache(int currentIndex)
     {

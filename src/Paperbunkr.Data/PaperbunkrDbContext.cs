@@ -249,6 +249,23 @@ public class PaperbunkrDbContext : DbContext
                 .HasDefaultValue(ImageFitMode.FitWidth)
                 .HasSentinel(ImageFitMode.Original);
             builder.Property(a => a.DefaultAutoRotate).HasDefaultValue(false);
+            builder.Property(a => a.MagnifierZoom).HasDefaultValue(2.0);
+            builder.Property(a => a.MagnifierOpacity).HasDefaultValue(1.0);
+            builder.Property(a => a.MagnifierSizePixels).HasDefaultValue(200);
+            builder.Property(a => a.DefaultBrightness).HasDefaultValue(0.0);
+            builder.Property(a => a.DefaultContrast).HasDefaultValue(0.0);
+            builder.Property(a => a.DefaultSaturation).HasDefaultValue(0.0);
+            builder.Property(a => a.DefaultGamma).HasDefaultValue(0.0);
+            // Same HasSentinel gotcha as DefaultPageFitMode above - ImageBackgroundMode.Auto (0) is
+            // the CLR default, but the actual desired default is Color (1), so without the sentinel
+            // EF can't distinguish "explicitly Auto" from "unset" on the singleton row's backfill.
+            builder.Property(a => a.ImageBackgroundMode).HasConversion<string>().HasMaxLength(32)
+                .HasDefaultValue(ImageBackgroundMode.Color)
+                .HasSentinel(ImageBackgroundMode.Auto);
+            builder.Property(a => a.BackgroundColor).IsRequired().HasDefaultValue("WhiteSmoke");
+            builder.Property(a => a.PageMarginEnabled).HasDefaultValue(false);
+            builder.Property(a => a.PageMarginPercentWidth).HasDefaultValue(0.05);
+            builder.Property(a => a.ShowScrubberOverlay).HasDefaultValue(true);
         });
 
         modelBuilder.Entity<VirtualTagDefinition>(builder =>

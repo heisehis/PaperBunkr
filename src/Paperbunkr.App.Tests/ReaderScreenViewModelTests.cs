@@ -332,6 +332,63 @@ public class ReaderScreenViewModelTests : IDisposable
         Assert.Equal(4.0, vm.ZoomLevel);
     }
 
+    /// <summary>
+    /// docs/superpowers/specs/2026-08-10-reader-polish-continuous-scroll-chrome-overlays-design.md
+    /// §5 - "zoom is free and unclamped upward" in continuous mode, unlike paged mode's fixed 4.0
+    /// ceiling above.
+    /// </summary>
+    [Fact]
+    public void ZoomLevel_InContinuousMode_ClampsAt4_SameCeilingAsPagedMode()
+    {
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id);
+        vm.SetReadingModeCommand.Execute(ReadingMode.VerticalContinuous);
+
+        vm.ZoomLevel = 10;
+
+        Assert.Equal(4.0, vm.ZoomLevel);
+    }
+
+    /// <summary>User direction after initial testing: continuous/webtoon zoom is a bounded 0.5x-4x range (matching the toolbar slider), not paged mode's 1x-4x - supersedes the design spec's originally-scoped "unclamped upward."</summary>
+    [Fact]
+    public void ZoomLevel_InContinuousMode_AllowsZoomingOutBelowPagedFloor()
+    {
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id);
+        vm.SetReadingModeCommand.Execute(ReadingMode.VerticalContinuous);
+
+        vm.ZoomLevel = 0.5;
+
+        Assert.Equal(0.5, vm.ZoomLevel);
+    }
+
+    [Fact]
+    public void ZoomLevel_InContinuousMode_ClampsBelow0Point5To0Point5()
+    {
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id);
+        vm.SetReadingModeCommand.Execute(ReadingMode.VerticalContinuous);
+
+        vm.ZoomLevel = 0.1;
+
+        Assert.Equal(0.5, vm.ZoomLevel);
+    }
+
+    [Fact]
+    public void ZoomLevel_ReClampsToPagedFloor_WhenSwitchingBackFromContinuousMode()
+    {
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id);
+        vm.SetReadingModeCommand.Execute(ReadingMode.VerticalContinuous);
+        vm.ZoomLevel = 0.5;
+        Assert.Equal(0.5, vm.ZoomLevel);
+
+        vm.SetReadingModeCommand.Execute(ReadingMode.LeftToRight);
+        vm.ZoomLevel = 0.5; // setter re-evaluates the now-paged floor (1.0, not 0.5)
+
+        Assert.Equal(1.0, vm.ZoomLevel);
+    }
+
     [Fact]
     public void ZoomLevel_ClampsBelowMin_To1()
     {
@@ -421,6 +478,100 @@ public class ReaderScreenViewModelTests : IDisposable
 
         vm.ToggleReadingModeCommand.Execute(null);
         Assert.Equal("Left to Right ▾", vm.ReadingModeLabel);
+    }
+
+    /// <summary>
+    /// docs/superpowers/specs/2026-08-10-reader-polish-continuous-scroll-chrome-overlays-design.md
+    /// §4 - continuous mode needs a real way in, since <see cref="ReaderScreenViewModel.ToggleReadingModeCommand"/>
+    /// only ever flips between LeftToRight/RightToLeft.
+    /// </summary>
+    [Fact]
+    public void SetReadingModeCommand_VerticalContinuous_UpdatesLabelAndIsContinuousMode()
+    {
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id);
+        Assert.False(vm.IsContinuousMode);
+
+        vm.SetReadingModeCommand.Execute(ReadingMode.VerticalContinuous);
+
+        Assert.Equal("Vertical (Continuous) ▾", vm.ReadingModeLabel);
+        Assert.True(vm.IsContinuousMode);
+        Assert.Equal(ReadingMode.VerticalContinuous, vm.EffectiveReadingMode);
+
+        using var context = PaperbunkrDb.CreateContext();
+        Assert.Equal(ReadingMode.VerticalContinuous, context.Series.First(s => s.Id == _seriesId).ReadingMode);
+    }
+
+    [Fact]
+    public void SetReadingModeCommand_HorizontalContinuous_UpdatesLabelAndIsContinuousMode()
+    {
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id);
+
+        vm.SetReadingModeCommand.Execute(ReadingMode.HorizontalContinuous);
+
+        Assert.Equal("Horizontal (Continuous) ▾", vm.ReadingModeLabel);
+        Assert.True(vm.IsContinuousMode);
+    }
+
+    /// <summary>User direction added after initial testing - a real horizontal RTL mode, not just LTR.</summary>
+    [Fact]
+    public void SetReadingModeCommand_HorizontalContinuousRightToLeft_UpdatesLabelAndIsContinuousMode()
+    {
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id);
+
+        vm.SetReadingModeCommand.Execute(ReadingMode.HorizontalContinuousRightToLeft);
+
+        Assert.Equal("Horizontal RTL (Continuous) ▾", vm.ReadingModeLabel);
+        Assert.True(vm.IsContinuousMode);
+        Assert.Equal(ReadingMode.HorizontalContinuousRightToLeft, vm.EffectiveReadingMode);
+    }
+
+    /// <summary>User direction added after initial testing - Webtoon (merged, no gap) as a mode distinct from VerticalContinuous (gapped).</summary>
+    [Fact]
+    public void SetReadingModeCommand_Webtoon_UpdatesLabelAndIsContinuousMode()
+    {
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id);
+
+        vm.SetReadingModeCommand.Execute(ReadingMode.Webtoon);
+
+        Assert.Equal("Webtoon ▾", vm.ReadingModeLabel);
+        Assert.True(vm.IsContinuousMode);
+        Assert.NotNull(vm.Decoder); // opens the continuous-aware decoder same as the other continuous modes
+    }
+
+    [Fact]
+    public void IsContinuousMode_ReturnsToFalse_WhenSwitchedBackToPagedMode()
+    {
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id);
+        vm.SetReadingModeCommand.Execute(ReadingMode.VerticalContinuous);
+        Assert.True(vm.IsContinuousMode);
+
+        vm.SetReadingModeCommand.Execute(ReadingMode.LeftToRight);
+
+        Assert.False(vm.IsContinuousMode);
+    }
+
+    /// <summary>Reopening the issue picks the continuous decoder path in <see cref="ReaderScreenViewModel.LoadIssue"/> - confirms <see cref="ReaderScreenViewModel.Decoder"/> is non-null and page-count-correct via that path too, not just PageImageDecoder's.</summary>
+    [Fact]
+    public void LoadIssue_InContinuousMode_OpensDecoderSuccessfully_AndPopulatesPageCount()
+    {
+        using (var context = PaperbunkrDb.CreateContext())
+        {
+            context.Series.First(s => s.Id == _seriesId).ReadingMode = ReadingMode.VerticalContinuous;
+            context.SaveChanges();
+        }
+
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id);
+
+        Assert.True(vm.IsContinuousMode);
+        Assert.NotNull(vm.Decoder);
+        Assert.Equal(3, vm.PageCount);
+        Assert.False(vm.HasError);
     }
 
     [Fact]

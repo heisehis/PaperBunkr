@@ -71,4 +71,57 @@ public class IssueReaderOverridesTests : IDisposable
         Assert.Equal(ImageFitMode.BestFit, reloaded.PageFitModeOverride);
         Assert.True(reloaded.AutoRotateOverride);
     }
+
+    /// <summary>
+    /// New nullable columns from migration <c>AddReaderPolishSettings</c> (docs/superpowers/specs/
+    /// 2026-08-10-reader-polish-continuous-scroll-chrome-overlays-design.md §9/§11) - same
+    /// null-by-default/round-trips-when-set shape as <see cref="PageFitModeOverride"/> above.
+    /// </summary>
+    [Fact]
+    public void Issue_WithNoAdjustmentOverridesSet_ReadsBackAllFourColumnsAsNull()
+    {
+        var series = new Series { Name = "Test Series" };
+        _context.Series.Add(series);
+        _context.SaveChanges();
+
+        var issue = new Issue { SeriesId = series.Id, Number = "1" };
+        _context.Issues.Add(issue);
+        _context.SaveChanges();
+
+        using var reload = new PaperbunkrDbContext(new DbContextOptionsBuilder<PaperbunkrDbContext>().UseSqlite($"Data Source={_dbPath}").Options);
+        var reloaded = reload.Issues.Single(i => i.Id == issue.Id);
+
+        Assert.Null(reloaded.BrightnessOverride);
+        Assert.Null(reloaded.ContrastOverride);
+        Assert.Null(reloaded.SaturationOverride);
+        Assert.Null(reloaded.GammaOverride);
+    }
+
+    [Fact]
+    public void Issue_WithAdjustmentOverridesSet_RoundTrips()
+    {
+        var series = new Series { Name = "Test Series" };
+        _context.Series.Add(series);
+        _context.SaveChanges();
+
+        var issue = new Issue
+        {
+            SeriesId = series.Id,
+            Number = "1",
+            BrightnessOverride = 0.1f,
+            ContrastOverride = -0.2f,
+            SaturationOverride = 0.3f,
+            GammaOverride = -0.4f,
+        };
+        _context.Issues.Add(issue);
+        _context.SaveChanges();
+
+        using var reload = new PaperbunkrDbContext(new DbContextOptionsBuilder<PaperbunkrDbContext>().UseSqlite($"Data Source={_dbPath}").Options);
+        var reloaded = reload.Issues.Single(i => i.Id == issue.Id);
+
+        Assert.Equal(0.1f, reloaded.BrightnessOverride);
+        Assert.Equal(-0.2f, reloaded.ContrastOverride);
+        Assert.Equal(0.3f, reloaded.SaturationOverride);
+        Assert.Equal(-0.4f, reloaded.GammaOverride);
+    }
 }

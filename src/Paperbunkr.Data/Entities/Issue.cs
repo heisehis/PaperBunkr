@@ -121,6 +121,24 @@ public class Issue
     /// <summary>Same override shape as <see cref="PageFitModeOverride"/>, for the auto-rotate-landscape-pages toggle.</summary>
     public bool? AutoRotateOverride { get; set; }
 
+    /// <summary>
+    /// Nullable per-issue escape hatches for live image adjustment (docs/superpowers/specs/
+    /// 2026-08-10-reader-polish-continuous-scroll-chrome-overlays-design.md §9), same override
+    /// shape as <see cref="PageFitModeOverride"/>. Effective value is additive with the global
+    /// <c>AppSettings.Default*</c> counterpart (<c>global + (override ?? 0)</c>), matching
+    /// ComicRackCE's own <c>BitmapAdjustment.Add(BaseColorAdjustment, Comic.ColorAdjustment)</c>.
+    /// </summary>
+    public float? BrightnessOverride { get; set; }
+
+    /// <summary>See <see cref="BrightnessOverride"/>.</summary>
+    public float? ContrastOverride { get; set; }
+
+    /// <summary>See <see cref="BrightnessOverride"/>.</summary>
+    public float? SaturationOverride { get; set; }
+
+    /// <summary>See <see cref="BrightnessOverride"/>.</summary>
+    public float? GammaOverride { get; set; }
+
     // --- read-state / file fields carried over from ComicBook.cs ---
 
     public string? FilePath { get; set; }

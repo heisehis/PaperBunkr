@@ -20,18 +20,34 @@ needs a human (or a Claude Code session working in it) to update by hand when pr
 the tracker just keeps a lightweight view from silently going stale between those updates the way
 this file itself already did once (see the note below).
 
-## What's left (as of 2026-08-10, HEAD `5869ed0`)
+## What's left (as of 2026-08-10, HEAD `9769cfc`)
 
 > This section drifted before: it was last hand-written at `7e2d3d3` and had already fallen behind
 > five real commits by the time anyone reopened it. That's the whole reason for the live tracker —
 > see [Live tracker](#live-tracker) below. It drifted a second, smaller way too: `d86cac7` (same
 > day) hand-updated the "Open: nothing" content below to reflect P0–P7 all done, but left this
-> heading's HEAD marker at the older `3e7ada3` — caught and fixed by this sync pass, which also
+> heading's HEAD marker at the older `3e7ada3` — caught and fixed by a prior sync pass, which also
 > confirmed six more commits landed for items previously marked "not yet committed" (icon,
 > LRU-cache crash fix, dialog/Maintenance-toggle fix, installer project, file-association crash
 > fix — commit refs added inline below) and found two more stale worktrees beyond the one already
-> noted (see Housekeeping). Treat this file as re-synced as of `5869ed0`; if you're reading it
-> later than that commit, check the tracker artifact or `git log` before trusting it.
+> noted (see Housekeeping).
+>
+> **This sync (re-synced `5869ed0` → `9769cfc`):** two new commits, both Beta-backlog work, not
+> Alpha P0–P7 — `963ef8c` (design spec) and `9769cfc` (implementation): first slice of Reader
+> polish — fit modes (Original/Fit/FitWidth/FitHeight/BestFit), zoom presets, manual +
+> auto-rotate-landscape, and a Preferences → Reader tab to back it. Verified directly against
+> source, not the commit message: `PreferencesScreenViewModel.cs` has real
+> `FitModeOptions`/`ResetZoomOnPageChange`/`DefaultPageFitMode` members wired to persisted
+> settings. P0–P7 status is unchanged by this — see the updated [Bonus](#bonus-ahead-of-schedule-reader-zoompan-gestures-done)
+> note below. The three worktrees under `.claude/worktrees/` (`quirky-borg-c5d364`,
+> `compassionate-banach-c6e8bf`, `exciting-hypatia-eecfc9`) are still present but couldn't be
+> re-checked this pass — their `.git` files point at absolute Windows paths not resolvable from
+> this sync environment, so their status (clean vs. the noted uncommitted edit) is carried over
+> unverified rather than guessed at. Working tree in the main repo itself: `git status --short`
+> shows ~1040 modified files, all line-ending-only (CRLF vs. LF, confirmed by diffing
+> `.gitignore`) — an artifact of this environment's Windows↔Linux mount, not real uncommitted
+> work; not treated as a pending change. Treat this file as re-synced as of `9769cfc`; if you're
+> reading it later than that commit, check the tracker artifact or `git log` before trusting it.
 
 P0–P3 and P5 are done — shipped before this session (`f6bcee3`, `8e1bf55`), with P5 getting a
 same-day follow-up (2D grid arrow-key nav, `34e1d39`). The `alpha` git tag already exists.
@@ -410,9 +426,13 @@ docs/superpowers/specs/2026-08-09-reader-gestures-and-grid-navigation-design.md.
 - [x] Touch: 3-zone tap page-turn + horizontal flick
 - [x] Manual verification — **done 2026-08-10.** User confirmed live, on top of the existing
       unit tests (`ZoomPanMathTests`, 13 cases).
-- Remaining Reader polish (fit modes, page layout, rotation, magnifier, transitions, fullscreen,
-  overlays, live image adjustment, continuous/webtoon scroll, split-page nav, remappable shortcuts,
-  auto-scroll) stays Beta scope, unchanged.
+- Remaining Reader polish backlog, still Beta scope: **fit modes/zoom presets/rotation shipped as
+  a first slice 2026-08-10** (`963ef8c` design spec, `9769cfc` implementation — Original/Fit/
+  FitWidth/FitHeight/BestFit, checked against CE's `ImageDisplayControl.GetScale` rather than
+  guessed at, plus a Preferences → Reader tab). Still open: page layout, magnifier, transitions,
+  fullscreen, overlays, live image adjustment, continuous/webtoon scroll, split-page nav,
+  remappable shortcuts, auto-scroll. Tracked in full in `alpha-roadmap.md` per this doc's scope
+  note at the top — not duplicated here.
 
 ---
 

@@ -20,12 +20,18 @@ needs a human (or a Claude Code session working in it) to update by hand when pr
 the tracker just keeps a lightweight view from silently going stale between those updates the way
 this file itself already did once (see the note below).
 
-## What's left (as of 2026-08-09, HEAD `3e7ada3`)
+## What's left (as of 2026-08-10, HEAD `5869ed0`)
 
 > This section drifted before: it was last hand-written at `7e2d3d3` and had already fallen behind
 > five real commits by the time anyone reopened it. That's the whole reason for the live tracker —
-> see [Live tracker](#live-tracker) below. Treat this file as re-synced as of `3e7ada3`; if you're
-> reading it later than that commit, check the tracker artifact or `git log` before trusting it.
+> see [Live tracker](#live-tracker) below. It drifted a second, smaller way too: `d86cac7` (same
+> day) hand-updated the "Open: nothing" content below to reflect P0–P7 all done, but left this
+> heading's HEAD marker at the older `3e7ada3` — caught and fixed by this sync pass, which also
+> confirmed six more commits landed for items previously marked "not yet committed" (icon,
+> LRU-cache crash fix, dialog/Maintenance-toggle fix, installer project, file-association crash
+> fix — commit refs added inline below) and found two more stale worktrees beyond the one already
+> noted (see Housekeeping). Treat this file as re-synced as of `5869ed0`; if you're reading it
+> later than that commit, check the tracker artifact or `git log` before trusting it.
 
 P0–P3 and P5 are done — shipped before this session (`f6bcee3`, `8e1bf55`), with P5 getting a
 same-day follow-up (2D grid arrow-key nav, `34e1d39`). The `alpha` git tag already exists.
@@ -60,10 +66,13 @@ the P6 section below for what's confirmed vs. still needs a look.
   zoom.
 - Unrelated but landed since: `3e7ada3` fixed an unbounded memory leak (`CoverImageCache` now
   LRU-bounded) — not on the roadmap, worth knowing about. **That fix itself had a real bug, found
-  and fixed 2026-08-09 evening — see below.**
+  and fixed 2026-08-09 evening, committed `04a1eb0` — see below.**
 - ~~**New, not yet scoped:** Book Folders scan reads filenames only~~ — **done**, see below.
+- Unrelated, also landed since: Novels (EPUB/PDF) support, Phases 1–3 (`3894723`, `2c3e140`,
+  `8d94d11`, `25c664a`, merged via `5869ed0`) — tracked separately in `alpha-roadmap.md` per this
+  doc's own scope note above, not repeated here.
 
-**Real bug found + fixed today (2026-08-09 evening session, not yet committed) — a crash, not a
+**Real bug found + fixed today (2026-08-09 evening session, committed `04a1eb0`) — a crash, not a
 cosmetic gap:** `3e7ada3`'s LRU-bounding of `CoverImageCache` disposed evicted `Bitmap`s eagerly,
 but `Get()` hands the exact same `Bitmap` instance to view models that bind it straight into a
 still-visible `Image` control — browsing a large library (2000+ issues) evicts bitmaps still
@@ -74,7 +83,7 @@ native memory still gets reclaimed via GC once nothing else references it. The t
 asserted the old (unsafe) dispose-on-evict behavior now asserts the opposite. Confirmed fixed via a
 live repro (Library → Smart Lists, no crash) and the full 312-test suite.
 
-**Icon-pack sweep today (2026-08-09 evening session, not yet committed):** every screen swept for
+**Icon-pack sweep today (2026-08-09 evening session, committed `52a1ae6`):** every screen swept for
 text/glyph standing in for icons (rail nav's `Li`/`Sm`/`Rd`/`Pl`/`Pf`/`Rx`, toolbar buttons, dialog
 Save/Cancel, empty states, ~40 spots total) and wired to real icons from the user's `coolicons`
 pack via a reusable `Border.icon` + `OpacityMask` pattern (`App.axaml`) so icons pick up the same
@@ -116,7 +125,7 @@ bad fit.
 
 **Embedded ComicInfo.xml metadata + Migration relocation** (design spec:
 docs/superpowers/specs/2026-08-09-embedded-metadata-and-migration-relocation-design.md,
-2026-08-09 evening session, not yet committed):
+2026-08-09 evening session; design spec committed `a12d9b0`, implementation committed `c4e7404`):
 - Book Folders scan now reads embedded `ComicInfo.xml` via `IInfoStorage` (the mechanism already
   existed in the ported Engine, just never wired into the App layer — the original spec's "needs
   new archive-format plumbing" claim was wrong, confirmed with a real spike before writing the
@@ -144,11 +153,18 @@ docs/superpowers/specs/2026-08-09-embedded-metadata-and-migration-relocation-des
 
 **Housekeeping, not on the roadmap itself:**
 - Stale worktree `.claude/worktrees/quirky-borg-c5d364` (branch `claude/quirky-borg-c5d364`) —
-  still present as of `3e7ada3`. Its two commits (PageCanvas focus fix, Virtual Tags wiring)
-  predate and are superseded by `8e1bf55`'s versions of the same fixes. Also has an uncommitted
-  edit to `LibraryFolderScannerTests.cs`. Safe to discard once confirmed nothing else is needed
-  from it.
-- ~~`docs/alpha-roadmap.md` uncommitted edit~~ — resolved; working tree is clean as of `3e7ada3`.
+  still present as of `5869ed0`, unchanged since last check. Its two commits (PageCanvas focus
+  fix, Virtual Tags wiring) predate and are superseded by `8e1bf55`'s versions of the same fixes.
+  Still has the same uncommitted edit to `LibraryFolderScannerTests.cs`. Safe to discard once
+  confirmed nothing else is needed from it.
+- **New, found this sync:** two more worktrees from the Novels (EPUB/PDF) session —
+  `.claude/worktrees/compassionate-banach-c6e8bf` (branch `claude/compassionate-banach-c6e8bf`,
+  tip `25c664a`) and `.claude/worktrees/exciting-hypatia-eecfc9` (detached HEAD at `d86cac7`).
+  Both confirmed clean (`git status --short` empty) and both tip commits confirmed already merged
+  into `master` (`git branch --contains` shows `master`) — safe-to-discard candidates, same
+  reasoning as quirky-borg above.
+- ~~`docs/alpha-roadmap.md` uncommitted edit~~ — resolved; working tree is clean as of `5869ed0`
+  (re-confirmed this sync — `git status --short` on the main worktree is empty).
 
 ---
 
@@ -209,11 +225,13 @@ landed via `275a348` and `0d08890`. Re-verified directly against source (not jus
         state; Duplicate Finder's hardcoded badge and fake demo content removed (`275a348`,
         `0d08890`)
 - [x] Placeholder icons/images (default/stock art standing in for final assets) — **done
-      2026-08-09 evening, not yet committed**
+      2026-08-09 evening, committed `52a1ae6`**
   - [x] `Assets/avalonia-logo.ico` replaced with a real Paperbunkr mark (user-supplied artwork,
         flood-filled to transparent + packed into a multi-res `.ico`); wired as both the window
         icon (`MainWindow.axaml`) and `ApplicationIcon` in `Paperbunkr.App.csproj` (the exe/taskbar
-        icon, which the old setup never set at all)
+        icon, which the old setup never set at all). Re-verified this sync: the file itself was
+        renamed to `Assets/paperbunkr.ico` (old `avalonia-logo.ico` no longer present), and both
+        `MainWindow.axaml`'s `Icon=` and the `.csproj`'s `ApplicationIcon` point at the new name.
   - [x] Rail nav's 6 text abbreviations (`Li`/`Sm`/`Rd`/`Pl`/`Pf`/`Rx`) and ~35 other
         glyph-standing-in-for-icon spots across every screen (toolbar buttons, dialog
         Save/Cancel, empty states, etc.) replaced with real icons from the user's `coolicons` pack
@@ -247,8 +265,8 @@ Base audit shipped via `8e1bf55`; 2D grid navigation follow-up shipped today via
 - [x] Plugin screen — fake Duplicate Finder demo content and dead buttons replaced with a real
       empty state (`0d08890`)
 - [x] Confirm every dialog (Issue Properties Editor, Bulk Editing, Preferences) fully closes,
-      saves, and cancels correctly from all entry points — **audited 2026-08-09 evening, not yet
-      committed.** Traced (not just read commit messages) every navigation entry point and the
+      saves, and cancels correctly from all entry points — **audited 2026-08-09 evening, committed
+      `7f4b5eb`.** Traced (not just read commit messages) every navigation entry point and the
       Save/Cancel command bodies:
   - Issue Properties/Bulk Editing have exactly 2 entry points each (Detail's "Edit" toolbar button
     + DetailTabs' right-click menu), both funneling through the same `MainViewModel` methods — no
@@ -274,10 +292,12 @@ Base audit shipped via `8e1bf55`; 2D grid navigation follow-up shipped today via
     `IsStaged` flag after writing, so `HasUnsavedChanges()` would've still read `true` immediately
     post-Save (harmless in practice today since `CurrentScreen` flips away first, but would have
     been a real bug for anything else that queried it). 12 new tests added (Paperbunkr.App.Tests:
-    251/251 passing). Not yet manually clicked through in the live app — no desktop GUI automation
+    251/251 passing), committed `7f4b5eb`. Re-verified this sync directly against source
+    (`MainViewModel.cs` line 124: `GoLibrary() => TryLeaveCurrentEditor(...)`), not just the
+    commit message. Not yet manually clicked through in the live app — no desktop GUI automation
     available in this environment (same limitation noted for the Reader gestures below).
 - [x] One more pass across all screens to confirm nothing was missed — **swept 2026-08-09 evening,
-      not yet committed.** Structural search (not a manual click-through, see the note under the
+      committed `7f4b5eb`.** Structural search (not a manual click-through, see the note under the
       dialog audit above about why) across every `Views/*.axaml`: every `Button`/`CheckBox`/
       `ComboBox`/`ToggleButton`/`TextBox`/`MenuItem` for a missing command/binding, every
       `Cursor="Hand"` style for a matching gesture handler, and a grep for `TODO`/`FIXME`/
@@ -295,8 +315,9 @@ Base audit shipped via `8e1bf55`; 2D grid navigation follow-up shipped today via
 
 ## P7 — Known gaps: appshell + alpha build packaging ✅ Done
 
-- [x] **Build/configure the appshell (installer) project** — **done 2026-08-09 night, not yet
-      committed.** Packaging approach: **Inno Setup** (`installer/Installer.iss` +
+- [x] **Build/configure the appshell (installer) project** — **done 2026-08-09 night, committed
+      `65fc777`.** Re-verified this sync: `installer/Installer.iss` and `installer/BuildInstaller.ps1`
+      both present in the repo. Packaging approach: **Inno Setup** (`installer/Installer.iss` +
       `installer/BuildInstaller.ps1`), matching CE's own precedent
       (`_reference/ComicRackCE/Installer.iss`/`BuildInstaller.ps1`) rather than guessing at one —
       CE already ships this way. Two deliberate deviations from CE, both decided with the user

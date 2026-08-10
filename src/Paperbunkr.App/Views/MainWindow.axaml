@@ -108,6 +108,9 @@
                     <Button Classes="rail" Classes.active="{Binding IsLibrary}"
                             Command="{Binding GoLibraryCommand}" Content="Li"
                             ToolTip.Tip="Library" />
+                    <Button Classes="rail" Classes.active="{Binding IsBooks}"
+                            Command="{Binding GoBooksCommand}" Content="Bk"
+                            ToolTip.Tip="Books" />
                     <Button Classes="rail" Classes.active="{Binding IsSmart}"
                             Command="{Binding GoSmartCommand}" Content="Sm"
                             ToolTip.Tip="Smart Lists" />
@@ -297,6 +300,13 @@
                 <ContentControl.ContentTemplate>
                     <DataTemplate x:DataType="vm:LibraryScreenViewModel">
                         <views:LibraryScreen />
+                    </DataTemplate>
+                </ContentControl.ContentTemplate>
+            </ContentControl>
+            <ContentControl IsVisible="{Binding IsBooks}" Content="{Binding Books}">
+                <ContentControl.ContentTemplate>
+                    <DataTemplate x:DataType="vm:BooksScreenViewModel">
+                        <views:BooksScreen />
                     </DataTemplate>
                 </ContentControl.ContentTemplate>
             </ContentControl>

@@ -38,6 +38,14 @@ public class PaperbunkrDbContext : DbContext
 
     public DbSet<KeyBinding> KeyBindings => Set<KeyBinding>();
 
+    public DbSet<BookSeries> BookSeries => Set<BookSeries>();
+
+    public DbSet<Book> Books => Set<Book>();
+
+    public DbSet<BookBookmark> BookBookmarks => Set<BookBookmark>();
+
+    public DbSet<BookFolder> BookFolders => Set<BookFolder>();
+
     public PaperbunkrDbContext(DbContextOptions<PaperbunkrDbContext> options)
         : base(options)
     {
@@ -241,6 +249,47 @@ public class PaperbunkrDbContext : DbContext
             builder.Property(k => k.CommandId).IsRequired();
             builder.Property(k => k.Key).IsRequired();
             builder.HasIndex(k => k.CommandId).IsUnique();
+        });
+
+        // Novels (docs/superpowers/specs/2026-08-09-novels-epub-pdf-support-design.md §2) -
+        // independent of the comic Series/Issue tables above, no FK crossing between the two.
+        modelBuilder.Entity<BookSeries>(builder =>
+        {
+            builder.HasKey(s => s.Id);
+            builder.Property(s => s.Name).IsRequired();
+            builder.HasIndex(s => s.Name);
+
+            builder.HasMany(s => s.Books)
+                .WithOne(b => b.BookSeries)
+                .HasForeignKey(b => b.BookSeriesId)
+                .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<Book>(builder =>
+        {
+            builder.HasKey(b => b.Id);
+            builder.Property(b => b.Title).IsRequired();
+            builder.Property(b => b.FilePath).IsRequired();
+            builder.Property(b => b.Format).HasConversion<string>().HasMaxLength(32);
+            builder.HasIndex(b => b.FilePath);
+
+            builder.HasMany(b => b.Bookmarks)
+                .WithOne(bm => bm.Book)
+                .HasForeignKey(bm => bm.BookId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<BookBookmark>(builder =>
+        {
+            builder.HasKey(bm => bm.Id);
+            builder.HasIndex(bm => bm.BookId);
+        });
+
+        modelBuilder.Entity<BookFolder>(builder =>
+        {
+            builder.HasKey(f => f.Id);
+            builder.Property(f => f.Path).IsRequired();
+            builder.HasIndex(f => f.Path).IsUnique();
         });
     }
 

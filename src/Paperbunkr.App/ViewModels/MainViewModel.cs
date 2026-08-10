@@ -16,6 +16,7 @@ public partial class MainViewModel : ViewModelBase
     public MainViewModel()
     {
         Library = new LibraryScreenViewModel(GoDetailForSeries, GoReaderForIssue);
+        Books = new BooksScreenViewModel(new FilePickerService(), new BookFolderScanService(), new BookCoverThumbnailService(), ShowToast);
         Detail = new DetailScreenViewModel(GoLibrary, GoReaderForIssue, GoIssuePropertiesForIssue, GoBulkIssuePropertiesForIssues);
         Reader = new ReaderScreenViewModel(GoDetail);
         IssueProperties = new IssuePropertiesScreenViewModel(GoDetailAfterIssueEdit);
@@ -65,6 +66,7 @@ public partial class MainViewModel : ViewModelBase
     private void CloseProgressToast(ToastProgressViewModel toast) => ProgressToastCloseRequested?.Invoke(toast);
 
     public LibraryScreenViewModel Library { get; }
+    public BooksScreenViewModel Books { get; }
     public DetailScreenViewModel Detail { get; }
     public ReaderScreenViewModel Reader { get; }
     public IssuePropertiesScreenViewModel IssueProperties { get; }
@@ -82,6 +84,7 @@ public partial class MainViewModel : ViewModelBase
     private string _currentScreen = "library";
 
     public bool IsLibrary => CurrentScreen == "library";
+    public bool IsBooks => CurrentScreen == "books";
     public bool IsDetail => CurrentScreen == "detail";
     public bool IsSmart => CurrentScreen == "smart";
     public bool IsReading => CurrentScreen == "reading";
@@ -96,6 +99,7 @@ public partial class MainViewModel : ViewModelBase
     partial void OnCurrentScreenChanged(string value)
     {
         OnPropertyChanged(nameof(IsLibrary));
+        OnPropertyChanged(nameof(IsBooks));
         OnPropertyChanged(nameof(IsDetail));
         OnPropertyChanged(nameof(IsSmart));
         OnPropertyChanged(nameof(IsReading));
@@ -117,6 +121,13 @@ public partial class MainViewModel : ViewModelBase
         // those instead of special-casing each caller to remember to refresh Library itself.
         Library.LoadFromDatabase();
         CurrentScreen = "library";
+    }
+
+    [RelayCommand]
+    private void GoBooks()
+    {
+        Books.LoadFromDatabase();
+        CurrentScreen = "books";
     }
 
     [RelayCommand]

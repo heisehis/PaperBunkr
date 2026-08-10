@@ -127,6 +127,37 @@ to prove against. Explicitly Beta-scoped from the start.
 Crash reporter dialog, minimize-to-tray, external "open with" app associations.
 *(Backup manager and file association are already shipped as part of Alpha's Advanced tab.)*
 
+### Novels: EPUB/PDF support (Phase 1 landed 2026-08-09, Phase 2/3 remaining)
+Not a CE-parity item — ComicRackCE has no prose-reading equivalent, see the design spec's own
+CE-verification note. Design: docs/superpowers/specs/2026-08-09-novels-epub-pdf-support-design.md.
+**Phase 1 shipped** (independent `Book`/`BookSeries`/`BookBookmark`/`BookFolder` schema, `VersOne.Epub`-
+and raw-`pdfium`-text-API-backed parsers behind a shared `IBookTextSource`, folder-scan import with
+cover/metadata extraction, a Books nav section with a covers grid — no reader yet, verified via 17
+new xUnit tests against real synthetic EPUB/PDF fixtures plus a full migration-chain smoke test).
+**Phase 2 (reflowable text reader) and Phase 3 (resume position/bookmarks/search) not started.**
+
+**Two real, pre-existing bugs found and fixed during manual testing against a real 1992-series
+library and real e-book files** (neither caused by this Novels work, both unrelated to it):
+1. `CoverImageCache`'s LRU cache (`src/Paperbunkr.App/Services/LruCache.cs`) disposes a `Bitmap`
+   the instant it's evicted; `LibraryScreenViewModel.LoadFromDatabase` requests a cover for every
+   series in one synchronous pass before anything renders. Past the cache's 1000-entry cap (sized
+   against a 371-series test library), the earliest covers in that pass got disposed before the
+   layout pass that displays them ever ran — crashed Library on startup with `ObjectDisposedException`
+   on `Ref<IBitmapImpl>` for any real library over ~1000 series. Fixed by raising the cap to 5000
+   (comfortable margin over the real 1992-series case that found it); same fix applied to the new
+   `BookCoverImageCache`, which copied the identical pattern, before it could bite there too.
+2. `PdfiumReaderEngine` (`PDFiumSharpV2`, the existing comic-PDF-reading pipeline) P/Invokes
+   against `pdfium_x64.dll`, but the native binary actually bundled (`bblanchon.PDFium.Win32`)
+   ships a plain `pdfium.dll` — the names never matched, so PDFiumSharpV2 silently failed to load
+   its native library for every real PDF, swallowed by `ComicProvider.Open()` into a silent
+   `Count == 0` rather than a visible error. This means **PDF-as-comic reading has likely never
+   actually worked** for a real PDF file, not just Book PDF cover generation (which reuses this
+   same pipeline) — nobody had tested it against a real, non-synthetic PDF before. Fixed with a
+   `NativeLibrary.SetDllImportResolver` on PDFiumSharpV2's own assembly (in `PdfiumReaderEngine`'s
+   static constructor) redirecting its DllImport names to the same already-resolved `pdfium.dll`,
+   verified against two real e-book PDFs. Worth a dedicated regression test in a future pass — today's
+   verification was manual/diagnostic, not a checked-in test, since it depends on files outside the repo.
+
 ### Deferred / dropped (no action needed)
 - **News reader** (`Help > News` RSS) — deferred, live idea to repurpose the feed mechanism for
   something Paperbunkr-relevant; needs its own brainstorm before scoping

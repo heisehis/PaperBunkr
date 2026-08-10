@@ -17,7 +17,9 @@ namespace cYo.Projects.ComicRack.Engine.IO.Provider.Native
 	/// using NativeLibrary.SetDllImportResolver instead of a build-time xcopy/hardcoded path.
 	/// It is not currently wired into ComicRack.Engine's PDF provider (which keeps using the
 	/// PDFiumSharpV2 package unchanged for this spike); see retarget_spike_report.md for the
-	/// rationale and the follow-up work this implies.
+	/// rationale and the follow-up work this implies. It *is* wired into <c>PdfBookSource</c>
+	/// (docs/superpowers/specs/2026-08-09-novels-epub-pdf-support-design.md §4) via the text/
+	/// metadata/bookmark entry points below -- PDFiumSharpV2 exposes none of those.
 	/// </summary>
 	public static class PdfiumNative
 	{
@@ -72,5 +74,47 @@ namespace cYo.Projects.ComicRack.Engine.IO.Provider.Native
 
 		[DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl)]
 		public static extern void FPDFBitmap_Destroy(IntPtr bitmap);
+
+		// --- Added for Novel PDF text-extraction reflow (docs/superpowers/specs/
+		// 2026-08-09-novels-epub-pdf-support-design.md §4/§9.2) -- PDFiumSharpV2 (the wrapper
+		// already referenced by Paperbunkr.Engine for comic-page PDF rendering) exposes no text
+		// APIs at all, so PdfBookSource talks to these entry points directly instead. Same
+		// "pdfium" native binary already bundled for comic PDFs -- no new native dependency, just
+		// more of PDFium's own public C API surfaced through the resolver already registered above.
+
+		[DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl)]
+		public static extern IntPtr FPDFText_LoadPage(IntPtr page);
+
+		[DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl)]
+		public static extern void FPDFText_ClosePage(IntPtr textPage);
+
+		[DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl)]
+		public static extern int FPDFText_CountChars(IntPtr textPage);
+
+		/// <summary>UTF-16LE code units, not including the null terminator FPDFText_GetText also writes.</summary>
+		[DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl)]
+		public static extern int FPDFText_GetText(IntPtr textPage, int startIndex, int count, [Out] byte[] result);
+
+		/// <summary>
+		/// UTF-16LE, including the null terminator. Returns the required buffer length in bytes;
+		/// call once with a null/zero-length buffer to size it, per PDFium's own convention.
+		/// </summary>
+		[DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl, CharSet = CharSet.Ansi)]
+		public static extern uint FPDF_GetMetaText(IntPtr document, string tag, byte[]? buffer, uint buflen);
+
+		[DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl)]
+		public static extern IntPtr FPDFBookmark_GetFirstChild(IntPtr document, IntPtr bookmark);
+
+		[DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl)]
+		public static extern IntPtr FPDFBookmark_GetNextSibling(IntPtr document, IntPtr bookmark);
+
+		[DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl)]
+		public static extern uint FPDFBookmark_GetTitle(IntPtr bookmark, byte[]? buffer, uint buflen);
+
+		[DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl)]
+		public static extern IntPtr FPDFBookmark_GetDest(IntPtr document, IntPtr bookmark);
+
+		[DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl)]
+		public static extern int FPDFDest_GetDestPageIndex(IntPtr document, IntPtr dest);
 	}
 }

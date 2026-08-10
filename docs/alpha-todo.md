@@ -230,6 +230,26 @@ Base audit shipped via `8e1bf55`; 2D grid navigation follow-up shipped today via
   - [ ] Verify first-run experience end-to-end
   - [ ] Test uninstall leaves no orphaned state
 
+**Fixed in passing, found during self-contained win-x64 publish testing for this section:**
+`LibHeifSharp` 3.2.0 ([Paperbunkr.Engine.csproj](../src/Paperbunkr.Engine/Paperbunkr.Engine.csproj))
+is only the managed P/Invoke wrapper — it ships no native `libheif.dll`, and the LibHeifSharp
+project deliberately leaves sourcing that binary to the consumer (confirmed against its docs and
+its samples repo, neither of which bundle one). Unlike `7z.dll` (manually Content-included under
+`x64\`), nothing was providing `libheif.dll`, so every `.heic`/`.avif` page threw
+`DllNotFoundException` — pre-existing, not something packaging introduced, and apparently never
+exercised end-to-end before. Added `LibHeif.Native.win-x64` 1.15.1 as a `PackageReference` next to
+`LibHeifSharp` — it ships `runtimes/win-x64/native/libheif.dll` (+ `aom`/`libde265`/`libx265`
+codec deps) via the standard NuGet native-asset convention, which `NativeInterop`'s
+`runtimes/{rid}/native/` search path already picks up the same way it does for
+`bblanchon.PDFium.Win32`'s `pdfium.dll`. Verified both a plain no-RID `dotnet build` (lands under
+`bin/.../runtimes/win-x64/native/`) and a self-contained `win-x64` publish (flattened to the
+output root, hitting the resolver's bare-filename fallback) place the DLL where the resolver
+finds it. **Caveat:** `LibHeif.Native.win-x64` is an unofficial third-party package (publisher
+"vforviolence"), not from the libheif or LibHeifSharp maintainers — a supply-chain trust call the
+user made explicitly aware of the alternative (documenting the gap instead). `_reference/ComicRackCE`
+wasn't available in-worktree to check how CE itself sourced this binary, so that side of the
+standing CE-parity rule is still unverified.
+
 ---
 
 ## Bonus, ahead of schedule: Reader zoom/pan gestures

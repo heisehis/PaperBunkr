@@ -11,7 +11,7 @@ namespace Paperbunkr.App.Tests;
 /// </summary>
 internal static class EpubFixture
 {
-    public static string Create(string path, string title = "Test Novel", string author = "Ada Author", string? seriesName = null)
+    public static string Create(string path, string title = "Test Novel", string author = "Ada Author", string? seriesName = null, bool firstChapterEmpty = false)
     {
         using var zip = ZipFile.Open(path, ZipArchiveMode.Create);
 
@@ -73,7 +73,20 @@ internal static class EpubFixture
             </html>
             """);
 
-        WriteEntry(zip, "OEBPS/chap1.xhtml", """
+        // Real EPUBs commonly lead with a cover/title-page spine item with no <p>/<h1>/etc at all
+        // (image-only) - firstChapterEmpty simulates that for testing the reader's chapter-skip
+        // behavior, since HtmlProseExtractor correctly yields zero paragraphs for markup like this.
+        WriteEntry(zip, "OEBPS/chap1.xhtml", firstChapterEmpty
+            ? """
+            <?xml version="1.0" encoding="UTF-8"?>
+            <html xmlns="http://www.w3.org/1999/xhtml">
+            <head><title>Cover</title></head>
+            <body>
+              <img src="cover.jpg" alt="Cover" />
+            </body>
+            </html>
+            """
+            : """
             <?xml version="1.0" encoding="UTF-8"?>
             <html xmlns="http://www.w3.org/1999/xhtml">
             <head><title>The Beginning</title></head>

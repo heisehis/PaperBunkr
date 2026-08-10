@@ -310,6 +310,20 @@
                     </DataTemplate>
                 </ContentControl.ContentTemplate>
             </ContentControl>
+            <ContentControl IsVisible="{Binding IsBookReader}" Content="{Binding BookReader}">
+                <ContentControl.ContentTemplate>
+                    <DataTemplate x:DataType="vm:BookReaderScreenViewModel">
+                        <views:BookReaderScreen />
+                    </DataTemplate>
+                </ContentControl.ContentTemplate>
+            </ContentControl>
+            <ContentControl IsVisible="{Binding IsPdfReader}" Content="{Binding PdfReader}">
+                <ContentControl.ContentTemplate>
+                    <DataTemplate x:DataType="vm:PdfPageReaderScreenViewModel">
+                        <views:PdfPageReaderScreen />
+                    </DataTemplate>
+                </ContentControl.ContentTemplate>
+            </ContentControl>
             <ContentControl IsVisible="{Binding IsDetail}" Content="{Binding Detail}">
                 <ContentControl.ContentTemplate>
                     <DataTemplate x:DataType="vm:DetailScreenViewModel">

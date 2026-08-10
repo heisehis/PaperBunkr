@@ -14,24 +14,27 @@ namespace Paperbunkr.App.ViewModels;
 
 /// <summary>
 /// Books grid + folder management (docs/superpowers/specs/2026-08-09-novels-epub-pdf-support-design.md
-/// §1/§3, Phase 1) - independent of <see cref="LibraryScreenViewModel"/>, no reader wired yet.
-/// Deliberately self-contained (its own inline scan-status text) rather than routed through
-/// MainViewModel's toast plumbing for scan progress, matching the "simpler than Library's chrome"
-/// scope call in the design spec - but book-card selection *does* use the shared toast (see
-/// <see cref="SelectBook"/>), since a silent no-op on click read as broken rather than "not built
-/// yet" during manual testing.
+/// §1/§3, Phase 1) - independent of <see cref="LibraryScreenViewModel"/>. Deliberately self-contained
+/// (its own inline scan-status text) rather than routed through MainViewModel's toast plumbing for
+/// scan progress, matching the "simpler than Library's chrome" scope call in the design spec.
+/// Book-card selection (<see cref="SelectBook"/>) now opens the real reader (Phase 2) - it briefly
+/// toasted "not available yet" during Phase 1, when there was nothing to navigate to. Routes by
+/// format: EPUB opens the reflowable text reader, PDF opens the comic-panel-style page reader
+/// (reflowed text extraction from an arbitrary PDF proved unreliable enough in manual testing to
+/// not be worth it - PDF is already a supported comic page-image format, so it gets that pipeline
+/// instead of a bespoke one).
 /// </summary>
 public partial class BooksScreenViewModel : ViewModelBase
 {
     private readonly FilePickerService _filePicker;
     private readonly BookFolderScanService _scanService;
     private readonly BookCoverThumbnailService _coverService;
-    private readonly Action<string, string> _showToast;
+    private readonly Action<int, BookFormat> _goReaderForBook;
 
-    public BooksScreenViewModel(FilePickerService filePicker, BookFolderScanService scanService, BookCoverThumbnailService coverService, Action<string, string> showToast)
+    public BooksScreenViewModel(FilePickerService filePicker, BookFolderScanService scanService, BookCoverThumbnailService coverService, Action<int, BookFormat> goReaderForBook)
     {
         _filePicker = filePicker;
-        _showToast = showToast;
+        _goReaderForBook = goReaderForBook;
         _scanService = scanService;
         _coverService = coverService;
         Books = new ObservableCollection<BookCardSample>();
@@ -78,11 +81,6 @@ public partial class BooksScreenViewModel : ViewModelBase
         OnPropertyChanged(nameof(HasFolders));
     }
 
-    /// <summary>
-    /// Reading isn't wired up yet (Phase 2 of the design spec) - a card click used to be a silent
-    /// no-op, which read as broken during manual testing rather than "not built yet". Toasts
-    /// instead so the gap is legible, until the real reader replaces this.
-    /// </summary>
     [RelayCommand]
     private void SelectBook(BookCardSample? book)
     {
@@ -91,7 +89,7 @@ public partial class BooksScreenViewModel : ViewModelBase
             return;
         }
 
-        _showToast("Reading not available yet", $"\"{book.Title}\" is imported, but the Novels reader isn't built yet.");
+        _goReaderForBook(book.BookId, book.Format);
     }
 
     [RelayCommand]

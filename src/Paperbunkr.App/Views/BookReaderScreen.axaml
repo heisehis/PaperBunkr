@@ -1,0 +1,209 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Paperbunkr.App.ViewModels"
+             xmlns:models="using:Paperbunkr.App.Models"
+             xmlns:books="using:cYo.Projects.ComicRack.Engine.IO.Provider.Books"
+             xmlns:conv="using:Avalonia.Data.Converters"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="700" d:DesignHeight="800"
+             x:Class="Paperbunkr.App.Views.BookReaderScreen"
+             x:DataType="vm:BookReaderScreenViewModel">
+
+    <UserControl.Styles>
+        <Style Selector="Button.chromeIcon">
+            <Setter Property="Width" Value="36" />
+            <Setter Property="Height" Value="36" />
+            <Setter Property="CornerRadius" Value="18" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="FontSize" Value="15" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+        </Style>
+        <Style Selector="Button.chromeIcon:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="#22FFFFFF" />
+        </Style>
+
+        <Style Selector="Button.tocRow">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="14,10" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="HorizontalContentAlignment" Value="Left" />
+            <Setter Property="FontSize" Value="13.5" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style Selector="Button.tocRow.active">
+            <Setter Property="Background" Value="{DynamicResource PbAccentSoftBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource PbAccentTextBrush}" />
+            <Setter Property="FontWeight" Value="Bold" />
+        </Style>
+
+        <Style Selector="Button.sheetOption">
+            <Setter Property="Padding" Value="12,7" />
+            <Setter Property="CornerRadius" Value="6" />
+            <Setter Property="Background" Value="{DynamicResource PbChromeBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
+            <Setter Property="FontSize" Value="12.5" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style Selector="Button.sheetOption.active">
+            <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
+            <Setter Property="Background" Value="{DynamicResource PbAccentSoftBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource PbAccentTextBrush}" />
+        </Style>
+
+        <Style Selector="Border.themeSwatch">
+            <Setter Property="Width" Value="40" />
+            <Setter Property="Height" Value="40" />
+            <Setter Property="CornerRadius" Value="8" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
+        </Style>
+        <Style Selector="Border.themeSwatch.active">
+            <Setter Property="BorderThickness" Value="2" />
+            <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
+        </Style>
+    </UserControl.Styles>
+
+    <Grid Name="RootGrid" Background="{Binding Settings.Background}">
+
+        <!-- Full-bleed reading pane - tap anywhere to toggle chrome (or close an open drawer/sheet) -->
+        <Border Background="Transparent" PointerPressed="OnContentPointerPressed">
+            <ScrollViewer Padding="40,70,40,60">
+                <ItemsControl ItemsSource="{Binding CurrentPageParagraphs}" MaxWidth="640" HorizontalAlignment="Center">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="books:BookParagraph">
+                            <TextBlock Text="{Binding Text}" TextWrapping="Wrap" Margin="0,0,0,10"
+                                       FontFamily="{Binding $parent[UserControl].((vm:BookReaderScreenViewModel)DataContext).Settings.ResolvedFontFamily}"
+                                       FontSize="{Binding $parent[UserControl].((vm:BookReaderScreenViewModel)DataContext).Settings.FontSize}"
+                                       LineHeight="{Binding $parent[UserControl].((vm:BookReaderScreenViewModel)DataContext).Settings.LineHeightPixels}"
+                                       Foreground="{Binding $parent[UserControl].((vm:BookReaderScreenViewModel)DataContext).Settings.Foreground}" />
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+        </Border>
+
+        <!-- Top bar: hidden until tapped -->
+        <Border VerticalAlignment="Top" IsVisible="{Binding IsChromeVisible}" Background="#CC14161B" Padding="10,8">
+            <Grid ColumnDefinitions="Auto,*,Auto,Auto">
+                <Button Grid.Column="0" Classes="chromeIcon" Content="☰" Command="{Binding OpenTocCommand}" ToolTip.Tip="Table of contents" />
+                <TextBlock Grid.Column="1" Text="{Binding ChapterTitle}" HorizontalAlignment="Center" VerticalAlignment="Center"
+                           FontSize="12.5" Foreground="{DynamicResource PbTextMutedBrush}" TextTrimming="CharacterEllipsis" />
+                <Button Grid.Column="2" Classes="chromeIcon" Content="Aa" Command="{Binding OpenFontSheetCommand}" ToolTip.Tip="Font and theme" Margin="0,0,4,0" />
+                <Button Grid.Column="3" Classes="chromeIcon" Content="✕" Command="{Binding CloseCommand}" ToolTip.Tip="Close" />
+            </Grid>
+        </Border>
+
+        <!-- Bottom progress bar: hidden until tapped -->
+        <Border VerticalAlignment="Bottom" IsVisible="{Binding IsChromeVisible}" Background="#CC14161B" Padding="10,8">
+            <Grid ColumnDefinitions="Auto,*,Auto">
+                <Button Grid.Column="0" Classes="chromeIcon" Content="‹" Command="{Binding PreviousPageCommand}" IsEnabled="{Binding CanGoPrevious}" ToolTip.Tip="Previous page" />
+                <TextBlock Grid.Column="1" Text="{Binding ProgressPercent, StringFormat={}{0:F0}%}" HorizontalAlignment="Center" VerticalAlignment="Center"
+                           FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" />
+                <Button Grid.Column="2" Classes="chromeIcon" Content="›" Command="{Binding NextPageCommand}" ToolTip.Tip="Next page" />
+            </Grid>
+        </Border>
+
+        <!-- TOC drawer overlay -->
+        <Grid IsVisible="{Binding IsTocOpen}">
+            <Border Background="#B0000000" PointerPressed="OnScrimPointerPressed" />
+            <Border Width="300" HorizontalAlignment="Left" Background="{DynamicResource PbChromeBrush}"
+                    BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,0,1,0">
+                <DockPanel>
+                    <TextBlock DockPanel.Dock="Top" Text="Chapters" FontSize="15" FontWeight="Bold"
+                               Foreground="{DynamicResource PbTextBrush}" Margin="16,18,16,10" />
+                    <ScrollViewer>
+                        <ItemsControl ItemsSource="{Binding TableOfContents}" Margin="8,0,8,16">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="models:BookChapterSummary">
+                                    <Button Classes="tocRow" Classes.active="{Binding IsActive}" Content="{Binding Title}"
+                                            Command="{Binding $parent[UserControl].((vm:BookReaderScreenViewModel)DataContext).GoToChapterCommand}"
+                                            CommandParameter="{Binding}" />
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                </DockPanel>
+            </Border>
+        </Grid>
+
+        <!-- Font/theme sheet overlay -->
+        <Grid IsVisible="{Binding IsFontSheetOpen}">
+            <Border Background="#B0000000" PointerPressed="OnScrimPointerPressed" />
+            <Border VerticalAlignment="Bottom" Background="{DynamicResource PbChromeBrush}"
+                    BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,1,0,0"
+                    Padding="20,18">
+                <StackPanel Spacing="16" MaxWidth="440" HorizontalAlignment="Center">
+
+                    <StackPanel Spacing="8">
+                        <TextBlock Text="TEXT SIZE" FontSize="10.5" FontWeight="Bold" LetterSpacing="1"
+                                   Foreground="{DynamicResource PbTextFaintBrush}" />
+                        <Grid ColumnDefinitions="Auto,*,Auto">
+                            <TextBlock Grid.Column="0" Text="A" FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" Margin="0,0,10,0" />
+                            <Slider Grid.Column="1" Minimum="12" Maximum="28" Value="{Binding Settings.FontSize}" />
+                            <TextBlock Grid.Column="2" Text="A" FontSize="20" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" Margin="10,0,0,0" />
+                        </Grid>
+                    </StackPanel>
+
+                    <StackPanel Spacing="8">
+                        <TextBlock Text="FONT" FontSize="10.5" FontWeight="Bold" LetterSpacing="1" Foreground="{DynamicResource PbTextFaintBrush}" />
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <Button Classes="sheetOption" Classes.active="{Binding Settings.FontFamilyOption, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static models:BookFontFamilyOption.Serif}}"
+                                    Content="Serif" FontFamily="Georgia,Cambria,serif"
+                                    Command="{Binding SetFontFamilyCommand}" CommandParameter="{x:Static models:BookFontFamilyOption.Serif}" />
+                            <Button Classes="sheetOption" Classes.active="{Binding Settings.FontFamilyOption, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static models:BookFontFamilyOption.Sans}}"
+                                    Content="Sans" FontFamily="Segoe UI,Arial,sans-serif"
+                                    Command="{Binding SetFontFamilyCommand}" CommandParameter="{x:Static models:BookFontFamilyOption.Sans}" />
+                            <Button Classes="sheetOption" Classes.active="{Binding Settings.FontFamilyOption, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static models:BookFontFamilyOption.Mono}}"
+                                    Content="Mono" FontFamily="Consolas,monospace"
+                                    Command="{Binding SetFontFamilyCommand}" CommandParameter="{x:Static models:BookFontFamilyOption.Mono}" />
+                        </StackPanel>
+                    </StackPanel>
+
+                    <StackPanel Spacing="8">
+                        <TextBlock Text="LINE SPACING" FontSize="10.5" FontWeight="Bold" LetterSpacing="1" Foreground="{DynamicResource PbTextFaintBrush}" />
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <Button Classes="sheetOption" Classes.active="{Binding Settings.LineSpacing, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static models:BookLineSpacingOption.Compact}}"
+                                    Content="Compact" Command="{Binding SetLineSpacingCommand}" CommandParameter="{x:Static models:BookLineSpacingOption.Compact}" />
+                            <Button Classes="sheetOption" Classes.active="{Binding Settings.LineSpacing, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static models:BookLineSpacingOption.Normal}}"
+                                    Content="Normal" Command="{Binding SetLineSpacingCommand}" CommandParameter="{x:Static models:BookLineSpacingOption.Normal}" />
+                            <Button Classes="sheetOption" Classes.active="{Binding Settings.LineSpacing, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static models:BookLineSpacingOption.Relaxed}}"
+                                    Content="Relaxed" Command="{Binding SetLineSpacingCommand}" CommandParameter="{x:Static models:BookLineSpacingOption.Relaxed}" />
+                        </StackPanel>
+                    </StackPanel>
+
+                    <StackPanel Spacing="8">
+                        <TextBlock Text="THEME" FontSize="10.5" FontWeight="Bold" LetterSpacing="1" Foreground="{DynamicResource PbTextFaintBrush}" />
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <Button Classes="chromeIcon" Command="{Binding SetThemeCommand}" CommandParameter="{x:Static models:BookTheme.Light}"
+                                    Width="44" Height="44" Padding="0">
+                                <Border Classes="themeSwatch" Classes.active="{Binding Settings.Theme, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static models:BookTheme.Light}}" Background="White" />
+                            </Button>
+                            <Button Classes="chromeIcon" Command="{Binding SetThemeCommand}" CommandParameter="{x:Static models:BookTheme.Dark}"
+                                    Width="44" Height="44" Padding="0">
+                                <Border Classes="themeSwatch" Classes.active="{Binding Settings.Theme, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static models:BookTheme.Dark}}" Background="#1C1C1C" />
+                            </Button>
+                            <Button Classes="chromeIcon" Command="{Binding SetThemeCommand}" CommandParameter="{x:Static models:BookTheme.Sepia}"
+                                    Width="44" Height="44" Padding="0">
+                                <Border Classes="themeSwatch" Classes.active="{Binding Settings.Theme, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static models:BookTheme.Sepia}}" Background="#F2E6CE" />
+                            </Button>
+                            <Button Classes="chromeIcon" Command="{Binding SetThemeCommand}" CommandParameter="{x:Static models:BookTheme.MatchAppSkin}"
+                                    Width="44" Height="44" Padding="0" ToolTip.Tip="Match app skin">
+                                <Border Classes="themeSwatch" Classes.active="{Binding Settings.Theme, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static models:BookTheme.MatchAppSkin}}" Background="#14161B" />
+                            </Button>
+                        </StackPanel>
+                    </StackPanel>
+
+                </StackPanel>
+            </Border>
+        </Grid>
+
+    </Grid>
+</UserControl>

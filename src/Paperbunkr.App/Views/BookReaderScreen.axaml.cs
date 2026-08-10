@@ -44,13 +44,15 @@ public partial class BookReaderScreen : UserControl
         }
     }
 
-    /// <summary>Tapping the dimmed backdrop behind the TOC drawer or font/theme sheet closes whichever is open - both close calls are harmless no-ops for the one that isn't.</summary>
+    /// <summary>Tapping the dimmed backdrop behind any drawer/sheet/overlay closes whichever is open - the other close calls are harmless no-ops for the ones that aren't.</summary>
     private void OnScrimPointerPressed(object? sender, PointerPressedEventArgs e)
     {
         if (DataContext is BookReaderScreenViewModel vm)
         {
             vm.CloseTocCommand.Execute(null);
             vm.CloseFontSheetCommand.Execute(null);
+            vm.CloseBookmarksCommand.Execute(null);
+            vm.CloseSearchCommand.Execute(null);
         }
 
         e.Handled = true;

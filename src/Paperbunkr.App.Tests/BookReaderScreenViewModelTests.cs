@@ -100,4 +100,131 @@ public class BookReaderScreenViewModelTests : IDisposable
         Assert.False(vm.TableOfContents[0].IsActive);
         Assert.Equal("The End", vm.ChapterTitle);
     }
+
+    [Fact]
+    public void GoToChapter_PersistsPosition_SoReopeningTheBookResumesThere()
+    {
+        int bookId = AddBook(firstChapterEmpty: false);
+        var vm = CreateViewModel(bookId);
+
+        vm.GoToChapterCommand.Execute(vm.TableOfContents[1]);
+
+        // A fresh view model (as if the book was closed and reopened) should land back on
+        // "The End" instead of the book's actual first chapter - design spec §6.
+        var reopened = CreateViewModel(bookId);
+        Assert.Equal("The End", reopened.ChapterTitle);
+    }
+
+    [Fact]
+    public void LoadBook_NeverOpened_StartsAtTheBeginningNotAnArbitraryOffset()
+    {
+        int bookId = AddBook(firstChapterEmpty: false);
+
+        var vm = CreateViewModel(bookId);
+
+        Assert.Equal("The Beginning", vm.ChapterTitle);
+    }
+
+    [Fact]
+    public void ToggleBookmark_AddsThenRemoves_ReflectedInBookmarksListAndFlag()
+    {
+        int bookId = AddBook(firstChapterEmpty: false);
+        var vm = CreateViewModel(bookId);
+
+        vm.ToggleBookmarkCommand.Execute(null);
+
+        Assert.True(vm.IsCurrentPositionBookmarked);
+        Assert.Single(vm.Bookmarks);
+        Assert.Equal("The Beginning", vm.Bookmarks[0].ChapterTitle);
+        Assert.NotEmpty(vm.Bookmarks[0].Excerpt);
+
+        vm.ToggleBookmarkCommand.Execute(null);
+
+        Assert.False(vm.IsCurrentPositionBookmarked);
+        Assert.Empty(vm.Bookmarks);
+    }
+
+    [Fact]
+    public void Bookmark_SurvivesReopeningTheBook()
+    {
+        int bookId = AddBook(firstChapterEmpty: false);
+        var vm = CreateViewModel(bookId);
+        vm.ToggleBookmarkCommand.Execute(null);
+
+        var reopened = CreateViewModel(bookId);
+
+        Assert.Single(reopened.Bookmarks);
+    }
+
+    [Fact]
+    public void GoToBookmark_NavigatesToItsChapterAndClosesTheDrawer()
+    {
+        int bookId = AddBook(firstChapterEmpty: false);
+        var vm = CreateViewModel(bookId);
+        vm.GoToChapterCommand.Execute(vm.TableOfContents[1]); // move off chapter 0 first
+        vm.ToggleBookmarkCommand.Execute(null); // bookmark "The End"
+        vm.GoToChapterCommand.Execute(vm.TableOfContents[0]); // move away again
+        vm.OpenBookmarksCommand.Execute(null);
+
+        vm.GoToBookmarkCommand.Execute(vm.Bookmarks[0]);
+
+        Assert.Equal("The End", vm.ChapterTitle);
+        Assert.False(vm.IsBookmarksOpen);
+    }
+
+    [Fact]
+    public void DeleteBookmark_RemovesItAndClearsTheFlagIfAtThatPosition()
+    {
+        int bookId = AddBook(firstChapterEmpty: false);
+        var vm = CreateViewModel(bookId);
+        vm.ToggleBookmarkCommand.Execute(null);
+        var bookmark = vm.Bookmarks[0];
+
+        vm.DeleteBookmarkCommand.Execute(bookmark);
+
+        Assert.Empty(vm.Bookmarks);
+        Assert.False(vm.IsCurrentPositionBookmarked);
+    }
+
+    [Fact]
+    public void Search_FindsMatchInAnotherChapter_AndCanNavigateToIt()
+    {
+        int bookId = AddBook(firstChapterEmpty: false);
+        var vm = CreateViewModel(bookId);
+
+        vm.SearchQuery = "quietly";
+
+        Assert.Single(vm.SearchResults);
+        Assert.Equal("The End", vm.SearchResults[0].ChapterTitle);
+        Assert.False(vm.HasNoSearchResults);
+
+        vm.GoToSearchResultCommand.Execute(vm.SearchResults[0]);
+
+        Assert.Equal("The End", vm.ChapterTitle);
+        Assert.False(vm.IsSearchOpen);
+    }
+
+    [Fact]
+    public void Search_NoMatches_SetsEmptyStateFlag()
+    {
+        int bookId = AddBook(firstChapterEmpty: false);
+        var vm = CreateViewModel(bookId);
+
+        vm.SearchQuery = "xyzzy";
+
+        Assert.Empty(vm.SearchResults);
+        Assert.True(vm.HasNoSearchResults);
+    }
+
+    [Fact]
+    public void Search_ShortQuery_DoesNotSearchOrShowEmptyState()
+    {
+        int bookId = AddBook(firstChapterEmpty: false);
+        var vm = CreateViewModel(bookId);
+
+        vm.SearchQuery = "a";
+
+        Assert.Empty(vm.SearchResults);
+        Assert.False(vm.HasNoSearchResults);
+    }
 }

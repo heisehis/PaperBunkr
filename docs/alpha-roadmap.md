@@ -127,7 +127,7 @@ to prove against. Explicitly Beta-scoped from the start.
 Crash reporter dialog, minimize-to-tray, external "open with" app associations.
 *(Backup manager and file association are already shipped as part of Alpha's Advanced tab.)*
 
-### Novels: EPUB/PDF support (Phase 1+2 landed 2026-08-09/10, Phase 3 remaining)
+### Novels: EPUB/PDF support (Phase 1+2 landed 2026-08-09/10, Phase 3 landed 2026-08-10)
 Not a CE-parity item — ComicRackCE has no prose-reading equivalent, see the design spec's own
 CE-verification note. Design: docs/superpowers/specs/2026-08-09-novels-epub-pdf-support-design.md.
 **Phase 1 shipped** (independent `Book`/`BookSeries`/`BookBookmark`/`BookFolder` schema, `VersOne.Epub`-
@@ -150,7 +150,35 @@ Two real bugs found via manual testing and fixed along the way: the reflow reade
 permanently blank the first time it was ever shown (viewport size never reported - fixed with a
 `Loaded`-event fallback), and a chapter with zero paragraphs (a real EPUB's cover/title-page spine
 item) left it stuck showing nothing (fixed by skipping to the first chapter with content). 12 new
-tests. **Phase 3 (resume position/bookmarks/search) not started — picking up in a future session.**
+tests.
+
+**Phase 3 shipped (2026-08-10): resume position, bookmarks, in-book search for the EPUB reader**
+(design spec §6/§7 — PDF's separate comic-panel reader was out of scope, per the user's explicit
+ask for "the EPUB reader"). Resume and bookmark position both use the same (ChapterIndex,
+CharacterOffset) paragraph-boundary identity `BookPosition` already established in Phase 2, so both
+stay stable across font-size/theme changes and window resizes, same as live pagination does.
+- **Resume:** `Book.LastChapterIndex`/`LastCharacterOffset`/`LastOpenedTime` are read on `LoadBook`
+  (chapter index clamped defensively; `BookPaginator.FindParagraphIndex` already clamps a stale
+  offset) and written via a new `PersistPosition()` after every explicit navigation (chapter/page/
+  bookmark/search jump) — deliberately *not* called from `RecomputeCurrentPage` itself, since that
+  also runs on every font/theme change and would otherwise fire a DB write per slider tick. Same
+  "fresh context per write" shape `ReaderScreenViewModel.GoToPage` already uses for
+  `Issue.LastPageRead`.
+- **Bookmarks:** a 🔖 icon opens a new Bookmarks drawer (mirrors the TOC drawer) with a toggle button
+  for the current page plus the full list, each row jumping via `GoToBookmarkCommand` or deletable
+  via `DeleteBookmarkCommand`. `BookBookmark.Excerpt` is the paragraph the page starts on, truncated.
+- **Search:** a 🔍 icon opens a top-anchored search sheet; typing runs a linear substring scan
+  (case-insensitive, one match per paragraph, capped at 200 results) over the already-parsed
+  in-memory chapters — no persistent index, per design spec §7. Results jump like TOC/bookmarks do.
+- Real bug found and fixed along the way: `LoadBook`'s `context.Books.Single(...)` query didn't
+  `.Include(b => b.Bookmarks)`, so a book's saved bookmarks silently came back empty on every reopen
+  (no lazy-loading proxies configured in this project - caught by a test, not manual testing this
+  time).
+- 8 new tests (resume-survives-reopen, bookmark add/remove/persist/navigate/delete, search
+  match/no-match/short-query) — all against the existing `EpubFixture`, no new fixture needed.
+  282 tests total in the suite now pass. **Manual-only, not yet done:** actual on-screen bookmark
+  drawer / search sheet interaction — no unattended desktop GUI automation available for this
+  project (same caveat as Phase 2's TOC/font-sheet verification).
 
 **Two real, pre-existing bugs found and fixed during manual testing against a real 1992-series
 library and real e-book files** (neither caused by this Novels work, both unrelated to it):

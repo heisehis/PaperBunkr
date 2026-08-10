@@ -25,6 +25,9 @@
         <Style Selector="Button.chromeIcon:pointerover /template/ ContentPresenter">
             <Setter Property="Background" Value="#22FFFFFF" />
         </Style>
+        <Style Selector="Button.chromeIcon.active">
+            <Setter Property="Foreground" Value="{DynamicResource PbAccentBrush}" />
+        </Style>
 
         <Style Selector="Button.tocRow">
             <Setter Property="Background" Value="Transparent" />
@@ -40,6 +43,31 @@
             <Setter Property="Background" Value="{DynamicResource PbAccentSoftBrush}" />
             <Setter Property="Foreground" Value="{DynamicResource PbAccentTextBrush}" />
             <Setter Property="FontWeight" Value="Bold" />
+        </Style>
+
+        <Style Selector="Button.resultRow">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="14,10" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="HorizontalContentAlignment" Value="Left" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style Selector="Button.resultRow:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource PbAccentSoftBrush}" />
+        </Style>
+        <Style Selector="Button.deleteRow">
+            <Setter Property="Width" Value="28" />
+            <Setter Property="Height" Value="28" />
+            <Setter Property="CornerRadius" Value="14" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextFaintBrush}" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style Selector="Button.deleteRow:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="#22FFFFFF" />
         </Style>
 
         <Style Selector="Button.sheetOption">
@@ -92,12 +120,15 @@
 
         <!-- Top bar: hidden until tapped -->
         <Border VerticalAlignment="Top" IsVisible="{Binding IsChromeVisible}" Background="#CC14161B" Padding="10,8">
-            <Grid ColumnDefinitions="Auto,*,Auto,Auto">
+            <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto,Auto">
                 <Button Grid.Column="0" Classes="chromeIcon" Content="☰" Command="{Binding OpenTocCommand}" ToolTip.Tip="Table of contents" />
                 <TextBlock Grid.Column="1" Text="{Binding ChapterTitle}" HorizontalAlignment="Center" VerticalAlignment="Center"
                            FontSize="12.5" Foreground="{DynamicResource PbTextMutedBrush}" TextTrimming="CharacterEllipsis" />
-                <Button Grid.Column="2" Classes="chromeIcon" Content="Aa" Command="{Binding OpenFontSheetCommand}" ToolTip.Tip="Font and theme" Margin="0,0,4,0" />
-                <Button Grid.Column="3" Classes="chromeIcon" Content="✕" Command="{Binding CloseCommand}" ToolTip.Tip="Close" />
+                <Button Grid.Column="2" Classes="chromeIcon" Content="🔍" Command="{Binding OpenSearchCommand}" ToolTip.Tip="Search this book" Margin="0,0,4,0" />
+                <Button Grid.Column="3" Classes="chromeIcon" Classes.active="{Binding IsCurrentPositionBookmarked}" Content="🔖"
+                        Command="{Binding OpenBookmarksCommand}" ToolTip.Tip="Bookmarks" Margin="0,0,4,0" />
+                <Button Grid.Column="4" Classes="chromeIcon" Content="Aa" Command="{Binding OpenFontSheetCommand}" ToolTip.Tip="Font and theme" Margin="0,0,4,0" />
+                <Button Grid.Column="5" Classes="chromeIcon" Content="✕" Command="{Binding CloseCommand}" ToolTip.Tip="Close" />
             </Grid>
         </Border>
 
@@ -126,6 +157,83 @@
                                     <Button Classes="tocRow" Classes.active="{Binding IsActive}" Content="{Binding Title}"
                                             Command="{Binding $parent[UserControl].((vm:BookReaderScreenViewModel)DataContext).GoToChapterCommand}"
                                             CommandParameter="{Binding}" />
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                </DockPanel>
+            </Border>
+        </Grid>
+
+        <!-- Bookmarks drawer overlay -->
+        <Grid IsVisible="{Binding IsBookmarksOpen}">
+            <Border Background="#B0000000" PointerPressed="OnScrimPointerPressed" />
+            <Border Width="320" HorizontalAlignment="Left" Background="{DynamicResource PbChromeBrush}"
+                    BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,0,1,0">
+                <DockPanel>
+                    <TextBlock DockPanel.Dock="Top" Text="Bookmarks" FontSize="15" FontWeight="Bold"
+                               Foreground="{DynamicResource PbTextBrush}" Margin="16,18,16,10" />
+                    <Button DockPanel.Dock="Top" Classes="sheetOption" Classes.active="{Binding IsCurrentPositionBookmarked}"
+                            Command="{Binding ToggleBookmarkCommand}" Margin="16,0,16,14" HorizontalAlignment="Stretch"
+                            HorizontalContentAlignment="Center">
+                        <StackPanel Orientation="Horizontal" Spacing="0">
+                            <TextBlock Text="🔖 Bookmark this page" IsVisible="{Binding !IsCurrentPositionBookmarked}" />
+                            <TextBlock Text="✓ Bookmarked - tap to remove" IsVisible="{Binding IsCurrentPositionBookmarked}" />
+                        </StackPanel>
+                    </Button>
+                    <ScrollViewer>
+                        <ItemsControl ItemsSource="{Binding Bookmarks}" Margin="8,0,8,16">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="models:BookBookmarkSummary">
+                                    <Grid ColumnDefinitions="*,Auto" Margin="0,2">
+                                        <Button Grid.Column="0" Classes="tocRow" HorizontalContentAlignment="Left"
+                                                Command="{Binding $parent[UserControl].((vm:BookReaderScreenViewModel)DataContext).GoToBookmarkCommand}"
+                                                CommandParameter="{Binding}">
+                                            <StackPanel>
+                                                <TextBlock Text="{Binding ChapterTitle}" FontSize="11" FontWeight="Bold"
+                                                           Foreground="{DynamicResource PbTextFaintBrush}" />
+                                                <TextBlock Text="{Binding Excerpt}" FontSize="12.5" TextWrapping="Wrap"
+                                                           Foreground="{DynamicResource PbTextMutedBrush}" Margin="0,2,0,0" />
+                                            </StackPanel>
+                                        </Button>
+                                        <Button Grid.Column="1" Classes="deleteRow" Content="✕" VerticalAlignment="Center"
+                                                Command="{Binding $parent[UserControl].((vm:BookReaderScreenViewModel)DataContext).DeleteBookmarkCommand}"
+                                                CommandParameter="{Binding}" ToolTip.Tip="Remove bookmark" />
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                </DockPanel>
+            </Border>
+        </Grid>
+
+        <!-- Search overlay -->
+        <Grid IsVisible="{Binding IsSearchOpen}">
+            <Border Background="#B0000000" PointerPressed="OnScrimPointerPressed" />
+            <Border VerticalAlignment="Top" Background="{DynamicResource PbChromeBrush}"
+                    BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,0,0,1"
+                    Padding="20,18" MaxHeight="480">
+                <DockPanel MaxWidth="480" HorizontalAlignment="Center">
+                    <TextBox DockPanel.Dock="Top" Name="SearchBox" Watermark="Search this book"
+                             Text="{Binding SearchQuery, Mode=TwoWay}" Margin="0,0,0,10" />
+                    <TextBlock DockPanel.Dock="Top" Text="No matches" FontSize="12.5" Margin="4,0,0,6"
+                               Foreground="{DynamicResource PbTextFaintBrush}"
+                               IsVisible="{Binding HasNoSearchResults}" />
+                    <ScrollViewer MaxHeight="380">
+                        <ItemsControl ItemsSource="{Binding SearchResults}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="models:BookSearchResult">
+                                    <Button Classes="resultRow" HorizontalContentAlignment="Left"
+                                            Command="{Binding $parent[UserControl].((vm:BookReaderScreenViewModel)DataContext).GoToSearchResultCommand}"
+                                            CommandParameter="{Binding}">
+                                        <StackPanel>
+                                            <TextBlock Text="{Binding ChapterTitle}" FontSize="11" FontWeight="Bold"
+                                                       Foreground="{DynamicResource PbTextFaintBrush}" />
+                                            <TextBlock Text="{Binding Excerpt}" FontSize="12.5" TextWrapping="Wrap"
+                                                       Foreground="{DynamicResource PbTextMutedBrush}" Margin="0,2,0,0" />
+                                        </StackPanel>
+                                    </Button>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>

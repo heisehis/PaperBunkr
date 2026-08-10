@@ -8,6 +8,7 @@ using Avalonia.Media.TextFormatting;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using cYo.Projects.ComicRack.Engine.IO.Provider.Books;
+using Microsoft.EntityFrameworkCore;
 using Paperbunkr.App.Models;
 using Paperbunkr.App.Services;
 using Paperbunkr.App.Views;
@@ -32,11 +33,21 @@ namespace Paperbunkr.App.ViewModels;
 /// this session's own forward navigation did. Simpler and more robust than exact backward-fill
 /// measurement, at the cost of "Previous" being a no-op before any "Next"/chapter jump has
 /// happened yet (matches how a lot of readers already behave for in-session "back").
+///
+/// Phase 3 (design spec §6/§7): resume position, bookmarks, in-book search. Resume/bookmarks are
+/// persisted via <see cref="Book.LastChapterIndex"/>/<see cref="Book.LastCharacterOffset"/>/
+/// <see cref="BookBookmark"/> - same "open a fresh context, write, SaveChanges" shape
+/// <c>ReaderScreenViewModel.GoToPage</c> already uses for <c>Issue.LastPageRead</c>. Position is only
+/// persisted on an actual navigation (chapter/page/bookmark/search jump), not from
+/// <see cref="RecomputeCurrentPage"/> itself, since that also runs on every font/theme change and a
+/// slider drag would otherwise fire a DB write per tick. Search is a linear scan over the
+/// already-parsed in-memory chapters (design spec §7) - no persistent index.
 /// </summary>
 public partial class BookReaderScreenViewModel : ViewModelBase
 {
     private readonly Action _goBack;
 
+    private int _bookId;
     private IBookTextSource? _source;
     private Book? _book;
     private BookPosition _position;
@@ -60,6 +71,10 @@ public partial class BookReaderScreenViewModel : ViewModelBase
 
     public ObservableCollection<BookChapterSummary> TableOfContents { get; } = new();
 
+    public ObservableCollection<BookBookmarkSummary> Bookmarks { get; } = new();
+
+    public ObservableCollection<BookSearchResult> SearchResults { get; } = new();
+
     [ObservableProperty]
     private string _bookTitle = string.Empty;
 
@@ -76,18 +91,36 @@ public partial class BookReaderScreenViewModel : ViewModelBase
     private bool _isFontSheetOpen;
 
     [ObservableProperty]
+    private bool _isBookmarksOpen;
+
+    [ObservableProperty]
+    private bool _isSearchOpen;
+
+    [ObservableProperty]
+    private string _searchQuery = string.Empty;
+
+    [ObservableProperty]
+    private bool _isCurrentPositionBookmarked;
+
+    [ObservableProperty]
     private double _progressPercent;
 
     [ObservableProperty]
     private bool _canGoPrevious;
 
+    partial void OnSearchQueryChanged(string value) => RunSearch(value);
+
     public void LoadBook(int bookId)
     {
         _source?.Dispose();
         _history.Clear();
+        SearchResults.Clear();
+        SearchQuery = string.Empty;
+
+        _bookId = bookId;
 
         using var context = PaperbunkrDb.CreateContext();
-        _book = context.Books.Single(b => b.Id == bookId);
+        _book = context.Books.Include(b => b.Bookmarks).Single(b => b.Id == bookId);
 
         _source = _book.Format == BookFormat.Epub
             ? new EpubBookSource(_book.FilePath)
@@ -101,10 +134,26 @@ public partial class BookReaderScreenViewModel : ViewModelBase
             TableOfContents.Add(new BookChapterSummary { Index = i, Title = _source.Chapters[i].Title, IsActive = i == 0 });
         }
 
-        _position = BookPosition.Start;
+        Bookmarks.Clear();
+        foreach (var bookmark in _book.Bookmarks.OrderByDescending(b => b.CreatedTime))
+        {
+            Bookmarks.Add(ToSummary(bookmark));
+        }
+
+        // Resume position (design spec §6): clamp the stored chapter index in case the book
+        // changed on disk since it was last saved - FindParagraphIndex already clamps a stale
+        // CharacterOffset safely, so only ChapterIndex needs guarding here.
+        int chapterIndex = Math.Clamp(_book.LastChapterIndex, 0, Math.Max(0, _source.Chapters.Count - 1));
+        _position = new BookPosition(chapterIndex, _book.LastCharacterOffset);
+
+        _book.LastOpenedTime = DateTime.UtcNow;
+        context.SaveChanges();
+
         IsChromeVisible = false;
         IsTocOpen = false;
         IsFontSheetOpen = false;
+        IsBookmarksOpen = false;
+        IsSearchOpen = false;
         RecomputeCurrentPage();
     }
 
@@ -122,20 +171,27 @@ public partial class BookReaderScreenViewModel : ViewModelBase
     [RelayCommand]
     private void ToggleChrome()
     {
-        if (IsTocOpen || IsFontSheetOpen)
+        if (IsTocOpen || IsFontSheetOpen || IsBookmarksOpen || IsSearchOpen)
         {
-            IsTocOpen = false;
-            IsFontSheetOpen = false;
+            CloseAllOverlays();
             return;
         }
 
         IsChromeVisible = !IsChromeVisible;
     }
 
+    private void CloseAllOverlays()
+    {
+        IsTocOpen = false;
+        IsFontSheetOpen = false;
+        IsBookmarksOpen = false;
+        IsSearchOpen = false;
+    }
+
     [RelayCommand]
     private void OpenToc()
     {
-        IsFontSheetOpen = false;
+        CloseAllOverlays();
         IsTocOpen = true;
     }
 
@@ -145,12 +201,36 @@ public partial class BookReaderScreenViewModel : ViewModelBase
     [RelayCommand]
     private void OpenFontSheet()
     {
-        IsTocOpen = false;
+        CloseAllOverlays();
         IsFontSheetOpen = true;
     }
 
     [RelayCommand]
     private void CloseFontSheet() => IsFontSheetOpen = false;
+
+    [RelayCommand]
+    private void OpenBookmarks()
+    {
+        CloseAllOverlays();
+        IsBookmarksOpen = true;
+    }
+
+    [RelayCommand]
+    private void CloseBookmarks() => IsBookmarksOpen = false;
+
+    [RelayCommand]
+    private void OpenSearch()
+    {
+        CloseAllOverlays();
+        IsSearchOpen = true;
+    }
+
+    [RelayCommand]
+    private void CloseSearch()
+    {
+        IsSearchOpen = false;
+        SearchQuery = string.Empty;
+    }
 
     [RelayCommand]
     private void GoToChapter(BookChapterSummary? chapter)
@@ -164,6 +244,7 @@ public partial class BookReaderScreenViewModel : ViewModelBase
         _position = new BookPosition(chapter.Index, 0);
         IsTocOpen = false;
         RecomputeCurrentPage();
+        PersistPosition();
     }
 
     [RelayCommand]
@@ -194,6 +275,7 @@ public partial class BookReaderScreenViewModel : ViewModelBase
         }
 
         RecomputeCurrentPage();
+        PersistPosition();
     }
 
     [RelayCommand]
@@ -206,6 +288,7 @@ public partial class BookReaderScreenViewModel : ViewModelBase
 
         _position = _history.Pop();
         RecomputeCurrentPage();
+        PersistPosition();
     }
 
     [RelayCommand]
@@ -219,6 +302,196 @@ public partial class BookReaderScreenViewModel : ViewModelBase
 
     [RelayCommand]
     private void SetTheme(BookTheme theme) => Settings.Theme = theme;
+
+    /// <summary>
+    /// Toggles a bookmark at the paragraph the current page starts on. Matches by
+    /// (ChapterIndex, CharacterOffset) - both are paragraph-boundary values (design spec §5), so
+    /// this is a stable identity across font/theme changes and window resizes, same as resume
+    /// position.
+    /// </summary>
+    [RelayCommand]
+    private void ToggleBookmark()
+    {
+        if (_source is null)
+        {
+            return;
+        }
+
+        var existing = Bookmarks.FirstOrDefault(b => b.ChapterIndex == _position.ChapterIndex && b.CharacterOffset == _position.CharacterOffset);
+        if (existing is not null)
+        {
+            DeleteBookmark(existing);
+            return;
+        }
+
+        var chapter = _source.Chapters[_position.ChapterIndex];
+        int paragraphIndex = BookPaginator.FindParagraphIndex(chapter.Paragraphs, _position.CharacterOffset);
+        string excerpt = paragraphIndex < chapter.Paragraphs.Count ? Truncate(chapter.Paragraphs[paragraphIndex].Text, 140) : string.Empty;
+
+        using var context = PaperbunkrDb.CreateContext();
+        var bookmark = new BookBookmark
+        {
+            BookId = _bookId,
+            ChapterIndex = _position.ChapterIndex,
+            CharacterOffset = _position.CharacterOffset,
+            Excerpt = excerpt,
+            CreatedTime = DateTime.UtcNow,
+        };
+        context.BookBookmarks.Add(bookmark);
+        context.SaveChanges();
+
+        Bookmarks.Insert(0, ToSummary(bookmark, chapter.Title));
+        IsCurrentPositionBookmarked = true;
+    }
+
+    [RelayCommand]
+    private void DeleteBookmark(BookBookmarkSummary? bookmark)
+    {
+        if (bookmark is null)
+        {
+            return;
+        }
+
+        using var context = PaperbunkrDb.CreateContext();
+        var entity = context.BookBookmarks.FirstOrDefault(b => b.Id == bookmark.Id);
+        if (entity is not null)
+        {
+            context.BookBookmarks.Remove(entity);
+            context.SaveChanges();
+        }
+
+        Bookmarks.Remove(bookmark);
+        if (bookmark.ChapterIndex == _position.ChapterIndex && bookmark.CharacterOffset == _position.CharacterOffset)
+        {
+            IsCurrentPositionBookmarked = false;
+        }
+    }
+
+    [RelayCommand]
+    private void GoToBookmark(BookBookmarkSummary? bookmark)
+    {
+        if (bookmark is null || _source is null)
+        {
+            return;
+        }
+
+        _history.Push(_position);
+        _position = new BookPosition(bookmark.ChapterIndex, bookmark.CharacterOffset);
+        IsBookmarksOpen = false;
+        RecomputeCurrentPage();
+        PersistPosition();
+    }
+
+    [RelayCommand]
+    private void GoToSearchResult(BookSearchResult? result)
+    {
+        if (result is null || _source is null)
+        {
+            return;
+        }
+
+        _history.Push(_position);
+        _position = new BookPosition(result.ChapterIndex, result.CharacterOffset);
+        IsSearchOpen = false;
+        SearchQuery = string.Empty;
+        RecomputeCurrentPage();
+        PersistPosition();
+    }
+
+    /// <summary>
+    /// Linear substring scan over the already-parsed chapters (design spec §7) - no persistent
+    /// index. Capped so a common word in a long novel doesn't produce thousands of rows.
+    /// </summary>
+    private void RunSearch(string query)
+    {
+        SearchResults.Clear();
+
+        if (_source is not null && query.Trim().Length >= 2)
+        {
+            const int maxResults = 200;
+            for (int chapterIndex = 0; chapterIndex < _source.Chapters.Count && SearchResults.Count < maxResults; chapterIndex++)
+            {
+                var chapter = _source.Chapters[chapterIndex];
+                int[] offsets = BookPaginator.ComputeParagraphOffsets(chapter.Paragraphs);
+
+                for (int p = 0; p < chapter.Paragraphs.Count && SearchResults.Count < maxResults; p++)
+                {
+                    string text = chapter.Paragraphs[p].Text;
+                    int matchIndex = text.IndexOf(query, StringComparison.OrdinalIgnoreCase);
+                    if (matchIndex < 0)
+                    {
+                        continue;
+                    }
+
+                    SearchResults.Add(new BookSearchResult
+                    {
+                        ChapterIndex = chapterIndex,
+                        CharacterOffset = offsets[p],
+                        ChapterTitle = chapter.Title,
+                        Excerpt = BuildSearchExcerpt(text, matchIndex, query.Length),
+                    });
+                }
+            }
+        }
+
+        OnPropertyChanged(nameof(HasNoSearchResults));
+    }
+
+    /// <summary>Drives the "No matches" empty state - only true once the user has actually typed something searchable.</summary>
+    public bool HasNoSearchResults => SearchQuery.Trim().Length >= 2 && SearchResults.Count == 0;
+
+    private static string BuildSearchExcerpt(string text, int matchIndex, int matchLength)
+    {
+        const int context = 40;
+        int start = Math.Max(0, matchIndex - context);
+        int end = Math.Min(text.Length, matchIndex + matchLength + context);
+
+        string excerpt = text[start..end];
+        if (start > 0) excerpt = "…" + excerpt;
+        if (end < text.Length) excerpt += "…";
+        return excerpt;
+    }
+
+    private static string Truncate(string text, int maxLength)
+        => text.Length <= maxLength ? text : text[..maxLength].TrimEnd() + "…";
+
+    private BookBookmarkSummary ToSummary(BookBookmark bookmark)
+    {
+        string chapterTitle = _source is not null && bookmark.ChapterIndex < _source.Chapters.Count
+            ? _source.Chapters[bookmark.ChapterIndex].Title
+            : string.Empty;
+        return ToSummary(bookmark, chapterTitle);
+    }
+
+    private static BookBookmarkSummary ToSummary(BookBookmark bookmark, string chapterTitle) => new()
+    {
+        Id = bookmark.Id,
+        ChapterIndex = bookmark.ChapterIndex,
+        CharacterOffset = bookmark.CharacterOffset,
+        ChapterTitle = chapterTitle,
+        Excerpt = bookmark.Excerpt,
+    };
+
+    /// <summary>
+    /// Reopens a fresh context per write, same shape as <c>ReaderScreenViewModel.GoToPage</c>'s
+    /// <c>Issue.LastPageRead</c> persistence - called from explicit navigation only (chapter/page/
+    /// bookmark/search jumps), never from <see cref="RecomputeCurrentPage"/> itself, so a font-size
+    /// slider drag doesn't fire a DB write per tick.
+    /// </summary>
+    private void PersistPosition()
+    {
+        using var context = PaperbunkrDb.CreateContext();
+        var book = context.Books.FirstOrDefault(b => b.Id == _bookId);
+        if (book is null)
+        {
+            return;
+        }
+
+        book.LastChapterIndex = _position.ChapterIndex;
+        book.LastCharacterOffset = _position.CharacterOffset;
+        book.LastOpenedTime = DateTime.UtcNow;
+        context.SaveChanges();
+    }
 
     private (int Start, int EndExclusive) CurrentPageRange(IReadOnlyList<BookParagraph> paragraphs)
     {
@@ -278,6 +551,8 @@ public partial class BookReaderScreenViewModel : ViewModelBase
         ProgressPercent = _source.Chapters.Count > 0
             ? (_position.ChapterIndex + chapterFraction) / _source.Chapters.Count * 100
             : 0;
+
+        IsCurrentPositionBookmarked = Bookmarks.Any(b => b.ChapterIndex == _position.ChapterIndex && b.CharacterOffset == _position.CharacterOffset);
     }
 
     /// <summary>

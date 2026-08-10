@@ -14,6 +14,17 @@ namespace Paperbunkr.App.Services;
 /// over a large library's Library-grid working set (371 series observed in that same session) -
 /// bounds total session growth without evicting mid-browse for typical libraries.
 ///
+/// **1000 was wrong.** <see cref="LruCache{TKey,TValue}"/> disposes an entry's <c>Bitmap</c> the
+/// moment it's evicted (that's the whole point - see its own doc comment). <c>LibraryScreenViewModel.LoadFromDatabase</c>
+/// requests a cover for every series in one synchronous pass, before Avalonia ever measures/renders
+/// any of the resulting cards - so once a single library exceeds capacity mid-pass, the *earliest*
+/// cards in that same pass get their <c>Bitmap</c> disposed out from under them before the layout
+/// pass that reads them ever runs, crashing with <c>ObjectDisposedException</c> on
+/// <c>Ref&lt;IBitmapImpl&gt;</c> from deep inside <c>Image.MeasureOverride</c>. Found for real
+/// against a 1992-series library (this cache's capacity was sized against a 371-series library,
+/// per the paragraph above, which is why it never fired before). Bumped to comfortably clear that
+/// with the same kind of margin the original 1000 was meant to give 371.
+///
 /// Misses are deliberately NOT cached: a series looked up before "Generate Covers" runs would
 /// otherwise permanently remember "no thumbnail" even after the file appears on disk. A cheap
 /// <see cref="File.Exists"/> re-check on the next lookup is enough to self-heal once a screen
@@ -25,7 +36,7 @@ namespace Paperbunkr.App.Services;
 /// </summary>
 public static class CoverImageCache
 {
-    private const int MaxEntries = 1000;
+    private const int MaxEntries = 5000;
 
     private static readonly LruCache<int, Bitmap> _cache = new(MaxEntries);
 

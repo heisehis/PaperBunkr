@@ -156,11 +156,13 @@ rotation transform API in the prior spec.
 
 - **One toggle**, not two independent controls — CE's `FullScreen` setter directly drives
   `MinimalGui`, confirmed from source; there's no CE precedent for a windowed "hide chrome without
-  fullscreen" mode, so this doesn't invent one. **F key only, not CE's F-key-and-double-click
+  fullscreen" mode, so this doesn't invent one. **F and F11, not CE's F-key-and-double-click
   pair**: double-click on the page is already bound to zoom-toggle in the shipped gestures spec
   (`PageCanvas.OnPointerPressed`, `e.ClickCount == 2` → `ToggleZoom`) — reusing it for fullscreen
-  would silently break that existing, tested behavior. Named deviation from CE, driven by a real
-  conflict with already-shipped Paperbunkr behavior, not CE's own design.
+  would silently break that existing, tested behavior. F11 is added alongside CE's F key since it's
+  the standard OS/desktop-app fullscreen convention Windows users expect, independent of CE parity.
+  Named deviation from CE, driven by a real conflict with already-shipped Paperbunkr behavior plus a
+  platform-convention addition, not CE's own design.
 - Entering fullscreen: OS-level fullscreen (Avalonia `WindowState`/`SystemDecorations`) + the
   Reader's toolbar and thumbnail rail collapse.
 - **Overlays are a separate layer from chrome** — they still render in fullscreen/minimal-chrome
@@ -255,7 +257,7 @@ rotation transform API in the prior spec.
 - Reader toolbar: fit-mode picker hides in continuous modes (§5); zoom control gains a slider
   alongside its existing −/%/+ presets; new magnifier toggle button; new "Adjust" button opening
   the brightness/contrast/saturation/gamma panel (§9).
-- Fullscreen toggle: F key, per §7's deviation from CE's double-click binding; no new visible
+- Fullscreen toggle: F and F11, per §7's deviation from CE's double-click binding; no new visible
   control strictly needed (CE treats this as a keyboard action, not menu-hunted), though a toolbar
   icon is reasonable to include for discoverability.
 - New on-canvas overlay layer: status text + scrubber strip (§7), magnifier loupe (§8).

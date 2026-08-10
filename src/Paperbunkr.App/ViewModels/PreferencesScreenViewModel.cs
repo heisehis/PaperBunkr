@@ -113,6 +113,8 @@ public partial class PreferencesScreenViewModel : ViewModelBase
 
     public ObservableCollection<string> FontFamilies { get; }
 
+    public static readonly ImageFitMode[] FitModeOptions = Enum.GetValues<ImageFitMode>();
+
     public ObservableCollection<VirtualTagSummary> VirtualTags { get; }
 
     public ObservableCollection<WatchedFolderSummary> WatchedFolders { get; }
@@ -156,6 +158,21 @@ public partial class PreferencesScreenViewModel : ViewModelBase
 
     [ObservableProperty]
     private bool _highQualityPageDisplay;
+
+    /// <summary>docs/superpowers/specs/2026-08-10-preferences-reader-tab-design.md - CE: <c>Settings.ResetZoomOnPageChange</c>, default false.</summary>
+    [ObservableProperty]
+    private bool _resetZoomOnPageChange;
+
+    /// <summary>CE: <c>Settings.MouseWheelSpeed</c> ("lines per mouse scrolling"), default 2.0, CE's own UI range 0.5-5.0.</summary>
+    [ObservableProperty]
+    private double _mouseWheelSpeed = 2.0;
+
+    /// <summary>Global default for a book with no <see cref="Issue.PageFitModeOverride"/> - not a CE setting, closes the TODO docs/superpowers/specs/2026-08-10-reader-polish-core-viewing-controls-design.md §3 left pending this tab's existence.</summary>
+    [ObservableProperty]
+    private ImageFitMode _defaultPageFitMode = ImageFitMode.FitWidth;
+
+    [ObservableProperty]
+    private bool _defaultAutoRotate;
 
     /// <summary>Every registered <see cref="KeyboardCommandRegistry"/> command, data-driven so a future command needs no Preferences-side change - see <see cref="KeyboardCommandRegistry"/>'s remarks.</summary>
     public ObservableCollection<KeyBindingRowViewModel> KeyBindings { get; }
@@ -231,6 +248,10 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         AutoNavigateComics = settings.AutoNavigateComics;
         ReverseRtlNavigation = settings.ReverseRtlNavigation;
         HighQualityPageDisplay = settings.HighQualityPageDisplay;
+        ResetZoomOnPageChange = settings.ResetZoomOnPageChange;
+        MouseWheelSpeed = settings.MouseWheelSpeed;
+        DefaultPageFitMode = settings.DefaultPageFitMode;
+        DefaultAutoRotate = settings.DefaultAutoRotate;
         _suppressBehaviorApply = false;
 
         var firstIssue = context.Issues.Include(i => i.Series).OrderBy(i => i.Id).FirstOrDefault();
@@ -318,6 +339,15 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     partial void OnReverseRtlNavigationChanged(bool value) => PersistBehaviorSetting(s => s.ReverseRtlNavigation = value);
 
     partial void OnHighQualityPageDisplayChanged(bool value) => PersistBehaviorSetting(s => s.HighQualityPageDisplay = value);
+
+    partial void OnResetZoomOnPageChangeChanged(bool value) => PersistBehaviorSetting(s => s.ResetZoomOnPageChange = value);
+
+    partial void OnMouseWheelSpeedChanged(double value) => PersistBehaviorSetting(s => s.MouseWheelSpeed = value);
+
+    partial void OnDefaultAutoRotateChanged(bool value) => PersistBehaviorSetting(s => s.DefaultAutoRotate = value);
+
+    /// <summary>Plain <c>ComboBox</c> + changed-hook, matching this class's existing <c>SelectedFontFamily</c> picker shape rather than the Reader screen's flyout-of-buttons (that shape fits a toolbar button, not a Preferences row).</summary>
+    partial void OnDefaultPageFitModeChanged(ImageFitMode value) => PersistBehaviorSetting(s => s.DefaultPageFitMode = value);
 
     private void PersistBehaviorSetting(Action<AppSettings> apply)
     {

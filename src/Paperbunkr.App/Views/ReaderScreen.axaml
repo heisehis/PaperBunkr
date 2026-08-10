@@ -3,6 +3,7 @@
              xmlns:vm="using:Paperbunkr.App.ViewModels"
              xmlns:views="using:Paperbunkr.App.Views"
              xmlns:models="using:Paperbunkr.App.Models"
+             xmlns:entities="using:Paperbunkr.Data.Entities"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d" d:DesignWidth="1000" d:DesignHeight="700"
@@ -32,6 +33,39 @@
         <Style Selector="Border.thumb.selected">
             <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
         </Style>
+
+        <Style Selector="Button.toolPill">
+            <Setter Property="Background" Value="#1E2127" />
+            <Setter Property="BorderBrush" Value="#33373F" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Foreground" Value="{StaticResource ReaderTextBrush}" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Padding" Value="10,6" />
+            <Setter Property="CornerRadius" Value="6" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style Selector="Button.toolPill.active">
+            <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource PbAccentTextBrush}" />
+        </Style>
+        <Style Selector="Button.toolIcon">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Foreground" Value="{StaticResource ReaderTextBrush}" />
+            <Setter Property="FontSize" Value="14" />
+            <Setter Property="Padding" Value="6" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style Selector="Button.flyoutRow">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="HorizontalContentAlignment" Value="Left" />
+            <Setter Property="Padding" Value="12,7" />
+            <Setter Property="FontSize" Value="12.5" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
     </UserControl.Styles>
 
     <Grid RowDefinitions="Auto,*,Auto" Background="{StaticResource ReaderBgBrush}">
@@ -39,7 +73,7 @@
         <!-- ============ Top toolbar ============ -->
         <Border Grid.Row="0" Background="{StaticResource ReaderChromeBrush}" BorderBrush="{StaticResource ReaderBorderBrush}"
                 BorderThickness="0,0,0,1" Padding="18,10">
-            <Grid ColumnDefinitions="*,Auto,Auto">
+            <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto,Auto,Auto">
                 <Button Grid.Column="0" Command="{Binding GoBackCommand}" Background="Transparent" BorderThickness="0"
                         Padding="0" Cursor="Hand" HorizontalAlignment="Left">
                     <StackPanel Orientation="Horizontal" Spacing="4">
@@ -53,9 +87,48 @@
                 <Button Grid.Column="1" Content="{Binding ReadingModeLabel}" Command="{Binding ToggleReadingModeCommand}"
                         Background="#1E2127" BorderBrush="#33373F" Cursor="Hand"
                         BorderThickness="1" Foreground="{StaticResource ReaderTextBrush}" FontSize="12" FontWeight="SemiBold"
-                        Padding="10,6" CornerRadius="6" Margin="16,0" />
+                        Padding="10,6" CornerRadius="6" Margin="0,0,8,0" />
 
-                <TextBlock Grid.Column="2" Text="{Binding PageLabel}" FontFamily="Consolas,monospace" FontSize="12"
+                <!-- Fit-mode picker (docs/superpowers/specs/2026-08-10-reader-polish-core-viewing-controls-design.md §5) -->
+                <Button Grid.Column="2" Classes="toolPill" Content="{Binding FitMode}" Margin="0,0,8,0" ToolTip.Tip="Fit mode">
+                    <Button.Flyout>
+                        <Flyout Placement="Bottom">
+                            <StackPanel Width="150">
+                                <Button Classes="flyoutRow" Content="Original" Command="{Binding SetFitModeCommand}" CommandParameter="{x:Static entities:ImageFitMode.Original}" />
+                                <Button Classes="flyoutRow" Content="Fit All" Command="{Binding SetFitModeCommand}" CommandParameter="{x:Static entities:ImageFitMode.Fit}" />
+                                <Button Classes="flyoutRow" Content="Fit Width" Command="{Binding SetFitModeCommand}" CommandParameter="{x:Static entities:ImageFitMode.FitWidth}" />
+                                <Button Classes="flyoutRow" Content="Fit Height" Command="{Binding SetFitModeCommand}" CommandParameter="{x:Static entities:ImageFitMode.FitHeight}" />
+                                <Button Classes="flyoutRow" Content="Best Fit" Command="{Binding SetFitModeCommand}" CommandParameter="{x:Static entities:ImageFitMode.BestFit}" />
+                            </StackPanel>
+                        </Flyout>
+                    </Button.Flyout>
+                </Button>
+
+                <!-- Zoom control: -/percentage(preset flyout)/+ -->
+                <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="2" Margin="0,0,8,0">
+                    <Button Classes="toolIcon" Content="−" Command="{Binding ZoomOutCommand}" ToolTip.Tip="Zoom out" />
+                    <Button Classes="toolPill" Content="{Binding ZoomLevel, StringFormat={}{0:P0}}" Padding="8,6" ToolTip.Tip="Zoom presets">
+                        <Button.Flyout>
+                            <Flyout Placement="Bottom">
+                                <StackPanel Width="100">
+                                    <Button Classes="flyoutRow" Content="100%" Command="{Binding SetZoom100Command}" />
+                                    <Button Classes="flyoutRow" Content="125%" Command="{Binding SetZoom125Command}" />
+                                    <Button Classes="flyoutRow" Content="150%" Command="{Binding SetZoom150Command}" />
+                                    <Button Classes="flyoutRow" Content="200%" Command="{Binding SetZoom200Command}" />
+                                    <Button Classes="flyoutRow" Content="400%" Command="{Binding SetZoom400Command}" />
+                                </StackPanel>
+                            </Flyout>
+                        </Button.Flyout>
+                    </Button>
+                    <Button Classes="toolIcon" Content="+" Command="{Binding ZoomInCommand}" ToolTip.Tip="Zoom in" />
+                </StackPanel>
+
+                <Button Grid.Column="4" Classes="toolIcon" Content="⟳" Command="{Binding RotateClockwiseCommand}" Margin="0,0,4,0" ToolTip.Tip="Rotate 90°" />
+
+                <Button Grid.Column="5" Classes="toolPill" Classes.active="{Binding AutoRotate}" Content="Auto-rotate"
+                        Command="{Binding ToggleAutoRotateCommand}" Margin="0,0,16,0" ToolTip.Tip="Auto-rotate landscape pages" />
+
+                <TextBlock Grid.Column="6" Text="{Binding PageLabel}" FontFamily="Consolas,monospace" FontSize="12"
                            Foreground="{StaticResource ReaderTextMutedBrush}" VerticalAlignment="Center" />
             </Grid>
         </Border>
@@ -90,6 +163,11 @@
                                   ZoomLevel="{Binding ZoomLevel}"
                                   PanOffsetX="{Binding PanOffsetX}"
                                   PanOffsetY="{Binding PanOffsetY}"
+                                  FitMode="{Binding FitMode}"
+                                  FitOnlyIfOversized="True"
+                                  ManualRotationDegrees="{Binding ManualRotationDegrees}"
+                                  AutoRotate="{Binding AutoRotate}"
+                                  WheelPanStep="{Binding MouseWheelSpeed}"
                                   IsVisible="{Binding !HasError}" />
 
                 <Border IsVisible="{Binding HasError}" Width="400" CornerRadius="8"

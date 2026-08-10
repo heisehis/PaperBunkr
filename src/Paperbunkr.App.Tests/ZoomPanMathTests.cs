@@ -1,5 +1,6 @@
 using Avalonia;
 using Paperbunkr.App.Views;
+using Paperbunkr.Data.Entities;
 
 namespace Paperbunkr.App.Tests;
 
@@ -59,6 +60,154 @@ public class ZoomPanMathTests
     {
         Assert.Equal(0, ZoomPanMath.ComputeBaseScale(new Size(0, 300), new PixelSize(400, 300)));
         Assert.Equal(0, ZoomPanMath.ComputeBaseScale(new Size(400, 300), new PixelSize(0, 300)));
+    }
+
+    // Fit-mode coverage (docs/superpowers/specs/2026-08-10-reader-polish-core-viewing-controls-
+    // design.md §2) - canvas 400x300, image 800x300 (2x wide, 1x tall): widthRatio=0.5,
+    // heightRatio=1.0, so Fit/BestFit's min/max pick genuinely different values, not the same one
+    // by coincidence.
+    [Fact]
+    public void ComputeBaseScale_Original_AlwaysReturnsOne()
+    {
+        Assert.Equal(1.0, ZoomPanMath.ComputeBaseScale(new Size(400, 300), new PixelSize(800, 300), ImageFitMode.Original));
+        Assert.Equal(1.0, ZoomPanMath.ComputeBaseScale(new Size(400, 300), new PixelSize(100, 50), ImageFitMode.Original, fitOnlyIfOversized: true));
+    }
+
+    [Fact]
+    public void ComputeBaseScale_Fit_ReturnsMinRatio_MatchingPreExistingDefaultBehavior()
+    {
+        // No fitMode argument at all - confirms the parameterless call sites elsewhere in this file
+        // (predating this design pass) still get exactly today's behavior.
+        Assert.Equal(0.5, ZoomPanMath.ComputeBaseScale(new Size(400, 300), new PixelSize(800, 300)));
+        Assert.Equal(0.5, ZoomPanMath.ComputeBaseScale(new Size(400, 300), new PixelSize(800, 300), ImageFitMode.Fit));
+    }
+
+    [Fact]
+    public void ComputeBaseScale_BestFit_ReturnsMaxRatio_OppositeOfFit()
+    {
+        Assert.Equal(1.0, ZoomPanMath.ComputeBaseScale(new Size(400, 300), new PixelSize(800, 300), ImageFitMode.BestFit));
+    }
+
+    [Fact]
+    public void ComputeBaseScale_FitWidthAndFitHeight_UseOnlyTheirOwnDimension()
+    {
+        // Canvas 400x300, image 800x900: widthRatio=0.5, heightRatio=0.333... - deliberately
+        // different values so a swapped implementation would fail loudly.
+        Assert.Equal(0.5, ZoomPanMath.ComputeBaseScale(new Size(400, 300), new PixelSize(800, 900), ImageFitMode.FitWidth));
+        Assert.Equal(300.0 / 900.0, ZoomPanMath.ComputeBaseScale(new Size(400, 300), new PixelSize(800, 900), ImageFitMode.FitHeight), precision: 6);
+    }
+
+    [Fact]
+    public void ComputeBaseScale_FitOnlyIfOversized_FitAndBestFit_SkipAsymmetrically()
+    {
+        // Canvas 400x300, image 200x600: canvas is already wider than the image (widthFits=true)
+        // but shorter than it (heightFits=false). Confirmed from ComicRackCE source
+        // (ImageDisplayControl.GetScale) that Fit only skips fitting when BOTH dimensions already
+        // fit (&&), while BestFit skips if EITHER already fits (||) - a real asymmetry, not a typo.
+        var canvas = new Size(400, 300);
+        var image = new PixelSize(200, 600);
+
+        double fitScale = ZoomPanMath.ComputeBaseScale(canvas, image, ImageFitMode.Fit, fitOnlyIfOversized: true);
+        double bestFitScale = ZoomPanMath.ComputeBaseScale(canvas, image, ImageFitMode.BestFit, fitOnlyIfOversized: true);
+
+        Assert.Equal(0.5, fitScale, precision: 6); // didn't skip - both dimensions must fit, and height doesn't
+        Assert.Equal(1.0, bestFitScale, precision: 6); // skipped - width alone already fits
+    }
+
+    [Fact]
+    public void ComputeBaseScale_FitWidth_FitOnlyIfOversized_SkipsWhenWidthAlreadyFits()
+    {
+        // Canvas wider than the image (400 > 100) - FitWidth would otherwise upscale.
+        Assert.Equal(1.0, ZoomPanMath.ComputeBaseScale(new Size(400, 300), new PixelSize(100, 50), ImageFitMode.FitWidth, fitOnlyIfOversized: true));
+    }
+
+    [Fact]
+    public void ComputeBaseScale_FitHeight_FitOnlyIfOversized_SkipsWhenHeightAlreadyFits()
+    {
+        Assert.Equal(1.0, ZoomPanMath.ComputeBaseScale(new Size(400, 300), new PixelSize(100, 50), ImageFitMode.FitHeight, fitOnlyIfOversized: true));
+    }
+
+    // HasOverflow (pan-enable gate) - real bug found via manual testing: Original/FitWidth/
+    // FitHeight/BestFit can all make content bigger than the canvas at zoom == MinZoom, unlike the
+    // pre-fit-mode-era "Fit always contains" assumption ZoomLevel-only pan gating relied on.
+    [Fact]
+    public void HasOverflow_Original_NativeSizeBiggerThanCanvas_ReturnsTrue()
+    {
+        // Canvas 400x300, image at its own native 800x600 (Original ignores the canvas entirely).
+        Assert.True(ZoomPanMath.HasOverflow(new Size(400, 300), new PixelSize(800, 600), zoom: 1.0, ImageFitMode.Original));
+    }
+
+    [Fact]
+    public void HasOverflow_Original_NativeSizeSmallerThanCanvas_ReturnsFalse()
+    {
+        Assert.False(ZoomPanMath.HasOverflow(new Size(400, 300), new PixelSize(100, 50), zoom: 1.0, ImageFitMode.Original));
+    }
+
+    [Fact]
+    public void HasOverflow_FitWidth_TallImage_OverflowsVertically()
+    {
+        // Canvas 400x300, image 800x1600 (very tall) - FitWidth scales to 400 wide, 800 tall: fits
+        // width exactly, overflows height.
+        Assert.True(ZoomPanMath.HasOverflow(new Size(400, 300), new PixelSize(800, 1600), zoom: 1.0, ImageFitMode.FitWidth));
+    }
+
+    [Fact]
+    public void HasOverflow_Fit_NeverOverflows_RegardlessOfAspectRatio()
+    {
+        // Fit (contain) is defined to never overflow either dimension - the one mode pan gating
+        // could previously assume "no zoom means no overflow" for.
+        Assert.False(ZoomPanMath.HasOverflow(new Size(400, 300), new PixelSize(800, 1600), zoom: 1.0, ImageFitMode.Fit));
+        Assert.False(ZoomPanMath.HasOverflow(new Size(400, 300), new PixelSize(1600, 300), zoom: 1.0, ImageFitMode.Fit));
+    }
+
+    [Fact]
+    public void HasOverflow_BestFit_MismatchedAspectRatio_AlwaysOverflowsOneDimension()
+    {
+        // BestFit (cover) is defined to always fill/overflow unless the aspect ratio matches exactly.
+        Assert.True(ZoomPanMath.HasOverflow(new Size(400, 300), new PixelSize(800, 1600), zoom: 1.0, ImageFitMode.BestFit));
+    }
+
+    [Fact]
+    public void HasOverflow_FitPlusUserZoom_Overflows()
+    {
+        // Fit alone never overflows, but zooming in past 1.0 always does - the pre-existing case
+        // this gate already handled correctly before fit modes existed.
+        Assert.True(ZoomPanMath.HasOverflow(new Size(400, 300), new PixelSize(800, 600), zoom: 2.0, ImageFitMode.Fit));
+    }
+
+    // Auto-rotate trigger (spec §4) - ported from ComicRackCE: fires only when the *native*
+    // (unrotated) bitmap is landscape, composed with manual rotation rather than replacing it.
+    [Fact]
+    public void ComposeRotationDegrees_LandscapeImageWithAutoRotateOn_SubtractsNinety()
+    {
+        Assert.Equal(270, ZoomPanMath.ComposeRotationDegrees(0, autoRotate: true, new PixelSize(800, 600)));
+    }
+
+    [Fact]
+    public void ComposeRotationDegrees_PortraitImageWithAutoRotateOn_NoContribution()
+    {
+        Assert.Equal(90, ZoomPanMath.ComposeRotationDegrees(90, autoRotate: true, new PixelSize(600, 800)));
+    }
+
+    [Fact]
+    public void ComposeRotationDegrees_AutoRotateOff_NeverContributesRegardlessOfShape()
+    {
+        Assert.Equal(0, ZoomPanMath.ComposeRotationDegrees(0, autoRotate: false, new PixelSize(800, 600)));
+    }
+
+    [Fact]
+    public void ComposeRotationDegrees_ComposesWithManualRotation_NotReplacingIt()
+    {
+        // Manual 180 + auto-rotate's -90 on a landscape image = 90, not -90 - proves composition,
+        // not override.
+        Assert.Equal(90, ZoomPanMath.ComposeRotationDegrees(180, autoRotate: true, new PixelSize(800, 600)));
+    }
+
+    [Fact]
+    public void ComposeRotationDegrees_AlwaysWrapsToPositiveZeroTo360Range()
+    {
+        int result = ZoomPanMath.ComposeRotationDegrees(0, autoRotate: true, new PixelSize(800, 600));
+        Assert.InRange(result, 0, 359);
     }
 
     [Fact]

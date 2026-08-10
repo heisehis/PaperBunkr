@@ -70,19 +70,62 @@ Pulled from `docs/ce-feature-inventory.md`'s full CE parity audit (2026-08-07), 
 Nothing here is sequenced yet — this is the full confirmed "decided: build" list, not a sprint plan.
 
 ### Preferences: Reader tab (last of 5 tabs)
-Not started. Per the Behavior-tab finding, read CE's actual `Settings.cs`/`FormUtility` source
-before scoping — expect most checkbox-visible settings to gate reader capabilities that don't
-exist yet (zoom, fullscreen, continuous scroll, double-page spreads), not all of them real surface.
+**Was stale — a Reader tab already existed** (shipped 2026-08-07 alongside RTL navigation:
+Right-to-Left/Display/Keyboard Shortcuts groups), this entry just hadn't been updated to say so.
+**Shipped 2026-08-10** (design spec docs/superpowers/specs/2026-08-10-preferences-reader-tab-
+design.md): checked CE's actual `Settings.cs` source directly, confirmed most of it does gate
+reader capabilities that don't exist yet (magnifier, overlays, auto-scroll, continuous-scroll,
+hardware-accel) — added only the three that back real, shipped capability: reset-zoom-on-page-
+change, mouse wheel scroll speed (replaces a fixed `PageCanvas` constant), and default fit
+mode/auto-rotate (closes a TODO this session's own earlier Reader Polish work left pending this
+tab's existence). 400 tests pass across the whole solution.
 
 ### Reader polish (onboarding.md §8, the largest single backlog)
-Fit modes (Original/Fit All/Fit Width/Fit Height/Best Fit), zoom (in/out/presets/custom), page
-layout (single/double-spread/adaptive), rotation (relative/absolute/autorotate), magnifier
+**First slice shipped 2026-08-10: fit modes, zoom presets, rotation** (design spec
+docs/superpowers/specs/2026-08-10-reader-polish-core-viewing-controls-design.md). Original/Fit/Fit
+Width/Fit Height/Best Fit (CE's `FitWidthAdaptive` and its anamorphic-tolerance non-uniform-XY
+scaling deliberately not ported — named deviations, not gaps), zoom presets (100/125/150/200/400%)
+layered on the existing gesture zoom, manual rotate + auto-rotate-landscape-pages. Fit mode and
+auto-rotate persist per-Issue (mirrors the existing-but-previously-dormant
+`Issue.ReadingModeOverride` shape, now with a real write path); zoom level and manual rotation stay
+session-only, matching CE precedent (confirmed from `_reference/ComicRackCE` source — CE itself
+never persists an exact zoom%/rotation angle per book either). 25 new `ZoomPanMathTests` (pure
+fit-mode/rotation-composition math), 11 new `ReaderScreenViewModelTests`, 2 new
+`IssueReaderOverridesTests` — 390 tests pass across the whole solution.
+
+Real pre-existing test-isolation bug found and fixed along the way, unrelated to Reader polish
+itself: `PreferencesScreenViewModelTests` constructed `MigrationOverlayViewModel`/
+`NeedsReviewViewModel` with no injected DB context factory, so ~13 of its tests silently queried
+the *real* production database instead of the test's isolated one — invisible until the new
+`Issue` columns made the real (unmigrated) database's schema actually diverge from what the
+compiled EF model expected. Fixed by setting `PaperbunkrDbContext.DatabasePathOverride` at the
+test class's constructor/`Dispose` level, matching the pattern other test classes already use.
+
+**Two more real bugs found via the user's actual manual testing after this shipped** (not caught by
+build/tests — this exact class of interaction bug only surfaces on-screen):
+1. `PageCanvas`'s drag/wheel/arrow-key pan was gated purely on `ZoomLevel > MinZoom` — correct
+   before fit modes existed (the only base scale was always contain-within-bounds, so "zoomed in"
+   and "content bigger than the canvas" were the same condition), but `Original`/`FitWidth`/
+   `FitHeight`/`BestFit` can all overflow the canvas at the default zoom too, leaving the
+   overflowing parts unreachable. Fixed with `ZoomPanMath.HasOverflow` (pure function) and a
+   `PageCanvas.CanPan()` gate combining it with the original zoom check.
+2. More fundamental: `PageCanvas` never set `ClipToBounds` (Avalonia default `false`), so oversized
+   content painted straight through into the toolbar/thumbnail rail regardless of pan offset — fix
+   #1 alone changed the pan offset but had nothing to actually reveal/hide by doing so. One line,
+   `ClipToBoundsProperty.OverrideDefaultValue<PageCanvas>(true)`. **Pre-existing gap predating fit
+   modes** — plain zoom-past-100% could already trigger it, just rarely hit before fit modes made
+   default-zoom overflow trivial to reach. Also fixes the Novels PDF reader, which shares this
+   control. 5 new `ZoomPanMathTests`. 406 tests pass across the whole solution; both fixes confirmed
+   working via the user's own on-screen testing.
+
+**Still open, not part of this slice:** page layout (single/double-spread/adaptive), magnifier
 overlay, page transition animations, fullscreen/minimal-chrome mode, on-screen overlays (scrubber,
 page/status text, clock/battery), live image adjustment (brightness/contrast/saturation/gamma),
 background/texture/margins, **continuous/webtoon vertical scroll** (genuinely new, not CE parity —
 also the highest-risk unproven piece per onboarding.md §8's memory-management warning), split-page
-part navigation, touch gestures (9-zone tap + double-tap + flick), remappable keyboard shortcuts,
-auto-scrolling/hands-free mode.
+part navigation, touch gestures beyond what's already shipped, remappable keyboard shortcuts,
+auto-scrolling/hands-free mode. A Preferences → Reader tab (to make the fit-mode/auto-rotate
+global defaults user-editable, currently fixed code constants) is also still open.
 
 ### Metadata editing extras
 Copy/paste fields between books, templated/token text field editor, Quick Rating + free-text

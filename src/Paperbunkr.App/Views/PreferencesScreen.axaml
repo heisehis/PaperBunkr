@@ -2,6 +2,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Paperbunkr.App.ViewModels"
              xmlns:models="using:Paperbunkr.App.Models"
+             xmlns:entities="using:Paperbunkr.Data.Entities"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d" d:DesignWidth="900" d:DesignHeight="760"
@@ -231,6 +232,36 @@
                         <StackPanel Margin="14" Spacing="12">
                             <CheckBox IsChecked="{Binding HighQualityPageDisplay}" Foreground="{DynamicResource PbTextBrush}" FontSize="13"
                                       Content="High quality page display (smoother scaling, more CPU)" />
+
+                            <Grid ColumnDefinitions="Auto,Auto" ColumnSpacing="10">
+                                <TextBlock Grid.Column="0" Text="Default fit mode" FontSize="13" VerticalAlignment="Center"
+                                           Foreground="{DynamicResource PbTextBrush}" />
+                                <ComboBox Grid.Column="1" ItemsSource="{x:Static vm:PreferencesScreenViewModel.FitModeOptions}"
+                                          SelectedItem="{Binding DefaultPageFitMode}" Width="150" />
+                            </Grid>
+                            <TextBlock Text="Used for any book that hasn't been set to a different fit mode from the reader itself."
+                                       FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" Margin="0,-6,0,0" />
+
+                            <CheckBox IsChecked="{Binding DefaultAutoRotate}" Foreground="{DynamicResource PbTextBrush}" FontSize="13"
+                                      Content="Auto-rotate landscape pages by default" />
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <Border Classes="groupBox">
+                    <StackPanel>
+                        <Border Classes="groupHeader">
+                            <TextBlock Text="Zoom &amp; Navigation" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
+                        </Border>
+                        <StackPanel Margin="14" Spacing="12">
+                            <CheckBox IsChecked="{Binding ResetZoomOnPageChange}" Foreground="{DynamicResource PbTextBrush}" FontSize="13"
+                                      Content="Reset zoom when turning the page" />
+
+                            <StackPanel Spacing="4">
+                                <TextBlock Text="{Binding MouseWheelSpeed, StringFormat='Mouse wheel scroll speed: {0:F1}'}" FontSize="13"
+                                           Foreground="{DynamicResource PbTextBrush}" />
+                                <Slider Minimum="0.5" Maximum="5" Value="{Binding MouseWheelSpeed}" Width="220" HorizontalAlignment="Left" />
+                            </StackPanel>
                         </StackPanel>
                     </StackPanel>
                 </Border>

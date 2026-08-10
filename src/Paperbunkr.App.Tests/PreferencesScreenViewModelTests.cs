@@ -4,6 +4,7 @@ using Paperbunkr.App.Models;
 using Paperbunkr.App.Services;
 using Paperbunkr.App.ViewModels;
 using Paperbunkr.Data;
+using Paperbunkr.Data.Entities;
 
 namespace Paperbunkr.App.Tests;
 
@@ -19,6 +20,7 @@ public class PreferencesScreenViewModelTests : IDisposable
     private readonly string _originalInstalledDirectory;
     private readonly string _originalExtractedDirectory;
     private readonly string _originalThumbnailDirectory;
+    private readonly string? _originalDbPathOverride;
     private readonly string _dbPath;
     private readonly DbContextOptions<PaperbunkrDbContext> _dbOptions;
     private readonly string _scanRoot;
@@ -39,6 +41,15 @@ public class PreferencesScreenViewModelTests : IDisposable
         using var context = new PaperbunkrDbContext(_dbOptions);
         context.Database.EnsureCreated();
 
+        // Real pre-existing isolation gap, surfaced (not caused) by an unrelated schema change:
+        // MigrationOverlayViewModel/NeedsReviewViewModel (constructed in CreateViewModel below)
+        // have no injected context-factory seam, unlike every other service here - without this,
+        // they silently fall through to the real default database path instead of this test's
+        // isolated one. Matches the class-wide DatabasePathOverride pattern other test classes
+        // (e.g. ReaderScreenViewModelTests) already use for exactly this reason.
+        _originalDbPathOverride = PaperbunkrDbContext.DatabasePathOverride;
+        PaperbunkrDbContext.DatabasePathOverride = _dbPath;
+
         _scanRoot = Path.Combine(root, "scan");
         Directory.CreateDirectory(_scanRoot);
     }
@@ -48,6 +59,7 @@ public class PreferencesScreenViewModelTests : IDisposable
         SkinPaths.InstalledDirectory = _originalInstalledDirectory;
         SkinPaths.ExtractedDirectory = _originalExtractedDirectory;
         CoverThumbnailPaths.ThumbnailDirectory = _originalThumbnailDirectory;
+        PaperbunkrDbContext.DatabasePathOverride = _originalDbPathOverride;
 
         Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
         try
@@ -245,6 +257,77 @@ public class PreferencesScreenViewModelTests : IDisposable
 
         using var context = new PaperbunkrDbContext(_dbOptions);
         Assert.False(context.GetOrCreateAppSettings().HighQualityPageDisplay);
+    }
+
+    // Reader tab additions (docs/superpowers/specs/2026-08-10-preferences-reader-tab-design.md)
+    [Fact]
+    public void EnsureLoaded_PopulatesReaderTabAdditionsFromAppSettings()
+    {
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            var settings = context.GetOrCreateAppSettings();
+            settings.ResetZoomOnPageChange = true;
+            settings.MouseWheelSpeed = 3.5;
+            settings.DefaultPageFitMode = ImageFitMode.BestFit;
+            settings.DefaultAutoRotate = true;
+            context.SaveChanges();
+        }
+
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+
+        Assert.True(vm.ResetZoomOnPageChange);
+        Assert.Equal(3.5, vm.MouseWheelSpeed);
+        Assert.Equal(ImageFitMode.BestFit, vm.DefaultPageFitMode);
+        Assert.True(vm.DefaultAutoRotate);
+    }
+
+    [Fact]
+    public void TogglingResetZoomOnPageChange_PersistsToAppSettings()
+    {
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+
+        vm.ResetZoomOnPageChange = true;
+
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        Assert.True(context.GetOrCreateAppSettings().ResetZoomOnPageChange);
+    }
+
+    [Fact]
+    public void ChangingMouseWheelSpeed_PersistsToAppSettings()
+    {
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+
+        vm.MouseWheelSpeed = 4.0;
+
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        Assert.Equal(4.0, context.GetOrCreateAppSettings().MouseWheelSpeed);
+    }
+
+    [Fact]
+    public void ChangingDefaultPageFitMode_PersistsToAppSettings()
+    {
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+
+        vm.DefaultPageFitMode = ImageFitMode.Original;
+
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        Assert.Equal(ImageFitMode.Original, context.GetOrCreateAppSettings().DefaultPageFitMode);
+    }
+
+    [Fact]
+    public void TogglingDefaultAutoRotate_PersistsToAppSettings()
+    {
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+
+        vm.DefaultAutoRotate = true;
+
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        Assert.True(context.GetOrCreateAppSettings().DefaultAutoRotate);
     }
 
     [Fact]

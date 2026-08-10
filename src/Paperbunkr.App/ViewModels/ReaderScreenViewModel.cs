@@ -108,6 +108,24 @@ public partial class ReaderScreenViewModel : ViewModelBase
     [ObservableProperty]
     private double _panOffsetY;
 
+    private const double ZoomStep = 0.25;
+
+    [ObservableProperty]
+    private ImageFitMode _fitMode = ImageFitMode.FitWidth;
+
+    [ObservableProperty]
+    private bool _autoRotate;
+
+    /// <summary>Session-only (spec §3) - resets on every <see cref="Load"/>, never persisted. Composed with <see cref="AutoRotate"/> inside <see cref="Views.PageCanvas"/>, which is the layer that actually knows the current page bitmap's landscape/portrait shape.</summary>
+    [ObservableProperty]
+    private int _manualRotationDegrees;
+
+    /// <summary>Whether <see cref="ZoomLevel"/> resets to 1.0 on every page turn (docs/superpowers/specs/2026-08-10-preferences-reader-tab-design.md), read from <c>AppSettings.ResetZoomOnPageChange</c> on <see cref="Load"/>.</summary>
+    private bool _resetZoomOnPageChange;
+
+    [ObservableProperty]
+    private double _mouseWheelSpeed = 2.0;
+
     public bool HasError => !string.IsNullOrEmpty(ErrorMessage);
 
     partial void OnErrorMessageChanged(string? value) => OnPropertyChanged(nameof(HasError));
@@ -173,12 +191,17 @@ public partial class ReaderScreenViewModel : ViewModelBase
 
         var appSettings = context.GetOrCreateAppSettings();
         HighQualityPageDisplay = appSettings.HighQualityPageDisplay;
+        MouseWheelSpeed = appSettings.MouseWheelSpeed;
+        _resetZoomOnPageChange = appSettings.ResetZoomOnPageChange;
         PageTurnLeftKey = _keyBindings.GetKey(context, KeyboardCommandRegistry.ReaderPageTurnLeft);
         PageTurnRightKey = _keyBindings.GetKey(context, KeyboardCommandRegistry.ReaderPageTurnRight);
         UpdateReadingModeState(issue.ReadingModeOverride ?? series.ReadingMode, appSettings.ReverseRtlNavigation);
 
         ErrorMessage = null;
         ZoomLevel = 1.0;
+        ManualRotationDegrees = 0;
+        FitMode = issue.PageFitModeOverride ?? appSettings.DefaultPageFitMode;
+        AutoRotate = issue.AutoRotateOverride ?? appSettings.DefaultAutoRotate;
         int pageCount = issue.PageCount is > 0 ? issue.PageCount.Value : 1;
 
         if (!string.IsNullOrEmpty(issue.FilePath))
@@ -281,6 +304,78 @@ public partial class ReaderScreenViewModel : ViewModelBase
     }
 
     /// <summary>
+    /// Unlike <see cref="ToggleReadingMode"/> (writes <c>Series.ReadingMode</c>), this writes the
+    /// per-book <c>Issue.PageFitModeOverride</c> directly - page dimensions/scan quality genuinely
+    /// vary issue-to-issue in a way reading direction doesn't (docs/superpowers/specs/
+    /// 2026-08-10-reader-polish-core-viewing-controls-design.md §3).
+    /// </summary>
+    [RelayCommand]
+    private void SetFitMode(ImageFitMode mode)
+    {
+        FitMode = mode;
+        if (_loadedIssueId is not int issueId)
+        {
+            return;
+        }
+
+        using var context = PaperbunkrDb.CreateContext();
+        var issue = context.Issues.Find(issueId);
+        if (issue is not null)
+        {
+            issue.PageFitModeOverride = mode;
+            context.SaveChanges();
+        }
+    }
+
+    /// <summary>Same per-book override shape as <see cref="SetFitMode"/>, for the auto-rotate-landscape-pages toggle.</summary>
+    [RelayCommand]
+    private void ToggleAutoRotate()
+    {
+        AutoRotate = !AutoRotate;
+        if (_loadedIssueId is not int issueId)
+        {
+            return;
+        }
+
+        using var context = PaperbunkrDb.CreateContext();
+        var issue = context.Issues.Find(issueId);
+        if (issue is not null)
+        {
+            issue.AutoRotateOverride = AutoRotate;
+            context.SaveChanges();
+        }
+    }
+
+    /// <summary>Session-only, never persisted (spec §3) - one press = +90 degrees, wraps at 360.</summary>
+    [RelayCommand]
+    private void RotateClockwise() => ManualRotationDegrees = (ManualRotationDegrees + 90) % 360;
+
+    // Discrete no-arg commands rather than a single SetZoomPreset(double) - a raw string
+    // CommandParameter (e.g. "1.5") bound in XAML has no compile-time check that it'll actually
+    // parse/cast to double at Execute time, unlike the x:Static-enum-CommandParameter pattern used
+    // for fit mode above (a real typed value, not a string Avalonia has to convert).
+    [RelayCommand]
+    private void SetZoom100() => ZoomLevel = 1.0;
+
+    [RelayCommand]
+    private void SetZoom125() => ZoomLevel = 1.25;
+
+    [RelayCommand]
+    private void SetZoom150() => ZoomLevel = 1.5;
+
+    [RelayCommand]
+    private void SetZoom200() => ZoomLevel = 2.0;
+
+    [RelayCommand]
+    private void SetZoom400() => ZoomLevel = 4.0;
+
+    [RelayCommand]
+    private void ZoomIn() => ZoomLevel += ZoomStep;
+
+    [RelayCommand]
+    private void ZoomOut() => ZoomLevel -= ZoomStep;
+
+    /// <summary>
     /// Real per-page rail thumbnails (docs/superpowers/specs/2026-08-06-cover-thumbnails-design.md
     /// §4), decoded lazily on a background thread rather than eagerly on <see cref="Load"/> - an
     /// eager synchronous decode of up to <see cref="MaxThumbnails"/> pages would be a real, visible
@@ -377,6 +472,14 @@ public partial class ReaderScreenViewModel : ViewModelBase
         ProgressFraction = pageCount > 1 ? (double)_currentPageIndex / (pageCount - 1) : 0;
         OnPropertyChanged(nameof(PageLabel));
         OnPropertyChanged(nameof(ProgressFraction));
+
+        // AppSettings.ResetZoomOnPageChange (docs/superpowers/specs/2026-08-10-preferences-reader-
+        // tab-design.md) - CE parity, off by default (matches Paperbunkr's own pre-existing
+        // behavior of leaving zoom alone across page turns within a session).
+        if (_resetZoomOnPageChange)
+        {
+            ZoomLevel = 1.0;
+        }
 
         int thumbnailCount = Thumbnails.Count;
         for (int page = 0; page < thumbnailCount; page++)

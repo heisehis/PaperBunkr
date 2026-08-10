@@ -99,6 +99,34 @@ public class ReaderScreenViewModelTests : IDisposable
         context.SaveChanges();
     }
 
+    private static void SetResetZoomOnPageChange(bool value)
+    {
+        using var context = PaperbunkrDb.CreateContext();
+        context.GetOrCreateAppSettings().ResetZoomOnPageChange = value;
+        context.SaveChanges();
+    }
+
+    private static void SetMouseWheelSpeed(double value)
+    {
+        using var context = PaperbunkrDb.CreateContext();
+        context.GetOrCreateAppSettings().MouseWheelSpeed = value;
+        context.SaveChanges();
+    }
+
+    private static void SetDefaultPageFitMode(ImageFitMode value)
+    {
+        using var context = PaperbunkrDb.CreateContext();
+        context.GetOrCreateAppSettings().DefaultPageFitMode = value;
+        context.SaveChanges();
+    }
+
+    private static void SetDefaultAutoRotate(bool value)
+    {
+        using var context = PaperbunkrDb.CreateContext();
+        context.GetOrCreateAppSettings().DefaultAutoRotate = value;
+        context.SaveChanges();
+    }
+
     private static void SetPageTurnLeftKey(Key key) =>
         new KeyBindingService().SetKey(KeyboardCommandRegistry.ReaderPageTurnLeft, key);
 
@@ -451,6 +479,192 @@ public class ReaderScreenViewModelTests : IDisposable
     /// when it can't get real access instead of hanging or spuriously failing - it still runs for
     /// real (and did catch this exact bug pre-fix) via `dotnet test --filter Name=<this test>`.
     /// </summary>
+    // Fit mode / auto-rotate persistence (docs/superpowers/specs/2026-08-10-reader-polish-core-
+    // viewing-controls-design.md §3) - global default + per-Issue override, mirroring
+    // Issue.ReadingModeOverride's shape but written from the reader toolbar itself.
+    // Preferences Reader tab additions (docs/superpowers/specs/2026-08-10-preferences-reader-tab-design.md)
+    [Fact]
+    public void GoToPage_ResetZoomOnPageChangeEnabled_ResetsZoomToOne()
+    {
+        SetResetZoomOnPageChange(true);
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id);
+        vm.ZoomLevel = 2.5;
+
+        vm.NextPageCommand.Execute(null);
+
+        Assert.Equal(1.0, vm.ZoomLevel);
+    }
+
+    [Fact]
+    public void GoToPage_ResetZoomOnPageChangeDisabled_LeavesZoomAlone()
+    {
+        // Default (false) - matches Paperbunkr's pre-existing behavior, unchanged by this setting's addition.
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id);
+        vm.ZoomLevel = 2.5;
+
+        vm.NextPageCommand.Execute(null);
+
+        Assert.Equal(2.5, vm.ZoomLevel);
+    }
+
+    [Fact]
+    public void MouseWheelSpeed_DefaultsTo2_AndReflectsAppSettingsOnLoad()
+    {
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id);
+        Assert.Equal(2.0, vm.MouseWheelSpeed);
+
+        SetMouseWheelSpeed(4.5);
+        vm.LoadIssue(_issue1Id);
+
+        Assert.Equal(4.5, vm.MouseWheelSpeed);
+    }
+
+    [Fact]
+    public void FitMode_ReflectsAppSettingsDefault_ForAnIssueWithNoOverride()
+    {
+        SetDefaultPageFitMode(ImageFitMode.BestFit);
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+
+        vm.LoadIssue(_issue1Id);
+
+        Assert.Equal(ImageFitMode.BestFit, vm.FitMode);
+    }
+
+    [Fact]
+    public void AutoRotate_ReflectsAppSettingsDefault_ForAnIssueWithNoOverride()
+    {
+        SetDefaultAutoRotate(true);
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+
+        vm.LoadIssue(_issue1Id);
+
+        Assert.True(vm.AutoRotate);
+    }
+
+    [Fact]
+    public void FitMode_DefaultsToFitWidth_ForAnIssueWithNoOverride()
+    {
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id);
+
+        Assert.Equal(ImageFitMode.FitWidth, vm.FitMode);
+    }
+
+    [Fact]
+    public void SetFitModeCommand_PersistsPerIssueOverride_ReadBackOnNextLoad()
+    {
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id);
+
+        vm.SetFitModeCommand.Execute(ImageFitMode.BestFit);
+
+        Assert.Equal(ImageFitMode.BestFit, vm.FitMode);
+        using (var context = PaperbunkrDb.CreateContext())
+        {
+            Assert.Equal(ImageFitMode.BestFit, context.Issues.First(i => i.Id == _issue1Id).PageFitModeOverride);
+        }
+
+        var reopened = new ReaderScreenViewModel(goBack: () => { });
+        reopened.LoadIssue(_issue1Id);
+        Assert.Equal(ImageFitMode.BestFit, reopened.FitMode);
+    }
+
+    [Fact]
+    public void SetFitModeCommand_OnOneIssue_DoesNotAffectAnother()
+    {
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id);
+        vm.SetFitModeCommand.Execute(ImageFitMode.Original);
+
+        vm.LoadIssue(_issue2Id);
+
+        Assert.Equal(ImageFitMode.FitWidth, vm.FitMode); // issue2's own default, untouched
+    }
+
+    [Fact]
+    public void AutoRotate_DefaultsToFalse_AndToggleCommandPersistsPerIssueOverride()
+    {
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id);
+        Assert.False(vm.AutoRotate);
+
+        vm.ToggleAutoRotateCommand.Execute(null);
+
+        Assert.True(vm.AutoRotate);
+        using (var context = PaperbunkrDb.CreateContext())
+        {
+            Assert.True(context.Issues.First(i => i.Id == _issue1Id).AutoRotateOverride);
+        }
+
+        var reopened = new ReaderScreenViewModel(goBack: () => { });
+        reopened.LoadIssue(_issue1Id);
+        Assert.True(reopened.AutoRotate);
+
+        vm.ToggleAutoRotateCommand.Execute(null);
+        Assert.False(vm.AutoRotate);
+    }
+
+    [Fact]
+    public void ManualRotationDegrees_DefaultsToZero_AndRotateClockwiseStepsBy90AndWraps()
+    {
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id);
+        Assert.Equal(0, vm.ManualRotationDegrees);
+
+        vm.RotateClockwiseCommand.Execute(null);
+        vm.RotateClockwiseCommand.Execute(null);
+        vm.RotateClockwiseCommand.Execute(null);
+        vm.RotateClockwiseCommand.Execute(null);
+
+        Assert.Equal(0, vm.ManualRotationDegrees); // four 90-degree steps wrap back to 0
+    }
+
+    [Fact]
+    public void ManualRotationDegrees_IsSessionOnly_ResetsOnReopen_NeverPersistedToIssue()
+    {
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id);
+        vm.RotateClockwiseCommand.Execute(null);
+        Assert.Equal(90, vm.ManualRotationDegrees);
+
+        vm.LoadIssue(_issue1Id);
+
+        Assert.Equal(0, vm.ManualRotationDegrees);
+    }
+
+    [Fact]
+    public void ZoomPresetCommands_SetExpectedZoomLevels()
+    {
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id);
+
+        vm.SetZoom150Command.Execute(null);
+        Assert.Equal(1.5, vm.ZoomLevel);
+
+        vm.SetZoom400Command.Execute(null);
+        Assert.Equal(4.0, vm.ZoomLevel);
+
+        vm.SetZoom100Command.Execute(null);
+        Assert.Equal(1.0, vm.ZoomLevel);
+    }
+
+    [Fact]
+    public void ZoomInZoomOutCommands_StepAndClamp()
+    {
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id);
+
+        vm.ZoomInCommand.Execute(null);
+        Assert.Equal(1.25, vm.ZoomLevel);
+
+        vm.ZoomOutCommand.Execute(null);
+        vm.ZoomOutCommand.Execute(null);
+        Assert.Equal(1.0, vm.ZoomLevel); // clamped at MinZoom, doesn't go below
+    }
+
     [Fact]
     public void LoadIssue_GeneratesThumbnailsForEveryPage_NoneLeftNull()
     {

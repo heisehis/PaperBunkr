@@ -115,6 +115,7 @@ public class PaperbunkrDbContext : DbContext
         {
             builder.HasKey(i => i.Id);
             builder.Property(i => i.ReadingModeOverride).HasConversion<string>().HasMaxLength(32);
+            builder.Property(i => i.PageFitModeOverride).HasConversion<string>().HasMaxLength(32);
             builder.HasIndex(i => i.SeriesId);
             builder.HasIndex(i => i.FilePath);
 
@@ -228,6 +229,26 @@ public class PaperbunkrDbContext : DbContext
             builder.Property(a => a.BackupsToKeep).HasDefaultValue(5);
             builder.Property(a => a.ReverseRtlNavigation).HasDefaultValue(true);
             builder.Property(a => a.HighQualityPageDisplay).HasDefaultValue(true);
+            builder.Property(a => a.ResetZoomOnPageChange).HasDefaultValue(false);
+            builder.Property(a => a.MouseWheelSpeed).HasDefaultValue(2.0);
+            // HasDefaultValue is required here (unlike other enum columns in this context) because,
+            // unlike Series.ContentType/ReadingMode, this ALTER TABLE runs against a table with an
+            // existing row (the AppSettings singleton) - without a DB-level default, SQLite has
+            // nothing valid to backfill that row's new NOT NULL column with, and EF's own fallback
+            // (empty string) isn't a parseable ImageFitMode, which would throw the next time
+            // anyone's real, already-existing settings row got read.
+            // .Metadata.SetSentinel makes explicit what EF already treats Original (0, the CLR
+            // default) as implicitly: the "this looks unset, use the DB default instead" value on
+            // insert. Silences EF's warning without changing behavior - AppSettings is a true
+            // singleton, only ever inserted once via GetOrCreateAppSettings with a real C# default
+            // (FitWidth, never Original), so the theoretical "someone explicitly chooses Original
+            // as their very first insert" ambiguity this warns about never actually occurs in this
+            // codebase's usage pattern. A nullable backing field would close the gap completely but
+            // isn't worth the complexity for a case that can't happen here.
+            builder.Property(a => a.DefaultPageFitMode).HasConversion<string>().HasMaxLength(32)
+                .HasDefaultValue(ImageFitMode.FitWidth)
+                .HasSentinel(ImageFitMode.Original);
+            builder.Property(a => a.DefaultAutoRotate).HasDefaultValue(false);
         });
 
         modelBuilder.Entity<VirtualTagDefinition>(builder =>

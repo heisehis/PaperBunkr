@@ -118,11 +118,11 @@ Nothing in this document was left un-triaged.
 | Feature | Status |
 |---|---|
 | Paged left-to-right reading, real page decode | ✅ shipped (Alpha) |
-| Fit modes: Original / Fit All / Fit Width (+ adaptive) / Fit Height / Best Fit | 📋 |
-| Zoom: in/out, toggle, presets (100/125/150/200/400%), custom | 📋 |
+| Fit modes: Original / Fit All / Fit Width (+ adaptive) / Fit Height / Best Fit | ✅ shipped 2026-08-10, minus `FitWidthAdaptive` — named deviation, see docs/superpowers/specs/2026-08-10-reader-polish-core-viewing-controls-design.md §1 |
+| Zoom: in/out, toggle, presets (100/125/150/200/400%), custom | ✅ shipped 2026-08-10 (custom zoom/pan gestures were already Alpha; presets added) |
 | Page layout: single / double-page spread / adaptive spread detection | 📋 |
-| Reading direction: RTL (manga), with flip-parts vs flip-pages sub-modes | 📋 — `ReadingMode.RightToLeft` is modeled in schema but Reader navigation doesn't act on it yet |
-| Rotation: relative/absolute + autorotate landscape pages | 📋 |
+| Reading direction: RTL (manga), with flip-parts vs flip-pages sub-modes | ✅ shipped — `ReaderScreenViewModel.ToggleReadingMode`/RTL page-turn flip, per docs/superpowers/specs/2026-08-07-reader-rtl-navigation-design.md |
+| Rotation: relative/absolute + autorotate landscape pages | ✅ shipped 2026-08-10 — session-only (not persisted per-book), matching CE's own precedent |
 | Magnifier/loupe overlay tool | 📋 |
 | Page transition animations (fade/slide/paging) + zoom-in/out-on-page-change | 📋 |
 | Fullscreen + minimal-UI chrome-reduction mode | 📋 |
@@ -157,10 +157,15 @@ Already shipped in Paperbunkr with CE field parity. CE's dual rule-builder/raw-q
 modes and recursive AND/OR matcher-group UI are worth a UX glance if the Smart Lists editor gets
 revisited, but this is not missing functionality.
 
-### E. Preferences / Settings (zero implementation today)
+### E. Preferences / Settings
+**Stale header — this whole section predates a lot of shipped work.** Appearance, Behavior,
+Libraries, Reader, and Advanced tabs are all real today (`PreferencesScreenViewModel`); Scripts was
+confirmed a zero-real-surface dead end via CE-source triage and deliberately has no tab. The table
+below documents CE's *original* notable contents per area for reference, not a current gap list —
+see each tab's own design spec for what actually shipped and what was deliberately left out.
 | Tab | Notable contents |
 |---|---|
-| Reader | display adjustment sliders, hardware-accel toggles, mouse/scroll behavior, overlay visibility + position, keyboard shortcut editor |
+| Reader | display adjustment sliders, hardware-accel toggles, mouse/scroll behavior, overlay visibility + position, keyboard shortcut editor — ✅ keyboard shortcuts + mouse/scroll speed + display shipped (docs/superpowers/specs/2026-08-10-preferences-reader-tab-design.md); magnifier/overlay/hardware-accel toggles deliberately skipped, gate unbuilt capability |
 | Behavior | ~10 reflection-driven categories: startup behavior, book-opening behavior, reading behavior, RTL, browser display, app chrome, caching, scripting, network, import/export |
 | Libraries | watched folders, scan behavior, sharing, server settings, **Virtual Tags** (see below) |
 | Scripts | script/plugin package management |

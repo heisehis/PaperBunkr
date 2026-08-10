@@ -6,6 +6,7 @@ using Avalonia.Data;
 using Avalonia.Input;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
+using Paperbunkr.Data.Entities;
 
 namespace Paperbunkr.App.Views;
 
@@ -31,7 +32,6 @@ public class PageCanvas : Control
 {
     private const double KeyPanStep = 40;
     private const double WheelZoomStep = 0.25;
-    private const double WheelPanStep = 1.0;
     private const double MinFlickDistance = 60;
     private const double MaxFlickDurationMs = 400;
 
@@ -63,6 +63,41 @@ public class PageCanvas : Control
     public static readonly StyledProperty<double> PanOffsetYProperty =
         AvaloniaProperty.Register<PageCanvas, double>(nameof(PanOffsetY), defaultBindingMode: BindingMode.TwoWay);
 
+    /// <summary>
+    /// Fit-mode/rotation controls (docs/superpowers/specs/2026-08-10-reader-polish-core-viewing-
+    /// controls-design.md). Default values (<see cref="ImageFitMode.Fit"/>/<c>false</c>/<c>0</c>)
+    /// exactly reproduce this control's pre-existing behavior, so the Novels PDF reader (which
+    /// shares this exact control but has no fit-mode/rotation concept of its own) needs zero
+    /// changes - it simply never binds these.
+    /// </summary>
+    public static readonly StyledProperty<ImageFitMode> FitModeProperty =
+        AvaloniaProperty.Register<PageCanvas, ImageFitMode>(nameof(FitMode), defaultValue: ImageFitMode.Fit);
+
+    public static readonly StyledProperty<bool> FitOnlyIfOversizedProperty =
+        AvaloniaProperty.Register<PageCanvas, bool>(nameof(FitOnlyIfOversized));
+
+    /// <summary>
+    /// Plain-wheel scroll/pan speed multiplier, backing <c>AppSettings.MouseWheelSpeed</c>
+    /// (docs/superpowers/specs/2026-08-10-preferences-reader-tab-design.md - CE:
+    /// <c>Settings.MouseWheelSpeed</c>, governs plain-wheel pan, not Ctrl+wheel zoom). Default 1.0
+    /// reproduces the fixed constant this replaces, so the Novels PDF reader (shares this control,
+    /// never binds this) is unaffected.
+    /// </summary>
+    public static readonly StyledProperty<double> WheelPanStepProperty =
+        AvaloniaProperty.Register<PageCanvas, double>(nameof(WheelPanStep), defaultValue: 1.0);
+
+    /// <summary>0/90/180/270 only - not validated here, the ViewModel owns wrapping the value (same division of responsibility as <see cref="ZoomLevel"/>'s clamp authority).</summary>
+    public static readonly StyledProperty<int> ManualRotationDegreesProperty =
+        AvaloniaProperty.Register<PageCanvas, int>(nameof(ManualRotationDegrees));
+
+    /// <summary>
+    /// Composed with <see cref="ManualRotationDegrees"/> here, not by the ViewModel, since the
+    /// landscape-vs-portrait check needs <see cref="Page"/>'s actual decoded pixel size, which this
+    /// control already has - the ViewModel only knows a bitmap exists, not its dimensions.
+    /// </summary>
+    public static readonly StyledProperty<bool> AutoRotateProperty =
+        AvaloniaProperty.Register<PageCanvas, bool>(nameof(AutoRotate));
+
     private bool _isDragging;
     private Point _dragStartPointer;
     private double _dragStartPanX;
@@ -77,7 +112,21 @@ public class PageCanvas : Control
         AffectsRender<PageCanvas>(ZoomLevelProperty);
         AffectsRender<PageCanvas>(PanOffsetXProperty);
         AffectsRender<PageCanvas>(PanOffsetYProperty);
+        AffectsRender<PageCanvas>(FitModeProperty);
+        AffectsRender<PageCanvas>(FitOnlyIfOversizedProperty);
+        AffectsRender<PageCanvas>(ManualRotationDegreesProperty);
+        AffectsRender<PageCanvas>(AutoRotateProperty);
         FocusableProperty.OverrideDefaultValue<PageCanvas>(true);
+
+        // Real bug, found via manual testing: Avalonia's ClipToBounds defaults to false, and
+        // nothing else here was clipping ReaderPageDrawOperation's draw calls to this control's own
+        // Bounds - a page bigger than the canvas (Original/FitWidth/FitHeight/BestFit, or any fit
+        // mode once zoomed in) painted straight through into whatever's visually adjacent (the
+        // toolbar, thumbnail rail) instead of being cropped to the reader viewport. Panning alone
+        // (the CanPan/HasOverflow fix above) only moves *where* the oversized content sits - without
+        // this, it still bleeds out regardless of pan offset. Pre-existing gap, not introduced by
+        // fit modes - zoom alone could already trigger it, just less commonly hit in practice.
+        ClipToBoundsProperty.OverrideDefaultValue<PageCanvas>(true);
     }
 
     public Bitmap? Page
@@ -136,10 +185,66 @@ public class PageCanvas : Control
         set => SetValue(PanOffsetYProperty, value);
     }
 
+    public double WheelPanStep
+    {
+        get => GetValue(WheelPanStepProperty);
+        set => SetValue(WheelPanStepProperty, value);
+    }
+
+    public ImageFitMode FitMode
+    {
+        get => GetValue(FitModeProperty);
+        set => SetValue(FitModeProperty, value);
+    }
+
+    public bool FitOnlyIfOversized
+    {
+        get => GetValue(FitOnlyIfOversizedProperty);
+        set => SetValue(FitOnlyIfOversizedProperty, value);
+    }
+
+    public int ManualRotationDegrees
+    {
+        get => GetValue(ManualRotationDegreesProperty);
+        set => SetValue(ManualRotationDegreesProperty, value);
+    }
+
+    public bool AutoRotate
+    {
+        get => GetValue(AutoRotateProperty);
+        set => SetValue(AutoRotateProperty, value);
+    }
+
+    private int EffectiveRotationDegrees() => ZoomPanMath.ComposeRotationDegrees(ManualRotationDegrees, AutoRotate, Page?.PixelSize ?? default);
+
+    /// <summary>
+    /// <see cref="Page"/>'s pixel size, swapped width/height for a 90/270 rotation - the shape
+    /// gesture math (pan clamping, zoom-anchor, double-click centering) needs to reason about,
+    /// since that's what's actually displayed on screen. See <see cref="ReaderPageDrawOperation"/>
+    /// for the matching render-time logic.
+    /// </summary>
+    private PixelSize EffectivePixelSize()
+    {
+        var pixelSize = Page?.PixelSize ?? default;
+        return EffectiveRotationDegrees() is 90 or 270 ? new PixelSize(pixelSize.Height, pixelSize.Width) : pixelSize;
+    }
+
+    /// <summary>
+    /// Real pan-enable gate (docs/superpowers/specs/2026-08-10-reader-polish-core-viewing-controls-
+    /// design.md follow-up fix) - <c>ZoomLevel &gt; MinZoom</c> alone used to be sufficient before
+    /// fit modes existed (the only base scale was always contain-within-bounds), but
+    /// <see cref="ImageFitMode.Original"/>/<see cref="ImageFitMode.FitWidth"/>/
+    /// <see cref="ImageFitMode.FitHeight"/>/<see cref="ImageFitMode.BestFit"/> can all overflow the
+    /// canvas at <c>ZoomLevel == MinZoom</c> too - without checking actual overflow, that content
+    /// is unreachable, stuck cut off with no way to pan to it (real bug, found via manual testing).
+    /// </summary>
+    private bool CanPan() => ZoomLevel > ZoomPanMath.MinZoom || ZoomPanMath.HasOverflow(Bounds.Size, EffectivePixelSize(), ZoomLevel, FitMode, FitOnlyIfOversized);
+
     public override void Render(DrawingContext context)
     {
         base.Render(context);
-        context.Custom(new ReaderPageDrawOperation(new Rect(Bounds.Size), Page, HighQualityDisplay, ZoomLevel, PanOffsetX, PanOffsetY));
+        context.Custom(new ReaderPageDrawOperation(new Rect(Bounds.Size), Page, HighQualityDisplay, ZoomLevel, PanOffsetX, PanOffsetY,
+            FitMode, FitOnlyIfOversized, EffectiveRotationDegrees()));
     }
 
     protected override void OnPointerPressed(PointerPressedEventArgs e)
@@ -161,7 +266,7 @@ public class PageCanvas : Control
             _touchPressTime = DateTime.UtcNow;
         }
 
-        if (ZoomLevel > ZoomPanMath.MinZoom)
+        if (CanPan())
         {
             _isDragging = true;
             _dragStartPointer = e.GetPosition(this);
@@ -191,8 +296,8 @@ public class PageCanvas : Control
         }
 
         var p = e.GetPosition(this);
-        var (x, y) = ZoomPanMath.ClampPan(Bounds.Size, Page?.PixelSize ?? default, ZoomLevel,
-            _dragStartPanX + (p.X - _dragStartPointer.X), _dragStartPanY + (p.Y - _dragStartPointer.Y));
+        var (x, y) = ZoomPanMath.ClampPan(Bounds.Size, EffectivePixelSize(), ZoomLevel,
+            _dragStartPanX + (p.X - _dragStartPointer.X), _dragStartPanY + (p.Y - _dragStartPointer.Y), FitMode, FitOnlyIfOversized);
         PanOffsetX = x;
         PanOffsetY = y;
         e.Handled = true;
@@ -208,7 +313,7 @@ public class PageCanvas : Control
 
         _isDragging = false;
 
-        if (e.Pointer.Type == PointerType.Touch && _touchPressPosition is { } start && ZoomLevel <= ZoomPanMath.MinZoom)
+        if (e.Pointer.Type == PointerType.Touch && _touchPressPosition is { } start && !CanPan())
         {
             var end = e.GetPosition(this);
             double dx = end.X - start.X;
@@ -237,8 +342,8 @@ public class PageCanvas : Control
         {
             double newZoom = ZoomPanMath.ClampZoom(ZoomLevel + (e.Delta.Y * WheelZoomStep));
             var cursor = e.GetPosition(this);
-            var (x, y) = ZoomPanMath.PanToKeepPointFixed(Bounds.Size, Page?.PixelSize ?? default,
-                ZoomLevel, new Point(PanOffsetX, PanOffsetY), cursor, newZoom);
+            var (x, y) = ZoomPanMath.PanToKeepPointFixed(Bounds.Size, EffectivePixelSize(),
+                ZoomLevel, new Point(PanOffsetX, PanOffsetY), cursor, newZoom, FitMode, FitOnlyIfOversized);
             ZoomLevel = newZoom;
             PanOffsetX = x;
             PanOffsetY = y;
@@ -246,10 +351,10 @@ public class PageCanvas : Control
             return;
         }
 
-        if (ZoomLevel > ZoomPanMath.MinZoom)
+        if (CanPan())
         {
-            var (x, y) = ZoomPanMath.ClampPan(Bounds.Size, Page?.PixelSize ?? default, ZoomLevel,
-                PanOffsetX - (e.Delta.X * WheelPanStep), PanOffsetY + (e.Delta.Y * WheelPanStep));
+            var (x, y) = ZoomPanMath.ClampPan(Bounds.Size, EffectivePixelSize(), ZoomLevel,
+                PanOffsetX - (e.Delta.X * WheelPanStep), PanOffsetY + (e.Delta.Y * WheelPanStep), FitMode, FitOnlyIfOversized);
             PanOffsetX = x;
             PanOffsetY = y;
         }
@@ -269,9 +374,9 @@ public class PageCanvas : Control
     {
         base.OnKeyDown(e);
 
-        if (ZoomLevel > ZoomPanMath.MinZoom && TryGetArrowPanDelta(e.Key, out double dx, out double dy))
+        if (CanPan() && TryGetArrowPanDelta(e.Key, out double dx, out double dy))
         {
-            var (x, y) = ZoomPanMath.ClampPan(Bounds.Size, Page?.PixelSize ?? default, ZoomLevel, PanOffsetX + dx, PanOffsetY + dy);
+            var (x, y) = ZoomPanMath.ClampPan(Bounds.Size, EffectivePixelSize(), ZoomLevel, PanOffsetX + dx, PanOffsetY + dy, FitMode, FitOnlyIfOversized);
             PanOffsetX = x;
             PanOffsetY = y;
             e.Handled = true;
@@ -296,7 +401,7 @@ public class PageCanvas : Control
             return;
         }
 
-        var (x, y) = ZoomPanMath.PanToCenterOn(Bounds.Size, Page?.PixelSize ?? default, ZoomPanMath.DoubleClickZoom, clickPoint);
+        var (x, y) = ZoomPanMath.PanToCenterOn(Bounds.Size, EffectivePixelSize(), ZoomPanMath.DoubleClickZoom, clickPoint, FitMode, FitOnlyIfOversized);
         ZoomLevel = ZoomPanMath.DoubleClickZoom;
         PanOffsetX = x;
         PanOffsetY = y;

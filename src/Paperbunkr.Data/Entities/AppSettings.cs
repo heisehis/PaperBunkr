@@ -44,4 +44,33 @@ public class AppSettings
     /// on by default).
     /// </summary>
     public bool HighQualityPageDisplay { get; set; } = true;
+
+    /// <summary>
+    /// Whether zoom resets to 1.0 on every page turn within a session, or persists across pages
+    /// until the issue is closed/reopened (Paperbunkr's existing behavior). CE:
+    /// <c>Settings.ResetZoomOnPageChange</c>, default false - both this and Paperbunkr's own
+    /// pre-existing default agree, so this setting only changes anything for someone who
+    /// deliberately turns it on.
+    /// </summary>
+    public bool ResetZoomOnPageChange { get; set; }
+
+    /// <summary>
+    /// Mouse-wheel scroll/pan speed multiplier, replacing <c>PageCanvas</c>'s previously-fixed
+    /// <c>WheelPanStep</c> constant. CE: <c>Settings.MouseWheelSpeed</c> ("lines per mouse
+    /// scrolling"), default 2.0, UI range 0.5-5.0 (CE's own trackbar min/max) - governs plain-wheel
+    /// pan speed, not Ctrl+wheel zoom, confirmed from CE source
+    /// (<c>ComicDisplay.OnMouseWheel</c>'s <c>scrollLines = ... * MouseWheelSpeed</c>).
+    /// </summary>
+    public double MouseWheelSpeed { get; set; } = 2.0;
+
+    /// <summary>
+    /// Global default fit mode for a book with no <see cref="Issue.PageFitModeOverride"/>
+    /// (docs/superpowers/specs/2026-08-10-reader-polish-core-viewing-controls-design.md §3 left
+    /// this as a fixed code constant pending a Reader Preferences surface to edit it - this is
+    /// that surface). Default matches the constant it replaces.
+    /// </summary>
+    public ImageFitMode DefaultPageFitMode { get; set; } = ImageFitMode.FitWidth;
+
+    /// <summary>Same rationale as <see cref="DefaultPageFitMode"/>, for the auto-rotate-landscape-pages default.</summary>
+    public bool DefaultAutoRotate { get; set; }
 }

@@ -110,6 +110,17 @@ public class Issue
     /// </summary>
     public ReadingMode? ReadingModeOverride { get; set; }
 
+    /// <summary>
+    /// Nullable escape hatch for a single issue that displays best with a different fit mode than
+    /// the fixed code default (docs/superpowers/specs/2026-08-10-reader-polish-core-viewing-
+    /// controls-design.md §3) - page dimensions/scan quality genuinely vary issue-to-issue in a way
+    /// reading direction doesn't, unlike <see cref="ReadingModeOverride"/> which is Series-scoped.
+    /// </summary>
+    public ImageFitMode? PageFitModeOverride { get; set; }
+
+    /// <summary>Same override shape as <see cref="PageFitModeOverride"/>, for the auto-rotate-landscape-pages toggle.</summary>
+    public bool? AutoRotateOverride { get; set; }
+
     // --- read-state / file fields carried over from ComicBook.cs ---
 
     public string? FilePath { get; set; }

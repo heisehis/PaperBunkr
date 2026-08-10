@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Paperbunkr.App.Services;
+using Paperbunkr.Data.Entities;
 
 namespace Paperbunkr.App.ViewModels;
 
@@ -16,6 +17,9 @@ public partial class MainViewModel : ViewModelBase
     public MainViewModel()
     {
         Library = new LibraryScreenViewModel(GoDetailForSeries, GoReaderForIssue);
+        Books = new BooksScreenViewModel(new FilePickerService(), new BookFolderScanService(), new BookCoverThumbnailService(), GoBookReaderForBook);
+        BookReader = new BookReaderScreenViewModel(GoBooks);
+        PdfReader = new PdfPageReaderScreenViewModel(GoBooks);
         Detail = new DetailScreenViewModel(GoLibrary, GoReaderForIssue, GoIssuePropertiesForIssue, GoBulkIssuePropertiesForIssues);
         Reader = new ReaderScreenViewModel(GoDetail);
         IssueProperties = new IssuePropertiesScreenViewModel(GoDetailAfterIssueEdit);
@@ -65,6 +69,9 @@ public partial class MainViewModel : ViewModelBase
     private void CloseProgressToast(ToastProgressViewModel toast) => ProgressToastCloseRequested?.Invoke(toast);
 
     public LibraryScreenViewModel Library { get; }
+    public BooksScreenViewModel Books { get; }
+    public BookReaderScreenViewModel BookReader { get; }
+    public PdfPageReaderScreenViewModel PdfReader { get; }
     public DetailScreenViewModel Detail { get; }
     public ReaderScreenViewModel Reader { get; }
     public IssuePropertiesScreenViewModel IssueProperties { get; }
@@ -82,6 +89,9 @@ public partial class MainViewModel : ViewModelBase
     private string _currentScreen = "library";
 
     public bool IsLibrary => CurrentScreen == "library";
+    public bool IsBooks => CurrentScreen == "books";
+    public bool IsBookReader => CurrentScreen == "bookReader";
+    public bool IsPdfReader => CurrentScreen == "pdfReader";
     public bool IsDetail => CurrentScreen == "detail";
     public bool IsSmart => CurrentScreen == "smart";
     public bool IsReading => CurrentScreen == "reading";
@@ -96,6 +106,9 @@ public partial class MainViewModel : ViewModelBase
     partial void OnCurrentScreenChanged(string value)
     {
         OnPropertyChanged(nameof(IsLibrary));
+        OnPropertyChanged(nameof(IsBooks));
+        OnPropertyChanged(nameof(IsBookReader));
+        OnPropertyChanged(nameof(IsPdfReader));
         OnPropertyChanged(nameof(IsDetail));
         OnPropertyChanged(nameof(IsSmart));
         OnPropertyChanged(nameof(IsReading));
@@ -117,6 +130,13 @@ public partial class MainViewModel : ViewModelBase
         // those instead of special-casing each caller to remember to refresh Library itself.
         Library.LoadFromDatabase();
         CurrentScreen = "library";
+    });
+
+    [RelayCommand]
+    private void GoBooks() => TryLeaveCurrentEditor(() =>
+    {
+        Books.LoadFromDatabase();
+        CurrentScreen = "books";
     });
 
     [RelayCommand]
@@ -171,7 +191,7 @@ public partial class MainViewModel : ViewModelBase
     });
 
     /// <summary>
-    /// Guards the six rail-nav destinations against silently discarding an in-progress Issue
+    /// Guards the seven rail-nav destinations against silently discarding an in-progress Issue
     /// Properties/Bulk Editing edit (P6 follow-up, docs/alpha-todo.md) - CE's equivalent
     /// (<c>ComicBookDialog</c>) is a true modal Windows dialog that blocks all other interaction by
     /// construction, but these screens are just screen-swaps within one window, so without this the
@@ -241,6 +261,20 @@ public partial class MainViewModel : ViewModelBase
     {
         Reader.LoadIssue(issueId);
         CurrentScreen = "reader";
+    }
+
+    private void GoBookReaderForBook(int bookId, BookFormat format)
+    {
+        if (format == BookFormat.Pdf)
+        {
+            PdfReader.LoadBook(bookId);
+            CurrentScreen = "pdfReader";
+        }
+        else
+        {
+            BookReader.LoadBook(bookId);
+            CurrentScreen = "bookReader";
+        }
     }
 
     private void GoIssuePropertiesForIssue(int issueId)

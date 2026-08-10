@@ -148,6 +148,14 @@
                             </Border.OpacityMask>
                         </Border>
                     </Button>
+                    <Button Classes="rail" Classes.active="{Binding IsBooks}"
+                            Command="{Binding GoBooksCommand}" ToolTip.Tip="Books">
+                        <Border Classes="icon">
+                            <Border.OpacityMask>
+                                <ImageBrush Source="/Assets/Icons/Layers.png" Stretch="Uniform" />
+                            </Border.OpacityMask>
+                        </Border>
+                    </Button>
                     <Button Classes="rail" Classes.active="{Binding IsSmart}"
                             Command="{Binding GoSmartCommand}" ToolTip.Tip="Smart Lists">
                         <Border Classes="icon">
@@ -388,6 +396,27 @@
                 <ContentControl.ContentTemplate>
                     <DataTemplate x:DataType="vm:LibraryScreenViewModel">
                         <views:LibraryScreen />
+                    </DataTemplate>
+                </ContentControl.ContentTemplate>
+            </ContentControl>
+            <ContentControl IsVisible="{Binding IsBooks}" Content="{Binding Books}">
+                <ContentControl.ContentTemplate>
+                    <DataTemplate x:DataType="vm:BooksScreenViewModel">
+                        <views:BooksScreen />
+                    </DataTemplate>
+                </ContentControl.ContentTemplate>
+            </ContentControl>
+            <ContentControl IsVisible="{Binding IsBookReader}" Content="{Binding BookReader}">
+                <ContentControl.ContentTemplate>
+                    <DataTemplate x:DataType="vm:BookReaderScreenViewModel">
+                        <views:BookReaderScreen />
+                    </DataTemplate>
+                </ContentControl.ContentTemplate>
+            </ContentControl>
+            <ContentControl IsVisible="{Binding IsPdfReader}" Content="{Binding PdfReader}">
+                <ContentControl.ContentTemplate>
+                    <DataTemplate x:DataType="vm:PdfPageReaderScreenViewModel">
+                        <views:PdfPageReaderScreen />
                     </DataTemplate>
                 </ContentControl.ContentTemplate>
             </ContentControl>

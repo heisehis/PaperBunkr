@@ -1,0 +1,79 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Paperbunkr.App.ViewModels"
+             xmlns:views="using:Paperbunkr.App.Views"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="1000" d:DesignHeight="700"
+             x:Class="Paperbunkr.App.Views.PdfPageReaderScreen"
+             x:DataType="vm:PdfPageReaderScreenViewModel">
+
+    <UserControl.Resources>
+        <SolidColorBrush x:Key="ReaderBgBrush" Color="#0B0C0F" />
+        <SolidColorBrush x:Key="ReaderChromeBrush" Color="#15171C" />
+        <SolidColorBrush x:Key="ReaderBorderBrush" Color="#24272E" />
+        <SolidColorBrush x:Key="ReaderTextBrush" Color="#E7E2D6" />
+        <SolidColorBrush x:Key="ReaderTextMutedBrush" Color="#8B8779" />
+        <SolidColorBrush x:Key="ReaderTrackBrush" Color="#2A2D34" />
+    </UserControl.Resources>
+
+    <Grid RowDefinitions="Auto,*,Auto" Background="{StaticResource ReaderBgBrush}">
+
+        <!-- ============ Top toolbar - same always-visible shape as the comic Reader's, not the Novels reflow reader's tap-to-hide chrome ============ -->
+        <Border Grid.Row="0" Background="{StaticResource ReaderChromeBrush}" BorderBrush="{StaticResource ReaderBorderBrush}"
+                BorderThickness="0,0,0,1" Padding="18,10">
+            <Grid ColumnDefinitions="*,Auto">
+                <Button Grid.Column="0" Command="{Binding CloseCommand}" Background="Transparent" BorderThickness="0"
+                        Padding="0" Cursor="Hand" HorizontalAlignment="Left">
+                    <StackPanel Orientation="Horizontal" Spacing="4">
+                        <TextBlock Text="←" FontSize="14" Foreground="{StaticResource ReaderTextMutedBrush}" />
+                        <TextBlock Text="Books" FontSize="13" Foreground="{StaticResource ReaderTextMutedBrush}" />
+                    </StackPanel>
+                </Button>
+                <TextBlock Grid.Column="1" Text="{Binding BookTitle}" FontSize="13" FontWeight="SemiBold"
+                           Foreground="{StaticResource ReaderTextBrush}" HorizontalAlignment="Right" TextTrimming="CharacterEllipsis" />
+            </Grid>
+        </Border>
+
+        <!-- ============ Page ============ -->
+        <Grid Grid.Row="1">
+            <views:PageCanvas x:Name="PageCanvasControl"
+                              Page="{Binding CurrentPage}"
+                              LeftCommand="{Binding GoLeftCommand}"
+                              RightCommand="{Binding GoRightCommand}"
+                              HighQualityDisplay="{Binding HighQualityPageDisplay}"
+                              ZoomLevel="{Binding ZoomLevel}"
+                              PanOffsetX="{Binding PanOffsetX}"
+                              PanOffsetY="{Binding PanOffsetY}"
+                              IsVisible="{Binding !HasError}" />
+
+            <Border IsVisible="{Binding HasError}" Width="400" CornerRadius="8"
+                    Background="{StaticResource ReaderChromeBrush}" BorderBrush="{StaticResource ReaderBorderBrush}"
+                    BorderThickness="1" Padding="20" HorizontalAlignment="Center" VerticalAlignment="Center">
+                <TextBlock Text="{Binding ErrorMessage}" FontSize="13" Foreground="{StaticResource ReaderTextMutedBrush}"
+                           TextWrapping="Wrap" HorizontalAlignment="Center" TextAlignment="Center" />
+            </Border>
+        </Grid>
+
+        <!-- ============ Bottom scrubber ============ -->
+        <Border Grid.Row="2" Background="{StaticResource ReaderChromeBrush}" BorderBrush="{StaticResource ReaderBorderBrush}"
+                BorderThickness="0,1,0,0" Padding="22,12">
+            <Grid ColumnDefinitions="Auto,*,Auto">
+                <Button Grid.Column="0" Content="◀" Command="{Binding GoLeftCommand}" Background="Transparent"
+                        BorderThickness="0" Padding="0" Cursor="Hand" Foreground="{StaticResource ReaderTextBrush}"
+                        VerticalAlignment="Center" Margin="0,0,14,0" />
+                <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="4">
+                    <ProgressBar Height="4" CornerRadius="2" Minimum="0" Maximum="1"
+                                 Value="{Binding ProgressFraction}" Background="{StaticResource ReaderTrackBrush}"
+                                 Foreground="{DynamicResource PbAccentBrush}" />
+                    <TextBlock HorizontalAlignment="Center" FontSize="11" Foreground="{StaticResource ReaderTextMutedBrush}">
+                        <Run Text="{Binding PageNumber}" /><Run Text=" / " /><Run Text="{Binding PageCount}" />
+                    </TextBlock>
+                </StackPanel>
+                <Button Grid.Column="2" Content="▶" Command="{Binding GoRightCommand}" Background="Transparent"
+                        BorderThickness="0" Padding="0" Cursor="Hand" Foreground="{StaticResource ReaderTextBrush}"
+                        VerticalAlignment="Center" Margin="14,0,0,0" />
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

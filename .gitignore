@@ -7,3 +7,6 @@ _reference/
 *.db
 installer/publish/
 installer/Output/
+
+# Brainstorming visual-companion scratch files
+.superpowers/

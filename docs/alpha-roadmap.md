@@ -127,6 +127,81 @@ to prove against. Explicitly Beta-scoped from the start.
 Crash reporter dialog, minimize-to-tray, external "open with" app associations.
 *(Backup manager and file association are already shipped as part of Alpha's Advanced tab.)*
 
+### Novels: EPUB/PDF support (Phase 1+2 landed 2026-08-09/10, Phase 3 landed 2026-08-10)
+Not a CE-parity item — ComicRackCE has no prose-reading equivalent, see the design spec's own
+CE-verification note. Design: docs/superpowers/specs/2026-08-09-novels-epub-pdf-support-design.md.
+**Phase 1 shipped** (independent `Book`/`BookSeries`/`BookBookmark`/`BookFolder` schema, `VersOne.Epub`-
+and raw-`pdfium`-text-API-backed parsers behind a shared `IBookTextSource`, folder-scan import with
+cover/metadata extraction, a Books nav section with a covers grid — no reader yet, verified via 17
+new xUnit tests against real synthetic EPUB/PDF fixtures plus a full migration-chain smoke test).
+
+**Phase 2 shipped, with one deliberate deviation from the original design spec §5: PDF reading was
+moved off the reflowable-text pipeline entirely.** EPUB got the real reflowable reader as designed
+(`BookPaginator` pure paragraph-fitting math + real Avalonia `TextLayout` measurement, immersive
+tap-to-reveal chrome, TOC drawer, font/theme sheet — size/family/line-spacing/theme). PDF was
+confirmed via manual testing against real e-book PDFs to be a poor fit for text-extraction reflow
+(exactly the risk §9.1 flagged going in — footnotes/columns/running headers interleaved
+unpredictably), so PDFs now open in a separate comic-panel-style reader instead
+(`PdfPageReaderScreenViewModel`), reusing `PageCanvas`/`PageImageDecoder`/`ZoomPanMath` directly -
+`PageCanvas` has zero Issue/comic coupling, so this was a straight port of the existing zoom/pan/
+page-turn interaction onto `Book`, not a new implementation. `PdfBookSource` (text extraction) is
+still used for import-time metadata only, not for reading.
+Two real bugs found via manual testing and fixed along the way: the reflow reader could get stuck
+permanently blank the first time it was ever shown (viewport size never reported - fixed with a
+`Loaded`-event fallback), and a chapter with zero paragraphs (a real EPUB's cover/title-page spine
+item) left it stuck showing nothing (fixed by skipping to the first chapter with content). 12 new
+tests.
+
+**Phase 3 shipped (2026-08-10): resume position, bookmarks, in-book search for the EPUB reader**
+(design spec §6/§7 — PDF's separate comic-panel reader was out of scope, per the user's explicit
+ask for "the EPUB reader"). Resume and bookmark position both use the same (ChapterIndex,
+CharacterOffset) paragraph-boundary identity `BookPosition` already established in Phase 2, so both
+stay stable across font-size/theme changes and window resizes, same as live pagination does.
+- **Resume:** `Book.LastChapterIndex`/`LastCharacterOffset`/`LastOpenedTime` are read on `LoadBook`
+  (chapter index clamped defensively; `BookPaginator.FindParagraphIndex` already clamps a stale
+  offset) and written via a new `PersistPosition()` after every explicit navigation (chapter/page/
+  bookmark/search jump) — deliberately *not* called from `RecomputeCurrentPage` itself, since that
+  also runs on every font/theme change and would otherwise fire a DB write per slider tick. Same
+  "fresh context per write" shape `ReaderScreenViewModel.GoToPage` already uses for
+  `Issue.LastPageRead`.
+- **Bookmarks:** a 🔖 icon opens a new Bookmarks drawer (mirrors the TOC drawer) with a toggle button
+  for the current page plus the full list, each row jumping via `GoToBookmarkCommand` or deletable
+  via `DeleteBookmarkCommand`. `BookBookmark.Excerpt` is the paragraph the page starts on, truncated.
+- **Search:** a 🔍 icon opens a top-anchored search sheet; typing runs a linear substring scan
+  (case-insensitive, one match per paragraph, capped at 200 results) over the already-parsed
+  in-memory chapters — no persistent index, per design spec §7. Results jump like TOC/bookmarks do.
+- Real bug found and fixed along the way: `LoadBook`'s `context.Books.Single(...)` query didn't
+  `.Include(b => b.Bookmarks)`, so a book's saved bookmarks silently came back empty on every reopen
+  (no lazy-loading proxies configured in this project - caught by a test, not manual testing this
+  time).
+- 8 new tests (resume-survives-reopen, bookmark add/remove/persist/navigate/delete, search
+  match/no-match/short-query) — all against the existing `EpubFixture`, no new fixture needed.
+  282 tests total in the suite now pass. **Manual-only, not yet done:** actual on-screen bookmark
+  drawer / search sheet interaction — no unattended desktop GUI automation available for this
+  project (same caveat as Phase 2's TOC/font-sheet verification).
+
+**Two real, pre-existing bugs found and fixed during manual testing against a real 1992-series
+library and real e-book files** (neither caused by this Novels work, both unrelated to it):
+1. `CoverImageCache`'s LRU cache (`src/Paperbunkr.App/Services/LruCache.cs`) disposes a `Bitmap`
+   the instant it's evicted; `LibraryScreenViewModel.LoadFromDatabase` requests a cover for every
+   series in one synchronous pass before anything renders. Past the cache's 1000-entry cap (sized
+   against a 371-series test library), the earliest covers in that pass got disposed before the
+   layout pass that displays them ever ran — crashed Library on startup with `ObjectDisposedException`
+   on `Ref<IBitmapImpl>` for any real library over ~1000 series. Fixed by raising the cap to 5000
+   (comfortable margin over the real 1992-series case that found it); same fix applied to the new
+   `BookCoverImageCache`, which copied the identical pattern, before it could bite there too.
+2. `PdfiumReaderEngine` (`PDFiumSharpV2`, the existing comic-PDF-reading pipeline) P/Invokes
+   against `pdfium_x64.dll`, but the native binary actually bundled (`bblanchon.PDFium.Win32`)
+   ships a plain `pdfium.dll` — the names never matched, so PDFiumSharpV2 silently failed to load
+   its native library for every real PDF, swallowed by `ComicProvider.Open()` into a silent
+   `Count == 0` rather than a visible error. This means **PDF-as-comic reading has likely never
+   actually worked** for a real PDF file, not just Book PDF cover generation (which reuses this
+   same pipeline) — nobody had tested it against a real, non-synthetic PDF before. Fixed with a
+   `NativeLibrary.SetDllImportResolver` on PDFiumSharpV2's own assembly (in `PdfiumReaderEngine`'s
+   static constructor) redirecting its DllImport names to the same already-resolved `pdfium.dll`,
+   verified against two real e-book PDFs. Worth a dedicated regression test in a future pass — today's
+   verification was manual/diagnostic, not a checked-in test, since it depends on files outside the repo.
+
 ### Deferred / dropped (no action needed)
 - **News reader** (`Help > News` RSS) — deferred, live idea to repurpose the feed mechanism for
   something Paperbunkr-relevant; needs its own brainstorm before scoping

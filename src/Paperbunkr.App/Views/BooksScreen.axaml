@@ -1,0 +1,128 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Paperbunkr.App.ViewModels"
+             xmlns:models="using:Paperbunkr.App.Models"
+             xmlns:conv="using:Avalonia.Data.Converters"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="900" d:DesignHeight="760"
+             x:Class="Paperbunkr.App.Views.BooksScreen"
+             x:DataType="vm:BooksScreenViewModel">
+
+    <UserControl.Styles>
+        <Style Selector="Button.headerAction">
+            <Setter Property="Padding" Value="10,5" />
+            <Setter Property="CornerRadius" Value="5" />
+            <Setter Property="FontSize" Value="11.5" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Background" Value="{DynamicResource PbChromeBrush}" />
+            <Setter Property="BorderBrush" Value="#383D47" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextBrush}" />
+        </Style>
+
+        <Style Selector="Border.folderRow">
+            <Setter Property="Background" Value="{DynamicResource PbChromeBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="5" />
+            <Setter Property="Padding" Value="10,6" />
+        </Style>
+
+        <Style Selector="Border.bookCover">
+            <Setter Property="CornerRadius" Value="6" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
+            <Setter Property="BoxShadow" Value="0 8 24 -12 #80000000" />
+            <Setter Property="ClipToBounds" Value="True" />
+        </Style>
+
+        <!-- Book card - same shape as LibraryScreen's Button.card, defined locally since each UserControl's Styles block isn't shared -->
+        <Style Selector="Button.card">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+        </Style>
+    </UserControl.Styles>
+
+    <ScrollViewer>
+        <StackPanel>
+
+            <Grid ColumnDefinitions="*,Auto" Margin="28,20,28,16">
+                <StackPanel Grid.Column="0" VerticalAlignment="Bottom">
+                    <TextBlock Text="Books" FontSize="22" FontWeight="Bold" Foreground="{DynamicResource PbTextBrush}" />
+                    <TextBlock Text="Novels - EPUB and PDF" FontSize="12.5" Foreground="{DynamicResource PbTextFaintBrush}" Margin="0,4,0,0" />
+                </StackPanel>
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Bottom">
+                    <Button Classes="headerAction" Content="Add Folder" Command="{Binding AddFolderCommand}" />
+                    <Button Classes="headerAction" Content="Scan Now" Command="{Binding ScanNowCommand}" IsEnabled="{Binding !IsScanning}" />
+                </StackPanel>
+            </Grid>
+            <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,0,0,1" Margin="0,0,0,20" />
+
+            <StackPanel Margin="28,0,28,20" Spacing="8" IsVisible="{Binding HasFolders}">
+                <TextBlock Text="BOOK FOLDERS" FontSize="11" FontWeight="Bold" LetterSpacing="1"
+                           Foreground="{DynamicResource PbTextFaintBrush}" />
+                <ItemsControl ItemsSource="{Binding Folders}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate><StackPanel Spacing="6" /></ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="models:BookFolderSummary">
+                            <Border Classes="folderRow">
+                                <Grid ColumnDefinitions="*,Auto">
+                                    <TextBlock Grid.Column="0" Text="{Binding Path}" FontSize="12.5"
+                                               Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center"
+                                               TextTrimming="CharacterEllipsis" />
+                                    <Button Grid.Column="1" Content="Remove" FontSize="11" Padding="8,3"
+                                            Background="Transparent" BorderThickness="0"
+                                            Foreground="{DynamicResource PbTextFaintBrush}"
+                                            Command="{Binding $parent[UserControl].((vm:BooksScreenViewModel)DataContext).RemoveFolderCommand}"
+                                            CommandParameter="{Binding}" />
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
+
+            <TextBlock Text="{Binding ScanStatus}" FontSize="12" Foreground="{DynamicResource PbTextFaintBrush}"
+                       Margin="28,0,28,16" IsVisible="{Binding ScanStatus, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
+
+            <TextBlock Text="No books yet - add a folder and Scan Now to import EPUB/PDF novels."
+                       FontSize="13" Foreground="{DynamicResource PbTextFaintBrush}" Margin="28,0,28,40"
+                       TextWrapping="Wrap" IsVisible="{Binding !HasBooks}" />
+
+            <ItemsControl ItemsSource="{Binding Books}" Margin="24,0,24,40" IsVisible="{Binding HasBooks}">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="models:BookCardSample">
+                        <Button Classes="card" Width="140" Margin="0,0,14,18"
+                                Command="{Binding $parent[UserControl].((vm:BooksScreenViewModel)DataContext).SelectBookCommand}"
+                                CommandParameter="{Binding}">
+                            <StackPanel Spacing="6">
+                                <Border Classes="bookCover" Background="{Binding CoverBrush}" Height="200">
+                                    <Image Source="{Binding CoverImage}" Stretch="UniformToFill" />
+                                </Border>
+                                <TextBlock Text="{Binding Title}" FontSize="12.5" FontWeight="SemiBold"
+                                           Foreground="{DynamicResource PbTextBrush}" TextWrapping="Wrap"
+                                           MaxLines="2" TextTrimming="CharacterEllipsis" />
+                                <TextBlock Text="{Binding Author}" FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}"
+                                           TextTrimming="CharacterEllipsis" IsVisible="{Binding Author, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
+                                <TextBlock Text="{Binding SeriesName}" FontSize="10.5" Foreground="{DynamicResource PbTextFaintBrush}"
+                                           FontStyle="Italic" TextTrimming="CharacterEllipsis" IsVisible="{Binding HasSeries}" />
+                            </StackPanel>
+                        </Button>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

@@ -4,15 +4,42 @@ using System.Drawing;
 using System.Drawing.Imaging;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Text;
 using PDFiumSharp;
 using PDFiumSharp.Enums;
 using cYo.Common.Drawing;
+using cYo.Projects.ComicRack.Engine.IO.Provider.Native;
 
 namespace cYo.Projects.ComicRack.Engine.IO.Provider.Readers.Pdf
 {
     public class PdfiumReaderEngine : IComicAccessor
     {
+        // PDFiumSharpV2 P/Invokes against "pdfium_x64"/"pdfium_x86"/"pdfium_arm64" (its own
+        // per-arch DllImport names - see PDFiumSharp.PDFium.PlatformInvoke), but the native binary
+        // actually bundled in this project is bblanchon.PDFium.Win32's plain "pdfium.dll" (the
+        // same one NativeInterop's own "pdfium" resolver already finds for PdfiumNative.cs's raw
+        // shim). Those two names never matched, so PDFiumSharpV2 silently failed to load the
+        // native library for every real PDF - confirmed via a live repro against real e-book PDFs
+        // (DllNotFoundException: "Unable to load DLL 'pdfium_x64'"), swallowed somewhere upstream
+        // by ComicProvider.Open() into a silent Count == 0 rather than a visible crash. Redirects
+        // PDFiumSharpV2's own DllImport names to the same already-resolved pdfium.dll instead of
+        // adding a second, differently-named native binary.
+        static PdfiumReaderEngine()
+        {
+            string resolvedPath = NativeInterop.ResolveNativeAssetPath(typeof(PdfDocument).Assembly, "pdfium.dll");
+
+            NativeLibrary.SetDllImportResolver(typeof(PdfDocument).Assembly, (name, requestingAssembly, searchPath) =>
+            {
+                if (name != "pdfium_x64" && name != "pdfium_x86" && name != "pdfium_arm64")
+                {
+                    return IntPtr.Zero;
+                }
+
+                return NativeLibrary.TryLoad(resolvedPath, out IntPtr handle) ? handle : IntPtr.Zero;
+            });
+        }
+
         public IEnumerable<ProviderImageInfo> GetEntryList(string source)
         {
             using (var pdfDocument = new PdfDocument(source))

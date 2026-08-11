@@ -266,4 +266,61 @@ public class ReaderLayoutModelTests
         int nearest = ReaderLayoutModel.NearestPageToViewportCenter(Array.Empty<ReaderLayoutModel.LayoutPage>(), new Size(400, 400), ReaderLayoutModel.Axis.Vertical);
         Assert.Equal(-1, nearest);
     }
+
+    [Fact]
+    public void ComputeStackOffsetOfPage_ZeroForFirstPage()
+    {
+        var sizes = new[] { new Size(400, 600), new Size(400, 300) };
+
+        double offset = ReaderLayoutModel.ComputeStackOffsetOfPage(sizes, targetIndex: 0, new Size(400, 100), ReaderLayoutModel.Axis.Vertical);
+
+        Assert.Equal(0, offset);
+    }
+
+    [Fact]
+    public void ComputeStackOffsetOfPage_SumsEveryPageBeforeTarget_ExcludingTargetItself()
+    {
+        var sizes = new[] { new Size(400, 600), new Size(400, 300), new Size(400, 900) };
+
+        double offset = ReaderLayoutModel.ComputeStackOffsetOfPage(sizes, targetIndex: 2, new Size(400, 100), ReaderLayoutModel.Axis.Vertical);
+
+        Assert.Equal(900, offset); // page 0 (600) + page 1 (300), not page 2's own 900
+    }
+
+    [Fact]
+    public void ComputeStackOffsetOfPage_IncludesGapsBeforeTarget()
+    {
+        var sizes = new[] { new Size(400, 600), new Size(400, 300) };
+
+        double offset = ReaderLayoutModel.ComputeStackOffsetOfPage(sizes, targetIndex: 1, new Size(400, 100), ReaderLayoutModel.Axis.Vertical, mainAxisGap: 20);
+
+        Assert.Equal(620, offset); // page 0 (600) + 1 gap (20)
+    }
+
+    [Fact]
+    public void ComputeStackOffsetOfPage_ScalesWithZoom()
+    {
+        var sizes = new[] { new Size(400, 600), new Size(400, 300) };
+
+        double offset = ReaderLayoutModel.ComputeStackOffsetOfPage(sizes, targetIndex: 1, new Size(400, 100), ReaderLayoutModel.Axis.Vertical, zoom: 2.0);
+
+        Assert.Equal(1200, offset); // page 0's height doubles with zoom, same as ComputeTotalMainAxisSize's scaling
+    }
+
+    [Fact]
+    public void ComputeStackOffsetOfPage_MatchesComputeContinuousLayoutsOwnStackOffsets()
+    {
+        // Cross-checks against ComputeContinuousLayout_Vertical_StacksPagesByCumulativeHeight's own
+        // expectations, so the two pure functions can't silently drift apart.
+        var sizes = new[] { new Size(400, 600), new Size(400, 300), new Size(400, 900) };
+        var viewport = new Size(400, 100);
+
+        var pages = ReaderLayoutModel.ComputeContinuousLayout(sizes, scrollOffset: 0, viewport, ReaderLayoutModel.Axis.Vertical, virtualizationRadius: 5);
+
+        for (int i = 0; i < sizes.Length; i++)
+        {
+            double offset = ReaderLayoutModel.ComputeStackOffsetOfPage(sizes, i, viewport, ReaderLayoutModel.Axis.Vertical);
+            Assert.Equal(pages[i].Rect.Y, offset);
+        }
+    }
 }

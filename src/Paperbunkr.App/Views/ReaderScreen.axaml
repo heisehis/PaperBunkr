@@ -18,6 +18,8 @@
         <SolidColorBrush x:Key="ReaderTextBrush" Color="#E7E2D6" />
         <SolidColorBrush x:Key="ReaderTextMutedBrush" Color="#8B8779" />
         <SolidColorBrush x:Key="ReaderTrackBrush" Color="#2A2D34" />
+        <!-- Fullscreen overlay panels (§7) - semi-transparent so they read as a HUD floating over the page, not another opaque chrome bar. -->
+        <SolidColorBrush x:Key="ReaderOverlayBrush" Color="#CC15171C" />
     </UserControl.Resources>
 
     <UserControl.Styles>
@@ -31,6 +33,20 @@
             <Setter Property="ClipToBounds" Value="True" />
         </Style>
         <Style Selector="Border.thumb.selected">
+            <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
+        </Style>
+
+        <!-- Fullscreen scrubber overlay's thumbnails (§7) - same shape as Border.thumb, smaller and horizontally-margined for a thin bottom strip instead of a tall side rail. -->
+        <Style Selector="Border.scrubberThumb">
+            <Setter Property="Width" Value="52" />
+            <Setter Property="Height" Value="72" />
+            <Setter Property="CornerRadius" Value="4" />
+            <Setter Property="BorderThickness" Value="2" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+            <Setter Property="Margin" Value="0,0,6,0" />
+            <Setter Property="ClipToBounds" Value="True" />
+        </Style>
+        <Style Selector="Border.scrubberThumb.selected">
             <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
         </Style>
 
@@ -68,12 +84,12 @@
         </Style>
     </UserControl.Styles>
 
-    <Grid RowDefinitions="Auto,*,Auto" Background="{StaticResource ReaderBgBrush}">
+    <Grid RowDefinitions="Auto,*,Auto" Background="{StaticResource ReaderBgBrush}" PointerMoved="OnReaderPointerMoved">
 
         <!-- ============ Top toolbar ============ -->
         <Border Grid.Row="0" Background="{StaticResource ReaderChromeBrush}" BorderBrush="{StaticResource ReaderBorderBrush}"
-                BorderThickness="0,0,0,1" Padding="18,10">
-            <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto,Auto,Auto">
+                BorderThickness="0,0,0,1" Padding="18,10" IsVisible="{Binding !IsFullscreen}">
+            <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
                 <Button Grid.Column="0" Command="{Binding GoBackCommand}" Background="Transparent" BorderThickness="0"
                         Padding="0" Cursor="Hand" HorizontalAlignment="Left">
                     <StackPanel Orientation="Horizontal" Spacing="4">
@@ -146,17 +162,58 @@
                         Command="{Binding ToggleAutoRotateCommand}" Margin="0,0,16,0" ToolTip.Tip="Auto-rotate landscape pages" />
 
                 <TextBlock Grid.Column="6" Text="{Binding PageLabel}" FontFamily="Consolas,monospace" FontSize="12"
-                           Foreground="{StaticResource ReaderTextMutedBrush}" VerticalAlignment="Center" />
+                           Foreground="{StaticResource ReaderTextMutedBrush}" VerticalAlignment="Center" Margin="0,0,12,0" />
+
+                <!-- Live image adjustment (docs/superpowers/specs/2026-08-10-reader-polish-continuous-scroll-chrome-overlays-design.md §9) - a flyout panel extending the existing toolbar, same pattern as fit-mode/zoom above rather than a new full-screen panel. -->
+                <Button Grid.Column="7" Classes="toolPill" Content="Adjust" Margin="0,0,8,0" ToolTip.Tip="Brightness / contrast / saturation / gamma">
+                    <Button.Flyout>
+                        <Flyout Placement="Bottom">
+                            <StackPanel Width="220" Spacing="12">
+                                <StackPanel Spacing="2">
+                                    <TextBlock Text="{Binding Brightness, StringFormat='Brightness: {0:F0}'}" FontSize="12"
+                                               Foreground="{StaticResource ReaderTextBrush}" />
+                                    <Slider Minimum="-100" Maximum="100" Value="{Binding Brightness}" />
+                                </StackPanel>
+                                <StackPanel Spacing="2">
+                                    <TextBlock Text="{Binding Contrast, StringFormat='Contrast: {0:F0}'}" FontSize="12"
+                                               Foreground="{StaticResource ReaderTextBrush}" />
+                                    <Slider Minimum="-100" Maximum="100" Value="{Binding Contrast}" />
+                                </StackPanel>
+                                <StackPanel Spacing="2">
+                                    <TextBlock Text="{Binding Saturation, StringFormat='Saturation: {0:F0}'}" FontSize="12"
+                                               Foreground="{StaticResource ReaderTextBrush}" />
+                                    <Slider Minimum="-100" Maximum="100" Value="{Binding Saturation}" />
+                                </StackPanel>
+                                <StackPanel Spacing="2">
+                                    <TextBlock Text="{Binding Gamma, StringFormat='Gamma: {0:F0}'}" FontSize="12"
+                                               Foreground="{StaticResource ReaderTextBrush}" />
+                                    <Slider Minimum="-100" Maximum="100" Value="{Binding Gamma}" />
+                                </StackPanel>
+                                <Button Classes="flyoutRow" Content="Reset to defaults" Command="{Binding ResetAdjustmentCommand}"
+                                        HorizontalContentAlignment="Center" />
+                            </StackPanel>
+                        </Flyout>
+                    </Button.Flyout>
+                </Button>
+
+                <!-- Fullscreen toggle (docs/superpowers/specs/2026-08-10-reader-polish-continuous-scroll-chrome-overlays-design.md §7) - F/F11 also work regardless of this button, this is purely for discoverability. -->
+                <Button Grid.Column="8" Classes="toolIcon" Content="⛶" Command="{Binding ToggleFullscreenCommand}"
+                        ToolTip.Tip="Fullscreen (F)" />
             </Grid>
         </Border>
 
         <!-- ============ Body: thumbnail rail + page ============ -->
-        <Grid Grid.Row="1" ColumnDefinitions="96,*">
+        <Grid x:Name="ReaderBodyGrid" Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <!-- Index 0's Width collapsed to 0 in fullscreen by ReaderScreen.axaml.cs - a fixed-pixel column doesn't shrink from the rail Border's own IsVisible alone. -->
+                <ColumnDefinition Width="96" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
 
             <Border Grid.Column="0" Background="{StaticResource ReaderRailBrush}" BorderBrush="{StaticResource ReaderBorderBrush}"
-                    BorderThickness="0,0,1,0">
+                    BorderThickness="0,0,1,0" IsVisible="{Binding !IsFullscreen}">
                 <ScrollViewer Padding="8,10">
-                    <ItemsControl ItemsSource="{Binding Thumbnails}">
+                    <ItemsControl x:Name="ThumbnailsItemsControl" ItemsSource="{Binding Thumbnails}">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate x:DataType="models:ReaderThumbnailSample">
                                 <Border Classes="thumb" Classes.selected="{Binding IsSelected}" Background="{Binding CoverBrush}"
@@ -169,7 +226,8 @@
                 </ScrollViewer>
             </Border>
 
-            <Grid Grid.Column="1">
+            <!-- Background (docs/superpowers/specs/2026-08-10-reader-polish-continuous-scroll-chrome-overlays-design.md §10) - Auto keeps today's fixed dark background (ReaderScreenViewModel.DefaultCanvasBackgroundBrush), Color overrides it with the user's chosen AppSettings.BackgroundColor. -->
+            <Grid Grid.Column="1" Background="{Binding CanvasBackgroundBrush}">
                 <views:PageCanvas x:Name="PageCanvasControl"
                                   Page="{Binding CurrentPage}"
                                   LeftCommand="{Binding GoLeftCommand}"
@@ -189,6 +247,13 @@
                                   Decoder="{Binding Decoder}"
                                   PageCount="{Binding PageCount}"
                                   ScrollOffset="{Binding ScrollOffset}"
+                                  CurrentContinuousPageIndex="{Binding CurrentContinuousPageIndex}"
+                                  FullscreenToggleCommand="{Binding ToggleFullscreenCommand}"
+                                  Brightness="{Binding Brightness}"
+                                  Contrast="{Binding Contrast}"
+                                  Saturation="{Binding Saturation}"
+                                  Gamma="{Binding Gamma}"
+                                  PageMarginMultiplier="{Binding PageMarginMultiplier}"
                                   IsVisible="{Binding !HasError}" />
 
                 <Border IsVisible="{Binding HasError}" Width="400" CornerRadius="8"
@@ -197,12 +262,40 @@
                     <TextBlock Text="{Binding ErrorMessage}" FontSize="13" Foreground="{StaticResource ReaderTextMutedBrush}"
                                TextWrapping="Wrap" HorizontalAlignment="Center" TextAlignment="Center" />
                 </Border>
+
+                <!-- ============ Fullscreen overlays (§7) - status text + scrubber, replace the collapsed toolbar/rail/bottom-bar while fullscreen, auto-hiding on cursor idle ============ -->
+                <Border IsVisible="{Binding ShowFullscreenOverlays}" VerticalAlignment="Top" HorizontalAlignment="Center"
+                        Margin="0,20,0,0" Background="{StaticResource ReaderOverlayBrush}" CornerRadius="8" Padding="14,7">
+                    <TextBlock Text="{Binding PageLabel}" FontFamily="Consolas,monospace" FontSize="13"
+                               Foreground="{StaticResource ReaderTextBrush}" />
+                </Border>
+
+                <Border IsVisible="{Binding ShowFullscreenOverlays}" VerticalAlignment="Bottom" HorizontalAlignment="Stretch"
+                        Margin="40,0,40,20" Background="{StaticResource ReaderOverlayBrush}" CornerRadius="8" Padding="10">
+                    <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+                        <ItemsControl x:Name="ScrubberItemsControl" ItemsSource="{Binding Thumbnails}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <StackPanel Orientation="Horizontal" />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="models:ReaderThumbnailSample">
+                                    <Border Classes="scrubberThumb" Classes.selected="{Binding IsSelected}" Background="{Binding CoverBrush}"
+                                            Cursor="Hand" PointerPressed="OnThumbnailPointerPressed">
+                                        <Image Source="{Binding CoverImage}" Stretch="UniformToFill" />
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                </Border>
             </Grid>
         </Grid>
 
         <!-- ============ Bottom scrubber ============ -->
         <Border Grid.Row="2" Background="{StaticResource ReaderChromeBrush}" BorderBrush="{StaticResource ReaderBorderBrush}"
-                BorderThickness="0,1,0,0" Padding="22,12">
+                BorderThickness="0,1,0,0" Padding="22,12" IsVisible="{Binding !IsFullscreen}">
             <Grid ColumnDefinitions="Auto,*,Auto">
                 <Button Grid.Column="0" Command="{Binding GoLeftCommand}" Background="Transparent"
                         BorderThickness="0" Padding="0" Cursor="Hand"

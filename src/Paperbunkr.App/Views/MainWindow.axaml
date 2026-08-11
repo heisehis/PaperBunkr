@@ -132,8 +132,16 @@
     <DockPanel LastChildFill="True">
 
         <!-- ============ Rail nav (64px) ============ -->
+        <!-- Real bug, found via manual testing: the Reader's own fullscreen toggle (docs/superpowers/
+             specs/2026-08-10-reader-polish-continuous-scroll-chrome-overlays-design.md §7) only sets
+             Window.WindowState - it has no reach into MainWindow's own persistent rail nav, which
+             lives here as a sibling of the Reader's ContentControl, not inside ReaderScreen's own
+             visual tree. Hidden directly off Reader.IsFullscreen (a stable ReaderScreenViewModel
+             instance, per MainViewModel.Reader) rather than adding a MainViewModel-level mirror
+             property - one source of truth. -->
         <Border DockPanel.Dock="Left" Width="64" Background="{DynamicResource PbChromeBrush}"
-                BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,0,1,0">
+                BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,0,1,0"
+                IsVisible="{Binding !Reader.IsFullscreen}">
             <Grid RowDefinitions="Auto,*,Auto" Margin="0,14,0,10">
 
                 <StackPanel Grid.Row="0" HorizontalAlignment="Center" Spacing="2">

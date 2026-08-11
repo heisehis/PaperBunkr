@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using Avalonia.Input;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
+using Avalonia.Media.Immutable;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -59,6 +60,16 @@ public partial class ReaderScreenViewModel : ViewModelBase
     /// </summary>
     private static readonly TimeSpan PurgeInterval = TimeSpan.FromSeconds(30);
     private DispatcherTimer? _purgeTimer;
+
+    /// <summary>
+    /// Debounce window for continuous-mode's throttled position save (spec §6: "throttled to avoid
+    /// a SaveChanges per scroll-frame") - restarted on every <see cref="OnCurrentContinuousPageIndexChanged"/>
+    /// call, so a `SaveChanges` only actually happens once scrolling has paused for this long.
+    /// </summary>
+    private static readonly TimeSpan PositionSaveDebounce = TimeSpan.FromMilliseconds(500);
+    private DispatcherTimer? _positionSaveTimer;
+    private int? _pendingPositionSaveIssueId;
+    private int _pendingPositionSaveIndex;
 
     public ReaderScreenViewModel(Action goBack)
     {
@@ -149,6 +160,59 @@ public partial class ReaderScreenViewModel : ViewModelBase
     private double _scrollOffset;
 
     /// <summary>
+    /// Continuous mode's tracked "current page" (docs/superpowers/specs/2026-08-10-reader-polish-
+    /// continuous-scroll-chrome-overlays-design.md §6) - written TwoWay by
+    /// <see cref="Views.PageCanvas.CurrentContinuousPageIndex"/> every time it recomputes
+    /// <see cref="Views.ReaderLayoutModel.NearestPageToViewportCenter"/> during scroll. Session-only
+    /// like <see cref="ScrollOffset"/> (resets to -1, PageCanvas's own "not determined yet"
+    /// sentinel, on every <see cref="Load"/>) - the effect of a change (<see cref="PageLabel"/>/
+    /// <see cref="ProgressFraction"/>/throttled <c>Issue.LastPageRead</c>) lives in
+    /// <see cref="OnCurrentContinuousPageIndexChanged"/>, not here.
+    /// </summary>
+    [ObservableProperty]
+    private int _currentContinuousPageIndex = -1;
+
+    /// <summary>
+    /// Continuous mode's counterpart to a paged-mode thumbnail/bookmark jump - the ViewModel has no
+    /// page-size knowledge to compute a scroll offset itself (that lives in <see cref="Views.PageCanvas"/>'s
+    /// progressive size cache), so it raises this and lets <see cref="Views.ReaderScreen"/>'s code-
+    /// behind call <see cref="Views.PageCanvas.ScrollToPage"/> directly, same "View owns View-layer
+    /// geometry" division <see cref="ScrollOffset"/> itself already draws.
+    /// </summary>
+    public event Action<int>? ScrollToPageRequested;
+
+    /// <summary>
+    /// Fired whenever the "current page" (paged mode's <see cref="GoToPage"/> or continuous mode's
+    /// <see cref="OnCurrentContinuousPageIndexChanged"/>, both funneled through
+    /// <see cref="UpdateThumbnailSelection"/>) actually changes, plus once from <see cref="Load"/>
+    /// itself. User direction: the thumbnail rail should keep the current page's thumbnail
+    /// scrolled into view as continuous-mode scrolling progresses - "follows along, but it's not
+    /// really bound to it" (a nudge-into-view on change, not a locked-together scrollbar). Lives on
+    /// the ViewModel rather than being inferred from <see cref="Thumbnails"/>' own collection-changed
+    /// events in the View, since <see cref="UpdateThumbnailSelection"/> replaces every item's
+    /// <c>IsSelected</c> flag - the View would have no cheap way to tell "which index is now
+    /// selected" from a raw collection-changed notification alone.
+    /// </summary>
+    public event Action<int>? CurrentPageIndexChanged;
+
+    partial void OnCurrentContinuousPageIndexChanged(int value)
+    {
+        if (!IsContinuousMode || value < 0 || PageCount <= 0)
+        {
+            return;
+        }
+
+        _currentPageIndex = value;
+        UpdatePageLabelAndProgress();
+        UpdateThumbnailSelection();
+
+        if (_loadedIssueId is int issueId)
+        {
+            SchedulePositionSave(issueId, value);
+        }
+    }
+
+    /// <summary>
     /// Computed off the currently-effective <see cref="Entities.ReadingMode"/> (docs/superpowers/
     /// specs/2026-08-10-reader-polish-continuous-scroll-chrome-overlays-design.md §5) - gates the
     /// fit-mode picker's visibility (continuous mode has no fit-mode concept, base scale always
@@ -187,6 +251,153 @@ public partial class ReaderScreenViewModel : ViewModelBase
 
     [ObservableProperty]
     private double _mouseWheelSpeed = 2.0;
+
+    /// <summary>
+    /// Live brightness/contrast/saturation/gamma (docs/superpowers/specs/2026-08-10-reader-polish-
+    /// continuous-scroll-chrome-overlays-design.md §9) - each bound property below is the
+    /// *effective* value (global default + per-issue override, additive, mirroring CE's own
+    /// <c>BitmapAdjustment.Add(BaseColorAdjustment, Comic.ColorAdjustment)</c>), -100..100 raw
+    /// slider units throughout (see <see cref="Services.ImageAdjustmentMath.CreateColorMatrix"/>'s
+    /// own doc comment for where that gets normalized). The four <c>*GlobalDefault</c> fields cache
+    /// what was read from <c>AppSettings</c> at <see cref="Load"/> time, so the partial
+    /// <c>On*Changed</c> hooks below can back out just the per-issue override delta
+    /// (<c>effective - global</c>) to persist to <see cref="Entities.Issue"/>, the same
+    /// global-vs-override split <see cref="FitMode"/>/<see cref="AutoRotate"/> already use for their
+    /// own overrides - just additive here instead of a flat replace.
+    /// </summary>
+    private double _brightnessGlobalDefault;
+    private double _contrastGlobalDefault;
+    private double _saturationGlobalDefault;
+    private double _gammaGlobalDefault;
+
+    /// <summary>Guards the four adjustment properties' <c>On*Changed</c> hooks during <see cref="Load"/> - setting them there reflects the issue's existing effective value back into the bound property, which would otherwise round-trip through the same "persist the override delta" logic as a real user edit and write an identical, redundant row on every single Load.</summary>
+    private bool _suppressAdjustmentPersist;
+
+    [ObservableProperty]
+    private double _brightness;
+
+    [ObservableProperty]
+    private double _contrast;
+
+    [ObservableProperty]
+    private double _saturation;
+
+    [ObservableProperty]
+    private double _gamma;
+
+    /// <summary>
+    /// Background/margin (docs/superpowers/specs/2026-08-10-reader-polish-continuous-scroll-chrome-
+    /// overlays-design.md §10) - global-only (<see cref="AppSettings.ImageBackgroundMode"/>/
+    /// <see cref="AppSettings.BackgroundColor"/>/<see cref="AppSettings.PageMarginEnabled"/>/
+    /// <see cref="AppSettings.PageMarginPercentWidth"/>), no per-Issue override, edited only via
+    /// Preferences - unlike <see cref="Brightness"/> etc. there's no toolbar panel or persistence
+    /// hook here, just a value computed fresh each <see cref="Load"/>.
+    ///
+    /// Real bug, found via manual (test-suite) verification: a plain <see cref="SolidColorBrush"/> is
+    /// an <c>AvaloniaObject</c> with dispatcher-thread affinity - stored in a <c>static readonly</c>
+    /// field, whichever thread happens to construct it first "owns" it, and any other thread that
+    /// later reads <c>.Color</c> off that same shared instance throws
+    /// <c>InvalidOperationException: The calling thread cannot access this object because a different
+    /// thread owns it</c> (surfaced by xUnit's parallel test runner touching it from multiple worker
+    /// threads - intermittent depending on scheduling, not every run). <see cref="ImmutableSolidColorBrush"/>
+    /// is the correct type for a fixed, never-mutated default: no <c>AvaloniaObject</c> base, no
+    /// thread-affinity check, genuinely immutable - also the more correct choice for the real app
+    /// regardless of the test failure, since nothing about this value should ever need live
+    /// styled-property change notifications.
+    /// </summary>
+    private static readonly IBrush DefaultCanvasBackgroundBrush = new ImmutableSolidColorBrush(Color.Parse("#0B0C0F"));
+
+    [ObservableProperty]
+    private IBrush _canvasBackgroundBrush = DefaultCanvasBackgroundBrush;
+
+    /// <summary>
+    /// Ported from CE's own <c>ImageDisplayControl.GetOutputConfig</c>: <c>ImageZoom * (PageMargin ?
+    /// (1f - PageMarginPercentWidth) : 1f)</c> - a separate, margin-adjusted zoom fed to rendering
+    /// alongside (not replacing) the real interactive <see cref="ZoomLevel"/>, exactly as CE passes
+    /// both the raw and margin-adjusted zoom into its own <c>DisplayOutputConfig</c> as two distinct
+    /// values. <see cref="Views.PageCanvas"/> multiplies this into the render-time scale only - pan
+    /// clamping stays keyed off the real <see cref="ZoomLevel"/>, matching CE's own separation.
+    /// </summary>
+    [ObservableProperty]
+    private double _pageMarginMultiplier = 1.0;
+
+    private static IBrush ComputeCanvasBackgroundBrush(ImageBackgroundMode mode, string? colorName)
+    {
+        if (mode != ImageBackgroundMode.Color || string.IsNullOrWhiteSpace(colorName))
+        {
+            return DefaultCanvasBackgroundBrush;
+        }
+
+        return Color.TryParse(colorName, out var color) ? new ImmutableSolidColorBrush(color) : DefaultCanvasBackgroundBrush;
+    }
+
+    /// <summary>
+    /// Re-reads background/margin from <c>AppSettings</c> - called from <see cref="Load"/> (a fresh
+    /// starting point for whatever book just opened) and wired by <see cref="MainViewModel"/> to
+    /// <see cref="PreferencesScreenViewModel.ReaderDisplaySettingsChanged"/>, so editing these from
+    /// Preferences updates a book that's already open instead of only taking effect on the next
+    /// <see cref="Load"/>. Safe to call with no book loaded at all (e.g. before <see cref="EnsureIssueLoaded"/>
+    /// ever ran) - it only touches these two properties, nothing book-specific.
+    /// </summary>
+    public void RefreshDisplaySettings()
+    {
+        using var context = PaperbunkrDb.CreateContext();
+        var appSettings = context.GetOrCreateAppSettings();
+        CanvasBackgroundBrush = ComputeCanvasBackgroundBrush(appSettings.ImageBackgroundMode, appSettings.BackgroundColor);
+        PageMarginMultiplier = appSettings.PageMarginEnabled ? 1.0 - appSettings.PageMarginPercentWidth : 1.0;
+    }
+
+    partial void OnBrightnessChanged(double value) => PersistAdjustmentOverride(_brightnessGlobalDefault, value, (issue, delta) => issue.BrightnessOverride = delta);
+
+    partial void OnContrastChanged(double value) => PersistAdjustmentOverride(_contrastGlobalDefault, value, (issue, delta) => issue.ContrastOverride = delta);
+
+    partial void OnSaturationChanged(double value) => PersistAdjustmentOverride(_saturationGlobalDefault, value, (issue, delta) => issue.SaturationOverride = delta);
+
+    partial void OnGammaChanged(double value) => PersistAdjustmentOverride(_gammaGlobalDefault, value, (issue, delta) => issue.GammaOverride = delta);
+
+    private void PersistAdjustmentOverride(double globalDefault, double effectiveValue, Action<Issue, float> apply)
+    {
+        if (_suppressAdjustmentPersist || _loadedIssueId is not int issueId)
+        {
+            return;
+        }
+
+        using var context = PaperbunkrDb.CreateContext();
+        var issue = context.Issues.Find(issueId);
+        if (issue is not null)
+        {
+            apply(issue, (float)(effectiveValue - globalDefault));
+            context.SaveChanges();
+        }
+    }
+
+    /// <summary>Resets this book's adjustment back to the global defaults (clears all four per-issue overrides) - the toolbar Adjust panel's "Reset" action.</summary>
+    [RelayCommand]
+    private void ResetAdjustment()
+    {
+        _suppressAdjustmentPersist = true;
+        Brightness = _brightnessGlobalDefault;
+        Contrast = _contrastGlobalDefault;
+        Saturation = _saturationGlobalDefault;
+        Gamma = _gammaGlobalDefault;
+        _suppressAdjustmentPersist = false;
+
+        if (_loadedIssueId is not int issueId)
+        {
+            return;
+        }
+
+        using var context = PaperbunkrDb.CreateContext();
+        var issue = context.Issues.Find(issueId);
+        if (issue is not null)
+        {
+            issue.BrightnessOverride = null;
+            issue.ContrastOverride = null;
+            issue.SaturationOverride = null;
+            issue.GammaOverride = null;
+            context.SaveChanges();
+        }
+    }
 
     public bool HasError => !string.IsNullOrEmpty(ErrorMessage);
 
@@ -238,6 +449,11 @@ public partial class ReaderScreenViewModel : ViewModelBase
     /// </summary>
     private void Load(Issue issue, Series series, PaperbunkrDbContext context, int? forcedStartPage = null)
     {
+        // Flushes the *previous* issue's throttled continuous-mode position (spec §6) before this
+        // method reassigns _loadedIssueId below - otherwise up to PositionSaveDebounce's worth of
+        // scroll progress on the book being left would be silently dropped, not just delayed.
+        FlushPendingPositionSave();
+
         int generation = ++_loadGeneration;
 
         if (_purgeTimer is null)
@@ -249,6 +465,19 @@ public partial class ReaderScreenViewModel : ViewModelBase
 
         _decoder?.Dispose();
         _decoder = null;
+
+        // Real crash, found via manual testing (opening a second issue after the first): PageImageDecoder.Dispose()
+        // above disposes its cached bitmaps directly, including whatever CurrentPage still references
+        // from the issue just left - but CurrentPage/PageCanvas.Page itself isn't cleared until
+        // RefreshCurrentPage() runs near the end of this method. In between, several property writes
+        // below (PageCount, ZoomLevel, ScrollOffset - all in PageCanvas.RenderAffectingProperties)
+        // synchronously push a fresh render pass through the live TwoWay binding, and PageCanvas reads
+        // Page.PixelSize (EffectiveRotationDegrees) along the way - an ObjectDisposedException on
+        // whichever of those properties happens to actually differ from the previous issue's value
+        // first (PageCount almost always does, since different issues have different page counts).
+        // Clearing CurrentPage here, before any of those writes, makes Page null instead of a stale
+        // disposed reference for that whole window - PushPagedVisualData already null-checks Page.
+        CurrentPage = null;
         _loadedIssueId = issue.Id;
         _loadedSeriesId = series.Id;
 
@@ -269,9 +498,28 @@ public partial class ReaderScreenViewModel : ViewModelBase
         ErrorMessage = null;
         ZoomLevel = 1.0;
         ScrollOffset = 0;
+        CurrentContinuousPageIndex = -1;
         ManualRotationDegrees = 0;
         FitMode = issue.PageFitModeOverride ?? appSettings.DefaultPageFitMode;
         AutoRotate = issue.AutoRotateOverride ?? appSettings.DefaultAutoRotate;
+
+        _brightnessGlobalDefault = appSettings.DefaultBrightness;
+        _contrastGlobalDefault = appSettings.DefaultContrast;
+        _saturationGlobalDefault = appSettings.DefaultSaturation;
+        _gammaGlobalDefault = appSettings.DefaultGamma;
+        _suppressAdjustmentPersist = true;
+        Brightness = _brightnessGlobalDefault + (issue.BrightnessOverride ?? 0);
+        Contrast = _contrastGlobalDefault + (issue.ContrastOverride ?? 0);
+        Saturation = _saturationGlobalDefault + (issue.SaturationOverride ?? 0);
+        Gamma = _gammaGlobalDefault + (issue.GammaOverride ?? 0);
+        _suppressAdjustmentPersist = false;
+
+        // Background/margin (docs/superpowers/specs/2026-08-10-reader-polish-continuous-scroll-
+        // chrome-overlays-design.md §10) - global-only, no per-Issue override. Also refreshed live
+        // while the Reader stays open (see RefreshDisplaySettings), so this Load-time read is really
+        // just "start with today's value," not the only time it's ever read.
+        RefreshDisplaySettings();
+
         int pageCount = issue.PageCount is > 0 ? issue.PageCount.Value : 1;
 
         if (!string.IsNullOrEmpty(issue.FilePath))
@@ -335,6 +583,23 @@ public partial class ReaderScreenViewModel : ViewModelBase
 
         RefreshCurrentPage();
         StartThumbnailGeneration(generation, thumbnailCount);
+
+        // Real bug, found via manual testing: resuming an issue (OpenLastPage) or crossing an issue
+        // boundary backward (forcedStartPage = int.MaxValue, NavigateToAdjacentIssue) already computed
+        // the right _currentPageIndex above - PageLabel/ProgressFraction/thumbnail selection all
+        // reflected it correctly - but continuous mode's actual scroll position had no path back to
+        // it at all; ScrollOffset was unconditionally reset to 0 a few lines up, so the canvas always
+        // opened at page 1 regardless of what the label said. Paged mode doesn't need this (its
+        // "current page" *is* whatever GetPage(_currentPageIndex) decodes), but continuous mode's
+        // position is ScrollOffset, not _currentPageIndex - reusing the same ScrollToPageRequested
+        // path SelectThumbnail already uses (§6), since only PageCanvas has the page-size knowledge
+        // to turn an index into a scroll offset.
+        if (IsContinuousMode)
+        {
+            ScrollToPageRequested?.Invoke(_currentPageIndex);
+        }
+
+        CurrentPageIndexChanged?.Invoke(_currentPageIndex);
     }
 
     /// <summary>Shared by <see cref="Load"/>, <see cref="ToggleReadingMode"/>, and <see cref="SetReadingMode"/> so the label/spatial-flip/continuous-mode switches can't drift apart between them.</summary>
@@ -477,6 +742,80 @@ public partial class ReaderScreenViewModel : ViewModelBase
     [RelayCommand]
     private void RotateClockwise() => ManualRotationDegrees = (ManualRotationDegrees + 90) % 360;
 
+    /// <summary>
+    /// Fullscreen + minimal-chrome (docs/superpowers/specs/2026-08-10-reader-polish-continuous-
+    /// scroll-chrome-overlays-design.md §7) - one combined toggle, not two independent controls
+    /// (CE's <c>FullScreen</c> setter directly drives <c>MinimalGui</c>, confirmed from source).
+    /// <see cref="Views.ReaderScreen"/>'s code-behind reacts to this changing by actually setting
+    /// <c>Window.WindowState</c> and collapsing the toolbar/rail/bottom-bar - this ViewModel has no
+    /// window reference of its own, same "View owns View-layer/Window-layer concerns" division
+    /// <see cref="ScrollToPageRequested"/> already draws for canvas geometry. Deliberately NOT reset
+    /// in <see cref="Load"/> (unlike <see cref="ZoomLevel"/>/<see cref="ManualRotationDegrees"/>/
+    /// <see cref="ScrollOffset"/>) - fullscreen is a window-chrome session preference, not per-book
+    /// view state, so switching books or crossing an issue boundary should stay fullscreen. Only
+    /// <see cref="GoBack"/> (actually leaving the Reader screen) exits it.
+    /// </summary>
+    [ObservableProperty]
+    private bool _isFullscreen;
+
+    /// <summary>
+    /// On-canvas status text/scrubber overlays (spec §7) - shown immediately on entering fullscreen,
+    /// then auto-hidden after <see cref="OverlayAutoHideDelay"/> of cursor inactivity and re-shown on
+    /// <see cref="NotifyCursorActivity"/>, matching the spec's "auto-hide after a few seconds of
+    /// cursor idle... reappearing on mouse move" (CE's <c>AutoHideCursor</c> UX pattern). Overlays
+    /// are the fullscreen-only replacement for the collapsed toolbar's page label/navigation, not a
+    /// windowed-mode feature - false whenever <see cref="IsFullscreen"/> is false.
+    /// </summary>
+    [ObservableProperty]
+    private bool _showFullscreenOverlays;
+
+    private static readonly TimeSpan OverlayAutoHideDelay = TimeSpan.FromSeconds(3);
+    private DispatcherTimer? _overlayAutoHideTimer;
+
+    [RelayCommand]
+    private void ToggleFullscreen()
+    {
+        IsFullscreen = !IsFullscreen;
+        if (IsFullscreen)
+        {
+            ShowFullscreenOverlays = true;
+            RestartOverlayAutoHideTimer();
+        }
+        else
+        {
+            _overlayAutoHideTimer?.Stop();
+            ShowFullscreenOverlays = false;
+        }
+    }
+
+    /// <summary>Called by <see cref="Views.ReaderScreen"/> on pointer movement over the Reader - a no-op outside fullscreen, same guard shape as every other fullscreen-only path here.</summary>
+    public void NotifyCursorActivity()
+    {
+        if (!IsFullscreen)
+        {
+            return;
+        }
+
+        ShowFullscreenOverlays = true;
+        RestartOverlayAutoHideTimer();
+    }
+
+    private void RestartOverlayAutoHideTimer()
+    {
+        if (_overlayAutoHideTimer is null)
+        {
+            _overlayAutoHideTimer = new DispatcherTimer { Interval = OverlayAutoHideDelay };
+            _overlayAutoHideTimer.Tick += (_, _) =>
+            {
+                _overlayAutoHideTimer!.Stop();
+                ShowFullscreenOverlays = false;
+            };
+        }
+
+        _overlayAutoHideTimer.Stop();
+        _overlayAutoHideTimer.Start();
+    }
+
     // Discrete no-arg commands rather than a single SetZoomPreset(double) - a raw string
     // CommandParameter (e.g. "1.5") bound in XAML has no compile-time check that it'll actually
     // parse/cast to double at Execute time, unlike the x:Static-enum-CommandParameter pattern used
@@ -587,18 +926,14 @@ public partial class ReaderScreenViewModel : ViewModelBase
             return;
         }
 
-        int pageCount = _decoder.PageCount;
-        pageIndex = Math.Clamp(pageIndex, 0, pageCount - 1);
+        pageIndex = Math.Clamp(pageIndex, 0, PageCount - 1);
         if (pageIndex == _currentPageIndex)
         {
             return;
         }
 
         _currentPageIndex = pageIndex;
-        PageLabel = $"PAGE {_currentPageIndex + 1} / {pageCount}";
-        ProgressFraction = pageCount > 1 ? (double)_currentPageIndex / (pageCount - 1) : 0;
-        OnPropertyChanged(nameof(PageLabel));
-        OnPropertyChanged(nameof(ProgressFraction));
+        UpdatePageLabelAndProgress();
 
         // AppSettings.ResetZoomOnPageChange (docs/superpowers/specs/2026-08-10-preferences-reader-
         // tab-design.md) - CE parity, off by default (matches Paperbunkr's own pre-existing
@@ -608,13 +943,7 @@ public partial class ReaderScreenViewModel : ViewModelBase
             ZoomLevel = 1.0;
         }
 
-        int thumbnailCount = Thumbnails.Count;
-        for (int page = 0; page < thumbnailCount; page++)
-        {
-            var existing = Thumbnails[page];
-            Thumbnails[page] = new ReaderThumbnailSample { CoverBrush = CoverBrush, CoverImage = existing.CoverImage, IsSelected = page == _currentPageIndex };
-        }
-
+        UpdateThumbnailSelection();
         RefreshCurrentPage();
 
         using var context = PaperbunkrDb.CreateContext();
@@ -626,11 +955,83 @@ public partial class ReaderScreenViewModel : ViewModelBase
         }
     }
 
+    /// <summary>Shared by <see cref="GoToPage"/> (paged mode, immediate) and <see cref="OnCurrentContinuousPageIndexChanged"/> (continuous mode, per scroll-frame) so the format string/progress formula can't drift between the two paths.</summary>
+    private void UpdatePageLabelAndProgress()
+    {
+        PageLabel = $"PAGE {_currentPageIndex + 1} / {PageCount}";
+        ProgressFraction = PageCount > 1 ? (double)_currentPageIndex / (PageCount - 1) : 0;
+        OnPropertyChanged(nameof(PageLabel));
+        OnPropertyChanged(nameof(ProgressFraction));
+    }
+
+    /// <summary>Shared by <see cref="GoToPage"/> and <see cref="OnCurrentContinuousPageIndexChanged"/>, same rationale as <see cref="UpdatePageLabelAndProgress"/>.</summary>
+    private void UpdateThumbnailSelection()
+    {
+        int thumbnailCount = Thumbnails.Count;
+        for (int page = 0; page < thumbnailCount; page++)
+        {
+            var existing = Thumbnails[page];
+            Thumbnails[page] = new ReaderThumbnailSample { CoverBrush = CoverBrush, CoverImage = existing.CoverImage, IsSelected = page == _currentPageIndex };
+        }
+
+        CurrentPageIndexChanged?.Invoke(_currentPageIndex);
+    }
+
+    /// <summary>Restarts the debounce window (see <see cref="PositionSaveDebounce"/>) rather than saving immediately - matches spec §6's explicit "throttled to avoid a SaveChanges per scroll-frame."</summary>
+    private void SchedulePositionSave(int issueId, int pageIndex)
+    {
+        _pendingPositionSaveIssueId = issueId;
+        _pendingPositionSaveIndex = pageIndex;
+
+        if (_positionSaveTimer is null)
+        {
+            _positionSaveTimer = new DispatcherTimer { Interval = PositionSaveDebounce };
+            _positionSaveTimer.Tick += (_, _) => FlushPendingPositionSave();
+        }
+
+        _positionSaveTimer.Stop();
+        _positionSaveTimer.Start();
+    }
+
+    /// <summary>
+    /// Writes whatever position is still pending, immediately - called both by the debounce timer
+    /// once it elapses, and by <see cref="Load"/> before switching issues (so navigating away from a
+    /// book mid-scroll doesn't silently drop up to <see cref="PositionSaveDebounce"/> worth of
+    /// unsaved progress). Internal rather than private: a real <see cref="DispatcherTimer"/> doesn't
+    /// reliably fire under a headless test's inert dispatcher loop (the same documented gap
+    /// <see cref="StartThumbnailGeneration"/>'s own test works around), so tests call this directly
+    /// via <c>Paperbunkr.App.csproj</c>'s existing <c>InternalsVisibleTo</c> rather than sleeping for
+    /// real elapsed time.
+    /// </summary>
+    internal void FlushPendingPositionSave()
+    {
+        _positionSaveTimer?.Stop();
+        if (_pendingPositionSaveIssueId is not int issueId)
+        {
+            return;
+        }
+
+        _pendingPositionSaveIssueId = null;
+        using var context = PaperbunkrDb.CreateContext();
+        var issue = context.Issues.Find(issueId);
+        if (issue is not null)
+        {
+            issue.LastPageRead = _pendingPositionSaveIndex;
+            context.SaveChanges();
+        }
+    }
+
     /// <summary>
     /// P6 fix (docs/alpha-todo.md) - the thumbnail rail rendered <c>Border.thumb.selected</c>
     /// styling implying click-to-jump, but nothing wired a click to <see cref="GoToPage"/>.
     /// <see cref="Thumbnails"/>' index already *is* the page index (populated by a straight
     /// <c>for</c> loop in <see cref="Load"/>), so this just needs the clicked sample's position.
+    ///
+    /// In continuous mode (spec §6), a page-index jump doesn't apply - there's no discrete "current
+    /// page" to swap, only a scroll position - so this raises <see cref="ScrollToPageRequested"/>
+    /// instead of calling <see cref="GoToPage"/> directly; <see cref="Views.ReaderScreen"/>'s
+    /// code-behind owns turning that into an actual <see cref="Views.PageCanvas.ScrollToPage"/> call
+    /// since only that control has the page-size knowledge to compute a scroll offset.
     /// </summary>
     [RelayCommand]
     private void SelectThumbnail(ReaderThumbnailSample? thumbnail)
@@ -641,10 +1042,18 @@ public partial class ReaderScreenViewModel : ViewModelBase
         }
 
         int index = Thumbnails.IndexOf(thumbnail);
-        if (index >= 0)
+        if (index < 0)
         {
-            GoToPage(index);
+            return;
         }
+
+        if (IsContinuousMode)
+        {
+            ScrollToPageRequested?.Invoke(index);
+            return;
+        }
+
+        GoToPage(index);
     }
 
     [RelayCommand]
@@ -741,6 +1150,17 @@ public partial class ReaderScreenViewModel : ViewModelBase
         Load(orderedIssues[adjacentIndex], series, context, forcedStartPage: forward ? 0 : int.MaxValue);
     }
 
+    /// <summary>Leaving the Reader entirely exits fullscreen (spec §7) - unlike page/book navigation, this is the one path where staying fullscreen wouldn't make sense (there's nothing left to view fullscreen).</summary>
     [RelayCommand]
-    private void GoBack() => _goBack();
+    private void GoBack()
+    {
+        if (IsFullscreen)
+        {
+            IsFullscreen = false;
+            _overlayAutoHideTimer?.Stop();
+            ShowFullscreenOverlays = false;
+        }
+
+        _goBack();
+    }
 }

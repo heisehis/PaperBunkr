@@ -115,6 +115,8 @@ public partial class PreferencesScreenViewModel : ViewModelBase
 
     public static readonly ImageFitMode[] FitModeOptions = Enum.GetValues<ImageFitMode>();
 
+    public static readonly ImageBackgroundMode[] BackgroundModeOptions = Enum.GetValues<ImageBackgroundMode>();
+
     public ObservableCollection<VirtualTagSummary> VirtualTags { get; }
 
     public ObservableCollection<WatchedFolderSummary> WatchedFolders { get; }
@@ -173,6 +175,45 @@ public partial class PreferencesScreenViewModel : ViewModelBase
 
     [ObservableProperty]
     private bool _defaultAutoRotate;
+
+    /// <summary>Global default live-adjustment values (docs/superpowers/specs/2026-08-10-reader-polish-continuous-scroll-chrome-overlays-design.md §9), additive with each Issue's own override - see ReaderScreenViewModel.Brightness's own doc comment for the split. -100..100, CE's exact PreferencesDialog trackbar range.</summary>
+    [ObservableProperty]
+    private double _defaultBrightness;
+
+    [ObservableProperty]
+    private double _defaultContrast;
+
+    [ObservableProperty]
+    private double _defaultSaturation;
+
+    [ObservableProperty]
+    private double _defaultGamma;
+
+    /// <summary>Global-only (docs/superpowers/specs/2026-08-10-reader-polish-continuous-scroll-chrome-overlays-design.md §10) - no per-Issue override, CE default <c>Color</c> (confirmed from <c>DisplayWorkspace.cs</c>).</summary>
+    [ObservableProperty]
+    private ImageBackgroundMode _imageBackgroundMode = ImageBackgroundMode.Color;
+
+    /// <summary>CE default "WhiteSmoke" (<c>DisplayWorkspace.BackgroundColor</c>) - a named or hex color string, parsed by <c>ReaderScreenViewModel.ComputeCanvasBackgroundBrush</c>.</summary>
+    [ObservableProperty]
+    private string _backgroundColor = "WhiteSmoke";
+
+    /// <summary>CE default false (<c>DisplayWorkspace.PageMargin</c>).</summary>
+    [ObservableProperty]
+    private bool _pageMarginEnabled;
+
+    /// <summary>CE default 0.05 (<c>DisplayWorkspace.PageMarginPercentWidth</c>), CE's own trackbar likely a 0..1 fraction - matches <see cref="MouseWheelSpeed"/>'s "raw AppSettings unit, no UI-side rescale" precedent.</summary>
+    [ObservableProperty]
+    private double _pageMarginPercentWidth = 0.05;
+
+    /// <summary>
+    /// User direction: CE's own background-color picker (<c>ComicDisplaySettingsDialog</c>'s
+    /// <c>cpBackgroundColor.FillKnownColors(includingSystem: false)</c>) fills a full swatch list off
+    /// every named .NET color - a curated subset here instead of porting that whole list verbatim, as
+    /// a dropdown rather than swatch buttons (user direction). A full color-picker control is a
+    /// reasonable future addition but out of scope for this pass; the free-text field alongside this
+    /// dropdown still accepts any named or hex color directly, including one not in this preset list.
+    /// </summary>
+    public static readonly string[] BackgroundColorPresets = ["White", "WhiteSmoke", "Beige", "Wheat", "LightGray", "Gray", "DarkSlateGray", "Black"];
 
     /// <summary>Every registered <see cref="KeyboardCommandRegistry"/> command, data-driven so a future command needs no Preferences-side change - see <see cref="KeyboardCommandRegistry"/>'s remarks.</summary>
     public ObservableCollection<KeyBindingRowViewModel> KeyBindings { get; }
@@ -252,6 +293,14 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         MouseWheelSpeed = settings.MouseWheelSpeed;
         DefaultPageFitMode = settings.DefaultPageFitMode;
         DefaultAutoRotate = settings.DefaultAutoRotate;
+        DefaultBrightness = settings.DefaultBrightness;
+        DefaultContrast = settings.DefaultContrast;
+        DefaultSaturation = settings.DefaultSaturation;
+        DefaultGamma = settings.DefaultGamma;
+        ImageBackgroundMode = settings.ImageBackgroundMode;
+        BackgroundColor = settings.BackgroundColor;
+        PageMarginEnabled = settings.PageMarginEnabled;
+        PageMarginPercentWidth = settings.PageMarginPercentWidth;
         _suppressBehaviorApply = false;
 
         var firstIssue = context.Issues.Include(i => i.Series).OrderBy(i => i.Id).FirstOrDefault();
@@ -345,6 +394,48 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     partial void OnMouseWheelSpeedChanged(double value) => PersistBehaviorSetting(s => s.MouseWheelSpeed = value);
 
     partial void OnDefaultAutoRotateChanged(bool value) => PersistBehaviorSetting(s => s.DefaultAutoRotate = value);
+
+    partial void OnDefaultBrightnessChanged(double value) => PersistBehaviorSetting(s => s.DefaultBrightness = value);
+
+    partial void OnDefaultContrastChanged(double value) => PersistBehaviorSetting(s => s.DefaultContrast = value);
+
+    partial void OnDefaultSaturationChanged(double value) => PersistBehaviorSetting(s => s.DefaultSaturation = value);
+
+    partial void OnDefaultGammaChanged(double value) => PersistBehaviorSetting(s => s.DefaultGamma = value);
+
+    /// <summary>
+    /// Real bug, found via manual testing: <see cref="ReaderScreenViewModel"/> only ever read
+    /// background/margin inside its own <c>Load</c> - fine for a value scoped to opening a book, but
+    /// these four are edited from here while the Reader may already have a book open and staying
+    /// open (the rail-nav switcher never destroys/recreates screens), so cycling through colors
+    /// appeared to "get stuck" without this. <see cref="MainViewModel"/> wires
+    /// <see cref="ReaderScreenViewModel.RefreshDisplaySettings"/> to this event once, at construction.
+    /// </summary>
+    public event Action? ReaderDisplaySettingsChanged;
+
+    partial void OnImageBackgroundModeChanged(ImageBackgroundMode value)
+    {
+        PersistBehaviorSetting(s => s.ImageBackgroundMode = value);
+        ReaderDisplaySettingsChanged?.Invoke();
+    }
+
+    partial void OnBackgroundColorChanged(string value)
+    {
+        PersistBehaviorSetting(s => s.BackgroundColor = value);
+        ReaderDisplaySettingsChanged?.Invoke();
+    }
+
+    partial void OnPageMarginEnabledChanged(bool value)
+    {
+        PersistBehaviorSetting(s => s.PageMarginEnabled = value);
+        ReaderDisplaySettingsChanged?.Invoke();
+    }
+
+    partial void OnPageMarginPercentWidthChanged(double value)
+    {
+        PersistBehaviorSetting(s => s.PageMarginPercentWidth = value);
+        ReaderDisplaySettingsChanged?.Invoke();
+    }
 
     /// <summary>Plain <c>ComboBox</c> + changed-hook, matching this class's existing <c>SelectedFontFamily</c> picker shape rather than the Reader screen's flyout-of-buttons (that shape fits a toolbar button, not a Preferences row).</summary>
     partial void OnDefaultPageFitModeChanged(ImageFitMode value) => PersistBehaviorSetting(s => s.DefaultPageFitMode = value);

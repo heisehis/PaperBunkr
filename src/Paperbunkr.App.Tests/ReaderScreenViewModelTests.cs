@@ -1,4 +1,6 @@
 using Avalonia.Input;
+using Avalonia.Media;
+using Avalonia.Media.Immutable;
 using Microsoft.EntityFrameworkCore;
 using Paperbunkr.App.Models;
 using Paperbunkr.App.Services;
@@ -124,6 +126,29 @@ public class ReaderScreenViewModelTests : IDisposable
     {
         using var context = PaperbunkrDb.CreateContext();
         context.GetOrCreateAppSettings().DefaultAutoRotate = value;
+        context.SaveChanges();
+    }
+
+    private static void SetImageBackgroundMode(ImageBackgroundMode value)
+    {
+        using var context = PaperbunkrDb.CreateContext();
+        context.GetOrCreateAppSettings().ImageBackgroundMode = value;
+        context.SaveChanges();
+    }
+
+    private static void SetBackgroundColor(string value)
+    {
+        using var context = PaperbunkrDb.CreateContext();
+        context.GetOrCreateAppSettings().BackgroundColor = value;
+        context.SaveChanges();
+    }
+
+    private static void SetPageMargin(bool enabled, double percentWidth)
+    {
+        using var context = PaperbunkrDb.CreateContext();
+        var settings = context.GetOrCreateAppSettings();
+        settings.PageMarginEnabled = enabled;
+        settings.PageMarginPercentWidth = percentWidth;
         context.SaveChanges();
     }
 
@@ -542,6 +567,398 @@ public class ReaderScreenViewModelTests : IDisposable
         Assert.NotNull(vm.Decoder); // opens the continuous-aware decoder same as the other continuous modes
     }
 
+    /// <summary>
+    /// docs/superpowers/specs/2026-08-10-reader-polish-continuous-scroll-chrome-overlays-design.md
+    /// §6 - <see cref="Views.PageCanvas"/> writes <see cref="ReaderScreenViewModel.CurrentContinuousPageIndex"/>
+    /// TwoWay every scroll pass; this exercises the VM-side effect directly (as PageCanvas itself
+    /// would set it) without needing a live composition visual.
+    /// </summary>
+    [Fact]
+    public void CurrentContinuousPageIndex_InContinuousMode_UpdatesPageLabelAndProgress()
+    {
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id);
+        vm.SetReadingModeCommand.Execute(ReadingMode.VerticalContinuous);
+
+        vm.CurrentContinuousPageIndex = 2;
+
+        Assert.Equal("PAGE 3 / 3", vm.PageLabel);
+        Assert.Equal(1.0, vm.ProgressFraction);
+    }
+
+    [Fact]
+    public void CurrentContinuousPageIndex_InPagedMode_IsIgnored()
+    {
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id);
+        Assert.Equal("PAGE 1 / 3", vm.PageLabel);
+
+        vm.CurrentContinuousPageIndex = 2;
+
+        Assert.Equal("PAGE 1 / 3", vm.PageLabel); // paged mode drives PageLabel through GoToPage, not this
+    }
+
+    [Fact]
+    public void CurrentContinuousPageIndex_ResetsToNegativeOne_OnLoad()
+    {
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id);
+        vm.SetReadingModeCommand.Execute(ReadingMode.VerticalContinuous);
+        vm.CurrentContinuousPageIndex = 2;
+
+        vm.LoadIssue(_issue1Id);
+
+        Assert.Equal(-1, vm.CurrentContinuousPageIndex);
+    }
+
+    /// <summary>
+    /// Spec §6's "throttled to avoid a SaveChanges per scroll-frame" - <see cref="ReaderScreenViewModel.FlushPendingPositionSave"/>
+    /// is the internal seam tests use instead of waiting on a real <c>DispatcherTimer</c> tick (see
+    /// its own doc comment for why - headless tests don't reliably drive a real dispatcher timer).
+    /// </summary>
+    [Fact]
+    public void CurrentContinuousPageIndex_Change_PersistsLastPageRead_OnceFlushed()
+    {
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id);
+        vm.SetReadingModeCommand.Execute(ReadingMode.VerticalContinuous);
+
+        vm.CurrentContinuousPageIndex = 1;
+        using (var context = PaperbunkrDb.CreateContext())
+        {
+            Assert.Null(context.Issues.First(i => i.Id == _issue1Id).LastPageRead); // not written yet - still debounced
+        }
+
+        vm.FlushPendingPositionSave();
+
+        using (var context = PaperbunkrDb.CreateContext())
+        {
+            Assert.Equal(1, context.Issues.First(i => i.Id == _issue1Id).LastPageRead);
+        }
+    }
+
+    /// <summary>
+    /// Real-world scenario spec §6 calls for: the user scrolls, then immediately navigates away
+    /// before the debounce window elapses - <see cref="ReaderScreenViewModel.Load"/> flushes the
+    /// *previous* issue's pending save itself, so this shouldn't need an explicit
+    /// <see cref="ReaderScreenViewModel.FlushPendingPositionSave"/> call to avoid losing progress.
+    /// </summary>
+    [Fact]
+    public void CurrentContinuousPageIndex_PendingSave_IsFlushed_WhenLoadingADifferentIssue()
+    {
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id);
+        vm.SetReadingModeCommand.Execute(ReadingMode.VerticalContinuous);
+        vm.CurrentContinuousPageIndex = 1;
+
+        vm.LoadIssue(_issue2Id);
+
+        using var context = PaperbunkrDb.CreateContext();
+        Assert.Equal(1, context.Issues.First(i => i.Id == _issue1Id).LastPageRead);
+    }
+
+    /// <summary>
+    /// Spec §6 - "in continuous mode they [bookmarks/search hits/thumbnail-rail clicks] instead
+    /// scroll the target page's top edge into view" rather than a paged-mode index jump, since the
+    /// ViewModel has no page-size knowledge to compute a scroll offset itself.
+    /// </summary>
+    [Fact]
+    public void SelectThumbnailCommand_InContinuousMode_RaisesScrollToPageRequested_InsteadOfJumping()
+    {
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id);
+        vm.SetReadingModeCommand.Execute(ReadingMode.VerticalContinuous);
+        int? requestedIndex = null;
+        vm.ScrollToPageRequested += index => requestedIndex = index;
+
+        vm.SelectThumbnailCommand.Execute(vm.Thumbnails[2]);
+
+        Assert.Equal(2, requestedIndex);
+        Assert.Equal("PAGE 1 / 3", vm.PageLabel); // unchanged - no paged-mode GoToPage jump happened
+    }
+
+    /// <summary>
+    /// Real bug, found via manual testing: reopening an issue with a saved <c>LastPageRead</c> in
+    /// continuous mode showed the correct page NUMBER in the label but the canvas itself always
+    /// started scrolled to page 1 - <c>_currentPageIndex</c> was computed correctly but nothing told
+    /// the canvas to actually scroll there. Fixed via the same <see cref="ReaderScreenViewModel.ScrollToPageRequested"/>
+    /// path the thumbnail rail already uses.
+    /// </summary>
+    [Fact]
+    public void LoadIssue_InContinuousMode_WithSavedLastPageRead_RaisesScrollToPageRequested_ForResumedPage()
+    {
+        using (var context = PaperbunkrDb.CreateContext())
+        {
+            context.Series.First(s => s.Id == _seriesId).ReadingMode = ReadingMode.VerticalContinuous;
+            context.Issues.First(i => i.Id == _issue1Id).LastPageRead = 2;
+            context.SaveChanges();
+        }
+
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        int? requestedIndex = null;
+        vm.ScrollToPageRequested += index => requestedIndex = index;
+
+        vm.LoadIssue(_issue1Id);
+
+        Assert.Equal("PAGE 3 / 3", vm.PageLabel);
+        Assert.Equal(2, requestedIndex);
+    }
+
+    /// <summary>
+    /// Deliberately unconditional, not gated on <c>_currentPageIndex &gt; 0</c>: the same code path
+    /// also covers <see cref="ReaderScreenViewModel.NavigateToAdjacentIssue"/>'s backward crossing
+    /// (<c>forcedStartPage = int.MaxValue</c>, landing on the *last* page), which would otherwise hit
+    /// the identical bug this fix addresses. Firing at index 0 too is a harmless no-op scroll.
+    /// </summary>
+    [Fact]
+    public void LoadIssue_InContinuousMode_AlwaysRaisesScrollToPageRequested_EvenAtPageZero()
+    {
+        using (var context = PaperbunkrDb.CreateContext())
+        {
+            context.Series.First(s => s.Id == _seriesId).ReadingMode = ReadingMode.VerticalContinuous;
+            context.SaveChanges();
+        }
+
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        int? requestedIndex = null;
+        vm.ScrollToPageRequested += index => requestedIndex = index;
+
+        vm.LoadIssue(_issue1Id);
+
+        Assert.Equal(0, requestedIndex);
+    }
+
+    [Fact]
+    public void LoadIssue_InPagedMode_DoesNotRaiseScrollToPageRequested()
+    {
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        bool raised = false;
+        vm.ScrollToPageRequested += _ => raised = true;
+
+        vm.LoadIssue(_issue1Id);
+
+        Assert.False(raised);
+    }
+
+    /// <summary>
+    /// User direction: the thumbnail rail should keep the current page's thumbnail scrolled into
+    /// view as the current page changes (paged navigation, continuous scroll, or a fresh
+    /// <see cref="ReaderScreenViewModel.Load"/>) - "follows along, but it's not really bound to it."
+    /// </summary>
+    [Fact]
+    public void CurrentPageIndexChanged_Fires_OnLoadAndOnPagedNavigation()
+    {
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        var seen = new List<int>();
+        vm.CurrentPageIndexChanged += seen.Add;
+
+        vm.LoadIssue(_issue1Id);
+        Assert.Equal(new[] { 0 }, seen);
+
+        vm.NextPageCommand.Execute(null);
+        Assert.Equal(new[] { 0, 1 }, seen);
+    }
+
+    /// <summary>
+    /// Same underlying bug/fix as <see cref="LoadIssue_InContinuousMode_WithSavedLastPageRead_RaisesScrollToPageRequested_ForResumedPage"/>,
+    /// via a different <c>_currentPageIndex</c> source: <see cref="ReaderScreenViewModel.PreviousPage"/>
+    /// crossing backward into a previous issue lands on that issue's *last* page
+    /// (<c>forcedStartPage = int.MaxValue</c>) - continuous mode needs the canvas scrolled there too,
+    /// not just the label showing it.
+    /// </summary>
+    [Fact]
+    public void PreviousPage_CrossingIssueBoundaryBackward_InContinuousMode_ScrollsToLastPageOfPreviousIssue()
+    {
+        using (var context = PaperbunkrDb.CreateContext())
+        {
+            context.Series.First(s => s.Id == _seriesId).ReadingMode = ReadingMode.VerticalContinuous;
+            context.SaveChanges();
+        }
+
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue2Id);
+        int? requestedIndex = null;
+        vm.ScrollToPageRequested += index => requestedIndex = index;
+
+        vm.PreviousPageCommand.Execute(null);
+
+        Assert.Equal("PAGE 3 / 3", vm.PageLabel);
+        Assert.Contains("#1", vm.IssueTitle);
+        Assert.Equal(2, requestedIndex); // issue1 has 3 pages - last index is 2
+    }
+
+    [Fact]
+    public void CurrentPageIndexChanged_Fires_OnContinuousModeScroll()
+    {
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id);
+        vm.SetReadingModeCommand.Execute(ReadingMode.VerticalContinuous);
+        var seen = new List<int>();
+        vm.CurrentPageIndexChanged += seen.Add;
+
+        vm.CurrentContinuousPageIndex = 2;
+
+        Assert.Equal(new[] { 2 }, seen);
+    }
+
+    /// <summary>docs/superpowers/specs/2026-08-10-reader-polish-continuous-scroll-chrome-overlays-design.md §7 - one combined toggle, entering fullscreen also shows the overlay layer immediately.</summary>
+    [Fact]
+    public void ToggleFullscreenCommand_TurnsOn_AndShowsOverlaysImmediately()
+    {
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id);
+
+        vm.ToggleFullscreenCommand.Execute(null);
+
+        Assert.True(vm.IsFullscreen);
+        Assert.True(vm.ShowFullscreenOverlays);
+    }
+
+    [Fact]
+    public void ToggleFullscreenCommand_TurnsOff_HidesOverlays()
+    {
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id);
+        vm.ToggleFullscreenCommand.Execute(null);
+
+        vm.ToggleFullscreenCommand.Execute(null);
+
+        Assert.False(vm.IsFullscreen);
+        Assert.False(vm.ShowFullscreenOverlays);
+    }
+
+    /// <summary>Fullscreen is a window-chrome session preference, not per-book view state (unlike ZoomLevel/ManualRotationDegrees/ScrollOffset, all of which reset every Load) - switching books mid-fullscreen-session should stay fullscreen.</summary>
+    [Fact]
+    public void IsFullscreen_PersistsAcrossLoad_UnlikeZoomOrRotation()
+    {
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id);
+        vm.ToggleFullscreenCommand.Execute(null);
+        Assert.True(vm.IsFullscreen);
+
+        vm.LoadIssue(_issue2Id);
+
+        Assert.True(vm.IsFullscreen);
+    }
+
+    [Fact]
+    public void GoBackCommand_ExitsFullscreen()
+    {
+        bool wentBack = false;
+        var vm = new ReaderScreenViewModel(goBack: () => wentBack = true);
+        vm.LoadIssue(_issue1Id);
+        vm.ToggleFullscreenCommand.Execute(null);
+
+        vm.GoBackCommand.Execute(null);
+
+        Assert.False(vm.IsFullscreen);
+        Assert.False(vm.ShowFullscreenOverlays);
+        Assert.True(wentBack);
+    }
+
+    [Fact]
+    public void NotifyCursorActivity_OutsideFullscreen_DoesNotShowOverlays()
+    {
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id);
+
+        vm.NotifyCursorActivity();
+
+        Assert.False(vm.ShowFullscreenOverlays);
+    }
+
+    /// <summary>docs/superpowers/specs/2026-08-10-reader-polish-continuous-scroll-chrome-overlays-design.md §9 - effective value with no override/default set is just 0 (CE's own BitmapAdjustment.Empty).</summary>
+    [Fact]
+    public void Adjustment_DefaultsToZero_ForAnIssueWithNoOverrideOrGlobalDefault()
+    {
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id);
+
+        Assert.Equal(0, vm.Brightness);
+        Assert.Equal(0, vm.Contrast);
+        Assert.Equal(0, vm.Saturation);
+        Assert.Equal(0, vm.Gamma);
+    }
+
+    [Fact]
+    public void Adjustment_ReflectsGlobalDefault_ForAnIssueWithNoOverride()
+    {
+        using (var context = PaperbunkrDb.CreateContext())
+        {
+            var settings = context.GetOrCreateAppSettings();
+            settings.DefaultBrightness = 20;
+            settings.DefaultContrast = -10;
+            context.SaveChanges();
+        }
+
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id);
+
+        Assert.Equal(20, vm.Brightness);
+        Assert.Equal(-10, vm.Contrast);
+    }
+
+    /// <summary>Setting the bound (effective) value persists just the delta as the per-issue override - additive like CE's own BitmapAdjustment.Add, mirroring SetFitModeCommand's per-issue-override shape but for a continuous slider instead of a discrete enum.</summary>
+    [Fact]
+    public void Adjustment_SettingEffectiveValue_PersistsOverrideDelta_ReadBackOnNextLoad()
+    {
+        using (var context = PaperbunkrDb.CreateContext())
+        {
+            context.GetOrCreateAppSettings().DefaultBrightness = 20;
+            context.SaveChanges();
+        }
+
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id);
+
+        vm.Brightness = 35; // effective 35 with a global default of 20 -> override should be +15
+
+        using (var context = PaperbunkrDb.CreateContext())
+        {
+            Assert.Equal(15, context.Issues.First(i => i.Id == _issue1Id).BrightnessOverride);
+        }
+
+        var reopened = new ReaderScreenViewModel(goBack: () => { });
+        reopened.LoadIssue(_issue1Id);
+        Assert.Equal(35, reopened.Brightness);
+    }
+
+    [Fact]
+    public void Adjustment_OnOneIssue_DoesNotAffectAnother()
+    {
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id);
+        vm.Saturation = 50;
+
+        vm.LoadIssue(_issue2Id);
+
+        Assert.Equal(0, vm.Saturation); // issue2's own default, untouched
+    }
+
+    [Fact]
+    public void ResetAdjustmentCommand_ClearsPerIssueOverrides_BackToGlobalDefaults()
+    {
+        using (var context = PaperbunkrDb.CreateContext())
+        {
+            context.GetOrCreateAppSettings().DefaultGamma = 5;
+            context.SaveChanges();
+        }
+
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id);
+        vm.Brightness = 40;
+        vm.Gamma = 25;
+
+        vm.ResetAdjustmentCommand.Execute(null);
+
+        Assert.Equal(0, vm.Brightness);
+        Assert.Equal(5, vm.Gamma); // back to the global default, not zero
+        using var context2 = PaperbunkrDb.CreateContext();
+        var issue = context2.Issues.First(i => i.Id == _issue1Id);
+        Assert.Null(issue.BrightnessOverride);
+        Assert.Null(issue.GammaOverride);
+    }
+
     [Fact]
     public void IsContinuousMode_ReturnsToFalse_WhenSwitchedBackToPagedMode()
     {
@@ -671,6 +1088,131 @@ public class ReaderScreenViewModelTests : IDisposable
         vm.LoadIssue(_issue1Id);
 
         Assert.Equal(4.5, vm.MouseWheelSpeed);
+    }
+
+    /// <summary>
+    /// docs/superpowers/specs/2026-08-10-reader-polish-continuous-scroll-chrome-overlays-design.md
+    /// §10 - background/margin are global-only, no per-Issue override, read fresh on every Load.
+    /// </summary>
+    [Fact]
+    public void PageMarginMultiplier_DefaultsTo1_WhenMarginDisabled()
+    {
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id);
+
+        Assert.Equal(1.0, vm.PageMarginMultiplier);
+    }
+
+    [Fact]
+    public void PageMarginMultiplier_ReflectsAppSettings_WhenMarginEnabled()
+    {
+        SetPageMargin(enabled: true, percentWidth: 0.05);
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+
+        vm.LoadIssue(_issue1Id);
+
+        Assert.Equal(0.95, vm.PageMarginMultiplier, 6);
+    }
+
+    [Fact]
+    public void PageMarginMultiplier_UsesConfiguredPercentWidth()
+    {
+        SetPageMargin(enabled: true, percentWidth: 0.2);
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+
+        vm.LoadIssue(_issue1Id);
+
+        Assert.Equal(0.8, vm.PageMarginMultiplier, 6);
+    }
+
+    /// <summary>
+    /// Real bug, found via manual testing: background/margin were only ever re-read inside Load,
+    /// so changing them in Preferences while the same book stayed open (the rail-nav switcher never
+    /// destroys/recreates the Reader) appeared to "get stuck" on whatever was set the last time Load
+    /// happened to run. RefreshDisplaySettings is what MainViewModel wires to
+    /// PreferencesScreenViewModel.ReaderDisplaySettingsChanged to fix that - this test exercises the
+    /// method directly, without needing a full PreferencesScreenViewModel/MainViewModel wiring.
+    /// </summary>
+    [Fact]
+    public void RefreshDisplaySettings_PicksUpChanges_WithoutReloadingTheIssue()
+    {
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id);
+        Assert.Equal(1.0, vm.PageMarginMultiplier);
+
+        SetPageMargin(enabled: true, percentWidth: 0.1);
+        SetImageBackgroundMode(ImageBackgroundMode.Color);
+        SetBackgroundColor("WhiteSmoke");
+        vm.RefreshDisplaySettings();
+
+        Assert.Equal(0.9, vm.PageMarginMultiplier, 6);
+        var brush = Assert.IsType<ImmutableSolidColorBrush>(vm.CanvasBackgroundBrush);
+        Assert.Equal(Colors.WhiteSmoke, brush.Color);
+    }
+
+    [Fact]
+    public void RefreshDisplaySettings_WorksBeforeAnyIssueIsLoaded()
+    {
+        SetImageBackgroundMode(ImageBackgroundMode.Color);
+        SetBackgroundColor("Black");
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+
+        vm.RefreshDisplaySettings();
+
+        var brush = Assert.IsType<ImmutableSolidColorBrush>(vm.CanvasBackgroundBrush);
+        Assert.Equal(Colors.Black, brush.Color);
+    }
+
+    [Fact]
+    public void CanvasBackgroundBrush_AutoMode_UsesTheFixedDefault_NotTheConfiguredColor()
+    {
+        SetImageBackgroundMode(ImageBackgroundMode.Auto);
+        SetBackgroundColor("Red"); // should be ignored in Auto mode
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+
+        vm.LoadIssue(_issue1Id);
+
+        var brush = Assert.IsType<ImmutableSolidColorBrush>(vm.CanvasBackgroundBrush);
+        Assert.Equal(Color.Parse("#0B0C0F"), brush.Color);
+    }
+
+    [Fact]
+    public void CanvasBackgroundBrush_ColorMode_ParsesTheConfiguredNamedColor()
+    {
+        SetImageBackgroundMode(ImageBackgroundMode.Color);
+        SetBackgroundColor("WhiteSmoke");
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+
+        vm.LoadIssue(_issue1Id);
+
+        var brush = Assert.IsType<ImmutableSolidColorBrush>(vm.CanvasBackgroundBrush);
+        Assert.Equal(Colors.WhiteSmoke, brush.Color);
+    }
+
+    [Fact]
+    public void CanvasBackgroundBrush_ColorMode_ParsesAHexColor()
+    {
+        SetImageBackgroundMode(ImageBackgroundMode.Color);
+        SetBackgroundColor("#112233");
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+
+        vm.LoadIssue(_issue1Id);
+
+        var brush = Assert.IsType<ImmutableSolidColorBrush>(vm.CanvasBackgroundBrush);
+        Assert.Equal(Color.Parse("#112233"), brush.Color);
+    }
+
+    [Fact]
+    public void CanvasBackgroundBrush_ColorMode_InvalidColor_FallsBackToTheFixedDefault()
+    {
+        SetImageBackgroundMode(ImageBackgroundMode.Color);
+        SetBackgroundColor("not-a-real-color");
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+
+        vm.LoadIssue(_issue1Id);
+
+        var brush = Assert.IsType<ImmutableSolidColorBrush>(vm.CanvasBackgroundBrush);
+        Assert.Equal(Color.Parse("#0B0C0F"), brush.Color);
     }
 
     [Fact]

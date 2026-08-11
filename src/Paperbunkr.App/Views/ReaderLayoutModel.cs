@@ -207,4 +207,34 @@ public static class ReaderLayoutModel
 
         return nearestIndex;
     }
+
+    /// <summary>
+    /// Main-axis stack offset where <paramref name="targetIndex"/> begins - the direct
+    /// <c>ScrollOffset</c> target for "scroll this page into view" (spec §6's thumbnail-rail/
+    /// bookmark jump behavior in continuous mode: "they instead scroll the target page's top edge
+    /// into view"), using the same per-page scale formula as <see cref="ComputeContinuousLayout"/>/
+    /// <see cref="ComputeTotalMainAxisSize"/>. Deliberately ignores <c>reverseMainAxis</c> - unlike
+    /// a page's on-screen <see cref="LayoutPage.Rect"/>, <c>ScrollOffset</c> itself is always plain
+    /// stack-space (see its doc comment on <see cref="ViewModels.ReaderScreenViewModel.ScrollOffset"/>);
+    /// the RTL mirror only happens at <see cref="ComputeContinuousLayout"/>'s final rect-placement
+    /// step, which this doesn't need to reproduce.
+    /// </summary>
+    public static double ComputeStackOffsetOfPage(IReadOnlyList<Size> pageNativeSizes, int targetIndex, Size viewportSize, Axis axis, double zoom = 1.0, double mainAxisGap = 0.0)
+    {
+        double viewportCrossSize = axis == Axis.Vertical ? viewportSize.Width : viewportSize.Height;
+        double crossAxisSize = viewportCrossSize * zoom;
+
+        double offset = 0;
+        int count = Math.Min(targetIndex, pageNativeSizes.Count);
+        for (int i = 0; i < count; i++)
+        {
+            var native = pageNativeSizes[i];
+            double nativeCross = axis == Axis.Vertical ? native.Width : native.Height;
+            double nativeMain = axis == Axis.Vertical ? native.Height : native.Width;
+            double scale = nativeCross > 0 ? crossAxisSize / nativeCross : 0;
+            offset += (nativeMain * scale) + mainAxisGap;
+        }
+
+        return offset;
+    }
 }

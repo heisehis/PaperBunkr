@@ -20,7 +20,7 @@ needs a human (or a Claude Code session working in it) to update by hand when pr
 the tracker just keeps a lightweight view from silently going stale between those updates the way
 this file itself already did once (see the note below).
 
-## What's left (as of 2026-08-10, HEAD `9769cfc`)
+## What's left (as of 2026-08-11, HEAD `103e3c3`)
 
 > This section drifted before: it was last hand-written at `7e2d3d3` and had already fallen behind
 > five real commits by the time anyone reopened it. That's the whole reason for the live tracker —
@@ -48,6 +48,30 @@ this file itself already did once (see the note below).
 > `.gitignore`) — an artifact of this environment's Windows↔Linux mount, not real uncommitted
 > work; not treated as a pending change. Treat this file as re-synced as of `9769cfc`; if you're
 > reading it later than that commit, check the tracker artifact or `git log` before trusting it.
+>
+> **This sync (re-synced `9769cfc` → `103e3c3`):** four new commits, all Beta-backlog Reader
+> polish, not Alpha P0–P7 — `b195f56` (design spec: continuous/webtoon scroll, chrome/overlays,
+> magnifier, image adjustment, background/margins), `5d47b8d` (this doc's own prior sync commit,
+> already reflected above), `a2cfb7d` (F11 added alongside F for fullscreen toggle), `103e3c3`
+> (Reader polish: continuous/webtoon scroll, rendering unification, Stages 0-4). P0–P7 status is
+> unchanged. Verified directly against source, not commit messages: F11 fullscreen toggle
+> confirmed in `PageCanvas.cs` (`if (e.Key is Key.F or Key.F11)`, with a doc comment citing the
+> Stage 0-4 design spec) and in `ReaderScreen.axaml`'s fullscreen button; continuous/webtoon
+> scroll confirmed present across `ReaderScreenViewModel.cs`, `ReaderLayoutModel.cs`,
+> `PageCanvas.cs`, `ReaderPageVisualHandler.cs`, and `ReaderScreen.axaml`/`.axaml.cs`. Both are
+> Beta "Reader polish" backlog per this doc's own scope note at the top, not part of the P0–P7
+> alpha checklist — see the updated [Bonus](#bonus-ahead-of-schedule-reader-zoompan-gestures-done)
+> note below for the one concrete edit made to reflect them landing. Worktrees re-checked via
+> `git worktree list` (works from this sync environment, unlike last time): all three
+> (`quirky-borg-c5d364` at `6e8c9b7`, `compassionate-banach-c6e8bf` at `25c664a`,
+> `exciting-hypatia-eecfc9`, detached at `d86cac7`) are still present, all marked `prunable` by
+> git itself — still safe-to-discard candidates, no new worktrees found. Main worktree `git
+> status --short` still shows ~1046 modified files, same CRLF/LF line-ending artifact as before,
+> not treated as pending work. No local companion HTML tracker file found anywhere under this
+> repo (searched for `*tracker*`/`*dashboard*` filenames and every `.html` file — only matches
+> were an unrelated `_reference/ComicRackCE` file and stray worktree scratch content) — skipping
+> that part of the sync rather than guessing at a path or fabricating one; the hosted dashboard
+> artifact URL above is unaffected. Treat this file as re-synced as of `103e3c3`.
 
 P0–P3 and P5 are done — shipped before this session (`f6bcee3`, `8e1bf55`), with P5 getting a
 same-day follow-up (2D grid arrow-key nav, `34e1d39`). The `alpha` git tag already exists.
@@ -429,10 +453,25 @@ docs/superpowers/specs/2026-08-09-reader-gestures-and-grid-navigation-design.md.
 - Remaining Reader polish backlog, still Beta scope: **fit modes/zoom presets/rotation shipped as
   a first slice 2026-08-10** (`963ef8c` design spec, `9769cfc` implementation — Original/Fit/
   FitWidth/FitHeight/BestFit, checked against CE's `ImageDisplayControl.GetScale` rather than
-  guessed at, plus a Preferences → Reader tab). Still open: page layout, magnifier, transitions,
-  fullscreen, overlays, live image adjustment, continuous/webtoon scroll, split-page nav,
-  remappable shortcuts, auto-scroll. Tracked in full in `alpha-roadmap.md` per this doc's scope
-  note at the top — not duplicated here.
+  guessed at, plus a Preferences → Reader tab). **Continuous/webtoon scroll and fullscreen shipped
+  2026-08-11** (`b195f56` design spec, `103e3c3` implementation for continuous/webtoon scroll and
+  rendering unification; `a2cfb7d` added F11 alongside F for the fullscreen toggle).
+  **Position tracking/persistence, fullscreen chrome/overlays, live image adjustment, and
+  background/margins all shipped 2026-08-11 in the same follow-on session** (design spec
+  `b195f56`'s §6/§7/§9/§10) — user-verified live in the running app, not just via the test suite,
+  including six real bugs found and fixed along the way: a resume-position bug (continuous mode's
+  scroll position never followed a resumed/forced page index), an `ObjectDisposedException` crash
+  reopening a second issue, F/F11 losing keyboard focus after a toolbar-button fullscreen toggle,
+  a brightness color-matrix scale bug (SkiaSharp's `CreateColorMatrix` translation column turned
+  out to be normalized -1..1 in this SkiaSharp version, not the legacy 0..255 the shipped package
+  docs and CE's own GDI+ convention describe), a `SolidColorBrush` thread-affinity crash under
+  xUnit's parallel runner (fixed by switching the static default to `ImmutableSolidColorBrush`),
+  and a zoom-slider/double-tap path that could leave continuous mode's scroll/cross-axis pan
+  pointing past the shrunk-down stack once zoomed below 100%, making the page appear to vanish.
+  **Magnifier (§8) explicitly skipped this pass, per user direction** ("we have a zoom slider").
+  Page layout (double-page spread), transitions, split-page nav, remappable shortcuts, and
+  auto-scroll remain open. Tracked in full in `alpha-roadmap.md` per this doc's scope note at the
+  top — not duplicated here.
 
 ---
 

@@ -55,6 +55,10 @@ public class PageCanvas : Control
     public static readonly StyledProperty<ICommand?> RightCommandProperty =
         AvaloniaProperty.Register<PageCanvas, ICommand?>(nameof(RightCommand));
 
+    /// <summary>F/F11 fullscreen toggle (docs/superpowers/specs/2026-08-10-reader-polish-continuous-scroll-chrome-overlays-design.md §7) - handled here alongside every other Reader key, unlike <see cref="LeftCommand"/>/<see cref="RightCommand"/> this fires regardless of paged/continuous mode, checked before either branch in <see cref="OnKeyDown"/>.</summary>
+    public static readonly StyledProperty<ICommand?> FullscreenToggleCommandProperty =
+        AvaloniaProperty.Register<PageCanvas, ICommand?>(nameof(FullscreenToggleCommand));
+
     public static readonly StyledProperty<bool> HighQualityDisplayProperty =
         AvaloniaProperty.Register<PageCanvas, bool>(nameof(HighQualityDisplay), defaultValue: true);
 
@@ -134,6 +138,55 @@ public class PageCanvas : Control
         AvaloniaProperty.Register<PageCanvas, double>(nameof(ScrollOffset), defaultBindingMode: BindingMode.TwoWay);
 
     /// <summary>
+    /// "Current page" for continuous mode (docs/superpowers/specs/2026-08-10-reader-polish-
+    /// continuous-scroll-chrome-overlays-design.md §6) - whichever page's midpoint is nearest the
+    /// viewport center, recomputed every <see cref="PushContinuousVisualData"/> pass via
+    /// <see cref="ReaderLayoutModel.NearestPageToViewportCenter"/> and written out TwoWay so
+    /// <see cref="ViewModels.ReaderScreenViewModel"/> can drive <c>PageLabel</c>/<c>LastPageRead</c>
+    /// off it without this control needing to know anything about persistence. Deliberately not in
+    /// <see cref="RenderAffectingProperties"/> - it's an output of a render pass, not an input to
+    /// one; including it would just be a harmless no-op given the property-changed filter below, but
+    /// leaving it out documents the direction of data flow. Default -1 (no page determined yet,
+    /// matches <see cref="ReaderLayoutModel.NearestPageToViewportCenter"/>'s own empty-list sentinel).
+    /// </summary>
+    public static readonly StyledProperty<int> CurrentContinuousPageIndexProperty =
+        AvaloniaProperty.Register<PageCanvas, int>(nameof(CurrentContinuousPageIndex), defaultValue: -1, defaultBindingMode: BindingMode.TwoWay);
+
+    /// <summary>
+    /// Live brightness/contrast/saturation/gamma (docs/superpowers/specs/2026-08-10-reader-polish-
+    /// continuous-scroll-chrome-overlays-design.md §9) - already the *effective* value
+    /// (<c>ViewModels.ReaderScreenViewModel</c>'s global-default-plus-per-issue-override sum, additive
+    /// like CE's own <c>BitmapAdjustment.Add</c>), this control has no override concept of its own.
+    /// Each is -100..100, the raw Preferences/toolbar slider range (spec §9) - see
+    /// <see cref="Services.ImageAdjustmentMath.CreateColorMatrix"/>'s own doc comment for where that
+    /// gets normalized. Applies identically to paged and continuous mode
+    /// (orthogonal to <see cref="ReadingMode"/>, unlike fit-mode/rotation), so unlike most other
+    /// styled properties here these are pushed via their own <see cref="AdjustmentVisualData"/>
+    /// message rather than folded into <see cref="PushPagedVisualData"/>/<see cref="PushContinuousVisualData"/>.
+    /// </summary>
+    public static readonly StyledProperty<double> BrightnessProperty =
+        AvaloniaProperty.Register<PageCanvas, double>(nameof(Brightness));
+
+    public static readonly StyledProperty<double> ContrastProperty =
+        AvaloniaProperty.Register<PageCanvas, double>(nameof(Contrast));
+
+    public static readonly StyledProperty<double> SaturationProperty =
+        AvaloniaProperty.Register<PageCanvas, double>(nameof(Saturation));
+
+    public static readonly StyledProperty<double> GammaProperty =
+        AvaloniaProperty.Register<PageCanvas, double>(nameof(Gamma));
+
+    /// <summary>
+    /// Page margin (docs/superpowers/specs/2026-08-10-reader-polish-continuous-scroll-chrome-
+    /// overlays-design.md §10) - a separate multiplier applied on top of <see cref="ZoomLevel"/> at
+    /// render time only (see <see cref="ViewModels.ReaderScreenViewModel.PageMarginMultiplier"/>'s
+    /// own doc comment for why it's not folded into <see cref="ZoomLevel"/> itself). Default 1.0
+    /// reproduces today's behavior exactly, so the Novels PDF reader (never binds this) is unaffected.
+    /// </summary>
+    public static readonly StyledProperty<double> PageMarginMultiplierProperty =
+        AvaloniaProperty.Register<PageCanvas, double>(nameof(PageMarginMultiplier), defaultValue: 1.0);
+
+    /// <summary>
     /// Placeholder aspect ratio for a page the layout model needs positioned but that hasn't been
     /// decoded yet (spec §4's progressive-estimate simplification, named explicitly - there's no
     /// cheap "dimensions only" read in this codebase's engine layer, and decoding every page in a
@@ -177,7 +230,18 @@ public class PageCanvas : Control
     [
         PageProperty, HighQualityDisplayProperty, ZoomLevelProperty, PanOffsetXProperty, PanOffsetYProperty,
         FitModeProperty, FitOnlyIfOversizedProperty, ManualRotationDegreesProperty, AutoRotateProperty,
-        ReadingModeProperty, DecoderProperty, PageCountProperty, ScrollOffsetProperty
+        ReadingModeProperty, DecoderProperty, PageCountProperty, ScrollOffsetProperty, PageMarginMultiplierProperty
+    ];
+
+    /// <summary>
+    /// Pushed via their own <see cref="AdjustmentVisualData"/> message (see <see cref="Brightness"/>'s
+    /// own doc comment) rather than through <see cref="RenderAffectingProperties"/>/<see cref="PushRenderData"/>
+    /// - orthogonal to paged-vs-continuous mode, so there's no reason to rebuild/resend the whole page
+    /// list just because a slider moved.
+    /// </summary>
+    private static readonly AvaloniaProperty[] AdjustmentProperties =
+    [
+        BrightnessProperty, ContrastProperty, SaturationProperty, GammaProperty
     ];
 
     static PageCanvas()
@@ -228,6 +292,12 @@ public class PageCanvas : Control
     {
         get => GetValue(RightCommandProperty);
         set => SetValue(RightCommandProperty, value);
+    }
+
+    public ICommand? FullscreenToggleCommand
+    {
+        get => GetValue(FullscreenToggleCommandProperty);
+        set => SetValue(FullscreenToggleCommandProperty, value);
     }
 
     public bool HighQualityDisplay
@@ -322,6 +392,42 @@ public class PageCanvas : Control
         set => SetValue(ScrollOffsetProperty, value);
     }
 
+    public int CurrentContinuousPageIndex
+    {
+        get => GetValue(CurrentContinuousPageIndexProperty);
+        set => SetValue(CurrentContinuousPageIndexProperty, value);
+    }
+
+    public double Brightness
+    {
+        get => GetValue(BrightnessProperty);
+        set => SetValue(BrightnessProperty, value);
+    }
+
+    public double Contrast
+    {
+        get => GetValue(ContrastProperty);
+        set => SetValue(ContrastProperty, value);
+    }
+
+    public double Saturation
+    {
+        get => GetValue(SaturationProperty);
+        set => SetValue(SaturationProperty, value);
+    }
+
+    public double Gamma
+    {
+        get => GetValue(GammaProperty);
+        set => SetValue(GammaProperty, value);
+    }
+
+    public double PageMarginMultiplier
+    {
+        get => GetValue(PageMarginMultiplierProperty);
+        set => SetValue(PageMarginMultiplierProperty, value);
+    }
+
     private bool IsContinuous => ReadingMode is ReadingMode.VerticalContinuous or ReadingMode.HorizontalContinuous or ReadingMode.HorizontalContinuousRightToLeft or ReadingMode.Webtoon;
 
     private ReaderLayoutModel.Axis ContinuousAxis => ReadingMode is ReadingMode.HorizontalContinuous or ReadingMode.HorizontalContinuousRightToLeft ? ReaderLayoutModel.Axis.Horizontal : ReaderLayoutModel.Axis.Vertical;
@@ -381,6 +487,26 @@ public class PageCanvas : Control
         }
 
         return sizes;
+    }
+
+    /// <summary>
+    /// Scrolls <paramref name="pageIndex"/>'s top/leading edge into view (spec §6: "in continuous
+    /// mode they instead scroll the target page's top edge into view") - the continuous-mode
+    /// counterpart to paged mode's index jump, driven by <see cref="ViewModels.ReaderScreenViewModel.ScrollToPageRequested"/>
+    /// via <see cref="ReaderScreen"/>'s code-behind (the ViewModel itself has no page-size
+    /// knowledge, that's this control's <see cref="_knownPageSizes"/>/estimate). No-op outside
+    /// continuous mode or before layout has real bounds - matches every other scroll-input path's
+    /// bounds guard.
+    /// </summary>
+    public void ScrollToPage(int pageIndex)
+    {
+        if (!IsContinuous || Bounds.Width <= 0 || Bounds.Height <= 0)
+        {
+            return;
+        }
+
+        double target = ReaderLayoutModel.ComputeStackOffsetOfPage(EstimatedPageSizes(), pageIndex, Bounds.Size, ContinuousAxis, ZoomLevel, ContinuousMainAxisGap);
+        ScrollOffset = ClampScrollOffset(target);
     }
 
     /// <summary>Clamps scroll position to <c>[0, total stack size - viewport main-axis size]</c>, so dragging/scrolling past either end just stops rather than running away into empty space.</summary>
@@ -450,6 +576,7 @@ public class PageCanvas : Control
         _visual.Size = new Vector(Bounds.Width, Bounds.Height);
         _visual.ClipToBounds = true;
         PushRenderData();
+        PushAdjustmentData();
     }
 
     protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
@@ -477,6 +604,25 @@ public class PageCanvas : Control
             _knownPageSizes.Clear();
         }
 
+        // Real bug, found via manual testing: OnPointerWheelChanged's Ctrl+wheel zoom handler
+        // explicitly re-clamps ScrollOffset/cross-axis pan against the new zoom level after changing
+        // it (so a smaller zoom can't leave them pointing past the now-shrunk stack) - but that's the
+        // only path that did. ZoomLevel is TwoWay-bound directly to the toolbar's zoom slider
+        // (ReaderScreen.axaml), which sets it via the property system with no re-clamp at all; a
+        // stale ScrollOffset/PanOffsetX/Y left over from a higher zoom level (or just never touched
+        // since Load) can end up pointing entirely past the shrunk-down content once zoom drops
+        // enough - PushContinuousVisualData's viewport-intersection test then finds no pages at all,
+        // and the page appears to vanish, leaving only the canvas background. Centralizing the
+        // re-clamp here (rather than duplicating it in every gesture handler that can change
+        // ZoomLevel: wheel, pinch, double-tap, and now the slider) closes the gap for all of them at
+        // once, not just whichever one happened to remember to call it.
+        if (change.Property == ZoomLevelProperty && IsContinuous)
+        {
+            ScrollOffset = ClampScrollOffset(ScrollOffset);
+            PanOffsetX = ClampContinuousCrossAxisPan(PanOffsetX);
+            PanOffsetY = ClampContinuousCrossAxisPan(PanOffsetY);
+        }
+
         if (change.Property == BoundsProperty && _visual is not null)
         {
             _visual.Size = new Vector(Bounds.Width, Bounds.Height);
@@ -487,6 +633,11 @@ public class PageCanvas : Control
         if (Array.IndexOf(RenderAffectingProperties, change.Property) >= 0)
         {
             PushRenderData();
+        }
+
+        if (Array.IndexOf(AdjustmentProperties, change.Property) >= 0)
+        {
+            PushAdjustmentData();
         }
     }
 
@@ -502,10 +653,13 @@ public class PageCanvas : Control
         }
     }
 
+    private void PushAdjustmentData() =>
+        _visual?.SendHandlerMessage(new AdjustmentVisualData(Brightness, Contrast, Saturation, Gamma));
+
     private void PushPagedVisualData()
     {
         _visual?.SendHandlerMessage(new ReaderPageVisualData(
-            new Rect(Bounds.Size), Page, HighQualityDisplay, ZoomLevel, PanOffsetX, PanOffsetY,
+            new Rect(Bounds.Size), Page, HighQualityDisplay, ZoomLevel * PageMarginMultiplier, PanOffsetX, PanOffsetY,
             FitMode, FitOnlyIfOversized, EffectiveRotationDegrees()));
     }
 
@@ -533,12 +687,20 @@ public class PageCanvas : Control
 
         double crossAxisPan = ContinuousAxis == ReaderLayoutModel.Axis.Vertical ? PanOffsetX : PanOffsetY;
         var layout = ReaderLayoutModel.ComputeContinuousLayout(estimatedSizes, ScrollOffset, Bounds.Size, ContinuousAxis,
-            zoom: ZoomLevel, crossAxisPanOffset: crossAxisPan, mainAxisGap: ContinuousMainAxisGap, reverseMainAxis: IsContinuousReversed);
+            zoom: ZoomLevel * PageMarginMultiplier, crossAxisPanOffset: crossAxisPan, mainAxisGap: ContinuousMainAxisGap, reverseMainAxis: IsContinuousReversed);
 
         if (layout.Count == 0)
         {
             _visual.SendHandlerMessage(new ReaderContinuousVisualData(Bounds.Size, Array.Empty<ContinuousPageEntry>(), HighQualityDisplay));
             return;
+        }
+
+        // Position tracking (spec §6) - recomputed every pass off the same rects just built, not a
+        // separate pass over the decoder/layout model.
+        int nearest = ReaderLayoutModel.NearestPageToViewportCenter(layout, Bounds.Size, ContinuousAxis);
+        if (nearest >= 0)
+        {
+            CurrentContinuousPageIndex = nearest;
         }
 
         if (Decoder is PageDecodeService decodeService)
@@ -702,12 +864,9 @@ public class PageCanvas : Control
             {
                 // Free/unclamped upward per spec §5 - no cursor-anchor math for continuous mode this
                 // pass (a named simplification: cursor-anchored zoom needs per-page anchor tracking
-                // that doesn't exist yet here), just re-clamp the existing scroll/pan against the new
-                // zoom level so neither goes out of bounds.
+                // that doesn't exist yet here). Scroll/cross-axis pan re-clamping against the new zoom
+                // now happens centrally in OnPropertyChanged whenever ZoomLevel changes, not just here.
                 ZoomLevel = ZoomPanMath.ClampZoom(ZoomLevel + (e.Delta.Y * WheelZoomStep), ContinuousMaxZoom, ContinuousMinZoom);
-                ScrollOffset = ClampScrollOffset(ScrollOffset);
-                PanOffsetX = ClampContinuousCrossAxisPan(PanOffsetX);
-                PanOffsetY = ClampContinuousCrossAxisPan(PanOffsetY);
                 e.Handled = true;
                 return;
             }
@@ -758,6 +917,18 @@ public class PageCanvas : Control
     protected override void OnKeyDown(KeyEventArgs e)
     {
         base.OnKeyDown(e);
+
+        // Checked first, ahead of the paged/continuous split below - fullscreen applies equally to
+        // both modes, unlike every other key here (spec §7).
+        if (e.Key is Key.F or Key.F11)
+        {
+            if (TryExecute(FullscreenToggleCommand))
+            {
+                e.Handled = true;
+            }
+
+            return;
+        }
 
         if (IsContinuous)
         {

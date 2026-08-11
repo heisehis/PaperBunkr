@@ -40,6 +40,16 @@ public partial class MainViewModel : ViewModelBase
             OpenMigrationOverlay,
             ShowProgressToast,
             CloseProgressToast);
+
+        // Real bug, found via manual testing: Reader.CanvasBackgroundBrush/PageMarginMultiplier
+        // (docs/superpowers/specs/2026-08-10-reader-polish-continuous-scroll-chrome-overlays-design.md
+        // §10) were only ever re-read inside ReaderScreenViewModel.Load - fine for a value read once
+        // per book, but background/margin are edited from Preferences while a book may already be
+        // open and staying open (the rail-nav screen switcher never destroys/recreates the Reader),
+        // so cycling through colors there appeared to "get stuck" on whatever was set the last time
+        // Load happened to run. Wired the same way as the toast plumbing above - Preferences raises a
+        // plain event, the Reader refreshes its own snapshot in response, no shared mutable state.
+        Preferences.ReaderDisplaySettingsChanged += Reader.RefreshDisplaySettings;
     }
 
     /// <summary>

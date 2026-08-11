@@ -3,6 +3,7 @@
              xmlns:vm="using:Paperbunkr.App.ViewModels"
              xmlns:models="using:Paperbunkr.App.Models"
              xmlns:entities="using:Paperbunkr.Data.Entities"
+             xmlns:conv="using:Avalonia.Data.Converters"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d" d:DesignWidth="900" d:DesignHeight="760"
@@ -261,6 +262,77 @@
                                 <TextBlock Text="{Binding MouseWheelSpeed, StringFormat='Mouse wheel scroll speed: {0:F1}'}" FontSize="13"
                                            Foreground="{DynamicResource PbTextBrush}" />
                                 <Slider Minimum="0.5" Maximum="5" Value="{Binding MouseWheelSpeed}" Width="220" HorizontalAlignment="Left" />
+                            </StackPanel>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <!-- Live image adjustment defaults (docs/superpowers/specs/2026-08-10-reader-polish-continuous-scroll-chrome-overlays-design.md §9) - additive with each book's own per-issue override, set from the reader toolbar's Adjust panel. -->
+                <Border Classes="groupBox">
+                    <StackPanel>
+                        <Border Classes="groupHeader">
+                            <TextBlock Text="Image Adjustment" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
+                        </Border>
+                        <StackPanel Margin="14" Spacing="12">
+                            <TextBlock Text="Default brightness/contrast/saturation/gamma for every book - a book's own reader toolbar can adjust further from here."
+                                       FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" />
+
+                            <StackPanel Spacing="4">
+                                <TextBlock Text="{Binding DefaultBrightness, StringFormat='Brightness: {0:F0}'}" FontSize="13"
+                                           Foreground="{DynamicResource PbTextBrush}" />
+                                <Slider Minimum="-100" Maximum="100" Value="{Binding DefaultBrightness}" Width="220" HorizontalAlignment="Left" />
+                            </StackPanel>
+                            <StackPanel Spacing="4">
+                                <TextBlock Text="{Binding DefaultContrast, StringFormat='Contrast: {0:F0}'}" FontSize="13"
+                                           Foreground="{DynamicResource PbTextBrush}" />
+                                <Slider Minimum="-100" Maximum="100" Value="{Binding DefaultContrast}" Width="220" HorizontalAlignment="Left" />
+                            </StackPanel>
+                            <StackPanel Spacing="4">
+                                <TextBlock Text="{Binding DefaultSaturation, StringFormat='Saturation: {0:F0}'}" FontSize="13"
+                                           Foreground="{DynamicResource PbTextBrush}" />
+                                <Slider Minimum="-100" Maximum="100" Value="{Binding DefaultSaturation}" Width="220" HorizontalAlignment="Left" />
+                            </StackPanel>
+                            <StackPanel Spacing="4">
+                                <TextBlock Text="{Binding DefaultGamma, StringFormat='Gamma: {0:F0}'}" FontSize="13"
+                                           Foreground="{DynamicResource PbTextBrush}" />
+                                <Slider Minimum="-100" Maximum="100" Value="{Binding DefaultGamma}" Width="220" HorizontalAlignment="Left" />
+                            </StackPanel>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <!-- Background &amp; margin (docs/superpowers/specs/2026-08-10-reader-polish-continuous-scroll-chrome-overlays-design.md §10) - global-only, no per-book override. -->
+                <Border Classes="groupBox">
+                    <StackPanel>
+                        <Border Classes="groupHeader">
+                            <TextBlock Text="Background &amp; Margin" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
+                        </Border>
+                        <StackPanel Margin="14" Spacing="12">
+                            <Grid ColumnDefinitions="Auto,Auto" ColumnSpacing="10">
+                                <TextBlock Grid.Column="0" Text="Canvas background" FontSize="13" VerticalAlignment="Center"
+                                           Foreground="{DynamicResource PbTextBrush}" />
+                                <ComboBox Grid.Column="1" ItemsSource="{x:Static vm:PreferencesScreenViewModel.BackgroundModeOptions}"
+                                          SelectedItem="{Binding ImageBackgroundMode}" Width="150" />
+                            </Grid>
+                            <TextBlock Text="Auto keeps the app's own background; Color fills the canvas with the color below."
+                                       FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" Margin="0,-6,0,0" />
+
+                            <Grid ColumnDefinitions="Auto,Auto,Auto" ColumnSpacing="10" IsVisible="{Binding ImageBackgroundMode, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:ImageBackgroundMode.Color}}">
+                                <TextBlock Grid.Column="0" Text="Background color" FontSize="13" VerticalAlignment="Center"
+                                           Foreground="{DynamicResource PbTextBrush}" />
+                                <!-- Preset dropdown (user direction - a dropdown, not swatch buttons); the text field alongside still takes any named or hex color, including ones not in this preset list. -->
+                                <ComboBox Grid.Column="1" ItemsSource="{x:Static vm:PreferencesScreenViewModel.BackgroundColorPresets}"
+                                          SelectedItem="{Binding BackgroundColor}" Width="130" PlaceholderText="Presets" />
+                                <TextBox Grid.Column="2" Text="{Binding BackgroundColor}" Width="130" ToolTip.Tip="A named color (e.g. WhiteSmoke) or hex value (e.g. #F5F5F5)" />
+                            </Grid>
+
+                            <CheckBox IsChecked="{Binding PageMarginEnabled}" Foreground="{DynamicResource PbTextBrush}" FontSize="13"
+                                      Content="Add a margin around the page" />
+
+                            <StackPanel Spacing="4" IsVisible="{Binding PageMarginEnabled}">
+                                <TextBlock Text="{Binding PageMarginPercentWidth, StringFormat='Margin width: {0:P0}'}" FontSize="13"
+                                           Foreground="{DynamicResource PbTextBrush}" />
+                                <Slider Minimum="0" Maximum="0.3" Value="{Binding PageMarginPercentWidth}" Width="220" HorizontalAlignment="Left" />
                             </StackPanel>
                         </StackPanel>
                     </StackPanel>

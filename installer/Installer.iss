@@ -45,14 +45,29 @@ OutputBaseFilename={#MyAppSetupFile}
 Compression=lzma
 SolidCompression=yes
 WizardStyle=modern
+; Real bug, found via manual testing: Inno Setup 6 defaults DisableWelcomePage to "yes" (skips
+; straight to Select Components) - without this, the whole WelcomeLabel1/WelcomeLabel2 personality
+; text below never actually gets shown to anyone.
+DisableWelcomePage=no
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 SetupIconFile=..\src\Paperbunkr.App\Assets\paperbunkr.ico
 UninstallDisplayIcon={app}\{#MyAppExeName}
 UninstallDisplayName={#MyAppName}
+; Wizard branding (Welcome/Finished page side image + the small badge on every other page) -
+; composited from the app's own logo, per user direction to give the alpha installer some
+; personality rather than shipping Inno Setup's stock gray-gradient default.
+WizardImageFile=Assets\WizardImage.bmp
+WizardSmallImageFile=Assets\WizardSmallImage.bmp
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
+
+[Messages]
+; Custom Welcome-page copy (user direction: "give the installer personality") - Inno Setup's
+; %n is a literal line break within a [Messages] string, not a placeholder needing escaping.
+WelcomeLabel1=Welcome to the {#MyAppName} Alpha!
+WelcomeLabel2=Get ready to get bunked!%n%nYou're about to install {#MyAppName} {#MyAppVersion} on this computer.%n%nA few things before you dive in:%n     -  This is an early alpha - expect rough edges and the occasional bug.%n     -  A ComicRack-inspired comic && manga library and reader, built fresh from scratch.%n     -  Fully self-contained - no separate .NET install needed.%n     -  Your library and settings stay local; nothing leaves this machine.%n     -  Found something broken? We'd love to hear about it.%n%nClick Next to continue, or Cancel to make a quiet escape.
 
 [Types]
 Name: "full";    Description: "Full installation";

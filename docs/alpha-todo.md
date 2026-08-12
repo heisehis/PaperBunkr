@@ -20,7 +20,7 @@ needs a human (or a Claude Code session working in it) to update by hand when pr
 the tracker just keeps a lightweight view from silently going stale between those updates the way
 this file itself already did once (see the note below).
 
-## What's left (as of 2026-08-11, HEAD `103e3c3`)
+## What's left (as of 2026-08-11, HEAD `8fde584`)
 
 > This section drifted before: it was last hand-written at `7e2d3d3` and had already fallen behind
 > five real commits by the time anyone reopened it. That's the whole reason for the live tracker —
@@ -72,6 +72,31 @@ this file itself already did once (see the note below).
 > were an unrelated `_reference/ComicRackCE` file and stray worktree scratch content) — skipping
 > that part of the sync rather than guessing at a path or fabricating one; the hosted dashboard
 > artifact URL above is unaffected. Treat this file as re-synced as of `103e3c3`.
+>
+> **This sync (re-synced `103e3c3` → `8fde584`):** one new commit, `8fde584` — Reader polish:
+> position tracking/persistence, fullscreen + chrome/overlays, live image adjustment
+> (brightness/contrast/saturation/gamma), and background/margin, all Beta-backlog per this doc's
+> own scope note, not Alpha P0–P7. P0–P7 status is unchanged. This commit is unusual: it already
+> updated this doc's own Bonus section (see
+> [Bonus](#bonus-ahead-of-schedule-reader-zoompan-gestures-done) below) in the same commit as the
+> code — but left this heading's HEAD marker one commit behind its own SHA, the same
+> heading-lags-content drift pattern noted earlier in this section (`d86cac7`). Fixed here: heading
+> bumped from `103e3c3` to `8fde584`, no other content changes needed since the Bonus section
+> already accurately describes this commit's work. Verified directly against source, not the
+> commit message: `git show --stat 8fde584` confirms `ImageAdjustmentMath.cs` (new),
+> `ReaderScreenViewModel.cs` (+444/-lines), `PreferencesScreenViewModel.cs`, `PageCanvas.cs`,
+> `ReaderPageVisualHandler.cs`, and `ReaderScreen.axaml`/`PreferencesScreen.axaml` all touched,
+> matching the described §6/§7/§9/§10 feature set. Worktrees re-checked via `git worktree list`:
+> same three as last sync (`quirky-borg-c5d364` at `6e8c9b7`, `compassionate-banach-c6e8bf` at
+> `25c664a`, `exciting-hypatia-eecfc9` detached at `d86cac7`), still all `prunable`, no new ones.
+> `git status --short` shows the same ~1044 line-ending-only modified files as before (not treated
+> as pending work), plus five new untracked paths not present in earlier syncs:
+> `.claude/settings.local.json`, `installer/Assets/WizardImage.bmp`,
+> `installer/Assets/WizardSmallImage.bmp`, `installer/Assets/welcome-source.png`,
+> `src/Paperbunkr.App/Assets/welcome-source.png`. These look like in-progress installer-branding
+> assets (wizard banner images) but aren't referenced by any commit or roadmap item yet, so noted
+> here rather than guessed at — nothing in P0–P7 depends on them being committed. No local HTML
+> tracker file found (same result as last sync). Treat this file as re-synced as of `8fde584`.
 
 P0–P3 and P5 are done — shipped before this session (`f6bcee3`, `8e1bf55`), with P5 getting a
 same-day follow-up (2D grid arrow-key nav, `34e1d39`). The `alpha` git tag already exists.

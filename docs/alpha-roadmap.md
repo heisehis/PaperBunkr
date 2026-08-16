@@ -162,6 +162,18 @@ Tracker-driven classification pipeline (MangaUpdates/AniList), MangaDex metadata
 search-and-confirm UI shared across classification/tracking/scraping. Explicitly Beta-scoped from
 the start.
 
+**Expanded scope, per user-supplied research (2026-08-12):** full tracker-service *sync*
+integration (not just classification-time metadata lookup) — one `Track` row per series-per-
+service, six services (MyAnimeList, AniList, Kitsu, MangaUpdates, Shikimori, Bangumi), one-way
+progress push to start (Paperbunkr → tracker, on chapter-read/last-page), plus a manga-specific
+detail-page UI (chapter-list-first, blurred-cover header, tag chips, icon-led metadata rows,
+tracking status shown inline) ported from Mihon/Komikku's UX patterns, selected by `ContentType`
+alongside Paperbunkr's existing Western comic detail view. Full findings, per-service auth/API
+notes, and a staged implementation recommendation (data model → service abstraction → sync engine
+→ token security → stats differentiation → Avalonia UI): [docs/tracker-manga-ui-research.md](tracker-manga-ui-research.md).
+Research only, not a design spec yet — needs its own brainstorm → design-spec pass before
+implementation, same as the other substantial-subsystem items in this backlog.
+
 ### Plugin API v2 (onboarding.md §10)
 C# scripting initializer first, `pythonnet` interop as a follow-on spike. Needs a real test plugin
 to prove against. Explicitly Beta-scoped from the start.

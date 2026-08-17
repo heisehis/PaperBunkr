@@ -26,3 +26,41 @@ ComicRack-inspired comic/manga library and reader, Avalonia/.NET 8. Full design 
 Before adding any field, default, or behavior, verify it against the original ComicRack CE
 source/behavior (`_reference/ComicRackCE`) rather than assuming — this project is a from-scratch
 rewrite aiming for CE parity plus deliberate deviations, not a guess at what CE probably did.
+
+## Build gotcha: adding a new Avalonia View
+
+Adding a brand-new `.axaml` file with a fresh `x:Class` (a View not previously compiled in this
+project) can fail the first `dotnet build` with `Avalonia error AVLN2000: Unable to find type`.
+Root cause (verified by binlog inspection): `CompileAvaloniaXaml` — the MSBuild target that weaves
+compiled XAML IL into the assembly and builds the runtime `!AvaloniaResources` index — has no
+`Inputs`/`Outputs` of its own. It only runs as a `TargetsTriggeredByCompilation` side effect of
+`CoreCompile`. If `CoreCompile` succeeds (writing the `.dll`) but the immediately-following
+`CompileAvaloniaXamlTask` then fails, that failure never touches the `.dll`'s timestamp. The next
+plain `dotnet build` sees the `.dll` newer than every source file, skips `CoreCompile` entirely
+(and therefore skips `CompileAvaloniaXaml` too), and reports **0 Errors** — but the XAML weave
+never actually reran. The shipped assembly is the same un-woven artifact from the failed build,
+with no valid `!AvaloniaResources` index for *any* view in the project, so the app crashes at
+startup with `XamlLoadException: No precompiled XAML found for ...App` even though `App.axaml` was
+never touched.
+
+**Avoid it:** always add the code-behind `.cs` (even a minimal
+`partial class X : UserControl { public X() => InitializeComponent(); }`) in the same step as the
+new `.axaml`. `x:Class` types aren't stubbed out by a source generator in this Avalonia version —
+without a matching compiled partial class, `CompileAvaloniaXamlTask` has nothing to bind to and
+`AVLN2000` is not transient, it will recur on every genuinely fresh compile (confirmed via
+`dotnet build -t:Rebuild`, which honestly re-fails instead of masking the error).
+
+**If a build ever fails inside XAML compilation after `CoreCompile` already produced output,
+don't just retry `dotnet build`** — a bare retry can silently report success while shipping a
+never-woven assembly. Fix the real compile error first, then force `CoreCompile`'s own output to
+be seen as stale before rebuilding:
+
+```bash
+rm src/Paperbunkr.App/obj/Debug/net8.0/Paperbunkr.App.dll src/Paperbunkr.App/obj/Debug/net8.0/Paperbunkr.App.pdb
+dotnet build src/Paperbunkr.App/Paperbunkr.App.csproj
+```
+
+`dotnet build -t:Rebuild` works too. Deleting only the Avalonia-specific cache under
+`obj/.../Avalonia/` does **not** help — that's not what gates the skip. Treat "0 Errors" alone as
+insufficient proof the weave ran; verify by launching the exe (or grepping a `-v:diag` log for
+`CompileAvaloniaXaml` actually executing, not `"skipped... previously built successfully"`).

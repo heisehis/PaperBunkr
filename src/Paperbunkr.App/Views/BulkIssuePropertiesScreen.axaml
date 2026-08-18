@@ -53,11 +53,35 @@
         <Style Selector="Button.star.filled Border.icon">
             <Setter Property="Background" Value="{DynamicResource PbAccentBrush}" />
         </Style>
+
+        <!-- Enum-field picker (docs/superpowers/specs/2026-08-16-manga-content-type-classification-
+             design.md §1) - same shape/class names as LibraryScreen.axaml's toolbarPill/modeOption
+             (Avalonia styles don't share across files, so this mirrors rather than references them). -->
+        <Style Selector="Button.toolbarPill">
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
+            <Setter Property="Background" Value="{DynamicResource PbChromeBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
+            <Setter Property="CornerRadius" Value="999" />
+            <Setter Property="Padding" Value="12,6" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+        </Style>
+        <Style Selector="Button.modeOption">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="6,5" />
+            <Setter Property="CornerRadius" Value="5" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="HorizontalContentAlignment" Value="Left" />
+            <Setter Property="FontSize" Value="12.5" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
+        </Style>
     </UserControl.Styles>
 
     <UserControl.Resources>
         <DataTemplate x:Key="FieldRowTemplate" x:DataType="vm:BulkFieldViewModel">
-            <Grid ColumnDefinitions="Auto,160,*" Margin="0,0,0,10">
+            <Grid ColumnDefinitions="Auto,160,*" Margin="0,0,0,10" IsVisible="{Binding IsRowVisible}">
                 <CheckBox Grid.Column="0" IsChecked="{Binding IsStaged}" VerticalAlignment="Center" Margin="0,0,8,0" />
                 <TextBlock Grid.Column="1" Text="{Binding Label}" FontSize="12.5" Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
 
@@ -73,6 +97,28 @@
                     <Button Classes="star" Classes.filled="{Binding Star4}" Command="{Binding SetStar4Command}"><Border Classes="icon"><Border.OpacityMask><ImageBrush Source="/Assets/Icons/Star.png" Stretch="Uniform" /></Border.OpacityMask></Border></Button>
                     <Button Classes="star" Classes.filled="{Binding Star5}" Command="{Binding SetStar5Command}"><Border Classes="icon"><Border.OpacityMask><ImageBrush Source="/Assets/Icons/Star.png" Stretch="Uniform" /></Border.OpacityMask></Border></Button>
                 </StackPanel>
+
+                <!-- Fixed-choice picker (docs/superpowers/specs/2026-08-16-manga-content-type-classification-design.md §1) -
+                     this app's established flyout-of-buttons enum-picker idiom (e.g. ReaderScreen.axaml's reading-mode/
+                     fit-mode pickers), data-driven off Options instead of hardcoded per-option buttons. -->
+                <Button x:Name="EnumPickerButton" Grid.Column="2" Classes="toolbarPill" Content="{Binding Value}" HorizontalAlignment="Left"
+                        IsVisible="{Binding IsEnumKind}">
+                    <Button.Flyout>
+                        <Flyout Placement="Bottom">
+                            <StackPanel Width="160">
+                                <ItemsControl ItemsSource="{Binding Options}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="x:String">
+                                            <Button Classes="modeOption" Content="{Binding}"
+                                                    Command="{Binding #EnumPickerButton.((vm:BulkFieldViewModel)DataContext).SetValueCommand}"
+                                                    CommandParameter="{Binding}" />
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </Flyout>
+                    </Button.Flyout>
+                </Button>
             </Grid>
         </DataTemplate>
     </UserControl.Resources>
@@ -120,6 +166,13 @@
                             <TextBlock Text="Main" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
                         </Border>
                         <ItemsControl Margin="14" ItemsSource="{Binding MainFields}" ItemTemplate="{StaticResource FieldRowTemplate}" />
+                        <!-- Content Type writes through to each selected issue's owning Series, not the Issue
+                             itself - a multi-series selection can silently reclassify more series than were
+                             explicitly selected (docs/superpowers/specs/2026-08-16-manga-content-type-
+                             classification-design.md §1). -->
+                        <TextBlock Margin="14,0,14,14" FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}"
+                                   IsVisible="{Binding HasSeriesAffected}"
+                                   Text="{Binding SeriesAffectedCount, StringFormat='{}{0} series will be affected.'}" />
                     </StackPanel>
                 </Border>
 

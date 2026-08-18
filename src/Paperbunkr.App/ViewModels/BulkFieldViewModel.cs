@@ -24,12 +24,27 @@ public partial class BulkFieldViewModel : ObservableObject
     public bool IsTextKind => Descriptor.Kind == FieldKind.Text;
     public bool IsBooleanKind => Descriptor.Kind == FieldKind.Boolean;
     public bool IsRatingKind => Descriptor.Kind == FieldKind.Rating;
+    public bool IsEnumKind => Descriptor.Kind == FieldKind.Enum;
+
+    /// <summary>Candidate values for an <see cref="IsEnumKind"/> row's flyout (docs/superpowers/specs/2026-08-16-manga-content-type-classification-design.md §1).</summary>
+    public IReadOnlyList<string> Options => Descriptor.Options ?? [];
 
     [ObservableProperty]
     private string _value = string.Empty;
 
     [ObservableProperty]
     private bool _isStaged;
+
+    /// <summary>
+    /// Almost always true - the one exception is the bespoke Reading Direction row
+    /// (docs/superpowers/specs/2026-08-16-manga-content-type-classification-design.md §2), whose
+    /// visibility depends on a *different* row's (Content Type's) live value. Since this field
+    /// itself has no reference to sibling rows or the parent ViewModel, the parent
+    /// (BulkIssuePropertiesScreenViewModel) pushes the computed visibility in here directly rather
+    /// than this class reaching back out - keeps the dependency one-directional.
+    /// </summary>
+    [ObservableProperty]
+    private bool _isRowVisible = true;
 
     /// <summary>List fields only - the intersection shown at Load time, diffed against the edited <see cref="Value"/> on Save.</summary>
     internal HashSet<string> OriginalTokens { get; set; } = new(StringComparer.OrdinalIgnoreCase);
@@ -69,4 +84,7 @@ public partial class BulkFieldViewModel : ObservableObject
     [RelayCommand] private void SetStar3() => Value = ToggleStar(Value, 3);
     [RelayCommand] private void SetStar4() => Value = ToggleStar(Value, 4);
     [RelayCommand] private void SetStar5() => Value = ToggleStar(Value, 5);
+
+    /// <summary>Invoked by an <see cref="IsEnumKind"/> row's flyout options (docs/superpowers/specs/2026-08-16-manga-content-type-classification-design.md §1).</summary>
+    [RelayCommand] private void SetValue(string value) => Value = value;
 }

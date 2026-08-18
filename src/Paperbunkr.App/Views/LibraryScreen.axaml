@@ -2,6 +2,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Paperbunkr.App.ViewModels"
              xmlns:models="using:Paperbunkr.App.Models"
+             xmlns:entities="using:Paperbunkr.Data.Entities"
              xmlns:conv="using:Avalonia.Data.Converters"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -118,6 +119,24 @@
                     Width="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).CompactCardWidth}"
                     Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SelectCardCommand}"
                     CommandParameter="{Binding}" KeyDown="OnCardKeyDown">
+                <Button.ContextMenu>
+                    <ContextMenu>
+                        <MenuItem Header="Show in Explorer"
+                                  Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).RevealSeriesCommand}"
+                                  CommandParameter="{Binding}" IsEnabled="{Binding HasFile}" />
+                        <!-- docs/superpowers/specs/2026-08-16-manga-content-type-classification-design.md §2 -->
+                        <MenuItem Header="Set Content Type">
+                            <MenuItem Header="Comic" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesContentTypeComicCommand}" CommandParameter="{Binding}" />
+                            <MenuItem Header="Manga" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesContentTypeMangaCommand}" CommandParameter="{Binding}" />
+                            <MenuItem Header="Manhua" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesContentTypeManhuaCommand}" CommandParameter="{Binding}" />
+                            <MenuItem Header="Manhwa" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesContentTypeManhwaCommand}" CommandParameter="{Binding}" />
+                        </MenuItem>
+                        <MenuItem Header="Set Reading Direction" IsVisible="{Binding IsMangaFamily}">
+                            <MenuItem Header="Left to Right" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingModeLeftToRightCommand}" CommandParameter="{Binding}" />
+                            <MenuItem Header="Right to Left" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingModeRightToLeftCommand}" CommandParameter="{Binding}" />
+                        </MenuItem>
+                    </ContextMenu>
+                </Button.ContextMenu>
                 <Border Classes="cover" Background="{Binding CoverBrush}"
                         Height="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).CompactCardHeight}">
                     <Grid>
@@ -172,6 +191,24 @@
                     Width="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ComfortableCardWidth}"
                     Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SelectCardCommand}"
                     CommandParameter="{Binding}" KeyDown="OnCardKeyDown">
+                <Button.ContextMenu>
+                    <ContextMenu>
+                        <MenuItem Header="Show in Explorer"
+                                  Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).RevealSeriesCommand}"
+                                  CommandParameter="{Binding}" IsEnabled="{Binding HasFile}" />
+                        <!-- docs/superpowers/specs/2026-08-16-manga-content-type-classification-design.md §2 -->
+                        <MenuItem Header="Set Content Type">
+                            <MenuItem Header="Comic" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesContentTypeComicCommand}" CommandParameter="{Binding}" />
+                            <MenuItem Header="Manga" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesContentTypeMangaCommand}" CommandParameter="{Binding}" />
+                            <MenuItem Header="Manhua" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesContentTypeManhuaCommand}" CommandParameter="{Binding}" />
+                            <MenuItem Header="Manhwa" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesContentTypeManhwaCommand}" CommandParameter="{Binding}" />
+                        </MenuItem>
+                        <MenuItem Header="Set Reading Direction" IsVisible="{Binding IsMangaFamily}">
+                            <MenuItem Header="Left to Right" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingModeLeftToRightCommand}" CommandParameter="{Binding}" />
+                            <MenuItem Header="Right to Left" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingModeRightToLeftCommand}" CommandParameter="{Binding}" />
+                        </MenuItem>
+                    </ContextMenu>
+                </Button.ContextMenu>
                 <StackPanel>
                     <Border Classes="cover" Background="{Binding CoverBrush}"
                             Height="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ComfortableCardHeight}">
@@ -234,6 +271,24 @@
                     Width="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).CoverOnlyCardWidth}"
                     Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SelectCardCommand}"
                     CommandParameter="{Binding}" KeyDown="OnCardKeyDown">
+                <Button.ContextMenu>
+                    <ContextMenu>
+                        <MenuItem Header="Show in Explorer"
+                                  Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).RevealSeriesCommand}"
+                                  CommandParameter="{Binding}" IsEnabled="{Binding HasFile}" />
+                        <!-- docs/superpowers/specs/2026-08-16-manga-content-type-classification-design.md §2 -->
+                        <MenuItem Header="Set Content Type">
+                            <MenuItem Header="Comic" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesContentTypeComicCommand}" CommandParameter="{Binding}" />
+                            <MenuItem Header="Manga" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesContentTypeMangaCommand}" CommandParameter="{Binding}" />
+                            <MenuItem Header="Manhua" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesContentTypeManhuaCommand}" CommandParameter="{Binding}" />
+                            <MenuItem Header="Manhwa" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesContentTypeManhwaCommand}" CommandParameter="{Binding}" />
+                        </MenuItem>
+                        <MenuItem Header="Set Reading Direction" IsVisible="{Binding IsMangaFamily}">
+                            <MenuItem Header="Left to Right" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingModeLeftToRightCommand}" CommandParameter="{Binding}" />
+                            <MenuItem Header="Right to Left" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingModeRightToLeftCommand}" CommandParameter="{Binding}" />
+                        </MenuItem>
+                    </ContextMenu>
+                </Button.ContextMenu>
                 <Border Classes="cover" Background="{Binding CoverBrush}"
                         Height="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).CoverOnlyCardHeight}">
                     <Grid>
@@ -288,6 +343,24 @@
             <Button Classes="card" Margin="0,0,20,20" Width="{Binding PanoramaWidth}"
                     Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SelectCardCommand}"
                     CommandParameter="{Binding}" KeyDown="OnCardKeyDown">
+                <Button.ContextMenu>
+                    <ContextMenu>
+                        <MenuItem Header="Show in Explorer"
+                                  Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).RevealSeriesCommand}"
+                                  CommandParameter="{Binding}" IsEnabled="{Binding HasFile}" />
+                        <!-- docs/superpowers/specs/2026-08-16-manga-content-type-classification-design.md §2 -->
+                        <MenuItem Header="Set Content Type">
+                            <MenuItem Header="Comic" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesContentTypeComicCommand}" CommandParameter="{Binding}" />
+                            <MenuItem Header="Manga" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesContentTypeMangaCommand}" CommandParameter="{Binding}" />
+                            <MenuItem Header="Manhua" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesContentTypeManhuaCommand}" CommandParameter="{Binding}" />
+                            <MenuItem Header="Manhwa" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesContentTypeManhwaCommand}" CommandParameter="{Binding}" />
+                        </MenuItem>
+                        <MenuItem Header="Set Reading Direction" IsVisible="{Binding IsMangaFamily}">
+                            <MenuItem Header="Left to Right" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingModeLeftToRightCommand}" CommandParameter="{Binding}" />
+                            <MenuItem Header="Right to Left" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingModeRightToLeftCommand}" CommandParameter="{Binding}" />
+                        </MenuItem>
+                    </ContextMenu>
+                </Button.ContextMenu>
                 <StackPanel>
                     <Border Classes="cover" Background="{Binding CoverBrush}"
                             Height="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PanoramaCardHeight}">
@@ -348,6 +421,24 @@
             <Button Classes="card" HorizontalAlignment="Stretch" Margin="0,0,0,8"
                     Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SelectCardCommand}"
                     CommandParameter="{Binding}">
+                <Button.ContextMenu>
+                    <ContextMenu>
+                        <MenuItem Header="Show in Explorer"
+                                  Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).RevealSeriesCommand}"
+                                  CommandParameter="{Binding}" IsEnabled="{Binding HasFile}" />
+                        <!-- docs/superpowers/specs/2026-08-16-manga-content-type-classification-design.md §2 -->
+                        <MenuItem Header="Set Content Type">
+                            <MenuItem Header="Comic" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesContentTypeComicCommand}" CommandParameter="{Binding}" />
+                            <MenuItem Header="Manga" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesContentTypeMangaCommand}" CommandParameter="{Binding}" />
+                            <MenuItem Header="Manhua" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesContentTypeManhuaCommand}" CommandParameter="{Binding}" />
+                            <MenuItem Header="Manhwa" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesContentTypeManhwaCommand}" CommandParameter="{Binding}" />
+                        </MenuItem>
+                        <MenuItem Header="Set Reading Direction" IsVisible="{Binding IsMangaFamily}">
+                            <MenuItem Header="Left to Right" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingModeLeftToRightCommand}" CommandParameter="{Binding}" />
+                            <MenuItem Header="Right to Left" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingModeRightToLeftCommand}" CommandParameter="{Binding}" />
+                        </MenuItem>
+                    </ContextMenu>
+                </Button.ContextMenu>
                 <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1" CornerRadius="6" Padding="10">
                     <Grid ColumnDefinitions="44,*,Auto">
                         <Border Grid.Column="0" CornerRadius="4" Width="44" Height="63"
@@ -375,6 +466,24 @@
             <Button Classes="card" HorizontalAlignment="Stretch" Margin="0,0,0,4"
                     Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SelectCardCommand}"
                     CommandParameter="{Binding}">
+                <Button.ContextMenu>
+                    <ContextMenu>
+                        <MenuItem Header="Show in Explorer"
+                                  Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).RevealSeriesCommand}"
+                                  CommandParameter="{Binding}" IsEnabled="{Binding HasFile}" />
+                        <!-- docs/superpowers/specs/2026-08-16-manga-content-type-classification-design.md §2 -->
+                        <MenuItem Header="Set Content Type">
+                            <MenuItem Header="Comic" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesContentTypeComicCommand}" CommandParameter="{Binding}" />
+                            <MenuItem Header="Manga" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesContentTypeMangaCommand}" CommandParameter="{Binding}" />
+                            <MenuItem Header="Manhua" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesContentTypeManhuaCommand}" CommandParameter="{Binding}" />
+                            <MenuItem Header="Manhwa" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesContentTypeManhwaCommand}" CommandParameter="{Binding}" />
+                        </MenuItem>
+                        <MenuItem Header="Set Reading Direction" IsVisible="{Binding IsMangaFamily}">
+                            <MenuItem Header="Left to Right" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingModeLeftToRightCommand}" CommandParameter="{Binding}" />
+                            <MenuItem Header="Right to Left" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingModeRightToLeftCommand}" CommandParameter="{Binding}" />
+                        </MenuItem>
+                    </ContextMenu>
+                </Button.ContextMenu>
                 <Grid ColumnDefinitions="52,*,110,70,70,140" Margin="0,6">
                     <Border Grid.Column="0" Width="36" Height="50" CornerRadius="3" Background="{Binding CoverBrush}" ClipToBounds="True">
                         <Image Source="{Binding CoverImage}" Stretch="UniformToFill" />
@@ -398,6 +507,24 @@
                     Width="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).TilesCardWidth}"
                     Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SelectCardCommand}"
                     CommandParameter="{Binding}">
+                <Button.ContextMenu>
+                    <ContextMenu>
+                        <MenuItem Header="Show in Explorer"
+                                  Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).RevealSeriesCommand}"
+                                  CommandParameter="{Binding}" IsEnabled="{Binding HasFile}" />
+                        <!-- docs/superpowers/specs/2026-08-16-manga-content-type-classification-design.md §2 -->
+                        <MenuItem Header="Set Content Type">
+                            <MenuItem Header="Comic" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesContentTypeComicCommand}" CommandParameter="{Binding}" />
+                            <MenuItem Header="Manga" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesContentTypeMangaCommand}" CommandParameter="{Binding}" />
+                            <MenuItem Header="Manhua" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesContentTypeManhuaCommand}" CommandParameter="{Binding}" />
+                            <MenuItem Header="Manhwa" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesContentTypeManhwaCommand}" CommandParameter="{Binding}" />
+                        </MenuItem>
+                        <MenuItem Header="Set Reading Direction" IsVisible="{Binding IsMangaFamily}">
+                            <MenuItem Header="Left to Right" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingModeLeftToRightCommand}" CommandParameter="{Binding}" />
+                            <MenuItem Header="Right to Left" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingModeRightToLeftCommand}" CommandParameter="{Binding}" />
+                        </MenuItem>
+                    </ContextMenu>
+                </Button.ContextMenu>
                 <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1" CornerRadius="6" Padding="8">
                     <Grid ColumnDefinitions="Auto,*">
                         <Border Grid.Column="0" CornerRadius="4"
@@ -424,34 +551,46 @@
         <Border Grid.Row="0" Padding="24,14" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,0,0,1">
           <Panel>
             <StackPanel Orientation="Horizontal" Spacing="8">
-                <TextBox Width="260" Text="{Binding SearchQuery}" Watermark="Search all series…" FontSize="12.5" />
+                <TextBox Width="260" Text="{Binding SearchQuery}" Watermark="Search all series…" FontSize="12.5"
+                         AutomationProperties.AutomationId="LibrarySearchBox" />
 
                 <Button x:Name="FilterButton" Classes="toolbarPill" Classes.open="{Binding IsFilterOpen}"
-                        Command="{Binding ToggleFilterCommand}">
+                        Command="{Binding ToggleFilterCommand}" AutomationProperties.AutomationId="LibraryFilterButton"
+                        AutomationProperties.Name="Filter">
                     <StackPanel Orientation="Horizontal" Spacing="5">
                         <Border Classes="icon"><Border.OpacityMask><ImageBrush Source="/Assets/Icons/Filter.png" Stretch="Uniform" /></Border.OpacityMask></Border>
                         <TextBlock Text="Filter ▾" />
                     </StackPanel>
                 </Button>
                 <Button x:Name="SortButton" Classes="toolbarPill" Classes.open="{Binding IsSortOpen}"
-                        Command="{Binding ToggleSortCommand}">
+                        Command="{Binding ToggleSortCommand}" AutomationProperties.AutomationId="LibrarySortButton"
+                        AutomationProperties.Name="{Binding SortLabel, StringFormat='Sort: {0}'}">
                     <StackPanel Orientation="Horizontal" Spacing="5">
                         <Border Classes="icon"><Border.OpacityMask><ImageBrush Source="/Assets/Icons/Sort_Ascending.png" Stretch="Uniform" /></Border.OpacityMask></Border>
                         <TextBlock Text="{Binding SortLabel, StringFormat='Sort: {0} ▾'}" />
                     </StackPanel>
                 </Button>
                 <Button x:Name="GroupButton" Classes="toolbarPill" Classes.open="{Binding IsGroupOpen}"
-                        Command="{Binding ToggleGroupCommand}">
+                        Command="{Binding ToggleGroupCommand}" AutomationProperties.AutomationId="LibraryGroupButton"
+                        AutomationProperties.Name="{Binding GroupField, StringFormat='Group: {0}'}">
                     <StackPanel Orientation="Horizontal" Spacing="5">
                         <Border Classes="icon"><Border.OpacityMask><ImageBrush Source="/Assets/Icons/Layers.png" Stretch="Uniform" /></Border.OpacityMask></Border>
                         <TextBlock Text="{Binding GroupField, StringFormat='Group: {0} ▾'}" />
                     </StackPanel>
                 </Button>
                 <Button x:Name="DisplayButton" Classes="toolbarPill" Classes.open="{Binding IsDisplayOpen}"
-                        Command="{Binding ToggleDisplayCommand}">
+                        Command="{Binding ToggleDisplayCommand}" AutomationProperties.AutomationId="LibraryDisplayButton"
+                        AutomationProperties.Name="{Binding DisplayModeLabel, StringFormat='Display: {0}'}">
                     <StackPanel Orientation="Horizontal" Spacing="5">
                         <Border Classes="icon"><Border.OpacityMask><ImageBrush Source="/Assets/Icons/Window.png" Stretch="Uniform" /></Border.OpacityMask></Border>
                         <TextBlock Text="{Binding DisplayModeLabel, StringFormat='Display: {0} ▾'}" />
+                    </StackPanel>
+                </Button>
+                <Button x:Name="AddButton" Classes="toolbarPill" Classes.open="{Binding IsAddOpen}"
+                        Command="{Binding ToggleAddCommand}" AutomationProperties.AutomationId="LibraryAddButton"
+                        AutomationProperties.Name="Add">
+                    <StackPanel Orientation="Horizontal" Spacing="5">
+                        <TextBlock Text="+ Add" />
                     </StackPanel>
                 </Button>
             </StackPanel>
@@ -460,9 +599,9 @@
                    IsOpen="{Binding IsFilterOpen}" IsLightDismissEnabled="True">
                 <Border Classes="dropdown" Width="210">
                     <StackPanel Spacing="4">
-                        <CheckBox Content="Unread only" FontSize="12.5" IsChecked="{Binding FilterUnreadOnly}" />
-                        <CheckBox Content="Missing issues" FontSize="12.5" IsChecked="{Binding FilterMissingIssues}" />
-                        <CheckBox Content="Tracked series" FontSize="12.5" IsChecked="{Binding FilterTrackedOnly}" />
+                        <CheckBox Content="Unread only" FontSize="12.5" IsChecked="{Binding FilterUnreadOnly}" AutomationProperties.AutomationId="LibraryFilterUnreadOnly" />
+                        <CheckBox Content="Missing issues" FontSize="12.5" IsChecked="{Binding FilterMissingIssues}" AutomationProperties.AutomationId="LibraryFilterMissingIssues" />
+                        <CheckBox Content="Tracked series" FontSize="12.5" IsChecked="{Binding FilterTrackedOnly}" AutomationProperties.AutomationId="LibraryFilterTrackedOnly" />
                     </StackPanel>
                 </Border>
             </Popup>
@@ -471,25 +610,25 @@
                    IsOpen="{Binding IsSortOpen}" IsLightDismissEnabled="True">
                 <Border Classes="dropdown" Width="190">
                     <StackPanel Spacing="1">
-                        <Button Classes="modeOption" Classes.active="{Binding SortField, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static models:LibrarySortField.Name}}"
-                                Content="Name" Command="{Binding SetSortFieldCommand}" CommandParameter="{x:Static models:LibrarySortField.Name}" />
-                        <Button Classes="modeOption" Classes.active="{Binding SortField, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static models:LibrarySortField.DateAdded}}"
-                                Content="Date Added" Command="{Binding SetSortFieldCommand}" CommandParameter="{x:Static models:LibrarySortField.DateAdded}" />
-                        <Button Classes="modeOption" Classes.active="{Binding SortField, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static models:LibrarySortField.LastRead}}"
-                                Content="Last Read" Command="{Binding SetSortFieldCommand}" CommandParameter="{x:Static models:LibrarySortField.LastRead}" />
-                        <Button Classes="modeOption" Classes.active="{Binding SortField, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static models:LibrarySortField.Size}}"
-                                Content="Size" Command="{Binding SetSortFieldCommand}" CommandParameter="{x:Static models:LibrarySortField.Size}" />
-                        <Button Classes="modeOption" Classes.active="{Binding SortField, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static models:LibrarySortField.IssueCount}}"
-                                Content="Issue Count" Command="{Binding SetSortFieldCommand}" CommandParameter="{x:Static models:LibrarySortField.IssueCount}" />
-                        <Button Classes="modeOption" Classes.active="{Binding SortField, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static models:LibrarySortField.UnreadCount}}"
-                                Content="Unread Count" Command="{Binding SetSortFieldCommand}" CommandParameter="{x:Static models:LibrarySortField.UnreadCount}" />
-                        <Button Classes="modeOption" Classes.active="{Binding SortField, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static models:LibrarySortField.Publisher}}"
-                                Content="Publisher" Command="{Binding SetSortFieldCommand}" CommandParameter="{x:Static models:LibrarySortField.Publisher}" />
+                        <Button Classes="modeOption" Classes.active="{Binding SortField, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:LibrarySortField.Name}}"
+                                Content="Name" Command="{Binding SetSortFieldCommand}" CommandParameter="{x:Static entities:LibrarySortField.Name}" AutomationProperties.AutomationId="LibrarySortOption_Name" />
+                        <Button Classes="modeOption" Classes.active="{Binding SortField, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:LibrarySortField.DateAdded}}"
+                                Content="Date Added" Command="{Binding SetSortFieldCommand}" CommandParameter="{x:Static entities:LibrarySortField.DateAdded}" AutomationProperties.AutomationId="LibrarySortOption_DateAdded" />
+                        <Button Classes="modeOption" Classes.active="{Binding SortField, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:LibrarySortField.LastRead}}"
+                                Content="Last Read" Command="{Binding SetSortFieldCommand}" CommandParameter="{x:Static entities:LibrarySortField.LastRead}" AutomationProperties.AutomationId="LibrarySortOption_LastRead" />
+                        <Button Classes="modeOption" Classes.active="{Binding SortField, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:LibrarySortField.Size}}"
+                                Content="Size" Command="{Binding SetSortFieldCommand}" CommandParameter="{x:Static entities:LibrarySortField.Size}" AutomationProperties.AutomationId="LibrarySortOption_Size" />
+                        <Button Classes="modeOption" Classes.active="{Binding SortField, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:LibrarySortField.IssueCount}}"
+                                Content="Issue Count" Command="{Binding SetSortFieldCommand}" CommandParameter="{x:Static entities:LibrarySortField.IssueCount}" AutomationProperties.AutomationId="LibrarySortOption_IssueCount" />
+                        <Button Classes="modeOption" Classes.active="{Binding SortField, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:LibrarySortField.UnreadCount}}"
+                                Content="Unread Count" Command="{Binding SetSortFieldCommand}" CommandParameter="{x:Static entities:LibrarySortField.UnreadCount}" AutomationProperties.AutomationId="LibrarySortOption_UnreadCount" />
+                        <Button Classes="modeOption" Classes.active="{Binding SortField, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:LibrarySortField.Publisher}}"
+                                Content="Publisher" Command="{Binding SetSortFieldCommand}" CommandParameter="{x:Static entities:LibrarySortField.Publisher}" AutomationProperties.AutomationId="LibrarySortOption_Publisher" />
 
                         <Border Height="1" Background="{DynamicResource PbBorderBrush}" Margin="0,10" />
 
                         <Button Classes="modeOption" Content="{Binding SortDirection, StringFormat='Direction: {0}'}"
-                                Command="{Binding ToggleSortDirectionCommand}" />
+                                Command="{Binding ToggleSortDirectionCommand}" AutomationProperties.AutomationId="LibrarySortDirectionToggle" />
                     </StackPanel>
                 </Border>
             </Popup>
@@ -498,14 +637,14 @@
                    IsOpen="{Binding IsGroupOpen}" IsLightDismissEnabled="True">
                 <Border Classes="dropdown" Width="190">
                     <StackPanel Spacing="1">
-                        <Button Classes="modeOption" Classes.active="{Binding GroupField, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static models:LibraryGroupField.None}}"
-                                Content="None" Command="{Binding SetGroupFieldCommand}" CommandParameter="{x:Static models:LibraryGroupField.None}" />
-                        <Button Classes="modeOption" Classes.active="{Binding GroupField, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static models:LibraryGroupField.ContentType}}"
-                                Content="Content Type" Command="{Binding SetGroupFieldCommand}" CommandParameter="{x:Static models:LibraryGroupField.ContentType}" />
-                        <Button Classes="modeOption" Classes.active="{Binding GroupField, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static models:LibraryGroupField.Publisher}}"
-                                Content="Publisher" Command="{Binding SetGroupFieldCommand}" CommandParameter="{x:Static models:LibraryGroupField.Publisher}" />
-                        <Button Classes="modeOption" Classes.active="{Binding GroupField, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static models:LibraryGroupField.Alphabetical}}"
-                                Content="Alphabetical" Command="{Binding SetGroupFieldCommand}" CommandParameter="{x:Static models:LibraryGroupField.Alphabetical}" />
+                        <Button Classes="modeOption" Classes.active="{Binding GroupField, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:LibraryGroupField.None}}"
+                                Content="None" Command="{Binding SetGroupFieldCommand}" CommandParameter="{x:Static entities:LibraryGroupField.None}" AutomationProperties.AutomationId="LibraryGroupOption_None" />
+                        <Button Classes="modeOption" Classes.active="{Binding GroupField, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:LibraryGroupField.ContentType}}"
+                                Content="Content Type" Command="{Binding SetGroupFieldCommand}" CommandParameter="{x:Static entities:LibraryGroupField.ContentType}" AutomationProperties.AutomationId="LibraryGroupOption_ContentType" />
+                        <Button Classes="modeOption" Classes.active="{Binding GroupField, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:LibraryGroupField.Publisher}}"
+                                Content="Publisher" Command="{Binding SetGroupFieldCommand}" CommandParameter="{x:Static entities:LibraryGroupField.Publisher}" AutomationProperties.AutomationId="LibraryGroupOption_Publisher" />
+                        <Button Classes="modeOption" Classes.active="{Binding GroupField, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:LibraryGroupField.Alphabetical}}"
+                                Content="Alphabetical" Command="{Binding SetGroupFieldCommand}" CommandParameter="{x:Static entities:LibraryGroupField.Alphabetical}" AutomationProperties.AutomationId="LibraryGroupOption_Alphabetical" />
                     </StackPanel>
                 </Border>
             </Popup>
@@ -516,19 +655,19 @@
                     <StackPanel Spacing="1">
                         <TextBlock Classes="dropdownRow" Text="Display mode" Foreground="{DynamicResource PbTextBrush}" Margin="0,0,0,4" />
                         <Button Classes="modeOption" Classes.active="{Binding IsCompactGrid}" Content="Compact grid"
-                                Command="{Binding SetViewModeCommand}" CommandParameter="{x:Static models:LibraryViewMode.CompactGrid}" />
+                                Command="{Binding SetViewModeCommand}" CommandParameter="{x:Static entities:LibraryViewMode.CompactGrid}" AutomationProperties.AutomationId="LibraryViewModeOption_CompactGrid" />
                         <Button Classes="modeOption" Classes.active="{Binding IsComfortableGrid}" Content="Comfortable grid"
-                                Command="{Binding SetViewModeCommand}" CommandParameter="{x:Static models:LibraryViewMode.ComfortableGrid}" />
+                                Command="{Binding SetViewModeCommand}" CommandParameter="{x:Static entities:LibraryViewMode.ComfortableGrid}" AutomationProperties.AutomationId="LibraryViewModeOption_ComfortableGrid" />
                         <Button Classes="modeOption" Classes.active="{Binding IsCoverOnlyGrid}" Content="Cover-only grid"
-                                Command="{Binding SetViewModeCommand}" CommandParameter="{x:Static models:LibraryViewMode.CoverOnlyGrid}" />
+                                Command="{Binding SetViewModeCommand}" CommandParameter="{x:Static entities:LibraryViewMode.CoverOnlyGrid}" AutomationProperties.AutomationId="LibraryViewModeOption_CoverOnlyGrid" />
                         <Button Classes="modeOption" Classes.active="{Binding IsPanoramaGrid}" Content="Panorama comfortable grid"
-                                Command="{Binding SetViewModeCommand}" CommandParameter="{x:Static models:LibraryViewMode.PanoramaGrid}" />
+                                Command="{Binding SetViewModeCommand}" CommandParameter="{x:Static entities:LibraryViewMode.PanoramaGrid}" AutomationProperties.AutomationId="LibraryViewModeOption_PanoramaGrid" />
                         <Button Classes="modeOption" Classes.active="{Binding IsListView}" Content="List"
-                                Command="{Binding SetViewModeCommand}" CommandParameter="{x:Static models:LibraryViewMode.List}" />
+                                Command="{Binding SetViewModeCommand}" CommandParameter="{x:Static entities:LibraryViewMode.List}" AutomationProperties.AutomationId="LibraryViewModeOption_List" />
                         <Button Classes="modeOption" Classes.active="{Binding IsDetailsView}" Content="Details"
-                                Command="{Binding SetViewModeCommand}" CommandParameter="{x:Static models:LibraryViewMode.Details}" />
+                                Command="{Binding SetViewModeCommand}" CommandParameter="{x:Static entities:LibraryViewMode.Details}" AutomationProperties.AutomationId="LibraryViewModeOption_Details" />
                         <Button Classes="modeOption" Classes.active="{Binding IsTilesView}" Content="Tiles"
-                                Command="{Binding SetViewModeCommand}" CommandParameter="{x:Static models:LibraryViewMode.Tiles}" />
+                                Command="{Binding SetViewModeCommand}" CommandParameter="{x:Static entities:LibraryViewMode.Tiles}" AutomationProperties.AutomationId="LibraryViewModeOption_Tiles" />
 
                         <Border Height="1" Background="{DynamicResource PbBorderBrush}" Margin="0,10" />
 
@@ -543,6 +682,53 @@
                         <CheckBox Content="Language badge" FontSize="12.5" IsChecked="{Binding ShowLanguageBadge}" />
                         <CheckBox Content="Use language icon" FontSize="12.5" IsChecked="{Binding UseLanguageIcon}" />
                         <CheckBox Content="Continue reading button" FontSize="12.5" IsChecked="{Binding ShowContinueReadingButton}" />
+                    </StackPanel>
+                </Border>
+            </Popup>
+
+            <!-- Manual "add a physical book" entry point (docs/superpowers/specs/2026-08-16-reveal-in-explorer-and-fileless-entries-design.md §2) -->
+            <Popup PlacementTarget="{Binding #AddButton}" Placement="BottomEdgeAlignedRight" VerticalOffset="6"
+                   IsOpen="{Binding IsAddOpen}" IsLightDismissEnabled="True">
+                <Border Classes="dropdown" Width="220">
+                    <StackPanel Spacing="8">
+                        <TextBlock Classes="dropdownRow" Text="Add a physical book" Foreground="{DynamicResource PbTextBrush}" Margin="0,0,0,4" />
+                        <AutoCompleteBox Watermark="Series name" Text="{Binding NewIssueSeriesName}"
+                                          ItemsSource="{Binding ExistingSeriesNames}" FontSize="12.5" />
+                        <TextBox Watermark="Number" Text="{Binding NewIssueNumber}" FontSize="12.5" />
+
+                        <!-- docs/superpowers/specs/2026-08-16-manga-content-type-classification-design.md §3 -->
+                        <Button Classes="toolbarPill" Content="{Binding NewIssueContentType}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left">
+                            <Button.Flyout>
+                                <Flyout Placement="Bottom">
+                                    <StackPanel Width="140">
+                                        <Button Classes="modeOption" Classes.active="{Binding NewIssueContentType, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:ContentType.Comic}}"
+                                                Content="Comic" Command="{Binding SetNewIssueContentTypeCommand}" CommandParameter="{x:Static entities:ContentType.Comic}" />
+                                        <Button Classes="modeOption" Classes.active="{Binding NewIssueContentType, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:ContentType.Manga}}"
+                                                Content="Manga" Command="{Binding SetNewIssueContentTypeCommand}" CommandParameter="{x:Static entities:ContentType.Manga}" />
+                                        <Button Classes="modeOption" Classes.active="{Binding NewIssueContentType, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:ContentType.Manhua}}"
+                                                Content="Manhua" Command="{Binding SetNewIssueContentTypeCommand}" CommandParameter="{x:Static entities:ContentType.Manhua}" />
+                                        <Button Classes="modeOption" Classes.active="{Binding NewIssueContentType, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:ContentType.Manhwa}}"
+                                                Content="Manhwa" Command="{Binding SetNewIssueContentTypeCommand}" CommandParameter="{x:Static entities:ContentType.Manhwa}" />
+                                    </StackPanel>
+                                </Flyout>
+                            </Button.Flyout>
+                        </Button>
+
+                        <Button Classes="toolbarPill" Content="{Binding NewIssueReadingMode}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+                                IsVisible="{Binding ShowAddReadingModePicker}">
+                            <Button.Flyout>
+                                <Flyout Placement="Bottom">
+                                    <StackPanel Width="140">
+                                        <Button Classes="modeOption" Classes.active="{Binding NewIssueReadingMode, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:ReadingMode.LeftToRight}}"
+                                                Content="Left to Right" Command="{Binding SetNewIssueReadingModeCommand}" CommandParameter="{x:Static entities:ReadingMode.LeftToRight}" />
+                                        <Button Classes="modeOption" Classes.active="{Binding NewIssueReadingMode, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:ReadingMode.RightToLeft}}"
+                                                Content="Right to Left" Command="{Binding SetNewIssueReadingModeCommand}" CommandParameter="{x:Static entities:ReadingMode.RightToLeft}" />
+                                    </StackPanel>
+                                </Flyout>
+                            </Button.Flyout>
+                        </Button>
+
+                        <Button Classes="modeOption" Content="Create" Command="{Binding CreatePlaceholderIssueCommand}" />
                     </StackPanel>
                 </Border>
             </Popup>

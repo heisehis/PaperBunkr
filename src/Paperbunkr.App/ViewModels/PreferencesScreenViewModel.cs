@@ -95,13 +95,15 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         WatchedFolders = new ObservableCollection<WatchedFolderSummary>();
         FileAssociations = new ObservableCollection<FileAssociationSummary>();
         Backups = new ObservableCollection<BackupRowViewModel>();
-        KeyBindings = new ObservableCollection<KeyBindingRowViewModel>();
+        NavigationKeyBindings = new ObservableCollection<KeyBindingRowViewModel>();
+        ZoomFitKeyBindings = new ObservableCollection<KeyBindingRowViewModel>();
+        DisplayKeyBindings = new ObservableCollection<KeyBindingRowViewModel>();
     }
 
     private static Issue SampleIssue() => new()
     {
         Number = "1",
-        Volume = 1,
+        Volume = "1",
         Year = 2024,
         Title = "Sample Issue",
         Publisher = "Sample Publisher",
@@ -114,6 +116,12 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     public ObservableCollection<string> FontFamilies { get; }
 
     public static readonly ImageFitMode[] FitModeOptions = Enum.GetValues<ImageFitMode>();
+
+    /// <summary>docs/superpowers/specs/2026-08-13-reader-page-transition-animations-design.md §6.</summary>
+    public static readonly PageTransitionStyle[] PageTransitionStyleOptions = Enum.GetValues<PageTransitionStyle>();
+
+    /// <summary>docs/superpowers/specs/2026-08-15-reader-double-page-spread-design.md §2.</summary>
+    public static readonly PageLayoutMode[] PageLayoutModeOptions = Enum.GetValues<PageLayoutMode>();
 
     public static readonly ImageBackgroundMode[] BackgroundModeOptions = Enum.GetValues<ImageBackgroundMode>();
 
@@ -176,6 +184,17 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     [ObservableProperty]
     private bool _defaultAutoRotate;
 
+    /// <summary>Global default for a book with no <see cref="Series.PageLayoutMode"/>/<see cref="Issue.PageLayoutModeOverride"/> set (docs/superpowers/specs/2026-08-15-reader-double-page-spread-design.md §2).</summary>
+    [ObservableProperty]
+    private PageLayoutMode _defaultPageLayoutMode = PageLayoutMode.Single;
+
+    /// <summary>docs/superpowers/specs/2026-08-13-reader-page-transition-animations-design.md §2 - default <see cref="PageTransitionStyle.None"/>, matching CE's own <c>BlendWhilePaging</c> default of <c>false</c>.</summary>
+    [ObservableProperty]
+    private PageTransitionStyle _pageTransitionStyle = PageTransitionStyle.None;
+
+    [ObservableProperty]
+    private int _pageTransitionDurationMs = 250;
+
     /// <summary>Global default live-adjustment values (docs/superpowers/specs/2026-08-10-reader-polish-continuous-scroll-chrome-overlays-design.md §9), additive with each Issue's own override - see ReaderScreenViewModel.Brightness's own doc comment for the split. -100..100, CE's exact PreferencesDialog trackbar range.</summary>
     [ObservableProperty]
     private double _defaultBrightness;
@@ -215,8 +234,17 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     /// </summary>
     public static readonly string[] BackgroundColorPresets = ["White", "WhiteSmoke", "Beige", "Wheat", "LightGray", "Gray", "DarkSlateGray", "Black"];
 
-    /// <summary>Every registered <see cref="KeyboardCommandRegistry"/> command, data-driven so a future command needs no Preferences-side change - see <see cref="KeyboardCommandRegistry"/>'s remarks.</summary>
-    public ObservableCollection<KeyBindingRowViewModel> KeyBindings { get; }
+    /// <summary>
+    /// Every registered <see cref="KeyboardCommandRegistry"/> command, split into three UI
+    /// sections by <see cref="KeyboardCommandDescriptor.Group"/> - data-driven so a future command
+    /// needs no Preferences-side change beyond a new registry entry - see
+    /// <see cref="KeyboardCommandRegistry"/>'s remarks.
+    /// </summary>
+    public ObservableCollection<KeyBindingRowViewModel> NavigationKeyBindings { get; }
+
+    public ObservableCollection<KeyBindingRowViewModel> ZoomFitKeyBindings { get; }
+
+    public ObservableCollection<KeyBindingRowViewModel> DisplayKeyBindings { get; }
 
     [ObservableProperty]
     private string? _keyBindingConflictError;
@@ -293,6 +321,9 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         MouseWheelSpeed = settings.MouseWheelSpeed;
         DefaultPageFitMode = settings.DefaultPageFitMode;
         DefaultAutoRotate = settings.DefaultAutoRotate;
+        DefaultPageLayoutMode = settings.DefaultPageLayoutMode;
+        PageTransitionStyle = settings.PageTransitionStyle;
+        PageTransitionDurationMs = settings.PageTransitionDurationMs;
         DefaultBrightness = settings.DefaultBrightness;
         DefaultContrast = settings.DefaultContrast;
         DefaultSaturation = settings.DefaultSaturation;
@@ -327,10 +358,21 @@ public partial class PreferencesScreenViewModel : ViewModelBase
 
     private void RefreshKeyBindings()
     {
-        KeyBindings.Clear();
+        NavigationKeyBindings.Clear();
+        ZoomFitKeyBindings.Clear();
+        DisplayKeyBindings.Clear();
+
         foreach (var (command, currentKey) in _keyBindingService.GetAllBindings())
         {
-            KeyBindings.Add(new KeyBindingRowViewModel(command, currentKey, _keyBindingService, RecomputeKeyBindingConflict));
+            var row = new KeyBindingRowViewModel(command, currentKey, _keyBindingService, RecomputeKeyBindingConflict);
+            var targetCollection = command.Group switch
+            {
+                KeyboardCommandRegistry.NavigationGroup => NavigationKeyBindings,
+                KeyboardCommandRegistry.ZoomFitGroup => ZoomFitKeyBindings,
+                KeyboardCommandRegistry.DisplayGroup => DisplayKeyBindings,
+                _ => throw new InvalidOperationException($"Unrecognized keyboard command group \"{command.Group}\" - add a matching Preferences section for it."),
+            };
+            targetCollection.Add(row);
         }
 
         RecomputeKeyBindingConflict();
@@ -338,21 +380,38 @@ public partial class PreferencesScreenViewModel : ViewModelBase
 
     /// <summary>
     /// Soft validation, not a hard block - the row already persisted its new key by the time this
-    /// runs (matches every other Preferences toggle's immediate-persist behavior). Only same-group
-    /// collisions matter (e.g. Reader.PageTurnLeft/Right sharing a key would break navigation);
-    /// commands in different groups are never active at the same time, so a cross-group repeat
-    /// isn't actually a conflict.
+    /// runs (matches every other Preferences toggle's immediate-persist behavior). Two commands
+    /// conflict iff their gestures are equal AND (their <see cref="ConflictContext"/>s match OR
+    /// either is <see cref="ConflictContext.Always"/>) - see that enum's own doc comment for why:
+    /// mode-specific contexts (paged/zoomed/continuous) are mutually exclusive at runtime, so
+    /// sharing a gesture across two of them is never actually reachable, but an Always command
+    /// unconditionally shadows every mode-specific one it collides with.
     /// </summary>
     private void RecomputeKeyBindingConflict()
     {
-        var conflict = KeyBindings
-            .GroupBy(r => r.Group)
-            .SelectMany(g => g.GroupBy(r => r.SelectedKey.Key))
-            .FirstOrDefault(g => g.Count() > 1);
+        var all = NavigationKeyBindings.Concat(ZoomFitKeyBindings).Concat(DisplayKeyBindings).ToList();
+        for (int i = 0; i < all.Count; i++)
+        {
+            for (int j = i + 1; j < all.Count; j++)
+            {
+                var a = all[i];
+                var b = all[j];
+                if (a.SelectedKey.Gesture != b.SelectedKey.Gesture)
+                {
+                    continue;
+                }
 
-        KeyBindingConflictError = conflict is null
-            ? null
-            : $"\"{conflict.First().SelectedKey.Label}\" is assigned to more than one {conflict.First().Group} shortcut.";
+                if (a.Context != ConflictContext.Always && b.Context != ConflictContext.Always && a.Context != b.Context)
+                {
+                    continue;
+                }
+
+                KeyBindingConflictError = $"\"{a.SelectedKey.Label}\" is assigned to both \"{a.Label}\" and \"{b.Label}\".";
+                return;
+            }
+        }
+
+        KeyBindingConflictError = null;
     }
 
     private void RefreshSkins()
@@ -394,6 +453,28 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     partial void OnMouseWheelSpeedChanged(double value) => PersistBehaviorSetting(s => s.MouseWheelSpeed = value);
 
     partial void OnDefaultAutoRotateChanged(bool value) => PersistBehaviorSetting(s => s.DefaultAutoRotate = value);
+
+    partial void OnDefaultPageLayoutModeChanged(PageLayoutMode value) => PersistBehaviorSetting(s => s.DefaultPageLayoutMode = value);
+
+    /// <summary>
+    /// Real bug, found via manual testing: without <see cref="ReaderDisplaySettingsChanged"/>, this
+    /// setting only took effect on the *next* book opened (or by switching reading mode, which forces
+    /// a fresh <c>Load</c> as a side effect) - same live-while-open treatment as
+    /// <see cref="OnPageMarginEnabledChanged"/>/<see cref="OnBackgroundColorChanged"/> below, since a
+    /// book can already be open in the Reader (screens aren't destroyed by the rail-nav switcher) when
+    /// this is changed.
+    /// </summary>
+    partial void OnPageTransitionStyleChanged(PageTransitionStyle value)
+    {
+        PersistBehaviorSetting(s => s.PageTransitionStyle = value);
+        ReaderDisplaySettingsChanged?.Invoke();
+    }
+
+    partial void OnPageTransitionDurationMsChanged(int value)
+    {
+        PersistBehaviorSetting(s => s.PageTransitionDurationMs = value);
+        ReaderDisplaySettingsChanged?.Invoke();
+    }
 
     partial void OnDefaultBrightnessChanged(double value) => PersistBehaviorSetting(s => s.DefaultBrightness = value);
 

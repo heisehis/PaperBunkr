@@ -1,4 +1,4 @@
-namespace Paperbunkr.App.Models;
+namespace Paperbunkr.Data.Entities;
 
 public enum SortDirection
 {

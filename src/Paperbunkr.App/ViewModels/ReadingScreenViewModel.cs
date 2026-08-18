@@ -7,7 +7,9 @@ using CommunityToolkit.Mvvm.Input;
 using Microsoft.EntityFrameworkCore;
 using Paperbunkr.App.Models;
 using Paperbunkr.App.Services;
+using Paperbunkr.Data;
 using Paperbunkr.Data.Entities;
+using Paperbunkr.Data.Metadata;
 using Paperbunkr.Data.ReadingLists;
 
 namespace Paperbunkr.App.ViewModels;
@@ -24,6 +26,7 @@ public partial class ReadingScreenViewModel : ViewModelBase
 {
     private readonly IFilePickerService _filePicker;
     private int? _activeReadingListId;
+    private bool _isLoadingList;
 
     public ReadingScreenViewModel(IFilePickerService filePicker)
     {
@@ -37,12 +40,51 @@ public partial class ReadingScreenViewModel : ViewModelBase
     public ObservableCollection<ReadingListSummary> Lists { get; }
     public ObservableCollection<ReadingListGroupViewModel> Groups { get; }
     public ObservableCollection<IssueSearchResult> SearchResults { get; }
+    public ObservableCollection<StoryEventSearchResult> StoryEventSearchResults { get; } = new();
+
+    /// <summary>Phase 4c overhaul (docs/superpowers/specs/2026-08-17-metadata-model-phase4c-reading-list-overhaul-design.md).</summary>
+    public static ReadingListTypeOption[] TypeOptions => ReadingListTypeOption.All;
 
     [ObservableProperty]
     private string _listName = string.Empty;
 
     [ObservableProperty]
     private string _subtitle = string.Empty;
+
+    [ObservableProperty]
+    private ReadingListType _selectedType = ReadingListType.User;
+
+    /// <summary>
+    /// Bound to the ComboBox's <c>SelectedItem</c> instead of <c>SelectedValue</c>/
+    /// <c>SelectedValueBinding</c> - the latter resolves its binding path against this
+    /// ViewModel's own DataContext, not the <c>ItemsSource</c> element type, so `{Binding Type}`
+    /// there was silently unresolvable (a real, permanent XAML bug, not a build-tooling artifact -
+    /// see docs/superpowers/specs/2026-08-18-selectedvaluebinding-xaml-fix-design.md).
+    /// </summary>
+    [ObservableProperty]
+    private ReadingListTypeOption _selectedTypeOption = TypeOptions.First(o => o.Type == ReadingListType.User);
+
+    partial void OnSelectedTypeOptionChanged(ReadingListTypeOption value) => SelectedType = value.Type;
+
+    partial void OnSelectedTypeChanged(ReadingListType value)
+    {
+        if (!_isLoadingList)
+        {
+            PersistTypeChange(value);
+        }
+    }
+
+    [ObservableProperty]
+    private string? _linkedStoryEventName;
+
+    [ObservableProperty]
+    private string _createdAtLabel = string.Empty;
+
+    [ObservableProperty]
+    private bool _isLinkingStoryEvent;
+
+    [ObservableProperty]
+    private string _storyEventSearchQuery = string.Empty;
 
     [ObservableProperty]
     private string _totalIssues = "0";
@@ -76,6 +118,8 @@ public partial class ReadingScreenViewModel : ViewModelBase
         using var context = PaperbunkrDb.CreateContext();
         var list = context.ReadingLists
             .Include(r => r.Items).ThenInclude(i => i.Issue).ThenInclude(i => i!.Series)
+            .Include(r => r.Items).ThenInclude(i => i.Issue).ThenInclude(i => i!.MetadataProposals)
+            .Include(r => r.StoryEvent)
             .FirstOrDefault(r => r.Id == readingListId);
         if (list is null)
         {
@@ -84,6 +128,13 @@ public partial class ReadingScreenViewModel : ViewModelBase
 
         ListName = list.Name;
         Subtitle = "Cross-series reading order · tracked list";
+
+        _isLoadingList = true;
+        SelectedType = list.Type;
+        SelectedTypeOption = TypeOptions.First(o => o.Type == list.Type);
+        _isLoadingList = false;
+        LinkedStoryEventName = list.StoryEvent?.Name;
+        CreatedAtLabel = $"Created {list.CreatedAt:MMM d, yyyy}";
 
         var items = list.Items.OrderBy(i => i.SortOrder).ToList();
         TotalIssues = items.Count.ToString();
@@ -94,7 +145,7 @@ public partial class ReadingScreenViewModel : ViewModelBase
         foreach (var group in items.GroupBy(i => i.GroupLabel ?? string.Empty))
         {
             var rows = new ObservableCollection<ReadingListItemRowViewModel>(
-                group.Select(i => new ReadingListItemRowViewModel(i, MoveItemUp, MoveItemDown, RemoveItem)));
+                group.Select(i => new ReadingListItemRowViewModel(i, MoveItemUp, MoveItemDown, RemoveItem, PersistFieldChange)));
             Groups.Add(new ReadingListGroupViewModel { Label = group.Key, Rows = rows });
         }
 
@@ -143,6 +194,127 @@ public partial class ReadingScreenViewModel : ViewModelBase
         OnPropertyChanged(nameof(HasNoItems));
     }
 
+    // --- Phase 4c overhaul (docs/superpowers/specs/2026-08-17-metadata-model-phase4c-reading-
+    // list-overhaul-design.md): Type/StoryEvent link/per-item Role+Notes, all persisting
+    // immediately like every other edit on this screen. ---
+
+    private void PersistTypeChange(ReadingListType value)
+    {
+        if (_activeReadingListId is not int listId)
+        {
+            return;
+        }
+
+        using var context = PaperbunkrDb.CreateContext();
+        var list = context.ReadingLists.Find(listId);
+        if (list is null)
+        {
+            return;
+        }
+
+        list.Type = value;
+        list.UpdatedAt = DateTime.UtcNow;
+        context.SaveChanges();
+    }
+
+    private void PersistFieldChange(ReadingListItemRowViewModel row)
+    {
+        if (_activeReadingListId is not int listId)
+        {
+            return;
+        }
+
+        using var context = PaperbunkrDb.CreateContext();
+        var item = context.ReadingListItems.Find(row.Item.Id);
+        var list = context.ReadingLists.Find(listId);
+        if (item is null || list is null)
+        {
+            return;
+        }
+
+        item.Role = row.SelectedRole;
+        item.Notes = row.Notes;
+        list.UpdatedAt = DateTime.UtcNow;
+        context.SaveChanges();
+    }
+
+    [RelayCommand]
+    private void ToggleLinkStoryEvent()
+    {
+        IsLinkingStoryEvent = !IsLinkingStoryEvent;
+        StoryEventSearchQuery = string.Empty;
+        StoryEventSearchResults.Clear();
+    }
+
+    partial void OnStoryEventSearchQueryChanged(string value) => SearchStoryEvents();
+
+    [RelayCommand]
+    private void SearchStoryEvents()
+    {
+        StoryEventSearchResults.Clear();
+        if (string.IsNullOrWhiteSpace(StoryEventSearchQuery))
+        {
+            return;
+        }
+
+        using var context = PaperbunkrDb.CreateContext();
+        var matches = context.StoryEvents
+            .AsEnumerable()
+            .Where(e => e.Name.Contains(StoryEventSearchQuery, StringComparison.OrdinalIgnoreCase))
+            .Take(20);
+
+        foreach (var storyEvent in matches)
+        {
+            StoryEventSearchResults.Add(new StoryEventSearchResult { StoryEventId = storyEvent.Id, Name = storyEvent.Name });
+        }
+    }
+
+    [RelayCommand]
+    private void LinkStoryEvent(StoryEventSearchResult? target)
+    {
+        if (target is null || _activeReadingListId is not int listId)
+        {
+            return;
+        }
+
+        using var context = PaperbunkrDb.CreateContext();
+        var list = context.ReadingLists.Find(listId);
+        if (list is null)
+        {
+            return;
+        }
+
+        list.StoryEventId = target.StoryEventId;
+        list.UpdatedAt = DateTime.UtcNow;
+        context.SaveChanges();
+
+        IsLinkingStoryEvent = false;
+        StoryEventSearchQuery = string.Empty;
+        StoryEventSearchResults.Clear();
+        LoadReadingList(listId);
+    }
+
+    [RelayCommand]
+    private void UnlinkStoryEvent()
+    {
+        if (_activeReadingListId is not int listId)
+        {
+            return;
+        }
+
+        using var context = PaperbunkrDb.CreateContext();
+        var list = context.ReadingLists.Find(listId);
+        if (list is null)
+        {
+            return;
+        }
+
+        list.StoryEventId = null;
+        list.UpdatedAt = DateTime.UtcNow;
+        context.SaveChanges();
+        LoadReadingList(listId);
+    }
+
     private void MoveItemUp(ReadingListItemRowViewModel row) => Reorder(row, offset: -1);
 
     private void MoveItemDown(ReadingListItemRowViewModel row) => Reorder(row, offset: 1);
@@ -164,6 +336,7 @@ public partial class ReadingScreenViewModel : ViewModelBase
         }
 
         (items[index].SortOrder, items[swapWith].SortOrder) = (items[swapWith].SortOrder, items[index].SortOrder);
+        BumpUpdatedAt(context, listId);
         context.SaveChanges();
         LoadReadingList(listId);
     }
@@ -183,8 +356,18 @@ public partial class ReadingScreenViewModel : ViewModelBase
         }
 
         context.ReadingListItems.Remove(item);
+        BumpUpdatedAt(context, listId);
         context.SaveChanges();
         LoadReadingList(listId);
+    }
+
+    private static void BumpUpdatedAt(PaperbunkrDbContext context, int listId)
+    {
+        var list = context.ReadingLists.Find(listId);
+        if (list is not null)
+        {
+            list.UpdatedAt = DateTime.UtcNow;
+        }
     }
 
     [RelayCommand]
@@ -199,9 +382,10 @@ public partial class ReadingScreenViewModel : ViewModelBase
         using var context = PaperbunkrDb.CreateContext();
         var matches = context.Issues
             .Include(i => i.Series)
+            .Include(i => i.MetadataProposals)
             .AsEnumerable()
             .Where(i => (i.Series?.Name ?? string.Empty).Contains(SearchQuery, StringComparison.OrdinalIgnoreCase)
-                || (i.Number ?? string.Empty).Contains(SearchQuery, StringComparison.OrdinalIgnoreCase))
+                || (i.EffectiveNumber() ?? string.Empty).Contains(SearchQuery, StringComparison.OrdinalIgnoreCase))
             .Take(20);
 
         foreach (var issue in matches)
@@ -209,7 +393,7 @@ public partial class ReadingScreenViewModel : ViewModelBase
             SearchResults.Add(new IssueSearchResult
             {
                 IssueId = issue.Id,
-                DisplayLabel = $"{issue.Series?.Name ?? "Unknown"} #{issue.Number}",
+                DisplayLabel = $"{issue.Series?.Name ?? "Unknown"} #{issue.EffectiveNumber()}",
             });
         }
     }
@@ -225,6 +409,7 @@ public partial class ReadingScreenViewModel : ViewModelBase
         using var context = PaperbunkrDb.CreateContext();
         int nextOrder = context.ReadingListItems.Where(i => i.ReadingListId == listId).Select(i => (int?)i.SortOrder).Max() is int max ? max + 1 : 0;
         context.ReadingListItems.Add(new ReadingListItem { ReadingListId = listId, IssueId = result.IssueId, SortOrder = nextOrder });
+        BumpUpdatedAt(context, listId);
         context.SaveChanges();
 
         SearchResults.Clear();
@@ -236,7 +421,8 @@ public partial class ReadingScreenViewModel : ViewModelBase
     private void CreateNew()
     {
         using var context = PaperbunkrDb.CreateContext();
-        var list = new ReadingList { Name = "New Reading List", SortOrder = context.ReadingLists.Count() };
+        var now = DateTime.UtcNow;
+        var list = new ReadingList { Name = "New Reading List", SortOrder = context.ReadingLists.Count(), Type = ReadingListType.User, CreatedAt = now, UpdatedAt = now };
         context.ReadingLists.Add(list);
         context.SaveChanges();
         LoadReadingList(list.Id);

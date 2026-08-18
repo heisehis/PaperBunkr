@@ -49,6 +49,10 @@ public class PageCanvas : Control
     public static readonly StyledProperty<Bitmap?> PageProperty =
         AvaloniaProperty.Register<PageCanvas, Bitmap?>(nameof(Page));
 
+    /// <summary>The second page of a double-page spread (docs/superpowers/specs/2026-08-15-reader-double-page-spread-design.md §4), null for solo display - always changes alongside <see cref="Page"/>, never independently.</summary>
+    public static readonly StyledProperty<Bitmap?> SecondaryPageProperty =
+        AvaloniaProperty.Register<PageCanvas, Bitmap?>(nameof(SecondaryPage));
+
     public static readonly StyledProperty<ICommand?> LeftCommandProperty =
         AvaloniaProperty.Register<PageCanvas, ICommand?>(nameof(LeftCommand));
 
@@ -59,14 +63,124 @@ public class PageCanvas : Control
     public static readonly StyledProperty<ICommand?> FullscreenToggleCommandProperty =
         AvaloniaProperty.Register<PageCanvas, ICommand?>(nameof(FullscreenToggleCommand));
 
+    /// <summary>
+    /// Always-context commands (docs/superpowers/specs/2026-08-16-remappable-reader-shortcuts-
+    /// design.md §2/§3) - checked first in <see cref="OnKeyDown"/>, ahead of every mode branch,
+    /// same precedence <see cref="FullscreenToggleCommand"/> already had. <see cref="SetFitModeCommand"/>
+    /// is one command taking an <see cref="ImageFitMode"/> parameter, not five separate bound
+    /// commands - <see cref="OnKeyDown"/> matches the pressed gesture against each Fit*Gesture
+    /// property and executes this with the corresponding mode.
+    /// </summary>
+    public static readonly StyledProperty<ICommand?> SetFitModeCommandProperty =
+        AvaloniaProperty.Register<PageCanvas, ICommand?>(nameof(SetFitModeCommand));
+
+    public static readonly StyledProperty<ICommand?> RotateClockwiseCommandProperty =
+        AvaloniaProperty.Register<PageCanvas, ICommand?>(nameof(RotateClockwiseCommand));
+
+    public static readonly StyledProperty<ICommand?> RotateCounterClockwiseCommandProperty =
+        AvaloniaProperty.Register<PageCanvas, ICommand?>(nameof(RotateCounterClockwiseCommand));
+
+    public static readonly StyledProperty<ICommand?> ZoomInCommandProperty =
+        AvaloniaProperty.Register<PageCanvas, ICommand?>(nameof(ZoomInCommand));
+
+    public static readonly StyledProperty<ICommand?> ZoomOutCommandProperty =
+        AvaloniaProperty.Register<PageCanvas, ICommand?>(nameof(ZoomOutCommand));
+
     public static readonly StyledProperty<bool> HighQualityDisplayProperty =
         AvaloniaProperty.Register<PageCanvas, bool>(nameof(HighQualityDisplay), defaultValue: true);
 
-    public static readonly StyledProperty<Key> LeftKeyProperty =
-        AvaloniaProperty.Register<PageCanvas, Key>(nameof(LeftKey), defaultValue: Key.Left);
+    public static readonly StyledProperty<KeyGesture> LeftKeyProperty =
+        AvaloniaProperty.Register<PageCanvas, KeyGesture>(nameof(LeftKey), defaultValue: new KeyGesture(Key.Left));
 
-    public static readonly StyledProperty<Key> RightKeyProperty =
-        AvaloniaProperty.Register<PageCanvas, Key>(nameof(RightKey), defaultValue: Key.Right);
+    public static readonly StyledProperty<KeyGesture> RightKeyProperty =
+        AvaloniaProperty.Register<PageCanvas, KeyGesture>(nameof(RightKey), defaultValue: new KeyGesture(Key.Right));
+
+    /// <summary>
+    /// Pan (zoomed paged mode) and scroll (continuous mode) direction gestures, plus continuous
+    /// mode's page-jump/start/end gestures (docs/superpowers/specs/2026-08-16-remappable-reader-
+    /// shortcuts-design.md §1/§3) - independently remappable per direction, per mode, per user
+    /// direction (not unified into one "move" command the way <see cref="LeftKey"/>/
+    /// <see cref="RightKey"/> already are for spatial page-turn). Defaults reproduce today's
+    /// hardcoded arrow/PageUp/PageDown/Home/End behavior exactly.
+    /// </summary>
+    public static readonly StyledProperty<KeyGesture> PanLeftGestureProperty =
+        AvaloniaProperty.Register<PageCanvas, KeyGesture>(nameof(PanLeftGesture), defaultValue: new KeyGesture(Key.Left));
+
+    public static readonly StyledProperty<KeyGesture> PanRightGestureProperty =
+        AvaloniaProperty.Register<PageCanvas, KeyGesture>(nameof(PanRightGesture), defaultValue: new KeyGesture(Key.Right));
+
+    public static readonly StyledProperty<KeyGesture> PanUpGestureProperty =
+        AvaloniaProperty.Register<PageCanvas, KeyGesture>(nameof(PanUpGesture), defaultValue: new KeyGesture(Key.Up));
+
+    public static readonly StyledProperty<KeyGesture> PanDownGestureProperty =
+        AvaloniaProperty.Register<PageCanvas, KeyGesture>(nameof(PanDownGesture), defaultValue: new KeyGesture(Key.Down));
+
+    public static readonly StyledProperty<KeyGesture> ScrollLeftGestureProperty =
+        AvaloniaProperty.Register<PageCanvas, KeyGesture>(nameof(ScrollLeftGesture), defaultValue: new KeyGesture(Key.Left));
+
+    public static readonly StyledProperty<KeyGesture> ScrollRightGestureProperty =
+        AvaloniaProperty.Register<PageCanvas, KeyGesture>(nameof(ScrollRightGesture), defaultValue: new KeyGesture(Key.Right));
+
+    public static readonly StyledProperty<KeyGesture> ScrollUpGestureProperty =
+        AvaloniaProperty.Register<PageCanvas, KeyGesture>(nameof(ScrollUpGesture), defaultValue: new KeyGesture(Key.Up));
+
+    public static readonly StyledProperty<KeyGesture> ScrollDownGestureProperty =
+        AvaloniaProperty.Register<PageCanvas, KeyGesture>(nameof(ScrollDownGesture), defaultValue: new KeyGesture(Key.Down));
+
+    public static readonly StyledProperty<KeyGesture> ScrollPageUpGestureProperty =
+        AvaloniaProperty.Register<PageCanvas, KeyGesture>(nameof(ScrollPageUpGesture), defaultValue: new KeyGesture(Key.PageUp));
+
+    public static readonly StyledProperty<KeyGesture> ScrollPageDownGestureProperty =
+        AvaloniaProperty.Register<PageCanvas, KeyGesture>(nameof(ScrollPageDownGesture), defaultValue: new KeyGesture(Key.PageDown));
+
+    public static readonly StyledProperty<KeyGesture> ScrollToStartGestureProperty =
+        AvaloniaProperty.Register<PageCanvas, KeyGesture>(nameof(ScrollToStartGesture), defaultValue: new KeyGesture(Key.Home));
+
+    public static readonly StyledProperty<KeyGesture> ScrollToEndGestureProperty =
+        AvaloniaProperty.Register<PageCanvas, KeyGesture>(nameof(ScrollToEndGesture), defaultValue: new KeyGesture(Key.End));
+
+    /// <summary>Toggles the ViewModel-driven hands-free auto-scroll timer (docs/superpowers/specs/2026-08-16-reader-auto-scroll-design.md) - meaningless outside continuous mode, gesture-matched in the same OnKeyDown block as the other continuous-mode gestures above, not the Always-context block.</summary>
+    public static readonly StyledProperty<KeyGesture> ToggleAutoScrollGestureProperty =
+        AvaloniaProperty.Register<PageCanvas, KeyGesture>(nameof(ToggleAutoScrollGesture), defaultValue: new KeyGesture(Key.S));
+
+    public static readonly StyledProperty<ICommand?> ToggleAutoScrollCommandProperty =
+        AvaloniaProperty.Register<PageCanvas, ICommand?>(nameof(ToggleAutoScrollCommand));
+
+    /// <summary>
+    /// Always-context gestures (docs/superpowers/specs/2026-08-16-remappable-reader-shortcuts-
+    /// design.md §1/§3) - F11 stays a hardcoded secondary fullscreen trigger in <see cref="OnKeyDown"/>
+    /// (an OS-level convention, not really "a shortcut" in the remappable sense); this gesture is
+    /// what's actually remappable.
+    /// </summary>
+    public static readonly StyledProperty<KeyGesture> FullscreenToggleGestureProperty =
+        AvaloniaProperty.Register<PageCanvas, KeyGesture>(nameof(FullscreenToggleGesture), defaultValue: new KeyGesture(Key.F));
+
+    public static readonly StyledProperty<KeyGesture> RotateClockwiseGestureProperty =
+        AvaloniaProperty.Register<PageCanvas, KeyGesture>(nameof(RotateClockwiseGesture), defaultValue: new KeyGesture(Key.R));
+
+    public static readonly StyledProperty<KeyGesture> RotateCounterClockwiseGestureProperty =
+        AvaloniaProperty.Register<PageCanvas, KeyGesture>(nameof(RotateCounterClockwiseGesture), defaultValue: new KeyGesture(Key.R, KeyModifiers.Shift));
+
+    public static readonly StyledProperty<KeyGesture> ZoomInGestureProperty =
+        AvaloniaProperty.Register<PageCanvas, KeyGesture>(nameof(ZoomInGesture), defaultValue: new KeyGesture(Key.Z));
+
+    public static readonly StyledProperty<KeyGesture> ZoomOutGestureProperty =
+        AvaloniaProperty.Register<PageCanvas, KeyGesture>(nameof(ZoomOutGesture), defaultValue: new KeyGesture(Key.Z, KeyModifiers.Shift));
+
+    public static readonly StyledProperty<KeyGesture> FitOriginalGestureProperty =
+        AvaloniaProperty.Register<PageCanvas, KeyGesture>(nameof(FitOriginalGesture), defaultValue: new KeyGesture(Key.D1));
+
+    public static readonly StyledProperty<KeyGesture> FitAllGestureProperty =
+        AvaloniaProperty.Register<PageCanvas, KeyGesture>(nameof(FitAllGesture), defaultValue: new KeyGesture(Key.D2));
+
+    public static readonly StyledProperty<KeyGesture> FitWidthGestureProperty =
+        AvaloniaProperty.Register<PageCanvas, KeyGesture>(nameof(FitWidthGesture), defaultValue: new KeyGesture(Key.D3));
+
+    public static readonly StyledProperty<KeyGesture> FitHeightGestureProperty =
+        AvaloniaProperty.Register<PageCanvas, KeyGesture>(nameof(FitHeightGesture), defaultValue: new KeyGesture(Key.D4));
+
+    public static readonly StyledProperty<KeyGesture> FitBestGestureProperty =
+        AvaloniaProperty.Register<PageCanvas, KeyGesture>(nameof(FitBestGesture), defaultValue: new KeyGesture(Key.D5));
 
     public static readonly StyledProperty<double> ZoomLevelProperty =
         AvaloniaProperty.Register<PageCanvas, double>(nameof(ZoomLevel), defaultValue: ZoomPanMath.MinZoom,
@@ -187,6 +301,20 @@ public class PageCanvas : Control
         AvaloniaProperty.Register<PageCanvas, double>(nameof(PageMarginMultiplier), defaultValue: 1.0);
 
     /// <summary>
+    /// Page-turn transition style/duration (docs/superpowers/specs/2026-08-13-reader-page-transition-
+    /// animations-design.md §4), backing <c>AppSettings.PageTransitionStyle</c>/
+    /// <c>PageTransitionDurationMs</c>. Read directly by <see cref="TryBuildPageTransition"/> at
+    /// turn-time rather than added to <see cref="RenderAffectingProperties"/> - same non-reactive-read
+    /// precedent as <see cref="WheelPanStep"/>, changing the setting mid-session only needs to affect
+    /// the *next* turn, not force an immediate rerender.
+    /// </summary>
+    public static readonly StyledProperty<PageTransitionStyle> PageTransitionStyleProperty =
+        AvaloniaProperty.Register<PageCanvas, PageTransitionStyle>(nameof(PageTransitionStyle), defaultValue: PageTransitionStyle.None);
+
+    public static readonly StyledProperty<int> PageTransitionDurationMsProperty =
+        AvaloniaProperty.Register<PageCanvas, int>(nameof(PageTransitionDurationMs), defaultValue: 250);
+
+    /// <summary>
     /// Placeholder aspect ratio for a page the layout model needs positioned but that hasn't been
     /// decoded yet (spec §4's progressive-estimate simplification, named explicitly - there's no
     /// cheap "dimensions only" read in this codebase's engine layer, and decoding every page in a
@@ -205,6 +333,28 @@ public class PageCanvas : Control
     private Point? _touchPressPosition;
     private DateTime _touchPressTime;
     private CompositionCustomVisual? _visual;
+
+    /// <summary>Set by <see cref="ExecuteDirectional"/> immediately before invoking <see cref="LeftCommand"/>/<see cref="RightCommand"/> - the only paths adjacent paged-mode navigation takes (spec §3.1), so a pending direction here means the next <see cref="PageProperty"/> change is a turn, not a jump. Cleared after being read, and whenever <see cref="DecoderProperty"/> changes (a different issue was opened).</summary>
+    private PageTransitionDirection? _pendingTransitionDirection;
+
+    /// <summary>Wall-clock start of the most recently *animated* transition (spec §3.3) - a new turn only animates if this is far enough in the past, otherwise it falls back to an instant swap, same principle as CE's own rapid-paging throttle.</summary>
+    private DateTime? _lastTransitionStartUtc;
+
+    /// <summary>
+    /// What was last actually pushed to the visual via <see cref="PushPagedVisualData"/> (docs/
+    /// superpowers/specs/2026-08-15-reader-double-page-spread-design.md's implementation-level
+    /// decision, Context section) - the "old" side of a transition, replacing the previous
+    /// <c>change.OldValue</c>-based approach. Adding <see cref="SecondaryPage"/> broke that: Avalonia
+    /// fires <see cref="OnPropertyChanged(AvaloniaPropertyChangedEventArgs)"/> once per changed
+    /// property, so there's no single event carrying "old primary + old secondary" together, and
+    /// relying on the two events firing in a guaranteed order would be fragile. These two fields sidestep
+    /// the ordering question entirely - <see cref="TryBuildPageTransition"/> reads them as "old" and
+    /// the current <see cref="Page"/>/<see cref="SecondaryPage"/> values as "new," with no dependency
+    /// on which property's change notification happens to fire first. Cleared alongside
+    /// <see cref="_pendingTransitionDirection"/> whenever <see cref="DecoderProperty"/> changes.
+    /// </summary>
+    private Bitmap? _lastRenderedPage;
+    private Bitmap? _lastRenderedSecondaryPage;
 
     private bool _pinchActive;
     private Point _pinchStartOrigin;
@@ -228,7 +378,7 @@ public class PageCanvas : Control
     /// </summary>
     private static readonly AvaloniaProperty[] RenderAffectingProperties =
     [
-        PageProperty, HighQualityDisplayProperty, ZoomLevelProperty, PanOffsetXProperty, PanOffsetYProperty,
+        PageProperty, SecondaryPageProperty, HighQualityDisplayProperty, ZoomLevelProperty, PanOffsetXProperty, PanOffsetYProperty,
         FitModeProperty, FitOnlyIfOversizedProperty, ManualRotationDegreesProperty, AutoRotateProperty,
         ReadingModeProperty, DecoderProperty, PageCountProperty, ScrollOffsetProperty, PageMarginMultiplierProperty
     ];
@@ -282,6 +432,12 @@ public class PageCanvas : Control
         set => SetValue(PageProperty, value);
     }
 
+    public Bitmap? SecondaryPage
+    {
+        get => GetValue(SecondaryPageProperty);
+        set => SetValue(SecondaryPageProperty, value);
+    }
+
     public ICommand? LeftCommand
     {
         get => GetValue(LeftCommandProperty);
@@ -300,6 +456,36 @@ public class PageCanvas : Control
         set => SetValue(FullscreenToggleCommandProperty, value);
     }
 
+    public ICommand? SetFitModeCommand
+    {
+        get => GetValue(SetFitModeCommandProperty);
+        set => SetValue(SetFitModeCommandProperty, value);
+    }
+
+    public ICommand? RotateClockwiseCommand
+    {
+        get => GetValue(RotateClockwiseCommandProperty);
+        set => SetValue(RotateClockwiseCommandProperty, value);
+    }
+
+    public ICommand? RotateCounterClockwiseCommand
+    {
+        get => GetValue(RotateCounterClockwiseCommandProperty);
+        set => SetValue(RotateCounterClockwiseCommandProperty, value);
+    }
+
+    public ICommand? ZoomInCommand
+    {
+        get => GetValue(ZoomInCommandProperty);
+        set => SetValue(ZoomInCommandProperty, value);
+    }
+
+    public ICommand? ZoomOutCommand
+    {
+        get => GetValue(ZoomOutCommandProperty);
+        set => SetValue(ZoomOutCommandProperty, value);
+    }
+
     public bool HighQualityDisplay
     {
         get => GetValue(HighQualityDisplayProperty);
@@ -307,17 +493,161 @@ public class PageCanvas : Control
     }
 
     /// <summary>Remappable via Preferences &gt; Reader &gt; Keyboard Shortcuts (docs/alpha-roadmap.md P5 follow-up). Defaults to the physical Left arrow.</summary>
-    public Key LeftKey
+    public KeyGesture LeftKey
     {
         get => GetValue(LeftKeyProperty);
         set => SetValue(LeftKeyProperty, value);
     }
 
     /// <summary>See <see cref="LeftKey"/>. Defaults to the physical Right arrow.</summary>
-    public Key RightKey
+    public KeyGesture RightKey
     {
         get => GetValue(RightKeyProperty);
         set => SetValue(RightKeyProperty, value);
+    }
+
+    public KeyGesture PanLeftGesture
+    {
+        get => GetValue(PanLeftGestureProperty);
+        set => SetValue(PanLeftGestureProperty, value);
+    }
+
+    public KeyGesture PanRightGesture
+    {
+        get => GetValue(PanRightGestureProperty);
+        set => SetValue(PanRightGestureProperty, value);
+    }
+
+    public KeyGesture PanUpGesture
+    {
+        get => GetValue(PanUpGestureProperty);
+        set => SetValue(PanUpGestureProperty, value);
+    }
+
+    public KeyGesture PanDownGesture
+    {
+        get => GetValue(PanDownGestureProperty);
+        set => SetValue(PanDownGestureProperty, value);
+    }
+
+    public KeyGesture ScrollLeftGesture
+    {
+        get => GetValue(ScrollLeftGestureProperty);
+        set => SetValue(ScrollLeftGestureProperty, value);
+    }
+
+    public KeyGesture ScrollRightGesture
+    {
+        get => GetValue(ScrollRightGestureProperty);
+        set => SetValue(ScrollRightGestureProperty, value);
+    }
+
+    public KeyGesture ScrollUpGesture
+    {
+        get => GetValue(ScrollUpGestureProperty);
+        set => SetValue(ScrollUpGestureProperty, value);
+    }
+
+    public KeyGesture ScrollDownGesture
+    {
+        get => GetValue(ScrollDownGestureProperty);
+        set => SetValue(ScrollDownGestureProperty, value);
+    }
+
+    public KeyGesture ScrollPageUpGesture
+    {
+        get => GetValue(ScrollPageUpGestureProperty);
+        set => SetValue(ScrollPageUpGestureProperty, value);
+    }
+
+    public KeyGesture ScrollPageDownGesture
+    {
+        get => GetValue(ScrollPageDownGestureProperty);
+        set => SetValue(ScrollPageDownGestureProperty, value);
+    }
+
+    public KeyGesture ScrollToStartGesture
+    {
+        get => GetValue(ScrollToStartGestureProperty);
+        set => SetValue(ScrollToStartGestureProperty, value);
+    }
+
+    public KeyGesture ScrollToEndGesture
+    {
+        get => GetValue(ScrollToEndGestureProperty);
+        set => SetValue(ScrollToEndGestureProperty, value);
+    }
+
+    public KeyGesture ToggleAutoScrollGesture
+    {
+        get => GetValue(ToggleAutoScrollGestureProperty);
+        set => SetValue(ToggleAutoScrollGestureProperty, value);
+    }
+
+    public ICommand? ToggleAutoScrollCommand
+    {
+        get => GetValue(ToggleAutoScrollCommandProperty);
+        set => SetValue(ToggleAutoScrollCommandProperty, value);
+    }
+
+    public KeyGesture FullscreenToggleGesture
+    {
+        get => GetValue(FullscreenToggleGestureProperty);
+        set => SetValue(FullscreenToggleGestureProperty, value);
+    }
+
+    public KeyGesture RotateClockwiseGesture
+    {
+        get => GetValue(RotateClockwiseGestureProperty);
+        set => SetValue(RotateClockwiseGestureProperty, value);
+    }
+
+    public KeyGesture RotateCounterClockwiseGesture
+    {
+        get => GetValue(RotateCounterClockwiseGestureProperty);
+        set => SetValue(RotateCounterClockwiseGestureProperty, value);
+    }
+
+    public KeyGesture ZoomInGesture
+    {
+        get => GetValue(ZoomInGestureProperty);
+        set => SetValue(ZoomInGestureProperty, value);
+    }
+
+    public KeyGesture ZoomOutGesture
+    {
+        get => GetValue(ZoomOutGestureProperty);
+        set => SetValue(ZoomOutGestureProperty, value);
+    }
+
+    public KeyGesture FitOriginalGesture
+    {
+        get => GetValue(FitOriginalGestureProperty);
+        set => SetValue(FitOriginalGestureProperty, value);
+    }
+
+    public KeyGesture FitAllGesture
+    {
+        get => GetValue(FitAllGestureProperty);
+        set => SetValue(FitAllGestureProperty, value);
+    }
+
+    public KeyGesture FitWidthGesture
+    {
+        get => GetValue(FitWidthGestureProperty);
+        set => SetValue(FitWidthGestureProperty, value);
+    }
+
+    public KeyGesture FitHeightGesture
+    {
+        get => GetValue(FitHeightGestureProperty);
+        set => SetValue(FitHeightGestureProperty, value);
+    }
+
+    public KeyGesture FitBestGesture
+    {
+        get => GetValue(FitBestGestureProperty);
+        set => SetValue(FitBestGestureProperty, value);
     }
 
     public double ZoomLevel
@@ -426,6 +756,18 @@ public class PageCanvas : Control
     {
         get => GetValue(PageMarginMultiplierProperty);
         set => SetValue(PageMarginMultiplierProperty, value);
+    }
+
+    public PageTransitionStyle PageTransitionStyle
+    {
+        get => GetValue(PageTransitionStyleProperty);
+        set => SetValue(PageTransitionStyleProperty, value);
+    }
+
+    public int PageTransitionDurationMs
+    {
+        get => GetValue(PageTransitionDurationMsProperty);
+        set => SetValue(PageTransitionDurationMsProperty, value);
     }
 
     private bool IsContinuous => ReadingMode is ReadingMode.VerticalContinuous or ReadingMode.HorizontalContinuous or ReadingMode.HorizontalContinuousRightToLeft or ReadingMode.Webtoon;
@@ -602,6 +944,39 @@ public class PageCanvas : Control
             // A new issue was opened (or continuous mode's decoder was swapped) - yesterday's page
             // sizes don't apply to today's book.
             _knownPageSizes.Clear();
+
+            // A pending direction here would mean crossing an issue boundary via
+            // NavigateToAdjacentIssue set one right before this decoder swap - clearing it means that
+            // transition never animates as if it were a same-book turn (spec §3.1).
+            _pendingTransitionDirection = null;
+
+            // Same rationale, for the double-page-spread trigger mechanism (2026-08-15 spec) - a new
+            // issue's first page shouldn't transition from the previous issue's last-shown page/pair.
+            _lastRenderedPage = null;
+            _lastRenderedSecondaryPage = null;
+        }
+
+        // Real page-turn animation trigger (spec §3.1/§3.3): only PageProperty changes in paged mode
+        // are candidates - continuous mode never touches Page at all. A transition is only built when
+        // ExecuteDirectional left a pending direction (adjacent nav, not a thumbnail-click jump), the
+        // style isn't None, and the rapid-paging throttle allows it; otherwise this falls through to
+        // the ordinary instant-swap push below, same as every other RenderAffectingProperties change.
+        if (change.Property == PageProperty && !IsContinuous)
+        {
+            var transition = TryBuildPageTransition();
+            _pendingTransitionDirection = null;
+
+            if (transition is not null)
+            {
+                _lastTransitionStartUtc = DateTime.UtcNow;
+                // Bookkeeping stays correct for the next turn even though the compositor is still
+                // animating toward these values - PushPagedVisualData won't run for this change since
+                // we return below, so nothing else updates them.
+                _lastRenderedPage = Page;
+                _lastRenderedSecondaryPage = SecondaryPage;
+                _visual?.SendHandlerMessage(transition);
+                return;
+            }
         }
 
         // Real bug, found via manual testing: OnPointerWheelChanged's Ctrl+wheel zoom handler
@@ -621,6 +996,37 @@ public class PageCanvas : Control
             ScrollOffset = ClampScrollOffset(ScrollOffset);
             PanOffsetX = ClampContinuousCrossAxisPan(PanOffsetX);
             PanOffsetY = ClampContinuousCrossAxisPan(PanOffsetY);
+        }
+
+        // Reclamp on ScrollOffset itself too (docs/superpowers/specs/2026-08-16-reader-auto-scroll-
+        // design.md) - lets ReaderScreenViewModel's auto-scroll timer propose an optimistic
+        // (possibly-past-max) increment each tick without duplicating this control's page-size math;
+        // the clamped result round-trips back through the TwoWay binding synchronously, so the
+        // ViewModel can tell whether it actually moved by comparing before/after. Safe for every
+        // existing ScrollOffset writer too (drag/wheel/pinch/Home/End/ScrollToPage all already
+        // pre-clamp before assigning) - reclamping an already-clamped value is a no-op (the `!=`
+        // guard below skips the reassignment entirely, unlike the ZoomLevel-triggered reclamp above
+        // which unconditionally reassigns). Real bug, found via manual testing: an earlier version
+        // of this block reassigned unconditionally with no early return - when the clamp *did*
+        // correct something (routine during mode entry, when ScrollOffset is still settling against
+        // just-swapped Decoder/PageCount), the nested SetValue recursion already pushes fresh visual
+        // data with the corrected value, but execution then fell through to this same method's
+        // generic RenderAffectingProperties push at the bottom *again* for the stale outer change -
+        // a double PushContinuousVisualData call in immediate succession, landing squarely in this
+        // control's own documented fragile spot (see OnKeyDown's continuous-mode comment on stale
+        // disposed bitmaps from PageDecodeService's virtualization window) and crashing continuous
+        // mode on entry. The early return below - only taken when a correction actually happened -
+        // matches the explicit-return shape <see cref="BoundsProperty"/>'s block already uses just
+        // below, and leaves the common (already-clamped) case falling through unchanged, exactly as
+        // it did before this block existed.
+        if (change.Property == ScrollOffsetProperty && IsContinuous)
+        {
+            double clamped = ClampScrollOffset(ScrollOffset);
+            if (clamped != ScrollOffset)
+            {
+                ScrollOffset = clamped;
+                return;
+            }
         }
 
         if (change.Property == BoundsProperty && _visual is not null)
@@ -656,11 +1062,100 @@ public class PageCanvas : Control
     private void PushAdjustmentData() =>
         _visual?.SendHandlerMessage(new AdjustmentVisualData(Brightness, Contrast, Saturation, Gamma));
 
+    /// <summary>
+    /// Synthesizes a Crossfade transition for a double-page layout-mode or reading-direction change
+    /// (docs/superpowers/specs/2026-08-15-reader-double-page-spread-design.md §6), reusing the exact
+    /// same <see cref="ReaderPageTransitionData"/> pipeline a page-turn uses - built here rather than
+    /// in <see cref="ReaderScreenViewModel"/>, which has no <see cref="Bounds"/>/geometry knowledge of
+    /// its own. Always Crossfade regardless of <see cref="PageTransitionStyle"/> (a layout/direction
+    /// change has no natural slide edge) - still snaps instantly when the user's style is
+    /// <see cref="Paperbunkr.Data.Entities.PageTransitionStyle.None"/>, same as every other transition.
+    /// <paramref name="oldPrimary"/>/<paramref name="oldSecondary"/>/<paramref name="oldIsRightToLeft"/>
+    /// are supplied by the caller rather than read from <see cref="_lastRenderedPage"/>/
+    /// <see cref="_lastRenderedSecondaryPage"/> - by the time this runs, the ViewModel's own property
+    /// changes (<see cref="Page"/>/<see cref="SecondaryPage"/>) have already fired and pushed an
+    /// ordinary instant re-render through <see cref="OnPropertyChanged(AvaloniaPropertyChangedEventArgs)"/>'s
+    /// normal <see cref="PageProperty"/> path (no pending direction, so <see cref="TryBuildPageTransition"/>
+    /// itself declines), clobbering that bookkeeping to the *new* values already. Named simplification:
+    /// this means one already-composited instant frame briefly shows the new state before the
+    /// crossfade sent here starts it back from the old one - a single-frame flash, not chased further
+    /// given the added cross-layer plumbing (an ordinary-push-suppression signal reaching PageCanvas
+    /// before the ViewModel mutation even happens) it'd take to fully avoid.
+    /// </summary>
+    public void PlayReflowTransition(Bitmap? oldPrimary, Bitmap? oldSecondary, bool oldIsRightToLeft)
+    {
+        if (PageTransitionStyle == PageTransitionStyle.None || oldPrimary is null || Page is null)
+        {
+            return;
+        }
+
+        bool throttleCleared = _lastTransitionStartUtc is null
+            || (DateTime.UtcNow - _lastTransitionStartUtc.Value).TotalMilliseconds >= PageTransitionDurationMs;
+        if (!throttleCleared)
+        {
+            return;
+        }
+
+        bool isRightToLeft = ReadingMode == ReadingMode.RightToLeft;
+        var transition = new ReaderPageTransitionData(
+            new Rect(Bounds.Size), oldPrimary, Page, HighQualityDisplay, ZoomLevel * PageMarginMultiplier, PanOffsetX, PanOffsetY,
+            FitMode, FitOnlyIfOversized, EffectiveRotationDegrees(), PageTransitionStyle.Crossfade, TimeSpan.FromMilliseconds(PageTransitionDurationMs),
+            PageTransitionDirection.Right, oldSecondary, SecondaryPage, isRightToLeft, oldIsRightToLeft);
+
+        _lastTransitionStartUtc = DateTime.UtcNow;
+        _lastRenderedPage = Page;
+        _lastRenderedSecondaryPage = SecondaryPage;
+        _visual?.SendHandlerMessage(transition);
+    }
+
+    /// <summary>
+    /// Builds an animated page-turn message for the <see cref="PageProperty"/> change just observed,
+    /// or <see langword="null"/> if this turn shouldn't animate (spec §3.1/§3.3): no pending direction
+    /// (a jump, not adjacent nav), <see cref="PageTransitionStyle"/> is <see cref="Paperbunkr.Data.Entities.PageTransitionStyle.None"/>,
+    /// the rapid-paging throttle hasn't cleared yet, or there's no outgoing bitmap to transition from
+    /// (e.g. the very first page of a freshly opened book, tracked via <see cref="_lastRenderedPage"/>
+    /// - see that field's own doc comment for why this no longer reads <c>change.OldValue</c>). Both
+    /// bitmaps render against the current (already-updated) zoom/pan/fit/rotation state - see
+    /// <see cref="ReaderPageTransitionData"/>'s own doc comment for why that's not an attempt to
+    /// preserve either page's historical transform. Carries <see cref="SecondaryPage"/> on both sides
+    /// too (docs/superpowers/specs/2026-08-15-reader-double-page-spread-design.md §5) - a turn between
+    /// solo and paired animates just like a solo-to-solo one, each side's plan(s) built against that
+    /// side's own bitmap count downstream in <see cref="ReaderPageVisualHandler"/>.
+    /// </summary>
+    private ReaderPageTransitionData? TryBuildPageTransition()
+    {
+        if (_pendingTransitionDirection is not { } direction || PageTransitionStyle == PageTransitionStyle.None)
+        {
+            return null;
+        }
+
+        bool throttleCleared = _lastTransitionStartUtc is null
+            || (DateTime.UtcNow - _lastTransitionStartUtc.Value).TotalMilliseconds >= PageTransitionDurationMs;
+        if (!throttleCleared)
+        {
+            return null;
+        }
+
+        if (_lastRenderedPage is not { } oldBitmap)
+        {
+            return null;
+        }
+
+        bool isRightToLeft = ReadingMode == ReadingMode.RightToLeft;
+        return new ReaderPageTransitionData(
+            new Rect(Bounds.Size), oldBitmap, Page, HighQualityDisplay, ZoomLevel * PageMarginMultiplier, PanOffsetX, PanOffsetY,
+            FitMode, FitOnlyIfOversized, EffectiveRotationDegrees(), PageTransitionStyle, TimeSpan.FromMilliseconds(PageTransitionDurationMs), direction,
+            _lastRenderedSecondaryPage, SecondaryPage, isRightToLeft, OldIsRightToLeft: isRightToLeft);
+    }
+
     private void PushPagedVisualData()
     {
         _visual?.SendHandlerMessage(new ReaderPageVisualData(
             new Rect(Bounds.Size), Page, HighQualityDisplay, ZoomLevel * PageMarginMultiplier, PanOffsetX, PanOffsetY,
-            FitMode, FitOnlyIfOversized, EffectiveRotationDegrees()));
+            FitMode, FitOnlyIfOversized, EffectiveRotationDegrees(), SecondaryPage, ReadingMode == ReadingMode.RightToLeft));
+
+        _lastRenderedPage = Page;
+        _lastRenderedSecondaryPage = SecondaryPage;
     }
 
     /// <summary>
@@ -840,7 +1335,7 @@ public class PageCanvas : Control
             var elapsed = DateTime.UtcNow - _touchPressTime;
             if (elapsed.TotalMilliseconds <= MaxFlickDurationMs && Math.Abs(dx) >= MinFlickDistance && Math.Abs(dx) > Math.Abs(end.Y - start.Y))
             {
-                TryExecute(dx < 0 ? RightCommand : LeftCommand);
+                ExecuteDirectional(dx < 0 ? RightCommand : LeftCommand, dx < 0 ? PageTransitionDirection.Right : PageTransitionDirection.Left);
                 e.Handled = true;
             }
         }
@@ -904,11 +1399,11 @@ public class PageCanvas : Control
         }
         else if (e.Delta.Y < 0 || e.Delta.X > 0)
         {
-            TryExecute(RightCommand);
+            ExecuteDirectional(RightCommand, PageTransitionDirection.Right);
         }
         else if (e.Delta.Y > 0 || e.Delta.X < 0)
         {
-            TryExecute(LeftCommand);
+            ExecuteDirectional(LeftCommand, PageTransitionDirection.Left);
         }
 
         e.Handled = true;
@@ -918,9 +1413,12 @@ public class PageCanvas : Control
     {
         base.OnKeyDown(e);
 
-        // Checked first, ahead of the paged/continuous split below - fullscreen applies equally to
-        // both modes, unlike every other key here (spec §7).
-        if (e.Key is Key.F or Key.F11)
+        // Always-context commands (docs/superpowers/specs/2026-08-16-remappable-reader-shortcuts-
+        // design.md §2/§3): checked first, ahead of the paged/continuous split below, since they
+        // apply regardless of mode - same precedence fullscreen already had, extended to
+        // rotate/zoom/fit. F11 stays a hardcoded secondary fullscreen trigger alongside the
+        // remappable FullscreenToggleGesture (an OS-level convention, not a real "shortcut").
+        if (e.Key == Key.F11 || FullscreenToggleGesture.Matches(e))
         {
             if (TryExecute(FullscreenToggleCommand))
             {
@@ -930,23 +1428,84 @@ public class PageCanvas : Control
             return;
         }
 
+        if (RotateClockwiseGesture.Matches(e))
+        {
+            if (TryExecute(RotateClockwiseCommand))
+            {
+                e.Handled = true;
+            }
+
+            return;
+        }
+
+        if (RotateCounterClockwiseGesture.Matches(e))
+        {
+            if (TryExecute(RotateCounterClockwiseCommand))
+            {
+                e.Handled = true;
+            }
+
+            return;
+        }
+
+        if (ZoomInGesture.Matches(e))
+        {
+            if (TryExecute(ZoomInCommand))
+            {
+                e.Handled = true;
+            }
+
+            return;
+        }
+
+        if (ZoomOutGesture.Matches(e))
+        {
+            if (TryExecute(ZoomOutCommand))
+            {
+                e.Handled = true;
+            }
+
+            return;
+        }
+
+        if (TryMatchFitGesture(e, out var fitMode))
+        {
+            if (SetFitModeCommand?.CanExecute(fitMode) == true)
+            {
+                SetFitModeCommand.Execute(fitMode);
+                e.Handled = true;
+            }
+
+            return;
+        }
+
         if (IsContinuous)
         {
-            if (e.Key == Key.Home)
+            if (ToggleAutoScrollGesture.Matches(e))
+            {
+                if (TryExecute(ToggleAutoScrollCommand))
+                {
+                    e.Handled = true;
+                }
+
+                return;
+            }
+
+            if (ScrollToStartGesture.Matches(e))
             {
                 ScrollOffset = 0;
                 e.Handled = true;
                 return;
             }
 
-            if (e.Key == Key.End)
+            if (ScrollToEndGesture.Matches(e))
             {
                 ScrollOffset = ClampScrollOffset(double.MaxValue);
                 e.Handled = true;
                 return;
             }
 
-            if (TryGetContinuousScrollDelta(e.Key, out double scrollDelta))
+            if (TryGetContinuousScrollDelta(e, out double scrollDelta))
             {
                 ScrollOffset = ClampScrollOffset(ScrollOffset + scrollDelta);
                 e.Handled = true;
@@ -963,7 +1522,7 @@ public class PageCanvas : Control
             return;
         }
 
-        if (CanPan() && TryGetArrowPanDelta(e.Key, out double dx, out double dy))
+        if (CanPan() && TryGetArrowPanDelta(e, out double dx, out double dy))
         {
             var (x, y) = ZoomPanMath.ClampPan(Bounds.Size, EffectivePixelSize(), ZoomLevel, PanOffsetX + dx, PanOffsetY + dy, FitMode, FitOnlyIfOversized);
             PanOffsetX = x;
@@ -972,14 +1531,32 @@ public class PageCanvas : Control
             return;
         }
 
-        if (e.Key == LeftKey && TryExecute(LeftCommand))
+        if (LeftKey.Matches(e) && ExecuteDirectional(LeftCommand, PageTransitionDirection.Left))
         {
             e.Handled = true;
         }
-        else if (e.Key == RightKey && TryExecute(RightCommand))
+        else if (RightKey.Matches(e) && ExecuteDirectional(RightCommand, PageTransitionDirection.Right))
         {
             e.Handled = true;
         }
+    }
+
+    /// <summary>
+    /// Fit-mode gesture-to-<see cref="ImageFitMode"/> mapping (docs/superpowers/specs/
+    /// 2026-08-16-remappable-reader-shortcuts-design.md §1) - note FitAllGesture maps to
+    /// <see cref="ImageFitMode.Fit"/> and FitBestGesture maps to <see cref="ImageFitMode.BestFit"/>,
+    /// matching the existing fit-mode toolbar flyout's own labels ("Fit All"/"Best Fit") rather than
+    /// the command names themselves.
+    /// </summary>
+    private bool TryMatchFitGesture(KeyEventArgs e, out ImageFitMode mode)
+    {
+        if (FitOriginalGesture.Matches(e)) { mode = ImageFitMode.Original; return true; }
+        if (FitAllGesture.Matches(e)) { mode = ImageFitMode.Fit; return true; }
+        if (FitWidthGesture.Matches(e)) { mode = ImageFitMode.FitWidth; return true; }
+        if (FitHeightGesture.Matches(e)) { mode = ImageFitMode.FitHeight; return true; }
+        if (FitBestGesture.Matches(e)) { mode = ImageFitMode.BestFit; return true; }
+        mode = default;
+        return false;
     }
 
     /// <summary>
@@ -1060,7 +1637,7 @@ public class PageCanvas : Control
             bool wasPrimarilyADrag = Math.Abs(_pinchLastScale - 1.0) < 0.15;
             if (wasPrimarilyADrag && elapsed.TotalMilliseconds <= MaxFlickDurationMs && Math.Abs(dx) >= MinFlickDistance && Math.Abs(dx) > Math.Abs(dy))
             {
-                TryExecute(dx < 0 ? RightCommand : LeftCommand);
+                ExecuteDirectional(dx < 0 ? RightCommand : LeftCommand, dx < 0 ? PageTransitionDirection.Right : PageTransitionDirection.Left);
             }
         }
 
@@ -1111,19 +1688,19 @@ public class PageCanvas : Control
         double third = Bounds.Width / 3;
         if (p.X < third)
         {
-            TryExecute(LeftCommand);
+            ExecuteDirectional(LeftCommand, PageTransitionDirection.Left);
         }
         else if (p.X > third * 2)
         {
-            TryExecute(RightCommand);
+            ExecuteDirectional(RightCommand, PageTransitionDirection.Right);
         }
         // center column (all 3 rows): reserved no-op, per spec §4 - no chrome/menu feature to call yet
     }
 
     private void InvokeZoneCommand(double x)
     {
-        var command = x < Bounds.Width / 2 ? LeftCommand : RightCommand;
-        TryExecute(command);
+        bool isLeft = x < Bounds.Width / 2;
+        ExecuteDirectional(isLeft ? LeftCommand : RightCommand, isLeft ? PageTransitionDirection.Left : PageTransitionDirection.Right);
     }
 
     /// <summary>
@@ -1132,30 +1709,30 @@ public class PageCanvas : Control
     /// key (Down for vertical, Right for horizontal) increases <see cref="ScrollOffset"/>; its
     /// opposite decreases it.
     /// </summary>
-    private bool TryGetContinuousScrollDelta(Key key, out double delta)
+    private bool TryGetContinuousScrollDelta(KeyEventArgs e, out double delta)
     {
         double pageJump = (ContinuousAxis == ReaderLayoutModel.Axis.Vertical ? Bounds.Height : Bounds.Width) * PageJumpFraction;
         bool isVertical = ContinuousAxis == ReaderLayoutModel.Axis.Vertical;
 
-        if ((isVertical && key == Key.Down) || (!isVertical && key == Key.Right))
+        if ((isVertical && ScrollDownGesture.Matches(e)) || (!isVertical && ScrollRightGesture.Matches(e)))
         {
             delta = WheelScrollStepPixels;
             return true;
         }
 
-        if ((isVertical && key == Key.Up) || (!isVertical && key == Key.Left))
+        if ((isVertical && ScrollUpGesture.Matches(e)) || (!isVertical && ScrollLeftGesture.Matches(e)))
         {
             delta = -WheelScrollStepPixels;
             return true;
         }
 
-        if (key == Key.PageDown)
+        if (ScrollPageDownGesture.Matches(e))
         {
             delta = pageJump;
             return true;
         }
 
-        if (key == Key.PageUp)
+        if (ScrollPageUpGesture.Matches(e))
         {
             delta = -pageJump;
             return true;
@@ -1165,26 +1742,14 @@ public class PageCanvas : Control
         return false;
     }
 
-    private static bool TryGetArrowPanDelta(Key key, out double dx, out double dy)
+    private bool TryGetArrowPanDelta(KeyEventArgs e, out double dx, out double dy)
     {
         dx = dy = 0;
-        switch (key)
-        {
-            case Key.Left:
-                dx = KeyPanStep;
-                return true;
-            case Key.Right:
-                dx = -KeyPanStep;
-                return true;
-            case Key.Up:
-                dy = KeyPanStep;
-                return true;
-            case Key.Down:
-                dy = -KeyPanStep;
-                return true;
-            default:
-                return false;
-        }
+        if (PanLeftGesture.Matches(e)) { dx = KeyPanStep; return true; }
+        if (PanRightGesture.Matches(e)) { dx = -KeyPanStep; return true; }
+        if (PanUpGesture.Matches(e)) { dy = KeyPanStep; return true; }
+        if (PanDownGesture.Matches(e)) { dy = -KeyPanStep; return true; }
+        return false;
     }
 
     private static bool TryExecute(ICommand? command)
@@ -1196,5 +1761,18 @@ public class PageCanvas : Control
 
         command.Execute(null);
         return true;
+    }
+
+    /// <summary>
+    /// Every adjacent paged-mode navigation path funnels through here instead of calling
+    /// <see cref="TryExecute"/> directly (spec §3.1) - records <paramref name="direction"/> so the
+    /// <see cref="PageProperty"/> change this command is about to cause (via <see cref="LeftCommand"/>/
+    /// <see cref="RightCommand"/> → <c>ReaderScreenViewModel.GoToPage</c>) is recognized as a turn, not
+    /// a jump, in <see cref="OnPropertyChanged"/>.
+    /// </summary>
+    private bool ExecuteDirectional(ICommand? command, PageTransitionDirection direction)
+    {
+        _pendingTransitionDirection = direction;
+        return TryExecute(command);
     }
 }

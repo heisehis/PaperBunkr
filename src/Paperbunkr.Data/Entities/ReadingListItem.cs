@@ -17,4 +17,9 @@ public class ReadingListItem
     public string? GroupLabel { get; set; }
 
     public int SortOrder { get; set; }
+
+    /// <summary>Phase 4c overhaul - reuses <see cref="EventMembershipRole"/> rather than a second near-identical vocabulary (source doc §24 doesn't specify distinct values for reading-list items).</summary>
+    public EventMembershipRole? Role { get; set; }
+
+    public string? Notes { get; set; }
 }

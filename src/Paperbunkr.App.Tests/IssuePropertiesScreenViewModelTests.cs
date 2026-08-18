@@ -36,11 +36,11 @@ public class IssuePropertiesScreenViewModelTests : IDisposable
             Number = "1",
             Title = "Original Title",
             Writer = "Original Writer",
-            Volume = 2,
+            Volume = "2",
             Year = 1999,
             Rating = 3,
             CommunityRating = 4,
-            BlackAndWhite = true,
+            ColorMode = ColorMode.BlackAndWhite,
             Summary = "Original Summary",
         };
         context.Issues.Add(issue);
@@ -80,7 +80,7 @@ public class IssuePropertiesScreenViewModelTests : IDisposable
         Assert.Equal("1999", vm.YearText);
         Assert.Equal(3, vm.MyRating);
         Assert.Equal(4, vm.CommunityRating);
-        Assert.True(vm.BlackAndWhite);
+        Assert.Equal(nameof(ColorMode.BlackAndWhite), vm.ColorModeText);
         Assert.Equal("Original Summary", vm.Summary);
     }
 
@@ -95,7 +95,7 @@ public class IssuePropertiesScreenViewModelTests : IDisposable
         vm.Writer = "New Writer";
         vm.VolumeText = "5";
         vm.YearText = "2020";
-        vm.BlackAndWhite = false;
+        vm.ColorModeText = nameof(ColorMode.Color);
         vm.Summary = "New Summary";
 
         vm.SaveCommand.Execute(null);
@@ -104,9 +104,9 @@ public class IssuePropertiesScreenViewModelTests : IDisposable
         var issue = GetIssue();
         Assert.Equal("New Title", issue.Title);
         Assert.Equal("New Writer", issue.Writer);
-        Assert.Equal(5, issue.Volume);
+        Assert.Equal("5", issue.Volume);
         Assert.Equal(2020, issue.Year);
-        Assert.False(issue.BlackAndWhite);
+        Assert.Equal(ColorMode.Color, issue.ColorMode);
         Assert.Equal("New Summary", issue.Summary);
     }
 
@@ -125,7 +125,47 @@ public class IssuePropertiesScreenViewModelTests : IDisposable
         Assert.True(wentBack);
         var issue = GetIssue();
         Assert.Equal("Original Title", issue.Title);
-        Assert.Equal(2, issue.Volume);
+        Assert.Equal("2", issue.Volume);
+    }
+
+    /// <summary>docs/superpowers/specs/2026-08-16-reveal-in-explorer-and-fileless-entries-design.md §3 - the manual "add a physical book" flow's Cancel-deletes-if-unedited guard.</summary>
+    [Fact]
+    public void Cancel_WithDeleteIfUneditedAndNoChanges_DeletesTheIssue()
+    {
+        bool wentBack = false;
+        var vm = new IssuePropertiesScreenViewModel(() => wentBack = true, () => new PaperbunkrDbContext(_dbOptions));
+        vm.Load(_issueId, deleteIfUnedited: true);
+
+        vm.CancelCommand.Execute(null);
+
+        Assert.True(wentBack);
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        Assert.Null(context.Issues.FirstOrDefault(i => i.Id == _issueId));
+    }
+
+    [Fact]
+    public void Cancel_WithDeleteIfUneditedButFieldChanged_KeepsTheIssue()
+    {
+        var vm = new IssuePropertiesScreenViewModel(() => { }, () => new PaperbunkrDbContext(_dbOptions));
+        vm.Load(_issueId, deleteIfUnedited: true);
+
+        vm.Title = "Now I typed something";
+        vm.CancelCommand.Execute(null);
+
+        var issue = GetIssue();
+        Assert.Equal(_issueId, issue.Id);
+    }
+
+    [Fact]
+    public void Cancel_WithoutDeleteIfUnedited_NeverDeletes()
+    {
+        var vm = new IssuePropertiesScreenViewModel(() => { }, () => new PaperbunkrDbContext(_dbOptions));
+        vm.Load(_issueId); // deleteIfUnedited defaults false - every existing call site (e.g. Detail's "Edit Properties")
+
+        vm.CancelCommand.Execute(null);
+
+        var issue = GetIssue();
+        Assert.Equal(_issueId, issue.Id);
     }
 
     [Fact]

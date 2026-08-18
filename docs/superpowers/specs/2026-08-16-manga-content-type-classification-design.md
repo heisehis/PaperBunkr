@@ -37,13 +37,17 @@ But this mapping only ever runs once, at one-time CE migration. Two real gaps fo
 2. **The normal (non-migration) file scanner never reads `<Manga>` from `ComicInfo.xml` at all** —
    `LibraryFolderScanner.TryReadEmbeddedInfo` already returns CE's real `ComicInfo` object (via CE's
    own `IInfoStorage.LoadInfo`), whose `Manga` field is already populated by CE's XML
-   deserialization — but nothing reads it. A freshly-scanned manga archive gets `ContentType.Comic`
-   (the enum's default C# value — `Comic` is declared first) forever, with no correction path.
+   deserialization — but nothing reads it. A freshly-scanned manga archive gets `ContentType.Unknown`
+   (`Series.ContentType`'s own property initializer) forever, with no correction path.
 
-A related latent bug caught during design: since `ContentType`'s default value is `Comic`, not
-`Unknown`, any logic gating on `ContentType == Unknown` to mean "not yet classified" is wrong for a
-freshly-created `Series` — the correct gate is "was this series newly created in this operation,"
-not "is its `ContentType` still the sentinel."
+A related design pitfall caught (and corrected) during implementation, worth recording since it's
+easy to re-fall into: `Series.ContentType`'s property initializer *is* `Unknown` — so at first glance
+gating scan-time detection on `ContentType == Unknown` (i.e. "not yet classified") looks like a valid
+signal. It isn't: `Unknown` is itself one of the selectable `Options` in Bulk Edit/the series picker
+(§1 below), so a user can deliberately set a series back to `Unknown`. Gating on that value instead
+of "was this series newly created in this scan" would silently override a real, intentional choice
+on a later re-scan. The correct guard is "is this series new to this operation," not "is its
+`ContentType` still the sentinel value" — regardless of what that sentinel happens to be.
 
 ## 1. `BulkFieldDescriptor` gains `FieldKind.Enum`
 

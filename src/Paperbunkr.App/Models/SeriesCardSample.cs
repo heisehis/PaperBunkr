@@ -26,6 +26,9 @@ public sealed class SeriesCardSample
     public required string Sub { get; init; }
     public string? Publisher { get; init; }
     public required string ContentTypeLabel { get; init; }
+
+    /// <summary>Gates the series-card context menu's Reading Direction submenu (docs/superpowers/specs/2026-08-16-manga-content-type-classification-design.md §2) - only meaningful once a series is classified as manga-family.</summary>
+    public bool IsMangaFamily => ContentTypeLabel is "Manga" or "Manhua" or "Manhwa";
     public int IssueCount { get; init; }
     public int UnreadCount { get; init; }
     public bool HasUnread => UnreadCount > 0;
@@ -46,6 +49,9 @@ public sealed class SeriesCardSample
     public bool HasContinueReading => ContinueReadingIssueId is not null;
     public bool HasPublisher => !string.IsNullOrWhiteSpace(Publisher);
     public bool HasLanguage => !string.IsNullOrWhiteSpace(LanguageIso);
+
+    /// <summary>Drives "Show in Explorer"'s IsEnabled (docs/superpowers/specs/2026-08-16-reveal-in-explorer-and-fileless-entries-design.md §1) - false only when every issue in the series is a fileless placeholder.</summary>
+    public bool HasFile { get; init; }
 
     /// <summary>
     /// Panorama grid's per-series tile width (docs/superpowers/specs/
@@ -144,6 +150,7 @@ public sealed class SeriesCardSample
             IssueCount = series.Issues.Count,
             UnreadCount = unreadCount,
             Missing = series.Issues.Any(i => i.FileIsMissing),
+            HasFile = series.Issues.Any(i => !string.IsNullOrEmpty(i.FilePath)),
             CoverBrush = CoverBrushFor(series.Name),
             CoverImage = coverImage,
             PanoramaWidth = ComputePanoramaWidth(aspectRatio),

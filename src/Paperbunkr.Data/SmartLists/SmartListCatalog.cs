@@ -1,4 +1,5 @@
 using Paperbunkr.Data.Entities;
+using Paperbunkr.Data.Metadata;
 
 namespace Paperbunkr.Data.SmartLists;
 
@@ -136,7 +137,7 @@ public static class SmartListCatalog
             [SmartListField.ReadingMode] = i => i.Series?.ReadingMode.ToString() ?? string.Empty,
 
             [SmartListField.Title] = i => i.Title ?? string.Empty,
-            [SmartListField.Number] = i => i.Number ?? string.Empty,
+            [SmartListField.Number] = i => i.EffectiveNumber() ?? string.Empty,
             [SmartListField.AlternateSeries] = i => i.AlternateSeries ?? string.Empty,
             [SmartListField.AlternateNumber] = i => i.AlternateNumber ?? string.Empty,
             [SmartListField.StoryArc] = i => i.StoryArc ?? string.Empty,
@@ -189,10 +190,14 @@ public static class SmartListCatalog
     public static readonly IReadOnlyDictionary<SmartListField, Func<Issue, float>> NumberSelectors =
         new Dictionary<SmartListField, Func<Issue, float>>
         {
-            [SmartListField.Year] = i => i.Year ?? -1,
+            [SmartListField.Year] = i => i.EffectiveYear() ?? -1,
             [SmartListField.Month] = i => i.Month ?? -1,
             [SmartListField.Day] = i => i.Day ?? -1,
-            [SmartListField.Volume] = i => i.Volume ?? -1,
+            // Volume is a string as of docs/superpowers/specs/2026-08-17-metadata-model-phase1-
+            // canonical-metadata-design.md (preserves the original display value) - parsed here so
+            // this field's existing numeric smart-list operators (>, <, range) keep working.
+            // Reads through EffectiveVolume (Phase 2a) so a filename-inferred value still filters.
+            [SmartListField.Volume] = i => float.TryParse(i.EffectiveVolume(), out var vol) ? vol : -1,
             [SmartListField.Count] = i => i.Count ?? -1,
             [SmartListField.PageCount] = i => i.PageCount ?? -1,
             [SmartListField.Rating] = i => i.Rating ?? 0,
@@ -211,7 +216,7 @@ public static class SmartListCatalog
             [SmartListField.Checked] = i => i.Checked,
             [SmartListField.IsMissing] = i => i.FileIsMissing,
             [SmartListField.IsLinked] = i => !string.IsNullOrEmpty(i.FilePath),
-            [SmartListField.BlackAndWhite] = i => i.BlackAndWhite,
+            [SmartListField.BlackAndWhite] = i => i.ColorMode == ColorMode.BlackAndWhite,
             [SmartListField.HasCustomValues] = i => i.CustomValues.Count > 0,
         };
 

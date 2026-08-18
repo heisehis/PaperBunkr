@@ -282,6 +282,78 @@ public class PreferencesScreenViewModelTests : IDisposable
         Assert.True(vm.DefaultAutoRotate);
     }
 
+    // Page transition animations (docs/superpowers/specs/2026-08-13-reader-page-transition-animations-design.md)
+    [Fact]
+    public void EnsureLoaded_PopulatesPageTransitionSettingsFromAppSettings()
+    {
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            var settings = context.GetOrCreateAppSettings();
+            settings.PageTransitionStyle = PageTransitionStyle.Slide;
+            settings.PageTransitionDurationMs = 400;
+            context.SaveChanges();
+        }
+
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+
+        Assert.Equal(PageTransitionStyle.Slide, vm.PageTransitionStyle);
+        Assert.Equal(400, vm.PageTransitionDurationMs);
+    }
+
+    [Fact]
+    public void ChangingPageTransitionStyle_PersistsToAppSettings()
+    {
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+
+        vm.PageTransitionStyle = PageTransitionStyle.Crossfade;
+
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        Assert.Equal(PageTransitionStyle.Crossfade, context.GetOrCreateAppSettings().PageTransitionStyle);
+    }
+
+    [Fact]
+    public void ChangingPageTransitionDurationMs_PersistsToAppSettings()
+    {
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+
+        vm.PageTransitionDurationMs = 500;
+
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        Assert.Equal(500, context.GetOrCreateAppSettings().PageTransitionDurationMs);
+    }
+
+    // Double-page spread (docs/superpowers/specs/2026-08-15-reader-double-page-spread-design.md)
+    [Fact]
+    public void EnsureLoaded_PopulatesDefaultPageLayoutModeFromAppSettings()
+    {
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            var settings = context.GetOrCreateAppSettings();
+            settings.DefaultPageLayoutMode = PageLayoutMode.Double;
+            context.SaveChanges();
+        }
+
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+
+        Assert.Equal(PageLayoutMode.Double, vm.DefaultPageLayoutMode);
+    }
+
+    [Fact]
+    public void ChangingDefaultPageLayoutMode_PersistsToAppSettings()
+    {
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+
+        vm.DefaultPageLayoutMode = PageLayoutMode.Double;
+
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        Assert.Equal(PageLayoutMode.Double, context.GetOrCreateAppSettings().DefaultPageLayoutMode);
+    }
+
     [Fact]
     public void TogglingResetZoomOnPageChange_PersistsToAppSettings()
     {
@@ -337,9 +409,10 @@ public class PreferencesScreenViewModelTests : IDisposable
 
         vm.EnsureLoaded();
 
-        Assert.Equal(KeyboardCommandRegistry.Commands.Count, vm.KeyBindings.Count);
-        Assert.Contains(vm.KeyBindings, r => r.CommandId == KeyboardCommandRegistry.ReaderPageTurnLeft && r.SelectedKey.Key == Key.Left);
-        Assert.Contains(vm.KeyBindings, r => r.CommandId == KeyboardCommandRegistry.ReaderPageTurnRight && r.SelectedKey.Key == Key.Right);
+        int total = vm.NavigationKeyBindings.Count + vm.ZoomFitKeyBindings.Count + vm.DisplayKeyBindings.Count;
+        Assert.Equal(KeyboardCommandRegistry.Commands.Count, total);
+        Assert.Contains(vm.NavigationKeyBindings, r => r.CommandId == KeyboardCommandRegistry.ReaderPageTurnLeft && r.SelectedKey.Gesture == new KeyGesture(Key.Left));
+        Assert.Contains(vm.NavigationKeyBindings, r => r.CommandId == KeyboardCommandRegistry.ReaderPageTurnRight && r.SelectedKey.Gesture == new KeyGesture(Key.Right));
     }
 
     [Fact]
@@ -347,9 +420,9 @@ public class PreferencesScreenViewModelTests : IDisposable
     {
         var vm = CreateViewModel();
         vm.EnsureLoaded();
-        var row = vm.KeyBindings.Single(r => r.CommandId == KeyboardCommandRegistry.ReaderPageTurnLeft);
+        var row = vm.NavigationKeyBindings.Single(r => r.CommandId == KeyboardCommandRegistry.ReaderPageTurnLeft);
 
-        row.SelectedKey = row.Options.Single(o => o.Key == Key.J);
+        row.SelectedKey = row.Options.Single(o => o.Gesture == new KeyGesture(Key.J));
 
         using var context = new PaperbunkrDbContext(_dbOptions);
         Assert.Equal("J", context.KeyBindings.Single(k => k.CommandId == KeyboardCommandRegistry.ReaderPageTurnLeft).Key);
@@ -360,17 +433,57 @@ public class PreferencesScreenViewModelTests : IDisposable
     {
         var vm = CreateViewModel();
         vm.EnsureLoaded();
-        var left = vm.KeyBindings.Single(r => r.CommandId == KeyboardCommandRegistry.ReaderPageTurnLeft);
-        var right = vm.KeyBindings.Single(r => r.CommandId == KeyboardCommandRegistry.ReaderPageTurnRight);
+        var left = vm.NavigationKeyBindings.Single(r => r.CommandId == KeyboardCommandRegistry.ReaderPageTurnLeft);
+        var right = vm.NavigationKeyBindings.Single(r => r.CommandId == KeyboardCommandRegistry.ReaderPageTurnRight);
 
-        left.SelectedKey = left.Options.Single(o => o.Key == Key.J);
-        right.SelectedKey = right.Options.Single(o => o.Key == Key.J);
+        left.SelectedKey = left.Options.Single(o => o.Gesture == new KeyGesture(Key.J));
+        right.SelectedKey = right.Options.Single(o => o.Gesture == new KeyGesture(Key.J));
 
         Assert.True(vm.HasKeyBindingConflictError);
 
         // Resolving it clears the error again.
-        right.SelectedKey = right.Options.Single(o => o.Key == Key.K);
+        right.SelectedKey = right.Options.Single(o => o.Gesture == new KeyGesture(Key.K));
         Assert.False(vm.HasKeyBindingConflictError);
+    }
+
+    [Fact]
+    public void FreshLoad_NoConflictError_DespitePagedUnzoomedPagedZoomedAndContinuousSharingDefaultLeft()
+    {
+        // PageTurnLeft/PanLeft/ScrollLeft all default to Left across three different, mutually
+        // exclusive-at-runtime contexts (PagedUnzoomed/PagedZoomed/Continuous) - must not flag.
+        var vm = CreateViewModel();
+
+        vm.EnsureLoaded();
+
+        Assert.False(vm.HasKeyBindingConflictError);
+    }
+
+    [Fact]
+    public void SameContextCollision_SetsConflictError()
+    {
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+        var panRight = vm.NavigationKeyBindings.Single(r => r.CommandId == KeyboardCommandRegistry.ReaderPanRight);
+
+        // PanLeft (also PagedZoomed) still sits at its default Left.
+        panRight.SelectedKey = panRight.Options.Single(o => o.Gesture == new KeyGesture(Key.Left));
+
+        Assert.True(vm.HasKeyBindingConflictError);
+    }
+
+    [Fact]
+    public void AlwaysContextCollidingWithModeSpecificCommand_SetsConflictError()
+    {
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+        var zoomIn = vm.ZoomFitKeyBindings.Single(r => r.CommandId == KeyboardCommandRegistry.ReaderZoomIn);
+
+        // ZoomIn is Always-context - colliding with PageTurnLeft/PanLeft/ScrollLeft (all still at
+        // their default Left) is a real conflict even though those three don't conflict with
+        // each other.
+        zoomIn.SelectedKey = zoomIn.Options.Single(o => o.Gesture == new KeyGesture(Key.Left));
+
+        Assert.True(vm.HasKeyBindingConflictError);
     }
 
     [Fact]

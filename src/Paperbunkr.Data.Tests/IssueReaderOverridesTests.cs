@@ -124,4 +124,48 @@ public class IssueReaderOverridesTests : IDisposable
         Assert.Equal(0.3f, reloaded.SaturationOverride);
         Assert.Equal(-0.4f, reloaded.GammaOverride);
     }
+
+    /// <summary>
+    /// New nullable columns from migration <c>AddPageLayoutModeSettings</c> (docs/superpowers/specs/
+    /// 2026-08-15-reader-double-page-spread-design.md §2) - same null-by-default/round-trips-when-set
+    /// shape as <see cref="PageFitModeOverride"/> above, for both the Series and Issue layers of the
+    /// resolution chain.
+    /// </summary>
+    [Fact]
+    public void SeriesAndIssue_WithNoPageLayoutModeSet_ReadBackAsNull()
+    {
+        var series = new Series { Name = "Test Series" };
+        _context.Series.Add(series);
+        _context.SaveChanges();
+
+        var issue = new Issue { SeriesId = series.Id, Number = "1" };
+        _context.Issues.Add(issue);
+        _context.SaveChanges();
+
+        using var reload = new PaperbunkrDbContext(new DbContextOptionsBuilder<PaperbunkrDbContext>().UseSqlite($"Data Source={_dbPath}").Options);
+        var reloadedSeries = reload.Series.Single(s => s.Id == series.Id);
+        var reloadedIssue = reload.Issues.Single(i => i.Id == issue.Id);
+
+        Assert.Null(reloadedSeries.PageLayoutMode);
+        Assert.Null(reloadedIssue.PageLayoutModeOverride);
+    }
+
+    [Fact]
+    public void SeriesAndIssue_WithPageLayoutModeSet_RoundTripThroughEnumStringConversion()
+    {
+        var series = new Series { Name = "Test Series", PageLayoutMode = PageLayoutMode.Double };
+        _context.Series.Add(series);
+        _context.SaveChanges();
+
+        var issue = new Issue { SeriesId = series.Id, Number = "1", PageLayoutModeOverride = PageLayoutMode.Single };
+        _context.Issues.Add(issue);
+        _context.SaveChanges();
+
+        using var reload = new PaperbunkrDbContext(new DbContextOptionsBuilder<PaperbunkrDbContext>().UseSqlite($"Data Source={_dbPath}").Options);
+        var reloadedSeries = reload.Series.Single(s => s.Id == series.Id);
+        var reloadedIssue = reload.Issues.Single(i => i.Id == issue.Id);
+
+        Assert.Equal(PageLayoutMode.Double, reloadedSeries.PageLayoutMode);
+        Assert.Equal(PageLayoutMode.Single, reloadedIssue.PageLayoutModeOverride);
+    }
 }

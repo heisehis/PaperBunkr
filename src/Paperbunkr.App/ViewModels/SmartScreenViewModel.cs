@@ -8,6 +8,7 @@ using Microsoft.EntityFrameworkCore;
 using Paperbunkr.App.Models;
 using Paperbunkr.App.Services;
 using Paperbunkr.Data.Entities;
+using Paperbunkr.Data.Metadata;
 using Paperbunkr.Data.SmartLists;
 
 namespace Paperbunkr.App.ViewModels;
@@ -204,7 +205,7 @@ public partial class SmartScreenViewModel : ViewModelBase
             {
                 Id = issue.Id,
                 SeriesId = issue.SeriesId,
-                Title = string.IsNullOrWhiteSpace(issue.Number) ? "#?" : $"#{issue.Number}",
+                Title = string.IsNullOrWhiteSpace(issue.EffectiveNumber()) ? "#?" : $"#{issue.EffectiveNumber()}",
                 IsUnread = issue.LastPageRead is null or 0,
                 CoverBrush = SeriesCardSample.CoverBrushFor(issue.Series!.Name),
                 CoverImage = CoverImageCache.Get(issue.Id),

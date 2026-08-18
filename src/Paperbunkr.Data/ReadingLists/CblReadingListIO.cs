@@ -1,6 +1,7 @@
 using cYo.Projects.ComicRack.Engine.Database;
 using Microsoft.EntityFrameworkCore;
 using Paperbunkr.Data.Entities;
+using Paperbunkr.Data.Metadata;
 
 namespace Paperbunkr.Data.ReadingLists;
 
@@ -17,9 +18,12 @@ public static class CblReadingListIO
         var container = ComicReadingListContainer.Deserialize(filePath)
             ?? throw new InvalidDataException($"'{filePath}' is not a valid CBL reading list.");
 
+        var now = DateTime.UtcNow;
         var list = new ReadingList
         {
             Name = string.IsNullOrEmpty(container.Name) ? Path.GetFileNameWithoutExtension(filePath) : container.Name,
+            CreatedAt = now,
+            UpdatedAt = now,
         };
 
         int sortOrder = 0;
@@ -29,7 +33,7 @@ public static class CblReadingListIO
                 context,
                 item.Series,
                 item.Number,
-                item.Volume < 0 ? null : item.Volume,
+                item.Volume < 0 ? null : item.Volume.ToString(),
                 item.Year < 0 ? null : item.Year,
                 string.IsNullOrEmpty(item.Format) ? null : item.Format);
 
@@ -45,6 +49,7 @@ public static class CblReadingListIO
     {
         var list = context.ReadingLists
             .Include(r => r.Items).ThenInclude(i => i.Issue).ThenInclude(i => i!.Series)
+            .Include(r => r.Items).ThenInclude(i => i.Issue).ThenInclude(i => i!.MetadataProposals)
             .First(r => r.Id == readingListId);
 
         var container = new ComicReadingListContainer { Name = list.Name };
@@ -54,9 +59,9 @@ public static class CblReadingListIO
             container.Items.Add(new ComicReadingListItem
             {
                 Series = issue.Series?.Name ?? string.Empty,
-                Number = issue.Number ?? string.Empty,
-                Volume = issue.Volume ?? -1,
-                Year = issue.Year ?? -1,
+                Number = issue.EffectiveNumber() ?? string.Empty,
+                Volume = int.TryParse(issue.EffectiveVolume(), out var volumeNumber) ? volumeNumber : -1,
+                Year = issue.EffectiveYear() ?? -1,
                 Format = issue.Format ?? string.Empty,
             });
         }

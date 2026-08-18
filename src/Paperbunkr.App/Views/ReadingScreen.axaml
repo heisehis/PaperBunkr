@@ -2,6 +2,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Paperbunkr.App.ViewModels"
              xmlns:models="using:Paperbunkr.App.Models"
+             xmlns:conv="using:Avalonia.Data.Converters"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d" d:DesignWidth="900" d:DesignHeight="760"
@@ -69,6 +70,7 @@
                 <StackPanel Grid.Column="0" VerticalAlignment="Bottom">
                     <TextBlock Text="{Binding ListName}" FontSize="22" FontWeight="Bold" Foreground="{DynamicResource PbTextBrush}" />
                     <TextBlock Text="{Binding Subtitle}" FontSize="12.5" Foreground="{DynamicResource PbTextFaintBrush}" Margin="0,4,0,0" />
+                    <TextBlock Text="{Binding CreatedAtLabel}" FontSize="10.5" Foreground="{DynamicResource PbTextFaintBrush}" Margin="0,2,0,0" />
                 </StackPanel>
                 <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Bottom">
                     <Button Classes="headerAction ghost" Command="{Binding CopyAsTextCommand}">
@@ -101,6 +103,53 @@
                        IsVisible="{Binding HasNoReadingLists}" />
 
             <StackPanel MaxWidth="820" HorizontalAlignment="Left" Margin="28,0,28,40" IsVisible="{Binding !HasNoReadingLists}">
+
+                <!-- Type/StoryEvent link (docs/superpowers/specs/2026-08-17-metadata-model-
+                     phase4c-reading-list-overhaul-design.md) - Type and the link are independent;
+                     setting Type=Event doesn't require a link, and a link can exist without it. -->
+                <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,0,0,16">
+                    <TextBlock Text="Type:" FontSize="12" VerticalAlignment="Center" Foreground="{DynamicResource PbTextMutedBrush}" />
+                    <ComboBox ItemsSource="{Binding TypeOptions}" SelectedItem="{Binding SelectedTypeOption}"
+                              MinWidth="140" FontSize="12">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate x:DataType="models:ReadingListTypeOption">
+                                <TextBlock Text="{Binding Label}" />
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+
+                    <Border IsVisible="{Binding LinkedStoryEventName, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}"
+                            Background="{DynamicResource PbSurfaceAltBrush}" CornerRadius="12" Padding="10,4" Margin="8,0,0,0">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <TextBlock Text="{Binding LinkedStoryEventName, StringFormat='Event: {0}'}" FontSize="11.5" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
+                            <Button Content="✕" Padding="0" Width="16" Height="16" FontSize="9.5" CornerRadius="8"
+                                    Background="Transparent" BorderThickness="0" Foreground="{DynamicResource PbTextFaintBrush}"
+                                    Command="{Binding UnlinkStoryEventCommand}" ToolTip.Tip="Unlink event" />
+                        </StackPanel>
+                    </Border>
+                    <Button Classes="headerAction secondary" Content="Link to Event" Margin="8,0,0,0"
+                            Command="{Binding ToggleLinkStoryEventCommand}" />
+                </StackPanel>
+
+                <Border IsVisible="{Binding IsLinkingStoryEvent}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
+                        CornerRadius="6" Padding="12" Margin="0,0,0,16">
+                    <StackPanel Spacing="8">
+                        <TextBox Text="{Binding StoryEventSearchQuery}" Watermark="Search for a story event…" FontSize="12" />
+                        <ItemsControl ItemsSource="{Binding StoryEventSearchResults}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="models:StoryEventSearchResult">
+                                    <Button HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Padding="8,6" Margin="0,2"
+                                            Background="Transparent" BorderThickness="0" FontSize="12.5"
+                                            Foreground="{DynamicResource PbTextMutedBrush}"
+                                            Command="{Binding $parent[ItemsControl].((vm:ReadingScreenViewModel)DataContext).LinkStoryEventCommand}"
+                                            CommandParameter="{Binding}">
+                                        <TextBlock Text="{Binding Name}" />
+                                    </Button>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </Border>
 
                 <Border Background="{DynamicResource PbAccentSoftBrush}" CornerRadius="5" Padding="10,7" Margin="0,0,0,16"
                         IsVisible="{Binding HasStatusMessage}">
@@ -214,7 +263,8 @@
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate x:DataType="vm:ReadingListItemRowViewModel">
                                             <Border Classes="issueRow">
-                                                <Grid ColumnDefinitions="30,30,*,Auto,Auto,Auto,Auto">
+                                                <StackPanel Spacing="4">
+                                                <Grid ColumnDefinitions="30,30,*,Auto,120,Auto,Auto,Auto">
                                                     <TextBlock Grid.Column="0" Text="{Binding Number}" FontFamily="Consolas,monospace"
                                                                FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" />
                                                     <Border Grid.Column="1" Width="30" Height="42" CornerRadius="3"
@@ -233,14 +283,25 @@
                                                         </Border>
                                                         <TextBlock Text="Missing" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource PbBadgeBrush}" />
                                                     </StackPanel>
-                                                    <Button Grid.Column="4" Classes="headerAction ghost" Content="↑" Command="{Binding MoveUpCommand}" />
-                                                    <Button Grid.Column="5" Classes="headerAction ghost" Content="↓" Command="{Binding MoveDownCommand}" />
-                                                    <Button Grid.Column="6" Classes="headerAction ghost" Command="{Binding RemoveCommand}" ToolTip.Tip="Remove">
+                                                    <ComboBox Grid.Column="4" ItemsSource="{Binding RoleOptions}" SelectedItem="{Binding SelectedRoleOption}"
+                                                              FontSize="11.5" PlaceholderText="Role (optional)">
+                                                        <ComboBox.ItemTemplate>
+                                                            <DataTemplate x:DataType="models:EventMembershipRoleOption">
+                                                                <TextBlock Text="{Binding Label}" />
+                                                            </DataTemplate>
+                                                        </ComboBox.ItemTemplate>
+                                                    </ComboBox>
+                                                    <Button Grid.Column="5" Classes="headerAction ghost" Content="↑" Command="{Binding MoveUpCommand}" />
+                                                    <Button Grid.Column="6" Classes="headerAction ghost" Content="↓" Command="{Binding MoveDownCommand}" />
+                                                    <Button Grid.Column="7" Classes="headerAction ghost" Command="{Binding RemoveCommand}" ToolTip.Tip="Remove">
                                                         <Border Classes="icon" Width="11" Height="11">
                                                             <Border.OpacityMask><ImageBrush Source="/Assets/Icons/Trash_Empty.png" Stretch="Uniform" /></Border.OpacityMask>
                                                         </Border>
                                                     </Button>
                                                 </Grid>
+                                                <TextBox Text="{Binding Notes}" Watermark="Notes…" FontSize="11.5" Margin="42,0,0,0"
+                                                          Background="Transparent" BorderThickness="0" Padding="0" />
+                                                </StackPanel>
                                             </Border>
                                         </DataTemplate>
                                     </ItemsControl.ItemTemplate>

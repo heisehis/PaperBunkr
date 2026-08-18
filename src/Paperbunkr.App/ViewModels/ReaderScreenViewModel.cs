@@ -2,6 +2,7 @@ using System;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Threading.Tasks;
+using Avalonia;
 using Avalonia.Input;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
@@ -12,8 +13,10 @@ using CommunityToolkit.Mvvm.Input;
 using Microsoft.EntityFrameworkCore;
 using Paperbunkr.App.Models;
 using Paperbunkr.App.Services;
+using Paperbunkr.App.Views;
 using Paperbunkr.Data;
 using Paperbunkr.Data.Entities;
+using Paperbunkr.Data.Metadata;
 using SkiaSharp;
 
 namespace Paperbunkr.App.ViewModels;
@@ -71,6 +74,24 @@ public partial class ReaderScreenViewModel : ViewModelBase
     private int? _pendingPositionSaveIssueId;
     private int _pendingPositionSaveIndex;
 
+    /// <summary>
+    /// Hands-free auto-scroll tick cadence (docs/superpowers/specs/2026-08-16-reader-auto-scroll-
+    /// design.md) - short enough to read as smooth continuous motion without excessive CPU churn,
+    /// same tradeoff category as <see cref="PurgeInterval"/>/<see cref="PositionSaveDebounce"/>
+    /// above.
+    /// </summary>
+    private static readonly TimeSpan AutoScrollTickInterval = TimeSpan.FromMilliseconds(40);
+    private DispatcherTimer? _autoScrollTimer;
+
+    /// <summary>
+    /// Distinguishes the auto-scroll timer's own <see cref="ScrollOffset"/> writes from every other
+    /// writer (drag/wheel/keyboard scroll in <see cref="Views.PageCanvas"/>, all round-tripped
+    /// through the same TwoWay binding) - <see cref="OnScrollOffsetChanged"/> uses this to tell
+    /// "auto-scroll advanced itself" apart from "the user just touched the page", which should stop
+    /// auto-scroll (spec §2, a hard stop rather than pause-then-resume, per user direction).
+    /// </summary>
+    private bool _settingScrollOffsetFromAutoScroll;
+
     public ReaderScreenViewModel(Action goBack)
     {
         _goBack = goBack;
@@ -94,14 +115,104 @@ public partial class ReaderScreenViewModel : ViewModelBase
     [ObservableProperty]
     private Bitmap? _currentPage;
 
+    /// <summary>The second page of a double-page spread (docs/superpowers/specs/2026-08-15-reader-double-page-spread-design.md §3), null whenever <see cref="_currentPageIndex"/> isn't paired - solo display, same as before this feature existed.</summary>
+    [ObservableProperty]
+    private Bitmap? _currentPageSecondary;
+
+    /// <summary>
+    /// <c>Issue.PageLayoutModeOverride ?? Series.PageLayoutMode ?? AppSettings.DefaultPageLayoutMode</c>
+    /// (spec §2), resolved live in <see cref="RefreshDisplaySettings"/> alongside background/margin -
+    /// same live-while-open treatment <see cref="PageTransitionStyle"/> already has, so a Preferences
+    /// change to the global default applies to an already-open book without reopening it.
+    /// </summary>
+    [ObservableProperty]
+    private PageLayoutMode _effectivePageLayoutMode = PageLayoutMode.Single;
+
+    /// <summary>Bindable convenience for the Reader toolbar's double-page toggle button's <c>Classes.active</c> (spec §7) - avoids a converter for a plain enum-equality check in XAML.</summary>
+    public bool IsDoublePageMode => EffectivePageLayoutMode == PageLayoutMode.Double;
+
+    partial void OnEffectivePageLayoutModeChanged(PageLayoutMode value) => OnPropertyChanged(nameof(IsDoublePageMode));
+
     [ObservableProperty]
     private bool _highQualityPageDisplay = true;
 
+    // Remappable reader shortcuts (docs/superpowers/specs/2026-08-16-remappable-reader-shortcuts-
+    // design.md) - defaults here mirror KeyboardCommandRegistry's own defaults exactly; Load()
+    // overwrites each with the actual (default-or-remapped) gesture from KeyBindingService.
     [ObservableProperty]
-    private Key _pageTurnLeftKey = Key.Left;
+    private KeyGesture _pageTurnLeftKey = new(Key.Left);
 
     [ObservableProperty]
-    private Key _pageTurnRightKey = Key.Right;
+    private KeyGesture _pageTurnRightKey = new(Key.Right);
+
+    [ObservableProperty]
+    private KeyGesture _panLeftKey = new(Key.Left);
+
+    [ObservableProperty]
+    private KeyGesture _panRightKey = new(Key.Right);
+
+    [ObservableProperty]
+    private KeyGesture _panUpKey = new(Key.Up);
+
+    [ObservableProperty]
+    private KeyGesture _panDownKey = new(Key.Down);
+
+    [ObservableProperty]
+    private KeyGesture _scrollLeftKey = new(Key.Left);
+
+    [ObservableProperty]
+    private KeyGesture _scrollRightKey = new(Key.Right);
+
+    [ObservableProperty]
+    private KeyGesture _scrollUpKey = new(Key.Up);
+
+    [ObservableProperty]
+    private KeyGesture _scrollDownKey = new(Key.Down);
+
+    [ObservableProperty]
+    private KeyGesture _scrollPageUpKey = new(Key.PageUp);
+
+    [ObservableProperty]
+    private KeyGesture _scrollPageDownKey = new(Key.PageDown);
+
+    [ObservableProperty]
+    private KeyGesture _scrollToStartKey = new(Key.Home);
+
+    [ObservableProperty]
+    private KeyGesture _scrollToEndKey = new(Key.End);
+
+    [ObservableProperty]
+    private KeyGesture _toggleAutoScrollKey = new(Key.S);
+
+    [ObservableProperty]
+    private KeyGesture _toggleFullscreenKey = new(Key.F);
+
+    [ObservableProperty]
+    private KeyGesture _rotateClockwiseKey = new(Key.R);
+
+    [ObservableProperty]
+    private KeyGesture _rotateCounterClockwiseKey = new(Key.R, KeyModifiers.Shift);
+
+    [ObservableProperty]
+    private KeyGesture _zoomInKey = new(Key.Z);
+
+    [ObservableProperty]
+    private KeyGesture _zoomOutKey = new(Key.Z, KeyModifiers.Shift);
+
+    [ObservableProperty]
+    private KeyGesture _fitOriginalKey = new(Key.D1);
+
+    [ObservableProperty]
+    private KeyGesture _fitAllKey = new(Key.D2);
+
+    [ObservableProperty]
+    private KeyGesture _fitWidthKey = new(Key.D3);
+
+    [ObservableProperty]
+    private KeyGesture _fitHeightKey = new(Key.D4);
+
+    [ObservableProperty]
+    private KeyGesture _fitBestKey = new(Key.D5);
 
     [ObservableProperty]
     private string? _errorMessage;
@@ -160,6 +271,31 @@ public partial class ReaderScreenViewModel : ViewModelBase
     private double _scrollOffset;
 
     /// <summary>
+    /// Stops hands-free auto-scroll the moment anything other than the auto-scroll timer itself
+    /// changes <see cref="ScrollOffset"/> - catches drag/wheel/keyboard scroll from
+    /// <see cref="Views.PageCanvas"/> (all round-tripped through the TwoWay binding) without this
+    /// ViewModel needing to know which gesture caused it (docs/superpowers/specs/
+    /// 2026-08-16-reader-auto-scroll-design.md §2).
+    /// </summary>
+    partial void OnScrollOffsetChanged(double value)
+    {
+        if (IsAutoScrolling && !_settingScrollOffsetFromAutoScroll)
+        {
+            StopAutoScroll();
+        }
+    }
+
+    /// <summary>Hands-free auto-scroll toggle state (docs/superpowers/specs/2026-08-16-reader-auto-scroll-design.md) - drives the Reader toolbar button's active state, visible only in continuous mode (ScrollOffset has no meaning otherwise).</summary>
+    [ObservableProperty]
+    private bool _isAutoScrolling;
+
+    /// <summary>Auto-scroll rate in px/sec, session-only (resets each launch, same lifetime as ZoomLevel/pan) - range enforcement lives in the toolbar slider's Minimum/Maximum, matching Brightness/Contrast/Gamma's existing no-VM-side-clamp precedent, not duplicated here.</summary>
+    [ObservableProperty]
+    private double _autoScrollSpeed = DefaultAutoScrollSpeed;
+
+    private const double DefaultAutoScrollSpeed = 60;
+
+    /// <summary>
     /// Continuous mode's tracked "current page" (docs/superpowers/specs/2026-08-10-reader-polish-
     /// continuous-scroll-chrome-overlays-design.md §6) - written TwoWay by
     /// <see cref="Views.PageCanvas.CurrentContinuousPageIndex"/> every time it recomputes
@@ -180,6 +316,16 @@ public partial class ReaderScreenViewModel : ViewModelBase
     /// geometry" division <see cref="ScrollOffset"/> itself already draws.
     /// </summary>
     public event Action<int>? ScrollToPageRequested;
+
+    /// <summary>
+    /// Double-page spread reflow (docs/superpowers/specs/2026-08-15-reader-double-page-spread-
+    /// design.md §6) - same "View owns View-layer geometry" reasoning as <see cref="ScrollToPageRequested"/>,
+    /// this ViewModel has no <c>Bounds</c>/zoom/pan knowledge to build a real transition message
+    /// itself, so it raises the old primary/secondary bitmaps and old reading direction and lets
+    /// <see cref="Views.ReaderScreen"/>'s code-behind call <see cref="Views.PageCanvas.PlayReflowTransition"/>
+    /// directly, which has everything else it needs already.
+    /// </summary>
+    public event Action<Bitmap?, Bitmap?, bool>? ReflowTransitionRequested;
 
     /// <summary>
     /// Fired whenever the "current page" (paged mode's <see cref="GoToPage"/> or continuous mode's
@@ -251,6 +397,13 @@ public partial class ReaderScreenViewModel : ViewModelBase
 
     [ObservableProperty]
     private double _mouseWheelSpeed = 2.0;
+
+    /// <summary>Page-turn transition style/duration (docs/superpowers/specs/2026-08-13-reader-page-transition-animations-design.md §5), read from <c>AppSettings</c> in <see cref="RefreshDisplaySettings"/> (same live-while-open treatment as background/margin - a Preferences change should apply to a book that's already open, not just the next one loaded) and bound onto <see cref="Views.PageCanvas.PageTransitionStyle"/>/<see cref="Views.PageCanvas.PageTransitionDurationMs"/>.</summary>
+    [ObservableProperty]
+    private PageTransitionStyle _pageTransitionStyle = PageTransitionStyle.None;
+
+    [ObservableProperty]
+    private int _pageTransitionDurationMs = 250;
 
     /// <summary>
     /// Live brightness/contrast/saturation/gamma (docs/superpowers/specs/2026-08-10-reader-polish-
@@ -345,6 +498,21 @@ public partial class ReaderScreenViewModel : ViewModelBase
         var appSettings = context.GetOrCreateAppSettings();
         CanvasBackgroundBrush = ComputeCanvasBackgroundBrush(appSettings.ImageBackgroundMode, appSettings.BackgroundColor);
         PageMarginMultiplier = appSettings.PageMarginEnabled ? 1.0 - appSettings.PageMarginPercentWidth : 1.0;
+
+        // Real bug, found via manual testing: these two were originally Load-only (matching
+        // MouseWheelSpeed/ResetZoomOnPageChange's precedent), but unlike those two - which only ever
+        // matter at the moment of a gesture/page-turn, read fresh each time - a page-turn style/
+        // duration change needs to affect a book that's already open right now, the same way
+        // background/margin already do here, not require reopening the book (or switching reading
+        // mode, which happens to force a fresh Load as a side effect) just to pick it up.
+        PageTransitionStyle = appSettings.PageTransitionStyle;
+        PageTransitionDurationMs = appSettings.PageTransitionDurationMs;
+
+        // Double-page spread (docs/superpowers/specs/2026-08-15-reader-double-page-spread-design.md
+        // §2/§3) - all three tiers resolved live here, same rationale as PageTransitionStyle above.
+        var series = _loadedSeriesId is int seriesId ? context.Series.Find(seriesId) : null;
+        var issue = _loadedIssueId is int issueId ? context.Issues.Find(issueId) : null;
+        EffectivePageLayoutMode = issue?.PageLayoutModeOverride ?? series?.PageLayoutMode ?? appSettings.DefaultPageLayoutMode;
     }
 
     partial void OnBrightnessChanged(double value) => PersistAdjustmentOverride(_brightnessGlobalDefault, value, (issue, delta) => issue.BrightnessOverride = delta);
@@ -407,7 +575,7 @@ public partial class ReaderScreenViewModel : ViewModelBase
     public void LoadIssue(int issueId)
     {
         using var context = PaperbunkrDb.CreateContext();
-        var issue = context.Issues.Include(i => i.Series).FirstOrDefault(i => i.Id == issueId);
+        var issue = context.Issues.Include(i => i.Series).Include(i => i.MetadataProposals).FirstOrDefault(i => i.Id == issueId);
         if (issue?.Series is null)
         {
             return;
@@ -430,7 +598,7 @@ public partial class ReaderScreenViewModel : ViewModelBase
         }
 
         using var context = PaperbunkrDb.CreateContext();
-        var series = context.Series.Include(s => s.Issues).OrderBy(s => s.SortName ?? s.Name).FirstOrDefault();
+        var series = context.Series.Include(s => s.Issues).ThenInclude(i => i.MetadataProposals).OrderBy(s => s.SortName ?? s.Name).FirstOrDefault();
         var issue = series?.Issues.OrderByNumber().FirstOrDefault();
         if (series is not null && issue is not null)
         {
@@ -481,11 +649,20 @@ public partial class ReaderScreenViewModel : ViewModelBase
         _loadedIssueId = issue.Id;
         _loadedSeriesId = series.Id;
 
+        // Real open-tracking (docs/superpowers/specs/2026-08-17-metadata-model-phase1-canonical-
+        // metadata-design.md) - the first place either of these fields is actually written; confirmed
+        // via search that OpenedTime was never set anywhere in the app before this, so Library's
+        // "Sort by Last Read" was a silent no-op until now. Unlike CE's own OpenedCount (only ever
+        // flips 0->1 on mark-as-read), this is a real counter, incremented on every load.
+        issue.OpenCount++;
+        issue.OpenedTime = DateTime.UtcNow;
+        context.SaveChanges();
+
         CoverBrush = SeriesCardSample.CoverBrushFor(series.Name);
         BreadcrumbSeries = $"Library / {series.Name} /";
         IssueTitle = string.IsNullOrWhiteSpace(issue.Title)
-            ? $"Issue #{issue.Number}"
-            : $"Issue #{issue.Number} — {issue.Title}";
+            ? $"Issue #{issue.EffectiveNumber()}"
+            : $"Issue #{issue.EffectiveNumber()} — {issue.Title}";
 
         var appSettings = context.GetOrCreateAppSettings();
         HighQualityPageDisplay = appSettings.HighQualityPageDisplay;
@@ -493,10 +670,34 @@ public partial class ReaderScreenViewModel : ViewModelBase
         _resetZoomOnPageChange = appSettings.ResetZoomOnPageChange;
         PageTurnLeftKey = _keyBindings.GetKey(context, KeyboardCommandRegistry.ReaderPageTurnLeft);
         PageTurnRightKey = _keyBindings.GetKey(context, KeyboardCommandRegistry.ReaderPageTurnRight);
+        PanLeftKey = _keyBindings.GetKey(context, KeyboardCommandRegistry.ReaderPanLeft);
+        PanRightKey = _keyBindings.GetKey(context, KeyboardCommandRegistry.ReaderPanRight);
+        PanUpKey = _keyBindings.GetKey(context, KeyboardCommandRegistry.ReaderPanUp);
+        PanDownKey = _keyBindings.GetKey(context, KeyboardCommandRegistry.ReaderPanDown);
+        ScrollLeftKey = _keyBindings.GetKey(context, KeyboardCommandRegistry.ReaderScrollLeft);
+        ScrollRightKey = _keyBindings.GetKey(context, KeyboardCommandRegistry.ReaderScrollRight);
+        ScrollUpKey = _keyBindings.GetKey(context, KeyboardCommandRegistry.ReaderScrollUp);
+        ScrollDownKey = _keyBindings.GetKey(context, KeyboardCommandRegistry.ReaderScrollDown);
+        ScrollPageUpKey = _keyBindings.GetKey(context, KeyboardCommandRegistry.ReaderScrollPageUp);
+        ScrollPageDownKey = _keyBindings.GetKey(context, KeyboardCommandRegistry.ReaderScrollPageDown);
+        ScrollToStartKey = _keyBindings.GetKey(context, KeyboardCommandRegistry.ReaderScrollToStart);
+        ScrollToEndKey = _keyBindings.GetKey(context, KeyboardCommandRegistry.ReaderScrollToEnd);
+        ToggleAutoScrollKey = _keyBindings.GetKey(context, KeyboardCommandRegistry.ReaderToggleAutoScroll);
+        ToggleFullscreenKey = _keyBindings.GetKey(context, KeyboardCommandRegistry.ReaderToggleFullscreen);
+        RotateClockwiseKey = _keyBindings.GetKey(context, KeyboardCommandRegistry.ReaderRotateClockwise);
+        RotateCounterClockwiseKey = _keyBindings.GetKey(context, KeyboardCommandRegistry.ReaderRotateCounterClockwise);
+        ZoomInKey = _keyBindings.GetKey(context, KeyboardCommandRegistry.ReaderZoomIn);
+        ZoomOutKey = _keyBindings.GetKey(context, KeyboardCommandRegistry.ReaderZoomOut);
+        FitOriginalKey = _keyBindings.GetKey(context, KeyboardCommandRegistry.ReaderFitOriginal);
+        FitAllKey = _keyBindings.GetKey(context, KeyboardCommandRegistry.ReaderFitAll);
+        FitWidthKey = _keyBindings.GetKey(context, KeyboardCommandRegistry.ReaderFitWidth);
+        FitHeightKey = _keyBindings.GetKey(context, KeyboardCommandRegistry.ReaderFitHeight);
+        FitBestKey = _keyBindings.GetKey(context, KeyboardCommandRegistry.ReaderFitBest);
         UpdateReadingModeState(issue.ReadingModeOverride ?? series.ReadingMode, appSettings.ReverseRtlNavigation);
 
         ErrorMessage = null;
         ZoomLevel = 1.0;
+        StopAutoScroll();
         ScrollOffset = 0;
         CurrentContinuousPageIndex = -1;
         ManualRotationDegrees = 0;
@@ -515,9 +716,11 @@ public partial class ReaderScreenViewModel : ViewModelBase
         _suppressAdjustmentPersist = false;
 
         // Background/margin (docs/superpowers/specs/2026-08-10-reader-polish-continuous-scroll-
-        // chrome-overlays-design.md §10) - global-only, no per-Issue override. Also refreshed live
-        // while the Reader stays open (see RefreshDisplaySettings), so this Load-time read is really
-        // just "start with today's value," not the only time it's ever read.
+        // chrome-overlays-design.md §10) and page-transition style/duration (docs/superpowers/specs/
+        // 2026-08-13-reader-page-transition-animations-design.md) - global-only, no per-Issue
+        // override. Also refreshed live while the Reader stays open (see RefreshDisplaySettings), so
+        // this Load-time read is really just "start with today's value," not the only time it's ever
+        // read.
         RefreshDisplaySettings();
 
         int pageCount = issue.PageCount is > 0 ? issue.PageCount.Value : 1;
@@ -645,11 +848,65 @@ public partial class ReaderScreenViewModel : ViewModelBase
             return;
         }
 
+        // Double-page reflow (spec §6) - captured before the flip, since RTL doesn't itself change
+        // which pages pair (only their left/right placement), only fired below if a spread was (and
+        // still is) actually showing. EffectiveReadingMode, not _isRightToLeft, matches exactly what
+        // PageCanvas itself uses to decide spread placement (PageCanvas.ReadingMode is bound to this
+        // property directly).
+        bool oldRenderRtl = EffectiveReadingMode == ReadingMode.RightToLeft;
+        var oldPrimary = CurrentPage;
+        var oldSecondary = CurrentPageSecondary;
+
         series.ReadingMode = series.ReadingMode == ReadingMode.RightToLeft ? ReadingMode.LeftToRight : ReadingMode.RightToLeft;
         context.SaveChanges();
 
         var issue = _loadedIssueId is int issueId ? context.Issues.Find(issueId) : null;
         UpdateReadingModeState(issue?.ReadingModeOverride ?? series.ReadingMode, context.GetOrCreateAppSettings().ReverseRtlNavigation);
+
+        if (CurrentPageSecondary is not null)
+        {
+            ReflowTransitionRequested?.Invoke(oldPrimary, oldSecondary, oldRenderRtl);
+        }
+    }
+
+    /// <summary>
+    /// Reader-toolbar double-page spread toggle (docs/superpowers/specs/2026-08-15-reader-double-
+    /// page-spread-design.md §3/§7). Mirrors <see cref="ToggleReadingMode"/>'s exact shape: a binary
+    /// flip, writes <c>Series.PageLayoutMode</c> (not <c>Issue.PageLayoutModeOverride</c> - dormant
+    /// this pass, same as <c>Issue.ReadingModeOverride</c> above). Re-pairs/un-pairs immediately via
+    /// <see cref="RefreshCurrentPage"/> rather than waiting for the next navigation.
+    /// </summary>
+    [RelayCommand]
+    private void ToggleDoublePageMode()
+    {
+        if (_loadedSeriesId is not int seriesId)
+        {
+            return;
+        }
+
+        using var context = PaperbunkrDb.CreateContext();
+        var series = context.Series.FirstOrDefault(s => s.Id == seriesId);
+        if (series is null)
+        {
+            return;
+        }
+
+        // Reflow (spec §6) - captured before re-pairing, since RefreshCurrentPage below overwrites
+        // CurrentPage/CurrentPageSecondary with the new arrangement.
+        bool oldRenderRtl = EffectiveReadingMode == ReadingMode.RightToLeft;
+        var oldPrimary = CurrentPage;
+        var oldSecondary = CurrentPageSecondary;
+
+        series.PageLayoutMode = EffectivePageLayoutMode == PageLayoutMode.Double ? PageLayoutMode.Single : PageLayoutMode.Double;
+        context.SaveChanges();
+
+        var issue = _loadedIssueId is int issueId ? context.Issues.Find(issueId) : null;
+        EffectivePageLayoutMode = issue?.PageLayoutModeOverride ?? series.PageLayoutMode ?? context.GetOrCreateAppSettings().DefaultPageLayoutMode;
+        RefreshCurrentPage();
+
+        // Unlike ToggleReadingMode's guard above, this always fires - re-pairing (or un-pairing) is
+        // the entire point of this toggle, unlike RTL where a reflow is only sometimes relevant.
+        ReflowTransitionRequested?.Invoke(oldPrimary, oldSecondary, oldRenderRtl);
     }
 
     /// <summary>
@@ -738,9 +995,31 @@ public partial class ReaderScreenViewModel : ViewModelBase
         }
     }
 
+    /// <summary>
+    /// Reader-toolbar quick toggle for the page-turn transition style (user direction, after manual
+    /// testing surfaced that Preferences-only access felt hidden for something this visible). Unlike
+    /// <see cref="SetFitMode"/>/<see cref="ToggleAutoRotate"/> above, there's no per-Issue override
+    /// column - the design (docs/superpowers/specs/2026-08-13-reader-page-transition-animations-
+    /// design.md §2) is global-only, so this writes straight to <c>AppSettings.PageTransitionStyle</c>,
+    /// the same value Preferences' own dropdown edits, just reachable without leaving the book.
+    /// </summary>
+    [RelayCommand]
+    private void SetPageTransitionStyle(PageTransitionStyle style)
+    {
+        PageTransitionStyle = style;
+
+        using var context = PaperbunkrDb.CreateContext();
+        context.GetOrCreateAppSettings().PageTransitionStyle = style;
+        context.SaveChanges();
+    }
+
     /// <summary>Session-only, never persisted (spec §3) - one press = +90 degrees, wraps at 360.</summary>
     [RelayCommand]
     private void RotateClockwise() => ManualRotationDegrees = (ManualRotationDegrees + 90) % 360;
+
+    /// <summary>Mirrors <see cref="RotateClockwise"/> - one press = -90 degrees, wrapped via +270 rather than negative modulo (C#'s % can return negative for negative operands).</summary>
+    [RelayCommand]
+    private void RotateCounterClockwise() => ManualRotationDegrees = (ManualRotationDegrees + 270) % 360;
 
     /// <summary>
     /// Fullscreen + minimal-chrome (docs/superpowers/specs/2026-08-10-reader-polish-continuous-
@@ -785,6 +1064,68 @@ public partial class ReaderScreenViewModel : ViewModelBase
         {
             _overlayAutoHideTimer?.Stop();
             ShowFullscreenOverlays = false;
+        }
+    }
+
+    /// <summary>
+    /// Hands-free auto-scroll (docs/superpowers/specs/2026-08-16-reader-auto-scroll-design.md). A
+    /// no-op outside continuous mode - the toolbar button/keyboard gesture that invoke this are
+    /// already both gated to continuous mode, but guarded here too in case this command is ever
+    /// invoked directly.
+    /// </summary>
+    [RelayCommand]
+    private void ToggleAutoScroll()
+    {
+        if (!IsContinuousMode)
+        {
+            return;
+        }
+
+        if (IsAutoScrolling)
+        {
+            StopAutoScroll();
+            return;
+        }
+
+        IsAutoScrolling = true;
+        if (_autoScrollTimer is null)
+        {
+            _autoScrollTimer = new DispatcherTimer { Interval = AutoScrollTickInterval };
+            _autoScrollTimer.Tick += OnAutoScrollTick;
+        }
+
+        _autoScrollTimer.Start();
+    }
+
+    private void StopAutoScroll()
+    {
+        _autoScrollTimer?.Stop();
+        IsAutoScrolling = false;
+    }
+
+    /// <summary>
+    /// Proposes an optimistic (possibly-past-max) increment each tick; <see cref="Views.PageCanvas"/>
+    /// reclamps it and round-trips the clamped result back through the TwoWay <see cref="ScrollOffset"/>
+    /// binding synchronously (spec §2/implementation plan's "architecture gap resolved during
+    /// planning" note) - comparing before/after tells us whether it actually moved, with no
+    /// page-size math duplicated here.
+    /// </summary>
+    internal void OnAutoScrollTick(object? sender, EventArgs e)
+    {
+        if (!IsContinuousMode)
+        {
+            StopAutoScroll();
+            return;
+        }
+
+        double before = ScrollOffset;
+        _settingScrollOffsetFromAutoScroll = true;
+        ScrollOffset = before + (AutoScrollSpeed * AutoScrollTickInterval.TotalSeconds);
+        _settingScrollOffsetFromAutoScroll = false;
+
+        if (ScrollOffset <= before)
+        {
+            StopAutoScroll();
         }
     }
 
@@ -899,11 +1240,31 @@ public partial class ReaderScreenViewModel : ViewModelBase
         });
     }
 
+    /// <summary>
+    /// Real crash, found via manual testing (switching a book to Vertical Continuous from the
+    /// reading-mode picker): decoding <c>_currentPageIndex</c> here and assigning it to
+    /// <see cref="CurrentPage"/> synchronously pushes a fresh continuous render pass through the
+    /// live TwoWay <see cref="Views.PageCanvas.Page"/> binding (Page is one of
+    /// <see cref="Views.PageCanvas"/>'s <c>RenderAffectingProperties</c> regardless of reading mode).
+    /// That reentrant pass calls <see cref="Services.PageDecodeService.SetVirtualizationWindow"/>
+    /// against whatever the *continuous* layout actually needs right now - if
+    /// <c>_currentPageIndex</c> (a paged-mode concept continuous mode's own scroll position doesn't
+    /// otherwise track, see <see cref="ScrollOffset"/>'s own doc comment) falls outside that window,
+    /// it gets disposed there before this method reaches <c>CurrentPage.PixelSize</c> two lines
+    /// down - an <c>ObjectDisposedException</c>, the same "Page is a stale reference once continuous
+    /// mode has moved on" hazard <see cref="Views.PageCanvas.OnKeyDown(Avalonia.Input.KeyEventArgs)"/>'s
+    /// continuous-mode branch already documents, just reached from <see cref="Load"/>/mode-switches
+    /// instead of a keypress. Continuous mode's own rendering (<c>PushContinuousVisualData</c>)
+    /// never reads <see cref="CurrentPage"/>/<see cref="CurrentPageSecondary"/> anyway - it decodes
+    /// pages directly off <see cref="Decoder"/> for whatever's in its computed viewport - so skipping
+    /// this whole method there isn't losing anything real.
+    /// </summary>
     private void RefreshCurrentPage()
     {
-        if (_decoder is null)
+        if (IsContinuousMode || _decoder is null)
         {
             CurrentPage = null;
+            CurrentPageSecondary = null;
             return;
         }
 
@@ -915,7 +1276,67 @@ public partial class ReaderScreenViewModel : ViewModelBase
         catch (Exception)
         {
             CurrentPage = null;
+            CurrentPageSecondary = null;
             ErrorMessage = $"Couldn't decode page {_currentPageIndex + 1}.";
+            return;
+        }
+
+        CurrentPageSecondary = TryDecodePairedPage(_currentPageIndex, CurrentPage.PixelSize);
+    }
+
+    /// <summary>Gates every double-page pairing decision below (spec §3) - Single mode, continuous mode (orthogonal per spec §1), and no decoder all mean pairing never applies.</summary>
+    private bool DoublePagePairingActive => _decoder is not null && EffectivePageLayoutMode == PageLayoutMode.Double && !IsContinuousMode;
+
+    /// <summary>
+    /// Double-page spread pairing (docs/superpowers/specs/2026-08-15-reader-double-page-spread-
+    /// design.md §3) - null whenever pairing doesn't apply (see <see cref="DoublePagePairingActive"/>,
+    /// the cover at index 0, the last page, or a landscape/mismatched pair), matching CE's own pairing
+    /// test (<see cref="SpreadLayoutMath.IsPairEligible"/>). Decoding the lookahead page even when it
+    /// turns out not to pair isn't wasted - it primes <see cref="Services.PageDecodeService"/>'s cache
+    /// for whenever the reader actually turns there.
+    /// </summary>
+    private Bitmap? TryDecodePairedPage(int pageIndex, PixelSize primaryPixelSize)
+    {
+        if (!DoublePagePairingActive || pageIndex == 0 || pageIndex + 1 >= _decoder!.PageCount)
+        {
+            return null;
+        }
+
+        try
+        {
+            var secondary = _decoder.GetPage(pageIndex + 1);
+            return SpreadLayoutMath.IsPairEligible(primaryPixelSize, secondary.PixelSize) ? secondary : null;
+        }
+        catch (Exception)
+        {
+            return null; // one bad lookahead page doesn't break solo display of the current one
+        }
+    }
+
+    /// <summary>
+    /// Whether pages <paramref name="primaryIndex"/>/<paramref name="primaryIndex"/>+1 would pair -
+    /// used by <see cref="PreviousPage"/> to decide its step size, mirroring CE's own
+    /// <c>DisplayPreviousPage</c> structure (confirmed from source: it checks the pair immediately
+    /// behind the current position, not the current position itself). <paramref name="primaryIndex"/>
+    /// can legitimately go negative here (stepping back from early in the book) - handled the same as
+    /// any other ineligible pair, not a special case.
+    /// </summary>
+    private bool ArePagesPaired(int primaryIndex)
+    {
+        if (!DoublePagePairingActive || primaryIndex <= 0 || primaryIndex + 1 >= _decoder!.PageCount)
+        {
+            return false;
+        }
+
+        try
+        {
+            var a = _decoder.GetPage(primaryIndex);
+            var b = _decoder.GetPage(primaryIndex + 1);
+            return SpreadLayoutMath.IsPairEligible(a.PixelSize, b.PixelSize);
+        }
+        catch (Exception)
+        {
+            return false;
         }
     }
 
@@ -1061,7 +1482,11 @@ public partial class ReaderScreenViewModel : ViewModelBase
     {
         if (_currentPageIndex > 0)
         {
-            GoToPage(_currentPageIndex - 1);
+            // Double-page spread stepping (spec §3): steps back 2 when the pair immediately behind
+            // the current position is itself eligible to pair, else 1 - same as solo-page stepping
+            // when double-page mode isn't active (ArePagesPaired is always false then).
+            int step = ArePagesPaired(_currentPageIndex - 2) ? 2 : 1;
+            GoToPage(_currentPageIndex - step);
             return;
         }
 
@@ -1073,7 +1498,11 @@ public partial class ReaderScreenViewModel : ViewModelBase
     {
         if (_decoder is not null && _currentPageIndex < _decoder.PageCount - 1)
         {
-            GoToPage(_currentPageIndex + 1);
+            // Double-page spread stepping (spec §3): steps by 2 when the current page is paired -
+            // GoToPage's own Math.Clamp already handles landing exactly on the last page if the pair
+            // would otherwise overshoot PageCount-1.
+            int step = CurrentPageSecondary is not null ? 2 : 1;
+            GoToPage(_currentPageIndex + step);
             return;
         }
 
@@ -1133,7 +1562,7 @@ public partial class ReaderScreenViewModel : ViewModelBase
             return;
         }
 
-        var series = context.Series.Include(s => s.Issues).FirstOrDefault(s => s.Id == seriesId);
+        var series = context.Series.Include(s => s.Issues).ThenInclude(i => i.MetadataProposals).FirstOrDefault(s => s.Id == seriesId);
         var orderedIssues = series?.Issues.OrderByNumber().ToList();
         int index = orderedIssues?.FindIndex(i => i.Id == currentIssueId) ?? -1;
         if (series is null || orderedIssues is null || index < 0)
@@ -1161,6 +1590,7 @@ public partial class ReaderScreenViewModel : ViewModelBase
             ShowFullscreenOverlays = false;
         }
 
+        StopAutoScroll();
         _goBack();
     }
 }

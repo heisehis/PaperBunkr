@@ -7,6 +7,7 @@ using Avalonia.Interactivity;
 using Avalonia.VisualTree;
 using Paperbunkr.App.Models;
 using Paperbunkr.App.ViewModels;
+using Paperbunkr.Data.Entities;
 
 namespace Paperbunkr.App.Views;
 

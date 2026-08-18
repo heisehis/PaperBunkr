@@ -16,7 +16,7 @@ public partial class MainViewModel : ViewModelBase
 {
     public MainViewModel()
     {
-        Library = new LibraryScreenViewModel(GoDetailForSeries, GoReaderForIssue);
+        Library = new LibraryScreenViewModel(GoDetailForSeries, GoReaderForIssue, GoNewIssuePropertiesForPlaceholder);
         Books = new BooksScreenViewModel(new FilePickerService(), new BookFolderScanService(), new BookCoverThumbnailService(), GoBookReaderForBook);
         BookReader = new BookReaderScreenViewModel(GoBooks);
         PdfReader = new PdfPageReaderScreenViewModel(GoBooks);
@@ -26,6 +26,7 @@ public partial class MainViewModel : ViewModelBase
         BulkIssueProperties = new BulkIssuePropertiesScreenViewModel(GoDetailAfterIssueEdit);
         Smart = new SmartScreenViewModel(GoDetailForSeries);
         Reading = new ReadingScreenViewModel(new FilePickerService());
+        Events = new EventsScreenViewModel();
         Plugin = new PluginScreenViewModel();
         Migration = new MigrationOverlayViewModel(new FilePickerService(), OpenSeriesDetailFromReview);
         Preferences = new PreferencesScreenViewModel(
@@ -88,6 +89,7 @@ public partial class MainViewModel : ViewModelBase
     public BulkIssuePropertiesScreenViewModel BulkIssueProperties { get; }
     public SmartScreenViewModel Smart { get; }
     public ReadingScreenViewModel Reading { get; }
+    public EventsScreenViewModel Events { get; }
     public PluginScreenViewModel Plugin { get; }
     public PreferencesScreenViewModel Preferences { get; }
     public MigrationOverlayViewModel Migration { get; }
@@ -105,13 +107,14 @@ public partial class MainViewModel : ViewModelBase
     public bool IsDetail => CurrentScreen == "detail";
     public bool IsSmart => CurrentScreen == "smart";
     public bool IsReading => CurrentScreen == "reading";
+    public bool IsEvents => CurrentScreen == "events";
     public bool IsPlugin => CurrentScreen == "plugin";
     public bool IsPreferences => CurrentScreen == "preferences";
     public bool IsReader => CurrentScreen == "reader";
     public bool IsIssueProperties => CurrentScreen == "issueProperties";
     public bool IsBulkIssueProperties => CurrentScreen == "bulkIssueProperties";
 
-    public bool ShowContextualSidebar => IsLibrary || IsSmart || IsReading;
+    public bool ShowContextualSidebar => IsLibrary || IsSmart || IsReading || IsEvents;
 
     partial void OnCurrentScreenChanged(string value)
     {
@@ -122,6 +125,7 @@ public partial class MainViewModel : ViewModelBase
         OnPropertyChanged(nameof(IsDetail));
         OnPropertyChanged(nameof(IsSmart));
         OnPropertyChanged(nameof(IsReading));
+        OnPropertyChanged(nameof(IsEvents));
         OnPropertyChanged(nameof(IsPlugin));
         OnPropertyChanged(nameof(IsPreferences));
         OnPropertyChanged(nameof(IsReader));
@@ -161,6 +165,13 @@ public partial class MainViewModel : ViewModelBase
     {
         Reading.EnsureListLoaded();
         CurrentScreen = "reading";
+    });
+
+    [RelayCommand]
+    private void GoEvents() => TryLeaveCurrentEditor(() =>
+    {
+        Events.EnsureEventLoaded();
+        CurrentScreen = "events";
     });
 
     [RelayCommand]
@@ -265,6 +276,20 @@ public partial class MainViewModel : ViewModelBase
     {
         Detail.LoadSeries(seriesId);
         CurrentScreen = "detail";
+    }
+
+    /// <summary>
+    /// Manual "add a physical book" hand-off (docs/superpowers/specs/2026-08-16-reveal-in-explorer-
+    /// and-fileless-entries-design.md §2/§3) - loads Detail's target series first, same shape as
+    /// <see cref="GoDetailForSeries"/>, so IssueProperties' shared _goBack (GoDetailAfterIssueEdit)
+    /// lands the user on the right series' Detail screen once they Save/Cancel out of the editor,
+    /// not whatever series they last viewed.
+    /// </summary>
+    private void GoNewIssuePropertiesForPlaceholder(int issueId, int seriesId, bool deleteIfUnedited)
+    {
+        Detail.LoadSeries(seriesId);
+        IssueProperties.Load(issueId, deleteIfUnedited);
+        CurrentScreen = "issueProperties";
     }
 
     private void GoReaderForIssue(int issueId)

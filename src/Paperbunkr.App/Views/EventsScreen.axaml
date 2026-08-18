@@ -1,0 +1,167 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Paperbunkr.App.ViewModels"
+             xmlns:models="using:Paperbunkr.App.Models"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="900" d:DesignHeight="760"
+             x:Class="Paperbunkr.App.Views.EventsScreen"
+             x:DataType="vm:EventsScreenViewModel">
+
+    <UserControl.Styles>
+        <Style Selector="Button.headerAction">
+            <Setter Property="Padding" Value="10,5" />
+            <Setter Property="CornerRadius" Value="5" />
+            <Setter Property="FontSize" Value="11.5" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style Selector="Button.headerAction.ghost">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
+        </Style>
+        <Style Selector="Button.headerAction.secondary">
+            <Setter Property="Background" Value="{DynamicResource PbChromeBrush}" />
+            <Setter Property="BorderBrush" Value="#383D47" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextBrush}" />
+        </Style>
+
+        <Style Selector="Border.statCard">
+            <Setter Property="Background" Value="{DynamicResource PbChromeBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="7" />
+            <Setter Property="Padding" Value="16,12" />
+            <Setter Property="MinWidth" Value="120" />
+        </Style>
+        <Style Selector="TextBlock.statNumber">
+            <Setter Property="FontFamily" Value="Consolas,monospace" />
+            <Setter Property="FontSize" Value="20" />
+            <Setter Property="FontWeight" Value="Bold" />
+        </Style>
+        <Style Selector="TextBlock.statLabel">
+            <Setter Property="FontSize" Value="10.5" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextFaintBrush}" />
+            <Setter Property="Margin" Value="0,2,0,0" />
+        </Style>
+
+        <Style Selector="Border.issueRow">
+            <Setter Property="CornerRadius" Value="5" />
+            <Setter Property="Padding" Value="12,9" />
+        </Style>
+
+        <Style Selector="TextBox.searchBox">
+            <Setter Property="Background" Value="{DynamicResource PbChromeBrush}" />
+            <Setter Property="BorderBrush" Value="#383D47" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="5" />
+            <Setter Property="FontSize" Value="12.5" />
+            <Setter Property="Padding" Value="10,6" />
+        </Style>
+    </UserControl.Styles>
+
+    <ScrollViewer>
+        <StackPanel>
+
+            <Grid ColumnDefinitions="*,Auto" Margin="28,20,28,16">
+                <StackPanel Grid.Column="0" VerticalAlignment="Bottom">
+                    <TextBlock Text="{Binding EventName}" FontSize="22" FontWeight="Bold" Foreground="{DynamicResource PbTextBrush}" />
+                    <TextBlock Text="{Binding Description}" FontSize="12.5" Foreground="{DynamicResource PbTextFaintBrush}" Margin="0,4,0,0" />
+                </StackPanel>
+            </Grid>
+            <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,0,0,1" Margin="0,0,0,24" />
+
+            <TextBlock Text="No story events yet — create one from the sidebar to get started." FontSize="13"
+                       Foreground="{DynamicResource PbTextFaintBrush}" Margin="28,0,28,40" TextWrapping="Wrap"
+                       IsVisible="{Binding HasNoEvents}" />
+
+            <StackPanel MaxWidth="820" HorizontalAlignment="Left" Margin="28,0,28,40" IsVisible="{Binding !HasNoEvents}">
+
+                <StackPanel Orientation="Horizontal" Spacing="10" Margin="0,0,0,22">
+                    <Border Classes="statCard">
+                        <StackPanel><TextBlock Classes="statNumber" Text="{Binding TotalMembers}" Foreground="{DynamicResource PbTextBrush}" />
+                            <TextBlock Classes="statLabel" Text="MEMBERS" /></StackPanel>
+                    </Border>
+                </StackPanel>
+
+                <Grid ColumnDefinitions="*,Auto,Auto" Margin="0,0,0,20">
+                    <TextBox Grid.Column="0" Classes="searchBox" Watermark="Search your library by series or number…"
+                              Text="{Binding SearchQuery}" />
+                    <ComboBox Grid.Column="1" Margin="8,0,0,0" ItemsSource="{Binding RoleOptions}" SelectedItem="{Binding SelectedRoleOption}"
+                              MinWidth="120" FontSize="12">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate x:DataType="models:EventMembershipRoleOption">
+                                <TextBlock Text="{Binding Label}" />
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+                    <Button Grid.Column="2" Classes="headerAction secondary" Margin="8,0,0,0" Command="{Binding SearchCommand}">
+                        <StackPanel Orientation="Horizontal" Spacing="5">
+                            <Border Classes="icon" Width="11" Height="11" Background="{DynamicResource PbTextBrush}">
+                                <Border.OpacityMask><ImageBrush Source="/Assets/Icons/Search_Magnifying_Glass.png" Stretch="Uniform" /></Border.OpacityMask>
+                            </Border>
+                            <TextBlock Text="Search" />
+                        </StackPanel>
+                    </Button>
+                </Grid>
+                <ItemsControl ItemsSource="{Binding SearchResults}" Margin="0,0,0,20">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="models:IssueSearchResult">
+                            <Border Classes="issueRow" Background="{DynamicResource PbChromeBrush}" Margin="0,0,0,4">
+                                <Grid ColumnDefinitions="*,Auto">
+                                    <TextBlock Grid.Column="0" Text="{Binding DisplayLabel}" FontSize="13" Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
+                                    <Button Grid.Column="1" Classes="headerAction secondary"
+                                            Command="{Binding $parent[ItemsControl].((vm:EventsScreenViewModel)DataContext).AddIssueCommand}"
+                                            CommandParameter="{Binding}">
+                                        <StackPanel Orientation="Horizontal" Spacing="5">
+                                            <Border Classes="icon" Width="10" Height="10" Background="{DynamicResource PbTextBrush}">
+                                                <Border.OpacityMask><ImageBrush Source="/Assets/Icons/Add_Plus.png" Stretch="Uniform" /></Border.OpacityMask>
+                                            </Border>
+                                            <TextBlock Text="Add" />
+                                        </StackPanel>
+                                    </Button>
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+
+                <TextBlock Text="No members yet — search above to add issues." FontSize="12.5"
+                           Foreground="{DynamicResource PbTextFaintBrush}" IsVisible="{Binding HasNoMembers}" />
+
+                <ItemsControl ItemsSource="{Binding Members}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:EventMemberRowViewModel">
+                            <Border Classes="issueRow">
+                                <Grid ColumnDefinitions="30,*,140,Auto,Auto,Auto">
+                                    <TextBlock Grid.Column="0" Text="{Binding Number}" FontFamily="Consolas,monospace"
+                                               FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" />
+                                    <TextBlock Grid.Column="1" Text="{Binding Name}" FontSize="13"
+                                               Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" Margin="12,0" />
+                                    <ComboBox Grid.Column="2" ItemsSource="{Binding RoleOptions}" SelectedItem="{Binding SelectedRoleOption}"
+                                              FontSize="12" VerticalAlignment="Center">
+                                        <ComboBox.ItemTemplate>
+                                            <DataTemplate x:DataType="models:EventMembershipRoleOption">
+                                                <TextBlock Text="{Binding Label}" />
+                                            </DataTemplate>
+                                        </ComboBox.ItemTemplate>
+                                    </ComboBox>
+                                    <Button Grid.Column="3" Classes="headerAction ghost" Content="↑" Command="{Binding MoveUpCommand}" />
+                                    <Button Grid.Column="4" Classes="headerAction ghost" Content="↓" Command="{Binding MoveDownCommand}" />
+                                    <Button Grid.Column="5" Classes="headerAction ghost" Command="{Binding RemoveCommand}" ToolTip.Tip="Remove">
+                                        <Border Classes="icon" Width="11" Height="11">
+                                            <Border.OpacityMask><ImageBrush Source="/Assets/Icons/Trash_Empty.png" Stretch="Uniform" /></Border.OpacityMask>
+                                        </Border>
+                                    </Button>
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+
+            </StackPanel>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

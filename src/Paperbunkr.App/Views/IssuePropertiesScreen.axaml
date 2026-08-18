@@ -223,8 +223,8 @@
                             <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="AGE RATING" /><TextBox Text="{Binding AgeRating}" /></StackPanel>
                             <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="LANGUAGE (ISO)" /><TextBox Text="{Binding LanguageIso}" /></StackPanel>
                             <StackPanel Classes="field">
-                                <TextBlock Classes="fieldLabel" Text="BLACK AND WHITE" />
-                                <CheckBox IsChecked="{Binding BlackAndWhite}" Content="Yes" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
+                                <TextBlock Classes="fieldLabel" Text="COLOR MODE" />
+                                <ComboBox ItemsSource="{Binding ColorModeOptions}" SelectedItem="{Binding ColorModeText}" />
                             </StackPanel>
                         </WrapPanel>
                     </StackPanel>

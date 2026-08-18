@@ -97,6 +97,56 @@ public class DetailTabsViewModelTests : IDisposable
         Assert.Equal(ReadingMode.LeftToRight, context.Series.First(s => s.Id == _seriesId).ReadingMode);
     }
 
+    /// <summary>docs/superpowers/specs/2026-08-16-reveal-in-explorer-and-fileless-entries-design.md §1/§2 - fixture issues have no FilePath, matching a fileless placeholder.</summary>
+    [Fact]
+    public void LoadSeries_PopulatesHasFile_FalseForFilelessIssues()
+    {
+        var vm = CreateViewModel();
+
+        vm.LoadSeries(LoadSeriesEntity());
+
+        Assert.All(vm.Issues, issue => Assert.False(issue.HasFile));
+    }
+
+    [Fact]
+    public void RevealIssue_WithNoFilePath_DoesNotThrow()
+    {
+        var vm = CreateViewModel();
+        vm.LoadSeries(LoadSeriesEntity());
+        var issueCard = vm.Issues.First();
+
+        var exception = Record.Exception(() => vm.RevealIssueCommand.Execute(issueCard));
+
+        Assert.Null(exception);
+    }
+
+    [Fact]
+    public void RevealIssue_WithMultipleSelected_ResolvesUniqueFoldersAcrossSelection()
+    {
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            var issue1 = context.Issues.First(i => i.Number == "1");
+            var issue2 = context.Issues.First(i => i.Number == "2");
+            var issue3 = context.Issues.First(i => i.Number == "3");
+            issue1.FilePath = @"C:\Comics\SeriesA\issue1.cbz";
+            issue2.FilePath = @"C:\Comics\SeriesA\issue2.cbz"; // same folder as issue1 - should dedupe
+            issue3.FilePath = @"C:\Comics\SeriesB\issue3.cbz";
+            context.SaveChanges();
+        }
+
+        var vm = CreateViewModel();
+        vm.LoadSeries(LoadSeriesEntity());
+        var first = vm.Issues.First(i => i.Title == "#1");
+        var second = vm.Issues.First(i => i.Title == "#2");
+        var third = vm.Issues.First(i => i.Title == "#3");
+        vm.ToggleIssueSelection(first, isShiftHeld: false);
+        vm.ToggleIssueSelection(second, isShiftHeld: false);
+
+        var exception = Record.Exception(() => vm.RevealIssueCommand.Execute(third));
+
+        Assert.Null(exception);
+    }
+
     [Fact]
     public void EditIssueProperties_NoSelection_InvokesSinglePropertiesCallback_WithClickedIssueId()
     {
@@ -172,5 +222,295 @@ public class DetailTabsViewModelTests : IDisposable
         vm.ToggleReadingModeCommand.Execute(null);
 
         Assert.Equal("Right to Left ▾", vm.ReadingModeLabel);
+    }
+
+    // --- Related tab (docs/superpowers/specs/2026-08-17-metadata-model-phase3-media-relations-
+    // design.md) ---
+
+    private int AddOtherSeries(string name = "Other Series")
+    {
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        var series = new Series { Name = name };
+        context.Series.Add(series);
+        context.SaveChanges();
+        return series.Id;
+    }
+
+    [Fact]
+    public void LoadSeries_NoRelations_HasRelatedFalse_ShowsNoneYet()
+    {
+        var vm = CreateViewModel();
+
+        vm.LoadSeries(LoadSeriesEntity());
+
+        Assert.False(vm.HasRelated);
+        Assert.Empty(vm.Related);
+    }
+
+    [Fact]
+    public void ToggleAddRelation_TogglesPanelState_AndClearsSearch()
+    {
+        var vm = CreateViewModel();
+        vm.LoadSeries(LoadSeriesEntity());
+
+        vm.ToggleAddRelationCommand.Execute(null);
+        Assert.True(vm.IsAddingRelation);
+
+        vm.ToggleAddRelationCommand.Execute(null);
+        Assert.False(vm.IsAddingRelation);
+        Assert.Equal(string.Empty, vm.RelationSearchQuery);
+    }
+
+    [Fact]
+    public void RelationSearchQuery_ExcludesCurrentSeries_MatchesByName()
+    {
+        AddOtherSeries("Justice League");
+        var vm = CreateViewModel();
+        vm.LoadSeries(LoadSeriesEntity()); // "Test Series"
+
+        vm.RelationSearchQuery = "justice"; // case-insensitive substring
+
+        var result = Assert.Single(vm.RelationSearchResults);
+        Assert.Equal("Justice League", result.Name);
+    }
+
+    [Fact]
+    public void AddRelation_CreatesRelation_RefreshesRelatedTab_ClosesPanel()
+    {
+        int otherId = AddOtherSeries("Justice League");
+        var vm = CreateViewModel();
+        vm.LoadSeries(LoadSeriesEntity());
+        vm.SelectedRelationType = RelationType.Crossover;
+        vm.ToggleAddRelationCommand.Execute(null);
+        vm.RelationSearchQuery = "justice";
+        var target = Assert.Single(vm.RelationSearchResults);
+
+        vm.AddRelationCommand.Execute(target);
+
+        Assert.False(vm.IsAddingRelation);
+        var related = Assert.Single(vm.Related);
+        Assert.Equal("Justice League", related.Name);
+        Assert.Equal(otherId, related.RelatedSeriesId);
+        Assert.True(vm.HasRelated);
+
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        Assert.Single(context.MediaRelations);
+    }
+
+    [Fact]
+    public void AddRelation_NamedInversePair_ShowsInverseLabelFromSourceSeriesOwnPage()
+    {
+        // Current series ("Test Series") is added as the SOURCE, RelationType=Prequel - meaning
+        // "Test Series is the Prequel of Justice League Origin." Viewed from the target's OWN page
+        // (Justice League Origin), the source's card correctly shows the stored type as-is
+        // ("Prequel" - that literally is Test Series's role). Viewed from the SOURCE's own page
+        // (Test Series, this vm), the target's card needs the inverse ("Sequel" - Justice League
+        // Origin's own role, the later work).
+        int otherId = AddOtherSeries("Justice League Origin");
+        var vm = CreateViewModel();
+        vm.LoadSeries(LoadSeriesEntity());
+        vm.SelectedRelationType = RelationType.Prequel;
+        var target = new Paperbunkr.App.Models.SeriesSearchResult { SeriesId = otherId, Name = "Justice League Origin" };
+
+        vm.AddRelationCommand.Execute(target);
+
+        var related = Assert.Single(vm.Related);
+        Assert.Equal("Sequel", related.Note);
+
+        var otherVm = CreateViewModel();
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            otherVm.LoadSeries(context.Series.Include(s => s.Issues).First(s => s.Id == otherId));
+        }
+
+        var relatedFromOther = Assert.Single(otherVm.Related);
+        Assert.Equal("Prequel", relatedFromOther.Note);
+    }
+
+    [Fact]
+    public void RemoveRelation_DeletesRelation_ClearsFromRelatedTab()
+    {
+        int otherId = AddOtherSeries("Justice League");
+        var vm = CreateViewModel();
+        vm.LoadSeries(LoadSeriesEntity());
+        var target = new Paperbunkr.App.Models.SeriesSearchResult { SeriesId = otherId, Name = "Justice League" };
+        vm.AddRelationCommand.Execute(target);
+        var related = Assert.Single(vm.Related);
+
+        vm.RemoveRelationCommand.Execute(related);
+
+        Assert.Empty(vm.Related);
+        Assert.False(vm.HasRelated);
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        Assert.Empty(context.MediaRelations);
+    }
+
+    // --- Continuity membership (docs/superpowers/specs/2026-08-17-metadata-model-phase4a-
+    // continuity-design.md) ---
+
+    [Fact]
+    public void LoadSeries_NoContinuities_HasSameContinuityFalse_NoChips()
+    {
+        var vm = CreateViewModel();
+
+        vm.LoadSeries(LoadSeriesEntity());
+
+        Assert.False(vm.HasSameContinuity);
+        Assert.Empty(vm.SameContinuity);
+        Assert.Empty(vm.ContinuityChips);
+    }
+
+    [Fact]
+    public void ToggleAddContinuity_TogglesPanelState_AndClearsSearch()
+    {
+        var vm = CreateViewModel();
+        vm.LoadSeries(LoadSeriesEntity());
+
+        vm.ToggleAddContinuityCommand.Execute(null);
+        Assert.True(vm.IsAddingContinuity);
+
+        vm.ToggleAddContinuityCommand.Execute(null);
+        Assert.False(vm.IsAddingContinuity);
+        Assert.Equal(string.Empty, vm.ContinuitySearchQuery);
+    }
+
+    [Fact]
+    public void ContinuitySearchQuery_NoExistingMatch_OffersCreateNewRow()
+    {
+        var vm = CreateViewModel();
+        vm.LoadSeries(LoadSeriesEntity());
+
+        vm.ContinuitySearchQuery = "Earth-616";
+
+        var result = Assert.Single(vm.ContinuitySearchResults);
+        Assert.True(result.IsNew);
+        Assert.Equal("Earth-616", result.Name);
+    }
+
+    [Fact]
+    public void ContinuitySearchQuery_ExistingMatch_DoesNotOfferCreateNewRow()
+    {
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            Paperbunkr.Data.Metadata.ContinuityResolver.GetOrCreate(context, "Earth-616");
+        }
+        var vm = CreateViewModel();
+        vm.LoadSeries(LoadSeriesEntity());
+
+        vm.ContinuitySearchQuery = "earth-616"; // case-insensitive substring, matches the exact-name check
+
+        var result = Assert.Single(vm.ContinuitySearchResults);
+        Assert.False(result.IsNew);
+    }
+
+    [Fact]
+    public void AddContinuity_NewName_CreatesContinuityAndMembership_ClosesPanel()
+    {
+        var vm = CreateViewModel();
+        vm.LoadSeries(LoadSeriesEntity());
+        vm.ToggleAddContinuityCommand.Execute(null);
+        vm.ContinuitySearchQuery = "Earth-616";
+        var target = Assert.Single(vm.ContinuitySearchResults);
+
+        vm.AddContinuityCommand.Execute(target);
+
+        Assert.False(vm.IsAddingContinuity);
+        var chip = Assert.Single(vm.ContinuityChips);
+        Assert.Equal("Earth-616", chip.Name);
+
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        Assert.Single(context.Continuities);
+    }
+
+    [Fact]
+    public void AddContinuity_ExistingContinuity_SameSeriesSharesItAppearsUnderSameContinuity()
+    {
+        int otherId = AddOtherSeries("Ultimate Spider-Man");
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            var continuity = Paperbunkr.Data.Metadata.ContinuityResolver.GetOrCreate(context, "Earth-616");
+            Paperbunkr.Data.Metadata.ContinuityResolver.AddSeriesToContinuity(context, otherId, continuity.Id);
+        }
+        var vm = CreateViewModel();
+        vm.LoadSeries(LoadSeriesEntity());
+        vm.ToggleAddContinuityCommand.Execute(null);
+        vm.ContinuitySearchQuery = "Earth-616";
+        var target = Assert.Single(vm.ContinuitySearchResults);
+        Assert.False(target.IsNew);
+
+        vm.AddContinuityCommand.Execute(target);
+
+        var sameContinuity = Assert.Single(vm.SameContinuity);
+        Assert.Equal(otherId, sameContinuity.SeriesId);
+        Assert.True(vm.HasSameContinuity);
+    }
+
+    [Fact]
+    public void RemoveContinuity_ClearsChipAndSameContinuitySection()
+    {
+        int otherId = AddOtherSeries("Ultimate Spider-Man");
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            var continuity = Paperbunkr.Data.Metadata.ContinuityResolver.GetOrCreate(context, "Earth-616");
+            Paperbunkr.Data.Metadata.ContinuityResolver.AddSeriesToContinuity(context, otherId, continuity.Id);
+        }
+        var vm = CreateViewModel();
+        vm.LoadSeries(LoadSeriesEntity());
+        vm.ToggleAddContinuityCommand.Execute(null);
+        vm.ContinuitySearchQuery = "Earth-616";
+        vm.AddContinuityCommand.Execute(Assert.Single(vm.ContinuitySearchResults));
+        var chip = Assert.Single(vm.ContinuityChips);
+
+        vm.RemoveContinuityCommand.Execute(chip);
+
+        Assert.Empty(vm.ContinuityChips);
+        Assert.Empty(vm.SameContinuity);
+        Assert.False(vm.HasSameContinuity);
+    }
+
+    // --- Same Event (docs/superpowers/specs/2026-08-17-metadata-model-phase4b-story-events-
+    // design.md) - read-only derived section. ---
+
+    [Fact]
+    public void LoadSeries_NoEventMembership_HasSameEventFalse()
+    {
+        var vm = CreateViewModel();
+
+        vm.LoadSeries(LoadSeriesEntity());
+
+        Assert.False(vm.HasSameEvent);
+        Assert.Empty(vm.SameEvent);
+    }
+
+    [Fact]
+    public void LoadSeries_SharedEventMembership_ShowsOtherSeriesUnderSameEvent()
+    {
+        int otherId = AddOtherSeries("Green Lantern Corps");
+        int currentIssueId;
+        int otherIssueId;
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            currentIssueId = context.Issues.First(i => i.SeriesId == _seriesId).Id;
+            var otherIssue = new Issue { SeriesId = otherId, Number = "1" };
+            context.Issues.Add(otherIssue);
+            context.SaveChanges();
+            otherIssueId = otherIssue.Id;
+
+            var storyEvent = new StoryEvent { Name = "Rise of the Third Army", CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow };
+            context.StoryEvents.Add(storyEvent);
+            context.SaveChanges();
+
+            context.EventMemberships.AddRange(
+                new EventMembership { StoryEventId = storyEvent.Id, IssueId = currentIssueId, Position = 0, Role = EventMembershipRole.Prologue },
+                new EventMembership { StoryEventId = storyEvent.Id, IssueId = otherIssueId, Position = 1, Role = EventMembershipRole.Core });
+            context.SaveChanges();
+        }
+
+        var vm = CreateViewModel();
+        vm.LoadSeries(LoadSeriesEntity());
+
+        var sameEvent = Assert.Single(vm.SameEvent);
+        Assert.Equal(otherId, sameEvent.SeriesId);
+        Assert.True(vm.HasSameEvent);
     }
 }

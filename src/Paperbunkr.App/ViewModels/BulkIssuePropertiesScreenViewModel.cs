@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -8,6 +9,7 @@ using Microsoft.EntityFrameworkCore;
 using Paperbunkr.App.Models;
 using Paperbunkr.App.Services;
 using Paperbunkr.Data;
+using Paperbunkr.Data.Entities;
 
 namespace Paperbunkr.App.ViewModels;
 
@@ -23,6 +25,25 @@ public partial class BulkIssuePropertiesScreenViewModel : ViewModelBase
     private readonly Action _goBack;
     private readonly Func<PaperbunkrDbContext> _contextFactory;
     private List<int> _issueIds = new();
+    private BulkFieldViewModel? _contentTypeField;
+    private BulkFieldViewModel? _readingModeField;
+
+    /// <summary>
+    /// "Reading Direction" (docs/superpowers/specs/2026-08-16-manga-content-type-classification-
+    /// design.md §2) - deliberately not in <see cref="BulkFieldRegistry.All"/>. Unlike every
+    /// registry field, its row's visibility depends on a *different* field's (Content Type's) live
+    /// value, which the flat, mutually-unaware <see cref="BulkFieldRegistry"/>/<see cref="AllFields"/>
+    /// shape has no way to express - so this stays bespoke wiring specific to this one interaction
+    /// rather than a second generalized "conditional field" registry concept. Still a real
+    /// <see cref="BulkFieldDescriptor"/>/<see cref="BulkFieldViewModel"/> underneath, so it
+    /// participates in the normal staging/Save loop (<see cref="AllFields"/> includes it once
+    /// inserted into <see cref="MainFields"/>) with zero special-casing in <see cref="Save"/>.
+    /// </summary>
+    private static readonly BulkFieldDescriptor ReadingModeDescriptor = new(
+        "Reading Direction", BulkFieldRegistry.Main, FieldKind.Enum, IsListField: false,
+        i => i.Series.ReadingMode.ToString(),
+        (i, v) => i.Series.ReadingMode = Enum.Parse<ReadingMode>(v ?? nameof(ReadingMode.LeftToRight)),
+        Options: [nameof(ReadingMode.LeftToRight), nameof(ReadingMode.RightToLeft)]);
 
     public BulkIssuePropertiesScreenViewModel(Action goBack) : this(goBack, PaperbunkrDb.CreateContext)
     {
@@ -70,7 +91,7 @@ public partial class BulkIssuePropertiesScreenViewModel : ViewModelBase
         ArtistFields.Clear();
         PlotNotesFields.Clear();
 
-        foreach (var descriptor in BulkFieldRegistry.All)
+        BulkFieldViewModel PopulateField(BulkFieldDescriptor descriptor)
         {
             var field = new BulkFieldViewModel(descriptor);
 
@@ -91,6 +112,12 @@ public partial class BulkIssuePropertiesScreenViewModel : ViewModelBase
             // Value assignment above auto-stages via BulkFieldViewModel.OnValueChanged - that's the
             // correct behavior for a user edit, but this is programmatic Load population, not one.
             field.IsStaged = false;
+            return field;
+        }
+
+        foreach (var descriptor in BulkFieldRegistry.All)
+        {
+            var field = PopulateField(descriptor);
 
             var target = descriptor.Group switch
             {
@@ -99,6 +126,68 @@ public partial class BulkIssuePropertiesScreenViewModel : ViewModelBase
                 _ => PlotNotesFields,
             };
             target.Add(field);
+
+            if (descriptor.Label == BulkFieldRegistry.ContentTypeLabel)
+            {
+                _contentTypeField = field;
+                field.PropertyChanged += OnContentTypeFieldPropertyChanged;
+
+                // Inserted right after Content Type (docs/superpowers/specs/2026-08-16-manga-
+                // content-type-classification-design.md §2) - populated from real data like every
+                // other field, so it already shows the right value/visibility if the selection's
+                // series are already Manga-family, not only when the user changes Content Type
+                // during this session.
+                _readingModeField = PopulateField(ReadingModeDescriptor);
+                MainFields.Add(_readingModeField);
+            }
+        }
+
+        _readingModeField!.IsRowVisible = ShowReadingModePicker;
+        OnPropertyChanged(nameof(ShowReadingModePicker));
+        OnPropertyChanged(nameof(SeriesAffectedCount));
+        OnPropertyChanged(nameof(HasSeriesAffected));
+    }
+
+    private static readonly string[] MangaFamily = [nameof(ContentType.Manga), nameof(ContentType.Manhua), nameof(ContentType.Manhwa)];
+
+    /// <summary>Content Type's own row stays visible/staged independent of this - only gates the bespoke Reading Direction row (see <see cref="ReadingModeDescriptor"/>'s own doc comment).</summary>
+    public bool ShowReadingModePicker => _contentTypeField is not null && MangaFamily.Contains(_contentTypeField.Value);
+
+    /// <summary>Distinct series among the current selection - Content Type writes through to each one's owning Series (docs/superpowers/specs/2026-08-16-manga-content-type-classification-design.md §1), which can silently span more series than were explicitly multi-selected.</summary>
+    public int SeriesAffectedCount
+    {
+        get
+        {
+            using var context = _contextFactory();
+            return context.Issues.Where(i => _issueIds.Contains(i.Id)).Select(i => i.SeriesId).Distinct().Count();
+        }
+    }
+
+    public bool HasSeriesAffected => _contentTypeField?.IsStaged == true;
+
+    private void OnContentTypeFieldPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(BulkFieldViewModel.Value))
+        {
+            _readingModeField!.IsRowVisible = ShowReadingModePicker;
+            OnPropertyChanged(nameof(ShowReadingModePicker));
+
+            // First transition into a manga-family classification this session defaults Reading
+            // Direction to RTL, per spec §2 - gated on IsStaged (has the *user* touched this row
+            // yet this session), not on Value being blank: Load populates Value from real data even
+            // when every selected issue's series already agrees on the schema default (LeftToRight),
+            // so a blank-only guard would never fire for the common case of an as-yet-unclassified
+            // series sitting at its default. Once staged (by this default or a real user pick), it's
+            // never re-defaulted, so flipping Content Type back and forth never clobbers a choice.
+            if (ShowReadingModePicker && _readingModeField is { IsStaged: false })
+            {
+                _readingModeField.Value = nameof(ReadingMode.RightToLeft);
+            }
+        }
+        else if (e.PropertyName == nameof(BulkFieldViewModel.IsStaged))
+        {
+            OnPropertyChanged(nameof(HasSeriesAffected));
+            OnPropertyChanged(nameof(SeriesAffectedCount));
         }
     }
 
@@ -106,7 +195,10 @@ public partial class BulkIssuePropertiesScreenViewModel : ViewModelBase
     private void Save()
     {
         using var context = _contextFactory();
-        var issues = context.Issues.Where(i => _issueIds.Contains(i.Id)).ToList();
+        // Include(Series) - the "Content Type"/"Reading Direction" fields' Set reaches through
+        // Issue.Series (docs/superpowers/specs/2026-08-16-manga-content-type-classification-design.md
+        // §1), which would otherwise be null here (this query didn't need it before those fields existed).
+        var issues = context.Issues.Include(i => i.Series).Where(i => _issueIds.Contains(i.Id)).ToList();
         var stagedFields = AllFields.Where(f => f.IsStaged).ToList();
 
         foreach (var field in stagedFields)

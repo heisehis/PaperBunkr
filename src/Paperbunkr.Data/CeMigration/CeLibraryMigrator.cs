@@ -4,6 +4,7 @@ using cYo.Projects.ComicRack.Engine;
 using cYo.Projects.ComicRack.Engine.Database;
 using Microsoft.EntityFrameworkCore;
 using Paperbunkr.Data.Entities;
+using Paperbunkr.Data.Metadata;
 
 namespace Paperbunkr.Data.CeMigration;
 
@@ -155,7 +156,7 @@ public class CeLibraryMigrator
         // Loaded once up front: the pre-migration state of the library, used both for the
         // idempotent exact-name path and for resolving the against-existing conflict candidates
         // recomputed below.
-        var existingSeriesByName = context.Series.Include(s => s.Issues)
+        var existingSeriesByName = context.Series.Include(s => s.Issues).ThenInclude(i => i.MetadataProposals)
             .AsEnumerable()
             .GroupBy(s => s.Name, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
@@ -171,7 +172,7 @@ public class CeLibraryMigrator
                 if (options.MergeIntoExisting.TryGetValue(memberName, out int existingId))
                 {
                     target = existingSeriesByName.Values.FirstOrDefault(s => s.Id == existingId)
-                        ?? context.Series.Include(s => s.Issues).First(s => s.Id == existingId);
+                        ?? context.Series.Include(s => s.Issues).ThenInclude(i => i.MetadataProposals).First(s => s.Id == existingId);
                     break;
                 }
             }
@@ -185,12 +186,12 @@ public class CeLibraryMigrator
 
             if (target is not null)
             {
-                var existingKeys = new HashSet<(string?, int?)>(target.Issues.Select(i => (i.Number, i.Volume)));
+                var existingKeys = new HashSet<(string?, string?)>(target.Issues.Select(i => (i.EffectiveNumber(), i.EffectiveVolume())));
                 int added = 0;
                 foreach (var book in books)
                 {
                     var issue = MapIssue(book);
-                    if (!existingKeys.Add((issue.Number, issue.Volume)))
+                    if (!existingKeys.Add((issue.EffectiveNumber(), issue.EffectiveVolume())))
                     {
                         continue;
                     }
@@ -222,7 +223,10 @@ public class CeLibraryMigrator
             series.Publisher = books.Select(b => b.Publisher).FirstOrDefault(v => !string.IsNullOrWhiteSpace(v));
             series.Genre = books.Select(b => b.Genre).FirstOrDefault(v => !string.IsNullOrWhiteSpace(v));
             series.Summary = books.Select(b => b.Summary).FirstOrDefault(v => !string.IsNullOrWhiteSpace(v));
-            series.IsComplete = books.Any(b => b.SeriesComplete == YesNo.Yes);
+            // Status backfill (docs/superpowers/specs/2026-08-17-metadata-model-phase1-canonical-
+            // metadata-design.md): true->Completed, false->Unknown - CE never told us anything
+            // stronger than "not marked complete," so Ongoing would overclaim.
+            series.Status = books.Any(b => b.SeriesComplete == YesNo.Yes) ? SeriesStatus.Completed : SeriesStatus.Unknown;
 
             // Exact migration mapping table from docs/onboarding.md §6. All books in a CE "series"
             // grouping are expected to share the same Manga value in practice; if they disagree,
@@ -365,6 +369,11 @@ public class CeLibraryMigrator
         issue.FileIsMissing = book.FileIsMissing;
         issue.CustomThumbnailKey = NullIfEmpty(book.CustomThumbnailKey);
 
+        // CE's per-issue SeriesComplete flag ("this issue is the one that completes the series") -
+        // only on ComicBook, not ComicInfo, so mapped here rather than in MapStoryFields (docs/
+        // superpowers/specs/2026-08-17-metadata-model-phase1-canonical-metadata-design.md).
+        issue.IsFinalIssue = book.SeriesComplete == YesNo.Yes;
+
         return issue;
     }
 
@@ -391,7 +400,7 @@ public class CeLibraryMigrator
         issue.Title = Pick(issue.Title, NullIfEmpty(info.Title));
         issue.Number = Pick(issue.Number, NullIfEmpty(info.Number));
         issue.Count = Pick(issue.Count, info.Count > 0 ? info.Count : null);
-        issue.Volume = Pick(issue.Volume, info.Volume != 0 ? info.Volume : null);
+        issue.Volume = Pick(issue.Volume, info.Volume != 0 ? info.Volume.ToString() : null);
         issue.AlternateSeries = Pick(issue.AlternateSeries, NullIfEmpty(info.AlternateSeries));
         issue.AlternateNumber = Pick(issue.AlternateNumber, NullIfEmpty(info.AlternateNumber));
         issue.StoryArc = Pick(issue.StoryArc, NullIfEmpty(info.StoryArc));

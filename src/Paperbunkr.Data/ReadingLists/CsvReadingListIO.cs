@@ -31,7 +31,8 @@ public static class CsvReadingListIO
         int yearIndex = header.FindIndex(h => string.Equals(h, "Year", StringComparison.OrdinalIgnoreCase));
         int formatIndex = header.FindIndex(h => string.Equals(h, "Format", StringComparison.OrdinalIgnoreCase));
 
-        var list = new ReadingList { Name = listName ?? Path.GetFileNameWithoutExtension(filePath) };
+        var now = DateTime.UtcNow;
+        var list = new ReadingList { Name = listName ?? Path.GetFileNameWithoutExtension(filePath), CreatedAt = now, UpdatedAt = now };
         var skippedRows = new List<string>();
         int sortOrder = 0;
         int placeholderCount = 0;
@@ -53,7 +54,7 @@ public static class CsvReadingListIO
                 continue;
             }
 
-            int? volume = int.TryParse(Field(fields, volumeIndex), out var v) ? v : null;
+            string? volume = string.IsNullOrWhiteSpace(Field(fields, volumeIndex)) ? null : Field(fields, volumeIndex)!.Trim();
             int? year = int.TryParse(Field(fields, yearIndex), out var y) ? y : null;
             string? format = string.IsNullOrWhiteSpace(Field(fields, formatIndex)) ? null : Field(fields, formatIndex)!.Trim();
 

@@ -44,6 +44,35 @@
                 </Grid>
             </Border>
         </DataTemplate>
+
+        <DataTemplate x:Key="MetadataProposalRowTemplate" x:DataType="vm:MetadataProposalRowViewModel">
+            <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1" CornerRadius="6" Padding="12,10" Margin="0,0,0,8">
+                <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto">
+                    <StackPanel Grid.Row="0" Grid.Column="0" Orientation="Horizontal" Spacing="6">
+                        <TextBlock Text="{Binding IssueLabel}" FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}" FontSize="13" />
+                        <TextBlock Text="·" Foreground="{DynamicResource PbTextFaintBrush}" />
+                        <TextBlock Text="{Binding FieldLabel}" FontSize="13" Foreground="{DynamicResource PbTextMutedBrush}" />
+                        <TextBlock Text="(already applied)" FontSize="11" FontStyle="Italic" Foreground="{DynamicResource PbTextFaintBrush}"
+                                   IsVisible="{Binding IsAlreadyAccepted}" VerticalAlignment="Center" />
+                    </StackPanel>
+                    <StackPanel Grid.Row="1" Grid.Column="0" Orientation="Horizontal" Spacing="6" Margin="0,3,0,0">
+                        <TextBlock Text="{Binding CurrentValue}" FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" />
+                        <TextBlock Text="→" Foreground="{DynamicResource PbTextFaintBrush}" />
+                        <TextBlock Text="{Binding ProposedValue}" FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" />
+                        <TextBlock Text="{Binding SourceLabel}" FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" Margin="6,0,0,0" />
+                    </StackPanel>
+
+                    <StackPanel Grid.Row="0" Grid.RowSpan="2" Grid.Column="1" Orientation="Horizontal" Spacing="6"
+                                VerticalAlignment="Center" IsVisible="{Binding !IsResolved}">
+                        <Button Classes="pillAction" Content="Accept" Command="{Binding AcceptCommand}" />
+                        <Button Classes="pillAction ghost" Content="Reject" Command="{Binding RejectCommand}" />
+                    </StackPanel>
+                    <TextBlock Grid.Row="0" Grid.RowSpan="2" Grid.Column="1" Text="{Binding ResolutionLabel}"
+                               Foreground="{DynamicResource PbAccentTextBrush}" FontSize="12" FontWeight="SemiBold"
+                               VerticalAlignment="Center" IsVisible="{Binding IsResolved}" />
+                </Grid>
+            </Border>
+        </DataTemplate>
     </UserControl.Resources>
 
     <UserControl.Styles>
@@ -283,6 +312,11 @@
                                 <Button Classes="rowAction" Content="Merge All Above 90%" Command="{Binding NeedsReview.MergeAllAboveNinetyCommand}" />
                             </StackPanel>
                             <ItemsControl ItemsSource="{Binding NeedsReview.SeriesConflicts}" ItemTemplate="{StaticResource ConflictRowTemplate}" />
+                        </StackPanel>
+
+                        <StackPanel IsVisible="{Binding NeedsReview.HasMetadataProposalItems}">
+                            <TextBlock Classes="sectionHeading" Text="Metadata Proposals" />
+                            <ItemsControl ItemsSource="{Binding NeedsReview.MetadataProposalItems}" ItemTemplate="{StaticResource MetadataProposalRowTemplate}" />
                         </StackPanel>
 
                     </StackPanel>

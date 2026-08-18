@@ -26,9 +26,11 @@ public class ReaderScreenViewModelTests : IDisposable
     private readonly string _dbPath;
     private readonly string _issue1Path;
     private readonly string _issue2Path;
+    private readonly string _issue3Path;
     private readonly int _seriesId;
     private readonly int _issue1Id;
     private readonly int _issue2Id;
+    private readonly int _issue3Id;
 
     public ReaderScreenViewModelTests()
     {
@@ -38,8 +40,14 @@ public class ReaderScreenViewModelTests : IDisposable
 
         _issue1Path = Path.Combine(Path.GetTempPath(), $"paperbunkr_reader_vm_issue1_{Guid.NewGuid():N}.cbz");
         _issue2Path = Path.Combine(Path.GetTempPath(), $"paperbunkr_reader_vm_issue2_{Guid.NewGuid():N}.cbz");
+        _issue3Path = Path.Combine(Path.GetTempPath(), $"paperbunkr_reader_vm_issue3_{Guid.NewGuid():N}.cbz");
         CbzFixture.Create(_issue1Path, pageCount: 3);
         CbzFixture.Create(_issue2Path, pageCount: 2);
+
+        // Double-page spread fixture (docs/superpowers/specs/2026-08-15-reader-double-page-spread-
+        // design.md §7): index 0 cover (type irrelevant, always solo), 1+2 both portrait (pairs), 3
+        // landscape (breaks pairing on both sides), 4+5 both portrait (pairs again).
+        CbzFixture.Create(_issue3Path, pageCount: 6, pageSize: i => i == 3 ? new System.Drawing.Size(96, 64) : new System.Drawing.Size(64, 96));
 
         var options = new DbContextOptionsBuilder<PaperbunkrDbContext>().UseSqlite($"Data Source={_dbPath}").Options;
         using var context = new PaperbunkrDbContext(options);
@@ -52,10 +60,14 @@ public class ReaderScreenViewModelTests : IDisposable
 
         var issue1 = new Issue { SeriesId = series.Id, Number = "1", FilePath = _issue1Path };
         var issue2 = new Issue { SeriesId = series.Id, Number = "2", FilePath = _issue2Path };
-        context.Issues.AddRange(issue1, issue2);
+        // Number "0" - sorts before issue1/issue2 (OrderByNumber), so existing series-boundary tests
+        // that depend on issue2 being the *last* issue (e.g. NextPage_AtEndOfSeries_NoOps) still hold.
+        var issue3 = new Issue { SeriesId = series.Id, Number = "0", FilePath = _issue3Path };
+        context.Issues.AddRange(issue1, issue2, issue3);
         context.SaveChanges();
         _issue1Id = issue1.Id;
         _issue2Id = issue2.Id;
+        _issue3Id = issue3.Id;
     }
 
     public void Dispose()
@@ -67,6 +79,7 @@ public class ReaderScreenViewModelTests : IDisposable
             if (File.Exists(_dbPath)) File.Delete(_dbPath);
             if (File.Exists(_issue1Path)) File.Delete(_issue1Path);
             if (File.Exists(_issue2Path)) File.Delete(_issue2Path);
+            if (File.Exists(_issue3Path)) File.Delete(_issue3Path);
         }
         catch (IOException)
         {
@@ -115,6 +128,36 @@ public class ReaderScreenViewModelTests : IDisposable
         context.SaveChanges();
     }
 
+    private static void SetPageTransitionSettings(PageTransitionStyle style, int durationMs)
+    {
+        using var context = PaperbunkrDb.CreateContext();
+        var settings = context.GetOrCreateAppSettings();
+        settings.PageTransitionStyle = style;
+        settings.PageTransitionDurationMs = durationMs;
+        context.SaveChanges();
+    }
+
+    private static void SetDefaultPageLayoutMode(PageLayoutMode mode)
+    {
+        using var context = PaperbunkrDb.CreateContext();
+        context.GetOrCreateAppSettings().DefaultPageLayoutMode = mode;
+        context.SaveChanges();
+    }
+
+    private void SetSeriesPageLayoutMode(PageLayoutMode? mode)
+    {
+        using var context = PaperbunkrDb.CreateContext();
+        context.Series.Find(_seriesId)!.PageLayoutMode = mode;
+        context.SaveChanges();
+    }
+
+    private void SetIssuePageLayoutModeOverride(int issueId, PageLayoutMode? mode)
+    {
+        using var context = PaperbunkrDb.CreateContext();
+        context.Issues.Find(issueId)!.PageLayoutModeOverride = mode;
+        context.SaveChanges();
+    }
+
     private static void SetDefaultPageFitMode(ImageFitMode value)
     {
         using var context = PaperbunkrDb.CreateContext();
@@ -152,8 +195,8 @@ public class ReaderScreenViewModelTests : IDisposable
         context.SaveChanges();
     }
 
-    private static void SetPageTurnLeftKey(Key key) =>
-        new KeyBindingService().SetKey(KeyboardCommandRegistry.ReaderPageTurnLeft, key);
+    private static void SetKeyBinding(string commandId, KeyGesture gesture) =>
+        new KeyBindingService().SetKey(commandId, gesture);
 
     private void SetSeriesReadingMode(ReadingMode mode)
     {
@@ -310,14 +353,35 @@ public class ReaderScreenViewModelTests : IDisposable
     {
         var vm = new ReaderScreenViewModel(goBack: () => { });
         vm.LoadIssue(_issue1Id);
-        Assert.Equal(Key.Left, vm.PageTurnLeftKey);
-        Assert.Equal(Key.Right, vm.PageTurnRightKey);
+        Assert.Equal(new KeyGesture(Key.Left), vm.PageTurnLeftKey);
+        Assert.Equal(new KeyGesture(Key.Right), vm.PageTurnRightKey);
 
-        SetPageTurnLeftKey(Key.J);
+        SetKeyBinding(KeyboardCommandRegistry.ReaderPageTurnLeft, new KeyGesture(Key.J));
         vm.LoadIssue(_issue1Id);
 
-        Assert.Equal(Key.J, vm.PageTurnLeftKey);
-        Assert.Equal(Key.Right, vm.PageTurnRightKey); // untouched
+        Assert.Equal(new KeyGesture(Key.J), vm.PageTurnLeftKey);
+        Assert.Equal(new KeyGesture(Key.Right), vm.PageTurnRightKey); // untouched
+    }
+
+    [Fact]
+    public void NewReaderShortcutKeys_DefaultCorrectly_AndReflectRemappingOnLoad()
+    {
+        // Representative sample across all three UI groups (Navigation/Zoom & Fit/Display) -
+        // docs/superpowers/specs/2026-08-16-remappable-reader-shortcuts-design.md.
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id);
+        Assert.Equal(new KeyGesture(Key.Left), vm.PanLeftKey);
+        Assert.Equal(new KeyGesture(Key.Z), vm.ZoomInKey);
+        Assert.Equal(new KeyGesture(Key.F), vm.ToggleFullscreenKey);
+
+        SetKeyBinding(KeyboardCommandRegistry.ReaderPanLeft, new KeyGesture(Key.A));
+        SetKeyBinding(KeyboardCommandRegistry.ReaderZoomIn, new KeyGesture(Key.OemComma));
+        SetKeyBinding(KeyboardCommandRegistry.ReaderToggleFullscreen, new KeyGesture(Key.OemPeriod));
+        vm.LoadIssue(_issue1Id);
+
+        Assert.Equal(new KeyGesture(Key.A), vm.PanLeftKey);
+        Assert.Equal(new KeyGesture(Key.OemComma), vm.ZoomInKey);
+        Assert.Equal(new KeyGesture(Key.OemPeriod), vm.ToggleFullscreenKey);
     }
 
     [Fact]
@@ -1090,6 +1154,223 @@ public class ReaderScreenViewModelTests : IDisposable
         Assert.Equal(4.5, vm.MouseWheelSpeed);
     }
 
+    /// <summary>docs/superpowers/specs/2026-08-13-reader-page-transition-animations-design.md §5.</summary>
+    [Fact]
+    public void PageTransitionSettings_DefaultToNoneAnd250_AndReflectAppSettingsOnLoad()
+    {
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id);
+        Assert.Equal(PageTransitionStyle.None, vm.PageTransitionStyle);
+        Assert.Equal(250, vm.PageTransitionDurationMs);
+
+        SetPageTransitionSettings(PageTransitionStyle.Slide, 400);
+        vm.LoadIssue(_issue1Id);
+
+        Assert.Equal(PageTransitionStyle.Slide, vm.PageTransitionStyle);
+        Assert.Equal(400, vm.PageTransitionDurationMs);
+    }
+
+    /// <summary>
+    /// Unlike SetFitModeCommand (per-Issue override), this has no per-Issue column - it's a Reader-
+    /// toolbar shortcut to the same global AppSettings.PageTransitionStyle value Preferences edits, so
+    /// it should be visible both to a freshly reopened issue and to a *different* issue's own
+    /// ViewModel instance, not scoped to the issue it was set from.
+    /// </summary>
+    [Fact]
+    public void SetPageTransitionStyleCommand_PersistsGlobally_VisibleToAnyIssue()
+    {
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id);
+
+        vm.SetPageTransitionStyleCommand.Execute(PageTransitionStyle.Crossfade);
+
+        Assert.Equal(PageTransitionStyle.Crossfade, vm.PageTransitionStyle);
+        using (var context = PaperbunkrDb.CreateContext())
+        {
+            Assert.Equal(PageTransitionStyle.Crossfade, context.GetOrCreateAppSettings().PageTransitionStyle);
+        }
+
+        var otherVm = new ReaderScreenViewModel(goBack: () => { });
+        otherVm.LoadIssue(_issue2Id);
+        Assert.Equal(PageTransitionStyle.Crossfade, otherVm.PageTransitionStyle);
+    }
+
+    // Double-page spread (docs/superpowers/specs/2026-08-15-reader-double-page-spread-design.md) -
+    // _issue3Id's fixture: index 0 cover, 1+2 portrait (pairs), 3 landscape (breaks pairing), 4+5
+    // portrait (pairs again). See its own setup comment in the constructor for the full layout.
+
+    [Fact]
+    public void CurrentPageSecondary_Null_InSingleMode()
+    {
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue3Id);
+        vm.SelectThumbnailCommand.Execute(vm.Thumbnails[1]);
+
+        Assert.Null(vm.CurrentPageSecondary);
+    }
+
+    [Fact]
+    public void CurrentPageSecondary_Null_ForTheCoverEvenInDoubleMode()
+    {
+        SetSeriesPageLayoutMode(PageLayoutMode.Double);
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue3Id);
+
+        Assert.Null(vm.CurrentPageSecondary);
+    }
+
+    [Fact]
+    public void CurrentPageSecondary_PairsAdjacentPortraitPages()
+    {
+        SetSeriesPageLayoutMode(PageLayoutMode.Double);
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue3Id);
+        vm.SelectThumbnailCommand.Execute(vm.Thumbnails[1]);
+
+        Assert.NotNull(vm.CurrentPageSecondary);
+    }
+
+    [Fact]
+    public void CurrentPageSecondary_Null_WhenTheNextPageIsLandscape()
+    {
+        SetSeriesPageLayoutMode(PageLayoutMode.Double);
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue3Id);
+        vm.SelectThumbnailCommand.Execute(vm.Thumbnails[2]); // page 3 (landscape) would be its partner
+
+        Assert.Null(vm.CurrentPageSecondary);
+    }
+
+    [Fact]
+    public void CurrentPageSecondary_Null_WhenThePageItselfIsLandscape()
+    {
+        SetSeriesPageLayoutMode(PageLayoutMode.Double);
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue3Id);
+        vm.SelectThumbnailCommand.Execute(vm.Thumbnails[3]); // landscape itself
+
+        Assert.Null(vm.CurrentPageSecondary);
+    }
+
+    [Fact]
+    public void CurrentPageSecondary_Null_OnTheLastPageWithNoPartner()
+    {
+        SetSeriesPageLayoutMode(PageLayoutMode.Double);
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue2Id); // 2 portrait pages
+        vm.SelectThumbnailCommand.Execute(vm.Thumbnails[1]);
+
+        Assert.Null(vm.CurrentPageSecondary);
+    }
+
+    [Fact]
+    public void NextPage_StepsByTwo_WhenCurrentlyPaired()
+    {
+        SetSeriesPageLayoutMode(PageLayoutMode.Double);
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue3Id);
+        vm.SelectThumbnailCommand.Execute(vm.Thumbnails[1]); // paired with page 2
+
+        vm.NextPageCommand.Execute(null);
+
+        Assert.Equal("PAGE 4 / 6", vm.PageLabel); // lands on index 3 (landscape, solo)
+    }
+
+    [Fact]
+    public void NextPage_StepsByOne_WhenCurrentlySolo()
+    {
+        SetSeriesPageLayoutMode(PageLayoutMode.Double);
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue3Id);
+        vm.SelectThumbnailCommand.Execute(vm.Thumbnails[3]); // landscape, solo
+
+        vm.NextPageCommand.Execute(null);
+
+        Assert.Equal("PAGE 5 / 6", vm.PageLabel); // lands on index 4, first of the (4,5) pair
+    }
+
+    [Fact]
+    public void PreviousPage_StepsByTwo_WhenThePairImmediatelyBehindIsEligible()
+    {
+        SetSeriesPageLayoutMode(PageLayoutMode.Double);
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue3Id);
+        vm.SelectThumbnailCommand.Execute(vm.Thumbnails[3]); // landscape, solo, at index 3
+
+        vm.PreviousPageCommand.Execute(null);
+
+        Assert.Equal("PAGE 2 / 6", vm.PageLabel); // (1,2) eligible behind index 3, steps back to index 1
+    }
+
+    [Fact]
+    public void PreviousPage_StepsByOne_WhenThePairImmediatelyBehindIsNotEligible()
+    {
+        SetSeriesPageLayoutMode(PageLayoutMode.Double);
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue3Id);
+        vm.SelectThumbnailCommand.Execute(vm.Thumbnails[4]); // paired with index 5, at index 4
+
+        vm.PreviousPageCommand.Execute(null);
+
+        Assert.Equal("PAGE 4 / 6", vm.PageLabel); // (2,3) not eligible (page 3 landscape), steps back to index 3 only
+    }
+
+    [Fact]
+    public void EffectivePageLayoutMode_ResolvesFromAppSettingsDefault_WhenSeriesAndIssueUnset()
+    {
+        SetDefaultPageLayoutMode(PageLayoutMode.Double);
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id);
+
+        Assert.Equal(PageLayoutMode.Double, vm.EffectivePageLayoutMode);
+    }
+
+    [Fact]
+    public void EffectivePageLayoutMode_SeriesOverridesAppSettingsDefault()
+    {
+        SetDefaultPageLayoutMode(PageLayoutMode.Single);
+        SetSeriesPageLayoutMode(PageLayoutMode.Double);
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id);
+
+        Assert.Equal(PageLayoutMode.Double, vm.EffectivePageLayoutMode);
+    }
+
+    [Fact]
+    public void EffectivePageLayoutMode_IssueOverrideWinsOverSeriesAndAppSettings()
+    {
+        SetDefaultPageLayoutMode(PageLayoutMode.Double);
+        SetSeriesPageLayoutMode(PageLayoutMode.Double);
+        SetIssuePageLayoutModeOverride(_issue1Id, PageLayoutMode.Single);
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id);
+
+        Assert.Equal(PageLayoutMode.Single, vm.EffectivePageLayoutMode);
+    }
+
+    [Fact]
+    public void ToggleDoublePageModeCommand_PersistsToSeries_AndRePairsImmediately()
+    {
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue3Id);
+        vm.SelectThumbnailCommand.Execute(vm.Thumbnails[1]);
+        Assert.Null(vm.CurrentPageSecondary); // Single mode by default
+
+        vm.ToggleDoublePageModeCommand.Execute(null);
+
+        Assert.Equal(PageLayoutMode.Double, vm.EffectivePageLayoutMode);
+        Assert.NotNull(vm.CurrentPageSecondary); // re-paired immediately, page 1+2 both portrait
+        using (var context = PaperbunkrDb.CreateContext())
+        {
+            Assert.Equal(PageLayoutMode.Double, context.Series.Find(_seriesId)!.PageLayoutMode);
+        }
+
+        vm.ToggleDoublePageModeCommand.Execute(null);
+
+        Assert.Equal(PageLayoutMode.Single, vm.EffectivePageLayoutMode);
+        Assert.Null(vm.CurrentPageSecondary);
+    }
+
     /// <summary>
     /// docs/superpowers/specs/2026-08-10-reader-polish-continuous-scroll-chrome-overlays-design.md
     /// §10 - background/margin are global-only, no per-Issue override, read fresh on every Load.
@@ -1316,6 +1597,23 @@ public class ReaderScreenViewModelTests : IDisposable
     }
 
     [Fact]
+    public void ManualRotationDegrees_RotateCounterClockwiseStepsByMinus90AndWraps()
+    {
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id);
+        Assert.Equal(0, vm.ManualRotationDegrees);
+
+        vm.RotateCounterClockwiseCommand.Execute(null);
+        Assert.Equal(270, vm.ManualRotationDegrees);
+
+        vm.RotateCounterClockwiseCommand.Execute(null);
+        vm.RotateCounterClockwiseCommand.Execute(null);
+        vm.RotateCounterClockwiseCommand.Execute(null);
+
+        Assert.Equal(0, vm.ManualRotationDegrees); // four -90-degree steps wrap back to 0
+    }
+
+    [Fact]
     public void ManualRotationDegrees_IsSessionOnly_ResetsOnReopen_NeverPersistedToIssue()
     {
         var vm = new ReaderScreenViewModel(goBack: () => { });
@@ -1359,6 +1657,90 @@ public class ReaderScreenViewModelTests : IDisposable
     }
 
     [Fact]
+    public void ToggleAutoScrollCommand_TogglesIsAutoScrolling()
+    {
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id);
+        vm.SetReadingModeCommand.Execute(ReadingMode.VerticalContinuous);
+        Assert.False(vm.IsAutoScrolling);
+
+        vm.ToggleAutoScrollCommand.Execute(null);
+        Assert.True(vm.IsAutoScrolling);
+
+        vm.ToggleAutoScrollCommand.Execute(null);
+        Assert.False(vm.IsAutoScrolling);
+    }
+
+    [Fact]
+    public void AutoScroll_TickAdvancesScrollOffsetBySpeedTimesInterval()
+    {
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id);
+        vm.SetReadingModeCommand.Execute(ReadingMode.VerticalContinuous);
+        vm.ToggleAutoScrollCommand.Execute(null);
+        double before = vm.ScrollOffset;
+
+        vm.OnAutoScrollTick(null, EventArgs.Empty);
+
+        Assert.Equal(before + (vm.AutoScrollSpeed * 0.04), vm.ScrollOffset, precision: 3);
+    }
+
+    [Fact]
+    public void AutoScroll_ManualScrollOffsetWrite_StopsIt()
+    {
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id);
+        vm.SetReadingModeCommand.Execute(ReadingMode.VerticalContinuous);
+        vm.ToggleAutoScrollCommand.Execute(null);
+        Assert.True(vm.IsAutoScrolling);
+
+        // Simulates a drag/wheel/keyboard scroll round-tripped in from PageCanvas's TwoWay binding.
+        vm.ScrollOffset = 500;
+
+        Assert.False(vm.IsAutoScrolling);
+    }
+
+    /// <summary>
+    /// No live PageCanvas in a ViewModel unit test, so there's nothing to reclamp ScrollOffset at a
+    /// real end-of-book - exercises the tick handler's own before/after stop condition directly by
+    /// forcing a zero-magnitude tick (AutoScrollSpeed = 0), the same code path a real saturated
+    /// reclamp round-trip would hit.
+    /// </summary>
+    [Fact]
+    public void AutoScroll_TickThatDoesNotMoveScrollOffset_StopsIt()
+    {
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id);
+        vm.SetReadingModeCommand.Execute(ReadingMode.VerticalContinuous);
+        vm.ToggleAutoScrollCommand.Execute(null);
+        vm.AutoScrollSpeed = 0;
+
+        vm.OnAutoScrollTick(null, EventArgs.Empty);
+
+        Assert.False(vm.IsAutoScrolling);
+    }
+
+    [Fact]
+    public void LoadIssue_And_GoBack_BothStopAutoScroll()
+    {
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id);
+        vm.SetReadingModeCommand.Execute(ReadingMode.VerticalContinuous);
+        vm.ToggleAutoScrollCommand.Execute(null);
+        Assert.True(vm.IsAutoScrolling);
+
+        vm.LoadIssue(_issue1Id);
+        Assert.False(vm.IsAutoScrolling);
+
+        vm.SetReadingModeCommand.Execute(ReadingMode.VerticalContinuous);
+        vm.ToggleAutoScrollCommand.Execute(null);
+        Assert.True(vm.IsAutoScrolling);
+
+        vm.GoBackCommand.Execute(null);
+        Assert.False(vm.IsAutoScrolling);
+    }
+
+    [Fact]
     public void LoadIssue_GeneratesThumbnailsForEveryPage_NoneLeftNull()
     {
         var vm = new ReaderScreenViewModel(goBack: () => { });
@@ -1380,5 +1762,36 @@ public class ReaderScreenViewModelTests : IDisposable
         Avalonia.Threading.Dispatcher.UIThread.RunJobs();
 
         Assert.All(vm.Thumbnails, t => Assert.NotNull(t.CoverImage));
+    }
+
+    /// <summary>docs/superpowers/specs/2026-08-17-metadata-model-phase1-canonical-metadata-design.md - the first place OpenCount/OpenedTime are actually written; confirmed via a fresh DB read, not just the in-memory object, matching this project's existing pattern for AppSettings-touching ReaderScreenViewModel behavior.</summary>
+    [Fact]
+    public void LoadIssue_IncrementsOpenCount_AndSetsOpenedTime_OnlyForTheLoadedIssue()
+    {
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+
+        vm.LoadIssue(_issue1Id);
+
+        using var context = PaperbunkrDb.CreateContext();
+        var loaded = context.Issues.First(i => i.Id == _issue1Id);
+        Assert.Equal(1, loaded.OpenCount);
+        Assert.NotNull(loaded.OpenedTime);
+
+        var untouched = context.Issues.First(i => i.Id == _issue2Id);
+        Assert.Equal(0, untouched.OpenCount);
+        Assert.Null(untouched.OpenedTime);
+    }
+
+    [Fact]
+    public void LoadIssue_CalledAgain_IncrementsOpenCountFurther()
+    {
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+
+        vm.LoadIssue(_issue1Id);
+        vm.LoadIssue(_issue2Id);
+        vm.LoadIssue(_issue1Id);
+
+        using var context = PaperbunkrDb.CreateContext();
+        Assert.Equal(2, context.Issues.First(i => i.Id == _issue1Id).OpenCount);
     }
 }

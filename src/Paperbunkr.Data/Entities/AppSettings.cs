@@ -75,6 +75,29 @@ public class AppSettings
     public bool DefaultAutoRotate { get; set; }
 
     /// <summary>
+    /// Paged-mode page-turn transition style (docs/superpowers/specs/2026-08-13-reader-page-
+    /// transition-animations-design.md §2). Default <see cref="PageTransitionStyle.None"/>, matching
+    /// CE's own <c>BlendWhilePaging</c> default of <c>false</c>.
+    /// </summary>
+    public PageTransitionStyle PageTransitionStyle { get; set; } = PageTransitionStyle.None;
+
+    /// <summary>
+    /// Page-turn transition duration in milliseconds, UI range 100-600 (spec §2) - CE parity in
+    /// spirit (<c>AnimationDuration</c> 250-300, <c>BlendDuration</c> 400 depending on version)
+    /// collapsed into one duration here rather than a literal port of either.
+    /// </summary>
+    public int PageTransitionDurationMs { get; set; } = 250;
+
+    /// <summary>
+    /// Global default for paged-mode double-page spread (docs/superpowers/specs/2026-08-15-reader-
+    /// double-page-spread-design.md §2), the bottom of the <c>Issue.PageLayoutModeOverride ??
+    /// Series.PageLayoutMode ?? AppSettings.DefaultPageLayoutMode</c> resolution chain - unlike
+    /// <see cref="Series.PageLayoutMode"/> (nullable, so this layer can act as its live fallback),
+    /// this always has a concrete value.
+    /// </summary>
+    public PageLayoutMode DefaultPageLayoutMode { get; set; } = PageLayoutMode.Single;
+
+    /// <summary>
     /// Magnifier zoom multiplier (docs/superpowers/specs/2026-08-10-reader-polish-continuous-
     /// scroll-chrome-overlays-design.md §8). CE default 2.0 (<c>ComicDisplayControl.magnifierZoom</c>
     /// field initializer, confirmed from source).
@@ -126,4 +149,75 @@ public class AppSettings
     /// has toolbar-based page nav as a fallback that Paperbunkr's fullscreen mode deliberately hides.
     /// </summary>
     public bool ShowScrubberOverlay { get; set; } = true;
+
+    /// <summary>
+    /// Library screen's sort/group/display/filter state (docs/superpowers/specs/2026-08-17-library-
+    /// saved-list-layouts-design.md), the CE <c>DisplayListConfig</c> equivalent - a single,
+    /// transparently auto-persisted config, not named/multiple presets (that's the separate,
+    /// not-yet-built Saved Workspaces feature, CE's <c>DisplayWorkspace</c>). Every field here
+    /// defaults to whatever <c>LibraryScreenViewModel</c>'s own in-code default already was before
+    /// persistence existed, so an existing settings row reproduces prior startup behavior exactly.
+    /// </summary>
+    public LibrarySortField LibrarySortField { get; set; } = LibrarySortField.DateAdded;
+
+    /// <summary>See <see cref="LibrarySortField"/>.</summary>
+    public SortDirection LibrarySortDirection { get; set; } = SortDirection.Descending;
+
+    /// <summary>See <see cref="LibrarySortField"/>.</summary>
+    public LibraryGroupField LibraryGroupField { get; set; } = LibraryGroupField.None;
+
+    /// <summary>See <see cref="LibrarySortField"/>.</summary>
+    public LibraryViewMode LibraryViewMode { get; set; } = LibraryViewMode.ComfortableGrid;
+
+    /// <summary>See <see cref="LibrarySortField"/>.</summary>
+    public double LibraryGridDensity { get; set; } = 1.0;
+
+    /// <summary>See <see cref="LibrarySortField"/>.</summary>
+    public bool LibraryShowUnreadBadge { get; set; } = true;
+
+    /// <summary>See <see cref="LibrarySortField"/>.</summary>
+    public bool LibraryShowPublisherBadge { get; set; }
+
+    /// <summary>See <see cref="LibrarySortField"/>.</summary>
+    public bool LibraryShowLanguageBadge { get; set; }
+
+    /// <summary>See <see cref="LibrarySortField"/>.</summary>
+    public bool LibraryUseLanguageIcon { get; set; }
+
+    /// <summary>See <see cref="LibrarySortField"/>.</summary>
+    public bool LibraryShowContinueReadingButton { get; set; }
+
+    /// <summary>See <see cref="LibrarySortField"/>.</summary>
+    public string? LibrarySearchQuery { get; set; }
+
+    /// <summary>
+    /// See <see cref="LibrarySortField"/>. Mutually exclusive with <see cref="LibraryActiveCategoryId"/>
+    /// - null means "All Series" (both null) or this content type is the active sidebar filter.
+    /// </summary>
+    public ContentType? LibraryActiveContentType { get; set; }
+
+    /// <summary>
+    /// See <see cref="LibraryActiveContentType"/>. If the referenced <c>Category</c> no longer
+    /// exists at load time (deleted since last session), <c>LibraryScreenViewModel</c> falls back to
+    /// "All Series" rather than rendering a silently empty grid.
+    /// </summary>
+    public int? LibraryActiveCategoryId { get; set; }
+
+    /// <summary>See <see cref="LibrarySortField"/>.</summary>
+    public bool LibraryFilterUnreadOnly { get; set; }
+
+    /// <summary>See <see cref="LibrarySortField"/>.</summary>
+    public bool LibraryFilterMissingIssues { get; set; }
+
+    /// <summary>See <see cref="LibrarySortField"/>.</summary>
+    public bool LibraryFilterTrackedOnly { get; set; }
+
+    /// <summary>
+    /// Global policy governing newly-created <see cref="MetadataProposal"/> rows (docs/superpowers/
+    /// specs/2026-08-17-metadata-model-phase2a-metadata-proposals-design.md) - one setting for the
+    /// whole library, not per-issue (unlike CE's per-book <c>EnableProposed</c>), since there's no
+    /// per-book UI surface or user request for one. Default <see cref="MetadataResolutionPolicy.Automatic"/>
+    /// matches <c>LibraryFolderScanner</c>'s pre-existing filename-fallback UX exactly.
+    /// </summary>
+    public MetadataResolutionPolicy MetadataResolutionPolicy { get; set; } = MetadataResolutionPolicy.Automatic;
 }

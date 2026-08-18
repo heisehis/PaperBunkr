@@ -173,12 +173,22 @@ public class CeLibraryMigratorTests : IDisposable
             Assert.Equal(ReadingMode.LeftToRight, astro.ReadingMode);
             Assert.Equal(2, astro.Issues.Count);
             Assert.False(astro.IsComplete);
+            // Status backfill (docs/superpowers/specs/2026-08-17-metadata-model-phase1-canonical-
+            // metadata-design.md): no book reported SeriesComplete=Yes, so Unknown - not Ongoing,
+            // since CE never told us anything stronger than "not marked complete."
+            Assert.Equal(SeriesStatus.Unknown, astro.Status);
+            Assert.All(astro.Issues, i => Assert.False(i.IsFinalIssue));
 
             var moonlit = context.Series.Include(s => s.Issues).Single(s => s.Name == "Moonlit Blade");
             Assert.Equal(ContentType.Manga, moonlit.ContentType);
             Assert.Equal(ReadingMode.RightToLeft, moonlit.ReadingMode);
             Assert.Equal(3, moonlit.Issues.Count);
             Assert.True(moonlit.IsComplete);
+            Assert.Equal(SeriesStatus.Completed, moonlit.Status);
+            // Per-issue IsFinalIssue mapped from CE's own per-book SeriesComplete flag (only on
+            // ComicBook, not ComicInfo) - every Moonlit Blade fixture book sets it, so every migrated
+            // Issue should too.
+            Assert.All(moonlit.Issues, i => Assert.True(i.IsFinalIssue));
 
             var sunrise = context.Series.Single(s => s.Name == "Sunrise Diner");
             Assert.Equal(ContentType.Manga, sunrise.ContentType);

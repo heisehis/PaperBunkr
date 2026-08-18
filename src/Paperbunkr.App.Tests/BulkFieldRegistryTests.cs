@@ -29,29 +29,45 @@ public class BulkFieldRegistryTests
     [Fact]
     public void NumericField_RoundTrips_AndParsesInvalidToNull()
     {
-        var descriptor = Find("Volume");
+        var descriptor = Find("Count");
         var issue = new Issue();
 
         descriptor.Set(issue, "5");
-        Assert.Equal(5, issue.Volume);
+        Assert.Equal(5, issue.Count);
         Assert.Equal("5", descriptor.Get(issue));
 
         descriptor.Set(issue, "not-a-number");
+        Assert.Null(issue.Count);
+    }
+
+    /// <summary>Volume is a Text field, not Numeric (docs/superpowers/specs/2026-08-17-metadata-model-phase1-canonical-metadata-design.md) - preserves the original display value like Number, no int coercion.</summary>
+    [Fact]
+    public void VolumeField_RoundTrips_AsText()
+    {
+        var descriptor = Find("Volume");
+        var issue = new Issue();
+
+        descriptor.Set(issue, "1A");
+        Assert.Equal("1A", issue.Volume);
+        Assert.Equal("1A", descriptor.Get(issue));
+
+        descriptor.Set(issue, "   ");
         Assert.Null(issue.Volume);
     }
 
+    /// <summary>Color Mode is FieldKind.Enum (replaced the old bool "Black and White" field, docs/superpowers/specs/2026-08-17-metadata-model-phase1-canonical-metadata-design.md).</summary>
     [Fact]
-    public void BooleanField_RoundTrips()
+    public void EnumField_RoundTrips()
     {
-        var descriptor = Find("Black and White");
+        var descriptor = Find("Color Mode");
         var issue = new Issue();
 
-        descriptor.Set(issue, "true");
-        Assert.True(issue.BlackAndWhite);
-        Assert.Equal("true", descriptor.Get(issue));
+        descriptor.Set(issue, nameof(ColorMode.BlackAndWhite));
+        Assert.Equal(ColorMode.BlackAndWhite, issue.ColorMode);
+        Assert.Equal(nameof(ColorMode.BlackAndWhite), descriptor.Get(issue));
 
-        descriptor.Set(issue, "false");
-        Assert.False(issue.BlackAndWhite);
+        descriptor.Set(issue, nameof(ColorMode.Color));
+        Assert.Equal(ColorMode.Color, issue.ColorMode);
     }
 
     [Fact]

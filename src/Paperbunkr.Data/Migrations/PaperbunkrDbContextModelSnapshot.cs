@@ -32,6 +32,21 @@ namespace Paperbunkr.Data.Migrations
                     b.ToTable("CategorySeries");
                 });
 
+            modelBuilder.Entity("ContinuitySeries", b =>
+                {
+                    b.Property<int>("ContinuitiesId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("SeriesId")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("ContinuitiesId", "SeriesId");
+
+                    b.HasIndex("SeriesId");
+
+                    b.ToTable("ContinuitySeries");
+                });
+
             modelBuilder.Entity("Paperbunkr.Data.Entities.AppSettings", b =>
                 {
                     b.Property<int>("Id")
@@ -90,6 +105,13 @@ namespace Paperbunkr.Data.Migrations
                         .HasColumnType("TEXT")
                         .HasDefaultValue("FitWidth");
 
+                    b.Property<string>("DefaultPageLayoutMode")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT")
+                        .HasDefaultValue("Single");
+
                     b.Property<double>("DefaultSaturation")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("REAL")
@@ -107,6 +129,89 @@ namespace Paperbunkr.Data.Migrations
                         .HasColumnType("TEXT")
                         .HasDefaultValue("Color");
 
+                    b.Property<int?>("LibraryActiveCategoryId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("LibraryActiveContentType")
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("LibraryFilterMissingIssues")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasDefaultValue(false);
+
+                    b.Property<bool>("LibraryFilterTrackedOnly")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasDefaultValue(false);
+
+                    b.Property<bool>("LibraryFilterUnreadOnly")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasDefaultValue(false);
+
+                    b.Property<double>("LibraryGridDensity")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("REAL")
+                        .HasDefaultValue(1.0);
+
+                    b.Property<string>("LibraryGroupField")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT")
+                        .HasDefaultValue("None");
+
+                    b.Property<string>("LibrarySearchQuery")
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("LibraryShowContinueReadingButton")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasDefaultValue(false);
+
+                    b.Property<bool>("LibraryShowLanguageBadge")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasDefaultValue(false);
+
+                    b.Property<bool>("LibraryShowPublisherBadge")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasDefaultValue(false);
+
+                    b.Property<bool>("LibraryShowUnreadBadge")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasDefaultValue(true);
+
+                    b.Property<string>("LibrarySortDirection")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT")
+                        .HasDefaultValue("Descending");
+
+                    b.Property<string>("LibrarySortField")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT")
+                        .HasDefaultValue("DateAdded");
+
+                    b.Property<bool>("LibraryUseLanguageIcon")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasDefaultValue(false);
+
+                    b.Property<string>("LibraryViewMode")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT")
+                        .HasDefaultValue("ComfortableGrid");
+
                     b.Property<double>("MagnifierOpacity")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("REAL")
@@ -121,6 +226,13 @@ namespace Paperbunkr.Data.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("REAL")
                         .HasDefaultValue(2.0);
+
+                    b.Property<string>("MetadataResolutionPolicy")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT")
+                        .HasDefaultValue("Automatic");
 
                     b.Property<double>("MouseWheelSpeed")
                         .ValueGeneratedOnAdd()
@@ -141,6 +253,18 @@ namespace Paperbunkr.Data.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("REAL")
                         .HasDefaultValue(0.050000000000000003);
+
+                    b.Property<int>("PageTransitionDurationMs")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasDefaultValue(250);
+
+                    b.Property<string>("PageTransitionStyle")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT")
+                        .HasDefaultValue("None");
 
                     b.Property<bool>("ResetZoomOnPageChange")
                         .ValueGeneratedOnAdd()
@@ -308,6 +432,164 @@ namespace Paperbunkr.Data.Migrations
                     b.ToTable("Categories");
                 });
 
+            modelBuilder.Entity("Paperbunkr.Data.Entities.Continuity", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Publisher")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Name");
+
+                    b.ToTable("Continuities");
+                });
+
+            modelBuilder.Entity("Paperbunkr.Data.Entities.EventMembership", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("IssueId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Position")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Role")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("StoryEventId")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("IssueId");
+
+                    b.HasIndex("StoryEventId");
+
+                    b.ToTable("EventMemberships");
+                });
+
+            modelBuilder.Entity("Paperbunkr.Data.Entities.ExternalMediaId", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("ExternalId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("LastFetchedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Provider")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("SeriesId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Url")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SeriesId");
+
+                    b.ToTable("ExternalMediaIds");
+                });
+
+            modelBuilder.Entity("Paperbunkr.Data.Entities.ExternalMetadataSnapshot", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("ExternalId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Payload")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Provider")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("RetrievedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("SchemaVersion")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("SeriesId")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SeriesId");
+
+                    b.ToTable("ExternalMetadataSnapshots");
+                });
+
+            modelBuilder.Entity("Paperbunkr.Data.Entities.ExternalRating", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Provider")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("RetrievedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<decimal>("Scale")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("SeriesId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<decimal>("Value")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("VoteCount")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SeriesId");
+
+                    b.ToTable("ExternalRatings");
+                });
+
             modelBuilder.Entity("Paperbunkr.Data.Entities.Issue", b =>
                 {
                     b.Property<int>("Id")
@@ -327,9 +609,6 @@ namespace Paperbunkr.Data.Migrations
                         .HasColumnType("TEXT");
 
                     b.Property<bool?>("AutoRotateOverride")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<bool>("BlackAndWhite")
                         .HasColumnType("INTEGER");
 
                     b.Property<string>("BookAge")
@@ -364,6 +643,13 @@ namespace Paperbunkr.Data.Migrations
 
                     b.Property<bool>("Checked")
                         .HasColumnType("INTEGER");
+
+                    b.Property<string>("ColorMode")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT")
+                        .HasDefaultValue("Unknown");
 
                     b.Property<string>("Colorist")
                         .HasColumnType("TEXT");
@@ -422,6 +708,9 @@ namespace Paperbunkr.Data.Migrations
                     b.Property<string>("Inker")
                         .HasColumnType("TEXT");
 
+                    b.Property<bool>("IsFinalIssue")
+                        .HasColumnType("INTEGER");
+
                     b.Property<bool>("IsPlaceholder")
                         .HasColumnType("INTEGER");
 
@@ -455,6 +744,9 @@ namespace Paperbunkr.Data.Migrations
                     b.Property<string>("Number")
                         .HasColumnType("TEXT");
 
+                    b.Property<int>("OpenCount")
+                        .HasColumnType("INTEGER");
+
                     b.Property<DateTime?>("OpenedTime")
                         .HasColumnType("TEXT");
 
@@ -462,6 +754,10 @@ namespace Paperbunkr.Data.Migrations
                         .HasColumnType("INTEGER");
 
                     b.Property<string>("PageFitModeOverride")
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("PageLayoutModeOverride")
                         .HasMaxLength(32)
                         .HasColumnType("TEXT");
 
@@ -517,8 +813,8 @@ namespace Paperbunkr.Data.Migrations
                     b.Property<string>("Translator")
                         .HasColumnType("TEXT");
 
-                    b.Property<int?>("Volume")
-                        .HasColumnType("INTEGER");
+                    b.Property<string>("Volume")
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("Web")
                         .HasColumnType("TEXT");
@@ -536,6 +832,34 @@ namespace Paperbunkr.Data.Migrations
                     b.HasIndex("SeriesId");
 
                     b.ToTable("Issues");
+                });
+
+            modelBuilder.Entity("Paperbunkr.Data.Entities.IssueBookmark", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("CreatedTime")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("IssueId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Label")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Note")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("PageNumber")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("IssueId");
+
+                    b.ToTable("IssueBookmarks");
                 });
 
             modelBuilder.Entity("Paperbunkr.Data.Entities.IssueCustomValue", b =>
@@ -584,6 +908,86 @@ namespace Paperbunkr.Data.Migrations
                     b.ToTable("KeyBindings");
                 });
 
+            modelBuilder.Entity("Paperbunkr.Data.Entities.MediaRelation", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Notes")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("RelationType")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("SourceSeriesId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("TargetSeriesId")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SourceSeriesId");
+
+                    b.HasIndex("TargetSeriesId");
+
+                    b.ToTable("MediaRelations");
+                });
+
+            modelBuilder.Entity("Paperbunkr.Data.Entities.MetadataProposal", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<decimal>("Confidence")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("CurrentValue")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Field")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("IssueId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("ProposedValue")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("ResolvedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("IssueId");
+
+                    b.HasIndex("Status");
+
+                    b.ToTable("MetadataProposals");
+                });
+
             modelBuilder.Entity("Paperbunkr.Data.Entities.ReadingList", b =>
                 {
                     b.Property<int>("Id")
@@ -599,6 +1003,11 @@ namespace Paperbunkr.Data.Migrations
                     b.Property<string>("CoverImageUrl")
                         .HasColumnType("TEXT");
 
+                    b.Property<DateTime>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT")
+                        .HasDefaultValue(new DateTime(1970, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc));
+
                     b.Property<string>("Description")
                         .HasColumnType("TEXT");
 
@@ -612,7 +1021,24 @@ namespace Paperbunkr.Data.Migrations
                     b.Property<string>("Source")
                         .HasColumnType("TEXT");
 
+                    b.Property<int?>("StoryEventId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT")
+                        .HasDefaultValue("User");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT")
+                        .HasDefaultValue(new DateTime(1970, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc));
+
                     b.HasKey("Id");
+
+                    b.HasIndex("StoryEventId");
 
                     b.ToTable("ReadingLists");
                 });
@@ -629,8 +1055,15 @@ namespace Paperbunkr.Data.Migrations
                     b.Property<int>("IssueId")
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("Notes")
+                        .HasColumnType("TEXT");
+
                     b.Property<int>("ReadingListId")
                         .HasColumnType("INTEGER");
+
+                    b.Property<string>("Role")
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT");
 
                     b.Property<int>("SortOrder")
                         .HasColumnType("INTEGER");
@@ -642,6 +1075,39 @@ namespace Paperbunkr.Data.Migrations
                     b.HasIndex("ReadingListId");
 
                     b.ToTable("ReadingListItems");
+                });
+
+            modelBuilder.Entity("Paperbunkr.Data.Entities.RelationEvidence", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<decimal>("Confidence")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("MediaRelationId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Provider")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ProviderRelationType")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ProviderSourceId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("RetrievedAt")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MediaRelationId");
+
+                    b.ToTable("RelationEvidence");
                 });
 
             modelBuilder.Entity("Paperbunkr.Data.Entities.Series", b =>
@@ -661,11 +1127,12 @@ namespace Paperbunkr.Data.Migrations
                     b.Property<string>("Genre")
                         .HasColumnType("TEXT");
 
-                    b.Property<bool>("IsComplete")
-                        .HasColumnType("INTEGER");
-
                     b.Property<string>("Name")
                         .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("PageLayoutMode")
+                        .HasMaxLength(32)
                         .HasColumnType("TEXT");
 
                     b.Property<string>("Publisher")
@@ -678,6 +1145,13 @@ namespace Paperbunkr.Data.Migrations
 
                     b.Property<string>("SortName")
                         .HasColumnType("TEXT");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT")
+                        .HasDefaultValue("Unknown");
 
                     b.Property<string>("Summary")
                         .HasColumnType("TEXT");
@@ -801,6 +1275,38 @@ namespace Paperbunkr.Data.Migrations
                     b.ToTable("SmartListConditions");
                 });
 
+            modelBuilder.Entity("Paperbunkr.Data.Entities.StoryEvent", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Description")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("EndDate")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("StartDate")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Name");
+
+                    b.ToTable("StoryEvents");
+                });
+
             modelBuilder.Entity("Paperbunkr.Data.Entities.TrackingLink", b =>
                 {
                     b.Property<int>("Id")
@@ -891,6 +1397,21 @@ namespace Paperbunkr.Data.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("ContinuitySeries", b =>
+                {
+                    b.HasOne("Paperbunkr.Data.Entities.Continuity", null)
+                        .WithMany()
+                        .HasForeignKey("ContinuitiesId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Paperbunkr.Data.Entities.Series", null)
+                        .WithMany()
+                        .HasForeignKey("SeriesId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Paperbunkr.Data.Entities.Book", b =>
                 {
                     b.HasOne("Paperbunkr.Data.Entities.BookSeries", "BookSeries")
@@ -912,6 +1433,58 @@ namespace Paperbunkr.Data.Migrations
                     b.Navigation("Book");
                 });
 
+            modelBuilder.Entity("Paperbunkr.Data.Entities.EventMembership", b =>
+                {
+                    b.HasOne("Paperbunkr.Data.Entities.Issue", "Issue")
+                        .WithMany()
+                        .HasForeignKey("IssueId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("Paperbunkr.Data.Entities.StoryEvent", "StoryEvent")
+                        .WithMany("Members")
+                        .HasForeignKey("StoryEventId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Issue");
+
+                    b.Navigation("StoryEvent");
+                });
+
+            modelBuilder.Entity("Paperbunkr.Data.Entities.ExternalMediaId", b =>
+                {
+                    b.HasOne("Paperbunkr.Data.Entities.Series", "Series")
+                        .WithMany()
+                        .HasForeignKey("SeriesId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Series");
+                });
+
+            modelBuilder.Entity("Paperbunkr.Data.Entities.ExternalMetadataSnapshot", b =>
+                {
+                    b.HasOne("Paperbunkr.Data.Entities.Series", "Series")
+                        .WithMany()
+                        .HasForeignKey("SeriesId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Series");
+                });
+
+            modelBuilder.Entity("Paperbunkr.Data.Entities.ExternalRating", b =>
+                {
+                    b.HasOne("Paperbunkr.Data.Entities.Series", "Series")
+                        .WithMany()
+                        .HasForeignKey("SeriesId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Series");
+                });
+
             modelBuilder.Entity("Paperbunkr.Data.Entities.Issue", b =>
                 {
                     b.HasOne("Paperbunkr.Data.Entities.Series", "Series")
@@ -923,6 +1496,17 @@ namespace Paperbunkr.Data.Migrations
                     b.Navigation("Series");
                 });
 
+            modelBuilder.Entity("Paperbunkr.Data.Entities.IssueBookmark", b =>
+                {
+                    b.HasOne("Paperbunkr.Data.Entities.Issue", "Issue")
+                        .WithMany("Bookmarks")
+                        .HasForeignKey("IssueId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Issue");
+                });
+
             modelBuilder.Entity("Paperbunkr.Data.Entities.IssueCustomValue", b =>
                 {
                     b.HasOne("Paperbunkr.Data.Entities.Issue", "Issue")
@@ -932,6 +1516,46 @@ namespace Paperbunkr.Data.Migrations
                         .IsRequired();
 
                     b.Navigation("Issue");
+                });
+
+            modelBuilder.Entity("Paperbunkr.Data.Entities.MediaRelation", b =>
+                {
+                    b.HasOne("Paperbunkr.Data.Entities.Series", "SourceSeries")
+                        .WithMany()
+                        .HasForeignKey("SourceSeriesId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Paperbunkr.Data.Entities.Series", "TargetSeries")
+                        .WithMany()
+                        .HasForeignKey("TargetSeriesId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("SourceSeries");
+
+                    b.Navigation("TargetSeries");
+                });
+
+            modelBuilder.Entity("Paperbunkr.Data.Entities.MetadataProposal", b =>
+                {
+                    b.HasOne("Paperbunkr.Data.Entities.Issue", "Issue")
+                        .WithMany("MetadataProposals")
+                        .HasForeignKey("IssueId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Issue");
+                });
+
+            modelBuilder.Entity("Paperbunkr.Data.Entities.ReadingList", b =>
+                {
+                    b.HasOne("Paperbunkr.Data.Entities.StoryEvent", "StoryEvent")
+                        .WithMany()
+                        .HasForeignKey("StoryEventId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("StoryEvent");
                 });
 
             modelBuilder.Entity("Paperbunkr.Data.Entities.ReadingListItem", b =>
@@ -951,6 +1575,17 @@ namespace Paperbunkr.Data.Migrations
                     b.Navigation("Issue");
 
                     b.Navigation("ReadingList");
+                });
+
+            modelBuilder.Entity("Paperbunkr.Data.Entities.RelationEvidence", b =>
+                {
+                    b.HasOne("Paperbunkr.Data.Entities.MediaRelation", "MediaRelation")
+                        .WithMany("Evidence")
+                        .HasForeignKey("MediaRelationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("MediaRelation");
                 });
 
             modelBuilder.Entity("Paperbunkr.Data.Entities.Series", b =>
@@ -1021,7 +1656,16 @@ namespace Paperbunkr.Data.Migrations
 
             modelBuilder.Entity("Paperbunkr.Data.Entities.Issue", b =>
                 {
+                    b.Navigation("Bookmarks");
+
                     b.Navigation("CustomValues");
+
+                    b.Navigation("MetadataProposals");
+                });
+
+            modelBuilder.Entity("Paperbunkr.Data.Entities.MediaRelation", b =>
+                {
+                    b.Navigation("Evidence");
                 });
 
             modelBuilder.Entity("Paperbunkr.Data.Entities.ReadingList", b =>
@@ -1039,6 +1683,11 @@ namespace Paperbunkr.Data.Migrations
             modelBuilder.Entity("Paperbunkr.Data.Entities.SmartList", b =>
                 {
                     b.Navigation("Conditions");
+                });
+
+            modelBuilder.Entity("Paperbunkr.Data.Entities.StoryEvent", b =>
+                {
+                    b.Navigation("Members");
                 });
 #pragma warning restore 612, 618
         }

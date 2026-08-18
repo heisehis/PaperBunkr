@@ -28,6 +28,12 @@ public sealed partial class IssueCardSample : ObservableObject
     /// <summary>Real decoded cover art, null until "Generate Covers" has processed this issue.</summary>
     public Bitmap? CoverImage { get; init; }
 
+    /// <summary>Null/empty for a fileless placeholder entry (docs/superpowers/specs/2026-08-16-reveal-in-explorer-and-fileless-entries-design.md).</summary>
+    public string? FilePath { get; init; }
+
+    /// <summary>Drives "Show in Explorer"'s IsEnabled without a converter - see FilePath's own doc comment.</summary>
+    public bool HasFile => !string.IsNullOrEmpty(FilePath);
+
     [ObservableProperty]
     private bool _isSelected;
 }

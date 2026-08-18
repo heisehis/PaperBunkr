@@ -9,6 +9,7 @@ using Microsoft.EntityFrameworkCore;
 using Paperbunkr.App.Models;
 using Paperbunkr.App.Services;
 using Paperbunkr.Data.Entities;
+using Paperbunkr.Data.ReadingLists;
 
 namespace Paperbunkr.App.ViewModels;
 
@@ -22,22 +23,129 @@ public partial class LibraryScreenViewModel : ViewModelBase
 {
     private readonly Action<int> _goDetail;
     private readonly Action<int> _goReaderForIssue;
+    private readonly Action<int, int, bool> _goToNewIssueProperties;
 
     private ContentType? _activeContentType;
     private int? _activeCategoryId;
 
-    public LibraryScreenViewModel(Action<int> goDetail, Action<int> goReaderForIssue)
+    public LibraryScreenViewModel(Action<int> goDetail, Action<int> goReaderForIssue, Action<int, int, bool> goToNewIssueProperties)
     {
         _goDetail = goDetail;
         _goReaderForIssue = goReaderForIssue;
+        _goToNewIssueProperties = goToNewIssueProperties;
         Covers = new ObservableCollection<SeriesCardSample>();
         ContentTypes = new ObservableCollection<ContentTypeSummary>();
         Collections = new ObservableCollection<CategorySummary>();
         Groups = new ObservableCollection<SeriesCardGroup>();
+        ExistingSeriesNames = new ObservableCollection<string>();
+        LoadLibrarySettings();
         LoadFromDatabase();
     }
 
+    /// <summary>
+    /// Seeds sort/group/display/filter state from <see cref="Paperbunkr.Data.Entities.AppSettings"/>
+    /// (docs/superpowers/specs/2026-08-17-library-saved-list-layouts-design.md) before the first
+    /// <see cref="LoadFromDatabase"/> call, via direct field assignment rather than the public
+    /// property setters - those setters' <c>On*Changed</c> partials call <see cref="LoadFromDatabase"/>
+    /// and <see cref="SaveLibrarySettings"/> themselves, which during construction would mean one
+    /// redundant DB round-trip per field instead of the single one this method plus the constructor's
+    /// own <see cref="LoadFromDatabase"/> call already need.
+    /// </summary>
+    private void LoadLibrarySettings()
+    {
+        using var context = PaperbunkrDb.CreateContext();
+        var settings = context.GetOrCreateAppSettings();
+
+        // Deliberate direct field writes, not the generated properties (which would each re-run
+        // On*Changed's own LoadFromDatabase/SaveLibrarySettings) - see this method's doc comment.
+#pragma warning disable MVVMTK0034
+        _sortField = settings.LibrarySortField;
+        _sortDirection = settings.LibrarySortDirection;
+        _groupField = settings.LibraryGroupField;
+        _viewMode = settings.LibraryViewMode;
+        _gridDensity = settings.LibraryGridDensity;
+        _showUnreadBadge = settings.LibraryShowUnreadBadge;
+        _showPublisherBadge = settings.LibraryShowPublisherBadge;
+        _showLanguageBadge = settings.LibraryShowLanguageBadge;
+        _useLanguageIcon = settings.LibraryUseLanguageIcon;
+        _showContinueReadingButton = settings.LibraryShowContinueReadingButton;
+        _searchQuery = settings.LibrarySearchQuery ?? string.Empty;
+        _filterUnreadOnly = settings.LibraryFilterUnreadOnly;
+        _filterMissingIssues = settings.LibraryFilterMissingIssues;
+        _filterTrackedOnly = settings.LibraryFilterTrackedOnly;
+#pragma warning restore MVVMTK0034
+
+        // Stale-reference fallback: a category deleted since last session falls back to "All
+        // Series" rather than silently rendering an empty grid with no visible reason why.
+        if (settings.LibraryActiveCategoryId is int categoryId &&
+            context.Categories.Any(c => c.Id == categoryId))
+        {
+            _activeCategoryId = categoryId;
+        }
+        else
+        {
+            _activeContentType = settings.LibraryActiveContentType;
+        }
+    }
+
+    /// <summary>Immediate write-back for every field <see cref="LoadLibrarySettings"/> seeds, called from each field's own change hook - no debounce, matching this ViewModel's existing no-debounce philosophy (see <see cref="SearchQuery"/>'s doc comment) and <see cref="Paperbunkr.App.ViewModels.ReaderScreenViewModel"/>'s equivalent immediate-write precedent for <c>AppSettings</c>.</summary>
+    private void SaveLibrarySettings()
+    {
+        using var context = PaperbunkrDb.CreateContext();
+        var settings = context.GetOrCreateAppSettings();
+
+        settings.LibrarySortField = SortField;
+        settings.LibrarySortDirection = SortDirection;
+        settings.LibraryGroupField = GroupField;
+        settings.LibraryViewMode = ViewMode;
+        settings.LibraryGridDensity = GridDensity;
+        settings.LibraryShowUnreadBadge = ShowUnreadBadge;
+        settings.LibraryShowPublisherBadge = ShowPublisherBadge;
+        settings.LibraryShowLanguageBadge = ShowLanguageBadge;
+        settings.LibraryUseLanguageIcon = UseLanguageIcon;
+        settings.LibraryShowContinueReadingButton = ShowContinueReadingButton;
+        settings.LibrarySearchQuery = string.IsNullOrEmpty(SearchQuery) ? null : SearchQuery;
+        settings.LibraryActiveContentType = _activeContentType;
+        settings.LibraryActiveCategoryId = _activeCategoryId;
+        settings.LibraryFilterUnreadOnly = FilterUnreadOnly;
+        settings.LibraryFilterMissingIssues = FilterMissingIssues;
+        settings.LibraryFilterTrackedOnly = FilterTrackedOnly;
+
+        context.SaveChanges();
+    }
+
     public ObservableCollection<SeriesCardSample> Covers { get; }
+
+    /// <summary>Typeahead source for the "Add a physical book" flyout (docs/superpowers/specs/2026-08-16-reveal-in-explorer-and-fileless-entries-design.md §2).</summary>
+    public ObservableCollection<string> ExistingSeriesNames { get; }
+
+    [ObservableProperty]
+    private string _newIssueSeriesName = string.Empty;
+
+    [ObservableProperty]
+    private string _newIssueNumber = string.Empty;
+
+    /// <summary>
+    /// "+ Add" flow's Content Type picker (docs/superpowers/specs/2026-08-16-manga-content-type-
+    /// classification-design.md §3). Applied only when <see cref="CreatePlaceholderIssue"/> actually
+    /// creates a new row - never overwrites an existing matched series' classification (same
+    /// wasCreated-gated safety already established for that command's deleteIfUnedited behavior).
+    /// </summary>
+    [ObservableProperty]
+    private ContentType _newIssueContentType = ContentType.Comic;
+
+    [ObservableProperty]
+    private ReadingMode _newIssueReadingMode = ReadingMode.RightToLeft;
+
+    public bool ShowAddReadingModePicker => NewIssueContentType is ContentType.Manga or ContentType.Manhua or ContentType.Manhwa;
+
+    partial void OnNewIssueContentTypeChanged(ContentType value) => OnPropertyChanged(nameof(ShowAddReadingModePicker));
+
+    [RelayCommand]
+    private void SetNewIssueContentType(ContentType type) => NewIssueContentType = type;
+
+    [RelayCommand]
+    private void SetNewIssueReadingMode(ReadingMode mode) => NewIssueReadingMode = mode;
 
     /// <summary>A-Z jump indexer's letters (docs/superpowers/specs/2026-08-09-library-toolbar-design.md Phase B) - "#" covers names that don't start with a letter.</summary>
     public static IReadOnlyList<string> AlphabetIndexLetters { get; } =
@@ -81,6 +189,12 @@ public partial class LibraryScreenViewModel : ViewModelBase
             .ToList();
 
         AllSeriesCount = series.Count;
+
+        ExistingSeriesNames.Clear();
+        foreach (string name in series.Select(s => s.Name).Distinct().OrderBy(n => n))
+        {
+            ExistingSeriesNames.Add(name);
+        }
 
         ContentTypes.Clear();
         foreach (var group in series.GroupBy(s => s.ContentType).OrderBy(g => g.Key))
@@ -165,22 +279,20 @@ public partial class LibraryScreenViewModel : ViewModelBase
         OnPropertyChanged(nameof(HasAnyResults));
     }
 
-    /// <summary>Sorts by <see cref="SortField"/>/<see cref="SortDirection"/> - Series-level aggregates already computed on each <see cref="SeriesCardSample"/>, not re-derived from the Issue entities here.</summary>
+    /// <summary>
+    /// Sorts by <see cref="SortField"/>/<see cref="SortDirection"/> - Series-level aggregates
+    /// already computed on each <see cref="SeriesCardSample"/>, not re-derived from the Issue
+    /// entities here. Comparison logic itself lives in <see cref="LibraryFieldCatalog"/> (docs/
+    /// superpowers/specs/2026-08-17-metadata-model-phase2c-library-field-descriptors-design.md).
+    /// </summary>
     private List<SeriesCardSample> SortCards(List<SeriesCardSample> cards)
     {
-        IOrderedEnumerable<SeriesCardSample> ordered = SortField switch
-        {
-            LibrarySortField.Name => cards.OrderBy(c => c.Name, StringComparer.OrdinalIgnoreCase),
-            LibrarySortField.DateAdded => cards.OrderBy(c => c.LastAddedTime),
-            LibrarySortField.LastRead => cards.OrderBy(c => c.LastOpenedTime),
-            LibrarySortField.Size => cards.OrderBy(c => c.TotalFileSize),
-            LibrarySortField.IssueCount => cards.OrderBy(c => c.IssueCount),
-            LibrarySortField.UnreadCount => cards.OrderBy(c => c.UnreadCount),
-            LibrarySortField.Publisher => cards.OrderBy(c => c.Publisher, StringComparer.OrdinalIgnoreCase),
-            _ => cards.OrderBy(c => c.Name, StringComparer.OrdinalIgnoreCase),
-        };
+        var descriptor = LibraryFieldCatalog.SortFields.TryGetValue(SortField, out var found)
+            ? found
+            : LibraryFieldCatalog.SortFields[LibrarySortField.Name];
 
-        var result = ordered.ToList();
+        var result = cards.ToList();
+        result.Sort(descriptor.Compare);
         if (SortDirection == SortDirection.Descending)
         {
             result.Reverse();
@@ -192,30 +304,29 @@ public partial class LibraryScreenViewModel : ViewModelBase
     /// <summary>
     /// Partitions already-sorted <paramref name="cards"/> into <see cref="SeriesCardGroup"/>s -
     /// LINQ's GroupBy preserves each group's internal element order, so Sort's order survives
-    /// intact within every group without any extra work here.
+    /// intact within every group without any extra work here. Bucketing/ordering logic itself lives
+    /// in <see cref="LibraryFieldCatalog"/>; <see cref="LibraryGroupField.None"/> (and any future
+    /// gap) falls through to the same empty result the old switch's default branch returned.
     /// </summary>
-    private IEnumerable<SeriesCardGroup> GroupCards(List<SeriesCardSample> cards) => GroupField switch
+    private IEnumerable<SeriesCardGroup> GroupCards(List<SeriesCardSample> cards)
     {
-        LibraryGroupField.ContentType => cards
-            .GroupBy(c => c.ContentTypeLabel)
-            .OrderBy(g => Enum.Parse<ContentType>(g.Key))
-            .Select(g => new SeriesCardGroup { Header = g.Key, Items = new ObservableCollection<SeriesCardSample>(g) }),
-        LibraryGroupField.Publisher => cards
-            .GroupBy(c => string.IsNullOrWhiteSpace(c.Publisher) ? "Unknown" : c.Publisher)
-            .OrderBy(g => g.Key, StringComparer.OrdinalIgnoreCase)
-            .Select(g => new SeriesCardGroup { Header = g.Key, Items = new ObservableCollection<SeriesCardSample>(g) }),
-        LibraryGroupField.Alphabetical => cards
-            .GroupBy(c => c.Name.Length > 0 && char.IsAsciiLetter(c.Name[0]) ? char.ToUpperInvariant(c.Name[0]).ToString() : "#")
-            .OrderBy(g => g.Key, StringComparer.OrdinalIgnoreCase)
-            .Select(g => new SeriesCardGroup { Header = g.Key, Items = new ObservableCollection<SeriesCardSample>(g) }),
-        _ => Enumerable.Empty<SeriesCardGroup>(),
-    };
+        if (!LibraryFieldCatalog.GroupFields.TryGetValue(GroupField, out var descriptor))
+        {
+            return Enumerable.Empty<SeriesCardGroup>();
+        }
+
+        return cards
+            .GroupBy(descriptor.GroupKey)
+            .OrderBy(g => g.Key, Comparer<string>.Create(descriptor.GroupOrder))
+            .Select(g => new SeriesCardGroup { Header = g.Key, Items = new ObservableCollection<SeriesCardSample>(g) });
+    }
 
     [RelayCommand]
     private void SelectAllSeries()
     {
         _activeContentType = null;
         _activeCategoryId = null;
+        SaveLibrarySettings();
         LoadFromDatabase();
     }
 
@@ -229,6 +340,7 @@ public partial class LibraryScreenViewModel : ViewModelBase
 
         _activeContentType = summary.ContentType;
         _activeCategoryId = null;
+        SaveLibrarySettings();
         LoadFromDatabase();
     }
 
@@ -242,6 +354,7 @@ public partial class LibraryScreenViewModel : ViewModelBase
 
         _activeCategoryId = summary.Id;
         _activeContentType = null;
+        SaveLibrarySettings();
         LoadFromDatabase();
     }
 
@@ -256,22 +369,38 @@ public partial class LibraryScreenViewModel : ViewModelBase
     [ObservableProperty]
     private string _searchQuery = string.Empty;
 
-    partial void OnSearchQueryChanged(string value) => LoadFromDatabase();
+    partial void OnSearchQueryChanged(string value)
+    {
+        SaveLibrarySettings();
+        LoadFromDatabase();
+    }
 
     [ObservableProperty]
     private bool _filterUnreadOnly;
 
-    partial void OnFilterUnreadOnlyChanged(bool value) => LoadFromDatabase();
+    partial void OnFilterUnreadOnlyChanged(bool value)
+    {
+        SaveLibrarySettings();
+        LoadFromDatabase();
+    }
 
     [ObservableProperty]
     private bool _filterMissingIssues;
 
-    partial void OnFilterMissingIssuesChanged(bool value) => LoadFromDatabase();
+    partial void OnFilterMissingIssuesChanged(bool value)
+    {
+        SaveLibrarySettings();
+        LoadFromDatabase();
+    }
 
     [ObservableProperty]
     private bool _filterTrackedOnly;
 
-    partial void OnFilterTrackedOnlyChanged(bool value) => LoadFromDatabase();
+    partial void OnFilterTrackedOnlyChanged(bool value)
+    {
+        SaveLibrarySettings();
+        LoadFromDatabase();
+    }
 
     [ObservableProperty]
     private LibrarySortField _sortField = LibrarySortField.DateAdded;
@@ -280,6 +409,7 @@ public partial class LibraryScreenViewModel : ViewModelBase
     {
         OnPropertyChanged(nameof(ShowAlphabetIndex));
         OnPropertyChanged(nameof(SortLabel));
+        SaveLibrarySettings();
         LoadFromDatabase();
     }
 
@@ -289,6 +419,7 @@ public partial class LibraryScreenViewModel : ViewModelBase
     partial void OnSortDirectionChanged(SortDirection value)
     {
         OnPropertyChanged(nameof(SortLabel));
+        SaveLibrarySettings();
         LoadFromDatabase();
     }
 
@@ -296,17 +427,9 @@ public partial class LibraryScreenViewModel : ViewModelBase
     private void ToggleSortDirection() =>
         SortDirection = SortDirection == SortDirection.Ascending ? SortDirection.Descending : SortDirection.Ascending;
 
-    public string SortLabel => SortField switch
-    {
-        LibrarySortField.Name => "Name",
-        LibrarySortField.DateAdded => "Date Added",
-        LibrarySortField.LastRead => "Last Read",
-        LibrarySortField.Size => "Size",
-        LibrarySortField.IssueCount => "Issue Count",
-        LibrarySortField.UnreadCount => "Unread Count",
-        LibrarySortField.Publisher => "Publisher",
-        _ => "Sort",
-    } + (SortDirection == SortDirection.Ascending ? " ↑" : " ↓");
+    public string SortLabel =>
+        (LibraryFieldCatalog.SortFields.TryGetValue(SortField, out var descriptor) ? descriptor.DisplayName : "Sort")
+        + (SortDirection == SortDirection.Ascending ? " ↑" : " ↓");
 
     [ObservableProperty]
     private LibraryGroupField _groupField = LibraryGroupField.None;
@@ -317,6 +440,7 @@ public partial class LibraryScreenViewModel : ViewModelBase
     {
         OnPropertyChanged(nameof(IsGrouped));
         OnPropertyChanged(nameof(ShowAlphabetIndex));
+        SaveLibrarySettings();
         LoadFromDatabase();
     }
 
@@ -330,6 +454,7 @@ public partial class LibraryScreenViewModel : ViewModelBase
     public bool IsSortOpen => ActiveDropdown == "sort";
     public bool IsGroupOpen => ActiveDropdown == "group";
     public bool IsDisplayOpen => ActiveDropdown == "display";
+    public bool IsAddOpen => ActiveDropdown == "add";
 
     partial void OnActiveDropdownChanged(string? value)
     {
@@ -337,6 +462,7 @@ public partial class LibraryScreenViewModel : ViewModelBase
         OnPropertyChanged(nameof(IsSortOpen));
         OnPropertyChanged(nameof(IsGroupOpen));
         OnPropertyChanged(nameof(IsDisplayOpen));
+        OnPropertyChanged(nameof(IsAddOpen));
     }
 
     [RelayCommand]
@@ -350,6 +476,117 @@ public partial class LibraryScreenViewModel : ViewModelBase
 
     [RelayCommand]
     private void ToggleDisplay() => ActiveDropdown = ActiveDropdown == "display" ? null : "display";
+
+    [RelayCommand]
+    private void ToggleAdd()
+    {
+        ActiveDropdown = ActiveDropdown == "add" ? null : "add";
+        NewIssueSeriesName = string.Empty;
+        NewIssueNumber = string.Empty;
+        NewIssueContentType = ContentType.Comic;
+        NewIssueReadingMode = ReadingMode.RightToLeft;
+    }
+
+    /// <summary>docs/superpowers/specs/2026-08-16-reveal-in-explorer-and-fileless-entries-design.md §1 - a series has no single file, so this opens its first issue's folder rather than selecting one.</summary>
+    [RelayCommand]
+    private void RevealSeries(SeriesCardSample card)
+    {
+        using var context = PaperbunkrDb.CreateContext();
+        var series = context.Series.Include(s => s.Issues).FirstOrDefault(s => s.Id == card.SeriesId);
+        if (series is not null)
+        {
+            RevealInExplorerHelper.RevealSeries(series);
+        }
+    }
+
+    /// <summary>
+    /// Series-card "Set Content Type" picker (docs/superpowers/specs/2026-08-16-manga-content-type-
+    /// classification-design.md §2) - one small command per fixed value (Avalonia's CommandParameter
+    /// only carries a single value, and this needs both "which card" and "which value"; matches
+    /// this codebase's existing per-value-command shape, e.g. SetSortField/SetGroupField, rather
+    /// than a tuple/multi-binding CommandParameter, which has no clean XAML story here) each taking
+    /// the right-clicked card as CommandParameter, same as the existing RevealSeriesCommand.
+    /// </summary>
+    private void SetSeriesContentType(SeriesCardSample card, ContentType type)
+    {
+        using var context = PaperbunkrDb.CreateContext();
+        var series = context.Series.Find(card.SeriesId);
+        if (series is not null)
+        {
+            series.ContentType = type;
+            context.SaveChanges();
+            LoadFromDatabase();
+        }
+    }
+
+    [RelayCommand] private void SetSeriesContentTypeComic(SeriesCardSample card) => SetSeriesContentType(card, ContentType.Comic);
+    [RelayCommand] private void SetSeriesContentTypeManga(SeriesCardSample card) => SetSeriesContentType(card, ContentType.Manga);
+    [RelayCommand] private void SetSeriesContentTypeManhua(SeriesCardSample card) => SetSeriesContentType(card, ContentType.Manhua);
+    [RelayCommand] private void SetSeriesContentTypeManhwa(SeriesCardSample card) => SetSeriesContentType(card, ContentType.Manhwa);
+
+    private void SetSeriesReadingMode(SeriesCardSample card, ReadingMode mode)
+    {
+        using var context = PaperbunkrDb.CreateContext();
+        var series = context.Series.Find(card.SeriesId);
+        if (series is not null)
+        {
+            series.ReadingMode = mode;
+            context.SaveChanges();
+        }
+    }
+
+    [RelayCommand] private void SetSeriesReadingModeLeftToRight(SeriesCardSample card) => SetSeriesReadingMode(card, ReadingMode.LeftToRight);
+    [RelayCommand] private void SetSeriesReadingModeRightToLeft(SeriesCardSample card) => SetSeriesReadingMode(card, ReadingMode.RightToLeft);
+
+    /// <summary>
+    /// Manual "add a physical book" entry point (docs/superpowers/specs/2026-08-16-reveal-in-
+    /// explorer-and-fileless-entries-design.md §2/§3) - creates (or resolves to an existing match
+    /// for) a fileless placeholder Issue, then hands off to the Issue Properties editor to fill in
+    /// the rest. deleteIfUnedited only applies when a new row was actually created - see
+    /// ReadingListMatcher's wasCreated out param.
+    /// </summary>
+    [RelayCommand]
+    private void CreatePlaceholderIssue()
+    {
+        if (string.IsNullOrWhiteSpace(NewIssueSeriesName) || string.IsNullOrWhiteSpace(NewIssueNumber))
+        {
+            return;
+        }
+
+        using var context = PaperbunkrDb.CreateContext();
+        string trimmedSeriesName = NewIssueSeriesName.Trim();
+
+        // Real bug, found via manual testing: wasCreated (below) reflects whether the *Issue* was
+        // newly created, not the Series - ResolveOrCreatePlaceholder attaches a new placeholder Issue
+        // to an EXISTING series (by name) whenever that series just doesn't have this exact issue
+        // number yet, which still reports wasCreated=true. Applying the picker's Content Type in that
+        // case would silently overwrite a real, already-classified series just because it didn't
+        // happen to have issue NewIssueNumber on file - checking series existence *before* the call
+        // is the only way to tell "series is genuinely new" apart from "issue is new but its series
+        // isn't" (docs/superpowers/specs/2026-08-16-manga-content-type-classification-design.md §3).
+        bool seriesIsNew = !context.Series.Any(s => s.Name.ToLower() == trimmedSeriesName.ToLower());
+
+        var issue = ReadingListMatcher.ResolveOrCreatePlaceholder(
+            context, trimmedSeriesName, NewIssueNumber.Trim(), null, null, null, out bool wasCreated);
+
+        if (seriesIsNew)
+        {
+            issue.Series.ContentType = NewIssueContentType;
+            if (ShowAddReadingModePicker)
+            {
+                issue.Series.ReadingMode = NewIssueReadingMode;
+            }
+
+            context.SaveChanges();
+        }
+
+        ActiveDropdown = null;
+        NewIssueSeriesName = string.Empty;
+        NewIssueNumber = string.Empty;
+        NewIssueContentType = ContentType.Comic;
+        NewIssueReadingMode = ReadingMode.RightToLeft;
+        _goToNewIssueProperties(issue.Id, issue.SeriesId, wasCreated);
+    }
 
     [RelayCommand]
     private void SetSortField(LibrarySortField field) => SortField = field;
@@ -378,6 +615,7 @@ public partial class LibraryScreenViewModel : ViewModelBase
         OnPropertyChanged(nameof(IsDetailsView));
         OnPropertyChanged(nameof(IsTilesView));
         OnPropertyChanged(nameof(DisplayModeLabel));
+        SaveLibrarySettings();
     }
 
     [RelayCommand]
@@ -423,6 +661,7 @@ public partial class LibraryScreenViewModel : ViewModelBase
                 OnPropertyChanged(nameof(TilesThumbWidth));
                 OnPropertyChanged(nameof(TilesThumbHeight));
                 OnPropertyChanged(nameof(TilesCardWidth));
+                SaveLibrarySettings();
             }
         }
     }
@@ -449,21 +688,31 @@ public partial class LibraryScreenViewModel : ViewModelBase
         }
     }
 
-    /// <summary>Overlay toggles (docs/superpowers/specs/2026-08-09-library-toolbar-design.md Phase D) - session-only state, matching the existing (already-unpersisted) ViewMode/Sort/Group precedent. Persisting these is Beta-scoped (Saved Workspaces/List Layouts).</summary>
+    /// <summary>Overlay toggles (docs/superpowers/specs/2026-08-09-library-toolbar-design.md Phase D), persisted per docs/superpowers/specs/2026-08-17-library-saved-list-layouts-design.md.</summary>
     [ObservableProperty]
     private bool _showUnreadBadge = true;
+
+    partial void OnShowUnreadBadgeChanged(bool value) => SaveLibrarySettings();
 
     [ObservableProperty]
     private bool _showPublisherBadge;
 
+    partial void OnShowPublisherBadgeChanged(bool value) => SaveLibrarySettings();
+
     [ObservableProperty]
     private bool _showLanguageBadge;
+
+    partial void OnShowLanguageBadgeChanged(bool value) => SaveLibrarySettings();
 
     [ObservableProperty]
     private bool _useLanguageIcon;
 
+    partial void OnUseLanguageIconChanged(bool value) => SaveLibrarySettings();
+
     [ObservableProperty]
     private bool _showContinueReadingButton;
+
+    partial void OnShowContinueReadingButtonChanged(bool value) => SaveLibrarySettings();
 
     [RelayCommand]
     private void ContinueReading(SeriesCardSample? card)

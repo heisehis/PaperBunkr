@@ -180,6 +180,14 @@
                             </Border.OpacityMask>
                         </Border>
                     </Button>
+                    <Button Classes="rail" Classes.active="{Binding IsEvents}"
+                            Command="{Binding GoEventsCommand}" ToolTip.Tip="Story Events">
+                        <Border Classes="icon">
+                            <Border.OpacityMask>
+                                <ImageBrush Source="/Assets/Icons/Star.png" Stretch="Uniform" />
+                            </Border.OpacityMask>
+                        </Border>
+                    </Button>
 
                     <Border Width="28" Height="1" Background="{DynamicResource PbBorderBrush}" Margin="0,8" />
 
@@ -394,6 +402,44 @@
                         </Border>
                     </StackPanel>
 
+                    <!-- Story Events sidebar (docs/superpowers/specs/2026-08-17-metadata-model-
+                         phase4b-story-events-design.md), wired to real StoryEvent data -->
+                    <StackPanel IsVisible="{Binding IsEvents}" Spacing="1">
+                        <TextBlock Text="Story Events" FontSize="16" FontWeight="Bold"
+                                   Foreground="{DynamicResource PbTextBrush}" Margin="8,0,8,14" />
+
+                        <ItemsControl x:Name="StoryEvents" ItemsSource="{Binding Events.Events}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="models:StoryEventSummary">
+                                    <Button Classes="sideItemButton" Classes.active="{Binding IsActive}"
+                                            Command="{Binding #StoryEvents.((vm:MainViewModel)DataContext).Events.SelectEventCommand}"
+                                            CommandParameter="{Binding}">
+                                        <Grid ColumnDefinitions="*,Auto">
+                                            <TextBlock Grid.Column="0" Classes="sideItemLabel" Text="{Binding Name}" FontSize="13"
+                                                       Foreground="{DynamicResource PbTextMutedBrush}" TextTrimming="CharacterEllipsis" />
+                                            <Border Grid.Column="1" Classes="countBadge"><TextBlock Classes="count" Text="{Binding MemberCount}" Foreground="{DynamicResource PbTextFaintBrush}" /></Border>
+                                        </Grid>
+                                    </Button>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                        <Border BorderThickness="1" BorderBrush="#383D47" CornerRadius="5" Margin="0,12,0,0" Padding="8">
+                            <Button Classes="sideItemButton" HorizontalContentAlignment="Center"
+                                    Command="{Binding Events.CreateNewCommand}"
+                                    Foreground="{DynamicResource PbTextFaintBrush}">
+                                <StackPanel Orientation="Horizontal" Spacing="6" HorizontalAlignment="Center">
+                                    <Border Classes="icon" Width="11" Height="11" Background="{DynamicResource PbTextFaintBrush}">
+                                        <Border.OpacityMask>
+                                            <ImageBrush Source="/Assets/Icons/Add_Plus.png" Stretch="Uniform" />
+                                        </Border.OpacityMask>
+                                    </Border>
+                                    <TextBlock Text="New Story Event" FontSize="12" />
+                                </StackPanel>
+                            </Button>
+                        </Border>
+                    </StackPanel>
+
                 </StackPanel>
             </ScrollViewer>
         </Border>
@@ -449,6 +495,13 @@
                     </DataTemplate>
                 </ContentControl.ContentTemplate>
             </ContentControl>
+            <ContentControl IsVisible="{Binding IsEvents}" Content="{Binding Events}">
+                <ContentControl.ContentTemplate>
+                    <DataTemplate x:DataType="vm:EventsScreenViewModel">
+                        <views:EventsScreen />
+                    </DataTemplate>
+                </ContentControl.ContentTemplate>
+            </ContentControl>
             <ContentControl IsVisible="{Binding IsPlugin}" Content="{Binding Plugin}">
                 <ContentControl.ContentTemplate>
                     <DataTemplate x:DataType="vm:PluginScreenViewModel">
@@ -495,7 +548,8 @@
             <Button Classes="rail" Width="28" Height="28"
                     HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-14,-14,0"
                     Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
-                    Command="{Binding CloseMigrationOverlayCommand}" ToolTip.Tip="Close">
+                    Command="{Binding CloseMigrationOverlayCommand}" ToolTip.Tip="Close"
+                    AutomationProperties.AutomationId="MigrationOverlayCloseButton">
                 <Border Classes="icon" Width="13" Height="13">
                     <Border.OpacityMask>
                         <ImageBrush Source="/Assets/Icons/Close_Circle.png" Stretch="Uniform" />

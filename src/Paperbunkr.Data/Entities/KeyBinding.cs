@@ -16,6 +16,6 @@ public class KeyBinding
     /// <summary>Stable identifier matching a <c>Paperbunkr.App.Models.KeyboardCommandRegistry</c> entry, e.g. "Reader.PageTurnLeft".</summary>
     public string CommandId { get; set; } = string.Empty;
 
-    /// <summary><c>Avalonia.Input.Key</c> enum name of the remapped key.</summary>
+    /// <summary><c>Avalonia.Input.KeyGesture</c> string form of the remapped key, e.g. "Left" or "Shift+R".</summary>
     public string Key { get; set; } = string.Empty;
 }

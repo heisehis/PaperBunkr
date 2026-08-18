@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Linq;
 using cYo.Common.Text;
 using Paperbunkr.Data.Entities;
+using Paperbunkr.Data.Metadata;
 
 namespace Paperbunkr.App.Models;
 
@@ -15,5 +16,5 @@ namespace Paperbunkr.App.Models;
 public static class IssueOrdering
 {
     public static IOrderedEnumerable<Issue> OrderByNumber(this IEnumerable<Issue> issues) =>
-        issues.OrderBy(i => new TextNumberFloat(i.Number ?? string.Empty));
+        issues.OrderBy(i => new TextNumberFloat(i.EffectiveNumber() ?? string.Empty));
 }

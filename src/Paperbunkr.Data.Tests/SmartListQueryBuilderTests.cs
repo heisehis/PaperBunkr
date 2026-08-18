@@ -42,7 +42,7 @@ public class SmartListQueryBuilderTests : IDisposable
             Publisher = "Acme",
             ContentType = ContentType.Comic,
             ReadingMode = ReadingMode.LeftToRight,
-            IsComplete = true,
+            Status = SeriesStatus.Completed,
         };
         _context.Series.Add(seriesA);
         _context.SaveChanges();

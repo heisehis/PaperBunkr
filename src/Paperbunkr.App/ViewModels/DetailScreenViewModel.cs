@@ -9,6 +9,7 @@ using Microsoft.EntityFrameworkCore;
 using Paperbunkr.App.Models;
 using Paperbunkr.App.Services;
 using Paperbunkr.Data.Entities;
+using Paperbunkr.Data.Metadata;
 
 namespace Paperbunkr.App.ViewModels;
 
@@ -107,7 +108,7 @@ public partial class DetailScreenViewModel : ViewModelBase
     public void LoadSeries(int seriesId)
     {
         using var context = PaperbunkrDb.CreateContext();
-        var series = context.Series.Include(s => s.Issues).FirstOrDefault(s => s.Id == seriesId);
+        var series = context.Series.Include(s => s.Issues).ThenInclude(i => i.MetadataProposals).FirstOrDefault(s => s.Id == seriesId);
         if (series is null)
         {
             return;
@@ -148,8 +149,8 @@ public partial class DetailScreenViewModel : ViewModelBase
         ContinueLabel = continueIssue is null
             ? "No Issues"
             : isReread
-                ? $"Re-read — Issue #{continueIssue.Number}"
-                : $"Continue — Issue #{continueIssue.Number}";
+                ? $"Re-read — Issue #{continueIssue.EffectiveNumber()}"
+                : $"Continue — Issue #{continueIssue.EffectiveNumber()}";
 
         var enabledVirtualTags = context.VirtualTagDefinitions.Where(t => t.IsEnabled).OrderBy(t => t.SortOrder).ToList();
 
@@ -197,7 +198,7 @@ public partial class DetailScreenViewModel : ViewModelBase
         if (Tabs.SelectedIssueIds.Count == 1)
         {
             int issueId = Tabs.SelectedIssueIds.Single();
-            var issue = context.Issues.Include(i => i.Series).FirstOrDefault(i => i.Id == issueId);
+            var issue = context.Issues.Include(i => i.Series).Include(i => i.MetadataProposals).FirstOrDefault(i => i.Id == issueId);
             if (issue is null)
             {
                 return;

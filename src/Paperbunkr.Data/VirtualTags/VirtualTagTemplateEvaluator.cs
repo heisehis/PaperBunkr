@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Text.RegularExpressions;
 using Paperbunkr.Data.Entities;
+using Paperbunkr.Data.Metadata;
 
 namespace Paperbunkr.Data.VirtualTags;
 
@@ -43,9 +44,9 @@ public static class VirtualTagTemplateEvaluator
     private static string? GetFieldValue(string field, Issue issue, Series? series) => field.ToLowerInvariant() switch
     {
         "series" => series?.Name,
-        "number" => issue.Number,
-        "volume" => issue.Volume?.ToString(),
-        "year" => issue.Year?.ToString(),
+        "number" => issue.EffectiveNumber(),
+        "volume" => issue.EffectiveVolume(),
+        "year" => issue.EffectiveYear()?.ToString(),
         "title" => issue.Title,
         "publisher" => issue.Publisher,
         "writer" => issue.Writer,

@@ -1,6 +1,10 @@
 using System;
+using System.Linq;
+using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Paperbunkr.App.Models;
 using Paperbunkr.Data.Entities;
+using Paperbunkr.Data.Metadata;
 
 namespace Paperbunkr.App.ViewModels;
 
@@ -10,28 +14,68 @@ public partial class ReadingListItemRowViewModel : ViewModelBase
     private readonly Action<ReadingListItemRowViewModel> _onMoveUp;
     private readonly Action<ReadingListItemRowViewModel> _onMoveDown;
     private readonly Action<ReadingListItemRowViewModel> _onRemove;
+    private readonly Action<ReadingListItemRowViewModel> _onFieldChanged;
 
     public ReadingListItemRowViewModel(
         ReadingListItem item,
         Action<ReadingListItemRowViewModel> onMoveUp,
         Action<ReadingListItemRowViewModel> onMoveDown,
-        Action<ReadingListItemRowViewModel> onRemove)
+        Action<ReadingListItemRowViewModel> onRemove,
+        Action<ReadingListItemRowViewModel> onFieldChanged)
     {
         Item = item;
         _onMoveUp = onMoveUp;
         _onMoveDown = onMoveDown;
         _onRemove = onRemove;
+        _onFieldChanged = onFieldChanged;
+        _selectedRole = item.Role;
+        _selectedRoleOption = item.Role is EventMembershipRole role ? RoleOptions.FirstOrDefault(o => o.Role == role) : null;
+        _notes = item.Notes ?? string.Empty;
     }
 
     public ReadingListItem Item { get; }
 
-    public string Number => Item.Issue?.Number ?? "?";
+    public string Number => Item.Issue?.EffectiveNumber() ?? "?";
 
     public string Name => Item.Issue?.Title ?? Item.Issue?.Series?.Name ?? "Unknown";
 
     public bool IsOwned => Item.Issue is { FileIsMissing: false };
 
     public bool IsMissing => !IsOwned;
+
+    /// <summary>Phase 4c overhaul (docs/superpowers/specs/2026-08-17-metadata-model-phase4c-reading-list-overhaul-design.md) - reuses <see cref="EventMembershipRole"/>, optional/blank by default.</summary>
+    public static Models.EventMembershipRoleOption[] RoleOptions => Models.EventMembershipRoleOption.All;
+
+    [ObservableProperty]
+    private EventMembershipRole? _selectedRole;
+
+    /// <summary>
+    /// Bound to the ComboBox's <c>SelectedItem</c> instead of <c>SelectedValue</c>/
+    /// <c>SelectedValueBinding</c> - the latter resolves its binding path against this row's own
+    /// ambient DataContext, not the <c>ItemsSource</c> element type, so `{Binding Role}` there was
+    /// silently unresolvable (a real, permanent XAML bug, not a build-tooling artifact - see
+    /// docs/superpowers/specs/2026-08-18-selectedvaluebinding-xaml-fix-design.md). Null clears the
+    /// optional role, matching the ComboBox's placeholder-text empty state.
+    /// </summary>
+    [ObservableProperty]
+    private EventMembershipRoleOption? _selectedRoleOption;
+
+    partial void OnSelectedRoleOptionChanged(EventMembershipRoleOption? value) => SelectedRole = value?.Role;
+
+    partial void OnSelectedRoleChanged(EventMembershipRole? value)
+    {
+        Item.Role = value;
+        _onFieldChanged(this);
+    }
+
+    [ObservableProperty]
+    private string _notes;
+
+    partial void OnNotesChanged(string value)
+    {
+        Item.Notes = string.IsNullOrWhiteSpace(value) ? null : value;
+        _onFieldChanged(this);
+    }
 
     [RelayCommand]
     private void MoveUp() => _onMoveUp(this);

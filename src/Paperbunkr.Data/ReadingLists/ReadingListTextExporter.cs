@@ -1,5 +1,6 @@
 using System.Text;
 using Microsoft.EntityFrameworkCore;
+using Paperbunkr.Data.Metadata;
 
 namespace Paperbunkr.Data.ReadingLists;
 
@@ -15,6 +16,7 @@ public static class ReadingListTextExporter
     {
         var list = context.ReadingLists
             .Include(r => r.Items).ThenInclude(i => i.Issue).ThenInclude(i => i!.Series)
+            .Include(r => r.Items).ThenInclude(i => i.Issue).ThenInclude(i => i!.MetadataProposals)
             .First(r => r.Id == readingListId);
 
         var items = list.Items.OrderBy(i => i.SortOrder).ToList();
@@ -29,8 +31,8 @@ public static class ReadingListTextExporter
         {
             var issue = items[i].Issue!;
             string series = issue.Series?.Name ?? "Unknown Series";
-            string year = issue.Year is int y ? $" ({y})" : string.Empty;
-            sb.AppendLine($"{i + 1}. {series} #{issue.Number}{year}");
+            string year = issue.EffectiveYear() is int y ? $" ({y})" : string.Empty;
+            sb.AppendLine($"{i + 1}. {series} #{issue.EffectiveNumber()}{year}");
         }
 
         return sb.ToString();

@@ -1,4 +1,4 @@
-namespace Paperbunkr.App.Models;
+namespace Paperbunkr.Data.Entities;
 
 /// <summary>
 /// Library screen's display mode (docs/superpowers/specs/2026-08-09-library-toolbar-design.md

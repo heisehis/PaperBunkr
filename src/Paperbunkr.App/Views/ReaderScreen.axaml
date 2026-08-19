@@ -89,7 +89,7 @@
         <!-- ============ Top toolbar ============ -->
         <Border Grid.Row="0" Background="{StaticResource ReaderChromeBrush}" BorderBrush="{StaticResource ReaderBorderBrush}"
                 BorderThickness="0,0,0,1" Padding="18,10" IsVisible="{Binding !IsFullscreen}">
-            <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+            <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
                 <Button Grid.Column="0" Command="{Binding GoBackCommand}" Background="Transparent" BorderThickness="0"
                         Padding="0" Cursor="Hand" HorizontalAlignment="Left">
                     <StackPanel Orientation="Horizontal" Spacing="4">
@@ -233,8 +233,39 @@
                     </Button.Flyout>
                 </Button>
 
+                <!-- Bookmarks (docs/superpowers/specs/2026-08-18-metadata-model-ui-gaps-status-and-bookmarks-design.md) -->
+                <Button Grid.Column="10" Classes="toolPill" Classes.active="{Binding IsCurrentPageBookmarked}" Content="🔖" Margin="0,0,8,0" ToolTip.Tip="Bookmarks">
+                    <Button.Flyout>
+                        <Flyout Placement="Bottom">
+                            <StackPanel Width="220" Spacing="4">
+                                <Button Classes="flyoutRow" Command="{Binding ToggleBookmarkCommand}">
+                                    <Panel>
+                                        <TextBlock Text="🔖 Bookmark this page" IsVisible="{Binding !IsCurrentPageBookmarked}" />
+                                        <TextBlock Text="✓ Bookmarked — tap to remove" IsVisible="{Binding IsCurrentPageBookmarked}" />
+                                    </Panel>
+                                </Button>
+                                <Border Height="1" Background="#33373F" Margin="0,4" IsVisible="{Binding Bookmarks.Count}" />
+                                <ItemsControl ItemsSource="{Binding Bookmarks}" MaxHeight="220">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="models:IssueBookmarkSummary">
+                                            <Grid ColumnDefinitions="*,Auto" Margin="0,2">
+                                                <Button Grid.Column="0" Classes="flyoutRow"
+                                                        Command="{Binding $parent[UserControl].((vm:ReaderScreenViewModel)DataContext).GoToBookmarkCommand}"
+                                                        CommandParameter="{Binding}" Content="{Binding Label}" HorizontalContentAlignment="Left" />
+                                                <Button Grid.Column="1" Classes="toolIcon" Content="✕" FontSize="10"
+                                                        Command="{Binding $parent[UserControl].((vm:ReaderScreenViewModel)DataContext).DeleteBookmarkCommand}"
+                                                        CommandParameter="{Binding}" ToolTip.Tip="Remove bookmark" />
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </Flyout>
+                    </Button.Flyout>
+                </Button>
+
                 <!-- Fullscreen toggle (docs/superpowers/specs/2026-08-10-reader-polish-continuous-scroll-chrome-overlays-design.md §7) - F/F11 also work regardless of this button, this is purely for discoverability. -->
-                <Button Grid.Column="10" Classes="toolIcon" Content="⛶" Command="{Binding ToggleFullscreenCommand}"
+                <Button Grid.Column="11" Classes="toolIcon" Content="⛶" Command="{Binding ToggleFullscreenCommand}"
                         ToolTip.Tip="Fullscreen (F)" />
             </Grid>
         </Border>
@@ -255,7 +286,13 @@
                             <DataTemplate x:DataType="models:ReaderThumbnailSample">
                                 <Border Classes="thumb" Classes.selected="{Binding IsSelected}" Background="{Binding CoverBrush}"
                                         Cursor="Hand" PointerPressed="OnThumbnailPointerPressed">
-                                    <Image Source="{Binding CoverImage}" Stretch="UniformToFill" />
+                                    <Grid>
+                                        <Image Source="{Binding CoverImage}" Stretch="UniformToFill" />
+                                        <!-- Bookmark ribbon (docs/superpowers/specs/2026-08-18-metadata-model-ui-gaps-status-and-bookmarks-design.md) - CE draws the same kind of marker on its own thumbnail rail. -->
+                                        <Polygon IsVisible="{Binding IsBookmarked}" Fill="#E0B814" Stretch="Fill"
+                                                 Points="0,0 10,0 10,14 5,9 0,14" Width="10" Height="14"
+                                                 HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,2,3,0" />
+                                    </Grid>
                                 </Border>
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
@@ -292,6 +329,10 @@
                                   RotateClockwiseCommand="{Binding RotateClockwiseCommand}"
                                   RotateCounterClockwiseGesture="{Binding RotateCounterClockwiseKey}"
                                   RotateCounterClockwiseCommand="{Binding RotateCounterClockwiseCommand}"
+                                  PreviousBookmarkGesture="{Binding PreviousBookmarkKey}"
+                                  PreviousBookmarkCommand="{Binding PreviousBookmarkCommand}"
+                                  NextBookmarkGesture="{Binding NextBookmarkKey}"
+                                  NextBookmarkCommand="{Binding NextBookmarkCommand}"
                                   ZoomInGesture="{Binding ZoomInKey}"
                                   ZoomInCommand="{Binding ZoomInCommand}"
                                   ZoomOutGesture="{Binding ZoomOutKey}"

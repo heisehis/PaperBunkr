@@ -1794,4 +1794,106 @@ public class ReaderScreenViewModelTests : IDisposable
         using var context = PaperbunkrDb.CreateContext();
         Assert.Equal(2, context.Issues.First(i => i.Id == _issue1Id).OpenCount);
     }
+
+    // ===================== Bookmarks (docs/superpowers/specs/2026-08-18-metadata-model-ui-gaps-status-and-bookmarks-design.md) =====================
+
+    [Fact]
+    public void ToggleBookmark_OnUnbookmarkedPage_CreatesRowWithAutoLabel_MarksStateActive()
+    {
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id); // 3 pages, starts on page index 0
+
+        vm.ToggleBookmarkCommand.Execute(null);
+
+        Assert.True(vm.IsCurrentPageBookmarked);
+        var summary = Assert.Single(vm.Bookmarks);
+        Assert.Equal(0, summary.PageNumber);
+        Assert.Equal("Page 1", summary.Label);
+        Assert.True(vm.Thumbnails[0].IsBookmarked);
+
+        using var context = PaperbunkrDb.CreateContext();
+        var row = Assert.Single(context.IssueBookmarks.Where(b => b.IssueId == _issue1Id));
+        Assert.Equal(0, row.PageNumber);
+    }
+
+    [Fact]
+    public void ToggleBookmark_OnAlreadyBookmarkedPage_RemovesIt()
+    {
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id);
+        vm.ToggleBookmarkCommand.Execute(null);
+
+        vm.ToggleBookmarkCommand.Execute(null);
+
+        Assert.False(vm.IsCurrentPageBookmarked);
+        Assert.Empty(vm.Bookmarks);
+        Assert.False(vm.Thumbnails[0].IsBookmarked);
+
+        using var context = PaperbunkrDb.CreateContext();
+        Assert.Empty(context.IssueBookmarks.Where(b => b.IssueId == _issue1Id));
+    }
+
+    [Fact]
+    public void GoToBookmark_NavigatesToItsPage()
+    {
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id);
+        vm.NextPageCommand.Execute(null);
+        vm.NextPageCommand.Execute(null); // now on page index 2
+        vm.ToggleBookmarkCommand.Execute(null);
+        vm.SelectThumbnailCommand.Execute(vm.Thumbnails[0]); // navigate away
+
+        vm.GoToBookmarkCommand.Execute(vm.Bookmarks[0]);
+
+        Assert.Equal("PAGE 3 / 3", vm.PageLabel);
+    }
+
+    [Fact]
+    public void DeleteBookmark_RemovesRowAndClearsActiveState()
+    {
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id);
+        vm.ToggleBookmarkCommand.Execute(null);
+        var summary = vm.Bookmarks[0];
+
+        vm.DeleteBookmarkCommand.Execute(summary);
+
+        Assert.False(vm.IsCurrentPageBookmarked);
+        Assert.Empty(vm.Bookmarks);
+    }
+
+    [Fact]
+    public void PreviousNextBookmark_FindNearestInEachDirection_NoOpAtEnds()
+    {
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id); // 3 pages: 0, 1, 2
+        vm.ToggleBookmarkCommand.Execute(null); // bookmark page 0 (starts there)
+        vm.SelectThumbnailCommand.Execute(vm.Thumbnails[2]);
+        vm.ToggleBookmarkCommand.Execute(null); // bookmark page 2
+        vm.SelectThumbnailCommand.Execute(vm.Thumbnails[1]); // sit between the two bookmarks
+
+        vm.PreviousBookmarkCommand.Execute(null);
+        Assert.Equal("PAGE 1 / 3", vm.PageLabel); // jumped to page 0
+
+        vm.NextBookmarkCommand.Execute(null);
+        vm.NextBookmarkCommand.Execute(null);
+        Assert.Equal("PAGE 3 / 3", vm.PageLabel); // jumped to page 2, then no-op (no bookmark after it)
+
+        vm.PreviousBookmarkCommand.Execute(null);
+        vm.PreviousBookmarkCommand.Execute(null);
+        Assert.Equal("PAGE 1 / 3", vm.PageLabel); // back to page 0, then no-op (no bookmark before it)
+    }
+
+    [Fact]
+    public void Bookmarks_AreScopedToTheirOwnIssue()
+    {
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id);
+        vm.ToggleBookmarkCommand.Execute(null);
+
+        vm.LoadIssue(_issue2Id);
+
+        Assert.Empty(vm.Bookmarks);
+        Assert.False(vm.IsCurrentPageBookmarked);
+    }
 }

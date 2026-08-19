@@ -148,8 +148,18 @@
                     <Border Width="26" Height="26" CornerRadius="6" BorderThickness="1.5"
                             BorderBrush="{DynamicResource PbAccentBrush}" Margin="0,0,0,12" />
 
+                    <Button Classes="rail" Classes.active="{Binding IsHome}"
+                            Command="{Binding GoHomeCommand}" ToolTip.Tip="Home"
+                            AutomationProperties.AutomationId="HomeRailButton">
+                        <Border Classes="icon">
+                            <Border.OpacityMask>
+                                <ImageBrush Source="/Assets/Icons/Home.png" Stretch="Uniform" />
+                            </Border.OpacityMask>
+                        </Border>
+                    </Button>
                     <Button Classes="rail" Classes.active="{Binding IsLibrary}"
-                            Command="{Binding GoLibraryCommand}" ToolTip.Tip="Library">
+                            Command="{Binding GoLibraryCommand}" ToolTip.Tip="Library"
+                            AutomationProperties.AutomationId="LibraryRailButton">
                         <Border Classes="icon">
                             <Border.OpacityMask>
                                 <ImageBrush Source="/Assets/Icons/Book.png" Stretch="Uniform" />
@@ -235,7 +245,9 @@
                                    Foreground="{DynamicResource PbTextBrush}" Margin="8,0,8,14" />
 
                         <Button Classes="sideItemButton" Classes.active="{Binding Library.IsAllSeriesActive}"
-                                Command="{Binding Library.SelectAllSeriesCommand}">
+                                Command="{Binding Library.SelectAllSeriesCommand}"
+                                AutomationProperties.AutomationId="LibrarySidebarAllSeries"
+                                AutomationProperties.HelpText="{Binding Library.IsAllSeriesActive}">
                             <Grid ColumnDefinitions="8,*,Auto">
                                 <Border Grid.Column="0" Width="8" Height="8" CornerRadius="2"
                                         Background="{DynamicResource PbAccentTextBrush}" VerticalAlignment="Center" />
@@ -273,7 +285,9 @@
                                 <DataTemplate x:DataType="models:ContentTypeSummary">
                                     <Button Classes="sideItemButton" Classes.active="{Binding IsActive}"
                                             Command="{Binding #LibraryContentTypes.((vm:MainViewModel)DataContext).Library.SelectContentTypeCommand}"
-                                            CommandParameter="{Binding}">
+                                            CommandParameter="{Binding}"
+                                            AutomationProperties.AutomationId="{Binding ContentType, StringFormat='LibraryContentTypeOption_{0}'}"
+                                            AutomationProperties.HelpText="{Binding IsActive}">
                                         <Grid ColumnDefinitions="*,Auto">
                                             <TextBlock Grid.Column="0" Classes="sideItemLabel" Text="{Binding Name}" FontSize="13" Foreground="{DynamicResource PbTextMutedBrush}" />
                                             <TextBlock Grid.Column="1" Classes="count" Text="{Binding Count}" Foreground="{DynamicResource PbTextFaintBrush}" />
@@ -446,6 +460,13 @@
 
         <!-- ============ Main content ============ -->
         <Grid>
+            <ContentControl IsVisible="{Binding IsHome}" Content="{Binding Home}">
+                <ContentControl.ContentTemplate>
+                    <DataTemplate x:DataType="vm:HomeScreenViewModel">
+                        <views:HomeScreen />
+                    </DataTemplate>
+                </ContentControl.ContentTemplate>
+            </ContentControl>
             <ContentControl IsVisible="{Binding IsLibrary}" Content="{Binding Library}">
                 <ContentControl.ContentTemplate>
                     <DataTemplate x:DataType="vm:LibraryScreenViewModel">

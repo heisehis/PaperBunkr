@@ -36,9 +36,12 @@ public sealed record BulkFieldDescriptor(
 /// <summary>
 /// The full bulk-editable field set, verified field-by-field against CE's real
 /// <c>MultipleComicBooksDialog.Designer.cs</c>/<c>.cs</c> (docs/superpowers/specs/
-/// 2026-08-07-bulk-issue-editing-design.md §3) - <c>StoryArcNumber</c>/<c>Series</c>/
-/// <c>SeriesComplete</c>/<c>Manga</c>/<c>EnableProposed</c>/<c>AlternateCount</c> are deliberately
-/// absent, see the spec for why each one is excluded.
+/// 2026-08-07-bulk-issue-editing-design.md §3) - <c>StoryArcNumber</c>/<c>Series</c>/<c>Manga</c>/
+/// <c>EnableProposed</c>/<c>AlternateCount</c> are deliberately absent, see the spec for why each
+/// one is excluded. CE's own <c>SeriesComplete</c> now has a real Paperbunkr home below (the
+/// Series-level <c>Status</c> row, docs/superpowers/specs/2026-08-18-metadata-model-ui-gaps-status-
+/// and-bookmarks-design.md) - not the same shape as CE's per-issue Yes/No/Unknown flag, which is
+/// <see cref="Issue.IsFinalIssue"/> instead, edited on the single-issue Issue Properties screen.
 /// </summary>
 public static class BulkFieldRegistry
 {
@@ -100,6 +103,12 @@ public static class BulkFieldRegistry
             i => i.Series.ContentType.ToString(),
             (i, v) => i.Series.ContentType = Enum.Parse<ContentType>(v ?? nameof(ContentType.Unknown)),
             Options: Enum.GetNames<ContentType>()),
+        // Series-owned, same shape as ContentType above (docs/superpowers/specs/2026-08-18-
+        // metadata-model-ui-gaps-status-and-bookmarks-design.md).
+        new("Status", Main, FieldKind.Enum, IsListField: false,
+            i => i.Series.Status.ToString(),
+            (i, v) => i.Series.Status = Enum.Parse<SeriesStatus>(v ?? nameof(SeriesStatus.Unknown)),
+            Options: Enum.GetNames<SeriesStatus>()),
         Text("Publisher", Main, i => i.Publisher, (i, v) => i.Publisher = v),
         Text("Imprint", Main, i => i.Imprint, (i, v) => i.Imprint = v),
         Text("Format", Main, i => i.Format, (i, v) => i.Format = v),

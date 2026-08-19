@@ -1,0 +1,332 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Paperbunkr.App.ViewModels"
+             xmlns:models="using:Paperbunkr.App.Models"
+             xmlns:conv="using:Avalonia.Data.Converters"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="900" d:DesignHeight="700"
+             x:Class="Paperbunkr.App.Views.HomeScreen"
+             x:DataType="vm:HomeScreenViewModel">
+
+    <!--
+    App launch screen (docs/superpowers/specs/2026-08-18-home-screen-design.md) - a hero header
+    (title/subtitle/search-to-Library/refresh), three horizontal-scrolling card rows (Continue
+    Reading, Recently Added, Because You Read), and two single-card "spotlight" modules (a small
+    auto-advancing carousel, Try This Reading List). All data/pick logic lives in
+    HomeScreenViewModel/HomeFeedResolver/RecommendationResolver - this view only renders it.
+    -->
+
+    <UserControl.Styles>
+        <Style Selector="TextBlock.sectionHeader">
+            <Setter Property="FontSize" Value="15" />
+            <Setter Property="FontWeight" Value="Bold" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextBrush}" />
+        </Style>
+        <Style Selector="TextBlock.emptyState">
+            <Setter Property="FontSize" Value="12.5" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextFaintBrush}" />
+        </Style>
+        <Style Selector="Button.viewAllLink">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Foreground" Value="{DynamicResource PbAccentTextBrush}" />
+            <Setter Property="FontSize" Value="12.5" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+        </Style>
+
+        <Style Selector="Button.rowCard">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Width" Value="150" />
+        </Style>
+        <Style Selector="Border.rowCover">
+            <Setter Property="CornerRadius" Value="7" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
+            <Setter Property="BoxShadow" Value="0 8 24 -12 #80000000" />
+            <Setter Property="ClipToBounds" Value="True" />
+            <Setter Property="Height" Value="216" />
+        </Style>
+        <Style Selector="Border.countPill">
+            <Setter Property="Background" Value="#B814161B" />
+            <Setter Property="CornerRadius" Value="999" />
+            <Setter Property="Padding" Value="6,2" />
+            <Setter Property="HorizontalAlignment" Value="Left" />
+            <Setter Property="VerticalAlignment" Value="Top" />
+            <Setter Property="Margin" Value="7" />
+        </Style>
+        <Style Selector="Border.countPill TextBlock">
+            <Setter Property="FontSize" Value="9" />
+            <Setter Property="FontWeight" Value="Bold" />
+            <Setter Property="Foreground" Value="White" />
+        </Style>
+
+        <Style Selector="Button.spotlightCard">
+            <Setter Property="Background" Value="{DynamicResource PbChromeBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
+            <Setter Property="CornerRadius" Value="10" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+        </Style>
+        <Style Selector="Border.spotlightCover">
+            <Setter Property="CornerRadius" Value="7,0,0,7" />
+            <Setter Property="ClipToBounds" Value="True" />
+            <Setter Property="Width" Value="120" />
+            <Setter Property="Height" Value="172" />
+        </Style>
+
+        <Style Selector="Border.tagPill">
+            <Setter Property="Background" Value="{DynamicResource PbAccentSoftBrush}" />
+            <Setter Property="CornerRadius" Value="999" />
+            <Setter Property="Padding" Value="8,3" />
+        </Style>
+
+        <Style Selector="Button.spotlightDot">
+            <Setter Property="Width" Value="8" />
+            <Setter Property="Height" Value="8" />
+            <Setter Property="CornerRadius" Value="999" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Background" Value="{DynamicResource PbBorderBrush}" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style Selector="Button.spotlightDot.active">
+            <Setter Property="Background" Value="{DynamicResource PbAccentBrush}" />
+        </Style>
+
+        <Style Selector="Border.heroIcon">
+            <Setter Property="Width" Value="16" />
+            <Setter Property="Height" Value="16" />
+            <Setter Property="Background" Value="{DynamicResource PbTextFaintBrush}" />
+        </Style>
+    </UserControl.Styles>
+
+    <ScrollViewer>
+        <StackPanel Margin="24" Spacing="28">
+
+            <!-- ============ Hero header ============ -->
+            <Panel>
+                <StackPanel HorizontalAlignment="Center" Spacing="14" MaxWidth="620" Margin="0,4,0,0">
+                    <TextBlock Text="Your Library" FontSize="28" FontWeight="Black"
+                               HorizontalAlignment="Center" Foreground="{DynamicResource PbTextBrush}" />
+                    <TextBlock Text="Search for a specific series or discover something new below"
+                               FontSize="13" HorizontalAlignment="Center" Foreground="{DynamicResource PbTextMutedBrush}" />
+                    <Grid ColumnDefinitions="*,Auto" Width="480">
+                        <TextBox Grid.Column="0" Text="{Binding SearchQuery}" Watermark="Search for a comic series..."
+                                 FontSize="12.5" AutomationProperties.AutomationId="HomeSearchBox">
+                            <TextBox.KeyBindings>
+                                <KeyBinding Gesture="Enter" Command="{Binding SearchCommand}" />
+                            </TextBox.KeyBindings>
+                        </TextBox>
+                        <Button Grid.Column="1" Content="Search" Margin="8,0,0,0" Padding="16,0"
+                                Command="{Binding SearchCommand}" AutomationProperties.AutomationId="HomeSearchButton" />
+                    </Grid>
+                </StackPanel>
+                <Button HorizontalAlignment="Right" VerticalAlignment="Top" Background="Transparent" BorderThickness="0"
+                        Cursor="Hand" Command="{Binding RefreshCommand}" AutomationProperties.AutomationId="HomeRefreshButton"
+                        ToolTip.Tip="Refresh">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <Border Classes="heroIcon">
+                            <Border.OpacityMask><ImageBrush Source="/Assets/Icons/Refresh.png" Stretch="Uniform" /></Border.OpacityMask>
+                        </Border>
+                        <TextBlock Text="Refresh" FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" />
+                    </StackPanel>
+                </Button>
+            </Panel>
+
+            <!-- ============ Continue Reading ============ -->
+            <StackPanel Spacing="10">
+                <TextBlock Text="Continue Reading" Classes="sectionHeader" AutomationProperties.AutomationId="HomeContinueReadingHeader" />
+                <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" IsVisible="{Binding HasContinueReading}">
+                    <ItemsControl ItemsSource="{Binding ContinueReading}" AutomationProperties.AutomationId="HomeContinueReadingList">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate><StackPanel Orientation="Horizontal" Spacing="16" /></ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="models:HomeContinueReadingCard">
+                                <Button Classes="rowCard"
+                                        Command="{Binding $parent[UserControl].((vm:HomeScreenViewModel)DataContext).OpenContinueReadingCommand}"
+                                        CommandParameter="{Binding ResumeIssueId}">
+                                    <StackPanel>
+                                        <Border Classes="rowCover" Background="{Binding Series.CoverBrush}">
+                                            <Grid>
+                                                <Image Source="{Binding Series.CoverImage}" Stretch="UniformToFill" />
+                                                <Border Classes="countPill">
+                                                    <TextBlock Text="{Binding Series.IssueCountLabel}" />
+                                                </Border>
+                                            </Grid>
+                                        </Border>
+                                        <TextBlock Text="{Binding Series.Name}" FontSize="12.5" FontWeight="SemiBold"
+                                                   Foreground="{DynamicResource PbTextBrush}" TextTrimming="CharacterEllipsis"
+                                                   Margin="0,8,0,0" />
+                                    </StackPanel>
+                                </Button>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+                <TextBlock Text="Nothing in progress yet" Classes="emptyState" IsVisible="{Binding !HasContinueReading}" />
+            </StackPanel>
+
+            <!-- ============ Recently Added ============ -->
+            <StackPanel Spacing="10">
+                <Grid ColumnDefinitions="*,Auto">
+                    <TextBlock Grid.Column="0" Text="Recently Added" Classes="sectionHeader" AutomationProperties.AutomationId="HomeRecentlyAddedHeader" />
+                    <Button Grid.Column="1" Classes="viewAllLink" Content="View Library →"
+                            Command="{Binding GoToLibraryCommand}"
+                            AutomationProperties.AutomationId="HomeViewLibraryLink" />
+                </Grid>
+                <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" IsVisible="{Binding HasRecentlyAdded}">
+                    <ItemsControl ItemsSource="{Binding RecentlyAdded}" AutomationProperties.AutomationId="HomeRecentlyAddedList">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate><StackPanel Orientation="Horizontal" Spacing="16" /></ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="models:SeriesCardSample">
+                                <Button Classes="rowCard"
+                                        Command="{Binding $parent[UserControl].((vm:HomeScreenViewModel)DataContext).OpenSeriesCommand}"
+                                        CommandParameter="{Binding}">
+                                    <StackPanel>
+                                        <Border Classes="rowCover" Background="{Binding CoverBrush}">
+                                            <Grid>
+                                                <Image Source="{Binding CoverImage}" Stretch="UniformToFill" />
+                                                <Border Classes="countPill">
+                                                    <TextBlock Text="{Binding IssueCountLabel}" />
+                                                </Border>
+                                            </Grid>
+                                        </Border>
+                                        <TextBlock Text="{Binding Name}" FontSize="12.5" FontWeight="SemiBold"
+                                                   Foreground="{DynamicResource PbTextBrush}" TextTrimming="CharacterEllipsis"
+                                                   Margin="0,8,0,0" />
+                                    </StackPanel>
+                                </Button>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+                <TextBlock Text="Nothing added yet" Classes="emptyState" IsVisible="{Binding !HasRecentlyAdded}" />
+            </StackPanel>
+
+            <!-- ============ Because You Read ============ -->
+            <ItemsControl ItemsSource="{Binding BecauseYouRead}" IsVisible="{Binding HasBecauseYouRead}"
+                          AutomationProperties.AutomationId="HomeBecauseYouReadSection">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="models:BecauseYouReadRow">
+                        <StackPanel Spacing="10" Margin="0,0,0,20">
+                            <TextBlock Text="{Binding SeedSeriesName, StringFormat='Because you read {0}'}" Classes="sectionHeader" />
+                            <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+                                <ItemsControl ItemsSource="{Binding Cards}">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate><StackPanel Orientation="Horizontal" Spacing="16" /></ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="models:SeriesCardSample">
+                                            <Button Classes="rowCard"
+                                                    Command="{Binding $parent[UserControl].((vm:HomeScreenViewModel)DataContext).OpenSeriesCommand}"
+                                                    CommandParameter="{Binding}">
+                                                <StackPanel>
+                                                    <Border Classes="rowCover" Background="{Binding CoverBrush}">
+                                                        <Grid>
+                                                            <Image Source="{Binding CoverImage}" Stretch="UniformToFill" />
+                                                            <Border Classes="countPill">
+                                                                <TextBlock Text="{Binding IssueCountLabel}" />
+                                                            </Border>
+                                                        </Grid>
+                                                    </Border>
+                                                    <TextBlock Text="{Binding Name}" FontSize="12.5" FontWeight="SemiBold"
+                                                               Foreground="{DynamicResource PbTextBrush}" TextTrimming="CharacterEllipsis"
+                                                               Margin="0,8,0,0" />
+                                                </StackPanel>
+                                            </Button>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </ScrollViewer>
+                        </StackPanel>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+            <TextBlock Text="No recommendations yet — link related series from a series' Detail screen to see them here."
+                       Classes="emptyState" TextWrapping="Wrap" IsVisible="{Binding !HasBecauseYouRead}"
+                       AutomationProperties.AutomationId="HomeBecauseYouReadEmptyState" />
+
+            <!-- ============ Spotlight (small auto-advancing carousel) ============ -->
+            <StackPanel Spacing="10">
+                <TextBlock Text="Spotlight" Classes="sectionHeader" AutomationProperties.AutomationId="HomeSpotlightHeader" />
+                <StackPanel Spacing="10" IsVisible="{Binding HasSpotlight}">
+                    <Button Classes="spotlightCard" Command="{Binding OpenSpotlightCommand}" AutomationProperties.AutomationId="HomeSpotlightCard">
+                        <Grid ColumnDefinitions="Auto,*">
+                            <Border Grid.Column="0" Classes="spotlightCover" Background="{Binding CurrentSpotlight.CoverBrush}">
+                                <Image Source="{Binding CurrentSpotlight.CoverImage}" Stretch="UniformToFill" />
+                            </Border>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="18,0" Spacing="4">
+                                <TextBlock Text="{Binding CurrentSpotlight.SeriesName}" FontSize="13" Foreground="{DynamicResource PbTextMutedBrush}" />
+                                <TextBlock Text="{Binding CurrentSpotlight.Title}" FontSize="16" FontWeight="Bold"
+                                           Foreground="{DynamicResource PbTextBrush}" TextWrapping="Wrap" />
+                                <TextBlock Text="Read Now" FontSize="12.5" FontWeight="SemiBold" Margin="0,6,0,0"
+                                           Foreground="{DynamicResource PbAccentTextBrush}" />
+                            </StackPanel>
+                        </Grid>
+                    </Button>
+                    <ItemsControl ItemsSource="{Binding SpotlightItems}" HorizontalAlignment="Center"
+                                  AutomationProperties.AutomationId="HomeSpotlightDots">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate><StackPanel Orientation="Horizontal" Spacing="6" /></ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="models:SpotlightIssueSample">
+                                <Button Classes="spotlightDot"
+                                        Classes.active="{Binding $parent[UserControl].((vm:HomeScreenViewModel)DataContext).CurrentSpotlight, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={Binding}}"
+                                        Command="{Binding $parent[UserControl].((vm:HomeScreenViewModel)DataContext).SetSpotlightItemCommand}"
+                                        CommandParameter="{Binding}" />
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+                <TextBlock Text="Your library's all caught up" Classes="emptyState" IsVisible="{Binding !HasSpotlight}" />
+            </StackPanel>
+
+            <!-- ============ Try This Reading List ============ -->
+            <StackPanel Spacing="10">
+                <TextBlock Text="Try This Reading List" Classes="sectionHeader" AutomationProperties.AutomationId="HomeReadingListSpotlightHeader" />
+                <Button Classes="spotlightCard" IsVisible="{Binding HasReadingListSpotlight}"
+                        Command="{Binding OpenReadingListSpotlightCommand}" AutomationProperties.AutomationId="HomeReadingListSpotlightCard">
+                    <Grid ColumnDefinitions="Auto,*">
+                        <Border Grid.Column="0" Classes="spotlightCover" Background="{Binding ReadingListSpotlight.CoverBrush}">
+                            <Image Source="{Binding ReadingListSpotlight.CoverImage}" Stretch="UniformToFill" />
+                        </Border>
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="18,0" Spacing="6">
+                            <TextBlock Text="{Binding ReadingListSpotlight.Name}" FontSize="16" FontWeight="Bold"
+                                       Foreground="{DynamicResource PbTextBrush}" />
+                            <TextBlock Text="{Binding ReadingListSpotlight.Synopsis}" FontSize="12.5"
+                                       Foreground="{DynamicResource PbTextMutedBrush}" TextWrapping="Wrap" />
+                            <ItemsControl ItemsSource="{Binding ReadingListSpotlight.Tags}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="x:String">
+                                        <Border Classes="tagPill" Margin="0,4,6,0">
+                                            <TextBlock Text="{Binding}" FontSize="10.5" FontWeight="SemiBold"
+                                                       Foreground="{DynamicResource PbAccentTextBrush}" />
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </Grid>
+                </Button>
+                <TextBlock Text="No reading lists with anything left to read" Classes="emptyState" IsVisible="{Binding !HasReadingListSpotlight}" />
+            </StackPanel>
+
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

@@ -514,6 +514,26 @@ public class PaperbunkrDbContext : DbContext
             builder.Property(a => a.LibraryViewMode).HasConversion<string>().HasMaxLength(32)
                 .HasDefaultValue(LibraryViewMode.ComfortableGrid)
                 .HasSentinel(LibraryViewMode.CompactGrid);
+            // Same treatment - Number (0) is the CLR default, desired default is Added.
+            builder.Property(a => a.LibraryIssueListSortField).HasConversion<string>().HasMaxLength(32)
+                .HasDefaultValue(IssueListSortField.Added)
+                .HasSentinel(IssueListSortField.Number);
+            builder.Property(a => a.LibraryIssueListSortDirection).HasConversion<string>().HasMaxLength(32)
+                .HasDefaultValue(SortDirection.Descending)
+                .HasSentinel(SortDirection.Ascending);
+            builder.Property(a => a.LibraryIssueListGroupField).HasConversion<string>().HasMaxLength(32)
+                .HasDefaultValue(IssueListGroupField.None)
+                .HasSentinel(IssueListGroupField.None);
+            // Issue (0) is both the CLR default and the desired default here - sentinel added
+            // anyway for consistency with every other enum-as-string column in this method.
+            builder.Property(a => a.LibraryGranularity).HasConversion<string>().HasMaxLength(32)
+                .HasDefaultValue(LibraryContentGranularity.Issue)
+                .HasSentinel(LibraryContentGranularity.Issue);
+            // Same enum-as-string HasSentinel treatment as LibraryGroupField above, even though
+            // All is both the CLR default and the desired default here.
+            builder.Property(a => a.LibrarySearchMode).HasConversion<string>().HasMaxLength(32)
+                .HasDefaultValue(SearchMode.All)
+                .HasSentinel(SearchMode.All);
             builder.Property(a => a.LibraryGridDensity).HasDefaultValue(1.0);
             builder.Property(a => a.LibraryShowUnreadBadge).HasDefaultValue(true);
             builder.Property(a => a.LibraryShowPublisherBadge).HasDefaultValue(false);

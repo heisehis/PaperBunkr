@@ -151,6 +151,13 @@ namespace Paperbunkr.Data.Migrations
                         .HasColumnType("INTEGER")
                         .HasDefaultValue(false);
 
+                    b.Property<string>("LibraryGranularity")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT")
+                        .HasDefaultValue("Issue");
+
                     b.Property<double>("LibraryGridDensity")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("REAL")
@@ -162,6 +169,34 @@ namespace Paperbunkr.Data.Migrations
                         .HasMaxLength(32)
                         .HasColumnType("TEXT")
                         .HasDefaultValue("None");
+
+                    b.Property<string>("LibraryIssueListGroupField")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT")
+                        .HasDefaultValue("None");
+
+                    b.Property<string>("LibraryIssueListSortDirection")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT")
+                        .HasDefaultValue("Descending");
+
+                    b.Property<string>("LibraryIssueListSortField")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT")
+                        .HasDefaultValue("Added");
+
+                    b.Property<string>("LibrarySearchMode")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT")
+                        .HasDefaultValue("All");
 
                     b.Property<string>("LibrarySearchQuery")
                         .HasColumnType("TEXT");

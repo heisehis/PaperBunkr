@@ -16,12 +16,13 @@ public partial class MainViewModel : ViewModelBase
 {
     public MainViewModel()
     {
+        Home = new HomeScreenViewModel(GoDetailForSeries, GoReaderForIssue, GoLibraryWithSearch);
         Library = new LibraryScreenViewModel(GoDetailForSeries, GoReaderForIssue, GoNewIssuePropertiesForPlaceholder);
         Books = new BooksScreenViewModel(new FilePickerService(), new BookFolderScanService(), new BookCoverThumbnailService(), GoBookReaderForBook);
         BookReader = new BookReaderScreenViewModel(GoBooks);
         PdfReader = new PdfPageReaderScreenViewModel(GoBooks);
         Detail = new DetailScreenViewModel(GoLibrary, GoReaderForIssue, GoIssuePropertiesForIssue, GoBulkIssuePropertiesForIssues);
-        Reader = new ReaderScreenViewModel(GoDetail);
+        Reader = new ReaderScreenViewModel(GoBackFromReader);
         IssueProperties = new IssuePropertiesScreenViewModel(GoDetailAfterIssueEdit);
         BulkIssueProperties = new BulkIssuePropertiesScreenViewModel(GoDetailAfterIssueEdit);
         Smart = new SmartScreenViewModel(GoDetailForSeries);
@@ -79,6 +80,7 @@ public partial class MainViewModel : ViewModelBase
 
     private void CloseProgressToast(ToastProgressViewModel toast) => ProgressToastCloseRequested?.Invoke(toast);
 
+    public HomeScreenViewModel Home { get; }
     public LibraryScreenViewModel Library { get; }
     public BooksScreenViewModel Books { get; }
     public BookReaderScreenViewModel BookReader { get; }
@@ -97,9 +99,13 @@ public partial class MainViewModel : ViewModelBase
     [ObservableProperty]
     private bool _isMigrationOverlayOpen;
 
+    /// <summary>Home is the app's launch screen (docs/superpowers/specs/2026-08-18-home-screen-
+    /// design.md) - was "library" before this screen existed; Library remains one rail click away,
+    /// unchanged otherwise.</summary>
     [ObservableProperty]
-    private string _currentScreen = "library";
+    private string _currentScreen = "home";
 
+    public bool IsHome => CurrentScreen == "home";
     public bool IsLibrary => CurrentScreen == "library";
     public bool IsBooks => CurrentScreen == "books";
     public bool IsBookReader => CurrentScreen == "bookReader";
@@ -118,6 +124,7 @@ public partial class MainViewModel : ViewModelBase
 
     partial void OnCurrentScreenChanged(string value)
     {
+        OnPropertyChanged(nameof(IsHome));
         OnPropertyChanged(nameof(IsLibrary));
         OnPropertyChanged(nameof(IsBooks));
         OnPropertyChanged(nameof(IsBookReader));
@@ -133,6 +140,26 @@ public partial class MainViewModel : ViewModelBase
         OnPropertyChanged(nameof(IsBulkIssueProperties));
         OnPropertyChanged(nameof(ShowContextualSidebar));
     }
+
+    [RelayCommand]
+    private void GoHome() => TryLeaveCurrentEditor(() =>
+    {
+        Home.LoadFromDatabase();
+        CurrentScreen = "home";
+    });
+
+    /// <summary>Home's search bar entry point (docs/superpowers/specs/2026-08-18-home-screen-
+    /// design.md) - not a rail-nav command itself (no dedicated rail button calls this), just a
+    /// callback <see cref="HomeScreenViewModel"/> holds. Sets <see cref="LibraryScreenViewModel.SearchQuery"/>
+    /// before navigating, whose own setter already triggers a reload - <see cref="GoLibrary"/>'s own
+    /// reload right after is a harmless redundant no-op, matching this codebase's existing tolerance
+    /// for that (see <see cref="LibraryScreenViewModel.LoadLibrarySettings"/>'s own doc comment).</summary>
+    private void GoLibraryWithSearch(string query) => TryLeaveCurrentEditor(() =>
+    {
+        Library.SearchQuery = query;
+        Library.LoadFromDatabase();
+        CurrentScreen = "library";
+    });
 
     [RelayCommand]
     private void GoLibrary() => TryLeaveCurrentEditor(() =>
@@ -207,9 +234,53 @@ public partial class MainViewModel : ViewModelBase
     [RelayCommand]
     private void GoReader() => TryLeaveCurrentEditor(() =>
     {
+        RememberScreenBeforeReader();
         Reader.EnsureIssueLoaded();
         CurrentScreen = "reader";
     });
+
+    /// <summary>
+    /// Real bug found via user testing: Reader's back button used to always return to Detail
+    /// (<c>GoDetail</c>), hardcoded - correct when Reader was entered *from* Detail (its own issue
+    /// tiles), but wrong for every other real entry point Reader now has: Library's per-issue
+    /// tiles/cards (docs/superpowers/specs/2026-08-18-library-book-centric-redesign-design.md
+    /// Slice 3) and Home's Continue Reading/Spotlight/Reading-List-spotlight cards (docs/
+    /// superpowers/specs/2026-08-18-home-screen-design.md) all open Reader directly, bypassing
+    /// Detail entirely - backing out from any of those landed on a stale or empty Detail page
+    /// instead of returning where the user actually came from. Fixed by remembering the screen
+    /// that was active right before Reader opened and returning there specifically.
+    /// </summary>
+    private string _screenBeforeReader = "library";
+
+    /// <summary>Captures <see cref="CurrentScreen"/> just before switching to Reader - guarded
+    /// against overwriting itself if already in Reader (e.g. <c>SetReadingMode</c>'s internal
+    /// same-issue reload), so the remembered origin always survives any in-Reader navigation that
+    /// doesn't itself leave and re-enter Reader from another screen.</summary>
+    private void RememberScreenBeforeReader()
+    {
+        if (CurrentScreen != "reader")
+        {
+            _screenBeforeReader = CurrentScreen;
+        }
+    }
+
+    private void GoBackFromReader()
+    {
+        switch (_screenBeforeReader)
+        {
+            case "library":
+                Library.LoadFromDatabase();
+                CurrentScreen = "library";
+                break;
+            case "home":
+                Home.LoadFromDatabase();
+                CurrentScreen = "home";
+                break;
+            default:
+                GoDetail();
+                break;
+        }
+    }
 
     /// <summary>
     /// Guards the seven rail-nav destinations against silently discarding an in-progress Issue
@@ -294,6 +365,7 @@ public partial class MainViewModel : ViewModelBase
 
     private void GoReaderForIssue(int issueId)
     {
+        RememberScreenBeforeReader();
         Reader.LoadIssue(issueId);
         CurrentScreen = "reader";
     }

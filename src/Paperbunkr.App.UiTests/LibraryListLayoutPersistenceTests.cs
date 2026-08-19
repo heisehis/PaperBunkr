@@ -21,26 +21,35 @@ public class LibraryListLayoutPersistenceTests : IDisposable
     public void SortFieldChange_SurvivesRestart()
     {
         Window window = _fixture.Window;
+        // Home is the app's default launch screen now (docs/superpowers/specs/
+        // 2026-08-18-home-screen-design.md) - navigate to Library first.
+        window.FindFirstDescendant(cf => cf.ByAutomationId("LibraryRailButton"))!.AsButton().Invoke();
 
-        // Default is "Sort: Date Added ▾" (LibraryScreenViewModel's own default) - change it to
-        // Size, which is unambiguous evidence the click actually landed and re-persisted.
+        // Default is "Sort: Date Added ▾" (IssueListScreenViewModel's own default, the one real
+        // Sort control now that every Display mode is per-issue - docs/superpowers/specs/
+        // 2026-08-18-library-book-centric-redesign-design.md Slice 3). Change it to File Size,
+        // which is unambiguous evidence the click actually landed and re-persisted.
         window.FindFirstDescendant(cf => cf.ByAutomationId("LibrarySortButton"))!.AsButton().Invoke();
-        window.FindFirstDescendant(cf => cf.ByAutomationId("LibrarySortOption_Size"))!.AsButton().Invoke();
+        window.FindFirstDescendant(cf => cf.ByAutomationId("ComicListSortOption_FileSize"))!.AsButton().Invoke();
 
         var sortButton = window.FindFirstDescendant(cf => cf.ByAutomationId("LibrarySortButton"))!;
-        Assert.Contains("Size", sortButton.Name);
+        Assert.Contains("File Size", sortButton.Name);
 
         _fixture.Restart();
         window = _fixture.Window;
+        window.FindFirstDescendant(cf => cf.ByAutomationId("LibraryRailButton"))!.AsButton().Invoke();
 
         var sortButtonAfterRestart = window.FindFirstDescendant(cf => cf.ByAutomationId("LibrarySortButton"))!;
-        Assert.Contains("Size", sortButtonAfterRestart.Name);
+        Assert.Contains("File Size", sortButtonAfterRestart.Name);
     }
 
     [Fact]
     public void ViewModeChange_SurvivesRestart()
     {
         Window window = _fixture.Window;
+        // Home is the app's default launch screen now (docs/superpowers/specs/
+        // 2026-08-18-home-screen-design.md) - navigate to Library first.
+        window.FindFirstDescendant(cf => cf.ByAutomationId("LibraryRailButton"))!.AsButton().Invoke();
 
         // Default is Comfortable grid - switch to List, then confirm the List-only column header
         // row (a real structural difference, not just a label) is what greets a fresh launch.
@@ -52,6 +61,7 @@ public class LibraryListLayoutPersistenceTests : IDisposable
 
         _fixture.Restart();
         window = _fixture.Window;
+        window.FindFirstDescendant(cf => cf.ByAutomationId("LibraryRailButton"))!.AsButton().Invoke();
 
         var displayButtonAfterRestart = window.FindFirstDescendant(cf => cf.ByAutomationId("LibraryDisplayButton"))!;
         Assert.Contains("List", displayButtonAfterRestart.Name);
@@ -61,6 +71,9 @@ public class LibraryListLayoutPersistenceTests : IDisposable
     public void FilterCheckboxChange_SurvivesRestart()
     {
         Window window = _fixture.Window;
+        // Home is the app's default launch screen now (docs/superpowers/specs/
+        // 2026-08-18-home-screen-design.md) - navigate to Library first.
+        window.FindFirstDescendant(cf => cf.ByAutomationId("LibraryRailButton"))!.AsButton().Invoke();
 
         window.FindFirstDescendant(cf => cf.ByAutomationId("LibraryFilterButton"))!.AsButton().Invoke();
         var unreadOnly = window.FindFirstDescendant(cf => cf.ByAutomationId("LibraryFilterUnreadOnly"))!.AsCheckBox();
@@ -69,6 +82,7 @@ public class LibraryListLayoutPersistenceTests : IDisposable
 
         _fixture.Restart();
         window = _fixture.Window;
+        window.FindFirstDescendant(cf => cf.ByAutomationId("LibraryRailButton"))!.AsButton().Invoke();
 
         window.FindFirstDescendant(cf => cf.ByAutomationId("LibraryFilterButton"))!.AsButton().Invoke();
         var unreadOnlyAfterRestart = window.FindFirstDescendant(cf => cf.ByAutomationId("LibraryFilterUnreadOnly"))!.AsCheckBox();

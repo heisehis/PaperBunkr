@@ -211,6 +211,13 @@ public partial class IssuePropertiesScreenViewModel : ViewModelBase
 
     public static string[] ColorModeOptions { get; } = Enum.GetNames<ColorMode>();
 
+    /// <summary>Replaces CE's per-issue Yes/No/Unknown <c>SeriesComplete</c> checkbox - had shipped
+    /// data (docs/superpowers/specs/2026-08-17-metadata-model-phase1-canonical-metadata-design.md)
+    /// with no editor UI until now (docs/superpowers/specs/2026-08-18-metadata-model-ui-gaps-status-
+    /// and-bookmarks-design.md). A plain bool, not tri-state like CE's - CE's "Unknown" state doesn't
+    /// have a real Paperbunkr equivalent here since this is a user-set flag, not inferred data.</summary>
+    [ObservableProperty] private bool _isFinalIssue;
+
     // ===================== Plot & Notes tab =====================
 
     [ObservableProperty] private string _characters = string.Empty;
@@ -280,6 +287,7 @@ public partial class IssuePropertiesScreenViewModel : ViewModelBase
         AgeRating = issue.AgeRating ?? string.Empty;
         LanguageIso = issue.LanguageISO ?? string.Empty;
         ColorModeText = issue.ColorMode.ToString();
+        IsFinalIssue = issue.IsFinalIssue;
 
         Characters = issue.Characters ?? string.Empty;
         Teams = issue.Teams ?? string.Empty;
@@ -347,6 +355,7 @@ public partial class IssuePropertiesScreenViewModel : ViewModelBase
         issue.AgeRating = NullIfEmpty(AgeRating);
         issue.LanguageISO = NullIfEmpty(LanguageIso);
         issue.ColorMode = Enum.Parse<ColorMode>(ColorModeText);
+        issue.IsFinalIssue = IsFinalIssue;
 
         issue.Characters = NullIfEmpty(Characters);
         issue.Teams = NullIfEmpty(Teams);
@@ -381,6 +390,7 @@ public partial class IssuePropertiesScreenViewModel : ViewModelBase
             {
                 context.Issues.Remove(issue);
                 context.SaveChanges();
+                CoverImageCache.Invalidate(issueId);
             }
         }
 

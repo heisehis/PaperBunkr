@@ -46,4 +46,12 @@ public static class BookCoverImageCache
             return null;
         }
     }
+
+    /// <summary>Drops bookId's in-memory entry (if any) and deletes its on-disk file - mirrors
+    /// <see cref="CoverImageCache.Invalidate"/>; call whenever a <c>Book</c> row is deleted.</summary>
+    public static void Invalidate(int bookId)
+    {
+        _cache.Remove(bookId);
+        BookCoverThumbnailPaths.DeleteCachedThumbnail(bookId);
+    }
 }

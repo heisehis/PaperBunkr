@@ -176,6 +176,7 @@ public partial class NeedsReviewViewModel : ViewModelBase
         {
             context.Issues.Remove(issue);
             context.SaveChanges();
+            CoverImageCache.Invalidate(issueId);
         }
 
         Refresh();
@@ -330,6 +331,7 @@ public partial class NeedsReviewViewModel : ViewModelBase
             else
             {
                 context.Issues.Remove(issue);
+                CoverImageCache.Invalidate(issue.Id);
             }
         }
 

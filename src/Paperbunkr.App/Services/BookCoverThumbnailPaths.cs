@@ -26,4 +26,21 @@ public static class BookCoverThumbnailPaths
         Directory.CreateDirectory(ThumbnailDirectory);
         return Path.Combine(ThumbnailDirectory, $"{bookId}.jpg");
     }
+
+    /// <summary>Deletes bookId's cached thumbnail file, if any - see <see cref="CoverThumbnailPaths.DeleteCachedThumbnail"/>
+    /// for the real bug this mirrors the fix for (same Id-reuse-across-a-reset risk applies here too).</summary>
+    public static void DeleteCachedThumbnail(int bookId)
+    {
+        try
+        {
+            string path = GetCachePath(bookId);
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+        }
+        catch (IOException)
+        {
+        }
+    }
 }

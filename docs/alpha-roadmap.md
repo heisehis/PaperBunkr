@@ -203,11 +203,27 @@ suite including this new project: 597 tests, all passing. Scope so far is limite
 toolbar's `AutomationId`s; extending to other screens is unblocked infrastructure work, not a new
 investigation — see §17 for the pattern.
 
-Still open, in rough sequence: pluggable sort/group strategies (paused, see above) → saved
-Workspaces (CE's `DisplayWorkspace` — named/multiple presets, depends on List Layouts, now
-available); then independently, drag-and-drop import, Recent/MRU + Quick Open overlay (CE's own
-version is recency-grouped, not fuzzy-search — a deliberate deviation to decide on, not CE parity),
-filesystem folder browsing mode, browse history (back/forward), live folder-watch scanning (CE's own
+**Pluggable sort/group strategies, previously noted "paused" above, did in fact ship** — as Issue
+List Sort/Group (design spec `2026-08-18-issue-list-pluggable-sort-group-design.md`), later merged
+into Library's own toolbar so there's only one Sort/Group control, not two. This doc's own "paused"
+claim had gone stale; corrected here rather than left to mislead the next reader.
+
+**Browse history (back/forward) shipped 2026-08-19** (design spec `2026-08-19-library-browse-
+history-design.md`) — CE's real `IBrowseHistory`/`CursorList<IComicBookListProvider>` model
+(`ComicListBrowser.cs`), ported onto Library's sidebar filter (Content Type/Collection) plus, as a
+deliberate deviation the user asked for, the search query too (debounced to a pause in typing, not
+per-keystroke). Reused `cYo.Common.Collections.CursorList<T>` as-is — already ported into this
+codebase (`Paperbunkr.Common`) with zero call sites before this, same "ported early, never wired
+up" pattern as several other pieces along the way. Two new toolbar buttons (`‹`/`›`, matching the
+existing precedent from `BookReaderScreen.axaml`'s own prev/next buttons), gated by
+`CanBrowsePrevious`/`CanBrowseNext`. 652 `Paperbunkr.App.Tests` + 274 `Paperbunkr.Data.Tests` +
+15 `Paperbunkr.App.UiTests` all passing (one new live on-screen case: buttons start disabled, a
+sidebar click enables Back, clicking Back actually returns to the prior selection).
+
+Still open, in rough sequence: saved Workspaces (CE's `DisplayWorkspace` — named/multiple presets,
+depends on List Layouts, now available); then independently, drag-and-drop import, Recent/MRU +
+Quick Open overlay (CE's own version is recency-grouped, not fuzzy-search — a deliberate deviation
+to decide on, not CE parity), filesystem folder browsing mode, live folder-watch scanning (CE's own
 is narrower than it sounds — rename-detection only, not full create/delete auto-import); file
 metadata write-back deliberately sequenced last (CE itself gates it behind explicit opt-in settings
 — real risk surface, mutates user files). A tracker/manga-UI research doc (Beta-scoped, see its own
@@ -230,6 +246,40 @@ Paperbunkr's current UI labels ("AniList"/"MyAnimeList") — needs its own brain
 Client (connect to another instance's shared library) + server (host, password-protected,
 per-list sharing) + background job/task monitor. Substantial subsystem, not named anywhere in the
 original onboarding.md — needs its own brainstorm → design spec before any implementation starts.
+
+### Metadata Model platform (user-supplied `PAPERBUNKR_METADATA_MODEL.md`, 2026-08-17/18)
+79-section implementation spec covering canonical metadata, relationships, events/reading lists,
+external providers, and recommendations — its own §68 "Migration Strategy" defines 7 phases.
+**Phases 1-6a shipped, Phase 7 explicitly deferred** (not dropped — the source doc itself gates it:
+"Implement only when needed by the reader and collected-edition use cases," and there's no concrete
+driving use case yet; revisit if one shows up). Design specs:
+`docs/superpowers/specs/2026-08-17-metadata-model-phase{1,2a,2b,2c,3,4a,4b,4c,5a}-*-design.md`,
+`docs/superpowers/specs/2026-08-18-metadata-model-phase{5b,6a}-*-design.md`.
+
+- **Phase 1 — Canonical metadata**: `OpenCount`/`ColorMode`/`Series.Status`/`Volume`-as-string/
+  `IssueBookmark` + resolvers, replacing CE's `BlackAndWhite`/`Volume`-as-int/`IsComplete`.
+- **Phase 2a/2b/2c — Metadata proposals, series reassignment, library field descriptors**:
+  `MetadataProposal`/`MetadataResolutionPolicy`, a resolver for moving issues between series, a
+  data-driven field catalog driving Library sort/group/filter.
+- **Phase 3 — Media Relations**: `MediaRelation`/`RelationEvidence`, first-class Series-to-Series
+  connections (CE has no equivalent) — powers the Detail screen's Related tab.
+- **Phase 4a/4b/4c — Continuity, Story Events, Reading List overhaul**: `Continuity` (M:M with
+  Series), `StoryEvent`/`EventMembership` (+ a new Events screen), `ReadingList`/`ReadingListItem`
+  gained `Type`/`CreatedAt`/`UpdatedAt`/`StoryEventId`/`Role`/`Notes` (CBL/CSV wire formats
+  untouched — separate CE-plugin-tied overhaul planned).
+- **Phase 5a — External Metadata schema**: `ExternalMediaId`/`ExternalMetadataSnapshot`/
+  `ExternalRating` + the `IMetadataProvider` adapter contract, schema-only, zero adapters/network/UI.
+- **Phase 5b — Real AniList adapter**: `AniListMetadataProvider`, live GraphQL calls, rate-limit-
+  aware (respects AniList's actual current 30 req/min degraded limit), licensing-verified against
+  AniList's real terms (`github.com/AniList/docs`). Backend-only — no UI caller yet. **Every other
+  provider (MAL/MangaDex/GCD/etc.) and all search/match UI are deliberately folded into the
+  tracker-service-sync item below, not built as a separate metadata-model phase** — that work should
+  reuse this adapter, not rebuild AniList integration from scratch.
+- **Phase 6a — Recommendation engine**: `RecommendationResolver`, a relationally-anchored (not
+  whole-library-similarity) 7-signal explainable scoring engine reusing the Phase 3/4a/4b resolvers.
+  Live-computed, not a persisted table. Backend-only — **no homepage screen exists yet to show "Because
+  you read X" modules on; the next time homepage/dashboard work comes up, reuse this resolver rather
+  than rebuilding recommendation logic.**
 
 ### Content-type classification & manga metadata scraping (onboarding.md §7/§9)
 Tracker-driven classification pipeline (MangaUpdates/AniList), MangaDex metadata scraping,

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Threading.Tasks;
@@ -49,6 +50,9 @@ public partial class ReaderScreenViewModel : ViewModelBase
     private int _loadGeneration;
     private bool _isRightToLeft;
 
+    /// <summary>Bookmarked page numbers for the currently-loaded issue - kept in sync with <see cref="Bookmarks"/>, queried on every page change instead of re-hitting the database.</summary>
+    private readonly HashSet<int> _bookmarkedPages = new();
+
     /// <summary>
     /// Periodic backstop against the documented Avalonia native-bitmap-memory growth risk (issue
     /// #18498, docs/onboarding.md §8, docs/superpowers/specs/2026-08-10-reader-polish-continuous-
@@ -97,9 +101,17 @@ public partial class ReaderScreenViewModel : ViewModelBase
         _goBack = goBack;
         CoverBrush = SeriesCardSample.Gradient("#442a1c", "#c9803f");
         Thumbnails = new ObservableCollection<ReaderThumbnailSample>();
+        Bookmarks = new ObservableCollection<IssueBookmarkSummary>();
     }
 
     public ObservableCollection<ReaderThumbnailSample> Thumbnails { get; }
+
+    /// <summary>Every <see cref="IssueBookmark"/> for the currently-loaded issue (docs/superpowers/specs/2026-08-18-metadata-model-ui-gaps-status-and-bookmarks-design.md), ordered by page.</summary>
+    public ObservableCollection<IssueBookmarkSummary> Bookmarks { get; }
+
+    /// <summary>Drives the toolbar pill's active state and the flyout's toggle-row text - true whenever <see cref="_currentPageIndex"/> has a bookmark.</summary>
+    [ObservableProperty]
+    private bool _isCurrentPageBookmarked;
 
     public IBrush CoverBrush { get; private set; }
     public string BreadcrumbSeries { get; private set; } = string.Empty;
@@ -183,6 +195,12 @@ public partial class ReaderScreenViewModel : ViewModelBase
 
     [ObservableProperty]
     private KeyGesture _toggleAutoScrollKey = new(Key.S);
+
+    [ObservableProperty]
+    private KeyGesture _previousBookmarkKey = new(Key.PageUp, KeyModifiers.Control);
+
+    [ObservableProperty]
+    private KeyGesture _nextBookmarkKey = new(Key.PageDown, KeyModifiers.Control);
 
     [ObservableProperty]
     private KeyGesture _toggleFullscreenKey = new(Key.F);
@@ -683,6 +701,8 @@ public partial class ReaderScreenViewModel : ViewModelBase
         ScrollToStartKey = _keyBindings.GetKey(context, KeyboardCommandRegistry.ReaderScrollToStart);
         ScrollToEndKey = _keyBindings.GetKey(context, KeyboardCommandRegistry.ReaderScrollToEnd);
         ToggleAutoScrollKey = _keyBindings.GetKey(context, KeyboardCommandRegistry.ReaderToggleAutoScroll);
+        PreviousBookmarkKey = _keyBindings.GetKey(context, KeyboardCommandRegistry.ReaderPreviousBookmark);
+        NextBookmarkKey = _keyBindings.GetKey(context, KeyboardCommandRegistry.ReaderNextBookmark);
         ToggleFullscreenKey = _keyBindings.GetKey(context, KeyboardCommandRegistry.ReaderToggleFullscreen);
         RotateClockwiseKey = _keyBindings.GetKey(context, KeyboardCommandRegistry.ReaderRotateClockwise);
         RotateCounterClockwiseKey = _keyBindings.GetKey(context, KeyboardCommandRegistry.ReaderRotateCounterClockwise);
@@ -771,11 +791,21 @@ public partial class ReaderScreenViewModel : ViewModelBase
         PageLabel = $"PAGE {_currentPageIndex + 1} / {pageCount}";
         ProgressFraction = pageCount > 1 ? (double)_currentPageIndex / (pageCount - 1) : 0;
 
+        Bookmarks.Clear();
+        _bookmarkedPages.Clear();
+        foreach (var bookmark in context.IssueBookmarks.Where(b => b.IssueId == issue.Id).OrderBy(b => b.PageNumber))
+        {
+            Bookmarks.Add(ToBookmarkSummary(bookmark));
+            _bookmarkedPages.Add(bookmark.PageNumber);
+        }
+
+        IsCurrentPageBookmarked = _bookmarkedPages.Contains(_currentPageIndex);
+
         Thumbnails.Clear();
         int thumbnailCount = Math.Min(pageCount, MaxThumbnails);
         for (int page = 0; page < thumbnailCount; page++)
         {
-            Thumbnails.Add(new ReaderThumbnailSample { CoverBrush = CoverBrush, IsSelected = page == _currentPageIndex });
+            Thumbnails.Add(new ReaderThumbnailSample { CoverBrush = CoverBrush, IsSelected = page == _currentPageIndex, IsBookmarked = _bookmarkedPages.Contains(page) });
         }
 
         OnPropertyChanged(nameof(CoverBrush));
@@ -1065,6 +1095,128 @@ public partial class ReaderScreenViewModel : ViewModelBase
             _overlayAutoHideTimer?.Stop();
             ShowFullscreenOverlays = false;
         }
+    }
+
+    // ===================== Bookmarks (docs/superpowers/specs/2026-08-18-metadata-model-ui-gaps-status-and-bookmarks-design.md) =====================
+
+    private static IssueBookmarkSummary ToBookmarkSummary(IssueBookmark bookmark) => new()
+    {
+        Id = bookmark.Id,
+        PageNumber = bookmark.PageNumber,
+        Label = bookmark.Label ?? $"Page {bookmark.PageNumber + 1}",
+    };
+
+    /// <summary>
+    /// One bookmark per page (toggle on/off) - matches both CE's own <c>ComicPageInfo.Bookmark</c>
+    /// (one string per page) and this codebase's own <c>BookBookmark</c> precedent (one per
+    /// position), not <see cref="IssueBookmark"/>'s technically-richer multi-per-page schema. Fresh
+    /// context per call, same "inline, no separate resolver" convention as
+    /// <c>BookReaderScreenViewModel.ToggleBookmark</c>.
+    /// </summary>
+    [RelayCommand]
+    private void ToggleBookmark()
+    {
+        if (_loadedIssueId is not int issueId)
+        {
+            return;
+        }
+
+        var existing = Bookmarks.FirstOrDefault(b => b.PageNumber == _currentPageIndex);
+        if (existing is not null)
+        {
+            DeleteBookmark(existing);
+            return;
+        }
+
+        using var context = PaperbunkrDb.CreateContext();
+        var bookmark = new IssueBookmark
+        {
+            IssueId = issueId,
+            PageNumber = _currentPageIndex,
+            Label = $"Page {_currentPageIndex + 1}",
+            CreatedTime = DateTime.UtcNow,
+        };
+        context.IssueBookmarks.Add(bookmark);
+        context.SaveChanges();
+
+        var summary = ToBookmarkSummary(bookmark);
+        int insertAt = 0;
+        while (insertAt < Bookmarks.Count && Bookmarks[insertAt].PageNumber < summary.PageNumber)
+        {
+            insertAt++;
+        }
+
+        Bookmarks.Insert(insertAt, summary);
+        _bookmarkedPages.Add(_currentPageIndex);
+        IsCurrentPageBookmarked = true;
+        SetThumbnailBookmarked(_currentPageIndex, true);
+    }
+
+    [RelayCommand]
+    private void DeleteBookmark(IssueBookmarkSummary? bookmark)
+    {
+        if (bookmark is null)
+        {
+            return;
+        }
+
+        using var context = PaperbunkrDb.CreateContext();
+        var row = context.IssueBookmarks.Find(bookmark.Id);
+        if (row is not null)
+        {
+            context.IssueBookmarks.Remove(row);
+            context.SaveChanges();
+        }
+
+        Bookmarks.Remove(bookmark);
+        _bookmarkedPages.Remove(bookmark.PageNumber);
+        if (bookmark.PageNumber == _currentPageIndex)
+        {
+            IsCurrentPageBookmarked = false;
+        }
+
+        SetThumbnailBookmarked(bookmark.PageNumber, false);
+    }
+
+    [RelayCommand]
+    private void GoToBookmark(IssueBookmarkSummary? bookmark)
+    {
+        if (bookmark is not null)
+        {
+            GoToPage(bookmark.PageNumber);
+        }
+    }
+
+    [RelayCommand]
+    private void PreviousBookmark()
+    {
+        int? target = Bookmarks.Select(b => (int?)b.PageNumber).Where(p => p < _currentPageIndex).Max();
+        if (target is int page)
+        {
+            GoToPage(page);
+        }
+    }
+
+    [RelayCommand]
+    private void NextBookmark()
+    {
+        int? target = Bookmarks.Select(b => (int?)b.PageNumber).Where(p => p > _currentPageIndex).Min();
+        if (target is int page)
+        {
+            GoToPage(page);
+        }
+    }
+
+    /// <summary>Updates one thumbnail's <see cref="ReaderThumbnailSample.IsBookmarked"/> in place, without the full rebuild <see cref="UpdateThumbnailSelection"/> does for a page change - <see cref="ToggleBookmark"/>/<see cref="DeleteBookmark"/> don't change which page is current.</summary>
+    private void SetThumbnailBookmarked(int page, bool isBookmarked)
+    {
+        if (page < 0 || page >= Thumbnails.Count)
+        {
+            return;
+        }
+
+        var existing = Thumbnails[page];
+        Thumbnails[page] = new ReaderThumbnailSample { CoverBrush = CoverBrush, CoverImage = existing.CoverImage, IsSelected = existing.IsSelected, IsBookmarked = isBookmarked };
     }
 
     /// <summary>
@@ -1392,9 +1544,10 @@ public partial class ReaderScreenViewModel : ViewModelBase
         for (int page = 0; page < thumbnailCount; page++)
         {
             var existing = Thumbnails[page];
-            Thumbnails[page] = new ReaderThumbnailSample { CoverBrush = CoverBrush, CoverImage = existing.CoverImage, IsSelected = page == _currentPageIndex };
+            Thumbnails[page] = new ReaderThumbnailSample { CoverBrush = CoverBrush, CoverImage = existing.CoverImage, IsSelected = page == _currentPageIndex, IsBookmarked = existing.IsBookmarked };
         }
 
+        IsCurrentPageBookmarked = _bookmarkedPages.Contains(_currentPageIndex);
         CurrentPageIndexChanged?.Invoke(_currentPageIndex);
     }
 

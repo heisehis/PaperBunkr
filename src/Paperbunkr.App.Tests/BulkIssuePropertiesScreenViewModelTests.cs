@@ -305,6 +305,44 @@ public class BulkIssuePropertiesScreenViewModelTests : IDisposable
         Assert.Equal(ReadingMode.LeftToRight, GetSeries(_seriesOneId).ReadingMode);
     }
 
+    // ===================== Status (docs/superpowers/specs/2026-08-18-metadata-model-ui-gaps-status-and-bookmarks-design.md) =====================
+
+    [Fact]
+    public void Status_Unstaged_NeverTouchesAnySeries()
+    {
+        var vm = CreateViewModel();
+        vm.Load(new[] { _issueAId, _issueBId });
+
+        vm.SaveCommand.Execute(null);
+
+        Assert.Equal(SeriesStatus.Unknown, GetSeries(_seriesOneId).Status);
+    }
+
+    [Fact]
+    public void Status_Staged_SingleSeriesSelection_WritesThroughToTheOwningSeries()
+    {
+        var vm = CreateViewModel();
+        vm.Load(new[] { _issueAId, _issueBId });
+        vm.MainFields.Single(f => f.Label == "Status").Value = nameof(SeriesStatus.Completed);
+
+        vm.SaveCommand.Execute(null);
+
+        Assert.Equal(SeriesStatus.Completed, GetSeries(_seriesOneId).Status);
+    }
+
+    [Fact]
+    public void Status_Staged_MultiSeriesSelection_WritesThroughToEveryDistinctSeries()
+    {
+        var vm = CreateViewModel();
+        vm.Load(new[] { _issueAId, _issueCId }); // spans seriesOne and seriesTwo
+        vm.MainFields.Single(f => f.Label == "Status").Value = nameof(SeriesStatus.Ongoing);
+
+        vm.SaveCommand.Execute(null);
+
+        Assert.Equal(SeriesStatus.Ongoing, GetSeries(_seriesOneId).Status);
+        Assert.Equal(SeriesStatus.Ongoing, GetSeries(_seriesTwoId).Status);
+    }
+
     [Fact]
     public void SeriesAffectedCount_ReflectsDistinctSeriesInSelection()
     {

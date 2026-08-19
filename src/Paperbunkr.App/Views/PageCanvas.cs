@@ -80,6 +80,12 @@ public class PageCanvas : Control
     public static readonly StyledProperty<ICommand?> RotateCounterClockwiseCommandProperty =
         AvaloniaProperty.Register<PageCanvas, ICommand?>(nameof(RotateCounterClockwiseCommand));
 
+    public static readonly StyledProperty<ICommand?> PreviousBookmarkCommandProperty =
+        AvaloniaProperty.Register<PageCanvas, ICommand?>(nameof(PreviousBookmarkCommand));
+
+    public static readonly StyledProperty<ICommand?> NextBookmarkCommandProperty =
+        AvaloniaProperty.Register<PageCanvas, ICommand?>(nameof(NextBookmarkCommand));
+
     public static readonly StyledProperty<ICommand?> ZoomInCommandProperty =
         AvaloniaProperty.Register<PageCanvas, ICommand?>(nameof(ZoomInCommand));
 
@@ -160,6 +166,12 @@ public class PageCanvas : Control
 
     public static readonly StyledProperty<KeyGesture> RotateCounterClockwiseGestureProperty =
         AvaloniaProperty.Register<PageCanvas, KeyGesture>(nameof(RotateCounterClockwiseGesture), defaultValue: new KeyGesture(Key.R, KeyModifiers.Shift));
+
+    public static readonly StyledProperty<KeyGesture> PreviousBookmarkGestureProperty =
+        AvaloniaProperty.Register<PageCanvas, KeyGesture>(nameof(PreviousBookmarkGesture), defaultValue: new KeyGesture(Key.PageUp, KeyModifiers.Control));
+
+    public static readonly StyledProperty<KeyGesture> NextBookmarkGestureProperty =
+        AvaloniaProperty.Register<PageCanvas, KeyGesture>(nameof(NextBookmarkGesture), defaultValue: new KeyGesture(Key.PageDown, KeyModifiers.Control));
 
     public static readonly StyledProperty<KeyGesture> ZoomInGestureProperty =
         AvaloniaProperty.Register<PageCanvas, KeyGesture>(nameof(ZoomInGesture), defaultValue: new KeyGesture(Key.Z));
@@ -468,6 +480,18 @@ public class PageCanvas : Control
         set => SetValue(RotateClockwiseCommandProperty, value);
     }
 
+    public ICommand? PreviousBookmarkCommand
+    {
+        get => GetValue(PreviousBookmarkCommandProperty);
+        set => SetValue(PreviousBookmarkCommandProperty, value);
+    }
+
+    public ICommand? NextBookmarkCommand
+    {
+        get => GetValue(NextBookmarkCommandProperty);
+        set => SetValue(NextBookmarkCommandProperty, value);
+    }
+
     public ICommand? RotateCounterClockwiseCommand
     {
         get => GetValue(RotateCounterClockwiseCommandProperty);
@@ -606,6 +630,18 @@ public class PageCanvas : Control
     {
         get => GetValue(RotateCounterClockwiseGestureProperty);
         set => SetValue(RotateCounterClockwiseGestureProperty, value);
+    }
+
+    public KeyGesture PreviousBookmarkGesture
+    {
+        get => GetValue(PreviousBookmarkGestureProperty);
+        set => SetValue(PreviousBookmarkGestureProperty, value);
+    }
+
+    public KeyGesture NextBookmarkGesture
+    {
+        get => GetValue(NextBookmarkGestureProperty);
+        set => SetValue(NextBookmarkGestureProperty, value);
     }
 
     public KeyGesture ZoomInGesture
@@ -1441,6 +1477,26 @@ public class PageCanvas : Control
         if (RotateCounterClockwiseGesture.Matches(e))
         {
             if (TryExecute(RotateCounterClockwiseCommand))
+            {
+                e.Handled = true;
+            }
+
+            return;
+        }
+
+        if (PreviousBookmarkGesture.Matches(e))
+        {
+            if (TryExecute(PreviousBookmarkCommand))
+            {
+                e.Handled = true;
+            }
+
+            return;
+        }
+
+        if (NextBookmarkGesture.Matches(e))
+        {
+            if (TryExecute(NextBookmarkCommand))
             {
                 e.Handled = true;
             }

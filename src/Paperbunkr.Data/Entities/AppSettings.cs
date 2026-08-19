@@ -158,6 +158,13 @@ public class AppSettings
     /// defaults to whatever <c>LibraryScreenViewModel</c>'s own in-code default already was before
     /// persistence existed, so an existing settings row reproduces prior startup behavior exactly.
     /// </summary>
+    /// <remarks>
+    /// Real again as of the same-session follow-up to Slice 3 above: the user asked for the
+    /// series-card view back as a real, switchable option (<see cref="LibraryContentGranularity"/>),
+    /// not permanently replaced by per-issue tiles. This is the series-card Sort field, used when
+    /// <see cref="LibraryGranularity"/> is <see cref="LibraryContentGranularity.Series"/>; see
+    /// <see cref="LibraryIssueListSortField"/> for the per-issue equivalent, used otherwise.
+    /// </remarks>
     public LibrarySortField LibrarySortField { get; set; } = LibrarySortField.DateAdded;
 
     /// <summary>See <see cref="LibrarySortField"/>.</summary>
@@ -165,6 +172,25 @@ public class AppSettings
 
     /// <summary>See <see cref="LibrarySortField"/>.</summary>
     public LibraryGroupField LibraryGroupField { get; set; } = LibraryGroupField.None;
+
+    /// <summary>
+    /// Per-issue Sort field, used when <see cref="LibraryGranularity"/> is
+    /// <see cref="LibraryContentGranularity.Issue"/> - see <see cref="LibrarySortField"/> for the
+    /// series-card equivalent, used otherwise.
+    /// </summary>
+    public IssueListSortField LibraryIssueListSortField { get; set; } = IssueListSortField.Added;
+
+    /// <summary>See <see cref="LibraryIssueListSortField"/>.</summary>
+    public SortDirection LibraryIssueListSortDirection { get; set; } = SortDirection.Descending;
+
+    /// <summary>See <see cref="LibraryIssueListSortField"/>.</summary>
+    public IssueListGroupField LibraryIssueListGroupField { get; set; } = IssueListGroupField.None;
+
+    /// <summary>
+    /// Card granularity - series-aggregate cards vs per-issue tiles, independent of
+    /// <see cref="LibraryViewMode"/>'s layout *shape*. See <see cref="LibraryContentGranularity"/>.
+    /// </summary>
+    public LibraryContentGranularity LibraryGranularity { get; set; } = LibraryContentGranularity.Issue;
 
     /// <summary>See <see cref="LibrarySortField"/>.</summary>
     public LibraryViewMode LibraryViewMode { get; set; } = LibraryViewMode.ComfortableGrid;
@@ -189,6 +215,9 @@ public class AppSettings
 
     /// <summary>See <see cref="LibrarySortField"/>.</summary>
     public string? LibrarySearchQuery { get; set; }
+
+    /// <summary>Field scope for <see cref="LibrarySearchQuery"/> - see <see cref="SearchMode"/>.</summary>
+    public SearchMode LibrarySearchMode { get; set; } = SearchMode.All;
 
     /// <summary>
     /// See <see cref="LibrarySortField"/>. Mutually exclusive with <see cref="LibraryActiveCategoryId"/>

@@ -226,6 +226,9 @@
                                 <TextBlock Classes="fieldLabel" Text="COLOR MODE" />
                                 <ComboBox ItemsSource="{Binding ColorModeOptions}" SelectedItem="{Binding ColorModeText}" />
                             </StackPanel>
+                            <StackPanel Classes="field" VerticalAlignment="Bottom">
+                                <CheckBox Content="Final issue" IsChecked="{Binding IsFinalIssue}" />
+                            </StackPanel>
                         </WrapPanel>
                     </StackPanel>
                 </Border>

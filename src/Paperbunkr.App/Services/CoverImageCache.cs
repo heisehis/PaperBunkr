@@ -67,4 +67,14 @@ public static class CoverImageCache
             return null;
         }
     }
+
+    /// <summary>Drops issueId's in-memory entry (if any) and deletes its on-disk file (docs bug
+    /// note: <see cref="CoverThumbnailPaths.DeleteCachedThumbnail"/>) - call this whenever an
+    /// <c>Issue</c> row is actually deleted, so nothing keeps serving a stale cover for a numeric
+    /// id a future migration might reuse.</summary>
+    public static void Invalidate(int issueId)
+    {
+        _cache.Remove(issueId);
+        CoverThumbnailPaths.DeleteCachedThumbnail(issueId);
+    }
 }

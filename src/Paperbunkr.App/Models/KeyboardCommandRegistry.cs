@@ -55,6 +55,8 @@ public static class KeyboardCommandRegistry
     public const string ReaderScrollToStart = "Reader.ScrollToStart";
     public const string ReaderScrollToEnd = "Reader.ScrollToEnd";
     public const string ReaderToggleAutoScroll = "Reader.ToggleAutoScroll";
+    public const string ReaderPreviousBookmark = "Reader.PreviousBookmark";
+    public const string ReaderNextBookmark = "Reader.NextBookmark";
     public const string ReaderToggleFullscreen = "Reader.ToggleFullscreen";
     public const string ReaderRotateClockwise = "Reader.RotateClockwise";
     public const string ReaderRotateCounterClockwise = "Reader.RotateCounterClockwise";
@@ -87,6 +89,11 @@ public static class KeyboardCommandRegistry
         new(ReaderScrollToStart, NavigationGroup, "Scroll to start (continuous)", new KeyGesture(Key.Home), ConflictContext.Continuous),
         new(ReaderScrollToEnd, NavigationGroup, "Scroll to end (continuous)", new KeyGesture(Key.End), ConflictContext.Continuous),
         new(ReaderToggleAutoScroll, NavigationGroup, "Toggle auto-scroll (continuous)", new KeyGesture(Key.S), ConflictContext.Continuous),
+        // Mirrors CE's actual defaults exactly (_reference/ComicRackCE/ComicRack/MainForm.cs
+        // InitializeKeyboard: MoveToPrevBookmark/MoveToNextBookmark) - CE has no default shortcut
+        // for *setting* a bookmark itself (menu/toolbar only), not reproduced here either.
+        new(ReaderPreviousBookmark, NavigationGroup, "Previous bookmark", new KeyGesture(Key.PageUp, KeyModifiers.Control), ConflictContext.Always),
+        new(ReaderNextBookmark, NavigationGroup, "Next bookmark", new KeyGesture(Key.PageDown, KeyModifiers.Control), ConflictContext.Always),
         new(ReaderToggleFullscreen, DisplayGroup, "Toggle fullscreen", new KeyGesture(Key.F), ConflictContext.Always),
         new(ReaderRotateClockwise, DisplayGroup, "Rotate clockwise", new KeyGesture(Key.R), ConflictContext.Always),
         new(ReaderRotateCounterClockwise, DisplayGroup, "Rotate counter-clockwise", new KeyGesture(Key.R, KeyModifiers.Shift), ConflictContext.Always),

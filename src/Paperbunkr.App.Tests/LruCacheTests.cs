@@ -93,4 +93,60 @@ public class LruCacheTests
         Assert.True(cache.TryGetValue(1, out var value) && value == "a-updated");
         Assert.True(cache.TryGetValue(2, out _));
     }
+
+    [Fact]
+    public void Remove_ExistingKey_DropsItAndReturnsTrue()
+    {
+        var cache = new LruCache<int, string>(capacity: 3);
+        cache.Add(1, "a");
+        cache.Add(2, "b");
+
+        bool removed = cache.Remove(1);
+
+        Assert.True(removed);
+        Assert.False(cache.TryGetValue(1, out _));
+        Assert.True(cache.TryGetValue(2, out _));
+        Assert.Equal(1, cache.Count);
+    }
+
+    [Fact]
+    public void Remove_MissingKey_ReturnsFalse_AndDoesNotThrow()
+    {
+        var cache = new LruCache<int, string>(capacity: 3);
+        cache.Add(1, "a");
+
+        bool removed = cache.Remove(99);
+
+        Assert.False(removed);
+        Assert.Equal(1, cache.Count);
+    }
+
+    [Fact]
+    public void Remove_DoesNotDisposeTheValue()
+    {
+        // Same rationale as eviction (Add_ExceedingCapacity_DoesNotDisposeEvictedValue) - a caller
+        // may still hold this exact instance bound into a live view.
+        var cache = new LruCache<int, TrackedDisposable>(capacity: 3);
+        var value = new TrackedDisposable();
+        cache.Add(1, value);
+
+        cache.Remove(1);
+
+        Assert.False(value.IsDisposed);
+    }
+
+    [Fact]
+    public void Add_AfterRemove_AllowsANewEntryAtCapacity()
+    {
+        var cache = new LruCache<int, string>(capacity: 2);
+        cache.Add(1, "a");
+        cache.Add(2, "b");
+        cache.Remove(1);
+
+        cache.Add(3, "c");
+
+        Assert.Equal(2, cache.Count);
+        Assert.True(cache.TryGetValue(2, out _));
+        Assert.True(cache.TryGetValue(3, out _));
+    }
 }

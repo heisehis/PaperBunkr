@@ -30,9 +30,16 @@ public partial class LibraryScreen : UserControl
     /// </summary>
     private void OnCardKeyDown(object? sender, KeyEventArgs e)
     {
-        if (sender is Button { DataContext: SeriesCardSample card } button &&
-            button.FindAncestorOfType<ItemsControl>() is { } itemsControl &&
-            GridKeyboardNavigation.TryHandleArrowKey(itemsControl, card, e.Key))
+        if (sender is not Button { DataContext: { } item } button ||
+            button.FindAncestorOfType<ItemsControl>() is not { } itemsControl)
+        {
+            return;
+        }
+
+        // Two independent card types can occupy this same handler depending on Granularity - see
+        // this file's own top doc comment and docs/superpowers/specs/2026-08-18-library-book-
+        // centric-redesign-design.md Slice 3's follow-up.
+        if ((item is IssueListRow or SeriesCardSample) && GridKeyboardNavigation.TryHandleArrowKey(itemsControl, item, e.Key))
         {
             e.Handled = true;
         }
@@ -53,7 +60,12 @@ public partial class LibraryScreen : UserControl
             return;
         }
 
-        int index = FindFirstIndexForLetter(vm.Covers, letter);
+        // ShowAlphabetIndex only lights up for the granularity whose own sort is Name/Series and
+        // ungrouped (see LibraryScreenViewModel.ShowAlphabetIndex) - the other granularity's
+        // collection is irrelevant to this click regardless of which one is "active" here.
+        int index = vm.IsSeriesGranularity
+            ? FindFirstIndexForLetter(vm.Covers, c => c.Name, letter)
+            : FindFirstIndexForLetter(vm.IssueList.Rows, r => r.SeriesName, letter);
         if (index < 0)
         {
             return;
@@ -80,11 +92,11 @@ public partial class LibraryScreen : UserControl
         scrollViewer.Offset = new Vector(scrollViewer.Offset.X, offsetY);
     }
 
-    private static int FindFirstIndexForLetter(IReadOnlyList<SeriesCardSample> covers, string letter)
+    private static int FindFirstIndexForLetter<T>(IReadOnlyList<T> items, Func<T, string> selectName, string letter)
     {
-        for (int i = 0; i < covers.Count; i++)
+        for (int i = 0; i < items.Count; i++)
         {
-            string name = covers[i].Name.TrimStart();
+            string name = selectName(items[i]).TrimStart();
             char first = name.Length > 0 ? char.ToUpperInvariant(name[0]) : '\0';
             bool matches = letter == "#" ? !char.IsAsciiLetter(first) : first == letter[0];
             if (matches)

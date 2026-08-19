@@ -25,6 +25,12 @@ public sealed class AppFixture : IDisposable
 
     public Window Window { get; private set; } = null!;
 
+    /// <summary>The isolated SQLite file this fixture's exe was launched against - lets a test seed
+    /// data directly (via a separate <c>PaperbunkrDbContext</c> pointed at the same path) rather than
+    /// only through UI-driven flows, for scenarios UI alone can't produce (e.g. a real in-progress
+    /// reading position, docs/superpowers/specs/2026-08-18-home-screen-design.md).</summary>
+    public string DbPath => _dbPath;
+
     public AppFixture()
     {
         _dbPath = Path.Combine(Path.GetTempPath(), $"paperbunkr_uitest_{Guid.NewGuid():N}.db");

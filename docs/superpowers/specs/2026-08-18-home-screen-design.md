@@ -1,7 +1,8 @@
 # Home Screen: Recommendation & Discovery Modules
 
 **Date:** 2026-08-18
-**Status:** Approved, pending implementation
+**Status:** Shipped, then polished same-day against real Omnibus screenshots/icons the user
+provided after the initial implementation landed - see [Polish pass](#polish-pass-same-day) below.
 **Related:** [[phase6a-recommendation-engine]] (backend this reuses as-is), inspired by three
 features from a companion web project's ("Omnibus") changelogs — genre-frequency spotlight,
 reading-list spotlight synopsis/tags derivation, and its general home-page shelf layout —
@@ -160,3 +161,52 @@ empty or fully read, or no lists exist at all).
   launches to Home by default, the rail nav entry exists and is clickable, all 5 module
   headers/cards render, and a card click navigates correctly for one row-module (Continue Reading)
   and one single-card module (Spotlight).
+
+## Polish pass (same day)
+
+After the above shipped, the user supplied real Omnibus screenshots and two icon packs (Feather,
+Material Symbols) and asked for the Home screen to be visually polished against that reference.
+Feather was used (287 clean single-purpose SVGs matching this codebase's existing simple-glyph
+icon style) - Material Symbols (1,658 files, filled/different style) wasn't. Rasterized `home.svg`
+and `refresh-cw.svg` to the existing `graya` PNG + `OpacityMask` convention via ImageMagick;
+`search.svg` was skipped in favor of the coolicons pack's existing `Search_Magnifying_Glass.png`
+(already used by Events/Reading/Smart screens) for visual consistency rather than a second search
+icon in a different style.
+
+Changes, decided via a short round of clarifying questions rather than ported feature-for-feature:
+
+- **Hero header added**: title + subtitle + a search box that jumps straight to Library with the
+  query pre-applied (`HomeScreenViewModel.SearchCommand` → a new `MainViewModel.GoLibraryWithSearch`
+  callback) - deliberately *not* a second, more limited search living on Home, since Library
+  already has full CE-parity 7-mode search. A Refresh button re-runs `LoadFromDatabase()` - mostly
+  reassurance, since every module already reloads fresh on every visit regardless.
+- **Continue Reading stays a horizontal row** (not Omnibus's single big featured card) - explicitly
+  chosen to keep all in-progress series visible at once, just restyled (issue-count pill badges,
+  added to Recently Added/Because You Read cards too via a new `SeriesCardSample.IssueCountLabel`
+  singular/plural-aware property).
+- **"View Library →" link** added to Recently Added's header (`HomeScreenViewModel.GoToLibraryCommand`,
+  reusing the same search callback with an empty query). Omnibus's equivalent "View History" link
+  was **omitted** - there's no History screen to point it at yet (still explicitly out of scope,
+  see above); adding a dead-end link wasn't worth it.
+- **Spotlight became a small auto-advancing carousel**, not a single static pick - the user
+  specifically recalled and asked for this after being shown the Omnibus reference.
+  `HomeFeedResolver.GetSpotlightPick` (singular) → `GetSpotlightPicks` (plural, `count: 6` default,
+  weighted-without-replacement sampling, same weighting logic as before but repeated until `count`
+  distinct picks or the candidate pool is exhausted, falling back to uniform-without-replacement
+  once every remaining candidate has zero weight). `HomeScreenViewModel` gained `SpotlightItems`
+  (the full pick set), `SpotlightIndex`/`CurrentSpotlight` (which one's showing), a
+  `DispatcherTimer` advancing the index every 7 seconds (matching Omnibus's own cadence - no
+  IDisposable needed, same as `ReaderScreenViewModel`'s own timers, since Home is a singleton
+  living for the app's lifetime), and dot pagination (`SetSpotlightItemCommand`, matched to its
+  item via `ObjectConverters.Equal` rather than an XAML-tracked index, which Avalonia has no clean
+  built-in story for).
+- **Real bug found via an actual on-screen screenshot, not just review**: `SpotlightIssueSample`'s
+  title fallback (`issue.EffectiveTitle() ?? $"#{issue.EffectiveNumber()}"`) rendered a bare `"#"`
+  when an issue had neither a title nor a number - fixed to `"#?"`, matching the fallback
+  `DetailTabsViewModel` already uses for the identical gap. The same bug pattern exists in
+  `IssueListScreenViewModel.cs` (pre-existing, unrelated to this screen) - flagged as a separate
+  follow-up task rather than fixed here.
+- Verified for real: a throwaway FlaUI screenshot test (seeded representative data, captured the
+  live compiled window, deleted after use) caught the title bug above and confirmed the hero
+  header, count-pill pluralization, dot pagination, and empty states all render correctly -
+  ordinary reasoning about the XAML wouldn't have caught the bare-`"#"` bug.

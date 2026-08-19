@@ -27,13 +27,26 @@ Windows only for now.
 
 ## What's in
 
-- **Library**: series/issue browsing, Smart Lists, Reading Lists, migration from an existing
-  ComicRack CE library.
+- **Home**: continue reading, "because you read" recommendations, and spotlight modules, driven by
+  a relationship-aware recommendation engine (not just whole-library similarity).
+- **Library**: series/issue browsing, pluggable sort/group, browse history (back/forward), Smart
+  Lists, Reading Lists, saved list layouts, migration from an existing ComicRack CE library.
+- **Metadata**: series relations, continuity groupings, story events, and a live AniList adapter
+  for external metadata lookups.
 - **Formats**: real page rendering for CBZ/CBR/PDF comics, plus a separate Books section for
   EPUB/PDF novels.
-- **Reader**: fit modes, zoom, rotation, continuous/webtoon scroll, fullscreen with auto-hiding
-  overlays, live brightness/contrast/saturation/gamma adjustment, background/margin customization.
-- **Preferences**: skins, remappable keyboard shortcuts, database backups, file associations.
+- **Reader**: fit modes, zoom, rotation, page transitions, double-page spread, continuous/webtoon
+  scroll, auto-scroll, fullscreen with auto-hiding overlays, live brightness/contrast/saturation/
+  gamma adjustment, background/margin customization, remappable keyboard shortcuts.
+- **Preferences**: skins, database backups, file associations.
+
+## Known limitations (alpha)
+
+- Windows only, and only tested on x64 so far.
+- No cloud sync — this is by design, not a gap, but worth knowing up front.
+- Some reader features (double-page spread, remapped shortcuts, auto-scroll) are automated-test
+  verified but still pending broader manual on-screen testing across setups.
+- Metadata providers beyond AniList (MAL, MangaDex, GCD, etc.) aren't wired up yet.
 
 ## Building from source
 

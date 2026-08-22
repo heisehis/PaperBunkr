@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PaperBunkr - Lightweight Desktop Comic &amp; Manga Reader</title>
+  <meta name="description" content="PaperBunkr is a free, local-first desktop comic and manga reader for Windows. Read CBZ, CBR, PDF, and EPUB with library management, Smart Lists, and no cloud dependency." />
+  <link rel="canonical" href="https://heisehis.github.io/PaperBunkr/" />
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="PaperBunkr - Lightweight Desktop Comic & Manga Reader" />
+  <meta property="og:description" content="A free, local-first comic and manga library and reader for Windows. CBZ, CBR, PDF, EPUB — no cloud, no account." />
+  <meta property="og:url" content="https://heisehis.github.io/PaperBunkr/" />
+  <meta property="og:image" content="https://heisehis.github.io/PaperBunkr/assets/paperbunkr-logo.png" />
+
+  <!-- Twitter -->
+  <meta name="twitter:card" content="summary" />
+  <meta name="twitter:title" content="PaperBunkr - Lightweight Desktop Comic & Manga Reader" />
+  <meta name="twitter:description" content="A free, local-first comic and manga library and reader for Windows. CBZ, CBR, PDF, EPUB — no cloud, no account." />
+  <meta name="twitter:image" content="https://heisehis.github.io/PaperBunkr/assets/paperbunkr-logo.png" />
+
+  <link rel="icon" type="image/png" href="assets/paperbunkr-logo.png" />
+
+  <style>
+    :root {
+      --bg: #0f1115;
+      --panel: #171a21;
+      --text: #e8e8ea;
+      --muted: #9a9ea8;
+      --accent: #7aa2ff;
+      --border: #262a33;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      line-height: 1.6;
+    }
+    .wrap {
+      max-width: 780px;
+      margin: 0 auto;
+      padding: 64px 24px 96px;
+    }
+    header {
+      text-align: center;
+      margin-bottom: 48px;
+    }
+    header img {
+      width: 96px;
+      height: 96px;
+      border-radius: 20px;
+      margin-bottom: 16px;
+    }
+    h1 {
+      font-size: 2rem;
+      margin: 0 0 8px;
+    }
+    .tagline {
+      color: var(--muted);
+      font-size: 1.05rem;
+      max-width: 560px;
+      margin: 0 auto;
+    }
+    .badge {
+      display: inline-block;
+      margin-top: 16px;
+      padding: 4px 12px;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      font-size: 0.8rem;
+      color: var(--muted);
+    }
+    .cta {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+      margin-top: 24px;
+      flex-wrap: wrap;
+    }
+    .cta a {
+      display: inline-block;
+      padding: 10px 20px;
+      border-radius: 8px;
+      text-decoration: none;
+      font-weight: 600;
+      font-size: 0.95rem;
+    }
+    .cta .primary {
+      background: var(--accent);
+      color: #0f1115;
+    }
+    .cta .secondary {
+      border: 1px solid var(--border);
+      color: var(--text);
+    }
+    section {
+      margin-top: 48px;
+    }
+    h2 {
+      font-size: 1.2rem;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 8px;
+    }
+    ul {
+      padding-left: 20px;
+      color: var(--text);
+    }
+    li { margin-bottom: 8px; }
+    li strong { color: var(--text); }
+    code {
+      background: var(--panel);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 0.9em;
+    }
+    footer {
+      margin-top: 64px;
+      text-align: center;
+      color: var(--muted);
+      font-size: 0.85rem;
+    }
+    footer a { color: var(--muted); }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <img src="assets/paperbunkr-logo.png" alt="PaperBunkr logo" />
+      <h1>PaperBunkr</h1>
+      <p class="tagline">
+        A free, local-first desktop comic &amp; manga library and reader for Windows.
+        CBZ, CBR, PDF, EPUB — no cloud, no account, your library stays on your machine.
+      </p>
+      <span class="badge">Early alpha — expect rough edges</span>
+      <div class="cta">
+        <a class="primary" href="https://github.com/heisehis/PaperBunkr/releases/latest">Download latest release</a>
+        <a class="secondary" href="https://github.com/heisehis/PaperBunkr">View on GitHub</a>
+      </div>
+    </header>
+
+    <section>
+      <h2>What it does</h2>
+      <ul>
+        <li><strong>Comic &amp; manga reading</strong> — real page rendering for <code>.cbz</code> / <code>.cbr</code> / <code>.pdf</code>, fit modes, zoom, rotation, double-page spread, continuous/webtoon scroll, and RTL manga reading direction.</li>
+        <li><strong>Books</strong> — a separate section for EPUB/PDF novels.</li>
+        <li><strong>Library management</strong> — series/issue browsing, sort/group, browse history, Smart Lists, Reading Lists, and migration from an existing ComicRack CE library.</li>
+        <li><strong>Home dashboard</strong> — continue reading and recommendation modules driven by a relationship-aware recommendation engine.</li>
+        <li><strong>Rich metadata</strong> — series relations, continuity groupings, story events, and a live AniList adapter.</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>Get started</h2>
+      <p>
+        Grab the installer from the
+        <a href="https://github.com/heisehis/PaperBunkr/releases/latest">latest release</a>.
+        It's fully self-contained — bundles its own .NET 8 runtime, nothing else to install.
+        Windows only for now. Full docs and build-from-source instructions are in the
+        <a href="https://github.com/heisehis/PaperBunkr#readme">project README</a>.
+      </p>
+    </section>
+
+    <footer>
+      <p>
+        Built on .NET 8 and Avalonia UI. No license has been chosen yet — see the
+        <a href="https://github.com/heisehis/PaperBunkr">repository</a> for current terms.
+        Feedback and bug reports welcome via
+        <a href="https://github.com/heisehis/PaperBunkr/issues">GitHub Issues</a>.
+      </p>
+    </footer>
+  </div>
+</body>
+</html>

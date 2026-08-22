@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Paperbunkr.App.Services;
 using Paperbunkr.Data;
 using Paperbunkr.Data.Entities;
+using Paperbunkr.Data.Metadata;
 
 namespace Paperbunkr.App.Tests;
 
@@ -66,10 +67,44 @@ public class LibraryFolderScannerTests : IDisposable
         using var context = new PaperbunkrDbContext(_dbOptions);
         var series = Assert.Single(context.Series);
         Assert.Equal("Kilo Station", series.Name);
-        var issue = Assert.Single(context.Issues);
-        Assert.Equal("12", issue.Number);
-        Assert.Equal(2021, issue.Year);
+        var issue = Assert.Single(context.Issues.Include(i => i.MetadataProposals));
+        // No embedded ComicInfo.xml - Number/Year land as MetadataProposal rows (docs/superpowers/
+        // specs/2026-08-17-metadata-model-phase2a-metadata-proposals-design.md), not direct field
+        // writes. Default policy is Automatic, so they're already Accepted and Effective* surfaces
+        // them exactly like the pre-existing direct-write behavior did.
+        Assert.Null(issue.Number);
+        Assert.Null(issue.Year);
+        Assert.Equal("12", issue.EffectiveNumber());
+        Assert.Equal(2021, issue.EffectiveYear());
         Assert.Equal(series.Id, issue.SeriesId);
+
+        var numberProposal = Assert.Single(issue.MetadataProposals, p => p.Field == MetadataProposalField.Number);
+        Assert.Equal("12", numberProposal.ProposedValue);
+        Assert.Equal(MetadataProposalSource.FilenameParser, numberProposal.Source);
+        Assert.Equal(MetadataProposalStatus.Accepted, numberProposal.Status);
+        Assert.NotNull(numberProposal.ResolvedAt);
+    }
+
+    [Fact]
+    public async Task ScanAllAsync_PromptPolicy_CreatesPendingProposal_EffectiveValueStaysNullUntilAccepted()
+    {
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            context.GetOrCreateAppSettings().MetadataResolutionPolicy = MetadataResolutionPolicy.Prompt;
+            context.SaveChanges();
+        }
+
+        CbzFixture.Create(Path.Combine(_scanRoot, "Kilo Station 012 (2021).cbz"), pageCount: 1);
+        AddWatchedFolder(_scanRoot);
+
+        await CreateScanner().ScanAllAsync(new Progress<(int, int)>());
+
+        using var context2 = new PaperbunkrDbContext(_dbOptions);
+        var issue = Assert.Single(context2.Issues.Include(i => i.MetadataProposals));
+        Assert.Null(issue.EffectiveNumber()); // Pending proposal contributes nothing
+        var numberProposal = Assert.Single(issue.MetadataProposals, p => p.Field == MetadataProposalField.Number);
+        Assert.Equal(MetadataProposalStatus.Pending, numberProposal.Status);
+        Assert.Null(numberProposal.ResolvedAt);
     }
 
     [Fact]
@@ -158,7 +193,12 @@ public class LibraryFolderScannerTests : IDisposable
             Writer = "Real Writer",
             Publisher = "Real Publisher",
         };
-        CbzFixture.Create(Path.Combine(_scanRoot, "Wrong Series 099 (1999).cbz"), pageCount: 1, embedded);
+        // Series name deliberately matches the embedded value here (docs/superpowers/specs/
+        // 2026-08-17-metadata-model-phase2b-series-reassignment-design.md) - a real, deliberately
+        // mismatched filename Series is covered by this file's dedicated Series-reassignment tests
+        // instead; mixing that trigger into this test (whose actual focus is Number/Volume/Year/
+        // Writer/Publisher) would make the two features' behaviors hard to tell apart at a glance.
+        CbzFixture.Create(Path.Combine(_scanRoot, "Real Series 099 (1999).cbz"), pageCount: 1, embedded);
         AddWatchedFolder(_scanRoot);
 
         var result = await CreateScanner().ScanAllAsync(new Progress<(int, int)>());
@@ -167,12 +207,15 @@ public class LibraryFolderScannerTests : IDisposable
         using var context = new PaperbunkrDbContext(_dbOptions);
         var series = Assert.Single(context.Series);
         Assert.Equal("Real Series", series.Name);
-        var issue = Assert.Single(context.Issues);
+        var issue = Assert.Single(context.Issues.Include(i => i.MetadataProposals));
         Assert.Equal("3", issue.Number);
-        Assert.Equal(2, issue.Volume);
+        Assert.Equal("2", issue.Volume);
         Assert.Equal(2023, issue.Year);
         Assert.Equal("Real Writer", issue.Writer);
         Assert.Equal("Real Publisher", issue.Publisher);
+        // Embedded metadata is already authoritative-by-source - no proposal needed for a field
+        // that already has a real, trusted value (design doc's explicit scope note).
+        Assert.Empty(issue.MetadataProposals);
     }
 
     [Fact]
@@ -183,7 +226,10 @@ public class LibraryFolderScannerTests : IDisposable
             Series = "Real Series",
             // Number/Volume/Year deliberately left unset - filename parsing should fill these in.
         };
-        CbzFixture.Create(Path.Combine(_scanRoot, "Ignored Name 007 (2018).cbz"), pageCount: 1, embedded);
+        // Series name matches the embedded value - see the comment on
+        // ScanAllAsync_EmbeddedComicInfo_WinsOverMisleadingFilename for why a real Series mismatch
+        // isn't mixed into this test.
+        CbzFixture.Create(Path.Combine(_scanRoot, "Real Series 007 (2018).cbz"), pageCount: 1, embedded);
         AddWatchedFolder(_scanRoot);
 
         await CreateScanner().ScanAllAsync(new Progress<(int, int)>());
@@ -191,9 +237,9 @@ public class LibraryFolderScannerTests : IDisposable
         using var context = new PaperbunkrDbContext(_dbOptions);
         var series = Assert.Single(context.Series);
         Assert.Equal("Real Series", series.Name); // embedded won
-        var issue = Assert.Single(context.Issues);
-        Assert.Equal("7", issue.Number); // filename fallback
-        Assert.Equal(2018, issue.Year); // filename fallback
+        var issue = Assert.Single(context.Issues.Include(i => i.MetadataProposals));
+        Assert.Equal("7", issue.EffectiveNumber()); // filename fallback, via an Accepted proposal
+        Assert.Equal(2018, issue.EffectiveYear()); // filename fallback, via an Accepted proposal
     }
 
     [Fact]
@@ -222,9 +268,9 @@ public class LibraryFolderScannerTests : IDisposable
         using var context = new PaperbunkrDbContext(_dbOptions);
         var series = Assert.Single(context.Series);
         Assert.Equal("Kilo Station", series.Name);
-        var issue = Assert.Single(context.Issues);
-        Assert.Equal("5", issue.Number);
-        Assert.Equal(2019, issue.Year);
+        var issue = Assert.Single(context.Issues.Include(i => i.MetadataProposals));
+        Assert.Equal("5", issue.EffectiveNumber());
+        Assert.Equal(2019, issue.EffectiveYear());
     }
 
     [Fact]
@@ -295,5 +341,151 @@ public class LibraryFolderScannerTests : IDisposable
 
         Assert.Equal(1, first.IssuesUpdated);
         Assert.Equal(0, second.IssuesUpdated);
+    }
+
+    // ===================== Manga/ContentType scan-time detection (docs/superpowers/specs/
+    // 2026-08-16-manga-content-type-classification-design.md §4) =====================
+
+    [Fact]
+    public async Task ScanAllAsync_EmbeddedMangaYesAndRightToLeft_NewSeries_SetsContentTypeAndReadingMode()
+    {
+        var embedded = new cYo.Projects.ComicRack.Engine.ComicInfo
+        {
+            Series = "One Piece",
+            Manga = cYo.Projects.ComicRack.Engine.MangaYesNo.YesAndRightToLeft,
+        };
+        CbzFixture.Create(Path.Combine(_scanRoot, "One Piece 001.cbz"), pageCount: 1, embedded);
+        AddWatchedFolder(_scanRoot);
+
+        await CreateScanner().ScanAllAsync(new Progress<(int, int)>());
+
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        var series = Assert.Single(context.Series);
+        Assert.Equal(ContentType.Manga, series.ContentType);
+        Assert.Equal(ReadingMode.RightToLeft, series.ReadingMode);
+    }
+
+    /// <summary>
+    /// Real bug, caught while writing this test: a naive "isNewSeries" implementation could be
+    /// bypassed if the guard were based on ContentType's own value instead of series novelty - this
+    /// asserts the actual guarding behavior directly (an existing, already-classified series stays
+    /// untouched by a later scan, regardless of what its ContentType happens to be).
+    /// </summary>
+    [Fact]
+    public async Task ScanAllAsync_EmbeddedManga_ExistingSeries_NeverOverwritesItsContentType()
+    {
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            context.Series.Add(new Series { Name = "One Piece", ContentType = ContentType.Comic, ReadingMode = ReadingMode.LeftToRight });
+            context.SaveChanges();
+        }
+
+        var embedded = new cYo.Projects.ComicRack.Engine.ComicInfo
+        {
+            Series = "One Piece",
+            Manga = cYo.Projects.ComicRack.Engine.MangaYesNo.YesAndRightToLeft,
+        };
+        CbzFixture.Create(Path.Combine(_scanRoot, "One Piece 001.cbz"), pageCount: 1, embedded);
+        AddWatchedFolder(_scanRoot);
+
+        await CreateScanner().ScanAllAsync(new Progress<(int, int)>());
+
+        using var verify = new PaperbunkrDbContext(_dbOptions);
+        var series = Assert.Single(verify.Series);
+        Assert.Equal(ContentType.Comic, series.ContentType);
+        Assert.Equal(ReadingMode.LeftToRight, series.ReadingMode);
+    }
+
+    [Fact]
+    public async Task ScanAllAsync_NoEmbeddedManga_NewSeries_LeavesContentTypeAtItsDefault()
+    {
+        CbzFixture.Create(Path.Combine(_scanRoot, "Kilo Station 001 (2020).cbz"), pageCount: 1);
+        AddWatchedFolder(_scanRoot);
+
+        await CreateScanner().ScanAllAsync(new Progress<(int, int)>());
+
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        var series = Assert.Single(context.Series);
+        Assert.Equal(ContentType.Unknown, series.ContentType); // Series.ContentType's own property initializer
+    }
+
+    // --- Series-reassignment proposals (docs/superpowers/specs/2026-08-17-metadata-model-phase2b-
+    // series-reassignment-design.md) ---
+
+    [Fact]
+    public async Task ScanAllAsync_AutomaticPolicy_SeriesMismatch_AttachesToFilenameSeries_CreatesAcceptedProposal()
+    {
+        var embedded = new cYo.Projects.ComicRack.Engine.ComicInfo { Series = "Embedded Name", Number = "1" };
+        CbzFixture.Create(Path.Combine(_scanRoot, "Filename Name 001 (2020).cbz"), pageCount: 1, embedded);
+        AddWatchedFolder(_scanRoot);
+
+        await CreateScanner().ScanAllAsync(new Progress<(int, int)>());
+
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        // Default policy is Automatic - the issue is attached to the filename-derived series, not
+        // the embedded-derived one, and no "Embedded Name" series is ever created at all.
+        var series = Assert.Single(context.Series);
+        Assert.Equal("Filename Name", series.Name);
+        var issue = Assert.Single(context.Issues.Include(i => i.MetadataProposals));
+        Assert.Equal(series.Id, issue.SeriesId);
+
+        var proposal = Assert.Single(issue.MetadataProposals, p => p.Field == MetadataProposalField.Series);
+        Assert.Equal("Embedded Name", proposal.CurrentValue);
+        Assert.Equal("Filename Name", proposal.ProposedValue);
+        Assert.Equal(MetadataProposalStatus.Accepted, proposal.Status);
+        Assert.NotNull(proposal.ResolvedAt);
+    }
+
+    [Fact]
+    public async Task ScanAllAsync_PromptPolicy_SeriesMismatch_StaysOnEmbeddedSeries_CreatesPendingProposal()
+    {
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            context.GetOrCreateAppSettings().MetadataResolutionPolicy = MetadataResolutionPolicy.Prompt;
+            context.SaveChanges();
+        }
+
+        var embedded = new cYo.Projects.ComicRack.Engine.ComicInfo { Series = "Embedded Name", Number = "1" };
+        CbzFixture.Create(Path.Combine(_scanRoot, "Filename Name 001 (2020).cbz"), pageCount: 1, embedded);
+        AddWatchedFolder(_scanRoot);
+
+        await CreateScanner().ScanAllAsync(new Progress<(int, int)>());
+
+        using var context2 = new PaperbunkrDbContext(_dbOptions);
+        var series = Assert.Single(context2.Series);
+        Assert.Equal("Embedded Name", series.Name); // stays on embedded, same as pre-2b behavior
+        var issue = Assert.Single(context2.Issues.Include(i => i.MetadataProposals));
+        Assert.Equal(series.Id, issue.SeriesId);
+
+        var proposal = Assert.Single(issue.MetadataProposals, p => p.Field == MetadataProposalField.Series);
+        Assert.Equal(MetadataProposalStatus.Pending, proposal.Status);
+        Assert.Null(proposal.ResolvedAt);
+    }
+
+    [Fact]
+    public async Task ScanAllAsync_SeriesNamesMatch_NoProposalCreated()
+    {
+        var embedded = new cYo.Projects.ComicRack.Engine.ComicInfo { Series = "Kilo Station", Number = "1" };
+        CbzFixture.Create(Path.Combine(_scanRoot, "Kilo Station 001 (2020).cbz"), pageCount: 1, embedded);
+        AddWatchedFolder(_scanRoot);
+
+        await CreateScanner().ScanAllAsync(new Progress<(int, int)>());
+
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        var issue = Assert.Single(context.Issues.Include(i => i.MetadataProposals));
+        Assert.DoesNotContain(issue.MetadataProposals, p => p.Field == MetadataProposalField.Series);
+    }
+
+    [Fact]
+    public async Task ScanAllAsync_NoEmbeddedInfo_NoSeriesProposalCreated()
+    {
+        CbzFixture.Create(Path.Combine(_scanRoot, "Kilo Station 001 (2020).cbz"), pageCount: 1);
+        AddWatchedFolder(_scanRoot);
+
+        await CreateScanner().ScanAllAsync(new Progress<(int, int)>());
+
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        var issue = Assert.Single(context.Issues.Include(i => i.MetadataProposals));
+        Assert.DoesNotContain(issue.MetadataProposals, p => p.Field == MetadataProposalField.Series);
     }
 }

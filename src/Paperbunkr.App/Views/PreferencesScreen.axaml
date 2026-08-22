@@ -245,6 +245,31 @@
 
                             <CheckBox IsChecked="{Binding DefaultAutoRotate}" Foreground="{DynamicResource PbTextBrush}" FontSize="13"
                                       Content="Auto-rotate landscape pages by default" />
+
+                            <Grid ColumnDefinitions="Auto,Auto" ColumnSpacing="10">
+                                <TextBlock Grid.Column="0" Text="Double-page spread" FontSize="13" VerticalAlignment="Center"
+                                           Foreground="{DynamicResource PbTextBrush}" />
+                                <ComboBox Grid.Column="1" ItemsSource="{x:Static vm:PreferencesScreenViewModel.PageLayoutModeOptions}"
+                                          SelectedItem="{Binding DefaultPageLayoutMode}" Width="150" />
+                            </Grid>
+                            <TextBlock Text="Used for any series that hasn't been set to a different double-page mode from the reader toolbar itself."
+                                       FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" Margin="0,-6,0,0" />
+
+                            <Grid ColumnDefinitions="Auto,Auto" ColumnSpacing="10">
+                                <TextBlock Grid.Column="0" Text="Page transition" FontSize="13" VerticalAlignment="Center"
+                                           Foreground="{DynamicResource PbTextBrush}" />
+                                <ComboBox Grid.Column="1" ItemsSource="{x:Static vm:PreferencesScreenViewModel.PageTransitionStyleOptions}"
+                                          SelectedItem="{Binding PageTransitionStyle}" Width="150" />
+                            </Grid>
+                            <TextBlock Text="Animates turning the page (arrow keys, click-zones, flick, scrubber) - jumping to a page (e.g. a thumbnail click) is always instant."
+                                       FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" Margin="0,-6,0,0" />
+
+                            <StackPanel Spacing="4">
+                                <TextBlock Text="{Binding PageTransitionDurationMs, StringFormat='Page transition speed: {0}ms'}" FontSize="13"
+                                           Foreground="{DynamicResource PbTextBrush}" />
+                                <Slider Minimum="100" Maximum="600" TickFrequency="50" IsSnapToTickEnabled="True"
+                                        Value="{Binding PageTransitionDurationMs}" Width="220" HorizontalAlignment="Left" />
+                            </StackPanel>
                         </StackPanel>
                     </StackPanel>
                 </Border>
@@ -338,25 +363,72 @@
                     </StackPanel>
                 </Border>
 
-                <!-- Keyboard Shortcuts (docs/alpha-roadmap.md P5 follow-up) - data-driven off
-                     KeyboardCommandRegistry, so a future remappable command just needs a new
-                     registry entry, not a XAML change. Only Reader commands exist today; this row
-                     list groups by KeyBindingRowViewModel.Group so it stays correct if/when a
-                     non-Reader command is registered, without needing its own Preferences tab. -->
+                <!-- Keyboard Shortcuts (docs/alpha-roadmap.md P5 follow-up, extended by
+                     docs/superpowers/specs/2026-08-16-remappable-reader-shortcuts-design.md) -
+                     data-driven off KeyboardCommandRegistry, so a future remappable command just
+                     needs a new registry entry, not a XAML change. Split into three sections by
+                     KeyboardCommandDescriptor.Group (Navigation/Zoom & Fit/Display) since a flat
+                     24-row list stopped being scannable once this grew past the original 2
+                     commands; the conflict-error banner stays a single shared element above all
+                     three, since a conflict is a conflict regardless of which section it's in. -->
+                <StackPanel Orientation="Horizontal" Spacing="5" IsVisible="{Binding HasKeyBindingConflictError}">
+                    <Border Classes="icon" Width="12" Height="12" Background="#D96C6C">
+                        <Border.OpacityMask><ImageBrush Source="/Assets/Icons/Circle_Warning.png" Stretch="Uniform" /></Border.OpacityMask>
+                    </Border>
+                    <TextBlock Text="{Binding KeyBindingConflictError}" Foreground="#D96C6C" FontSize="12" TextWrapping="Wrap" />
+                </StackPanel>
+
                 <Border Classes="groupBox">
                     <StackPanel>
                         <Border Classes="groupHeader">
-                            <TextBlock Text="Keyboard Shortcuts" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
+                            <TextBlock Text="Navigation" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
+                        </Border>
+                        <StackPanel Margin="14">
+                            <ItemsControl ItemsSource="{Binding NavigationKeyBindings}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:KeyBindingRowViewModel">
+                                        <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,4">
+                                            <TextBlock Grid.Column="0" Text="{Binding Label}" FontSize="13" VerticalAlignment="Center"
+                                                       Foreground="{DynamicResource PbTextBrush}" />
+                                            <ComboBox Grid.Column="1" ItemsSource="{Binding Options}"
+                                                      SelectedItem="{Binding SelectedKey}" Width="150" />
+                                        </Grid>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <Border Classes="groupBox">
+                    <StackPanel>
+                        <Border Classes="groupHeader">
+                            <TextBlock Text="Zoom &amp; Fit" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
+                        </Border>
+                        <StackPanel Margin="14">
+                            <ItemsControl ItemsSource="{Binding ZoomFitKeyBindings}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:KeyBindingRowViewModel">
+                                        <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,4">
+                                            <TextBlock Grid.Column="0" Text="{Binding Label}" FontSize="13" VerticalAlignment="Center"
+                                                       Foreground="{DynamicResource PbTextBrush}" />
+                                            <ComboBox Grid.Column="1" ItemsSource="{Binding Options}"
+                                                      SelectedItem="{Binding SelectedKey}" Width="150" />
+                                        </Grid>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <Border Classes="groupBox">
+                    <StackPanel>
+                        <Border Classes="groupHeader">
+                            <TextBlock Text="Display" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
                         </Border>
                         <StackPanel Margin="14" Spacing="10">
-                            <StackPanel Orientation="Horizontal" Spacing="5" IsVisible="{Binding HasKeyBindingConflictError}">
-                                <Border Classes="icon" Width="12" Height="12" Background="#D96C6C">
-                                    <Border.OpacityMask><ImageBrush Source="/Assets/Icons/Circle_Warning.png" Stretch="Uniform" /></Border.OpacityMask>
-                                </Border>
-                                <TextBlock Text="{Binding KeyBindingConflictError}" Foreground="#D96C6C" FontSize="12" TextWrapping="Wrap" />
-                            </StackPanel>
-
-                            <ItemsControl ItemsSource="{Binding KeyBindings}">
+                            <ItemsControl ItemsSource="{Binding DisplayKeyBindings}">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate x:DataType="vm:KeyBindingRowViewModel">
                                         <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,4">

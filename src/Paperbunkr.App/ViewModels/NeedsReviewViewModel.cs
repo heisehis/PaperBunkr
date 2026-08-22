@@ -9,6 +9,7 @@ using Paperbunkr.App.Models;
 using Paperbunkr.App.Services;
 using Paperbunkr.Data;
 using Paperbunkr.Data.Entities;
+using Paperbunkr.Data.Metadata;
 using Paperbunkr.Data.SmartLists;
 
 namespace Paperbunkr.App.ViewModels;
@@ -33,6 +34,7 @@ public partial class NeedsReviewViewModel : ViewModelBase
         ContentTypeItems = new ObservableCollection<SeriesReviewItem>();
         MissingFileItems = new ObservableCollection<MissingFileRowViewModel>();
         SeriesConflicts = new ObservableCollection<SeriesConflictRowViewModel>();
+        MetadataProposalItems = new ObservableCollection<MetadataProposalRowViewModel>();
         Refresh();
     }
 
@@ -42,19 +44,24 @@ public partial class NeedsReviewViewModel : ViewModelBase
 
     public ObservableCollection<SeriesConflictRowViewModel> SeriesConflicts { get; }
 
+    public ObservableCollection<MetadataProposalRowViewModel> MetadataProposalItems { get; }
+
     public bool HasContentTypeItems => ContentTypeItems.Count > 0;
 
     public bool HasMissingFileItems => MissingFileItems.Count > 0;
 
     public bool HasSeriesConflictItems => SeriesConflicts.Count > 0;
 
-    public bool HasPendingItems => HasContentTypeItems || HasMissingFileItems || HasSeriesConflictItems;
+    public bool HasMetadataProposalItems => MetadataProposalItems.Count > 0;
+
+    public bool HasPendingItems => HasContentTypeItems || HasMissingFileItems || HasSeriesConflictItems || HasMetadataProposalItems;
 
     private void NotifyCountsChanged()
     {
         OnPropertyChanged(nameof(HasContentTypeItems));
         OnPropertyChanged(nameof(HasMissingFileItems));
         OnPropertyChanged(nameof(HasSeriesConflictItems));
+        OnPropertyChanged(nameof(HasMetadataProposalItems));
         OnPropertyChanged(nameof(HasPendingItems));
     }
 
@@ -80,6 +87,7 @@ public partial class NeedsReviewViewModel : ViewModelBase
         RefreshContentTypeItems(context);
         RefreshMissingFileItems(context);
         RefreshSeriesConflicts(context);
+        RefreshMetadataProposalItems(context);
         NotifyCountsChanged();
     }
 
@@ -132,7 +140,7 @@ public partial class NeedsReviewViewModel : ViewModelBase
             int issueId = issue.Id;
             MissingFileItems.Add(new MissingFileRowViewModel(
                 issueId,
-                $"{issue.Series?.Name ?? "Unknown"} #{issue.Number}",
+                $"{issue.Series?.Name ?? "Unknown"} #{issue.EffectiveNumber()}",
                 onRelink: RelinkMissingFile,
                 onRemove: _ => RemoveMissingFile(issueId),
                 onDismiss: _ => DismissMissingFile(issueId)));
@@ -168,6 +176,7 @@ public partial class NeedsReviewViewModel : ViewModelBase
         {
             context.Issues.Remove(issue);
             context.SaveChanges();
+            CoverImageCache.Invalidate(issueId);
         }
 
         Refresh();
@@ -211,9 +220,9 @@ public partial class NeedsReviewViewModel : ViewModelBase
     {
         using var context = PaperbunkrDb.CreateContext();
         var conflict = context.SeriesConflicts
-            .Include(c => c.ExistingSeries).ThenInclude(s => s!.Issues)
-            .Include(c => c.SeriesA).ThenInclude(s => s!.Issues)
-            .Include(c => c.SeriesB).ThenInclude(s => s!.Issues)
+            .Include(c => c.ExistingSeries).ThenInclude(s => s!.Issues).ThenInclude(i => i.MetadataProposals)
+            .Include(c => c.SeriesA).ThenInclude(s => s!.Issues).ThenInclude(i => i.MetadataProposals)
+            .Include(c => c.SeriesB).ThenInclude(s => s!.Issues).ThenInclude(i => i.MetadataProposals)
             .FirstOrDefault(c => c.Id == conflictId);
         if (conflict is null)
         {
@@ -242,17 +251,79 @@ public partial class NeedsReviewViewModel : ViewModelBase
     }
 
     /// <summary>
+    /// Lists <see cref="MetadataProposalStatus.Pending"/> AND <see cref="MetadataProposalStatus.Accepted"/>
+    /// rows - unlike the other three sections, an Accepted proposal isn't "resolved" the way a
+    /// merged/kept-separate conflict is; it's "applied but still auditable/correctable" under the
+    /// default Automatic policy (docs/superpowers/specs/2026-08-17-metadata-model-phase2a-metadata-
+    /// proposals-design.md). Rejected/Ignored rows drop off, same as a resolved conflict does.
+    /// </summary>
+    private void RefreshMetadataProposalItems(PaperbunkrDbContext context)
+    {
+        MetadataProposalItems.Clear();
+
+        var proposals = context.MetadataProposals
+            .Include(p => p.Issue).ThenInclude(i => i!.Series)
+            .Include(p => p.Issue).ThenInclude(i => i!.MetadataProposals)
+            .Where(p => p.Status == MetadataProposalStatus.Pending || p.Status == MetadataProposalStatus.Accepted)
+            .OrderByDescending(p => p.CreatedAt)
+            .ToList();
+
+        foreach (var proposal in proposals)
+        {
+            int proposalId = proposal.Id;
+            string issueLabel = $"{proposal.Issue?.Series?.Name ?? "Unknown"} #{proposal.Issue?.EffectiveNumber() ?? "?"}";
+            MetadataProposalItems.Add(new MetadataProposalRowViewModel(
+                issueLabel,
+                proposal.Field.ToString(),
+                proposal.CurrentValue,
+                proposal.ProposedValue,
+                proposal.Source.ToString(),
+                isAlreadyAccepted: proposal.Status == MetadataProposalStatus.Accepted,
+                onAccept: _ => ResolveProposal(proposalId, accept: true),
+                onReject: _ => ResolveProposal(proposalId, accept: false)));
+        }
+    }
+
+    /// <summary>
+    /// Deliberately doesn't call <see cref="Refresh"/> - same as <see cref="ResolveConflict"/>, the
+    /// row's own <c>IsResolved</c>/<c>ResolutionLabel</c> (driven by its Accept/Reject command)
+    /// gives immediate in-place feedback without re-querying and rebuilding every section.
+    /// </summary>
+    private void ResolveProposal(int proposalId, bool accept)
+    {
+        using var context = PaperbunkrDb.CreateContext();
+        var proposal = context.MetadataProposals.Find(proposalId);
+        if (proposal is null)
+        {
+            return;
+        }
+
+        proposal.Status = accept ? MetadataProposalStatus.Accepted : MetadataProposalStatus.Rejected;
+        proposal.ResolvedAt = DateTime.UtcNow;
+        context.SaveChanges();
+
+        // Series is write-time, not read-time like every other field (docs/superpowers/specs/
+        // 2026-08-17-metadata-model-phase2b-series-reassignment-design.md) - accepting it must
+        // actually move the issue, not just flip Status. Reject needs no extra step: the issue
+        // simply stays on whatever series it's already on.
+        if (accept && proposal.Field == MetadataProposalField.Series)
+        {
+            SeriesReassignmentResolver.Apply(context, proposal);
+        }
+    }
+
+    /// <summary>
     /// Moves every issue from <paramref name="source"/> into <paramref name="target"/> - deduped
     /// by (Number, Volume), the same rule <see cref="Paperbunkr.Data.CeMigration.CeLibraryMigrator"/>'s
     /// idempotent commit path uses - and removes the now-empty source series.
     /// </summary>
     private static void MergeSeriesInto(PaperbunkrDbContext context, Series source, Series target)
     {
-        var existingKeys = new HashSet<(string?, int?)>(target.Issues.Select(i => (i.Number, i.Volume)));
+        var existingKeys = new HashSet<(string?, string?)>(target.Issues.Select(i => (i.EffectiveNumber(), i.EffectiveVolume())));
 
         foreach (var issue in source.Issues.ToList())
         {
-            if (existingKeys.Add((issue.Number, issue.Volume)))
+            if (existingKeys.Add((issue.EffectiveNumber(), issue.EffectiveVolume())))
             {
                 issue.SeriesId = target.Id;
                 issue.Series = target;
@@ -260,6 +331,7 @@ public partial class NeedsReviewViewModel : ViewModelBase
             else
             {
                 context.Issues.Remove(issue);
+                CoverImageCache.Invalidate(issue.Id);
             }
         }
 

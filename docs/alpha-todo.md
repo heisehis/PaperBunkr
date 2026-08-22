@@ -20,7 +20,7 @@ needs a human (or a Claude Code session working in it) to update by hand when pr
 the tracker just keeps a lightweight view from silently going stale between those updates the way
 this file itself already did once (see the note below).
 
-## What's left (as of 2026-08-11, HEAD `8fde584`)
+## What's left (as of 2026-08-12, HEAD `85fb681`)
 
 > This section drifted before: it was last hand-written at `7e2d3d3` and had already fallen behind
 > five real commits by the time anyone reopened it. That's the whole reason for the live tracker —
@@ -97,6 +97,28 @@ this file itself already did once (see the note below).
 > assets (wizard banner images) but aren't referenced by any commit or roadmap item yet, so noted
 > here rather than guessed at — nothing in P0–P7 depends on them being committed. No local HTML
 > tracker file found (same result as last sync). Treat this file as re-synced as of `8fde584`.
+>
+> **This sync (re-synced `8fde584` → `85fb681`):** two new commits, neither changing P0–P7 status
+> (already all done): `8ac8cb4` (wizard branding for the alpha installer) and `85fb681` (adds
+> `README.md`; also carries this doc's own pending resync-to-`8fde584` content, committed as-is —
+> that's why the previous sync note above already matched HEAD `8fde584` despite this being a
+> separate, later commit). Verified directly against source, not commit messages: `git show
+> 8ac8cb4` confirms `installer/Installer.iss` now sets `WizardImageFile`/`WizardSmallImageFile`
+> (composited from the app's own logo) and custom `WelcomeLabel1`/`WelcomeLabel2` text, plus
+> `DisableWelcomePage=no` (a real bug fix — Inno Setup 6 defaults that to `yes` and was skipping the
+> welcome page entirely); `git ls-files installer/Assets/` confirms `WizardImage.bmp`,
+> `WizardSmallImage.bmp`, and `welcome-source.png` are now tracked, so 3 of the 5 previously-noted
+> untracked installer-branding assets are resolved. Two untracked paths remain, unchanged in nature
+> from last sync: `.claude/settings.local.json` (local-only, expected) and
+> `src/Paperbunkr.App/Assets/welcome-source.png` (a leftover duplicate of the same source image now
+> that `installer/Assets/welcome-source.png` is the tracked, wired copy — not referenced by any
+> commit, no P0–P7 item depends on it). Worktrees re-checked via `git worktree list`: same three as
+> every prior sync (`quirky-borg-c5d364` at `6e8c9b7`, `compassionate-banach-c6e8bf` at `25c664a`,
+> `exciting-hypatia-eecfc9` detached at `d86cac7`), all still `prunable`, no new ones. Main worktree
+> `git status --short` still shows ~1042 line-ending-only modified files (confirmed via `.gitignore`
+> diff, same as every prior sync), not treated as pending work. No local HTML tracker file found
+> (same result as every prior sync — searched for `*tracker*`/`*dashboard*` filenames and every
+> `.html` file under the repo). Treat this file as re-synced as of `85fb681`.
 
 P0–P3 and P5 are done — shipped before this session (`f6bcee3`, `8e1bf55`), with P5 getting a
 same-day follow-up (2D grid arrow-key nav, `34e1d39`). The `alpha` git tag already exists.
@@ -494,9 +516,42 @@ docs/superpowers/specs/2026-08-09-reader-gestures-and-grid-navigation-design.md.
   and a zoom-slider/double-tap path that could leave continuous mode's scroll/cross-axis pan
   pointing past the shrunk-down stack once zoomed below 100%, making the page appear to vanish.
   **Magnifier (§8) explicitly skipped this pass, per user direction** ("we have a zoom slider").
-  Page layout (double-page spread), transitions, split-page nav, remappable shortcuts, and
-  auto-scroll remain open. Tracked in full in `alpha-roadmap.md` per this doc's scope note at the
-  top — not duplicated here.
+  **Page transition animations shipped 2026-08-15** (design spec 2026-08-13, Slide/Crossfade/None,
+  off by default) — user-verified live; two real bugs found and fixed post-ship from that live
+  testing (a live-refresh gap where the setting only took effect on the next book opened rather
+  than an already-open one, and a real per-frame performance bug where crossfade rebuilt a full-
+  resolution `SKImage` on every animation frame instead of once per transition), plus a Reader-
+  toolbar quick-toggle added afterward per user follow-up (Preferences-only access felt hidden).
+  **Double-page spread shipped 2026-08-16** (design spec 2026-08-15, `Single`/`Double` modes
+  collapsing CE's three-way `PageLayoutMode`, global/series/issue-scoped setting, stateless local
+  pairing test, spread rendering via a combined-virtual-size reuse of the existing single-image fit
+  math, full integration with the page-transition system including RTL-aware spread placement, and
+  a Crossfade reflow animation on layout/direction toggles) — 543 automated tests pass; **manual
+  on-screen verification of the actual double-page rendering/pairing/reflow still pending** (no
+  unattended desktop GUI automation available for this project, same standing caveat as every prior
+  reader spec).
+  **Remappable reader keyboard shortcuts shipped 2026-08-16** (design spec 2026-08-16, extends the
+  P5 seam from 2 to 24 commands — pan/scroll/PageUp/PageDown/Home/End navigation, fullscreen, fit
+  modes, zoom, rotate CW/CCW — verified against CE's actual keymap, `Key`→`KeyGesture` throughout
+  for modifier support, Preferences' Keyboard Shortcuts split into Navigation/Zoom & Fit/Display
+  sections with a new context-aware conflict check; new `Reader.RotateCounterClockwise`
+  command+button, no CCW rotate existed before) — 550 automated tests pass (build clean, no new
+  warnings); app verified to launch and stay running with the changes (no startup crash), but
+  **on-screen verification of the actual keypress-to-action wiring still pending**, same standing
+  GUI-automation caveat as every prior reader spec.
+  **Reader auto-scroll / hands-free mode shipped 2026-08-16** (design spec 2026-08-16 — clarified
+  that CE's actual `AutoScrolling` is an unrelated arrow-key-behavior switch for zoomed paged books,
+  not a timer; built the modern webtoon-style passive scroll the "hands-free" backlog phrasing
+  actually meant instead, layered on the existing continuous/webtoon mode and the just-shipped
+  shortcut registry — a 25th remappable command, `S` default). `DispatcherTimer`-driven,
+  `ClampScrollOffset` round-tripped from `PageCanvas` back to the ViewModel via the existing TwoWay
+  binding rather than duplicated (a real architecture gap the design spec hadn't fully resolved,
+  caught and fixed during planning), hard-stops on any manual scroll interaction or reaching the
+  end, toolbar toggle shares the Double-page button's slot via complementary visibility (no new
+  toolbar column) — 555 automated tests pass; app verified to launch and stay running, **on-screen
+  verification of the actual scroll/stop behavior still pending**, same standing GUI-automation
+  caveat. Split-page nav is now the only remaining open item in this backlog. Tracked in full in
+  `alpha-roadmap.md` per this doc's scope note at the top — not duplicated here.
 
 ---
 

@@ -14,7 +14,7 @@ public class VirtualTagTemplateEvaluatorTests
     private static readonly Issue Issue = new()
     {
         Number = "12",
-        Volume = 2,
+        Volume = "2",
         Year = 2021,
         Title = "Departure",
         Publisher = "Nightshift Press",

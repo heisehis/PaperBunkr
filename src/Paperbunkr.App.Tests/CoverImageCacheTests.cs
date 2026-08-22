@@ -58,4 +58,45 @@ public class CoverImageCacheTests : IDisposable
 
         Assert.Null(result);
     }
+
+    // --- Invalidate (real bug found 2026-08-19: a stale on-disk thumbnail from a since-deleted
+    // Issue can get "adopted" by a different Issue that lands on the same numeric Id after a
+    // library reset/re-migration, and this cache's own file-exists check then serves it forever) ---
+
+    [Fact]
+    public void Invalidate_DeletesTheOnDiskFile()
+    {
+        CbzFixture.Create(_cbzPath, pageCount: 1);
+        new CoverThumbnailService().TryGenerateThumbnail(issueId: 202, _cbzPath);
+        string path = CoverThumbnailPaths.GetCachePath(202);
+        Assert.True(File.Exists(path));
+
+        CoverImageCache.Invalidate(202);
+
+        Assert.False(File.Exists(path));
+    }
+
+    [Fact]
+    public void Invalidate_ClearsTheInMemoryEntry_SoGetStopsServingItAfterTheFileIsGone()
+    {
+        // The exact real-world bug this fixes: without dropping the in-memory LruCache entry too,
+        // Get() would keep handing back the stale Bitmap object forever even after its on-disk file
+        // was deleted - the cache-hit path (LruCacheTryGetValue) never re-checks the filesystem.
+        CbzFixture.Create(_cbzPath, pageCount: 1);
+        new CoverThumbnailService().TryGenerateThumbnail(issueId: 303, _cbzPath);
+        var stale = CoverImageCache.Get(303);
+        Assert.NotNull(stale);
+
+        CoverImageCache.Invalidate(303);
+
+        Assert.Null(CoverImageCache.Get(303));
+    }
+
+    [Fact]
+    public void Invalidate_NeverCached_DoesNotThrow()
+    {
+        var exception = Record.Exception(() => CoverImageCache.Invalidate(issueId: 888888));
+
+        Assert.Null(exception);
+    }
 }

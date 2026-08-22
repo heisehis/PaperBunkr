@@ -19,6 +19,7 @@
 14. [Migration UX](#14-migration-ux)
 15. [Open items](#15-open-items)
 16. [Release staging: Alpha & Beta](#16-release-staging-alpha--beta)
+17. [On-screen UI automation (FlaUI/UIA3)](#17-on-screen-ui-automation-flauiuia3)
 
 ---
 
@@ -259,3 +260,55 @@ All items below were resolved in a dedicated pass (`paperbunkr_open_items_resolv
 - Full migration UX including the "Needs Review" queue
 
 **One thing worth naming rather than letting slide:** this split defers the single highest-risk, most novel piece of the whole project — continuous/webtoon rendering and its documented memory-management failure mode (§8) — all the way to Beta. That's a reasonable sequencing call (get *something* reading before tackling the hardest rendering problem), but it means Alpha doesn't actually validate the part most likely to go wrong. Worth considering a narrow, throwaway memory-safety spike of the `CompositionCustomVisualHandler` canvas *during* Alpha — not full webtoon feature completeness, just proving the dispose/purge strategy from §8 actually holds under a tall image — rather than discovering that risk for the first time when Beta is already underway and harder to unwind.
+
+## 17. On-screen UI automation (FlaUI/UIA3)
+
+Closes a gap flagged repeatedly across specs and the roadmap doc ("no unattended desktop GUI
+automation available") — every feature up to 2026-08-17 was verified via `Avalonia.Headless`
+(windowless, ViewModel-level, `Paperbunkr.App.Tests`) plus the author's own manual on-screen
+testing, with no automated way to drive the *actual rendered window*. Shipped 2026-08-17 alongside
+the Saved List Layouts work that first needed it (`docs/superpowers/specs/2026-08-17-library-saved-
+list-layouts-design.md`).
+
+**What it is:** `src/Paperbunkr.App.UiTests`, a separate xUnit project using
+[FlaUI](https://github.com/FlaUI/FlaUI) (`FlaUI.Core`/`FlaUI.UIA3`) to drive the real compiled
+`Paperbunkr.App.exe` via Windows UI Automation — real process, real window, real clicks, no mocking
+of the UI layer at all. Avalonia 12 emits UIA automation peers for its standard controls out of the
+box; no extra Avalonia-side package was needed, just `AutomationProperties.AutomationId` (and, for
+buttons whose `Content` is a `StackPanel` rather than plain text — Avalonia's default UIA `Name`
+falls back to the content type's name in that case — an explicit `AutomationProperties.Name`
+binding) on the controls a test needs to target reliably.
+
+**Two things every consumer of this project needed, neither of which existed before:**
+- **Isolated test database for an out-of-process launch.** `PaperbunkrDbContext.DatabasePathOverride`
+  was in-process-only (a mutable static, set directly in test constructors) — useless for a
+  separately-launched exe. Its field initializer now also reads the `PAPERBUNKR_DB_PATH`
+  environment variable, so a UI test can point a freshly-launched app at a throwaway SQLite file by
+  setting that variable on the child process's `ProcessStartInfo.EnvironmentVariables` before
+  `Application.Launch`. In-process tests are unaffected — they still assign the property directly,
+  which simply overrides whatever the env var picked up.
+- **`Accessibility.dll` interop.** `FlaUI.UIA3` is a .NET-Framework-targeted package (restored on
+  net8.0 via the `NU1701` compatibility path) that needs the `Accessibility` GAC assembly at
+  runtime; `UIA3Automation`'s constructor throws `FileNotFoundException` without it.
+  `<UseWindowsForms>true</UseWindowsForms>` (which requires the `net8.0-windows` TFM) is what makes
+  the SDK add that reference — the standard, documented fix for this exact FlaUI-on-.NET-Core gap.
+  (This also pulls `System.Windows.Forms.Application` into scope, colliding with
+  `FlaUI.Core.Application` — resolved with a `using Application = FlaUI.Core.Application;` alias
+  rather than fully-qualifying every call site.)
+
+**Pattern for a new test:** `AppFixture` (`src/Paperbunkr.App.UiTests/AppFixture.cs`) launches the
+app fresh per test (not a shared collection fixture — each test gets its own clean database and
+process), exposes `Window`, and has a `Restart()` method that closes and relaunches against the
+*same* database file — the actual "does this survive an app restart" scenario most tests in this
+project exist to answer. Locate elements via
+`window.FindFirstDescendant(cf => cf.ByAutomationId("..."))`; add new `AutomationProperties.AutomationId`
+values to whatever `.axaml` controls a new test needs, following the existing `Library*` naming
+convention in `LibraryScreen.axaml`. `dotnet test src/Paperbunkr.App.UiTests` runs the suite (build
+`Paperbunkr.App` first — the fixture resolves its exe from a sibling `bin/{Configuration}/net8.0/`
+path, not a project reference, since it's launched as a black-box process, not linked against).
+
+**Scope so far:** only the Library toolbar's sort/group/display/filter controls have
+`AutomationId`s (`LibraryListLayoutPersistenceTests.cs`, 3 tests: sort field, view mode, and a
+filter checkbox all surviving a real restart). Extending coverage to other screens is a matter of
+adding `AutomationId`s there and writing more tests against the same `AppFixture` pattern — no
+further infrastructure work needed.

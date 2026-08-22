@@ -1,0 +1,53 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- -windows suffix required for UseWindowsForms below (NETSDK1136) - fine since this project
+         is inherently Windows-only anyway (FlaUI/UIA3 has no cross-platform story). -->
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+
+    <!-- FlaUI.UIA3 (a .NET Framework-targeted package, restored via NU1701 compat) transitively
+         needs the Accessibility.dll interop facade at runtime - UseWindowsForms=true is what makes
+         the SDK add that reference on .NET 8, confirmed necessary after UIA3Automation's
+         constructor threw FileNotFoundException for 'Accessibility, Version=4.0.0.0' without it. -->
+    <UseWindowsForms>true</UseWindowsForms>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" Version="6.0.0" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.8.0" />
+    <PackageReference Include="xunit" Version="2.5.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.5.3" />
+    <!-- Real Windows UI Automation (UIA3) driver - drives the actually-compiled, actually-rendered
+         app exe (docs/superpowers/specs/2026-08-17-ui-automation-harness-design.md), not the
+         windowless Avalonia.Headless bootstrap Paperbunkr.App.Tests uses for ViewModel-level tests.
+         Avalonia emits UIA peers for its standard controls out of the box (Avalonia 12) - no extra
+         Avalonia-side package needed, just AutomationProperties.AutomationId on the controls these
+         tests target. -->
+    <PackageReference Include="FlaUI.Core" Version="5.0.0" />
+    <PackageReference Include="FlaUI.UIA3" Version="5.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Not a normal ProjectReference dependency (this project launches App's compiled exe as a
+         separate process, it doesn't link against its code) - referenced only so MSBuild builds
+         Paperbunkr.App first and this project can resolve its output path/exe name reliably rather
+         than hardcoding a relative bin path guess. -->
+    <ProjectReference Include="..\Paperbunkr.App\Paperbunkr.App.csproj" ReferenceOutputAssembly="false" />
+    <!-- Unlike the App reference above, this one DOES link against real code - lets a test seed
+         AppFixture.DbPath directly via a separate PaperbunkrDbContext (docs/superpowers/specs/
+         2026-08-18-home-screen-design.md) for scenarios pure UI-driven flows can't produce (e.g. a
+         real in-progress reading position). Paperbunkr.Data has no dependency on Paperbunkr.App, so
+         this doesn't reintroduce the "launch the exe, don't link its code" concern above. -->
+    <ProjectReference Include="..\Paperbunkr.Data\Paperbunkr.Data.csproj" />
+  </ItemGroup>
+
+</Project>

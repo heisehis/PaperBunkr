@@ -74,6 +74,23 @@ public sealed class LruCache<TKey, TValue> where TKey : notnull
         _recencyNodes[key] = _recencyOrder.AddFirst(key);
     }
 
+    /// <summary>Drops <paramref name="key"/>'s entry, if present, without disposing it - same
+    /// no-dispose rationale as eviction (see this class's own doc comment). Used when the
+    /// underlying cached value is known-stale (e.g. its backing file was deleted/regenerated) and a
+    /// caller must not keep handing out the old one.</summary>
+    public bool Remove(TKey key)
+    {
+        if (!_recencyNodes.TryGetValue(key, out var node))
+        {
+            return false;
+        }
+
+        _recencyOrder.Remove(node);
+        _recencyNodes.Remove(key);
+        _values.Remove(key);
+        return true;
+    }
+
     private void Touch(TKey key)
     {
         if (_recencyNodes.TryGetValue(key, out var node))

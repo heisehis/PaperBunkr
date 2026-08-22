@@ -32,5 +32,22 @@ public class ReadingList
 
     public string? CoverImageUrl { get; set; }
 
+    /// <summary>Phase 4c overhaul (docs/superpowers/specs/2026-08-17-metadata-model-phase4c-reading-list-overhaul-design.md) - classification per the source doc's §24, defaults to User for every pre-existing list.</summary>
+    public ReadingListType Type { get; set; } = ReadingListType.User;
+
+    public DateTime CreatedAt { get; set; }
+
+    public DateTime UpdatedAt { get; set; }
+
+    /// <summary>
+    /// Optional link to the <see cref="Entities.StoryEvent"/> this list represents the official
+    /// reading order for (source doc §51: "An event can have an official reading order... A
+    /// reading list can exist without an event") - independent of <see cref="Type"/>; setting
+    /// <c>Type = Event</c> doesn't require this, and this can be set without changing <see cref="Type"/>.
+    /// </summary>
+    public int? StoryEventId { get; set; }
+
+    public StoryEvent? StoryEvent { get; set; }
+
     public List<ReadingListItem> Items { get; set; } = new();
 }

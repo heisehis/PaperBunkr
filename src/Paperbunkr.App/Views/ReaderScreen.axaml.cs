@@ -4,6 +4,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Input;
+using Avalonia.Media.Imaging;
 using Avalonia.Threading;
 using Paperbunkr.App.Models;
 using Paperbunkr.App.ViewModels;
@@ -37,6 +38,7 @@ public partial class ReaderScreen : UserControl
             _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
             _viewModel.ScrollToPageRequested -= OnScrollToPageRequested;
             _viewModel.CurrentPageIndexChanged -= OnCurrentPageIndexChanged;
+            _viewModel.ReflowTransitionRequested -= OnReflowTransitionRequested;
         }
 
         _viewModel = DataContext as ReaderScreenViewModel;
@@ -45,6 +47,7 @@ public partial class ReaderScreen : UserControl
             _viewModel.PropertyChanged += OnViewModelPropertyChanged;
             _viewModel.ScrollToPageRequested += OnScrollToPageRequested;
             _viewModel.CurrentPageIndexChanged += OnCurrentPageIndexChanged;
+            _viewModel.ReflowTransitionRequested += OnReflowTransitionRequested;
         }
     }
 
@@ -55,6 +58,10 @@ public partial class ReaderScreen : UserControl
     /// knows real/estimated per-page sizes.
     /// </summary>
     private void OnScrollToPageRequested(int pageIndex) => PageCanvasControl.ScrollToPage(pageIndex);
+
+    /// <summary>Double-page layout-mode/reading-direction reflow (docs/superpowers/specs/2026-08-15-reader-double-page-spread-design.md §6) - same "ViewModel raises, View has the geometry" split as <see cref="OnScrollToPageRequested"/> above.</summary>
+    private void OnReflowTransitionRequested(Bitmap? oldPrimary, Bitmap? oldSecondary, bool oldIsRightToLeft) =>
+        PageCanvasControl.PlayReflowTransition(oldPrimary, oldSecondary, oldIsRightToLeft);
 
     /// <summary>
     /// User direction: the thumbnail rail should keep the current page's thumbnail scrolled into

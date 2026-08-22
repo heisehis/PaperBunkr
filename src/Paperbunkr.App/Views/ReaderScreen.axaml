@@ -89,7 +89,7 @@
         <!-- ============ Top toolbar ============ -->
         <Border Grid.Row="0" Background="{StaticResource ReaderChromeBrush}" BorderBrush="{StaticResource ReaderBorderBrush}"
                 BorderThickness="0,0,0,1" Padding="18,10" IsVisible="{Binding !IsFullscreen}">
-            <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+            <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
                 <Button Grid.Column="0" Command="{Binding GoBackCommand}" Background="Transparent" BorderThickness="0"
                         Padding="0" Cursor="Hand" HorizontalAlignment="Left">
                     <StackPanel Orientation="Horizontal" Spacing="4">
@@ -156,16 +156,40 @@
                             VerticalAlignment="Center" Margin="4,0,0,0" ToolTip.Tip="Zoom" />
                 </StackPanel>
 
-                <Button Grid.Column="4" Classes="toolIcon" Content="⟳" Command="{Binding RotateClockwiseCommand}" Margin="0,0,4,0" ToolTip.Tip="Rotate 90°" />
+                <!-- Rotate CW/CCW (docs/superpowers/specs/2026-08-16-remappable-reader-shortcuts-design.md §1) - CCW is new here, no CCW rotate existed before this shortcut extension. -->
+                <StackPanel Grid.Column="4" Orientation="Horizontal" Spacing="4" Margin="0,0,4,0">
+                    <Button Classes="toolIcon" Content="⟳" Command="{Binding RotateClockwiseCommand}" ToolTip.Tip="Rotate 90° (R)" />
+                    <Button Classes="toolIcon" Content="⟲" Command="{Binding RotateCounterClockwiseCommand}" ToolTip.Tip="Rotate -90° (Shift+R)" />
+                </StackPanel>
 
                 <Button Grid.Column="5" Classes="toolPill" Classes.active="{Binding AutoRotate}" Content="Auto-rotate"
-                        Command="{Binding ToggleAutoRotateCommand}" Margin="0,0,16,0" ToolTip.Tip="Auto-rotate landscape pages" />
+                        Command="{Binding ToggleAutoRotateCommand}" Margin="0,0,8,0" ToolTip.Tip="Auto-rotate landscape pages" />
 
-                <TextBlock Grid.Column="6" Text="{Binding PageLabel}" FontFamily="Consolas,monospace" FontSize="12"
+                <!-- Double-page spread toggle (docs/superpowers/specs/2026-08-15-reader-double-page-spread-design.md §7) - hidden in continuous mode, which has no spread concept (spec §1, same gating as the fit-mode picker above). -->
+                <Button Grid.Column="6" Classes="toolPill" Classes.active="{Binding IsDoublePageMode}" Content="Double-page"
+                        Command="{Binding ToggleDoublePageModeCommand}" Margin="0,0,16,0" ToolTip.Tip="Double-page spread"
+                        IsVisible="{Binding !IsContinuousMode}" />
+
+                <!-- Hands-free auto-scroll (docs/superpowers/specs/2026-08-16-reader-auto-scroll-design.md) - shares this toolbar slot with Double-page above via complementary IsVisible, since exactly one of paged/continuous mode is ever active. -->
+                <Button Grid.Column="6" Classes="toolPill" Classes.active="{Binding IsAutoScrolling}" Content="Auto-scroll"
+                        Command="{Binding ToggleAutoScrollCommand}" Margin="0,0,16,0" ToolTip.Tip="Auto-scroll (S)"
+                        IsVisible="{Binding IsContinuousMode}">
+                    <Button.Flyout>
+                        <Flyout Placement="Bottom">
+                            <StackPanel Width="180" Spacing="6">
+                                <TextBlock Text="{Binding AutoScrollSpeed, StringFormat='Speed: {0:F0} px/s'}" FontSize="12"
+                                           Foreground="{StaticResource ReaderTextBrush}" />
+                                <Slider Minimum="20" Maximum="300" Value="{Binding AutoScrollSpeed}" />
+                            </StackPanel>
+                        </Flyout>
+                    </Button.Flyout>
+                </Button>
+
+                <TextBlock Grid.Column="7" Text="{Binding PageLabel}" FontFamily="Consolas,monospace" FontSize="12"
                            Foreground="{StaticResource ReaderTextMutedBrush}" VerticalAlignment="Center" Margin="0,0,12,0" />
 
                 <!-- Live image adjustment (docs/superpowers/specs/2026-08-10-reader-polish-continuous-scroll-chrome-overlays-design.md §9) - a flyout panel extending the existing toolbar, same pattern as fit-mode/zoom above rather than a new full-screen panel. -->
-                <Button Grid.Column="7" Classes="toolPill" Content="Adjust" Margin="0,0,8,0" ToolTip.Tip="Brightness / contrast / saturation / gamma">
+                <Button Grid.Column="8" Classes="toolPill" Content="Adjust" Margin="0,0,8,0" ToolTip.Tip="Brightness / contrast / saturation / gamma">
                     <Button.Flyout>
                         <Flyout Placement="Bottom">
                             <StackPanel Width="220" Spacing="12">
@@ -196,8 +220,52 @@
                     </Button.Flyout>
                 </Button>
 
+                <!-- Page transition quick toggle (docs/superpowers/specs/2026-08-13-reader-page-transition-animations-design.md §6/user follow-up) - same global AppSettings.PageTransitionStyle value Preferences' own dropdown edits, just reachable without leaving the book. -->
+                <Button Grid.Column="9" Classes="toolPill" Content="{Binding PageTransitionStyle}" Margin="0,0,8,0" ToolTip.Tip="Page turn transition">
+                    <Button.Flyout>
+                        <Flyout Placement="Bottom">
+                            <StackPanel Width="140">
+                                <Button Classes="flyoutRow" Content="None" Command="{Binding SetPageTransitionStyleCommand}" CommandParameter="{x:Static entities:PageTransitionStyle.None}" />
+                                <Button Classes="flyoutRow" Content="Slide" Command="{Binding SetPageTransitionStyleCommand}" CommandParameter="{x:Static entities:PageTransitionStyle.Slide}" />
+                                <Button Classes="flyoutRow" Content="Crossfade" Command="{Binding SetPageTransitionStyleCommand}" CommandParameter="{x:Static entities:PageTransitionStyle.Crossfade}" />
+                            </StackPanel>
+                        </Flyout>
+                    </Button.Flyout>
+                </Button>
+
+                <!-- Bookmarks (docs/superpowers/specs/2026-08-18-metadata-model-ui-gaps-status-and-bookmarks-design.md) -->
+                <Button Grid.Column="10" Classes="toolPill" Classes.active="{Binding IsCurrentPageBookmarked}" Content="🔖" Margin="0,0,8,0" ToolTip.Tip="Bookmarks">
+                    <Button.Flyout>
+                        <Flyout Placement="Bottom">
+                            <StackPanel Width="220" Spacing="4">
+                                <Button Classes="flyoutRow" Command="{Binding ToggleBookmarkCommand}">
+                                    <Panel>
+                                        <TextBlock Text="🔖 Bookmark this page" IsVisible="{Binding !IsCurrentPageBookmarked}" />
+                                        <TextBlock Text="✓ Bookmarked — tap to remove" IsVisible="{Binding IsCurrentPageBookmarked}" />
+                                    </Panel>
+                                </Button>
+                                <Border Height="1" Background="#33373F" Margin="0,4" IsVisible="{Binding Bookmarks.Count}" />
+                                <ItemsControl ItemsSource="{Binding Bookmarks}" MaxHeight="220">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="models:IssueBookmarkSummary">
+                                            <Grid ColumnDefinitions="*,Auto" Margin="0,2">
+                                                <Button Grid.Column="0" Classes="flyoutRow"
+                                                        Command="{Binding $parent[UserControl].((vm:ReaderScreenViewModel)DataContext).GoToBookmarkCommand}"
+                                                        CommandParameter="{Binding}" Content="{Binding Label}" HorizontalContentAlignment="Left" />
+                                                <Button Grid.Column="1" Classes="toolIcon" Content="✕" FontSize="10"
+                                                        Command="{Binding $parent[UserControl].((vm:ReaderScreenViewModel)DataContext).DeleteBookmarkCommand}"
+                                                        CommandParameter="{Binding}" ToolTip.Tip="Remove bookmark" />
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </Flyout>
+                    </Button.Flyout>
+                </Button>
+
                 <!-- Fullscreen toggle (docs/superpowers/specs/2026-08-10-reader-polish-continuous-scroll-chrome-overlays-design.md §7) - F/F11 also work regardless of this button, this is purely for discoverability. -->
-                <Button Grid.Column="8" Classes="toolIcon" Content="⛶" Command="{Binding ToggleFullscreenCommand}"
+                <Button Grid.Column="11" Classes="toolIcon" Content="⛶" Command="{Binding ToggleFullscreenCommand}"
                         ToolTip.Tip="Fullscreen (F)" />
             </Grid>
         </Border>
@@ -218,7 +286,13 @@
                             <DataTemplate x:DataType="models:ReaderThumbnailSample">
                                 <Border Classes="thumb" Classes.selected="{Binding IsSelected}" Background="{Binding CoverBrush}"
                                         Cursor="Hand" PointerPressed="OnThumbnailPointerPressed">
-                                    <Image Source="{Binding CoverImage}" Stretch="UniformToFill" />
+                                    <Grid>
+                                        <Image Source="{Binding CoverImage}" Stretch="UniformToFill" />
+                                        <!-- Bookmark ribbon (docs/superpowers/specs/2026-08-18-metadata-model-ui-gaps-status-and-bookmarks-design.md) - CE draws the same kind of marker on its own thumbnail rail. -->
+                                        <Polygon IsVisible="{Binding IsBookmarked}" Fill="#E0B814" Stretch="Fill"
+                                                 Points="0,0 10,0 10,14 5,9 0,14" Width="10" Height="14"
+                                                 HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,2,3,0" />
+                                    </Grid>
                                 </Border>
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
@@ -230,11 +304,45 @@
             <Grid Grid.Column="1" Background="{Binding CanvasBackgroundBrush}">
                 <views:PageCanvas x:Name="PageCanvasControl"
                                   Page="{Binding CurrentPage}"
+                                  SecondaryPage="{Binding CurrentPageSecondary}"
                                   LeftCommand="{Binding GoLeftCommand}"
                                   RightCommand="{Binding GoRightCommand}"
                                   HighQualityDisplay="{Binding HighQualityPageDisplay}"
                                   LeftKey="{Binding PageTurnLeftKey}"
                                   RightKey="{Binding PageTurnRightKey}"
+                                  PanLeftGesture="{Binding PanLeftKey}"
+                                  PanRightGesture="{Binding PanRightKey}"
+                                  PanUpGesture="{Binding PanUpKey}"
+                                  PanDownGesture="{Binding PanDownKey}"
+                                  ScrollLeftGesture="{Binding ScrollLeftKey}"
+                                  ScrollRightGesture="{Binding ScrollRightKey}"
+                                  ScrollUpGesture="{Binding ScrollUpKey}"
+                                  ScrollDownGesture="{Binding ScrollDownKey}"
+                                  ScrollPageUpGesture="{Binding ScrollPageUpKey}"
+                                  ScrollPageDownGesture="{Binding ScrollPageDownKey}"
+                                  ScrollToStartGesture="{Binding ScrollToStartKey}"
+                                  ScrollToEndGesture="{Binding ScrollToEndKey}"
+                                  ToggleAutoScrollGesture="{Binding ToggleAutoScrollKey}"
+                                  ToggleAutoScrollCommand="{Binding ToggleAutoScrollCommand}"
+                                  FullscreenToggleGesture="{Binding ToggleFullscreenKey}"
+                                  RotateClockwiseGesture="{Binding RotateClockwiseKey}"
+                                  RotateClockwiseCommand="{Binding RotateClockwiseCommand}"
+                                  RotateCounterClockwiseGesture="{Binding RotateCounterClockwiseKey}"
+                                  RotateCounterClockwiseCommand="{Binding RotateCounterClockwiseCommand}"
+                                  PreviousBookmarkGesture="{Binding PreviousBookmarkKey}"
+                                  PreviousBookmarkCommand="{Binding PreviousBookmarkCommand}"
+                                  NextBookmarkGesture="{Binding NextBookmarkKey}"
+                                  NextBookmarkCommand="{Binding NextBookmarkCommand}"
+                                  ZoomInGesture="{Binding ZoomInKey}"
+                                  ZoomInCommand="{Binding ZoomInCommand}"
+                                  ZoomOutGesture="{Binding ZoomOutKey}"
+                                  ZoomOutCommand="{Binding ZoomOutCommand}"
+                                  FitOriginalGesture="{Binding FitOriginalKey}"
+                                  FitAllGesture="{Binding FitAllKey}"
+                                  FitWidthGesture="{Binding FitWidthKey}"
+                                  FitHeightGesture="{Binding FitHeightKey}"
+                                  FitBestGesture="{Binding FitBestKey}"
+                                  SetFitModeCommand="{Binding SetFitModeCommand}"
                                   ZoomLevel="{Binding ZoomLevel}"
                                   PanOffsetX="{Binding PanOffsetX}"
                                   PanOffsetY="{Binding PanOffsetY}"
@@ -243,6 +351,8 @@
                                   ManualRotationDegrees="{Binding ManualRotationDegrees}"
                                   AutoRotate="{Binding AutoRotate}"
                                   WheelPanStep="{Binding MouseWheelSpeed}"
+                                  PageTransitionStyle="{Binding PageTransitionStyle}"
+                                  PageTransitionDurationMs="{Binding PageTransitionDurationMs}"
                                   ReadingMode="{Binding EffectiveReadingMode}"
                                   Decoder="{Binding Decoder}"
                                   PageCount="{Binding PageCount}"

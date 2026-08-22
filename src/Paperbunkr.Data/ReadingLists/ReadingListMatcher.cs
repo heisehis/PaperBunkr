@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Paperbunkr.Data.Entities;
+using Paperbunkr.Data.Metadata;
 
 namespace Paperbunkr.Data.ReadingLists;
 
@@ -18,14 +19,15 @@ public static class ReadingListMatcher
 {
     /// <summary>Read-only lookup — used by the manual "Add Issue" search, which only ever offers issues already in the library.</summary>
     public static Issue? FindExisting(
-        PaperbunkrDbContext context, string seriesName, string number, int? volume = null, int? year = null, string? format = null)
+        PaperbunkrDbContext context, string seriesName, string number, string? volume = null, int? year = null, string? format = null)
     {
         var candidates = context.Issues
             .Include(i => i.Series)
+            .Include(i => i.MetadataProposals)
             .AsEnumerable()
             .Where(i => i.Series is not null
                 && string.Equals(i.Series.Name, seriesName, StringComparison.OrdinalIgnoreCase)
-                && string.Equals(i.Number, number, StringComparison.OrdinalIgnoreCase))
+                && string.Equals(i.EffectiveNumber(), number, StringComparison.OrdinalIgnoreCase))
             .ToList();
 
         return Narrow(candidates, volume, year, format).FirstOrDefault();
@@ -37,7 +39,7 @@ public static class ReadingListMatcher
     /// <see cref="Issue.IsPlaceholder"/> both true) when <see cref="FindExisting"/> comes back empty.
     /// </summary>
     public static Issue ResolveOrCreatePlaceholder(
-        PaperbunkrDbContext context, string seriesName, string number, int? volume = null, int? year = null, string? format = null)
+        PaperbunkrDbContext context, string seriesName, string number, string? volume = null, int? year = null, string? format = null)
     {
         var existing = FindExisting(context, seriesName, number, volume, year, format);
         if (existing is not null)
@@ -63,6 +65,28 @@ public static class ReadingListMatcher
         return placeholder;
     }
 
+    /// <summary>
+    /// Additive overload for the manual "add a physical book" Library-screen entry point
+    /// (docs/superpowers/specs/2026-08-16-reveal-in-explorer-and-fileless-entries-design.md §3) -
+    /// the 5-argument overload above is untouched, so CBL/CSV import behavior doesn't change.
+    /// <paramref name="wasCreated"/> is <see langword="false"/> when <see cref="FindExisting"/>
+    /// matched something already in the library (a real book or an existing placeholder) - callers
+    /// must only treat the row as safely deletable when this is <see langword="true"/>.
+    /// </summary>
+    public static Issue ResolveOrCreatePlaceholder(
+        PaperbunkrDbContext context, string seriesName, string number, string? volume, int? year, string? format, out bool wasCreated)
+    {
+        var existing = FindExisting(context, seriesName, number, volume, year, format);
+        if (existing is not null)
+        {
+            wasCreated = false;
+            return existing;
+        }
+
+        wasCreated = true;
+        return ResolveOrCreatePlaceholder(context, seriesName, number, volume, year, format);
+    }
+
     private static Series CreateSeries(PaperbunkrDbContext context, string seriesName)
     {
         var series = new Series { Name = seriesName, SortName = seriesName };
@@ -71,7 +95,7 @@ public static class ReadingListMatcher
         return series;
     }
 
-    private static IEnumerable<Issue> Narrow(List<Issue> candidates, int? volume, int? year, string? format)
+    private static IEnumerable<Issue> Narrow(List<Issue> candidates, string? volume, int? year, string? format)
     {
         if (candidates.Count <= 1)
         {
@@ -79,9 +103,9 @@ public static class ReadingListMatcher
         }
 
         var narrowed = candidates;
-        if (volume is int v)
+        if (!string.IsNullOrEmpty(volume))
         {
-            var byVolume = narrowed.Where(i => i.Volume == v).ToList();
+            var byVolume = narrowed.Where(i => string.Equals(i.EffectiveVolume(), volume, StringComparison.OrdinalIgnoreCase)).ToList();
             if (byVolume.Count > 0)
             {
                 narrowed = byVolume;
@@ -90,7 +114,7 @@ public static class ReadingListMatcher
 
         if (narrowed.Count > 1 && year is int y)
         {
-            var byYear = narrowed.Where(i => i.Year.HasValue && Math.Abs(i.Year.Value - y) <= 1).ToList();
+            var byYear = narrowed.Where(i => i.EffectiveYear().HasValue && Math.Abs(i.EffectiveYear()!.Value - y) <= 1).ToList();
             if (byYear.Count > 0)
             {
                 narrowed = byYear;

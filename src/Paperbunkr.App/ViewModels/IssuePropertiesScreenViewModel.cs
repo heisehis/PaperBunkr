@@ -9,6 +9,8 @@ using Microsoft.EntityFrameworkCore;
 using Paperbunkr.App.Models;
 using Paperbunkr.App.Services;
 using Paperbunkr.Data;
+using Paperbunkr.Data.Entities;
+using Paperbunkr.Data.Metadata;
 
 namespace Paperbunkr.App.ViewModels;
 
@@ -25,6 +27,14 @@ public partial class IssuePropertiesScreenViewModel : ViewModelBase
     private readonly Action _goBack;
     private readonly Func<PaperbunkrDbContext> _contextFactory;
     private int? _issueId;
+
+    /// <summary>
+    /// True only for the manual "add a physical book" flow (docs/superpowers/specs/2026-08-16-
+    /// reveal-in-explorer-and-fileless-entries-design.md §3) - lets Cancel delete the placeholder
+    /// row this exact flow just created, if the user backs out without touching anything. Defaults
+    /// false, so every other Load call site (e.g. Detail screen's "Edit Properties") is unaffected.
+    /// </summary>
+    private bool _deleteIfUnedited;
 
     public IssuePropertiesScreenViewModel(Action goBack) : this(goBack, PaperbunkrDb.CreateContext)
     {
@@ -195,7 +205,18 @@ public partial class IssuePropertiesScreenViewModel : ViewModelBase
     [ObservableProperty] private string _translator = string.Empty;
     [ObservableProperty] private string _ageRating = string.Empty;
     [ObservableProperty] private string _languageIso = string.Empty;
-    [ObservableProperty] private bool _blackAndWhite;
+
+    /// <summary>String-backed enum picker, same shape as the other *Text fields in this VM - avoids needing an Avalonia enum value converter. Replaces the old bool BlackAndWhite checkbox (docs/superpowers/specs/2026-08-17-metadata-model-phase1-canonical-metadata-design.md).</summary>
+    [ObservableProperty] private string _colorModeText = nameof(ColorMode.Unknown);
+
+    public static string[] ColorModeOptions { get; } = Enum.GetNames<ColorMode>();
+
+    /// <summary>Replaces CE's per-issue Yes/No/Unknown <c>SeriesComplete</c> checkbox - had shipped
+    /// data (docs/superpowers/specs/2026-08-17-metadata-model-phase1-canonical-metadata-design.md)
+    /// with no editor UI until now (docs/superpowers/specs/2026-08-18-metadata-model-ui-gaps-status-
+    /// and-bookmarks-design.md). A plain bool, not tri-state like CE's - CE's "Unknown" state doesn't
+    /// have a real Paperbunkr equivalent here since this is a user-set flag, not inferred data.</summary>
+    [ObservableProperty] private bool _isFinalIssue;
 
     // ===================== Plot & Notes tab =====================
 
@@ -211,20 +232,21 @@ public partial class IssuePropertiesScreenViewModel : ViewModelBase
 
     // ===================== Load / Save / Cancel =====================
 
-    public void Load(int issueId)
+    public void Load(int issueId, bool deleteIfUnedited = false)
     {
         _isLoading = true;
         _issueId = issueId;
+        _deleteIfUnedited = deleteIfUnedited;
 
         using var context = _contextFactory();
-        var issue = context.Issues.Include(i => i.Series).FirstOrDefault(i => i.Id == issueId);
+        var issue = context.Issues.Include(i => i.Series).Include(i => i.MetadataProposals).FirstOrDefault(i => i.Id == issueId);
         if (issue is null)
         {
             _isLoading = false;
             return;
         }
 
-        HeaderLabel = $"{issue.Series?.Name ?? "Unknown Series"} #{issue.Number}";
+        HeaderLabel = $"{issue.Series?.Name ?? "Unknown Series"} #{issue.EffectiveNumber()}";
         CoverImage = CoverImageCache.Get(issue.Id);
         CoverBrush = SeriesCardSample.CoverBrushFor(issue.Series?.Name ?? string.Empty);
         FilePathLabel = issue.FilePath ?? string.Empty;
@@ -233,8 +255,12 @@ public partial class IssuePropertiesScreenViewModel : ViewModelBase
         MyRating = issue.Rating.HasValue ? (int)issue.Rating.Value : null;
         CommunityRating = issue.CommunityRating.HasValue ? (int)issue.CommunityRating.Value : null;
 
-        Number = issue.Number ?? string.Empty;
-        VolumeText = issue.Volume?.ToString() ?? string.Empty;
+        // Pre-filled with the effective (stored-or-accepted-proposal) value, not just the raw
+        // field (docs/superpowers/specs/2026-08-17-metadata-model-phase2a-metadata-proposals-
+        // design.md) - a filename-inferred guess shows up here as editable, same as CE's
+        // ShadowNumber-in-editor precedent. Save below still writes to the raw field only.
+        Number = issue.EffectiveNumber() ?? string.Empty;
+        VolumeText = issue.EffectiveVolume() ?? string.Empty;
         CountText = issue.Count?.ToString() ?? string.Empty;
         Title = issue.Title ?? string.Empty;
         AlternateSeries = issue.AlternateSeries ?? string.Empty;
@@ -245,7 +271,7 @@ public partial class IssuePropertiesScreenViewModel : ViewModelBase
         Publisher = issue.Publisher ?? string.Empty;
         Imprint = issue.Imprint ?? string.Empty;
         Format = issue.Format ?? string.Empty;
-        YearText = issue.Year?.ToString() ?? string.Empty;
+        YearText = issue.EffectiveYear()?.ToString() ?? string.Empty;
         MonthText = issue.Month?.ToString() ?? string.Empty;
         DayText = issue.Day?.ToString() ?? string.Empty;
         Genre = issue.Genre ?? string.Empty;
@@ -260,7 +286,8 @@ public partial class IssuePropertiesScreenViewModel : ViewModelBase
         Translator = issue.Translator ?? string.Empty;
         AgeRating = issue.AgeRating ?? string.Empty;
         LanguageIso = issue.LanguageISO ?? string.Empty;
-        BlackAndWhite = issue.BlackAndWhite;
+        ColorModeText = issue.ColorMode.ToString();
+        IsFinalIssue = issue.IsFinalIssue;
 
         Characters = issue.Characters ?? string.Empty;
         Teams = issue.Teams ?? string.Empty;
@@ -301,7 +328,7 @@ public partial class IssuePropertiesScreenViewModel : ViewModelBase
         issue.CommunityRating = CommunityRating.HasValue ? (float?)CommunityRating.Value : null;
 
         issue.Number = NullIfEmpty(Number);
-        issue.Volume = ParseInt(VolumeText);
+        issue.Volume = NullIfEmpty(VolumeText);
         issue.Count = ParseInt(CountText);
         issue.Title = NullIfEmpty(Title);
         issue.AlternateSeries = NullIfEmpty(AlternateSeries);
@@ -327,7 +354,8 @@ public partial class IssuePropertiesScreenViewModel : ViewModelBase
         issue.Translator = NullIfEmpty(Translator);
         issue.AgeRating = NullIfEmpty(AgeRating);
         issue.LanguageISO = NullIfEmpty(LanguageIso);
-        issue.BlackAndWhite = BlackAndWhite;
+        issue.ColorMode = Enum.Parse<ColorMode>(ColorModeText);
+        issue.IsFinalIssue = IsFinalIssue;
 
         issue.Characters = NullIfEmpty(Characters);
         issue.Teams = NullIfEmpty(Teams);
@@ -344,6 +372,28 @@ public partial class IssuePropertiesScreenViewModel : ViewModelBase
         _goBack();
     }
 
+    /// <summary>
+    /// Deletes the placeholder row this flow just created if the user backs out without touching
+    /// anything (docs/superpowers/specs/2026-08-16-reveal-in-explorer-and-fileless-entries-design.md
+    /// §3) - reuses HasUnsavedChanges()/_isDirty exactly as-is, so this can never delete a real
+    /// pre-existing book: _deleteIfUnedited is only ever true when the caller's ResolveOrCreatePlaceholder
+    /// call actually inserted a new row, never an existing match.
+    /// </summary>
     [RelayCommand]
-    private void Cancel() => _goBack();
+    private void Cancel()
+    {
+        if (_deleteIfUnedited && !HasUnsavedChanges() && _issueId is int issueId)
+        {
+            using var context = _contextFactory();
+            var issue = context.Issues.Find(issueId);
+            if (issue is not null)
+            {
+                context.Issues.Remove(issue);
+                context.SaveChanges();
+                CoverImageCache.Invalidate(issueId);
+            }
+        }
+
+        _goBack();
+    }
 }

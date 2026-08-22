@@ -134,12 +134,102 @@ tagging (cover/story/ad/deleted), per-page persisted rotation override, named bo
 from `LastPageRead`).
 
 ### Library browsing extras
-Filesystem folder browsing mode (not just library-backed), browse history (back/forward), saved
-Workspaces (display-setting presets), saved List Layouts (grid/sort/group presets — `LibraryScreen`
-already has decorative UI stubbed for this), pluggable sort/group strategies, drag-and-drop import,
-Recent/MRU + Quick Open overlay, reveal-in-Explorer, live folder-watch scanning (`FileSystemWatcher`,
-vs. today's scan-now only), file metadata write-back (edits saved into on-disk ComicInfo.xml/tags —
-real risk surface, mutates user files), fileless book entries (catalog a physical book with no file).
+**Decomposed 2026-08-16 into ~5 ordered sub-projects** (too large for one spec) —
+**reveal-in-Explorer and manual fileless book entries shipped 2026-08-16** (design spec 2026-08-16):
+CE's `FileExplorer` shell helper (already ported, previously zero call sites) wired into Detail
+screen's issue tiles, bulk multi-select, and Library series cards (opens the first-issue's folder,
+since a series has no single file); a new "+ Add" Library-toolbar entry creates a fileless
+placeholder Issue (reusing `ReadingListMatcher.ResolveOrCreatePlaceholder`, extended with a
+non-breaking `out bool wasCreated` overload) and hands off to the existing Issue Properties editor,
+which now safely deletes the placeholder if the user cancels without editing anything — safe by
+construction, since the delete-on-cancel flag is only ever set when the row was actually newly
+created this session, never an existing match. 566 automated tests pass; app verified to launch and
+stay running (checked via Windows Event Viewer for crash events, not just process-alive) — **on-
+screen verification of the actual context-menu/toolbar interactions still pending**, same standing
+GUI-automation caveat as every reader spec.
+**Manga/ContentType classification shipped 2026-08-16** (design spec 2026-08-16, surfaced while
+scoping pluggable sort/group — paused, still open below): CE's flat `Manga` field already had a
+better home in `Series.ContentType` (`Comic`/`Manga`/`Manhua`/`Manhwa`, distinguishing Japanese/
+Chinese/Korean origin — a real improvement over CE, matching this project's "more manga support
+than ComicRack" direction) but was only ever set by one-time CE migration, with zero edit UI and no
+scan-time detection despite the scanner already having CE's embedded `Manga` value available for
+free. Added: Bulk Edit's new `FieldKind.Enum` (the first bulk field that writes through to a
+selection's owning Series rather than the Issue itself, surfacing "N series will be affected"), a
+per-card Library context-menu picker, the "+ Add" flow's picker, and scan-time auto-detection
+reusing `CeLibraryMigrator.MapMangaField` exactly as CE migration itself does. A conditional Reading
+Direction row appears alongside Content Type whenever it's Manga-family, defaulting to
+right-to-left on first classification without ever clobbering an already-set value. Two real bugs
+caught and fixed during implementation: `Series.ContentType`'s own property initializer is
+`Unknown`, not the enum's raw default (`Comic`, first-declared) — an incorrect early assumption,
+corrected in both code comments and the spec itself; and `ResolveOrCreatePlaceholder`'s
+`wasCreated` reflects whether the *Issue* was newly created, not the *Series* — attaching a new
+issue to an *existing*, already-classified series also reports `wasCreated=true`, which would have
+silently overwritten real classifications via the "+ Add" flow had it been used as the write-gate
+instead of an explicit series-existence check. 584 automated tests pass (build clean); app verified
+to launch and stay running (Event Viewer checked, no crash events) — on-screen verification of the
+actual picker interactions still pending, same standing caveat.
+**Saved List Layouts shipped 2026-08-17** (spec: `docs/superpowers/specs/2026-08-17-library-saved-
+list-layouts-design.md`), the third sub-project. Verified against CE source first: CE's own
+`DisplayListConfig` (columns/sort/group/captions/search/filters, auto-persisted, no naming) and
+`DisplayWorkspace` (named, multiple, switchable bundles including window/page-layout state) are two
+distinct concepts — this sub-project is the `DisplayListConfig` equivalent only; named/multiple
+presets are the separate, still-unbuilt "saved Workspaces" item below. `LibraryScreenViewModel`'s
+entire session-only sort/group/display/filter state (sort field+direction, group field, view mode,
+grid density, 5 overlay badge toggles, search query, sidebar content-type/category selection, 3
+filter checkboxes) now round-trips through `AppSettings` — no new UI, immediate write on every
+change (no debounce, matching this ViewModel's existing no-debounce search philosophy), matching
+CE's own choice to persist search/filter state alongside sort/group/display rather than treat them
+as session-only. A stale `LibraryActiveCategoryId` (its category deleted since last session) falls
+back to "All Series" rather than silently rendering an empty grid. Required moving 4 enums
+(`SortDirection`, `LibrarySortField`, `LibraryGroupField`, `LibraryViewMode`) from `App.Models` into
+`Data.Entities` so `AppSettings` could reference them directly, following the precedent the
+`PageLayoutMode`/`PageTransitionStyle` work already set rather than inventing parallel mapped types.
+13 new `LibraryScreenViewModelTests` cover load-reflects-settings, per-field write-back, and the
+stale-category fallback; full suite (594 tests) passes, build clean. Pluggable sort/group strategies
+remains explicitly paused/skipped this session (still waiting on the user's ideas for the 5
+unmappable comparer/grouper concepts — AlternateCount/variant tracking, a Bookmarks system,
+OpenCount/access tracking, a Proposed-metadata workflow, per-issue SeriesComplete — none of which
+List Layouts needed).
+
+**On-screen verification gap closed the same session** (docs/onboarding.md §17): the "no
+unattended desktop GUI automation available" caveat repeated across ~15 specs/roadmap entries is no
+longer categorically true. `src/Paperbunkr.App.UiTests` (FlaUI/UIA3) now drives the real compiled
+exe — real process, real window, real clicks — with an isolated-database mechanism
+(`PAPERBUNKR_DB_PATH`) so it never touches a real library. First real test:
+`LibraryListLayoutPersistenceTests` (3 cases: sort field, view mode, filter checkbox), all verifying
+the exact restart-survives-it claim above by actually restarting the app and reading the toolbar
+state back via UI Automation, not by reading `AppSettings` from the database directly. Full solution
+suite including this new project: 597 tests, all passing. Scope so far is limited to the Library
+toolbar's `AutomationId`s; extending to other screens is unblocked infrastructure work, not a new
+investigation — see §17 for the pattern.
+
+**Pluggable sort/group strategies, previously noted "paused" above, did in fact ship** — as Issue
+List Sort/Group (design spec `2026-08-18-issue-list-pluggable-sort-group-design.md`), later merged
+into Library's own toolbar so there's only one Sort/Group control, not two. This doc's own "paused"
+claim had gone stale; corrected here rather than left to mislead the next reader.
+
+**Browse history (back/forward) shipped 2026-08-19** (design spec `2026-08-19-library-browse-
+history-design.md`) — CE's real `IBrowseHistory`/`CursorList<IComicBookListProvider>` model
+(`ComicListBrowser.cs`), ported onto Library's sidebar filter (Content Type/Collection) plus, as a
+deliberate deviation the user asked for, the search query too (debounced to a pause in typing, not
+per-keystroke). Reused `cYo.Common.Collections.CursorList<T>` as-is — already ported into this
+codebase (`Paperbunkr.Common`) with zero call sites before this, same "ported early, never wired
+up" pattern as several other pieces along the way. Two new toolbar buttons (`‹`/`›`, matching the
+existing precedent from `BookReaderScreen.axaml`'s own prev/next buttons), gated by
+`CanBrowsePrevious`/`CanBrowseNext`. 652 `Paperbunkr.App.Tests` + 274 `Paperbunkr.Data.Tests` +
+15 `Paperbunkr.App.UiTests` all passing (one new live on-screen case: buttons start disabled, a
+sidebar click enables Back, clicking Back actually returns to the prior selection).
+
+Still open, in rough sequence: saved Workspaces (CE's `DisplayWorkspace` — named/multiple presets,
+depends on List Layouts, now available); then independently, drag-and-drop import, Recent/MRU +
+Quick Open overlay (CE's own version is recency-grouped, not fuzzy-search — a deliberate deviation
+to decide on, not CE parity), filesystem folder browsing mode, live folder-watch scanning (CE's own
+is narrower than it sounds — rename-detection only, not full create/delete auto-import); file
+metadata write-back deliberately sequenced last (CE itself gates it behind explicit opt-in settings
+— real risk surface, mutates user files). A tracker/manga-UI research doc (Beta-scoped, see its own
+backlog entry) surfaced during this work — its Stage 6 "manga-specific detail view, selected by
+ContentType" depends on ContentType actually being real/editable/populated, which the Manga/
+ContentType entry above now provides.
 
 ### Reading Lists: story-arc auto-build (CBL Manager port)
 Currently-nonfunctional "AniList"/"MyAnimeList"/"Auto-Build from Tracked Arc" buttons on the
@@ -157,10 +247,56 @@ Client (connect to another instance's shared library) + server (host, password-p
 per-list sharing) + background job/task monitor. Substantial subsystem, not named anywhere in the
 original onboarding.md — needs its own brainstorm → design spec before any implementation starts.
 
+### Metadata Model platform (user-supplied `PAPERBUNKR_METADATA_MODEL.md`, 2026-08-17/18)
+79-section implementation spec covering canonical metadata, relationships, events/reading lists,
+external providers, and recommendations — its own §68 "Migration Strategy" defines 7 phases.
+**Phases 1-6a shipped, Phase 7 explicitly deferred** (not dropped — the source doc itself gates it:
+"Implement only when needed by the reader and collected-edition use cases," and there's no concrete
+driving use case yet; revisit if one shows up). Design specs:
+`docs/superpowers/specs/2026-08-17-metadata-model-phase{1,2a,2b,2c,3,4a,4b,4c,5a}-*-design.md`,
+`docs/superpowers/specs/2026-08-18-metadata-model-phase{5b,6a}-*-design.md`.
+
+- **Phase 1 — Canonical metadata**: `OpenCount`/`ColorMode`/`Series.Status`/`Volume`-as-string/
+  `IssueBookmark` + resolvers, replacing CE's `BlackAndWhite`/`Volume`-as-int/`IsComplete`.
+- **Phase 2a/2b/2c — Metadata proposals, series reassignment, library field descriptors**:
+  `MetadataProposal`/`MetadataResolutionPolicy`, a resolver for moving issues between series, a
+  data-driven field catalog driving Library sort/group/filter.
+- **Phase 3 — Media Relations**: `MediaRelation`/`RelationEvidence`, first-class Series-to-Series
+  connections (CE has no equivalent) — powers the Detail screen's Related tab.
+- **Phase 4a/4b/4c — Continuity, Story Events, Reading List overhaul**: `Continuity` (M:M with
+  Series), `StoryEvent`/`EventMembership` (+ a new Events screen), `ReadingList`/`ReadingListItem`
+  gained `Type`/`CreatedAt`/`UpdatedAt`/`StoryEventId`/`Role`/`Notes` (CBL/CSV wire formats
+  untouched — separate CE-plugin-tied overhaul planned).
+- **Phase 5a — External Metadata schema**: `ExternalMediaId`/`ExternalMetadataSnapshot`/
+  `ExternalRating` + the `IMetadataProvider` adapter contract, schema-only, zero adapters/network/UI.
+- **Phase 5b — Real AniList adapter**: `AniListMetadataProvider`, live GraphQL calls, rate-limit-
+  aware (respects AniList's actual current 30 req/min degraded limit), licensing-verified against
+  AniList's real terms (`github.com/AniList/docs`). Backend-only — no UI caller yet. **Every other
+  provider (MAL/MangaDex/GCD/etc.) and all search/match UI are deliberately folded into the
+  tracker-service-sync item below, not built as a separate metadata-model phase** — that work should
+  reuse this adapter, not rebuild AniList integration from scratch.
+- **Phase 6a — Recommendation engine**: `RecommendationResolver`, a relationally-anchored (not
+  whole-library-similarity) 7-signal explainable scoring engine reusing the Phase 3/4a/4b resolvers.
+  Live-computed, not a persisted table. Backend-only — **no homepage screen exists yet to show "Because
+  you read X" modules on; the next time homepage/dashboard work comes up, reuse this resolver rather
+  than rebuilding recommendation logic.**
+
 ### Content-type classification & manga metadata scraping (onboarding.md §7/§9)
 Tracker-driven classification pipeline (MangaUpdates/AniList), MangaDex metadata scraping,
 search-and-confirm UI shared across classification/tracking/scraping. Explicitly Beta-scoped from
 the start.
+
+**Expanded scope, per user-supplied research (2026-08-12):** full tracker-service *sync*
+integration (not just classification-time metadata lookup) — one `Track` row per series-per-
+service, six services (MyAnimeList, AniList, Kitsu, MangaUpdates, Shikimori, Bangumi), one-way
+progress push to start (Paperbunkr → tracker, on chapter-read/last-page), plus a manga-specific
+detail-page UI (chapter-list-first, blurred-cover header, tag chips, icon-led metadata rows,
+tracking status shown inline) ported from Mihon/Komikku's UX patterns, selected by `ContentType`
+alongside Paperbunkr's existing Western comic detail view. Full findings, per-service auth/API
+notes, and a staged implementation recommendation (data model → service abstraction → sync engine
+→ token security → stats differentiation → Avalonia UI): [docs/tracker-manga-ui-research.md](tracker-manga-ui-research.md).
+Research only, not a design spec yet — needs its own brainstorm → design-spec pass before
+implementation, same as the other substantial-subsystem items in this backlog.
 
 ### Plugin API v2 (onboarding.md §10)
 C# scripting initializer first, `pythonnet` interop as a follow-on spike. Needs a real test plugin

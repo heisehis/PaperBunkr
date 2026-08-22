@@ -34,13 +34,28 @@ public class Issue
 
     public int? Count { get; set; }
 
-    public int? Volume { get; set; }
+    /// <summary>
+    /// String, not int - preserves the original display representation (docs/superpowers/specs/
+    /// 2026-08-17-metadata-model-phase1-canonical-metadata-design.md), same treatment as
+    /// <see cref="Number"/>. Use <c>IssueMetadataExtensions.VolumeSortKey(this Issue)</c> for
+    /// sorting, not this raw string.
+    /// </summary>
+    public string? Volume { get; set; }
 
     public string? AlternateSeries { get; set; }
 
     public string? AlternateNumber { get; set; }
 
     public string? StoryArc { get; set; }
+
+    /// <summary>
+    /// Replaces the never-ported per-issue <c>SeriesComplete</c> (docs/superpowers/specs/2026-08-17-
+    /// metadata-model-phase1-canonical-metadata-design.md) - "this issue is the one that completes
+    /// the series," distinct from <see cref="Series.Status"/> ("this series is known to be
+    /// complete"). Schema-present, deliberately dormant this phase - no source to backfill from
+    /// (CE's flag was never carried into Paperbunkr's schema) and no editor UI yet.
+    /// </summary>
+    public bool IsFinalIssue { get; set; }
 
     /// <summary>
     /// New field — confirmed absent from CE's ComicInfo entirely (docs/onboarding.md §6). This is
@@ -118,6 +133,14 @@ public class Issue
     /// </summary>
     public ImageFitMode? PageFitModeOverride { get; set; }
 
+    /// <summary>
+    /// Nullable escape hatch for a single issue that should override the series' double-page spread
+    /// default (docs/superpowers/specs/2026-08-15-reader-double-page-spread-design.md §2) - same
+    /// shape as <see cref="PageFitModeOverride"/>. Schema-present but has no writer UI this pass
+    /// (dormant), same accepted precedent <see cref="ReadingModeOverride"/> already has here.
+    /// </summary>
+    public PageLayoutMode? PageLayoutModeOverride { get; set; }
+
     /// <summary>Same override shape as <see cref="PageFitModeOverride"/>, for the auto-rotate-landscape-pages toggle.</summary>
     public bool? AutoRotateOverride { get; set; }
 
@@ -149,6 +172,14 @@ public class Issue
 
     public DateTime? OpenedTime { get; set; }
 
+    /// <summary>
+    /// Real counter (docs/superpowers/specs/2026-08-17-metadata-model-phase1-canonical-metadata-
+    /// design.md), unlike CE's own <c>OpenedCount</c> which only ever flips 0→1 on mark-as-read.
+    /// Incremented alongside <see cref="OpenedTime"/> wherever an issue is actually opened for
+    /// reading (<c>ReaderScreenViewModel.Load</c>).
+    /// </summary>
+    public int OpenCount { get; set; }
+
     public int? LastPageRead { get; set; }
 
     public bool FileIsMissing { get; set; }
@@ -175,7 +206,12 @@ public class Issue
 
     public string? ScanInformation { get; set; }
 
-    public bool BlackAndWhite { get; set; }
+    /// <summary>
+    /// Replaces the old <c>bool BlackAndWhite</c> (docs/superpowers/specs/2026-08-17-metadata-
+    /// model-phase1-canonical-metadata-design.md) - see <see cref="Entities.ColorMode"/>'s own doc
+    /// comment for the CE-deviation note.
+    /// </summary>
+    public ColorMode ColorMode { get; set; } = ColorMode.Unknown;
 
     /// <summary>CE: <c>ComicBook.FileSize</c>, bytes.</summary>
     public long? FileSize { get; set; }
@@ -207,6 +243,17 @@ public class Issue
     public string? BookStore { get; set; }
 
     public List<IssueCustomValue> CustomValues { get; set; } = new();
+
+    /// <summary>Page-labeled bookmarks (docs/superpowers/specs/2026-08-17-metadata-model-phase1-canonical-metadata-design.md), mirrors <see cref="BookBookmark"/>'s shape. BookmarkCount is computed as <c>Bookmarks.Count</c>, never stored.</summary>
+    public List<IssueBookmark> Bookmarks { get; set; } = new();
+
+    /// <summary>
+    /// Filename/embedded-metadata-inferred field proposals (docs/superpowers/specs/2026-08-17-
+    /// metadata-model-phase2a-metadata-proposals-design.md), CE's <c>Shadow*</c>/<c>Proposed*</c>
+    /// pattern made real and auditable. Use <c>IssueMetadataExtensions.Effective*(this Issue)</c>
+    /// to read a field with proposals factored in, not this collection or the raw field directly.
+    /// </summary>
+    public List<MetadataProposal> MetadataProposals { get; set; } = new();
 
     /// <summary>
     /// True when this row was auto-created to stand in for an unmatched Reading List import row

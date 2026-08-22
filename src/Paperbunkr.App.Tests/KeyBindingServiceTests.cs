@@ -7,9 +7,10 @@ using Paperbunkr.Data;
 namespace Paperbunkr.App.Tests;
 
 /// <summary>
-/// Exercises <see cref="KeyBindingService"/> (docs/alpha-roadmap.md P5 follow-up). Uses an
-/// injected in-memory-database context factory (same test-injection seam as <see cref="SkinService"/>)
-/// so tests never touch the real per-user database.
+/// Exercises <see cref="KeyBindingService"/> (docs/alpha-roadmap.md P5 follow-up, extended by
+/// docs/superpowers/specs/2026-08-16-remappable-reader-shortcuts-design.md). Uses an injected
+/// in-memory-database context factory (same test-injection seam as <see cref="SkinService"/>) so
+/// tests never touch the real per-user database.
 /// </summary>
 public class KeyBindingServiceTests : IDisposable
 {
@@ -43,8 +44,16 @@ public class KeyBindingServiceTests : IDisposable
     {
         var service = CreateService();
 
-        Assert.Equal(Key.Left, service.GetKey(KeyboardCommandRegistry.ReaderPageTurnLeft));
-        Assert.Equal(Key.Right, service.GetKey(KeyboardCommandRegistry.ReaderPageTurnRight));
+        Assert.Equal(new KeyGesture(Key.Left), service.GetKey(KeyboardCommandRegistry.ReaderPageTurnLeft));
+        Assert.Equal(new KeyGesture(Key.Right), service.GetKey(KeyboardCommandRegistry.ReaderPageTurnRight));
+    }
+
+    [Fact]
+    public void GetKey_NoRowStored_ReturnsModifierRegistryDefault()
+    {
+        var service = CreateService();
+
+        Assert.Equal(new KeyGesture(Key.R, KeyModifiers.Shift), service.GetKey(KeyboardCommandRegistry.ReaderRotateCounterClockwise));
     }
 
     [Fact]
@@ -52,11 +61,21 @@ public class KeyBindingServiceTests : IDisposable
     {
         var service = CreateService();
 
-        service.SetKey(KeyboardCommandRegistry.ReaderPageTurnLeft, Key.J);
+        service.SetKey(KeyboardCommandRegistry.ReaderPageTurnLeft, new KeyGesture(Key.J));
 
-        Assert.Equal(Key.J, service.GetKey(KeyboardCommandRegistry.ReaderPageTurnLeft));
+        Assert.Equal(new KeyGesture(Key.J), service.GetKey(KeyboardCommandRegistry.ReaderPageTurnLeft));
         // The other command is untouched.
-        Assert.Equal(Key.Right, service.GetKey(KeyboardCommandRegistry.ReaderPageTurnRight));
+        Assert.Equal(new KeyGesture(Key.Right), service.GetKey(KeyboardCommandRegistry.ReaderPageTurnRight));
+    }
+
+    [Fact]
+    public void SetKey_ThenGetKey_RoundTripsModifierGesture()
+    {
+        var service = CreateService();
+
+        service.SetKey(KeyboardCommandRegistry.ReaderRotateCounterClockwise, new KeyGesture(Key.R, KeyModifiers.Shift));
+
+        Assert.Equal(new KeyGesture(Key.R, KeyModifiers.Shift), service.GetKey(KeyboardCommandRegistry.ReaderRotateCounterClockwise));
     }
 
     [Fact]
@@ -64,10 +83,10 @@ public class KeyBindingServiceTests : IDisposable
     {
         var service = CreateService();
 
-        service.SetKey(KeyboardCommandRegistry.ReaderPageTurnLeft, Key.J);
-        service.SetKey(KeyboardCommandRegistry.ReaderPageTurnLeft, Key.A);
+        service.SetKey(KeyboardCommandRegistry.ReaderPageTurnLeft, new KeyGesture(Key.J));
+        service.SetKey(KeyboardCommandRegistry.ReaderPageTurnLeft, new KeyGesture(Key.A));
 
-        Assert.Equal(Key.A, service.GetKey(KeyboardCommandRegistry.ReaderPageTurnLeft));
+        Assert.Equal(new KeyGesture(Key.A), service.GetKey(KeyboardCommandRegistry.ReaderPageTurnLeft));
 
         using var context = new PaperbunkrDbContext(_dbOptions);
         Assert.Single(context.KeyBindings.Where(k => k.CommandId == KeyboardCommandRegistry.ReaderPageTurnLeft));
@@ -77,22 +96,22 @@ public class KeyBindingServiceTests : IDisposable
     public void GetAllBindings_ReturnsEveryRegistryCommand_WithCurrentKeys()
     {
         var service = CreateService();
-        service.SetKey(KeyboardCommandRegistry.ReaderPageTurnRight, Key.K);
+        service.SetKey(KeyboardCommandRegistry.ReaderPageTurnRight, new KeyGesture(Key.K));
 
         var all = service.GetAllBindings();
 
         Assert.Equal(KeyboardCommandRegistry.Commands.Count, all.Count);
-        Assert.Contains(all, b => b.Command.Id == KeyboardCommandRegistry.ReaderPageTurnLeft && b.CurrentKey == Key.Left);
-        Assert.Contains(all, b => b.Command.Id == KeyboardCommandRegistry.ReaderPageTurnRight && b.CurrentKey == Key.K);
+        Assert.Contains(all, b => b.Command.Id == KeyboardCommandRegistry.ReaderPageTurnLeft && b.CurrentKey == new KeyGesture(Key.Left));
+        Assert.Contains(all, b => b.Command.Id == KeyboardCommandRegistry.ReaderPageTurnRight && b.CurrentKey == new KeyGesture(Key.K));
     }
 
     [Fact]
     public void GetKey_PaperbunkrDbContextOverload_MatchesOwnContextOverload()
     {
         var service = CreateService();
-        service.SetKey(KeyboardCommandRegistry.ReaderPageTurnLeft, Key.A);
+        service.SetKey(KeyboardCommandRegistry.ReaderPageTurnLeft, new KeyGesture(Key.A));
 
         using var context = new PaperbunkrDbContext(_dbOptions);
-        Assert.Equal(Key.A, service.GetKey(context, KeyboardCommandRegistry.ReaderPageTurnLeft));
+        Assert.Equal(new KeyGesture(Key.A), service.GetKey(context, KeyboardCommandRegistry.ReaderPageTurnLeft));
     }
 }

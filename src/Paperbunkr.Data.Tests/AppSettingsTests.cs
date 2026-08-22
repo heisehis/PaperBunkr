@@ -113,6 +113,61 @@ public class AppSettingsTests : IDisposable
         Assert.False(reloaded.HighQualityPageDisplay);
     }
 
+    /// <summary>
+    /// New columns from migration <c>AddPageTransitionSettings</c> (docs/superpowers/specs/
+    /// 2026-08-13-reader-page-transition-animations-design.md §2) round-trip with their defaults -
+    /// same "existing row comes back with new columns at their defaults" shape as
+    /// <see cref="GetOrCreateAppSettings_ReaderPolishFields_DefaultToCeVerifiedValues"/> above.
+    /// </summary>
+    [Fact]
+    public void GetOrCreateAppSettings_PageTransitionFields_DefaultToNoneAnd250()
+    {
+        var settings = _context.GetOrCreateAppSettings();
+
+        Assert.Equal(Entities.PageTransitionStyle.None, settings.PageTransitionStyle);
+        Assert.Equal(250, settings.PageTransitionDurationMs);
+    }
+
+    [Fact]
+    public void GetOrCreateAppSettings_PageTransitionFields_PersistAcrossContexts()
+    {
+        var settings = _context.GetOrCreateAppSettings();
+        settings.PageTransitionStyle = Entities.PageTransitionStyle.Crossfade;
+        settings.PageTransitionDurationMs = 400;
+        _context.SaveChanges();
+
+        using var freshContext = new PaperbunkrDbContext(_options);
+        var reloaded = freshContext.GetOrCreateAppSettings();
+
+        Assert.Equal(Entities.PageTransitionStyle.Crossfade, reloaded.PageTransitionStyle);
+        Assert.Equal(400, reloaded.PageTransitionDurationMs);
+    }
+
+    /// <summary>
+    /// New column from migration <c>AddPageLayoutModeSettings</c> (docs/superpowers/specs/
+    /// 2026-08-15-reader-double-page-spread-design.md §2) round-trips with its default.
+    /// </summary>
+    [Fact]
+    public void GetOrCreateAppSettings_PageLayoutModeField_DefaultsToSingle()
+    {
+        var settings = _context.GetOrCreateAppSettings();
+
+        Assert.Equal(Entities.PageLayoutMode.Single, settings.DefaultPageLayoutMode);
+    }
+
+    [Fact]
+    public void GetOrCreateAppSettings_PageLayoutModeField_PersistsAcrossContexts()
+    {
+        var settings = _context.GetOrCreateAppSettings();
+        settings.DefaultPageLayoutMode = Entities.PageLayoutMode.Double;
+        _context.SaveChanges();
+
+        using var freshContext = new PaperbunkrDbContext(_options);
+        var reloaded = freshContext.GetOrCreateAppSettings();
+
+        Assert.Equal(Entities.PageLayoutMode.Double, reloaded.DefaultPageLayoutMode);
+    }
+
     [Fact]
     public void GetOrCreateAppSettings_IsIdempotent_DoesNotDuplicateRow()
     {

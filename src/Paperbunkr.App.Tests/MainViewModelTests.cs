@@ -51,7 +51,10 @@ public class MainViewModelTests : IDisposable
 
         vm.EscapeCommand.Execute(null);
 
-        Assert.True(vm.IsLibrary);
+        // Home is the default launch screen now (docs/superpowers/specs/2026-08-18-home-screen-
+        // design.md) - Escape with nothing open should still be a no-op, just on Home instead of
+        // the old default of Library.
+        Assert.True(vm.IsHome);
     }
 
     [Fact]
@@ -202,5 +205,83 @@ public class MainViewModelTests : IDisposable
 
         Assert.True(vm.IsDiscardConfirmOpen);
         Assert.True(vm.IsBulkIssueProperties);
+    }
+
+    // --- Reader back-navigation (real bug found via user testing: Reader's back button used to
+    // always hardcode a return to Detail, even when Reader was opened from Library or Home
+    // directly - leaving an empty/stale Detail page instead of returning where the user actually
+    // came from) ---
+
+    private (int SeriesId, int IssueId) SeedSeriesWithIssue(string seriesName)
+    {
+        var options = new DbContextOptionsBuilder<PaperbunkrDbContext>().UseSqlite($"Data Source={_dbPath}").Options;
+        using var context = new PaperbunkrDbContext(options);
+        var series = new Paperbunkr.Data.Entities.Series { Name = seriesName };
+        context.Series.Add(series);
+        context.SaveChanges();
+        var issue = new Paperbunkr.Data.Entities.Issue { SeriesId = series.Id, Number = "1" };
+        context.Issues.Add(issue);
+        context.SaveChanges();
+        return (series.Id, issue.Id);
+    }
+
+    [Fact]
+    public void GoReaderForIssue_FromLibrary_BackReturnsToLibrary_NotDetail()
+    {
+        SeedSeriesWithIssue("Library Series");
+        var vm = new MainViewModel();
+        vm.GoLibraryCommand.Execute(null);
+        var row = Assert.Single(vm.Library.IssueList.Rows);
+
+        vm.Library.IssueList.OpenIssueCommand.Execute(row);
+        Assert.True(vm.IsReader);
+
+        vm.Reader.GoBackCommand.Execute(null);
+
+        Assert.True(vm.IsLibrary);
+        Assert.False(vm.IsDetail);
+    }
+
+    [Fact]
+    public void GoReaderForIssue_FromHome_BackReturnsToHome_NotDetail()
+    {
+        var (_, issueId) = SeedSeriesWithIssue("Home Series");
+        var options = new DbContextOptionsBuilder<PaperbunkrDbContext>().UseSqlite($"Data Source={_dbPath}").Options;
+        using (var context = new PaperbunkrDbContext(options))
+        {
+            var issue = context.Issues.Find(issueId)!;
+            issue.LastPageRead = 3;
+            issue.PageCount = 10;
+            issue.OpenedTime = DateTime.UtcNow;
+            context.SaveChanges();
+        }
+
+        var vm = new MainViewModel();
+        vm.GoHomeCommand.Execute(null);
+        var card = Assert.Single(vm.Home.ContinueReading);
+
+        vm.Home.OpenContinueReadingCommand.Execute(card.ResumeIssueId);
+        Assert.True(vm.IsReader);
+
+        vm.Reader.GoBackCommand.Execute(null);
+
+        Assert.True(vm.IsHome);
+        Assert.False(vm.IsDetail);
+    }
+
+    [Fact]
+    public void GoReaderForIssue_FromDetail_BackStillReturnsToDetail()
+    {
+        var (seriesId, _) = SeedSeriesWithIssue("Detail Series");
+        var vm = new MainViewModel();
+        vm.Detail.LoadSeries(seriesId);
+        vm.CurrentScreen = "detail";
+
+        vm.Detail.ContinueCommand.Execute(null);
+        Assert.True(vm.IsReader);
+
+        vm.Reader.GoBackCommand.Execute(null);
+
+        Assert.True(vm.IsDetail);
     }
 }

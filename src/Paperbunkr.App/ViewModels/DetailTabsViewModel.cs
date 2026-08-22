@@ -8,6 +8,7 @@ using Paperbunkr.App.Models;
 using Paperbunkr.App.Services;
 using Paperbunkr.Data;
 using Paperbunkr.Data.Entities;
+using Paperbunkr.Data.Metadata;
 
 namespace Paperbunkr.App.ViewModels;
 
@@ -39,6 +40,9 @@ public partial class DetailTabsViewModel : ViewModelBase
         _contextFactory = contextFactory;
         Issues = new ObservableCollection<IssueCardSample>();
         Related = new ObservableCollection<RelatedSeriesSample>();
+        SameContinuity = new ObservableCollection<RelatedGroupSeriesSample>();
+        ContinuityChips = new ObservableCollection<ContinuityChip>();
+        SameEvent = new ObservableCollection<RelatedGroupSeriesSample>();
     }
 
     /// <summary>Multi-select state for the Issues tab (docs/superpowers/specs/2026-08-07-bulk-issue-editing-design.md §1).</summary>
@@ -47,11 +51,40 @@ public partial class DetailTabsViewModel : ViewModelBase
     public ObservableCollection<IssueCardSample> Issues { get; }
 
     /// <summary>
-    /// Always empty for now - there's no "related series" data/schema yet (only DetailTabs.dc.html's
-    /// own sample content had this). Left genuinely empty rather than faked, since that's the real
-    /// state of the feature.
+    /// Real data as of docs/superpowers/specs/2026-08-17-metadata-model-phase3-media-relations-
+    /// design.md - populated by <see cref="LoadSeries"/> via <see cref="MediaRelationResolver.GetRelatedSeries"/>.
     /// </summary>
     public ObservableCollection<RelatedSeriesSample> Related { get; }
+
+    public bool HasRelated => Related.Count > 0;
+
+    /// <summary>
+    /// Real data as of docs/superpowers/specs/2026-08-17-metadata-model-phase4a-continuity-
+    /// design.md - other series sharing at least one <see cref="Data.Entities.Continuity"/> with
+    /// the loaded series, populated by <see cref="LoadSeries"/> via
+    /// <see cref="ContinuityResolver.GetOtherSeriesSharingContinuity"/>. Additive alongside
+    /// <see cref="Related"/>, not a replacement for it - Phase 3's flat relation carousel is
+    /// unchanged.
+    /// </summary>
+    public ObservableCollection<RelatedGroupSeriesSample> SameContinuity { get; }
+
+    public bool HasSameContinuity => SameContinuity.Count > 0;
+
+    /// <summary>The loaded series' own <see cref="Data.Entities.Continuity"/> memberships, shown as removable chips.</summary>
+    public ObservableCollection<ContinuityChip> ContinuityChips { get; }
+
+    /// <summary>
+    /// Real data as of docs/superpowers/specs/2026-08-17-metadata-model-phase4b-story-events-
+    /// design.md - other series sharing at least one <see cref="Data.Entities.StoryEvent"/> with
+    /// the loaded series, populated by <see cref="LoadSeries"/> via
+    /// <see cref="EventMembershipResolver.GetOtherSeriesInSharedEvents"/>. Additive alongside
+    /// <see cref="Related"/>/<see cref="SameContinuity"/>.
+    /// </summary>
+    public ObservableCollection<RelatedGroupSeriesSample> SameEvent { get; }
+
+    public bool HasSameEvent => SameEvent.Count > 0;
+
+    public ObservableCollection<SeriesSearchResult> RelationSearchResults { get; } = new();
 
     public string Publisher { get; private set; } = "Unknown";
     public string ReadingModeLabel { get; private set; } = "Left to Right";
@@ -69,10 +102,11 @@ public partial class DetailTabsViewModel : ViewModelBase
             {
                 Id = issue.Id,
                 SeriesId = series.Id,
-                Title = string.IsNullOrWhiteSpace(issue.Number) ? "#?" : $"#{issue.Number}",
+                Title = string.IsNullOrWhiteSpace(issue.EffectiveNumber()) ? "#?" : $"#{issue.EffectiveNumber()}",
                 IsUnread = issue.LastPageRead is null or 0,
                 CoverBrush = coverBrush,
                 CoverImage = CoverImageCache.Get(issue.Id),
+                FilePath = issue.FilePath,
             });
         }
 
@@ -81,8 +115,255 @@ public partial class DetailTabsViewModel : ViewModelBase
         SetReadingModeLabel(series.ReadingMode);
         OnPropertyChanged(nameof(Publisher));
 
+        using (var context = _contextFactory())
+        {
+            RefreshRelated(context, series.Id);
+            RefreshContinuity(context, series.Id);
+            RefreshSameEvent(context, series.Id);
+        }
+
         ActiveTab = "issues";
         _onSelectionChanged?.Invoke();
+    }
+
+    private void RefreshRelated(PaperbunkrDbContext context, int seriesId)
+    {
+        Related.Clear();
+        foreach (var (otherSeries, displayType, mediaRelationId) in MediaRelationResolver.GetRelatedSeries(context, seriesId))
+        {
+            Related.Add(new RelatedSeriesSample
+            {
+                Title = otherSeries.Name,
+                Name = otherSeries.Name,
+                Note = RelationTypeOption.FormatLabel(displayType),
+                CoverBrush = SeriesCardSample.CoverBrushFor(otherSeries.Name),
+                RelatedSeriesId = otherSeries.Id,
+                MediaRelationId = mediaRelationId,
+            });
+        }
+
+        OnPropertyChanged(nameof(HasRelated));
+    }
+
+    // --- Related tab: add/remove a MediaRelation (docs/superpowers/specs/2026-08-17-metadata-
+    // model-phase3-media-relations-design.md) ---
+
+    public static IReadOnlyList<RelationTypeOption> RelationTypeOptions => RelationTypeOption.All;
+
+    [ObservableProperty]
+    private bool _isAddingRelation;
+
+    [ObservableProperty]
+    private string _relationSearchQuery = string.Empty;
+
+    [ObservableProperty]
+    private RelationType _selectedRelationType = RelationType.Related;
+
+    /// <summary>
+    /// Bound to the ComboBox's <c>SelectedItem</c> instead of <c>SelectedValue</c>/
+    /// <c>SelectedValueBinding</c> - the latter resolves its binding path against this
+    /// ViewModel's own DataContext, not the <c>ItemsSource</c> element type, so `{Binding Type}`
+    /// there was silently unresolvable (a real, permanent XAML bug since Phase 3, not a build-
+    /// tooling artifact - see docs/superpowers/specs/2026-08-18-selectedvaluebinding-xaml-fix-
+    /// design.md).
+    /// </summary>
+    [ObservableProperty]
+    private RelationTypeOption _selectedRelationTypeOption = RelationTypeOptions.First(o => o.Type == RelationType.Related);
+
+    partial void OnSelectedRelationTypeOptionChanged(RelationTypeOption value) => SelectedRelationType = value.Type;
+
+    [RelayCommand]
+    private void ToggleAddRelation()
+    {
+        IsAddingRelation = !IsAddingRelation;
+        RelationSearchQuery = string.Empty;
+        RelationSearchResults.Clear();
+    }
+
+    partial void OnRelationSearchQueryChanged(string value) => SearchRelationCandidates();
+
+    [RelayCommand]
+    private void SearchRelationCandidates()
+    {
+        RelationSearchResults.Clear();
+        if (string.IsNullOrWhiteSpace(RelationSearchQuery) || _seriesId is not int currentSeriesId)
+        {
+            return;
+        }
+
+        using var context = _contextFactory();
+        var matches = context.Series
+            .Where(s => s.Id != currentSeriesId)
+            .AsEnumerable()
+            .Where(s => s.Name.Contains(RelationSearchQuery, StringComparison.OrdinalIgnoreCase))
+            .Take(20);
+
+        foreach (var series in matches)
+        {
+            RelationSearchResults.Add(new SeriesSearchResult { SeriesId = series.Id, Name = series.Name });
+        }
+    }
+
+    [RelayCommand]
+    private void AddRelation(SeriesSearchResult? target)
+    {
+        if (target is null || _seriesId is not int currentSeriesId)
+        {
+            return;
+        }
+
+        using var context = _contextFactory();
+        MediaRelationResolver.TryCreate(context, currentSeriesId, target.SeriesId, SelectedRelationType);
+
+        IsAddingRelation = false;
+        RelationSearchQuery = string.Empty;
+        RelationSearchResults.Clear();
+        RefreshRelated(context, currentSeriesId);
+    }
+
+    [RelayCommand]
+    private void RemoveRelation(RelatedSeriesSample? sample)
+    {
+        if (sample is null || _seriesId is not int currentSeriesId)
+        {
+            return;
+        }
+
+        using var context = _contextFactory();
+        MediaRelationResolver.Remove(context, sample.MediaRelationId);
+        RefreshRelated(context, currentSeriesId);
+    }
+
+    // --- Related tab: Continuity membership (docs/superpowers/specs/2026-08-17-metadata-model-
+    // phase4a-continuity-design.md) ---
+
+    private void RefreshContinuity(PaperbunkrDbContext context, int seriesId)
+    {
+        ContinuityChips.Clear();
+        foreach (var continuity in ContinuityResolver.GetContinuities(context, seriesId))
+        {
+            ContinuityChips.Add(new ContinuityChip { ContinuityId = continuity.Id, Name = continuity.Name });
+        }
+
+        SameContinuity.Clear();
+        foreach (var otherSeries in ContinuityResolver.GetOtherSeriesSharingContinuity(context, seriesId))
+        {
+            SameContinuity.Add(new RelatedGroupSeriesSample
+            {
+                Title = otherSeries.Name,
+                Name = otherSeries.Name,
+                Note = "Same continuity",
+                CoverBrush = SeriesCardSample.CoverBrushFor(otherSeries.Name),
+                SeriesId = otherSeries.Id,
+            });
+        }
+
+        OnPropertyChanged(nameof(HasSameContinuity));
+    }
+
+    [ObservableProperty]
+    private bool _isAddingContinuity;
+
+    [ObservableProperty]
+    private string _continuitySearchQuery = string.Empty;
+
+    public ObservableCollection<ContinuitySearchResult> ContinuitySearchResults { get; } = new();
+
+    [RelayCommand]
+    private void ToggleAddContinuity()
+    {
+        IsAddingContinuity = !IsAddingContinuity;
+        ContinuitySearchQuery = string.Empty;
+        ContinuitySearchResults.Clear();
+    }
+
+    partial void OnContinuitySearchQueryChanged(string value) => SearchContinuityCandidates();
+
+    [RelayCommand]
+    private void SearchContinuityCandidates()
+    {
+        ContinuitySearchResults.Clear();
+        string query = ContinuitySearchQuery.Trim();
+        if (query.Length == 0)
+        {
+            return;
+        }
+
+        using var context = _contextFactory();
+        var matches = context.Continuities
+            .AsEnumerable()
+            .Where(c => c.Name.Contains(query, StringComparison.OrdinalIgnoreCase))
+            .Take(20)
+            .ToList();
+
+        foreach (var continuity in matches)
+        {
+            ContinuitySearchResults.Add(new ContinuitySearchResult { ContinuityId = continuity.Id, Name = continuity.Name });
+        }
+
+        // No exact (case-insensitive) match among the results - offer a "create new" row rather
+        // than requiring a separate action, matching ContinuityResolver.GetOrCreate's own
+        // case-insensitive matching so this picker can never produce a near-duplicate.
+        if (!matches.Any(c => string.Equals(c.Name, query, StringComparison.OrdinalIgnoreCase)))
+        {
+            ContinuitySearchResults.Add(new ContinuitySearchResult { Name = query, IsNew = true });
+        }
+    }
+
+    [RelayCommand]
+    private void AddContinuity(ContinuitySearchResult? target)
+    {
+        if (target is null || _seriesId is not int currentSeriesId)
+        {
+            return;
+        }
+
+        using var context = _contextFactory();
+        var continuity = target.IsNew ? ContinuityResolver.GetOrCreate(context, target.Name) : context.Continuities.Find(target.ContinuityId);
+        if (continuity is not null)
+        {
+            ContinuityResolver.AddSeriesToContinuity(context, currentSeriesId, continuity.Id);
+        }
+
+        IsAddingContinuity = false;
+        ContinuitySearchQuery = string.Empty;
+        ContinuitySearchResults.Clear();
+        RefreshContinuity(context, currentSeriesId);
+    }
+
+    [RelayCommand]
+    private void RemoveContinuity(ContinuityChip? chip)
+    {
+        if (chip is null || _seriesId is not int currentSeriesId)
+        {
+            return;
+        }
+
+        using var context = _contextFactory();
+        ContinuityResolver.RemoveSeriesFromContinuity(context, currentSeriesId, chip.ContinuityId);
+        RefreshContinuity(context, currentSeriesId);
+    }
+
+    // --- Related tab: Same Event (docs/superpowers/specs/2026-08-17-metadata-model-phase4b-
+    // story-events-design.md) - read-only, populated from EventMembership, no creation UI here
+    // (that lives on the Events screen). ---
+
+    private void RefreshSameEvent(PaperbunkrDbContext context, int seriesId)
+    {
+        SameEvent.Clear();
+        foreach (var otherSeries in EventMembershipResolver.GetOtherSeriesInSharedEvents(context, seriesId))
+        {
+            SameEvent.Add(new RelatedGroupSeriesSample
+            {
+                Title = otherSeries.Name,
+                Name = otherSeries.Name,
+                Note = "Same event",
+                CoverBrush = SeriesCardSample.CoverBrushFor(otherSeries.Name),
+                SeriesId = otherSeries.Id,
+            });
+        }
+
+        OnPropertyChanged(nameof(HasSameEvent));
     }
 
     private void SetReadingModeLabel(ReadingMode mode)
@@ -214,6 +495,33 @@ public partial class DetailTabsViewModel : ViewModelBase
         else
         {
             _goToBulkProperties(ids);
+        }
+    }
+
+    /// <summary>
+    /// Right-click "Show in Explorer" (docs/superpowers/specs/2026-08-16-reveal-in-explorer-and-
+    /// fileless-entries-design.md §1) - same selection-union shape as <see cref="EditIssueProperties"/>
+    /// above, so right-clicking a lone unselected tile still just reveals that one file, but a
+    /// multi-selection reveals every uniquely-folder'd file at once. No cross-screen navigation
+    /// needed (pure OS side effect), so this stays entirely local - no injected callback.
+    /// </summary>
+    [RelayCommand]
+    private void RevealIssue(IssueCardSample issue)
+    {
+        var ids = (SelectedIssueIds.Count > 0 ? SelectedIssueIds.Append(issue.Id) : new[] { issue.Id })
+            .Distinct()
+            .ToList();
+
+        using var context = _contextFactory();
+        var issues = context.Issues.Where(i => ids.Contains(i.Id)).ToList();
+
+        if (issues.Count == 1)
+        {
+            RevealInExplorerHelper.RevealIssue(issues[0]);
+        }
+        else
+        {
+            RevealInExplorerHelper.RevealIssues(issues);
         }
     }
 }

@@ -20,6 +20,8 @@ public class PaperbunkrDbContext : DbContext
 
     public DbSet<IssueCustomValue> IssueCustomValues => Set<IssueCustomValue>();
 
+    public DbSet<IssueBookmark> IssueBookmarks => Set<IssueBookmark>();
+
     public DbSet<SmartList> SmartLists => Set<SmartList>();
 
     public DbSet<SmartListCondition> SmartListConditions => Set<SmartListCondition>();
@@ -29,6 +31,24 @@ public class PaperbunkrDbContext : DbContext
     public DbSet<ReadingListItem> ReadingListItems => Set<ReadingListItem>();
 
     public DbSet<SeriesConflict> SeriesConflicts => Set<SeriesConflict>();
+
+    public DbSet<MetadataProposal> MetadataProposals => Set<MetadataProposal>();
+
+    public DbSet<MediaRelation> MediaRelations => Set<MediaRelation>();
+
+    public DbSet<RelationEvidence> RelationEvidence => Set<RelationEvidence>();
+
+    public DbSet<Continuity> Continuities => Set<Continuity>();
+
+    public DbSet<StoryEvent> StoryEvents => Set<StoryEvent>();
+
+    public DbSet<EventMembership> EventMemberships => Set<EventMembership>();
+
+    public DbSet<ExternalMediaId> ExternalMediaIds => Set<ExternalMediaId>();
+
+    public DbSet<ExternalMetadataSnapshot> ExternalMetadataSnapshots => Set<ExternalMetadataSnapshot>();
+
+    public DbSet<ExternalRating> ExternalRatings => Set<ExternalRating>();
 
     public DbSet<AppSettings> AppSettings => Set<AppSettings>();
 
@@ -85,6 +105,19 @@ public class PaperbunkrDbContext : DbContext
             builder.Property(s => s.Name).IsRequired();
             builder.Property(s => s.ContentType).HasConversion<string>().HasMaxLength(32);
             builder.Property(s => s.ReadingMode).HasConversion<string>().HasMaxLength(32);
+            builder.Property(s => s.PageLayoutMode).HasConversion<string>().HasMaxLength(32);
+            // Same enum-as-string HasSentinel treatment as PageTransitionStyle above, even though
+            // Unknown is both the CLR default and the desired default here - keeps every enum-as-
+            // string column configured identically. HasDefaultValue matters here (unlike Series.
+            // ContentType/ReadingMode above): this ALTER TABLE runs against a table with existing
+            // rows, and the migration's own raw-SQL backfill (from the old IsComplete bool) needs a
+            // valid starting value to overwrite.
+            builder.Property(s => s.Status).HasConversion<string>().HasMaxLength(32)
+                .HasDefaultValue(SeriesStatus.Unknown)
+                .HasSentinel(SeriesStatus.Unknown);
+            // Series.IsComplete is computed (Status == Completed), not mapped - EF would otherwise
+            // try to persist a get-only property with no backing column.
+            builder.Ignore(s => s.IsComplete);
 
             builder.HasIndex(s => s.Name);
 
@@ -109,6 +142,9 @@ public class PaperbunkrDbContext : DbContext
 
             builder.HasMany(s => s.Categories)
                 .WithMany(c => c.Series);
+
+            builder.HasMany(s => s.Continuities)
+                .WithMany(c => c.Series);
         });
 
         modelBuilder.Entity<Issue>(builder =>
@@ -116,6 +152,12 @@ public class PaperbunkrDbContext : DbContext
             builder.HasKey(i => i.Id);
             builder.Property(i => i.ReadingModeOverride).HasConversion<string>().HasMaxLength(32);
             builder.Property(i => i.PageFitModeOverride).HasConversion<string>().HasMaxLength(32);
+            builder.Property(i => i.PageLayoutModeOverride).HasConversion<string>().HasMaxLength(32);
+            // Same treatment as Series.Status above - backfilled from the outgoing BlackAndWhite
+            // bool column by this migration's raw SQL, needs a valid default to overwrite.
+            builder.Property(i => i.ColorMode).HasConversion<string>().HasMaxLength(32)
+                .HasDefaultValue(ColorMode.Unknown)
+                .HasSentinel(ColorMode.Unknown);
             builder.HasIndex(i => i.SeriesId);
             builder.HasIndex(i => i.FilePath);
 
@@ -123,6 +165,22 @@ public class PaperbunkrDbContext : DbContext
                 .WithOne(cv => cv.Issue)
                 .HasForeignKey(cv => cv.IssueId)
                 .OnDelete(DeleteBehavior.Cascade);
+
+            builder.HasMany(i => i.Bookmarks)
+                .WithOne(bm => bm.Issue)
+                .HasForeignKey(bm => bm.IssueId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            builder.HasMany(i => i.MetadataProposals)
+                .WithOne(mp => mp.Issue)
+                .HasForeignKey(mp => mp.IssueId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<IssueBookmark>(builder =>
+        {
+            builder.HasKey(bm => bm.Id);
+            builder.HasIndex(bm => bm.IssueId);
         });
 
         modelBuilder.Entity<Category>(builder =>
@@ -169,17 +227,44 @@ public class PaperbunkrDbContext : DbContext
         {
             builder.HasKey(r => r.Id);
             builder.Property(r => r.Name).IsRequired();
+            // Phase 4c (docs/superpowers/specs/2026-08-17-metadata-model-phase4c-reading-list-
+            // overhaul-design.md) - this ALTER TABLE runs against a table with existing rows, so
+            // (same reasoning as Series.Status/Issue.ColorMode above) needs a DB-level default to
+            // backfill them with, not just the CLR default.
+            builder.Property(r => r.Type).HasConversion<string>().HasMaxLength(32)
+                .HasDefaultValue(ReadingListType.User)
+                .HasSentinel(ReadingListType.Official);
+            // Real bug caught before shipping: HasDefaultValueSql("CURRENT_TIMESTAMP") generates
+            // an ALTER TABLE ADD COLUMN with a non-constant default, which SQLite rejects outright
+            // ("Cannot add a column with non-constant default") - CURRENT_TIMESTAMP is only legal
+            // as a column default at CREATE TABLE time, not when adding a column to an existing
+            // table. Uses a literal constant default instead (legal for ALTER TABLE); the
+            // migration's own raw SQL (see MetadataModelPhase4cReadingListOverhaul) immediately
+            // overwrites every existing row with the real migration-run timestamp right after,
+            // same two-step shape as Series.Status's own HasDefaultValue-constant + raw-SQL-
+            // backfill precedent.
+            builder.Property(r => r.CreatedAt).HasDefaultValue(DateTime.UnixEpoch);
+            builder.Property(r => r.UpdatedAt).HasDefaultValue(DateTime.UnixEpoch);
 
             builder.HasMany(r => r.Items)
                 .WithOne(i => i.ReadingList)
                 .HasForeignKey(i => i.ReadingListId)
                 .OnDelete(DeleteBehavior.Cascade);
+
+            // SetNull, not Cascade/Restrict - deleting the linked StoryEvent shouldn't delete a
+            // curated reading list built from it or block the event's own deletion, just detach
+            // the list back to a plain (still Type=Event-classified, if it was) list.
+            builder.HasOne(r => r.StoryEvent)
+                .WithMany()
+                .HasForeignKey(r => r.StoryEventId)
+                .OnDelete(DeleteBehavior.SetNull);
         });
 
         modelBuilder.Entity<ReadingListItem>(builder =>
         {
             builder.HasKey(i => i.Id);
             builder.HasIndex(i => i.ReadingListId);
+            builder.Property(i => i.Role).HasConversion<string>().HasMaxLength(32);
 
             // An Issue can appear in many reading lists (and more than once within the same
             // list, e.g. a crossover issue revisited later) - Restrict, not Cascade, so deleting
@@ -219,6 +304,136 @@ public class PaperbunkrDbContext : DbContext
                 .OnDelete(DeleteBehavior.SetNull);
         });
 
+        // Brand-new table (like SeriesConflict above) - no existing rows to backfill, so its enum
+        // columns need only the conversion, no HasDefaultValue/HasSentinel.
+        modelBuilder.Entity<MetadataProposal>(builder =>
+        {
+            builder.HasKey(p => p.Id);
+            builder.Property(p => p.Field).HasConversion<string>().HasMaxLength(32);
+            builder.Property(p => p.Source).HasConversion<string>().HasMaxLength(32);
+            builder.Property(p => p.Status).HasConversion<string>().HasMaxLength(32);
+            builder.HasIndex(p => p.Status);
+        });
+
+        // Brand-new tables (like MetadataProposal above) - no existing rows to backfill.
+        modelBuilder.Entity<MediaRelation>(builder =>
+        {
+            builder.HasKey(m => m.Id);
+            builder.Property(m => m.RelationType).HasConversion<string>().HasMaxLength(32);
+            builder.HasIndex(m => m.SourceSeriesId);
+            builder.HasIndex(m => m.TargetSeriesId);
+
+            // Cascade, not Restrict - unlike ReadingListItem.Issue (a direct, interactive user
+            // action), every existing Series-deletion path in this codebase
+            // (SeriesReassignmentResolver, NeedsReviewViewModel.MergeSeriesInto, both from Phase
+            // 2b) is automatic empty-series cleanup with no chance to pause and check for
+            // relations first. Restrict would turn those into a real runtime FK-violation
+            // regression the moment a relation exists; Cascade just quietly removes a relation
+            // that's lost one of its two endpoints, which is the only sane outcome here.
+            builder.HasOne(m => m.SourceSeries)
+                .WithMany()
+                .HasForeignKey(m => m.SourceSeriesId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            builder.HasOne(m => m.TargetSeries)
+                .WithMany()
+                .HasForeignKey(m => m.TargetSeriesId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            builder.HasMany(m => m.Evidence)
+                .WithOne(e => e.MediaRelation)
+                .HasForeignKey(e => e.MediaRelationId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<RelationEvidence>(builder =>
+        {
+            builder.HasKey(e => e.Id);
+            builder.Property(e => e.Provider).HasConversion<string>().HasMaxLength(32);
+        });
+
+        // Brand-new table (like MediaRelation above) - no existing rows to backfill. The M:M with
+        // Series is configured on the Series side above (implicit skip-navigation join table, same
+        // pattern as Category - no explicit join entity needed since it carries no extra columns).
+        modelBuilder.Entity<Continuity>(builder =>
+        {
+            builder.HasKey(c => c.Id);
+            builder.Property(c => c.Name).IsRequired();
+            builder.HasIndex(c => c.Name);
+        });
+
+        // Brand-new tables (like Continuity above) - no existing rows to backfill.
+        modelBuilder.Entity<StoryEvent>(builder =>
+        {
+            builder.HasKey(e => e.Id);
+            builder.Property(e => e.Name).IsRequired();
+            builder.HasIndex(e => e.Name);
+
+            builder.HasMany(e => e.Members)
+                .WithOne(m => m.StoryEvent)
+                .HasForeignKey(m => m.StoryEventId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<EventMembership>(builder =>
+        {
+            builder.HasKey(m => m.Id);
+            builder.Property(m => m.Role).HasConversion<string>().HasMaxLength(32);
+            builder.HasIndex(m => m.StoryEventId);
+
+            // Restrict, not Cascade - same reasoning as ReadingListItem.Issue below: deleting an
+            // Issue that's a tracked event member should be a conscious action, not silent
+            // membership loss.
+            builder.HasOne(m => m.Issue)
+                .WithMany()
+                .HasForeignKey(m => m.IssueId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // Brand-new tables (like StoryEvent above) - no existing rows to backfill. Cascade on the
+        // Series FK for all three, same reasoning as MediaRelation/SeriesContinuity: every existing
+        // Series-deletion path is automatic empty-series cleanup with no interactive moment to
+        // check for external-data rows first, and these rows have no value once their Series is
+        // gone.
+        modelBuilder.Entity<ExternalMediaId>(builder =>
+        {
+            builder.HasKey(e => e.Id);
+            builder.Property(e => e.Provider).HasConversion<string>().HasMaxLength(32);
+            builder.Property(e => e.ExternalId).IsRequired();
+            builder.HasIndex(e => e.SeriesId);
+
+            builder.HasOne(e => e.Series)
+                .WithMany()
+                .HasForeignKey(e => e.SeriesId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<ExternalMetadataSnapshot>(builder =>
+        {
+            builder.HasKey(e => e.Id);
+            builder.Property(e => e.Provider).HasConversion<string>().HasMaxLength(32);
+            builder.Property(e => e.ExternalId).IsRequired();
+            builder.Property(e => e.SchemaVersion).IsRequired();
+            builder.HasIndex(e => e.SeriesId);
+
+            builder.HasOne(e => e.Series)
+                .WithMany()
+                .HasForeignKey(e => e.SeriesId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<ExternalRating>(builder =>
+        {
+            builder.HasKey(e => e.Id);
+            builder.Property(e => e.Provider).HasConversion<string>().HasMaxLength(32);
+            builder.HasIndex(e => e.SeriesId);
+
+            builder.HasOne(e => e.Series)
+                .WithMany()
+                .HasForeignKey(e => e.SeriesId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
         // Singleton row (Id always 1) - one app-wide config record, not a generic key-value store.
         modelBuilder.Entity<AppSettings>(builder =>
         {
@@ -249,6 +464,19 @@ public class PaperbunkrDbContext : DbContext
                 .HasDefaultValue(ImageFitMode.FitWidth)
                 .HasSentinel(ImageFitMode.Original);
             builder.Property(a => a.DefaultAutoRotate).HasDefaultValue(false);
+            // Same enum-as-string HasSentinel treatment as DefaultPageFitMode/ImageBackgroundMode
+            // above, even though None is both the CLR default and the desired default here - keeps
+            // every enum-as-string AppSettings column configured identically rather than special-
+            // casing the one case where they happen to coincide.
+            builder.Property(a => a.PageTransitionStyle).HasConversion<string>().HasMaxLength(32)
+                .HasDefaultValue(PageTransitionStyle.None)
+                .HasSentinel(PageTransitionStyle.None);
+            builder.Property(a => a.PageTransitionDurationMs).HasDefaultValue(250);
+            // Same enum-as-string HasSentinel treatment as PageTransitionStyle/DefaultPageFitMode
+            // above - Single is both the CLR default and the desired default here too.
+            builder.Property(a => a.DefaultPageLayoutMode).HasConversion<string>().HasMaxLength(32)
+                .HasDefaultValue(PageLayoutMode.Single)
+                .HasSentinel(PageLayoutMode.Single);
             builder.Property(a => a.MagnifierZoom).HasDefaultValue(2.0);
             builder.Property(a => a.MagnifierOpacity).HasDefaultValue(1.0);
             builder.Property(a => a.MagnifierSizePixels).HasDefaultValue(200);
@@ -266,6 +494,65 @@ public class PaperbunkrDbContext : DbContext
             builder.Property(a => a.PageMarginEnabled).HasDefaultValue(false);
             builder.Property(a => a.PageMarginPercentWidth).HasDefaultValue(0.05);
             builder.Property(a => a.ShowScrubberOverlay).HasDefaultValue(true);
+
+            // Same HasSentinel gotcha as DefaultPageFitMode/ImageBackgroundMode above - Name (0) is
+            // the CLR default, but the actual desired default is DateAdded, so without the sentinel
+            // EF can't distinguish "explicitly Name" from "unset" on the singleton row's backfill.
+            builder.Property(a => a.LibrarySortField).HasConversion<string>().HasMaxLength(32)
+                .HasDefaultValue(LibrarySortField.DateAdded)
+                .HasSentinel(LibrarySortField.Name);
+            // Same treatment - Ascending (0) is the CLR default, desired default is Descending.
+            builder.Property(a => a.LibrarySortDirection).HasConversion<string>().HasMaxLength(32)
+                .HasDefaultValue(SortDirection.Descending)
+                .HasSentinel(SortDirection.Ascending);
+            // Same enum-as-string HasSentinel treatment as PageTransitionStyle above, even though
+            // None is both the CLR default and the desired default here.
+            builder.Property(a => a.LibraryGroupField).HasConversion<string>().HasMaxLength(32)
+                .HasDefaultValue(LibraryGroupField.None)
+                .HasSentinel(LibraryGroupField.None);
+            // Same treatment - CompactGrid (0) is the CLR default, desired default is ComfortableGrid.
+            builder.Property(a => a.LibraryViewMode).HasConversion<string>().HasMaxLength(32)
+                .HasDefaultValue(LibraryViewMode.ComfortableGrid)
+                .HasSentinel(LibraryViewMode.CompactGrid);
+            // Same treatment - Number (0) is the CLR default, desired default is Added.
+            builder.Property(a => a.LibraryIssueListSortField).HasConversion<string>().HasMaxLength(32)
+                .HasDefaultValue(IssueListSortField.Added)
+                .HasSentinel(IssueListSortField.Number);
+            builder.Property(a => a.LibraryIssueListSortDirection).HasConversion<string>().HasMaxLength(32)
+                .HasDefaultValue(SortDirection.Descending)
+                .HasSentinel(SortDirection.Ascending);
+            builder.Property(a => a.LibraryIssueListGroupField).HasConversion<string>().HasMaxLength(32)
+                .HasDefaultValue(IssueListGroupField.None)
+                .HasSentinel(IssueListGroupField.None);
+            // Issue (0) is both the CLR default and the desired default here - sentinel added
+            // anyway for consistency with every other enum-as-string column in this method.
+            builder.Property(a => a.LibraryGranularity).HasConversion<string>().HasMaxLength(32)
+                .HasDefaultValue(LibraryContentGranularity.Issue)
+                .HasSentinel(LibraryContentGranularity.Issue);
+            // Same enum-as-string HasSentinel treatment as LibraryGroupField above, even though
+            // All is both the CLR default and the desired default here.
+            builder.Property(a => a.LibrarySearchMode).HasConversion<string>().HasMaxLength(32)
+                .HasDefaultValue(SearchMode.All)
+                .HasSentinel(SearchMode.All);
+            builder.Property(a => a.LibraryGridDensity).HasDefaultValue(1.0);
+            builder.Property(a => a.LibraryShowUnreadBadge).HasDefaultValue(true);
+            builder.Property(a => a.LibraryShowPublisherBadge).HasDefaultValue(false);
+            builder.Property(a => a.LibraryShowLanguageBadge).HasDefaultValue(false);
+            builder.Property(a => a.LibraryUseLanguageIcon).HasDefaultValue(false);
+            builder.Property(a => a.LibraryShowContinueReadingButton).HasDefaultValue(false);
+            // Nullable - null is an unambiguous "no active filter"/"empty search", no backfill
+            // ambiguity, so (unlike the non-nullable enum columns above) no HasDefaultValue/
+            // HasSentinel needed. Same treatment as Issue.PageFitModeOverride etc.
+            builder.Property(a => a.LibraryActiveContentType).HasConversion<string>().HasMaxLength(32);
+            builder.Property(a => a.LibraryFilterUnreadOnly).HasDefaultValue(false);
+            builder.Property(a => a.LibraryFilterMissingIssues).HasDefaultValue(false);
+            builder.Property(a => a.LibraryFilterTrackedOnly).HasDefaultValue(false);
+
+            // Same enum-as-string HasSentinel treatment as PageTransitionStyle/LibraryGroupField
+            // above, even though Automatic is both the CLR default and the desired default here.
+            builder.Property(a => a.MetadataResolutionPolicy).HasConversion<string>().HasMaxLength(32)
+                .HasDefaultValue(MetadataResolutionPolicy.Automatic)
+                .HasSentinel(MetadataResolutionPolicy.Automatic);
         });
 
         modelBuilder.Entity<VirtualTagDefinition>(builder =>
@@ -338,7 +625,16 @@ public class PaperbunkrDbContext : DbContext
     /// SQLite file instead of the real per-user database. Never set this outside a test's own
     /// constructor/teardown.
     /// </summary>
-    public static string? DatabasePathOverride { get; set; }
+    /// <remarks>
+    /// Seeded from the <c>PAPERBUNKR_DB_PATH</c> environment variable so the same redirect works
+    /// for an out-of-process launch too (docs/superpowers/specs/2026-08-17-library-saved-list-
+    /// layouts-design.md's UI automation harness starts the real compiled exe via
+    /// <c>Process.Start</c>, which can't reach this in-process static any other way) - set the env
+    /// var on the child process's environment before launch, not this property directly, for that
+    /// case. In-process tests keep assigning the property explicitly, which still works exactly as
+    /// before and simply overrides whatever the field initializer picked up.
+    /// </remarks>
+    public static string? DatabasePathOverride { get; set; } = Environment.GetEnvironmentVariable("PAPERBUNKR_DB_PATH");
 
     /// <summary>Default SQLite file location convention: %AppData%\Paperbunkr\paperbunkr.db.</summary>
     public static string GetDefaultDatabasePath()

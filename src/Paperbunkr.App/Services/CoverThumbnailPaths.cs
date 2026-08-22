@@ -28,4 +28,31 @@ public static class CoverThumbnailPaths
         Directory.CreateDirectory(ThumbnailDirectory);
         return Path.Combine(ThumbnailDirectory, $"{issueId}.jpg");
     }
+
+    /// <summary>
+    /// Deletes issueId's cached thumbnail file, if any. Real bug found + fixed 2026-08-19: this
+    /// cache is keyed purely by the auto-increment Issue.Id, which isn't stable across a library
+    /// reset/re-migration - a fresh migration's Issue #411 can land on the same numeric id an
+    /// earlier, since-deleted Issue #411 had, and <see cref="GetCachePath"/>'s "skip if a file
+    /// already exists" check in <c>CoverThumbnailService</c> then silently serves that orphaned,
+    /// unrelated cover forever. Called from every real Issue-deletion call site
+    /// (<c>IssuePropertiesScreenViewModel.Cancel</c>, <c>NeedsReviewViewModel.RemoveMissingFile</c>/
+    /// <c>MergeSeriesInto</c>) so an orphan can no longer accumulate going forward - swallows
+    /// <see cref="IOException"/> the same way this codebase's other cache-file cleanup already does
+    /// (a locked/already-gone file isn't worth failing the caller's own deletion over).
+    /// </summary>
+    public static void DeleteCachedThumbnail(int issueId)
+    {
+        try
+        {
+            string path = GetCachePath(issueId);
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+        }
+        catch (IOException)
+        {
+        }
+    }
 }

@@ -33,8 +33,8 @@ public class ReadingListTests : IDisposable
 
         var issue1 = new Issue { SeriesId = seriesA.Id, Number = "1", Year = 2020 };
         // Same Series+Number across two volumes/years - exercises the tie-breaker.
-        var issue2VolumeA = new Issue { SeriesId = seriesA.Id, Number = "2", Volume = 1, Year = 2019 };
-        var issue2VolumeB = new Issue { SeriesId = seriesA.Id, Number = "2", Volume = 2, Year = 2023 };
+        var issue2VolumeA = new Issue { SeriesId = seriesA.Id, Number = "2", Volume = "1", Year = 2019 };
+        var issue2VolumeB = new Issue { SeriesId = seriesA.Id, Number = "2", Volume = "2", Year = 2023 };
         _context.Issues.AddRange(issue1, issue2VolumeA, issue2VolumeB);
         _context.SaveChanges();
 
@@ -69,7 +69,7 @@ public class ReadingListTests : IDisposable
     [Fact]
     public void FindExisting_NarrowsAmbiguousMatchByVolume()
     {
-        var match = ReadingListMatcher.FindExisting(_context, "Kilo Station", "2", volume: 2);
+        var match = ReadingListMatcher.FindExisting(_context, "Kilo Station", "2", volume: "2");
         Assert.NotNull(match);
         Assert.Equal(_issue2VolumeBId, match!.Id);
     }
@@ -115,6 +115,27 @@ public class ReadingListTests : IDisposable
     {
         ReadingListMatcher.ResolveOrCreatePlaceholder(_context, "Kilo Station", "99");
         Assert.Equal(1, _context.Series.Count(s => s.Name == "Kilo Station")); // no duplicate series created
+    }
+
+    /// <summary>docs/superpowers/specs/2026-08-16-reveal-in-explorer-and-fileless-entries-design.md §3 - the manual "add a physical book" entry point's wasCreated overload.</summary>
+    [Fact]
+    public void ResolveOrCreatePlaceholder_WithWasCreatedOut_TrueForFreshSeriesAndNumber()
+    {
+        var issue = ReadingListMatcher.ResolveOrCreatePlaceholder(
+            _context, "Another Brand New Series", "1", null, null, null, out bool wasCreated);
+
+        Assert.True(wasCreated);
+        Assert.True(issue.IsPlaceholder);
+    }
+
+    [Fact]
+    public void ResolveOrCreatePlaceholder_WithWasCreatedOut_FalseWhenAnExistingIssueMatches()
+    {
+        var issue = ReadingListMatcher.ResolveOrCreatePlaceholder(
+            _context, "Kilo Station", "1", null, null, null, out bool wasCreated);
+
+        Assert.False(wasCreated);
+        Assert.Equal(_issue1Id, issue.Id);
     }
 
     // --- CBL round-trip ---

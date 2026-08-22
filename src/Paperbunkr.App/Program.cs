@@ -1,5 +1,6 @@
 ﻿using Avalonia;
 using System;
+using Paperbunkr.App.Services;
 
 namespace Paperbunkr.App;
 
@@ -9,8 +10,20 @@ sealed class Program
     // SynchronizationContext-reliant code before AppMain is called: things aren't initialized
     // yet and stuff might break.
     [STAThread]
-    public static void Main(string[] args) => BuildAvaloniaApp()
-        .StartWithClassicDesktopLifetime(args);
+    public static void Main(string[] args)
+    {
+        // First statement, before Avalonia touches anything: a startup failure inside Avalonia's
+        // own bootstrap (BuildAvaloniaApp/StartWithClassicDesktopLifetime) needs to be caught too.
+        DiagnosticsService.Install();
+        try
+        {
+            BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
+        }
+        finally
+        {
+            DiagnosticsService.LogMilestone("Process exiting.");
+        }
+    }
 
     // Avalonia configuration, don't remove; also used by visual designer.
     public static AppBuilder BuildAvaloniaApp()

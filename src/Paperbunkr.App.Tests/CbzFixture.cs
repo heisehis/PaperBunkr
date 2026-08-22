@@ -16,9 +16,12 @@ internal static class CbzFixture
     /// <paramref name="comicInfo"/> optionally embeds a real ComicInfo.xml entry (serialized via
     /// the engine's own <c>ComicInfo.ToArray()</c>, the same writer CE itself uses), for tests
     /// exercising embedded-metadata reading - same "generate via the real code path" precedent as
-    /// the rest of this fixture.
+    /// the rest of this fixture. <paramref name="pageSize"/> optionally overrides the default 64x96
+    /// (portrait) size per page index - for double-page-spread pairing tests (docs/superpowers/specs/
+    /// 2026-08-15-reader-double-page-spread-design.md §7), which need real landscape pages (width >
+    /// height) to exercise the "doesn't pair" path against actually-decoded <c>PixelSize</c>s.
     /// </summary>
-    public static string Create(string path, int pageCount, cYo.Projects.ComicRack.Engine.ComicInfo? comicInfo = null)
+    public static string Create(string path, int pageCount, cYo.Projects.ComicRack.Engine.ComicInfo? comicInfo = null, Func<int, Size>? pageSize = null)
     {
         using var zip = ZipFile.Open(path, ZipArchiveMode.Create);
         var colors = new[] { Color.Firebrick, Color.SteelBlue, Color.Goldenrod, Color.SeaGreen, Color.Orchid };
@@ -26,7 +29,8 @@ internal static class CbzFixture
         for (int i = 0; i < pageCount; i++)
         {
             var entry = zip.CreateEntry($"page_{i:D3}.png", CompressionLevel.Fastest);
-            using var bitmap = new Bitmap(64, 96);
+            var size = pageSize?.Invoke(i) ?? new Size(64, 96);
+            using var bitmap = new Bitmap(size.Width, size.Height);
             using (var g = Graphics.FromImage(bitmap))
             {
                 g.Clear(colors[i % colors.Length]);

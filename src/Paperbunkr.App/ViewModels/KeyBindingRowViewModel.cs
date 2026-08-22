@@ -19,17 +19,17 @@ public partial class KeyBindingRowViewModel : ViewModelBase
     private readonly KeyBindingService _service;
     private readonly Action _onChanged;
 
-    public KeyBindingRowViewModel(KeyboardCommandDescriptor command, Key currentKey, KeyBindingService service, Action onChanged)
+    public KeyBindingRowViewModel(KeyboardCommandDescriptor command, KeyGesture currentGesture, KeyBindingService service, Action onChanged)
     {
         _command = command;
         _service = service;
         _onChanged = onChanged;
 
-        // currentKey might not be in the curated Options list (e.g. a stale/manually-edited DB
+        // currentGesture might not be in the curated Options list (e.g. a stale/manually-edited DB
         // row) - fall back to a synthetic option for it rather than silently snapping to the
         // first candidate, so the picker shows what's actually bound instead of lying about it.
-        var match = KeyOptions.All.Where(o => o.Key == currentKey).Cast<KeyOption?>().FirstOrDefault();
-        _selectedKey = match ?? new KeyOption(currentKey, currentKey.ToString());
+        var match = KeyOptions.All.Where(o => o.Gesture == currentGesture).Cast<KeyOption?>().FirstOrDefault();
+        _selectedKey = match ?? new KeyOption(currentGesture, currentGesture.ToString());
     }
 
     public string Group => _command.Group;
@@ -38,6 +38,9 @@ public partial class KeyBindingRowViewModel : ViewModelBase
 
     public string CommandId => _command.Id;
 
+    /// <summary>Drives PreferencesScreenViewModel's pairwise conflict check - see ConflictContext's own doc comment.</summary>
+    public ConflictContext Context => _command.Context;
+
     public IReadOnlyList<KeyOption> Options => KeyOptions.All;
 
     [ObservableProperty]
@@ -45,7 +48,7 @@ public partial class KeyBindingRowViewModel : ViewModelBase
 
     partial void OnSelectedKeyChanged(KeyOption value)
     {
-        _service.SetKey(CommandId, value.Key);
+        _service.SetKey(CommandId, value.Gesture);
         _onChanged();
     }
 }

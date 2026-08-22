@@ -97,6 +97,10 @@
                                         </Border>
                                     </MenuItem.Icon>
                                 </MenuItem>
+                                <MenuItem Header="Show in Explorer"
+                                          Command="{Binding #IssuesList.((vm:DetailTabsViewModel)DataContext).RevealIssueCommand}"
+                                          CommandParameter="{Binding}"
+                                          IsEnabled="{Binding HasFile}" />
                             </ContextMenu>
                         </Border.ContextMenu>
                         <Grid>
@@ -109,33 +113,181 @@
             </ItemsControl.ItemTemplate>
         </ItemsControl>
 
-        <!-- Related tab - no relatedness data/schema exists yet, so Related is always empty
-             (see DetailTabsViewModel.Related); the message shows, the carousel below just
-             renders nothing rather than being special-cased, so it's ready the day real
-             related-series data exists. -->
-        <TextBlock IsVisible="{Binding IsRelatedTab}" Text="No related series yet." FontSize="12.5"
-                   Foreground="{DynamicResource PbTextFaintBrush}" Margin="0,20,0,0" />
-        <ScrollViewer IsVisible="{Binding IsRelatedTab}" HorizontalScrollBarVisibility="Auto" Margin="0,20,0,0">
-            <ItemsControl ItemsSource="{Binding Related}">
-                <ItemsControl.ItemsPanel>
-                    <ItemsPanelTemplate><StackPanel Orientation="Horizontal" Spacing="16" /></ItemsPanelTemplate>
-                </ItemsControl.ItemsPanel>
-                <ItemsControl.ItemTemplate>
-                    <DataTemplate x:DataType="models:RelatedSeriesSample">
-                        <StackPanel Width="126">
-                            <Border CornerRadius="6" BorderThickness="1" BorderBrush="{DynamicResource PbBorderBrush}"
-                                    Height="189" Background="{Binding CoverBrush}">
-                                <TextBlock Text="{Binding Title}" FontSize="12" FontWeight="Black" Foreground="#FFFFF8EC"
-                                           VerticalAlignment="Bottom" Margin="8" TextWrapping="Wrap" />
+        <!-- Related tab (docs/superpowers/specs/2026-08-17-metadata-model-phase3-media-relations-
+             design.md) - real MediaRelation data, added/removed from this tab directly since no
+             Series Properties editor exists elsewhere in this app. -->
+        <StackPanel IsVisible="{Binding IsRelatedTab}" Spacing="4" Margin="0,20,0,0">
+            <StackPanel Orientation="Horizontal" Spacing="10">
+                <Button Content="+ Add Related Series"
+                        Command="{Binding ToggleAddRelationCommand}" Padding="10,5" FontSize="12" CornerRadius="5"
+                        Background="{DynamicResource PbAccentBrush}" Foreground="{DynamicResource PbBadgeTextBrush}" BorderThickness="0" />
+            </StackPanel>
+
+            <Border IsVisible="{Binding IsAddingRelation}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
+                    CornerRadius="6" Padding="12" Margin="0,10,0,0">
+                <StackPanel Spacing="8">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <TextBlock Text="Relationship:" FontSize="12" VerticalAlignment="Center" Foreground="{DynamicResource PbTextMutedBrush}" />
+                        <ComboBox ItemsSource="{Binding RelationTypeOptions}" SelectedItem="{Binding SelectedRelationTypeOption}"
+                                  MinWidth="160" FontSize="12">
+                            <ComboBox.ItemTemplate>
+                                <DataTemplate x:DataType="models:RelationTypeOption">
+                                    <TextBlock Text="{Binding Label}" />
+                                </DataTemplate>
+                            </ComboBox.ItemTemplate>
+                        </ComboBox>
+                    </StackPanel>
+                    <TextBox Text="{Binding RelationSearchQuery}" Watermark="Search for a series…" FontSize="12" />
+                    <ItemsControl ItemsSource="{Binding RelationSearchResults}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="models:SeriesSearchResult">
+                                <Button HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Padding="8,6" Margin="0,2"
+                                        Background="Transparent" BorderThickness="0" FontSize="12.5"
+                                        Foreground="{DynamicResource PbTextMutedBrush}"
+                                        Command="{Binding $parent[ItemsControl].((vm:DetailTabsViewModel)DataContext).AddRelationCommand}"
+                                        CommandParameter="{Binding}">
+                                    <TextBlock Text="{Binding Name}" />
+                                </Button>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </Border>
+
+            <TextBlock IsVisible="{Binding !HasRelated}" Text="No related series yet." FontSize="12.5"
+                       Foreground="{DynamicResource PbTextFaintBrush}" Margin="0,10,0,0" />
+            <ScrollViewer HorizontalScrollBarVisibility="Auto" Margin="0,10,0,0">
+                <ItemsControl ItemsSource="{Binding Related}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate><StackPanel Orientation="Horizontal" Spacing="16" /></ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="models:RelatedSeriesSample">
+                            <StackPanel Width="126">
+                                <Border CornerRadius="6" BorderThickness="1" BorderBrush="{DynamicResource PbBorderBrush}"
+                                        Height="189" Background="{Binding CoverBrush}">
+                                    <Grid>
+                                        <TextBlock Text="{Binding Title}" FontSize="12" FontWeight="Black" Foreground="#FFFFF8EC"
+                                                   VerticalAlignment="Bottom" Margin="8" TextWrapping="Wrap" />
+                                        <Button Content="✕" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="4"
+                                                Width="20" Height="20" Padding="0" FontSize="11" CornerRadius="10"
+                                                Background="#88000000" Foreground="White" BorderThickness="0"
+                                                Command="{Binding $parent[ItemsControl].((vm:DetailTabsViewModel)DataContext).RemoveRelationCommand}"
+                                                CommandParameter="{Binding}"
+                                                ToolTip.Tip="Remove this relation" />
+                                    </Grid>
+                                </Border>
+                                <TextBlock Text="{Binding Name}" FontSize="11.5" FontWeight="SemiBold"
+                                           Foreground="{DynamicResource PbTextMutedBrush}" Margin="0,6,0,0" />
+                                <TextBlock Text="{Binding Note}" FontSize="10.5" Foreground="{DynamicResource PbTextFaintBrush}" />
+                            </StackPanel>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+
+            <!-- Continuity membership (docs/superpowers/specs/2026-08-17-metadata-model-phase4a-
+                 continuity-design.md) - additive section, doesn't touch the carousel above. -->
+            <StackPanel Margin="0,24,0,0" Spacing="8">
+                <StackPanel Orientation="Horizontal" Spacing="10">
+                    <TextBlock Text="Continuities" FontSize="12.5" FontWeight="SemiBold"
+                               Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
+                    <Button Content="+ Add to Continuity"
+                            Command="{Binding ToggleAddContinuityCommand}" Padding="10,5" FontSize="12" CornerRadius="5"
+                            Background="{DynamicResource PbAccentBrush}" Foreground="{DynamicResource PbBadgeTextBrush}" BorderThickness="0" />
+                </StackPanel>
+
+                <Border IsVisible="{Binding IsAddingContinuity}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
+                        CornerRadius="6" Padding="12">
+                    <StackPanel Spacing="8">
+                        <TextBox Text="{Binding ContinuitySearchQuery}" Watermark="Search or create a continuity…" FontSize="12" />
+                        <ItemsControl ItemsSource="{Binding ContinuitySearchResults}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="models:ContinuitySearchResult">
+                                    <Button HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Padding="8,6" Margin="0,2"
+                                            Background="Transparent" BorderThickness="0" FontSize="12.5"
+                                            Foreground="{DynamicResource PbTextMutedBrush}"
+                                            Command="{Binding $parent[ItemsControl].((vm:DetailTabsViewModel)DataContext).AddContinuityCommand}"
+                                            CommandParameter="{Binding}">
+                                        <TextBlock Text="{Binding Name}" />
+                                    </Button>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </Border>
+
+                <ItemsControl ItemsSource="{Binding ContinuityChips}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="models:ContinuityChip">
+                            <Border Background="{DynamicResource PbSurfaceAltBrush}" CornerRadius="12" Padding="10,4" Margin="0,0,6,6">
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <TextBlock Text="{Binding Name}" FontSize="11.5" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
+                                    <Button Content="✕" Padding="0" Width="16" Height="16" FontSize="9.5" CornerRadius="8"
+                                            Background="Transparent" BorderThickness="0" Foreground="{DynamicResource PbTextFaintBrush}"
+                                            Command="{Binding $parent[ItemsControl].((vm:DetailTabsViewModel)DataContext).RemoveContinuityCommand}"
+                                            CommandParameter="{Binding}"
+                                            ToolTip.Tip="Remove from this continuity" />
+                                </StackPanel>
                             </Border>
-                            <TextBlock Text="{Binding Name}" FontSize="11.5" FontWeight="SemiBold"
-                                       Foreground="{DynamicResource PbTextMutedBrush}" Margin="0,6,0,0" />
-                            <TextBlock Text="{Binding Note}" FontSize="10.5" Foreground="{DynamicResource PbTextFaintBrush}" />
-                        </StackPanel>
-                    </DataTemplate>
-                </ItemsControl.ItemTemplate>
-            </ItemsControl>
-        </ScrollViewer>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+
+                <TextBlock IsVisible="{Binding HasSameContinuity}" Text="Same Continuity" FontSize="12.5" FontWeight="SemiBold"
+                           Foreground="{DynamicResource PbTextMutedBrush}" Margin="0,10,0,0" />
+                <ScrollViewer IsVisible="{Binding HasSameContinuity}" HorizontalScrollBarVisibility="Auto">
+                    <ItemsControl ItemsSource="{Binding SameContinuity}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate><StackPanel Orientation="Horizontal" Spacing="16" /></ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="models:RelatedGroupSeriesSample">
+                                <StackPanel Width="126">
+                                    <Border CornerRadius="6" BorderThickness="1" BorderBrush="{DynamicResource PbBorderBrush}"
+                                            Height="189" Background="{Binding CoverBrush}">
+                                        <TextBlock Text="{Binding Title}" FontSize="12" FontWeight="Black" Foreground="#FFFFF8EC"
+                                                   VerticalAlignment="Bottom" Margin="8" TextWrapping="Wrap" />
+                                    </Border>
+                                    <TextBlock Text="{Binding Name}" FontSize="11.5" FontWeight="SemiBold"
+                                               Foreground="{DynamicResource PbTextMutedBrush}" Margin="0,6,0,0" />
+                                    <TextBlock Text="{Binding Note}" FontSize="10.5" Foreground="{DynamicResource PbTextFaintBrush}" />
+                                </StackPanel>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+
+                <!-- Same Event (docs/superpowers/specs/2026-08-17-metadata-model-phase4b-story-
+                     events-design.md) - read-only derived section, no creation UI here. -->
+                <TextBlock IsVisible="{Binding HasSameEvent}" Text="Same Event" FontSize="12.5" FontWeight="SemiBold"
+                           Foreground="{DynamicResource PbTextMutedBrush}" Margin="0,10,0,0" />
+                <ScrollViewer IsVisible="{Binding HasSameEvent}" HorizontalScrollBarVisibility="Auto">
+                    <ItemsControl ItemsSource="{Binding SameEvent}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate><StackPanel Orientation="Horizontal" Spacing="16" /></ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="models:RelatedGroupSeriesSample">
+                                <StackPanel Width="126">
+                                    <Border CornerRadius="6" BorderThickness="1" BorderBrush="{DynamicResource PbBorderBrush}"
+                                            Height="189" Background="{Binding CoverBrush}">
+                                        <TextBlock Text="{Binding Title}" FontSize="12" FontWeight="Black" Foreground="#FFFFF8EC"
+                                                   VerticalAlignment="Bottom" Margin="8" TextWrapping="Wrap" />
+                                    </Border>
+                                    <TextBlock Text="{Binding Name}" FontSize="11.5" FontWeight="SemiBold"
+                                               Foreground="{DynamicResource PbTextMutedBrush}" Margin="0,6,0,0" />
+                                    <TextBlock Text="{Binding Note}" FontSize="10.5" Foreground="{DynamicResource PbTextFaintBrush}" />
+                                </StackPanel>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+            </StackPanel>
+        </StackPanel>
 
         <!-- Details tab -->
         <Grid IsVisible="{Binding IsDetailsTab}" ColumnDefinitions="*,*" Margin="0,20,0,0">

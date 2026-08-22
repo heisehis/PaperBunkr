@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Paperbunkr.Data.Entities;
+using Paperbunkr.Data.Metadata;
 using Paperbunkr.Data.VirtualTags;
 
 namespace Paperbunkr.Data.SmartLists;
@@ -17,6 +18,7 @@ public static class SmartListQueryBuilder
         var issues = ctx.Issues
             .Include(i => i.Series)
             .Include(i => i.CustomValues)
+            .Include(i => i.MetadataProposals)
             .ToList();
 
         HashSet<int>? duplicateIds = list.Conditions.Any(c => c.Field == SmartListField.Duplicate)
@@ -163,8 +165,10 @@ public static class SmartListQueryBuilder
     /// </summary>
     public static HashSet<int> DuplicateIssueIds(IReadOnlyCollection<Issue> issues)
     {
+        // Number/Volume/Year read through Effective* (Phase 2a) so a filename-inferred value still
+        // counts toward the dedup key, not just a stored one.
         var byMetadata = issues
-            .GroupBy(i => (i.SeriesId, i.Format, i.Count, i.Number, i.Volume, i.LanguageISO, i.Year, i.Month, i.Day))
+            .GroupBy(i => (i.SeriesId, i.Format, i.Count, i.EffectiveNumber(), i.EffectiveVolume(), i.LanguageISO, i.EffectiveYear(), i.Month, i.Day))
             .Where(g => g.Count() > 1)
             .SelectMany(g => g);
 

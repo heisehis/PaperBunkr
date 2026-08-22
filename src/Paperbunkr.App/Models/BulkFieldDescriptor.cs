@@ -1,6 +1,8 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using Paperbunkr.Data.Entities;
+using Paperbunkr.Data.Metadata;
 
 namespace Paperbunkr.App.Models;
 
@@ -10,6 +12,9 @@ public enum FieldKind
     Text,
     Boolean,
     Rating,
+
+    /// <summary>Fixed-choice picker (docs/superpowers/specs/2026-08-16-manga-content-type-classification-design.md §1) - candidate values live in <see cref="BulkFieldDescriptor.Options"/>, rendered as a flyout of buttons (this app's established enum-picker idiom, e.g. ReaderScreen.axaml's reading-mode/fit-mode pickers) rather than a native ComboBox.</summary>
+    Enum,
 }
 
 /// <summary>
@@ -25,20 +30,27 @@ public sealed record BulkFieldDescriptor(
     FieldKind Kind,
     bool IsListField,
     Func<Issue, string?> Get,
-    Action<Issue, string?> Set);
+    Action<Issue, string?> Set,
+    IReadOnlyList<string>? Options = null);
 
 /// <summary>
 /// The full bulk-editable field set, verified field-by-field against CE's real
 /// <c>MultipleComicBooksDialog.Designer.cs</c>/<c>.cs</c> (docs/superpowers/specs/
-/// 2026-08-07-bulk-issue-editing-design.md §3) - <c>StoryArcNumber</c>/<c>Series</c>/
-/// <c>SeriesComplete</c>/<c>Manga</c>/<c>EnableProposed</c>/<c>AlternateCount</c> are deliberately
-/// absent, see the spec for why each one is excluded.
+/// 2026-08-07-bulk-issue-editing-design.md §3) - <c>StoryArcNumber</c>/<c>Series</c>/<c>Manga</c>/
+/// <c>EnableProposed</c>/<c>AlternateCount</c> are deliberately absent, see the spec for why each
+/// one is excluded. CE's own <c>SeriesComplete</c> now has a real Paperbunkr home below (the
+/// Series-level <c>Status</c> row, docs/superpowers/specs/2026-08-18-metadata-model-ui-gaps-status-
+/// and-bookmarks-design.md) - not the same shape as CE's per-issue Yes/No/Unknown flag, which is
+/// <see cref="Issue.IsFinalIssue"/> instead, edited on the single-issue Issue Properties screen.
 /// </summary>
 public static class BulkFieldRegistry
 {
     public const string Main = "Main";
     public const string Artists = "Artists";
     public const string PlotAndNotes = "Plot & Notes";
+
+    /// <summary>Shared with BulkIssuePropertiesScreenViewModel, which needs to find this specific row to wire the bespoke Reading Direction row's conditional visibility (docs/superpowers/specs/2026-08-16-manga-content-type-classification-design.md §2).</summary>
+    public const string ContentTypeLabel = "Content Type";
 
     private static string? Norm(string? value) => string.IsNullOrWhiteSpace(value) ? null : value;
 
@@ -64,10 +76,15 @@ public static class BulkFieldRegistry
     public static readonly BulkFieldDescriptor[] All =
     {
         // ===== Main =====
-        Text("Number", Main, i => i.Number, (i, v) => i.Number = v),
+        // Number/Volume/Year read through Effective* (docs/superpowers/specs/2026-08-17-metadata-
+        // model-phase2a-metadata-proposals-design.md) so a filename-inferred value still displays
+        // here even though the raw Issue field is null - Set is unchanged, still writes directly to
+        // the raw field (a real edit naturally supersedes any old Accepted proposal, since the
+        // resolver always prefers a stored value first).
+        Text("Number", Main, i => i.EffectiveNumber(), (i, v) => i.Number = v),
         Numeric("Count", Main, i => i.Count, (i, v) => i.Count = v),
-        Numeric("Volume", Main, i => i.Volume, (i, v) => i.Volume = v),
-        Numeric("Year", Main, i => i.Year, (i, v) => i.Year = v),
+        Text("Volume", Main, i => i.EffectiveVolume(), (i, v) => i.Volume = v),
+        Numeric("Year", Main, i => i.EffectiveYear(), (i, v) => i.Year = v),
         Numeric("Month", Main, i => i.Month, (i, v) => i.Month = v),
         Numeric("Day", Main, i => i.Day, (i, v) => i.Day = v),
         Text("Title", Main, i => i.Title, (i, v) => i.Title = v),
@@ -77,13 +94,30 @@ public static class BulkFieldRegistry
         Text("Story Arc", Main, i => i.StoryArc, (i, v) => i.StoryArc = v),
         Text("Genre", Main, i => i.Genre, (i, v) => i.Genre = v, isList: true),
         Text("Tags", Main, i => i.Tags, (i, v) => i.Tags = v, isList: true),
+        // Series-owned, reached through Issue.Series - the first bulk field to write through to the
+        // owning Series rather than the Issue itself (docs/superpowers/specs/2026-08-16-manga-
+        // content-type-classification-design.md §1). Bulk-saving iterates selected Issues once per
+        // staged field, so a selection spanning multiple series naturally converges to "every
+        // touched series ends up at the new value" with no special batching needed.
+        new(ContentTypeLabel, Main, FieldKind.Enum, IsListField: false,
+            i => i.Series.ContentType.ToString(),
+            (i, v) => i.Series.ContentType = Enum.Parse<ContentType>(v ?? nameof(ContentType.Unknown)),
+            Options: Enum.GetNames<ContentType>()),
+        // Series-owned, same shape as ContentType above (docs/superpowers/specs/2026-08-18-
+        // metadata-model-ui-gaps-status-and-bookmarks-design.md).
+        new("Status", Main, FieldKind.Enum, IsListField: false,
+            i => i.Series.Status.ToString(),
+            (i, v) => i.Series.Status = Enum.Parse<SeriesStatus>(v ?? nameof(SeriesStatus.Unknown)),
+            Options: Enum.GetNames<SeriesStatus>()),
         Text("Publisher", Main, i => i.Publisher, (i, v) => i.Publisher = v),
         Text("Imprint", Main, i => i.Imprint, (i, v) => i.Imprint = v),
         Text("Format", Main, i => i.Format, (i, v) => i.Format = v),
         Text("Age Rating", Main, i => i.AgeRating, (i, v) => i.AgeRating = v),
         Text("Language (ISO)", Main, i => i.LanguageISO, (i, v) => i.LanguageISO = v),
-        new("Black and White", Main, FieldKind.Boolean, IsListField: false,
-            i => i.BlackAndWhite ? "true" : "false", (i, v) => i.BlackAndWhite = v == "true"),
+        new("Color Mode", Main, FieldKind.Enum, IsListField: false,
+            i => i.ColorMode.ToString(),
+            (i, v) => i.ColorMode = Enum.Parse<ColorMode>(v ?? nameof(ColorMode.Unknown)),
+            Options: Enum.GetNames<ColorMode>()),
         new("My Rating", Main, FieldKind.Rating, IsListField: false,
             i => i.Rating.HasValue ? ((int)i.Rating.Value).ToString() : null,
             (i, v) => i.Rating = ParseInt(v)),

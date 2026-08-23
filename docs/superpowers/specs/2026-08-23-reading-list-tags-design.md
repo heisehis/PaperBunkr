@@ -62,9 +62,38 @@ item-browsing/reordering parts of `ReadingScreen` are untouched; only the "edit 
 properties" path moves into the overlay, reached via an Edit affordance next to the selected list
 (mirroring how Issue Properties Editor is reached via right-click/Edit on an issue).
 
+`Description` gets a real edit textbox for the first time - it exists on the entity and drives the
+sidebar's subtitle fallback today, but has no editing UI at all currently.
+
 Tag rows in the overlay follow the same shape as the Issue Properties Editor's Genre/Tags Details
 section: a plain CSV text box for adding/removing tag values, plus a per-value Category dropdown
 and Weight picker for values that already exist.
+
+### Cover image (new)
+
+`ReadingList.CoverImageUrl` is a remote URL today, driving `ArcCoverImageCache`
+(`src/Paperbunkr.App/Services/ArcCoverImageCache.cs`) - a disk cache keyed by `ReadingListId`,
+same shape as the per-Issue `CoverImageCache`. This adds a **local file picker** alongside it, both
+writing into that same cache slot - no dual-source precedence system needed, since there's only
+ever one physical cached file per list.
+
+- `CoverImageUrl` becomes a buffered text field like the rest of the form - editing it and hitting
+  Save re-fetches via the existing `DownloadAndCacheAsync`, overwriting the cache.
+- A new "Change Cover" affordance opens a file picker (reusing `FilePickerService`, same as other
+  local-file pickers in this app); the picked image is held as a buffered pending selection (shown
+  as a live preview in the overlay) and only written to `ArcCoverPaths.GetCachePath(readingListId)`
+  on Save - Cancel discards it, leaving the existing cover untouched. This diverges from the
+  per-Issue "Change Cover" button (which applies immediately, independent of any Save/Cancel), by
+  explicit user direction: consistency with this overlay's own buffered fields wins over matching
+  that other screen's convention.
+- **Precedence when both are touched in one session:** if a local file was picked, it wins on Save
+  regardless of whether `CoverImageUrl` also changed - a deliberate local pick is a clearer signal
+  of intent than a same-session URL edit silently overwriting it. `CoverImageUrl`'s own re-fetch
+  only runs when no local file was picked.
+- Needs a small addition to `ArcCoverImageCache` (or a sibling service, matching how
+  `CoverThumbnailService.TrySetCustomCover` is separate from `CoverImageCache`'s read-only cache
+  lookups) - a `TrySetCustomCover(readingListId, sourceImagePath)`-shaped method that decodes the
+  picked file and writes it to the same cache path `DownloadAndCacheAsync` already uses.
 
 ### Detail-pane chip row (new)
 
@@ -101,6 +130,9 @@ their reweight popover (Weight-only) and their editor (Category+Weight).
 - `ReadingListPropertiesScreenViewModel` Load/Save/Cancel tests covering every migrated field
   (Name/Description/Type/arc-link) plus Tags, confirming Cancel truly discards and Save writes
   everything atomically.
+- Cover tests: a buffered local pick is discarded on Cancel and applied on Save; a changed
+  `CoverImageUrl` alone re-fetches on Save; when both are touched in one session, the local pick
+  wins.
 - Sidebar filter tests: clicking a tag narrows `Lists` to matching lists only; clearing restores
   the full set.
 - Reweight-popover tests mirroring `TagPillViewModel`'s existing `SetWeightCommand` coverage.

@@ -106,19 +106,20 @@
             <Setter Property="Foreground" Value="{DynamicResource PbAccentTextBrush}" />
         </Style>
 
-        <!-- Removable filter / read-only state chips -->
+        <!-- Removable filter / read-only state chips - squircle (PbRadius), matching the
+             toolbarPill buttons rather than the fully-round DetailPills primitive. -->
         <Style Selector="Border.chip">
             <Setter Property="Background" Value="{DynamicResource PbSurface2Brush}" />
             <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
             <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="CornerRadius" Value="999" />
+            <Setter Property="CornerRadius" Value="{DynamicResource PbRadius}" />
             <Setter Property="Padding" Value="10,4" />
         </Style>
         <Style Selector="Button.chipBtn">
             <Setter Property="Background" Value="{DynamicResource PbSurface2Brush}" />
             <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
             <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="CornerRadius" Value="999" />
+            <Setter Property="CornerRadius" Value="{DynamicResource PbRadius}" />
             <Setter Property="Padding" Value="10,4" />
             <Setter Property="FontSize" Value="12" />
             <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
@@ -136,7 +137,7 @@
             <Setter Property="Background" Value="{DynamicResource PbSurface2Brush}" />
             <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
             <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="CornerRadius" Value="999" />
+            <Setter Property="CornerRadius" Value="{DynamicResource PbRadius}" />
             <Setter Property="Padding" Value="12,5" />
             <Setter Property="FontSize" Value="12" />
             <Setter Property="Foreground" Value="{DynamicResource PbTextBrush}" />

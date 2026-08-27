@@ -147,6 +147,10 @@ public partial class BookReaderScreenViewModel : ViewModelBase
         _position = new BookPosition(chapterIndex, _book.LastCharacterOffset);
 
         _book.LastOpenedTime = DateTime.UtcNow;
+        // Lazy-populate ChapterCount (feeds Home's progress bar) + un-finish a re-read
+        // (docs/superpowers/specs/2026-08-27-books-screen-chrome-and-home-strip-design.md).
+        _book.ChapterCount = _source.Chapters.Count;
+        _book.Finished = false;
         context.SaveChanges();
 
         IsChromeVisible = false;
@@ -270,7 +274,10 @@ public partial class BookReaderScreenViewModel : ViewModelBase
         }
         else
         {
-            _history.Pop(); // already at the end of the book - nothing to move to, don't record a no-op history entry
+            // Already at the end of the book - nothing to move to, don't record a no-op history
+            // entry, but do mark it finished so it leaves Home's Continue Reading — Books row.
+            _history.Pop();
+            PersistPosition(markFinished: true);
             return;
         }
 
@@ -478,7 +485,7 @@ public partial class BookReaderScreenViewModel : ViewModelBase
     /// bookmark/search jumps), never from <see cref="RecomputeCurrentPage"/> itself, so a font-size
     /// slider drag doesn't fire a DB write per tick.
     /// </summary>
-    private void PersistPosition()
+    private void PersistPosition(bool markFinished = false)
     {
         using var context = PaperbunkrDb.CreateContext();
         var book = context.Books.FirstOrDefault(b => b.Id == _bookId);
@@ -490,6 +497,11 @@ public partial class BookReaderScreenViewModel : ViewModelBase
         book.LastChapterIndex = _position.ChapterIndex;
         book.LastCharacterOffset = _position.CharacterOffset;
         book.LastOpenedTime = DateTime.UtcNow;
+        if (markFinished)
+        {
+            book.Finished = true;
+        }
+
         context.SaveChanges();
     }
 

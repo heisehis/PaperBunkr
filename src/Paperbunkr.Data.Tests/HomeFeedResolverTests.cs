@@ -301,4 +301,52 @@ public class HomeFeedResolverTests : IDisposable
         context.SaveChanges();
         return list.Id;
     }
+
+    // --- GetContinueReadingBooks (docs/superpowers/specs/2026-08-27-books-screen-chrome-and-home-
+    // strip-design.md) ---
+
+    private static void SeedBook(PaperbunkrDbContext context, string title, DateTime? lastOpened = null,
+        int lastChapter = 0, int lastOffset = 0, bool finished = false)
+    {
+        context.Books.Add(new Book
+        {
+            Title = title,
+            Format = BookFormat.Epub,
+            FilePath = $@"C:\books\{title}.epub",
+            AddedTime = DateTime.UtcNow,
+            LastOpenedTime = lastOpened,
+            LastChapterIndex = lastChapter,
+            LastCharacterOffset = lastOffset,
+            Finished = finished,
+            ChapterCount = 10,
+        });
+        context.SaveChanges();
+    }
+
+    [Fact]
+    public void GetContinueReadingBooks_OnlyStartedNotFinished_NewestOpenedFirst()
+    {
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        SeedBook(context, "Older", lastOpened: new DateTime(2024, 1, 1), lastChapter: 2);
+        SeedBook(context, "Newer", lastOpened: new DateTime(2024, 6, 1), lastOffset: 500);
+        SeedBook(context, "Finished", lastOpened: new DateTime(2024, 5, 1), lastChapter: 9, finished: true);
+        SeedBook(context, "Opened but not started", lastOpened: new DateTime(2024, 7, 1)); // position 0/0
+        SeedBook(context, "Never opened"); // LastOpenedTime null
+
+        var result = HomeFeedResolver.GetContinueReadingBooks(context);
+
+        Assert.Equal(new[] { "Newer", "Older" }, result.Select(b => b.Title));
+    }
+
+    [Fact]
+    public void GetContinueReadingBooks_RespectsLimit()
+    {
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        for (int i = 0; i < 5; i++)
+        {
+            SeedBook(context, $"Book {i}", lastOpened: DateTime.UtcNow.AddMinutes(-i), lastChapter: 1);
+        }
+
+        Assert.Equal(3, HomeFeedResolver.GetContinueReadingBooks(context, limit: 3).Count);
+    }
 }

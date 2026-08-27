@@ -2,6 +2,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Paperbunkr.App.ViewModels"
              xmlns:models="using:Paperbunkr.App.Models"
+             xmlns:entities="using:Paperbunkr.Data.Entities"
              xmlns:conv="using:Avalonia.Data.Converters"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -38,59 +39,183 @@
         <Style Selector="Button.card:focus-within Border.bookCover">
             <Setter Property="BoxShadow" Value="{StaticResource PbGlowRing}" />
         </Style>
+
+        <!-- Chrome pills / popups - own copy of the Library toolbar's classes (same per-UserControl
+             precedent LibraryScreen keeps). -->
+        <Style Selector="Button.toolbarPill">
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
+            <Setter Property="Background" Value="{DynamicResource PbSurface3Brush}" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
+            <Setter Property="CornerRadius" Value="{DynamicResource PbRadius}" />
+            <Setter Property="Padding" Value="12,7" />
+            <Setter Property="FontSize" Value="12.5" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style Selector="Button.toolbarPill.open">
+            <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
+            <Setter Property="Background" Value="{DynamicResource PbAccentSoftBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource PbAccentTextBrush}" />
+        </Style>
+        <Style Selector="Border.dropdown">
+            <Setter Property="Background" Value="{DynamicResource PbSurface3Brush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusLg}" />
+            <Setter Property="Padding" Value="14" />
+            <Setter Property="BoxShadow" Value="0 16 40 -8 #99000000" />
+        </Style>
+        <Style Selector="Button.modeOption">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="6,5" />
+            <Setter Property="CornerRadius" Value="5" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="HorizontalContentAlignment" Value="Left" />
+            <Setter Property="FontSize" Value="12.5" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style Selector="Button.modeOption.active">
+            <Setter Property="Background" Value="{DynamicResource PbAccentSoftBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource PbAccentTextBrush}" />
+            <Setter Property="FontWeight" Value="Bold" />
+        </Style>
     </UserControl.Styles>
 
-    <Grid RowDefinitions="Auto,*">
+    <UserControl.Resources>
+        <DataTemplate x:Key="BookCardTemplate" x:DataType="models:BookCardSample">
+            <Button Classes="card" Width="150" Margin="0,0,20,20"
+                    Command="{Binding $parent[UserControl].((vm:BooksScreenViewModel)DataContext).SelectBookCommand}"
+                    CommandParameter="{Binding}">
+                <Button.ContextMenu>
+                    <ContextMenu>
+                        <MenuItem Header="Delete Book">
+                            <MenuItem Header="Yes, delete this book"
+                                      Command="{Binding $parent[UserControl].((vm:BooksScreenViewModel)DataContext).DeleteBookCommand}"
+                                      CommandParameter="{Binding BookId}" />
+                        </MenuItem>
+                    </ContextMenu>
+                </Button.ContextMenu>
+                <StackPanel Spacing="8">
+                    <Border Classes="bookCover" Background="{Binding CoverBrush}" Height="216">
+                        <Grid>
+                            <Image Source="{Binding CoverImage}" Stretch="UniformToFill" />
+                            <Border Classes="posterScrim" />
+                        </Grid>
+                    </Border>
+                    <TextBlock Text="{Binding Title}" FontSize="12.5" FontWeight="SemiBold"
+                               Foreground="{DynamicResource PbTextBrush}" TextWrapping="Wrap"
+                               MaxLines="2" TextTrimming="CharacterEllipsis" />
+                    <TextBlock Text="{Binding Author}" Classes="pbTextCaption"
+                               TextTrimming="CharacterEllipsis" IsVisible="{Binding Author, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
+                    <TextBlock Text="{Binding SeriesName}" Classes="pbTextCaption" FontStyle="Italic"
+                               TextTrimming="CharacterEllipsis" IsVisible="{Binding HasSeries}" />
+                </StackPanel>
+            </Button>
+        </DataTemplate>
+    </UserControl.Resources>
 
-        <Border Grid.Row="0" Padding="28,20,28,16" Background="{DynamicResource PbSurface1Brush}"
-                BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,0,0,1">
+    <Grid RowDefinitions="Auto,Auto,*">
+
+        <Border Grid.Row="0" Padding="28,20,28,14" Background="{DynamicResource PbSurface1Brush}">
             <StackPanel>
                 <TextBlock Text="Books" Classes="pbTextHeading" />
                 <TextBlock Text="Novels — EPUB and PDF" Classes="pbTextCaption" Margin="0,4,0,0" />
             </StackPanel>
         </Border>
 
-        <ScrollViewer Grid.Row="1">
+        <!-- ============ Chrome ============ -->
+        <Border Grid.Row="1" Padding="28,10" Background="{DynamicResource PbSurface2Brush}"
+                BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,1,0,1">
+            <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="10">
+                <Border Grid.Column="0" Background="{DynamicResource PbSurface1Brush}" CornerRadius="{DynamicResource PbRadius}"
+                        BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1" Padding="10,0" MaxWidth="360" HorizontalAlignment="Left">
+                    <DockPanel LastChildFill="True">
+                        <Path DockPanel.Dock="Left" Classes="pbIcon" Data="{StaticResource PbIconSearch}" VerticalAlignment="Center" Margin="0,0,8,0" />
+                        <TextBox Text="{Binding SearchQuery}" PlaceholderText="Search books…" FontSize="12.5"
+                                 Background="Transparent" BorderThickness="0" VerticalAlignment="Center"
+                                 AutomationProperties.AutomationId="BooksSearchBox" />
+                    </DockPanel>
+                </Border>
+
+                <Button Grid.Column="1" x:Name="GroupButton" Classes="toolbarPill" Classes.open="{Binding IsGroupOpen}"
+                        Command="{Binding ToggleGroupCommand}" VerticalAlignment="Center"
+                        Content="{Binding GroupLabel, StringFormat='Group: {0}'}"
+                        AutomationProperties.AutomationId="BooksGroupButton" />
+                <Button Grid.Column="2" x:Name="SortButton" Classes="toolbarPill" Classes.open="{Binding IsSortOpen}"
+                        Command="{Binding ToggleSortCommand}" VerticalAlignment="Center"
+                        Content="{Binding SortLabel, StringFormat='Sort: {0}'}"
+                        AutomationProperties.AutomationId="BooksSortButton" />
+
+                <Popup PlacementTarget="{Binding #GroupButton}" Placement="BottomEdgeAlignedRight" VerticalOffset="6"
+                       IsOpen="{Binding IsGroupOpen}" IsLightDismissEnabled="True">
+                    <Border Classes="dropdown" Width="170">
+                        <StackPanel Spacing="1">
+                            <Button Classes="modeOption" Classes.active="{Binding GroupField, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:BooksGroupField.None}}"
+                                    Content="None" Command="{Binding SetGroupFieldCommand}" CommandParameter="{x:Static entities:BooksGroupField.None}" AutomationProperties.AutomationId="BooksGroupOption_None" />
+                            <Button Classes="modeOption" Classes.active="{Binding GroupField, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:BooksGroupField.Series}}"
+                                    Content="Series" Command="{Binding SetGroupFieldCommand}" CommandParameter="{x:Static entities:BooksGroupField.Series}" AutomationProperties.AutomationId="BooksGroupOption_Series" />
+                            <Button Classes="modeOption" Classes.active="{Binding GroupField, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:BooksGroupField.Author}}"
+                                    Content="Author" Command="{Binding SetGroupFieldCommand}" CommandParameter="{x:Static entities:BooksGroupField.Author}" AutomationProperties.AutomationId="BooksGroupOption_Author" />
+                        </StackPanel>
+                    </Border>
+                </Popup>
+
+                <Popup PlacementTarget="{Binding #SortButton}" Placement="BottomEdgeAlignedRight" VerticalOffset="6"
+                       IsOpen="{Binding IsSortOpen}" IsLightDismissEnabled="True">
+                    <Border Classes="dropdown" Width="180">
+                        <StackPanel Spacing="1">
+                            <Button Classes="modeOption" Classes.active="{Binding SortField, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:BooksSortField.Title}}"
+                                    Content="Title" Command="{Binding SetSortFieldCommand}" CommandParameter="{x:Static entities:BooksSortField.Title}" AutomationProperties.AutomationId="BooksSortOption_Title" />
+                            <Button Classes="modeOption" Classes.active="{Binding SortField, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:BooksSortField.Author}}"
+                                    Content="Author" Command="{Binding SetSortFieldCommand}" CommandParameter="{x:Static entities:BooksSortField.Author}" AutomationProperties.AutomationId="BooksSortOption_Author" />
+                            <Button Classes="modeOption" Classes.active="{Binding SortField, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:BooksSortField.RecentlyAdded}}"
+                                    Content="Recently added" Command="{Binding SetSortFieldCommand}" CommandParameter="{x:Static entities:BooksSortField.RecentlyAdded}" AutomationProperties.AutomationId="BooksSortOption_RecentlyAdded" />
+                            <Button Classes="modeOption" Classes.active="{Binding SortField, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:BooksSortField.LastOpened}}"
+                                    Content="Last opened" Command="{Binding SetSortFieldCommand}" CommandParameter="{x:Static entities:BooksSortField.LastOpened}" AutomationProperties.AutomationId="BooksSortOption_LastOpened" />
+                            <Border Height="1" Background="{DynamicResource PbBorderBrush}" Margin="0,8" />
+                            <Button Classes="modeOption" Classes.active="{Binding SortDirection, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:SortDirection.Ascending}}"
+                                    Content="↑ Ascending" Command="{Binding ToggleSortDirectionCommand}" AutomationProperties.AutomationId="BooksSortAscending" />
+                            <Button Classes="modeOption" Classes.active="{Binding SortDirection, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:SortDirection.Descending}}"
+                                    Content="↓ Descending" Command="{Binding ToggleSortDirectionCommand}" AutomationProperties.AutomationId="BooksSortDescending" />
+                        </StackPanel>
+                    </Border>
+                </Popup>
+            </Grid>
+        </Border>
+
+        <!-- ============ Content ============ -->
+        <ScrollViewer Grid.Row="2">
             <Grid>
-                <ItemsControl ItemsSource="{Binding Books}" Margin="24,22,24,40" IsVisible="{Binding HasBooks}">
+                <ItemsControl ItemsSource="{Binding Books}" Margin="24,22,24,40" IsVisible="{Binding !IsGrouped}"
+                              ItemTemplate="{StaticResource BookCardTemplate}">
                     <ItemsControl.ItemsPanel>
                         <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
                     </ItemsControl.ItemsPanel>
+                </ItemsControl>
+
+                <ItemsControl ItemsSource="{Binding Groups}" Margin="24,22,24,40" IsVisible="{Binding IsGrouped}">
                     <ItemsControl.ItemTemplate>
-                        <DataTemplate x:DataType="models:BookCardSample">
-                            <Button Classes="card" Width="150" Margin="0,0,20,20"
-                                    Command="{Binding $parent[UserControl].((vm:BooksScreenViewModel)DataContext).SelectBookCommand}"
-                                    CommandParameter="{Binding}">
-                                <Button.ContextMenu>
-                                    <ContextMenu>
-                                        <MenuItem Header="Delete Book">
-                                            <MenuItem Header="Yes, delete this book"
-                                                      Command="{Binding $parent[UserControl].((vm:BooksScreenViewModel)DataContext).DeleteBookCommand}"
-                                                      CommandParameter="{Binding BookId}" />
-                                        </MenuItem>
-                                    </ContextMenu>
-                                </Button.ContextMenu>
-                                <StackPanel Spacing="8">
-                                    <Border Classes="bookCover" Background="{Binding CoverBrush}" Height="216">
-                                        <Grid>
-                                            <Image Source="{Binding CoverImage}" Stretch="UniformToFill" />
-                                            <Border Classes="posterScrim" />
-                                        </Grid>
-                                    </Border>
-                                    <TextBlock Text="{Binding Title}" FontSize="12.5" FontWeight="SemiBold"
-                                               Foreground="{DynamicResource PbTextBrush}" TextWrapping="Wrap"
-                                               MaxLines="2" TextTrimming="CharacterEllipsis" />
-                                    <TextBlock Text="{Binding Author}" Classes="pbTextCaption"
-                                               TextTrimming="CharacterEllipsis" IsVisible="{Binding Author, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
-                                    <TextBlock Text="{Binding SeriesName}" Classes="pbTextCaption" FontStyle="Italic"
-                                               TextTrimming="CharacterEllipsis" IsVisible="{Binding HasSeries}" />
-                                </StackPanel>
-                            </Button>
+                        <DataTemplate x:DataType="models:BookCardGroup">
+                            <StackPanel Margin="0,0,0,18">
+                                <DockPanel Margin="0,0,0,12">
+                                    <TextBlock DockPanel.Dock="Left" Text="{Binding Header}" Classes="pbTextHeading" VerticalAlignment="Center" />
+                                    <TextBlock DockPanel.Dock="Left" Text="{Binding Items.Count}" Classes="pbTextCaption" Margin="8,0,0,0" VerticalAlignment="Center" />
+                                    <Border Height="1" VerticalAlignment="Center" Margin="14,0,0,0" Background="{DynamicResource PbBorderBrush}" />
+                                </DockPanel>
+                                <ItemsControl ItemsSource="{Binding Items}" ItemTemplate="{StaticResource BookCardTemplate}">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                </ItemsControl>
+                            </StackPanel>
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
 
-                <StackPanel IsVisible="{Binding !HasBooks}" Spacing="12" MaxWidth="340"
+                <StackPanel IsVisible="{Binding ShowEmptyLibrary}" Spacing="12" MaxWidth="340"
                             HorizontalAlignment="Center" VerticalAlignment="Center">
                     <Path Classes="pbIcon" Width="34" Height="34" HorizontalAlignment="Center"
                           Data="{StaticResource PbIconBook}" Stroke="{DynamicResource PbTextFaintBrush}" />
@@ -101,6 +226,16 @@
                     <Button Classes="secondary" HorizontalAlignment="Center" Content="Open Library settings"
                             Command="{Binding OpenLibrarySettingsCommand}"
                             AutomationProperties.AutomationId="BooksEmptyStateSettings" />
+                </StackPanel>
+
+                <StackPanel IsVisible="{Binding ShowNoMatches}" Spacing="12" MaxWidth="340"
+                            HorizontalAlignment="Center" VerticalAlignment="Center">
+                    <Path Classes="pbIcon" Width="30" Height="30" HorizontalAlignment="Center"
+                          Data="{StaticResource PbIconSearch}" Stroke="{DynamicResource PbTextFaintBrush}" />
+                    <TextBlock Classes="pbTextBody" TextAlignment="Center" Foreground="{DynamicResource PbTextMutedBrush}"
+                               Text="{Binding SearchQuery, StringFormat='No books match “{0}”.'}" />
+                    <Button Classes="secondary" HorizontalAlignment="Center" Content="Clear search"
+                            Command="{Binding ClearSearchCommand}" AutomationProperties.AutomationId="BooksClearSearch" />
                 </StackPanel>
             </Grid>
         </ScrollViewer>

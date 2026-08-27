@@ -258,6 +258,31 @@
                 <TextBlock Text="Nothing in progress yet" Classes="emptyState" IsVisible="{Binding !HasContinueReading}" />
             </StackPanel>
 
+            <!-- ============ Continue Reading — Books (only when the library has any books) ============ -->
+            <StackPanel Spacing="10" IsVisible="{Binding HasBooksLibrary}">
+                <TextBlock Text="Continue Reading — Books" Classes="pbTextHeading" AutomationProperties.AutomationId="HomeContinueReadingBooksHeader" />
+                <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" IsVisible="{Binding HasContinueReadingBooks}">
+                    <ItemsControl ItemsSource="{Binding ContinueReadingBooks}" Margin="0,0,0,12" AutomationProperties.AutomationId="HomeContinueReadingBooksList">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate><StackPanel Orientation="Horizontal" Spacing="16" /></ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="models:HomeBookCard">
+                                <views:PosterTile
+                                    CoverSource="{Binding BookId, Converter={x:Static views:BookCoverImageConverter.Instance}}"
+                                    TitleText="{Binding Title}"
+                                    MetaText="{Binding Author}"
+                                    ShowProgress="{Binding ShowProgress}"
+                                    ProgressFraction="{Binding ProgressFraction}"
+                                    Command="{Binding $parent[UserControl].((vm:HomeScreenViewModel)DataContext).OpenContinueReadingBookCommand}"
+                                    CommandParameter="{Binding}" />
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+                <TextBlock Text="Nothing in progress yet" Classes="emptyState" IsVisible="{Binding !HasContinueReadingBooks}" />
+            </StackPanel>
+
             <!-- ============ Recently Added ============ -->
             <StackPanel Spacing="10">
                 <Grid ColumnDefinitions="*,Auto">

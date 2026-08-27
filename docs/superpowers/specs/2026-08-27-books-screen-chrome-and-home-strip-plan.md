@@ -1,6 +1,12 @@
 # Books Screen Chrome + Home "Continue Reading — Books" — Implementation Plan
 *Implements: docs/superpowers/specs/2026-08-27-books-screen-chrome-and-home-strip-design.md*
 
+**Status:** Done 2026-08-27, all 6 steps, on branch `books/browse-chrome`. Solution builds on
+net10; `Paperbunkr.App.Tests` 970/970, `Paperbunkr.Data.Tests` green (one unrelated
+`CredentialStoreTests` flake that passes in isolation). Verified on screen: Books chrome (search /
+sort / group), grouped Bebas headers, Home "Continue Reading — Books" row with a progress bar.
+Book Details (Piece B) is a separate later spec.
+
 **Base branch:** `books/browse-chrome`, off `books/restyle` (PR #17). PR #17 must merge before this
 work lands on `master`; develop against `books/restyle` in the meantime.
 

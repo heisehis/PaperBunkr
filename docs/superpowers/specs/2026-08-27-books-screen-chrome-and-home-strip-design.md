@@ -1,6 +1,8 @@
 # Books Screen Chrome + Home "Continue Reading — Books" — Design
 
-**Status:** Design approved 2026-08-27, not yet planned.
+**Status:** Implemented 2026-08-27 — see the plan
+(`2026-08-27-books-screen-chrome-and-home-strip-plan.md`) for what was verified. Book Details is
+Piece B, still to spec.
 **Piece A of 2** in the Books-section follow-up to the Library UI redesign. Piece B (a Book
 Details screen) is a separate later spec. Builds on the Books restyle + folder-move
 (`2026-08-27-books-section-restyle-and-folders-to-preferences-plan.md`, PR #17).

@@ -109,6 +109,7 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         FontFamilies = new ObservableCollection<string>();
         VirtualTags = new ObservableCollection<VirtualTagSummary>();
         WatchedFolders = new ObservableCollection<WatchedFolderSummary>();
+        BookFolders = new ObservableCollection<BookFolderSummary>();
         FileAssociations = new ObservableCollection<FileAssociationSummary>();
         Backups = new ObservableCollection<BackupRowViewModel>();
         NavigationKeyBindings = new ObservableCollection<KeyBindingRowViewModel>();
@@ -147,6 +148,10 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     public ObservableCollection<VirtualTagSummary> VirtualTags { get; }
 
     public ObservableCollection<WatchedFolderSummary> WatchedFolders { get; }
+
+    /// <summary>Novel (EPUB/PDF) source folders - moved here from the Books screen so all
+    /// "populate my library" folder management lives on the Libraries tab.</summary>
+    public ObservableCollection<BookFolderSummary> BookFolders { get; }
 
     /// <summary>
     /// The same <see cref="MigrationOverlayViewModel"/> instance <see cref="MainViewModel"/> owns -
@@ -412,6 +417,7 @@ public partial class PreferencesScreenViewModel : ViewModelBase
 
         RefreshVirtualTags();
         RefreshWatchedFolders();
+        RefreshBookFolders();
         RefreshFileAssociations();
 
         _suppressBackupSettingsApply = true;
@@ -832,7 +838,9 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         }
     }
 
-    // ===================== Book Folders (docs/superpowers/specs/2026-08-07-preferences-libraries-tab-design.md §2) =====================
+    // ===================== Comic Library Folders (docs/superpowers/specs/2026-08-07-preferences-libraries-tab-design.md §2)
+    // - the comic library's watched source folders (LibraryFolderScanner). Historically mislabeled
+    // "Book Folders"; the real novel folders now live in their own region further down. =====================
 
     [ObservableProperty]
     private string? _scanStatus;
@@ -853,7 +861,7 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     [RelayCommand]
     private async Task AddFolder()
     {
-        string? path = await _filePicker.PickFolderAsync("Add Book Folder");
+        string? path = await _filePicker.PickFolderAsync("Add Comic Library Folder");
         if (path is null)
         {
             return;
@@ -921,6 +929,113 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         catch
         {
             // No shell/file-manager available - nothing more we can do.
+        }
+    }
+
+    // ===================== Book Folders (novels: EPUB/PDF) - moved here from the Books screen so
+    // every "populate my library" folder action lives on this tab. Simpler than the comic
+    // WatchedFolders above: BookFolder has no live-watch, so no Watch column. =====================
+
+    [ObservableProperty]
+    private string? _bookScanStatus;
+
+    [ObservableProperty]
+    private bool _isScanningBooks;
+
+    private void RefreshBookFolders()
+    {
+        using var context = _contextFactory();
+        BookFolders.Clear();
+        foreach (var folder in context.BookFolders.OrderBy(f => f.Path))
+        {
+            BookFolders.Add(new BookFolderSummary { Id = folder.Id, Path = folder.Path });
+        }
+    }
+
+    [RelayCommand]
+    private async Task AddBookFolder()
+    {
+        string? path = await _filePicker.PickFolderAsync("Add Book Folder");
+        if (path is null)
+        {
+            return;
+        }
+
+        using (var context = _contextFactory())
+        {
+            if (!context.BookFolders.Any(f => f.Path == path))
+            {
+                context.BookFolders.Add(new BookFolder { Path = path });
+                context.SaveChanges();
+            }
+        }
+
+        RefreshBookFolders();
+    }
+
+    [RelayCommand]
+    private void RemoveBookFolder(BookFolderSummary folder)
+    {
+        using (var context = _contextFactory())
+        {
+            var entity = context.BookFolders.FirstOrDefault(f => f.Id == folder.Id);
+            if (entity is not null)
+            {
+                context.BookFolders.Remove(entity);
+                context.SaveChanges();
+            }
+        }
+
+        RefreshBookFolders();
+    }
+
+    [RelayCommand]
+    private void OpenBookFolder(BookFolderSummary folder)
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo { FileName = folder.Path, UseShellExecute = true });
+        }
+        catch
+        {
+            // No shell/file-manager available - nothing more we can do.
+        }
+    }
+
+    [RelayCommand]
+    private async Task ScanBooksNow()
+    {
+        if (IsScanningBooks)
+        {
+            return;
+        }
+
+        IsScanningBooks = true;
+        BookScanStatus = "Scanning…";
+        try
+        {
+            var scanProgress = new Progress<(int Done, int Total)>(p => BookScanStatus = $"Scanning… {p.Done}/{p.Total}");
+            var result = await new BookFolderScanService().ScanAllAsync(scanProgress);
+
+            if (result.BooksAdded > 0)
+            {
+                var coverProgress = new Progress<(int Done, int Total)>(p => BookScanStatus = $"Generating covers… {p.Done}/{p.Total}");
+                await new BookCoverThumbnailService(_contextFactory).GenerateAllAsync(coverProgress);
+            }
+
+            BookScanStatus = result.BooksAdded == 0
+                ? "No new books found."
+                : $"Added {result.BooksAdded} book{(result.BooksAdded == 1 ? "" : "s")} across {result.SeriesTouched} series.";
+            _showToast("Book scan complete", BookScanStatus);
+        }
+        catch (Exception ex)
+        {
+            BookScanStatus = $"Scan failed: {ex.Message}";
+        }
+        finally
+        {
+            IsScanningBooks = false;
+            RefreshBookFolders();
         }
     }
 

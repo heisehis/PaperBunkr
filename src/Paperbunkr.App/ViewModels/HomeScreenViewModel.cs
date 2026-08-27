@@ -7,6 +7,7 @@ using CommunityToolkit.Mvvm.Input;
 using Microsoft.EntityFrameworkCore;
 using Paperbunkr.App.Models;
 using Paperbunkr.App.Services;
+using Paperbunkr.Data.Entities;
 using Paperbunkr.Data.Metadata;
 
 namespace Paperbunkr.App.ViewModels;
@@ -29,16 +30,19 @@ public partial class HomeScreenViewModel : ViewModelBase
     private readonly Action<int> _goReaderForIssue;
     private readonly Action<string> _goLibraryWithSearch;
     private readonly Action<int, int> _goReaderForIssueInReadingList;
+    private readonly Action<int, BookFormat> _goReaderForBook;
     private readonly Random _random = new();
     private readonly DispatcherTimer _spotlightTimer;
 
-    public HomeScreenViewModel(Action<int> goDetailForSeries, Action<int> goReaderForIssue, Action<string> goLibraryWithSearch, Action<int, int> goReaderForIssueInReadingList)
+    public HomeScreenViewModel(Action<int> goDetailForSeries, Action<int> goReaderForIssue, Action<string> goLibraryWithSearch, Action<int, int> goReaderForIssueInReadingList, Action<int, BookFormat> goReaderForBook)
     {
         _goDetailForSeries = goDetailForSeries;
         _goReaderForIssue = goReaderForIssue;
         _goLibraryWithSearch = goLibraryWithSearch;
         _goReaderForIssueInReadingList = goReaderForIssueInReadingList;
+        _goReaderForBook = goReaderForBook;
         ContinueReading = new ObservableCollection<HomeContinueReadingCard>();
+        ContinueReadingBooks = new ObservableCollection<HomeBookCard>();
         RecentlyAdded = new ObservableCollection<SeriesCardSample>();
         BecauseYouRead = new ObservableCollection<BecauseYouReadRow>();
         SpotlightItems = new ObservableCollection<SpotlightIssueSample>();
@@ -55,6 +59,12 @@ public partial class HomeScreenViewModel : ViewModelBase
     }
 
     public ObservableCollection<HomeContinueReadingCard> ContinueReading { get; }
+
+    /// <summary>Novels the user is mid-way through (docs/superpowers/specs/2026-08-27-books-screen-
+    /// chrome-and-home-strip-design.md) - a separate row from <see cref="ContinueReading"/>, shown
+    /// only when the library actually has books (<see cref="HasBooksLibrary"/>).</summary>
+    public ObservableCollection<HomeBookCard> ContinueReadingBooks { get; }
+
     public ObservableCollection<SeriesCardSample> RecentlyAdded { get; }
     public ObservableCollection<BecauseYouReadRow> BecauseYouRead { get; }
 
@@ -122,6 +132,14 @@ public partial class HomeScreenViewModel : ViewModelBase
     private void GoToLibrary() => _goLibraryWithSearch(string.Empty);
 
     public bool HasContinueReading => ContinueReading.Count > 0;
+
+    /// <summary>Whether the library contains any book at all - gates the whole "Continue Reading —
+    /// Books" row (header included) so books stay invisible to comic-only users.</summary>
+    [ObservableProperty]
+    private bool _hasBooksLibrary;
+
+    public bool HasContinueReadingBooks => ContinueReadingBooks.Count > 0;
+
     public bool HasRecentlyAdded => RecentlyAdded.Count > 0;
     public bool HasBecauseYouRead => BecauseYouRead.Count > 0;
     public bool HasSpotlight => SpotlightItems.Count > 0;
@@ -146,6 +164,13 @@ public partial class HomeScreenViewModel : ViewModelBase
                     ? "#?"
                     : $"#{candidate.ResumeIssue.EffectiveNumber()}",
             });
+        }
+
+        HasBooksLibrary = context.Books.Any();
+        ContinueReadingBooks.Clear();
+        foreach (var book in HomeFeedResolver.GetContinueReadingBooks(context))
+        {
+            ContinueReadingBooks.Add(HomeBookCard.FromBook(book));
         }
 
         RecentlyAdded.Clear();
@@ -195,6 +220,7 @@ public partial class HomeScreenViewModel : ViewModelBase
         ReadingListSpotlight = spotlightList is null ? null : ReadingListSpotlightSample.FromReadingList(spotlightList);
 
         OnPropertyChanged(nameof(HasContinueReading));
+        OnPropertyChanged(nameof(HasContinueReadingBooks));
         OnPropertyChanged(nameof(HasRecentlyAdded));
         OnPropertyChanged(nameof(HasBecauseYouRead));
         OnPropertyChanged(nameof(HasSpotlight));
@@ -204,6 +230,15 @@ public partial class HomeScreenViewModel : ViewModelBase
 
     [RelayCommand]
     private void OpenContinueReading(int issueId) => _goReaderForIssue(issueId);
+
+    [RelayCommand]
+    private void OpenContinueReadingBook(HomeBookCard? card)
+    {
+        if (card is not null)
+        {
+            _goReaderForBook(card.BookId, card.Format);
+        }
+    }
 
     [RelayCommand]
     private void OpenSeries(SeriesCardSample? card)

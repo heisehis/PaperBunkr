@@ -70,7 +70,7 @@ public class HomeScreenViewModelTests : IDisposable
     {
         var (_, issueId) = SeedSeriesWithIssue("In Progress", lastPageRead: 30, pageCount: 100, openedTime: DateTime.UtcNow);
 
-        var vm = new HomeScreenViewModel(_ => { }, _ => { }, _ => { }, (_, _) => { });
+        var vm = new HomeScreenViewModel(_ => { }, _ => { }, _ => { }, (_, _) => { }, (_, _) => { });
 
         var card = Assert.Single(vm.ContinueReading);
         Assert.Equal("In Progress", card.Series.Name);
@@ -83,7 +83,7 @@ public class HomeScreenViewModelTests : IDisposable
     {
         SeedSeriesWithIssue("In Progress", lastPageRead: 30, pageCount: 100, openedTime: DateTime.UtcNow);
 
-        var vm = new HomeScreenViewModel(_ => { }, _ => { }, _ => { }, (_, _) => { });
+        var vm = new HomeScreenViewModel(_ => { }, _ => { }, _ => { }, (_, _) => { }, (_, _) => { });
 
         Assert.Equal(0.30, vm.ContinueReading[0].ResumeProgressFraction, precision: 5);
     }
@@ -93,7 +93,7 @@ public class HomeScreenViewModelTests : IDisposable
     {
         var (_, issueId) = SeedSeriesWithIssue("In Progress", lastPageRead: 30, pageCount: 100, openedTime: DateTime.UtcNow);
         int? readerIssueId = null;
-        var vm = new HomeScreenViewModel(_ => { }, id => readerIssueId = id, _ => { }, (_, _) => { });
+        var vm = new HomeScreenViewModel(_ => { }, id => readerIssueId = id, _ => { }, (_, _) => { }, (_, _) => { });
 
         vm.OpenContinueReadingCommand.Execute(vm.ContinueReading[0].ResumeIssueId);
 
@@ -106,7 +106,7 @@ public class HomeScreenViewModelTests : IDisposable
         SeedSeriesWithIssue("Older", addedTime: new DateTime(2026, 1, 1));
         SeedSeriesWithIssue("Newer", addedTime: new DateTime(2026, 6, 1));
 
-        var vm = new HomeScreenViewModel(_ => { }, _ => { }, _ => { }, (_, _) => { });
+        var vm = new HomeScreenViewModel(_ => { }, _ => { }, _ => { }, (_, _) => { }, (_, _) => { });
 
         Assert.Equal(new[] { "Newer", "Older" }, vm.RecentlyAdded.Select(c => c.Name));
         Assert.True(vm.HasRecentlyAdded);
@@ -117,7 +117,7 @@ public class HomeScreenViewModelTests : IDisposable
     {
         var (seriesId, _) = SeedSeriesWithIssue("Some Series", addedTime: DateTime.UtcNow);
         int? navigatedSeriesId = null;
-        var vm = new HomeScreenViewModel(id => navigatedSeriesId = id, _ => { }, _ => { }, (_, _) => { });
+        var vm = new HomeScreenViewModel(id => navigatedSeriesId = id, _ => { }, _ => { }, (_, _) => { }, (_, _) => { });
 
         vm.OpenSeriesCommand.Execute(vm.RecentlyAdded[0]);
 
@@ -148,7 +148,7 @@ public class HomeScreenViewModelTests : IDisposable
             context.SaveChanges();
         }
 
-        var vm = new HomeScreenViewModel(_ => { }, _ => { }, _ => { }, (_, _) => { });
+        var vm = new HomeScreenViewModel(_ => { }, _ => { }, _ => { }, (_, _) => { }, (_, _) => { });
 
         Assert.True(vm.HasBecauseYouRead);
         var row = Assert.Single(vm.BecauseYouRead);
@@ -160,7 +160,7 @@ public class HomeScreenViewModelTests : IDisposable
     [Fact]
     public void Construct_NoData_AllModulesEmpty()
     {
-        var vm = new HomeScreenViewModel(_ => { }, _ => { }, _ => { }, (_, _) => { });
+        var vm = new HomeScreenViewModel(_ => { }, _ => { }, _ => { }, (_, _) => { }, (_, _) => { });
 
         Assert.False(vm.HasContinueReading);
         Assert.False(vm.HasRecentlyAdded);
@@ -174,7 +174,7 @@ public class HomeScreenViewModelTests : IDisposable
     {
         SeedSeriesWithIssue("Untouched Series");
 
-        var vm = new HomeScreenViewModel(_ => { }, _ => { }, _ => { }, (_, _) => { });
+        var vm = new HomeScreenViewModel(_ => { }, _ => { }, _ => { }, (_, _) => { }, (_, _) => { });
 
         Assert.NotEmpty(vm.SpotlightItems);
         Assert.NotNull(vm.CurrentSpotlight);
@@ -186,7 +186,7 @@ public class HomeScreenViewModelTests : IDisposable
     {
         SeedSeriesWithIssue("Untouched Series");
         int? readerIssueId = null;
-        var vm = new HomeScreenViewModel(_ => { }, id => readerIssueId = id, _ => { }, (_, _) => { });
+        var vm = new HomeScreenViewModel(_ => { }, id => readerIssueId = id, _ => { }, (_, _) => { }, (_, _) => { });
 
         vm.OpenSpotlightCommand.Execute(null);
 
@@ -208,7 +208,7 @@ public class HomeScreenViewModelTests : IDisposable
             }
             context.SaveChanges();
         }
-        var vm = new HomeScreenViewModel(_ => { }, _ => { }, _ => { }, (_, _) => { });
+        var vm = new HomeScreenViewModel(_ => { }, _ => { }, _ => { }, (_, _) => { }, (_, _) => { });
         Assert.True(vm.SpotlightItems.Count > 1); // sanity: enough picks to actually exercise dot navigation
 
         var target = vm.SpotlightItems[^1];
@@ -221,7 +221,7 @@ public class HomeScreenViewModelTests : IDisposable
     public void SearchCommand_NavigatesToLibraryWithTheTypedQuery()
     {
         string? capturedQuery = null;
-        var vm = new HomeScreenViewModel(_ => { }, _ => { }, q => capturedQuery = q, (_, _) => { }) { SearchQuery = "  Batman  " };
+        var vm = new HomeScreenViewModel(_ => { }, _ => { }, q => capturedQuery = q, (_, _) => { }, (_, _) => { }) { SearchQuery = "  Batman  " };
 
         vm.SearchCommand.Execute(null);
 
@@ -232,7 +232,7 @@ public class HomeScreenViewModelTests : IDisposable
     public void SearchCommand_NoOps_WhenQueryIsBlank()
     {
         bool invoked = false;
-        var vm = new HomeScreenViewModel(_ => { }, _ => { }, _ => invoked = true, (_, _) => { }) { SearchQuery = "   " };
+        var vm = new HomeScreenViewModel(_ => { }, _ => { }, _ => invoked = true, (_, _) => { }, (_, _) => { }) { SearchQuery = "   " };
 
         vm.SearchCommand.Execute(null);
 
@@ -243,7 +243,7 @@ public class HomeScreenViewModelTests : IDisposable
     public void GoToLibraryCommand_NavigatesToLibraryWithNoQuery()
     {
         string? capturedQuery = null;
-        var vm = new HomeScreenViewModel(_ => { }, _ => { }, q => capturedQuery = q, (_, _) => { });
+        var vm = new HomeScreenViewModel(_ => { }, _ => { }, q => capturedQuery = q, (_, _) => { }, (_, _) => { });
 
         vm.GoToLibraryCommand.Execute(null);
 
@@ -256,7 +256,7 @@ public class HomeScreenViewModelTests : IDisposable
         // Every issue is fully read - candidate pool is empty, Spotlight stays null.
         SeedSeriesWithIssue("Finished Series", lastPageRead: 100, pageCount: 100);
         int? readerIssueId = null;
-        var vm = new HomeScreenViewModel(_ => { }, id => readerIssueId = id, _ => { }, (_, _) => { });
+        var vm = new HomeScreenViewModel(_ => { }, id => readerIssueId = id, _ => { }, (_, _) => { }, (_, _) => { });
 
         var exception = Record.Exception(() => vm.OpenSpotlightCommand.Execute(null));
 
@@ -276,7 +276,7 @@ public class HomeScreenViewModelTests : IDisposable
             context.SaveChanges();
         }
 
-        var vm = new HomeScreenViewModel(_ => { }, _ => { }, _ => { }, (_, _) => { });
+        var vm = new HomeScreenViewModel(_ => { }, _ => { }, _ => { }, (_, _) => { }, (_, _) => { });
 
         Assert.NotNull(vm.ReadingListSpotlight);
         Assert.Equal("My List", vm.ReadingListSpotlight!.Name);
@@ -298,7 +298,7 @@ public class HomeScreenViewModelTests : IDisposable
         }
         int? readerIssueId = null;
         int? readerListId = null;
-        var vm = new HomeScreenViewModel(_ => { }, _ => { }, _ => { }, (issue, list) => { readerIssueId = issue; readerListId = list; });
+        var vm = new HomeScreenViewModel(_ => { }, _ => { }, _ => { }, (issue, list) => { readerIssueId = issue; readerListId = list; }, (_, _) => { });
 
         vm.OpenReadingListSpotlightCommand.Execute(null);
 
@@ -309,12 +309,73 @@ public class HomeScreenViewModelTests : IDisposable
     [Fact]
     public void LoadFromDatabase_ReReadsCurrentState()
     {
-        var vm = new HomeScreenViewModel(_ => { }, _ => { }, _ => { }, (_, _) => { });
+        var vm = new HomeScreenViewModel(_ => { }, _ => { }, _ => { }, (_, _) => { }, (_, _) => { });
         Assert.False(vm.HasRecentlyAdded);
 
         SeedSeriesWithIssue("Added After Construct", addedTime: DateTime.UtcNow);
         vm.LoadFromDatabase();
 
         Assert.True(vm.HasRecentlyAdded);
+    }
+
+    // --- Continue Reading — Books (docs/superpowers/specs/2026-08-27-books-screen-chrome-and-home-
+    // strip-design.md) ---
+
+    private static int SeedBook(string title, DateTime? lastOpened = null, int lastChapter = 0,
+        bool finished = false, int chapterCount = 10, Paperbunkr.Data.Entities.BookFormat format = Paperbunkr.Data.Entities.BookFormat.Epub)
+    {
+        using var context = PaperbunkrDb.CreateContext();
+        var book = new Paperbunkr.Data.Entities.Book
+        {
+            Title = title,
+            Format = format,
+            FilePath = $@"C:\books\{title}.epub",
+            AddedTime = DateTime.UtcNow,
+            LastOpenedTime = lastOpened,
+            LastChapterIndex = lastChapter,
+            Finished = finished,
+            ChapterCount = chapterCount,
+        };
+        context.Books.Add(book);
+        context.SaveChanges();
+        return book.Id;
+    }
+
+    [Fact]
+    public void HasBooksLibrary_FalseWithNoBooks_TrueWithAny()
+    {
+        var vm = new HomeScreenViewModel(_ => { }, _ => { }, _ => { }, (_, _) => { }, (_, _) => { });
+        Assert.False(vm.HasBooksLibrary);
+
+        SeedBook("Dune");
+        vm.LoadFromDatabase();
+        Assert.True(vm.HasBooksLibrary);
+    }
+
+    [Fact]
+    public void ContinueReadingBooks_IncludesOnlyStartedNotFinished_NewestFirst()
+    {
+        SeedBook("Old Progress", lastOpened: new DateTime(2024, 1, 1), lastChapter: 3);
+        SeedBook("New Progress", lastOpened: new DateTime(2024, 6, 1), lastChapter: 2);
+        SeedBook("Finished One", lastOpened: new DateTime(2024, 5, 1), lastChapter: 9, finished: true);
+        SeedBook("Never Opened");
+
+        var vm = new HomeScreenViewModel(_ => { }, _ => { }, _ => { }, (_, _) => { }, (_, _) => { });
+
+        Assert.Equal(new[] { "New Progress", "Old Progress" }, vm.ContinueReadingBooks.Select(c => c.Title));
+        Assert.True(vm.HasContinueReadingBooks);
+    }
+
+    [Fact]
+    public void OpenContinueReadingBookCommand_InvokesCallback_WithIdAndFormat()
+    {
+        int id = SeedBook("PDF Novel", lastOpened: DateTime.UtcNow, lastChapter: 1,
+            format: Paperbunkr.Data.Entities.BookFormat.Pdf);
+        (int Id, Paperbunkr.Data.Entities.BookFormat Format)? captured = null;
+        var vm = new HomeScreenViewModel(_ => { }, _ => { }, _ => { }, (_, _) => { }, (bookId, fmt) => captured = (bookId, fmt));
+
+        vm.OpenContinueReadingBookCommand.Execute(vm.ContinueReadingBooks.Single());
+
+        Assert.Equal((id, Paperbunkr.Data.Entities.BookFormat.Pdf), captured);
     }
 }

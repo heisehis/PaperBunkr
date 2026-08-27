@@ -37,7 +37,7 @@ public partial class MainViewModel : ViewModelBase
 
     public MainViewModel()
     {
-        Home = new HomeScreenViewModel(GoDetailForSeries, GoReaderForIssue, GoLibraryWithSearch, GoReaderForIssueInReadingList);
+        Home = new HomeScreenViewModel(GoDetailForSeries, GoReaderForIssue, GoLibraryWithSearch, GoReaderForIssueInReadingList, GoBookReaderForBook);
         Library = new LibraryScreenViewModel(GoDetailForSeries, GoReaderForIssue, GoNewIssuePropertiesForPlaceholder, OpenQuickRateOverlay, GoIssuePropertiesForIssue, GoBulkIssuePropertiesForIssues, ShowToast, GoBulkSeriesPropertiesForSeries, GoLibraryFoldersPreferences);
         Books = new BooksScreenViewModel(GoBookReaderForBook, GoLibraryFoldersPreferences);
         BookReader = new BookReaderScreenViewModel(GoBooks);

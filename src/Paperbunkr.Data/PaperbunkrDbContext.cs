@@ -629,6 +629,19 @@ public class PaperbunkrDbContext : DbContext
             builder.Property(a => a.LibraryFilterMissingIssues).HasDefaultValue(false);
             builder.Property(a => a.LibraryFilterTrackedOnly).HasDefaultValue(false);
 
+            // Books screen sort/group - same enum-as-string HasSentinel treatment as LibrarySortField
+            // above (the singleton AppSettings row needs a parseable value backfilled into the new
+            // NOT NULL columns).
+            builder.Property(a => a.BooksSortField).HasConversion<string>().HasMaxLength(32)
+                .HasDefaultValue(BooksSortField.Title)
+                .HasSentinel(BooksSortField.Title);
+            builder.Property(a => a.BooksSortDirection).HasConversion<string>().HasMaxLength(32)
+                .HasDefaultValue(SortDirection.Ascending)
+                .HasSentinel(SortDirection.Ascending);
+            builder.Property(a => a.BooksGroupField).HasConversion<string>().HasMaxLength(32)
+                .HasDefaultValue(BooksGroupField.None)
+                .HasSentinel(BooksGroupField.None);
+
             // Same enum-as-string HasSentinel treatment as PageTransitionStyle/LibraryGroupField
             // above, even though Automatic is both the CLR default and the desired default here.
             builder.Property(a => a.MetadataResolutionPolicy).HasConversion<string>().HasMaxLength(32)
@@ -685,6 +698,8 @@ public class PaperbunkrDbContext : DbContext
             builder.Property(b => b.Title).IsRequired();
             builder.Property(b => b.FilePath).IsRequired();
             builder.Property(b => b.Format).HasConversion<string>().HasMaxLength(32);
+            builder.Property(b => b.Finished).HasDefaultValue(false);
+            builder.Property(b => b.ChapterCount).HasDefaultValue(0);
             builder.HasIndex(b => b.FilePath);
 
             builder.HasMany(b => b.Bookmarks)

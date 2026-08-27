@@ -266,6 +266,19 @@ public class AppSettings
     public string? LibraryDetailsColumns { get; set; }
 
     /// <summary>
+    /// Books screen's persisted sort/group state (docs/superpowers/specs/2026-08-27-books-screen-
+    /// chrome-and-home-strip-design.md). Search text is deliberately not persisted. Enum-as-string
+    /// with the same HasDefaultValue/HasSentinel treatment as <see cref="LibrarySortField"/>.
+    /// </summary>
+    public BooksSortField BooksSortField { get; set; } = BooksSortField.Title;
+
+    /// <summary>See <see cref="BooksSortField"/>.</summary>
+    public SortDirection BooksSortDirection { get; set; } = SortDirection.Ascending;
+
+    /// <summary>See <see cref="BooksSortField"/>.</summary>
+    public BooksGroupField BooksGroupField { get; set; } = BooksGroupField.None;
+
+    /// <summary>
     /// Global policy governing newly-created <see cref="MetadataProposal"/> rows (docs/superpowers/
     /// specs/2026-08-17-metadata-model-phase2a-metadata-proposals-design.md) - one setting for the
     /// whole library, not per-issue (unlike CE's per-book <c>EnableProposed</c>), since there's no

@@ -38,5 +38,16 @@ public class Book
 
     public int LastCharacterOffset { get; set; }
 
+    /// <summary>Read to the end at least once (docs/superpowers/specs/2026-08-27-books-screen-chrome-
+    /// and-home-strip-design.md). Set by the reader when paging past the last chapter; cleared when
+    /// the book is reopened for reading. Drops the book off Home's "Continue Reading — Books" row.</summary>
+    public bool Finished { get; set; }
+
+    /// <summary>Total chapter count from the parsed source, populated lazily the first time the book
+    /// is opened in the reader (0 until then). Feeds Home's rough progress bar
+    /// (<see cref="LastChapterIndex"/> / <see cref="ChapterCount"/>); meaningless for
+    /// <see cref="BookFormat.Pdf"/> (the page reader has no chapters).</summary>
+    public int ChapterCount { get; set; }
+
     public List<BookBookmark> Bookmarks { get; set; } = new();
 }

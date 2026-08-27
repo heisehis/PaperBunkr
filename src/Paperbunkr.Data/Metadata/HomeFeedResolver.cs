@@ -171,4 +171,20 @@ public static class HomeFeedResolver
 
         return candidates.Count == 0 ? null : candidates[random.Next(candidates.Count)];
     }
+
+    /// <summary>Novels the user has started but not finished (docs/superpowers/specs/2026-08-27-
+    /// books-screen-chrome-and-home-strip-design.md) - <see cref="Book.LastOpenedTime"/> set,
+    /// <see cref="Book.Finished"/> false, and a real reading position (not merely opened once).
+    /// Newest-opened first, capped. Feeds Home's separate "Continue Reading — Books" row.</summary>
+    public static IReadOnlyList<Book> GetContinueReadingBooks(PaperbunkrDbContext context, int limit = 10)
+    {
+        return context.Books
+            .Include(b => b.BookSeries)
+            .Where(b => b.LastOpenedTime != null
+                        && !b.Finished
+                        && (b.LastChapterIndex > 0 || b.LastCharacterOffset > 0))
+            .OrderByDescending(b => b.LastOpenedTime)
+            .Take(limit)
+            .ToList();
+    }
 }

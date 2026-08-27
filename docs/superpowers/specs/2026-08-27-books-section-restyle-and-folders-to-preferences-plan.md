@@ -1,5 +1,11 @@
 # Books Section — Restyle + Move Folder Management to Preferences — Implementation Plan
 
+**Status:** Done 2026-08-27, all 6 steps — PR #17. Build clean on net10, `Paperbunkr.App.Tests`
+957/957. Verified on screen (Books empty state; Preferences → Libraries showing both "Comic Library
+Folders" and "Book Folders"). Extra tweaks not in the original plan: Books rail icon
+`PbIconLayers` → `PbIconBook` + a `BooksRailButton` AutomationId.
+
+
 *No design doc — task is clear: apply the Phase-1 design language (as used by Library 4a/4b) to
 `BooksScreen`, and move its book-folder management into Preferences → Libraries, mirroring the
 comic `WatchedFolders` section already there.*

@@ -490,11 +490,11 @@
 
             <StackPanel IsVisible="{Binding IsLibrariesTab}" Margin="28,0,28,40" Spacing="20">
 
-                <!-- Book Folders -->
+                <!-- Comic Library Folders (was mislabeled "Book Folders" - it manages WatchedFolders) -->
                 <Border Classes="groupBox">
                     <StackPanel>
                         <Border Classes="groupHeader">
-                            <TextBlock Text="Book Folders" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
+                            <TextBlock Text="Comic Library Folders" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
                         </Border>
                         <ItemsControl x:Name="WatchedFoldersList" ItemsSource="{Binding WatchedFolders}">
                             <ItemsControl.ItemTemplate>
@@ -574,6 +574,77 @@
                                 </Button>
                             </StackPanel>
                             <TextBlock Text="{Binding ScanStatus}" FontSize="12" Foreground="{DynamicResource PbTextFaintBrush}" />
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <!-- Book Folders (novels: EPUB/PDF) - moved here from the Books screen
+                     (docs/superpowers/specs/2026-08-27-books-section-restyle-and-folders-to-preferences-plan.md) -->
+                <Border Classes="groupBox">
+                    <StackPanel>
+                        <Border Classes="groupHeader">
+                            <StackPanel>
+                                <TextBlock Text="Book Folders" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
+                                <TextBlock Text="EPUB and PDF novels" FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" Margin="0,2,0,0" />
+                            </StackPanel>
+                        </Border>
+                        <ItemsControl x:Name="BookFoldersList" ItemsSource="{Binding BookFolders}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="models:BookFolderSummary">
+                                    <Border Classes="skinRow">
+                                        <Grid ColumnDefinitions="*,Auto,Auto" Margin="14,10">
+                                            <TextBlock Grid.Column="0" Text="{Binding Path}" FontSize="13" TextTrimming="CharacterEllipsis"
+                                                       Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
+                                            <Button Grid.Column="1" Classes="headerAction ghost" Margin="0,0,6,0"
+                                                    Command="{Binding #BookFoldersList.((vm:PreferencesScreenViewModel)DataContext).OpenBookFolderCommand}"
+                                                    CommandParameter="{Binding}"
+                                                    AutomationProperties.AutomationId="PreferencesBookFolderOpen">
+                                                <StackPanel Orientation="Horizontal" Spacing="5">
+                                                    <Border Classes="icon" Width="11" Height="11">
+                                                        <Border.OpacityMask><ImageBrush Source="/Assets/Icons/Folder_Open.png" Stretch="Uniform" /></Border.OpacityMask>
+                                                    </Border>
+                                                    <TextBlock Text="Open" />
+                                                </StackPanel>
+                                            </Button>
+                                            <Button Grid.Column="2" Classes="headerAction ghost"
+                                                    Command="{Binding #BookFoldersList.((vm:PreferencesScreenViewModel)DataContext).RemoveBookFolderCommand}"
+                                                    CommandParameter="{Binding}"
+                                                    AutomationProperties.AutomationId="PreferencesBookFolderRemove">
+                                                <StackPanel Orientation="Horizontal" Spacing="5">
+                                                    <Border Classes="icon" Width="11" Height="11">
+                                                        <Border.OpacityMask><ImageBrush Source="/Assets/Icons/Trash_Empty.png" Stretch="Uniform" /></Border.OpacityMask>
+                                                    </Border>
+                                                    <TextBlock Text="Remove" />
+                                                </StackPanel>
+                                            </Button>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <StackPanel Margin="14" Spacing="10">
+                            <StackPanel Orientation="Horizontal" Spacing="10">
+                                <Button Classes="headerAction primary" Command="{Binding AddBookFolderCommand}"
+                                        AutomationProperties.AutomationId="PreferencesAddBookFolder">
+                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                        <Border Classes="icon" Background="{DynamicResource PbBadgeTextBrush}">
+                                            <Border.OpacityMask><ImageBrush Source="/Assets/Icons/Folder_Add.png" Stretch="Uniform" /></Border.OpacityMask>
+                                        </Border>
+                                        <TextBlock Text="Add Folder…" />
+                                    </StackPanel>
+                                </Button>
+                                <Button Classes="headerAction ghost" Command="{Binding ScanBooksNowCommand}"
+                                        IsEnabled="{Binding !IsScanningBooks}"
+                                        AutomationProperties.AutomationId="PreferencesScanBooksNow">
+                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                        <Border Classes="icon">
+                                            <Border.OpacityMask><ImageBrush Source="/Assets/Icons/Folder_Search.png" Stretch="Uniform" /></Border.OpacityMask>
+                                        </Border>
+                                        <TextBlock Text="Scan Now" />
+                                    </StackPanel>
+                                </Button>
+                            </StackPanel>
+                            <TextBlock Text="{Binding BookScanStatus}" FontSize="12" Foreground="{DynamicResource PbTextFaintBrush}" />
                         </StackPanel>
                     </StackPanel>
                 </Border>

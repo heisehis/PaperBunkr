@@ -774,6 +774,65 @@ public class PreferencesScreenViewModelTests : IDisposable
         Assert.False(vm.IsScanning);
     }
 
+    // --- Book Folders (novels) - moved here from the Books screen
+    // (docs/superpowers/specs/2026-08-27-books-section-restyle-and-folders-to-preferences-plan.md) ---
+
+    [Fact]
+    public async Task AddBookFolder_UserPicksFolder_PersistsAndRefreshesList()
+    {
+        var vm = CreateViewModel(new StubFilePicker { FolderToReturn = @"D:\Novels" });
+        vm.EnsureLoaded();
+
+        await vm.AddBookFolderCommand.ExecuteAsync(null);
+
+        Assert.Single(vm.BookFolders);
+        Assert.Equal(@"D:\Novels", vm.BookFolders[0].Path);
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        Assert.Single(context.BookFolders);
+    }
+
+    [Fact]
+    public async Task AddBookFolder_UserCancels_DoesNotAdd()
+    {
+        var vm = CreateViewModel(new StubFilePicker { FolderToReturn = null });
+        vm.EnsureLoaded();
+
+        await vm.AddBookFolderCommand.ExecuteAsync(null);
+
+        Assert.Empty(vm.BookFolders);
+    }
+
+    [Fact]
+    public void RemoveBookFolder_DeletesItFromListAndDatabase()
+    {
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            context.BookFolders.Add(new Paperbunkr.Data.Entities.BookFolder { Path = @"D:\Novels" });
+            context.SaveChanges();
+        }
+
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+
+        vm.RemoveBookFolderCommand.Execute(vm.BookFolders[0]);
+
+        Assert.Empty(vm.BookFolders);
+        using var verify = new PaperbunkrDbContext(_dbOptions);
+        Assert.Empty(verify.BookFolders);
+    }
+
+    [Fact]
+    public async Task ScanBooksNow_ReportsResultInBookScanStatus()
+    {
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+
+        await vm.ScanBooksNowCommand.ExecuteAsync(null);
+
+        Assert.Equal("No new books found.", vm.BookScanStatus);
+        Assert.False(vm.IsScanningBooks);
+    }
+
     [Fact]
     public async Task ScanNow_FiresToast_OnCompletion()
     {

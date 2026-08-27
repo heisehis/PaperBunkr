@@ -203,9 +203,10 @@
                         </StackPanel>
                     </Button>
                     <Button Classes="rail" Classes.active="{Binding IsBooks}"
-                            Command="{Binding GoBooksCommand}" ToolTip.Tip="Books">
+                            Command="{Binding GoBooksCommand}" ToolTip.Tip="Books"
+                            AutomationProperties.AutomationId="BooksRailButton">
                         <StackPanel Orientation="Horizontal">
-                            <Path Classes="pbIcon" Data="{StaticResource PbIconLayers}" />
+                            <Path Classes="pbIcon" Data="{StaticResource PbIconBook}" />
                             <TextBlock Classes="railLabel" Text="Books" IsVisible="{Binding IsNavRailExpanded}" />
                         </StackPanel>
                     </Button>

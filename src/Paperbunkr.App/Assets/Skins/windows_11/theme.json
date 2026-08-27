@@ -12,9 +12,18 @@
     "accentSoft": "#1F0078D4",
     "badge": "#FFB900",
     "badgeText": "#1A1A1A",
-    "success": "#107C10"
+    "success": "#107C10",
+    "surface0": "#F3F3F3",
+    "surface1": "#FFFFFF",
+    "surface2": "#FAFAFA",
+    "surface3": "#FFFFFF",
+    "glow": "#4D0078D4",
+    "heroGradientStart": "#00F3F3F3",
+    "heroGradientEnd": "#FFF3F3F3"
   },
   "spacingUnit": 4,
   "radius": 8,
+  "radiusSm": 6,
+  "radiusLg": 16,
   "icons": {}
 }

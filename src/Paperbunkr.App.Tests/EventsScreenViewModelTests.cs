@@ -169,4 +169,34 @@ public class EventsScreenViewModelTests : IDisposable
         var reloaded = Assert.Single(vm.Members);
         Assert.Equal(EventMembershipRole.Aftermath, reloaded.SelectedRole);
     }
+
+    // --- Delete a whole event (docs/superpowers/specs/2026-08-22-delete-functionality-design.md) ---
+
+    [Fact]
+    public void DeleteConfirm_Trigger_RequiresTwoClicksBeforeDeleting()
+    {
+        var vm = new EventsScreenViewModel();
+        vm.CreateNewCommand.Execute(null);
+        var summary = vm.Events.Single();
+
+        summary.DeleteConfirm.TriggerCommand.Execute(null);
+        Assert.Single(vm.Events);
+
+        summary.DeleteConfirm.TriggerCommand.Execute(null);
+        Assert.Empty(vm.Events);
+    }
+
+    [Fact]
+    public void Delete_OfTheLastRemainingEvent_ClearsTheScreen()
+    {
+        var vm = new EventsScreenViewModel();
+        vm.CreateNewCommand.Execute(null);
+        var summary = vm.Events.Single();
+
+        summary.DeleteConfirm.TriggerCommand.Execute(null);
+        summary.DeleteConfirm.TriggerCommand.Execute(null);
+
+        Assert.True(vm.HasNoEvents);
+        Assert.Equal(string.Empty, vm.EventName);
+    }
 }

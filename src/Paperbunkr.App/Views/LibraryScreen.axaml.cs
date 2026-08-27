@@ -16,6 +16,26 @@ public partial class LibraryScreen : UserControl
     public LibraryScreen()
     {
         InitializeComponent();
+        // Tunnel so Escape closes the Add-issue overlay even while a field inside it has focus
+        // (an AutoCompleteBox otherwise swallows Escape for its own dropdown).
+        AddHandler(KeyDownEvent, OnLibraryScreenKeyDown, RoutingStrategies.Tunnel);
+    }
+
+    private void OnLibraryScreenKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Escape && DataContext is LibraryScreenViewModel { IsAddIssueOpen: true } vm)
+        {
+            vm.CloseAddIssueCommand.Execute(null);
+            e.Handled = true;
+        }
+    }
+
+    private void OnAddIssueBackdropPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (DataContext is LibraryScreenViewModel vm)
+        {
+            vm.CloseAddIssueCommand.Execute(null);
+        }
     }
 
     /// <summary>
@@ -46,6 +66,51 @@ public partial class LibraryScreen : UserControl
     }
 
     /// <summary>
+    /// Ctrl/shift-click multi-selection (docs/superpowers/specs/2026-08-24-library-multiselect-
+    /// slice1-design.md §3) - plain click is completely untouched (the tile Button's own Command
+    /// binding keeps navigating exactly as it always has); this handler only acts, and only
+    /// consumes the press (<c>e.Handled = true</c>, preventing the Button's own click from also
+    /// firing), when Ctrl or Shift is actually held. Mirrors <c>DetailTabs.axaml.cs</c>'s own
+    /// PointerPressed-based selection handler, adapted for a Button root instead of a Border.
+    /// </summary>
+    private void OnTilePointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (sender is not Button { DataContext: IssueListRow row } || DataContext is not LibraryScreenViewModel viewModel)
+        {
+            return;
+        }
+
+        bool ctrlOrShift = e.KeyModifiers.HasFlag(KeyModifiers.Control) || e.KeyModifiers.HasFlag(KeyModifiers.Shift);
+        if (!ctrlOrShift)
+        {
+            return;
+        }
+
+        viewModel.ToggleIssueSelection(row, e.KeyModifiers.HasFlag(KeyModifiers.Shift));
+        e.Handled = true;
+    }
+
+    /// <summary>Series-granularity counterpart to <see cref="OnTilePointerPressed"/> (docs/superpowers/
+    /// specs/2026-08-24-library-multiselect-slice3-design.md) - same ctrl/shift-only gating, plain
+    /// click still navigates untouched.</summary>
+    private void OnSeriesTilePointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (sender is not Button { DataContext: SeriesCardSample card } || DataContext is not LibraryScreenViewModel viewModel)
+        {
+            return;
+        }
+
+        bool ctrlOrShift = e.KeyModifiers.HasFlag(KeyModifiers.Control) || e.KeyModifiers.HasFlag(KeyModifiers.Shift);
+        if (!ctrlOrShift)
+        {
+            return;
+        }
+
+        viewModel.ToggleSeriesSelection(card, e.KeyModifiers.HasFlag(KeyModifiers.Shift));
+        e.Handled = true;
+    }
+
+    /// <summary>
     /// A-Z jump indexer (docs/superpowers/specs/2026-08-09-library-toolbar-design.md Phase B).
     /// Estimates a scroll offset rather than a real ScrollIntoView - none of the 7 display modes
     /// are backed by a virtualized ListBox, so there's no per-item realized container to scroll to
@@ -73,16 +138,14 @@ public partial class LibraryScreen : UserControl
 
         var (scrollViewer, cardWidth, cardHeight, margin, wraps) = vm.ViewMode switch
         {
-            LibraryViewMode.CompactGrid => (CompactScrollViewer, vm.CompactCardWidth, vm.CompactCardHeight, 14.0, true),
-            LibraryViewMode.ComfortableGrid => (ComfortableScrollViewer, vm.ComfortableCardWidth, vm.ComfortableCardHeight, 20.0, true),
-            LibraryViewMode.CoverOnlyGrid => (CoverOnlyScrollViewer, vm.CoverOnlyCardWidth, vm.CoverOnlyCardHeight, 20.0, true),
+            LibraryViewMode.PosterGrid => (PosterGridScrollViewer, vm.PosterCardWidth, vm.PosterCardHeight, 20.0, true),
             // Panorama's per-item width varies with each cover's own aspect ratio - averaged
             // estimate for items-per-row purposes only, not used for rendering.
             LibraryViewMode.PanoramaGrid => (PanoramaScrollViewer, 215.0, vm.PanoramaCardHeight, 20.0, true),
             LibraryViewMode.Tiles => (TilesScrollViewer, vm.TilesCardWidth, vm.TilesThumbHeight + 20, 14.0, true),
             LibraryViewMode.List => (ListScrollViewer, 0.0, 95.0, 0.0, false),
             LibraryViewMode.Details => (DetailsScrollViewer, 0.0, 64.0, 0.0, false),
-            _ => (ComfortableScrollViewer, vm.ComfortableCardWidth, vm.ComfortableCardHeight, 20.0, true),
+            _ => (PosterGridScrollViewer, vm.PosterCardWidth, vm.PosterCardHeight, 20.0, true),
         };
 
         int itemsPerRow = wraps ? Math.Max(1, (int)(scrollViewer.Bounds.Width / (cardWidth + margin))) : 1;

@@ -119,6 +119,59 @@ this file itself already did once (see the note below).
 > diff, same as every prior sync), not treated as pending work. No local HTML tracker file found
 > (same result as every prior sync — searched for `*tracker*`/`*dashboard*` filenames and every
 > `.html` file under the repo). Treat this file as re-synced as of `85fb681`.
+>
+> **This sync (re-synced `85fb681` → `2d0692e`, 2026-08-22):** a large batch — 17 new commits, none
+> changing P0–P7 status (still all done). Most were Beta-backlog design specs committed one at a
+> time (page transitions, double-page spread, remappable reader shortcuts, tracker/manga-UI
+> research, auto-scroll, reveal-in-Explorer/fileless entries, manga/ContentType classification,
+> saved List Layouts, Metadata Model Phase 1, Home screen, Library browse history), plus one
+> doc-only self-correction (`f83fa5f`, undoing a stale-file accidental revert `e019825` picked up).
+> Two commits carry real shipped implementation, not just specs — verified directly against source,
+> not commit messages:
+> - `c1e91a6` **"Ship reader polish, library UX, and Metadata Model Phases 2a-5a"** — lands a
+>   backlog of already-tested-but-uncommitted work: reader page transitions, double-page spread,
+>   remappable shortcuts (P5 seam extended to 25 commands), auto-scroll; reveal-in-Explorer/fileless
+>   entries, manga/ContentType classification, Saved List Layouts, a global `KeyBindingService`;
+>   Metadata Model Phases 2a–5a (proposals, series reassignment, field descriptors, Media Relations,
+>   Continuity, Story Events, Reading List overhaul, External Metadata schema); and the first real
+>   on-screen UI automation harness (`Paperbunkr.App.UiTests`, FlaUI/UIA3). Deliberately excluded
+>   `current_alpha_todo.md` as "a stale duplicate of docs/alpha-todo.md" — matches this file's own
+>   assessment (see the untracked-file note below).
+> - `2b2da5e` **"Ship Home screen, Issue List sort/group, library browse history, AniList adapter,
+>   recommendation engine"** — a real Home screen (continue-reading/because-you-read/spotlight
+>   modules) with `HomeScreenViewModel` wired into rail-nav (`GoHomeCommand`, `IsHome`), backed by
+>   `HomeFeedResolver`, which reuses `RecommendationResolver.GetRecommendations` as-is for the
+>   "Because You Read" module — closes the "no homepage UI yet" gap Phase 6a's own spec had flagged.
+>   Issue List sort/group confirmed merged into Library's own toolbar as `LibraryViewMode.IssueList`
+>   ("Comic List") rather than living as a separate rail-nav screen — `IssueListScreenViewModel` is
+>   composed inside `LibraryScreenViewModel`, `IssueListScreen.axaml` is embedded inside
+>   `LibraryScreen.axaml`, confirmed via grep that no second toolbar exists. Also confirmed:
+>   `LibraryContentGranularity`/`SearchMode` persistence and browse-history back/forward are real and
+>   wired, not just schema.
+>
+> Full solution test run this sync: `Paperbunkr.Data.Tests` 300/300 and `Paperbunkr.App.Tests`
+> 674/674 pass. `Paperbunkr.App.UiTests` initially showed 15/15 **failing** when run as part of the
+> full-solution `dotnet test` — a real infrastructure bug, not a product regression: each of those
+> tests launches a real on-screen app window via FlaUI, and the project had no parallelization guard,
+> so xUnit's default parallel test collections ran several at once and let them steal each other's
+> window focus. Confirmed by running one test in isolation (passed) versus the full suite (failed).
+> Fixed by adding `xunit.runner.json` (`"parallelizeTestCollections": false`) to
+> `Paperbunkr.App.UiTests`, wired into the `.csproj` so it copies to the output directory —
+> confirmed fixed: re-run of the project alone (now serialized) is 15/15 passing, 4m35s.
+>
+> Working tree at this sync is **not clean** — it holds real, tested, previously-verified-live work
+> from a 2026-08-19 session (Metadata Model review adoption R1–R4: `Series.ReadingStatus`,
+> multi-value `SeriesTitle`, an AniList search-and-link flow (`MetadataLinkResolver`/
+> `TitleMatchScorer`), and an `ArchitectureBoundaryTests` project-boundary guard), all confirmed
+> wired into real UI (Library/Detail screens), not dormant entities. R5 (MangaDex second provider)
+> and R6 (AniList tracker write-back sync) are sketched-only design specs, explicitly not built —
+> R6 in particular is scoped by the user as "sketch now, build later," not to be started without a
+> separate go-ahead. This working-tree state predates and is unrelated to the 17 commits above; it
+> should get its own commit rather than being folded into this sync note. Also present: the
+> already-known stale `current_alpha_todo.md` duplicate (untracked, not deleted this sync — pending
+> the user's call) and five new untracked Metadata-Model-review design specs dated 2026-08-19
+> matching R1–R6 above. Treat this file as re-synced as of `2d0692e`, with the caveat that the
+> working tree still has real uncommitted work beyond it.
 
 P0–P3 and P5 are done — shipped before this session (`f6bcee3`, `8e1bf55`), with P5 getting a
 same-day follow-up (2D grid arrow-key nav, `34e1d39`). The `alpha` git tag already exists.
@@ -397,6 +450,9 @@ Base audit shipped via `8e1bf55`; 2D grid navigation follow-up shipped today via
       found was either already correctly wired or an intentionally-disabled placeholder with its
       own explanatory tooltip (the 4 deferred external-tracker buttons on the Reading Lists
       screen — AniList/MyAnimeList/Auto-Build/Refresh). 1 new test added (252/252 passing).
+      **Stale as of 2026-08-22:** Auto-Build (now "Search Story Arc…") and Refresh are real and
+      wired now — see `alpha-roadmap.md`'s "Reading Lists: story-arc auto-build" entry. AniList/
+      MyAnimeList remain genuinely disabled/deferred (a different, unrelated tracker-sync feature).
 
 ---
 

@@ -1,4 +1,15 @@
-# Library book-centric redesign (Slices 1-3 shipped, Slice 4 partial)
+# Library book-centric redesign (Slices 1-3 shipped, Slice 4 moot — fully resolved)
+
+**Correction (2026-08-23):** this doc's Slice 4 note below claims `LibrarySortField`/
+`LibraryGroupField`/`LibraryShowContinueReadingButton` are dormant, unused columns safe to drop.
+That was wrong even at the time - a later decision in the *same* 2026-08-18 session (documented only
+in `LibraryScreenViewModel.cs`'s own constructor comment, never back-ported here) brought series-card
+view back as a real, user-toggleable `LibraryContentGranularity.Series` option alongside the
+book-centric `.Issue` default. Those three columns are the live sort/group/settings backing for
+Series-granularity mode specifically (`IssueList`'s own fields only cover Issue-granularity) -
+confirmed still read/written in `LibraryScreenViewModel.cs` and covered by a passing
+`LibraryScreenViewModelTests` round-trip test as of 2026-08-23. **Do not drop them.** There is
+nothing left to do on this redesign at all.
 
 ## Status
 

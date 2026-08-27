@@ -8,6 +8,7 @@ using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
 using Paperbunkr.Data.Entities;
+using Paperbunkr.Data.Tracking;
 
 namespace Paperbunkr.Data.Metadata;
 
@@ -21,7 +22,7 @@ namespace Paperbunkr.Data.Metadata;
 /// mass collection of data" - this adapter only ever fetches one media at a time, on an explicit
 /// caller-driven call, never a bulk crawl.
 /// </summary>
-public sealed class AniListMetadataProvider : IMetadataProvider
+public sealed class AniListMetadataProvider : IMetadataProvider, ITrackerSearchProvider
 {
     private const string Endpoint = "https://graphql.anilist.co";
 
@@ -45,12 +46,13 @@ public sealed class AniListMetadataProvider : IMetadataProvider
         query ($id: Int) {
           Media(id: $id) {
             id
-            title { romaji english }
+            title { romaji english native }
             siteUrl
             description(asHtml: false)
             status
             chapters
             volumes
+            genres
           }
         }
         """;
@@ -66,17 +68,27 @@ public sealed class AniListMetadataProvider : IMetadataProvider
 
     public ExternalMetadataProvider ProviderKey => ExternalMetadataProvider.AniList;
 
+    /// <summary>Satisfies <see cref="ITrackerSearchProvider"/> - the same <see cref="SearchAsync"/> call below serves both metadata search and tracker-linking search, no separate implementation needed.</summary>
+    TrackingService ITrackerSearchProvider.Service => TrackingService.AniList;
+
+    /// <summary>
+    /// Throws <see cref="MetadataProviderUnavailableException"/> when the call itself failed (rate
+    /// limit, outage, network error, malformed response) - <see cref="SendAsync"/> returns null for
+    /// all of those, and conflating that with "AniList genuinely found zero matches" made a real
+    /// outage look identical to "no such series" in the UI. A successful call whose result list is
+    /// actually empty still returns an empty list, not an exception.
+    /// </summary>
     public async Task<IReadOnlyList<MetadataSearchResult>> SearchAsync(string query, CancellationToken cancellationToken)
     {
         var response = await SendAsync(SearchQuery, new { search = query, perPage = 10 }, cancellationToken)
             .ConfigureAwait(false);
 
-        var mediaList = response?.Data?.Page?.Media;
-        if (mediaList is null)
+        if (response is null)
         {
-            return Array.Empty<MetadataSearchResult>();
+            throw new MetadataProviderUnavailableException();
         }
 
+        var mediaList = response.Data?.Page?.Media ?? new List<AniListMediaDto>();
         return mediaList.Select(AniListNormalizer.ToSearchResult).ToList();
     }
 
@@ -259,6 +271,10 @@ internal sealed class AniListMediaDto
 
     [JsonPropertyName("volumes")]
     public int? Volumes { get; set; }
+
+    /// <summary>Only requested by <see cref="AniListMetadataProvider.GetByIdQuery"/>, not the search query - same rationale as <see cref="AniListTitleDto.Native"/> above.</summary>
+    [JsonPropertyName("genres")]
+    public List<string>? Genres { get; set; }
 }
 
 internal sealed class AniListTitleDto
@@ -268,4 +284,18 @@ internal sealed class AniListTitleDto
 
     [JsonPropertyName("english")]
     public string? English { get; set; }
+
+    /// <summary>Only requested by <see cref="AniListMetadataProvider.GetByIdQuery"/>, not the search query - search results only need a display title, and requesting an extra field on every search result row is wasted payload for a value nothing there reads.</summary>
+    [JsonPropertyName("native")]
+    public string? Native { get; set; }
+}
+
+/// <summary>Shared <see cref="HttpClient"/> for <see cref="AniListMetadataProvider"/> callers - .NET
+/// guidance is against constructing a new <see cref="HttpClient"/> per call (socket exhaustion under
+/// load), and this app has no DI container/<c>IHttpClientFactory</c> registration to hand one out
+/// from, so a single static instance is the simplest correct option at this app's scale (one user,
+/// occasional manual searches - not the high-throughput scenario <c>IHttpClientFactory</c> exists for).</summary>
+public static class AniListHttpClient
+{
+    public static readonly HttpClient Shared = new() { Timeout = TimeSpan.FromSeconds(15) };
 }

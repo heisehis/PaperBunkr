@@ -6,10 +6,9 @@ namespace Paperbunkr.App.UiTests;
 /// <summary>
 /// Real, on-screen verification of docs/superpowers/specs/2026-08-17-library-saved-list-layouts-
 /// design.md's core claim - that Library sort/group/display/filter state survives an actual app
-/// restart - closing the standing "no unattended desktop GUI automation available" gap flagged
-/// across this project's specs for that exact scenario. Drives the real compiled exe via FlaUI/UIA3
-/// (see <see cref="AppFixture"/>), not the windowless Avalonia.Headless-backed ViewModel tests in
-/// Paperbunkr.App.Tests.
+/// restart. Post-4b the sort/display controls live in the "View &amp; Sort" tabbed popup; the active
+/// sort field surfaces as a chip and the active display mode as the View &amp; Sort button's
+/// accessible name. Drives the real compiled exe via FlaUI/UIA3 (see <see cref="AppFixture"/>).
 /// </summary>
 public class LibraryListLayoutPersistenceTests : IDisposable
 {
@@ -21,71 +20,53 @@ public class LibraryListLayoutPersistenceTests : IDisposable
     public void SortFieldChange_SurvivesRestart()
     {
         Window window = _fixture.Window;
-        // Home is the app's default launch screen now (docs/superpowers/specs/
-        // 2026-08-18-home-screen-design.md) - navigate to Library first.
-        window.FindFirstDescendant(cf => cf.ByAutomationId("LibraryRailButton"))!.AsButton().Invoke();
+        LibraryToolbarDriver.GoToLibrary(window);
 
-        // Default is "Sort: Date Added ▾" (IssueListScreenViewModel's own default, the one real
-        // Sort control now that every Display mode is per-issue - docs/superpowers/specs/
-        // 2026-08-18-library-book-centric-redesign-design.md Slice 3). Change it to File Size,
-        // which is unambiguous evidence the click actually landed and re-persisted.
-        window.FindFirstDescendant(cf => cf.ByAutomationId("LibrarySortButton"))!.AsButton().Invoke();
-        window.FindFirstDescendant(cf => cf.ByAutomationId("ComicListSortOption_FileSize"))!.AsButton().Invoke();
-
-        var sortButton = window.FindFirstDescendant(cf => cf.ByAutomationId("LibrarySortButton"))!;
-        Assert.Contains("File Size", sortButton.Name);
+        // Default sort is "Date Added" desc. Change it to File Size - unambiguous evidence the
+        // click landed and re-persisted (a non-default sort shows the "Sorted: …" chip).
+        LibraryToolbarDriver.SelectSort(window, "ComicListSortOption_FileSize");
+        Assert.Contains("File Size", LibraryToolbarDriver.SortChipText(window));
 
         _fixture.Restart();
         window = _fixture.Window;
-        window.FindFirstDescendant(cf => cf.ByAutomationId("LibraryRailButton"))!.AsButton().Invoke();
+        LibraryToolbarDriver.GoToLibrary(window);
 
-        var sortButtonAfterRestart = window.FindFirstDescendant(cf => cf.ByAutomationId("LibrarySortButton"))!;
-        Assert.Contains("File Size", sortButtonAfterRestart.Name);
+        Assert.Contains("File Size", LibraryToolbarDriver.SortChipText(window));
     }
 
     [Fact]
     public void ViewModeChange_SurvivesRestart()
     {
         Window window = _fixture.Window;
-        // Home is the app's default launch screen now (docs/superpowers/specs/
-        // 2026-08-18-home-screen-design.md) - navigate to Library first.
-        window.FindFirstDescendant(cf => cf.ByAutomationId("LibraryRailButton"))!.AsButton().Invoke();
+        LibraryToolbarDriver.GoToLibrary(window);
 
-        // Default is Comfortable grid - switch to List, then confirm the List-only column header
-        // row (a real structural difference, not just a label) is what greets a fresh launch.
-        window.FindFirstDescendant(cf => cf.ByAutomationId("LibraryDisplayButton"))!.AsButton().Invoke();
-        window.FindFirstDescendant(cf => cf.ByAutomationId("LibraryViewModeOption_List"))!.AsButton().Invoke();
-
-        var displayButton = window.FindFirstDescendant(cf => cf.ByAutomationId("LibraryDisplayButton"))!;
-        Assert.Contains("List", displayButton.Name);
+        LibraryToolbarDriver.SelectViewMode(window, "LibraryViewModeOption_List");
+        Assert.Contains("List", LibraryToolbarDriver.ViewSortButtonName(window));
 
         _fixture.Restart();
         window = _fixture.Window;
-        window.FindFirstDescendant(cf => cf.ByAutomationId("LibraryRailButton"))!.AsButton().Invoke();
+        LibraryToolbarDriver.GoToLibrary(window);
 
-        var displayButtonAfterRestart = window.FindFirstDescendant(cf => cf.ByAutomationId("LibraryDisplayButton"))!;
-        Assert.Contains("List", displayButtonAfterRestart.Name);
+        Assert.Contains("List", LibraryToolbarDriver.ViewSortButtonName(window));
     }
 
     [Fact]
     public void FilterCheckboxChange_SurvivesRestart()
     {
         Window window = _fixture.Window;
-        // Home is the app's default launch screen now (docs/superpowers/specs/
-        // 2026-08-18-home-screen-design.md) - navigate to Library first.
-        window.FindFirstDescendant(cf => cf.ByAutomationId("LibraryRailButton"))!.AsButton().Invoke();
+        LibraryToolbarDriver.GoToLibrary(window);
 
-        window.FindFirstDescendant(cf => cf.ByAutomationId("LibraryFilterButton"))!.AsButton().Invoke();
-        var unreadOnly = window.FindFirstDescendant(cf => cf.ByAutomationId("LibraryFilterUnreadOnly"))!.AsCheckBox();
+        LibraryToolbarDriver.Invoke(window, "LibraryFilterButton");
+        var unreadOnly = LibraryToolbarDriver.Find(window, "LibraryFilterUnreadOnly").AsCheckBox();
         unreadOnly.IsChecked = true;
         Assert.Equal(ToggleState.On, unreadOnly.ToggleState);
 
         _fixture.Restart();
         window = _fixture.Window;
-        window.FindFirstDescendant(cf => cf.ByAutomationId("LibraryRailButton"))!.AsButton().Invoke();
+        LibraryToolbarDriver.GoToLibrary(window);
 
-        window.FindFirstDescendant(cf => cf.ByAutomationId("LibraryFilterButton"))!.AsButton().Invoke();
-        var unreadOnlyAfterRestart = window.FindFirstDescendant(cf => cf.ByAutomationId("LibraryFilterUnreadOnly"))!.AsCheckBox();
+        LibraryToolbarDriver.Invoke(window, "LibraryFilterButton");
+        var unreadOnlyAfterRestart = LibraryToolbarDriver.Find(window, "LibraryFilterUnreadOnly").AsCheckBox();
         Assert.Equal(ToggleState.On, unreadOnlyAfterRestart.ToggleState);
     }
 }

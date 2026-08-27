@@ -27,10 +27,13 @@ public class ReaderScreenViewModelTests : IDisposable
     private readonly string _issue1Path;
     private readonly string _issue2Path;
     private readonly string _issue3Path;
+    private readonly string _issue4Path;
     private readonly int _seriesId;
     private readonly int _issue1Id;
     private readonly int _issue2Id;
     private readonly int _issue3Id;
+    private readonly int _otherSeriesId;
+    private readonly int _issue4Id;
 
     public ReaderScreenViewModelTests()
     {
@@ -41,8 +44,10 @@ public class ReaderScreenViewModelTests : IDisposable
         _issue1Path = Path.Combine(Path.GetTempPath(), $"paperbunkr_reader_vm_issue1_{Guid.NewGuid():N}.cbz");
         _issue2Path = Path.Combine(Path.GetTempPath(), $"paperbunkr_reader_vm_issue2_{Guid.NewGuid():N}.cbz");
         _issue3Path = Path.Combine(Path.GetTempPath(), $"paperbunkr_reader_vm_issue3_{Guid.NewGuid():N}.cbz");
+        _issue4Path = Path.Combine(Path.GetTempPath(), $"paperbunkr_reader_vm_issue4_{Guid.NewGuid():N}.cbz");
         CbzFixture.Create(_issue1Path, pageCount: 3);
         CbzFixture.Create(_issue2Path, pageCount: 2);
+        CbzFixture.Create(_issue4Path, pageCount: 1); // a different series (docs/superpowers/specs/2026-08-23-cbl-manager-manual-editing-and-list-aware-reading-design.md §3) - proves list-order navigation actually crosses series, not just re-derives series order
 
         // Double-page spread fixture (docs/superpowers/specs/2026-08-15-reader-double-page-spread-
         // design.md §7): index 0 cover (type irrelevant, always solo), 1+2 both portrait (pairs), 3
@@ -68,6 +73,16 @@ public class ReaderScreenViewModelTests : IDisposable
         _issue1Id = issue1.Id;
         _issue2Id = issue2.Id;
         _issue3Id = issue3.Id;
+
+        var otherSeries = new Series { Name = "Other Series" };
+        context.Series.Add(otherSeries);
+        context.SaveChanges();
+        _otherSeriesId = otherSeries.Id;
+
+        var issue4 = new Issue { SeriesId = otherSeries.Id, Number = "1", FilePath = _issue4Path };
+        context.Issues.Add(issue4);
+        context.SaveChanges();
+        _issue4Id = issue4.Id;
     }
 
     public void Dispose()
@@ -80,10 +95,39 @@ public class ReaderScreenViewModelTests : IDisposable
             if (File.Exists(_issue1Path)) File.Delete(_issue1Path);
             if (File.Exists(_issue2Path)) File.Delete(_issue2Path);
             if (File.Exists(_issue3Path)) File.Delete(_issue3Path);
+            if (File.Exists(_issue4Path)) File.Delete(_issue4Path);
         }
         catch (IOException)
         {
         }
+    }
+
+    private static int CreateReadingList(params int[] issueIdsInOrder)
+    {
+        using var context = PaperbunkrDb.CreateContext();
+        var list = new ReadingList { Name = "Test List", CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow };
+        context.ReadingLists.Add(list);
+        context.SaveChanges();
+
+        for (int i = 0; i < issueIdsInOrder.Length; i++)
+        {
+            context.ReadingListItems.Add(new ReadingListItem { ReadingListId = list.Id, IssueId = issueIdsInOrder[i], SortOrder = i });
+        }
+        context.SaveChanges();
+        return list.Id;
+    }
+
+    private static int CreatePlaceholderIssue()
+    {
+        using var context = PaperbunkrDb.CreateContext();
+        var series = new Series { Name = "Placeholder Series" };
+        context.Series.Add(series);
+        context.SaveChanges();
+
+        var issue = new Issue { SeriesId = series.Id, Number = "1", IsPlaceholder = true, FileIsMissing = true };
+        context.Issues.Add(issue);
+        context.SaveChanges();
+        return issue.Id;
     }
 
     private static void SetAutoNavigateComics(bool value)
@@ -215,6 +259,7 @@ public class ReaderScreenViewModelTests : IDisposable
         Assert.Equal("PAGE 3 / 3", vm.PageLabel);
 
         vm.NextPageCommand.Execute(null);
+        vm.OnChapterTransitionHoldTick(null, EventArgs.Empty); // docs/superpowers/specs/2026-08-23-reader-chapter-transition-design.md - navigation is deferred behind the transition card's hold timer; advance it directly (same test seam as OnAutoScrollTick).
 
         Assert.Equal("PAGE 1 / 2", vm.PageLabel);
         Assert.Contains("#2", vm.IssueTitle);
@@ -250,6 +295,135 @@ public class ReaderScreenViewModelTests : IDisposable
         Assert.Contains("#1", vm.IssueTitle);
     }
 
+    // ===================== Chapter transition (docs/superpowers/specs/2026-08-23-reader-chapter-
+    // transition-design.md) =====================
+
+    [Fact]
+    public void NextPage_PastLastPage_ShowsCardImmediately_AndDefersTheActualNavigate()
+    {
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id);
+        vm.NextPageCommand.Execute(null);
+        vm.NextPageCommand.Execute(null);
+
+        vm.NextPageCommand.Execute(null);
+
+        Assert.Equal(ChapterTransitionState.Card, vm.ChapterTransitionState);
+        Assert.Equal("#1", vm.ChapterTransitionFromLabel);
+        Assert.Equal("#2", vm.ChapterTransitionToLabel);
+        // Navigate is deferred behind the hold timer - still on issue 1 until the tick fires.
+        Assert.Equal("PAGE 3 / 3", vm.PageLabel);
+        Assert.Contains("#1", vm.IssueTitle);
+    }
+
+    [Fact]
+    public void NextPage_HoldTick_HidesTheCard()
+    {
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id);
+        vm.NextPageCommand.Execute(null);
+        vm.NextPageCommand.Execute(null);
+        vm.NextPageCommand.Execute(null);
+
+        vm.OnChapterTransitionHoldTick(null, EventArgs.Empty);
+
+        Assert.Equal(ChapterTransitionState.Hidden, vm.ChapterTransitionState);
+    }
+
+    [Fact]
+    public void PreviousPage_BeforeFirstPage_ShowsCard_WithLabelsInBackwardOrder()
+    {
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue2Id);
+
+        vm.PreviousPageCommand.Execute(null);
+
+        Assert.Equal(ChapterTransitionState.Card, vm.ChapterTransitionState);
+        Assert.Equal("#2", vm.ChapterTransitionFromLabel);
+        Assert.Equal("#1", vm.ChapterTransitionToLabel);
+    }
+
+    [Fact]
+    public void NextPage_PastLastPage_AutoNavigateDisabled_NeverShowsTheCard()
+    {
+        SetAutoNavigateComics(false);
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id);
+        vm.NextPageCommand.Execute(null);
+        vm.NextPageCommand.Execute(null);
+
+        vm.NextPageCommand.Execute(null);
+
+        Assert.Equal(ChapterTransitionState.Hidden, vm.ChapterTransitionState);
+    }
+
+    [Fact]
+    public void NextPage_RepeatedPresses_WhileCardShowing_AreIgnored()
+    {
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id);
+        vm.NextPageCommand.Execute(null);
+        vm.NextPageCommand.Execute(null);
+        vm.NextPageCommand.Execute(null); // shows the card, defers navigate
+
+        vm.NextPageCommand.Execute(null); // re-entrant press while still showing
+        vm.NextPageCommand.Execute(null);
+
+        // Still just one pending transition - the hold tick lands on issue 2, not further.
+        vm.OnChapterTransitionHoldTick(null, EventArgs.Empty);
+        Assert.Contains("#2", vm.IssueTitle);
+    }
+
+    [Fact]
+    public void NextChapterCommand_NavigatesImmediately_EvenWithAutoNavigateDisabled()
+    {
+        SetAutoNavigateComics(false);
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id);
+
+        vm.NextChapterCommand.Execute(null);
+
+        Assert.Contains("#2", vm.IssueTitle);
+    }
+
+    [Fact]
+    public void PreviousChapterCommand_NavigatesImmediately_EvenWithAutoNavigateDisabled()
+    {
+        SetAutoNavigateComics(false);
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id);
+
+        vm.PreviousChapterCommand.Execute(null);
+
+        Assert.Contains("#0", vm.IssueTitle);
+    }
+
+    [Fact]
+    public void NextChapterCommand_AtEndOfSeries_NoOps()
+    {
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue2Id);
+
+        vm.NextChapterCommand.Execute(null);
+
+        Assert.Contains("#2", vm.IssueTitle);
+    }
+
+    [Fact]
+    public void ChapterBoundaryOverscrollCommand_ShowsLoadingThenNavigatesAndShowsCard()
+    {
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id);
+
+        vm.ChapterBoundaryOverscrollCommand.Execute(true);
+        Assert.Equal(ChapterTransitionState.Loading, vm.ChapterTransitionState);
+
+        vm.OnChapterTransitionLoadDeferTick(null, EventArgs.Empty);
+
+        Assert.Equal(ChapterTransitionState.Card, vm.ChapterTransitionState);
+        Assert.Contains("#2", vm.IssueTitle); // navigate already happened, behind the Loading state
+    }
+
     [Fact]
     public void PreviousPage_BeforeFirstPage_LoadsPreviousIssueAtItsLastPage()
     {
@@ -257,6 +431,7 @@ public class ReaderScreenViewModelTests : IDisposable
         vm.LoadIssue(_issue2Id);
 
         vm.PreviousPageCommand.Execute(null);
+        vm.OnChapterTransitionHoldTick(null, EventArgs.Empty); // see NextPage_PastLastPage_LoadsNextIssue_WhenAutoNavigateEnabled
 
         Assert.Equal("PAGE 3 / 3", vm.PageLabel);
         Assert.Contains("#1", vm.IssueTitle);
@@ -396,6 +571,7 @@ public class ReaderScreenViewModelTests : IDisposable
         Assert.Equal("PAGE 3 / 3", vm.PageLabel);
 
         vm.GoLeftCommand.Execute(null);
+        vm.OnChapterTransitionHoldTick(null, EventArgs.Empty); // see NextPage_PastLastPage_LoadsNextIssue_WhenAutoNavigateEnabled
 
         Assert.Equal("PAGE 1 / 2", vm.PageLabel);
         Assert.Contains("#2", vm.IssueTitle);
@@ -543,6 +719,7 @@ public class ReaderScreenViewModelTests : IDisposable
         vm.PanOffsetY = -10;
 
         vm.NextPageCommand.Execute(null);
+        vm.OnChapterTransitionHoldTick(null, EventArgs.Empty); // see NextPage_PastLastPage_LoadsNextIssue_WhenAutoNavigateEnabled
 
         Assert.Contains("#2", vm.IssueTitle);
         Assert.Equal(1.0, vm.ZoomLevel);
@@ -589,6 +766,40 @@ public class ReaderScreenViewModelTests : IDisposable
 
         using var context = PaperbunkrDb.CreateContext();
         Assert.Equal(ReadingMode.VerticalContinuous, context.Series.First(s => s.Id == _seriesId).ReadingMode);
+    }
+
+    /// <summary>
+    /// docs/superpowers/specs/2026-08-27-vertical-paged-reading-mode-design.md - TopToBottom is a
+    /// paged mode (page-turns run along Y), so unlike the *Continuous modes it must stay
+    /// IsContinuousMode == false and keep the paged decoder.
+    /// </summary>
+    [Fact]
+    public void SetReadingModeCommand_TopToBottom_IsPagedAndLabelledVertical()
+    {
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id);
+
+        vm.SetReadingModeCommand.Execute(ReadingMode.TopToBottom);
+
+        Assert.Equal("Vertical ▾", vm.ReadingModeLabel);
+        Assert.False(vm.IsContinuousMode);
+        Assert.Equal(ReadingMode.TopToBottom, vm.EffectiveReadingMode);
+
+        using var context = PaperbunkrDb.CreateContext();
+        Assert.Equal(ReadingMode.TopToBottom, context.Series.First(s => s.Id == _seriesId).ReadingMode);
+    }
+
+    [Fact]
+    public void TopToBottom_SeededOnSeries_LoadsAsPagedVerticalMode()
+    {
+        SetSeriesReadingMode(ReadingMode.TopToBottom);
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+
+        vm.LoadIssue(_issue1Id);
+
+        Assert.Equal("Vertical ▾", vm.ReadingModeLabel);
+        Assert.False(vm.IsContinuousMode);
+        Assert.Equal(ReadingMode.TopToBottom, vm.EffectiveReadingMode);
     }
 
     [Fact]
@@ -845,6 +1056,7 @@ public class ReaderScreenViewModelTests : IDisposable
         vm.ScrollToPageRequested += index => requestedIndex = index;
 
         vm.PreviousPageCommand.Execute(null);
+        vm.OnChapterTransitionHoldTick(null, EventArgs.Empty); // see NextPage_PastLastPage_LoadsNextIssue_WhenAutoNavigateEnabled
 
         Assert.Equal("PAGE 3 / 3", vm.PageLabel);
         Assert.Contains("#1", vm.IssueTitle);
@@ -875,11 +1087,14 @@ public class ReaderScreenViewModelTests : IDisposable
         vm.ToggleFullscreenCommand.Execute(null);
 
         Assert.True(vm.IsFullscreen);
-        Assert.True(vm.ShowFullscreenOverlays);
+        Assert.True(vm.ShowChrome);
     }
 
+    /// <summary>docs/superpowers/specs/2026-08-25-reader-chrome-design.md - ShowChrome (renamed from
+    /// ShowFullscreenOverlays) now applies in windowed mode too, so leaving fullscreen no longer
+    /// hides it - the toggle itself counts as activity, same as any other cursor movement.</summary>
     [Fact]
-    public void ToggleFullscreenCommand_TurnsOff_HidesOverlays()
+    public void ToggleFullscreenCommand_TurnsOff_ChromeStaysVisible()
     {
         var vm = new ReaderScreenViewModel(goBack: () => { });
         vm.LoadIssue(_issue1Id);
@@ -888,7 +1103,7 @@ public class ReaderScreenViewModelTests : IDisposable
         vm.ToggleFullscreenCommand.Execute(null);
 
         Assert.False(vm.IsFullscreen);
-        Assert.False(vm.ShowFullscreenOverlays);
+        Assert.True(vm.ShowChrome);
     }
 
     /// <summary>Fullscreen is a window-chrome session preference, not per-book view state (unlike ZoomLevel/ManualRotationDegrees/ScrollOffset, all of which reset every Load) - switching books mid-fullscreen-session should stay fullscreen.</summary>
@@ -916,19 +1131,54 @@ public class ReaderScreenViewModelTests : IDisposable
         vm.GoBackCommand.Execute(null);
 
         Assert.False(vm.IsFullscreen);
-        Assert.False(vm.ShowFullscreenOverlays);
+        Assert.False(vm.ShowChrome);
         Assert.True(wentBack);
     }
 
+    /// <summary>docs/superpowers/specs/2026-08-25-reader-chrome-design.md - idle-fade now applies in
+    /// windowed mode too (previously this asserted the opposite: cursor activity was a no-op outside
+    /// fullscreen). NotifyCursorActivity no longer gates on IsFullscreen at all.</summary>
     [Fact]
-    public void NotifyCursorActivity_OutsideFullscreen_DoesNotShowOverlays()
+    public void NotifyCursorActivity_InWindowedMode_ShowsChromeToo()
     {
         var vm = new ReaderScreenViewModel(goBack: () => { });
         vm.LoadIssue(_issue1Id);
 
         vm.NotifyCursorActivity();
 
-        Assert.False(vm.ShowFullscreenOverlays);
+        Assert.False(vm.IsFullscreen);
+        Assert.True(vm.ShowChrome);
+    }
+
+    /// <summary>docs/superpowers/specs/2026-08-25-reader-chrome-design.md - the drawer's open state is independent of chrome idle-fade, it doesn't hide on its own.</summary>
+    [Fact]
+    public void ToggleDrawerCommand_FlipsIsDrawerOpen_WithoutTouchingShowChrome()
+    {
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id);
+        bool chromeBefore = vm.ShowChrome;
+
+        vm.ToggleDrawerCommand.Execute(null);
+        Assert.True(vm.IsDrawerOpen);
+        Assert.Equal(chromeBefore, vm.ShowChrome);
+
+        vm.ToggleDrawerCommand.Execute(null);
+        Assert.False(vm.IsDrawerOpen);
+    }
+
+    /// <summary>docs/superpowers/specs/2026-08-25-reader-chrome-design.md - the real bug this phase fixes: a hint bound at construction time would go stale after a remap. GetShortcutHint reads KeyBindingService fresh on every call instead.</summary>
+    [Fact]
+    public void GetShortcutHint_ReflectsARemapMadeAfterConstruction()
+    {
+        var keyBindingService = new KeyBindingService(() => PaperbunkrDb.CreateContext());
+        var vm = new ReaderScreenViewModel(goBack: () => { }, keyBindingService);
+        string before = vm.GetShortcutHint(KeyboardCommandRegistry.ReaderRotateClockwise);
+
+        keyBindingService.SetKey(KeyboardCommandRegistry.ReaderRotateClockwise, new KeyGesture(Key.J));
+        string after = vm.GetShortcutHint(KeyboardCommandRegistry.ReaderRotateClockwise);
+
+        Assert.NotEqual(before, after);
+        Assert.Contains("J", after);
     }
 
     /// <summary>docs/superpowers/specs/2026-08-10-reader-polish-continuous-scroll-chrome-overlays-design.md §9 - effective value with no override/default set is just 0 (CE's own BitmapAdjustment.Empty).</summary>
@@ -1795,7 +2045,48 @@ public class ReaderScreenViewModelTests : IDisposable
         Assert.Equal(2, context.Issues.First(i => i.Id == _issue1Id).OpenCount);
     }
 
+    // ===================== Reading Status (docs/superpowers/specs/2026-08-19-metadata-model-reading-status-design.md) =====================
+
+    [Fact]
+    public void LoadIssue_FirstOpen_SetsSeriesReadingStatusToReading()
+    {
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+
+        vm.LoadIssue(_issue1Id);
+
+        using var context = PaperbunkrDb.CreateContext();
+        Assert.Equal(ReadingStatus.Reading, context.Series.First(s => s.Id == _seriesId).ReadingStatus);
+    }
+
+    [Fact]
+    public void LoadIssue_SeriesAlreadyDropped_DoesNotOverwriteReadingStatus()
+    {
+        using (var context = PaperbunkrDb.CreateContext())
+        {
+            context.Series.First(s => s.Id == _seriesId).ReadingStatus = ReadingStatus.Dropped;
+            context.SaveChanges();
+        }
+
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id);
+
+        using var reloaded = PaperbunkrDb.CreateContext();
+        Assert.Equal(ReadingStatus.Dropped, reloaded.Series.First(s => s.Id == _seriesId).ReadingStatus);
+    }
+
     // ===================== Bookmarks (docs/superpowers/specs/2026-08-18-metadata-model-ui-gaps-status-and-bookmarks-design.md) =====================
+
+    /// <summary>docs/superpowers/specs/2026-08-25-reader-chrome-design.md - Actions cluster's glow pulse; the timer-driven "back to false" half isn't asserted here (no virtual-clock seam on this ViewModel to advance PbGlowPulseDuration deterministically), matching this test class's existing precedent of not unit-testing DispatcherTimer completion.</summary>
+    [Fact]
+    public void ToggleBookmark_SetsBookmarkJustToggled_ForTheGlowPulse()
+    {
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id);
+
+        vm.ToggleBookmarkCommand.Execute(null);
+
+        Assert.True(vm.BookmarkJustToggled);
+    }
 
     [Fact]
     public void ToggleBookmark_OnUnbookmarkedPage_CreatesRowWithAutoLabel_MarksStateActive()
@@ -1895,5 +2186,80 @@ public class ReaderScreenViewModelTests : IDisposable
 
         Assert.Empty(vm.Bookmarks);
         Assert.False(vm.IsCurrentPageBookmarked);
+    }
+
+    // ===================== Reading-list-order auto-advance (docs/superpowers/specs/2026-08-23-
+    // cbl-manager-manual-editing-and-list-aware-reading-design.md §3) =====================
+
+    [Fact]
+    public void NextPage_PastLastPage_FollowsReadingListOrder_AcrossSeries_WhenAnchored()
+    {
+        // List order deliberately differs from series order (issue1's series-order successor is
+        // issue2, not the other-series issue) - proves list mode actually took effect.
+        int listId = CreateReadingList(_issue1Id, _issue4Id, _issue2Id);
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id, listId); // 3 pages
+        vm.NextPageCommand.Execute(null);
+        vm.NextPageCommand.Execute(null);
+        Assert.Equal("PAGE 3 / 3", vm.PageLabel);
+
+        vm.NextPageCommand.Execute(null);
+        vm.OnChapterTransitionHoldTick(null, EventArgs.Empty);
+
+        Assert.Equal("PAGE 1 / 1", vm.PageLabel);
+        Assert.Contains("Other Series", vm.BreadcrumbSeries);
+    }
+
+    [Fact]
+    public void NextPage_PastLastPage_SkipsAMissingRow_WhenAnchoredToReadingList()
+    {
+        int placeholderId = CreatePlaceholderIssue();
+        int listId = CreateReadingList(_issue1Id, placeholderId, _issue4Id);
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id, listId);
+        vm.NextPageCommand.Execute(null);
+        vm.NextPageCommand.Execute(null);
+
+        vm.NextPageCommand.Execute(null);
+        vm.OnChapterTransitionHoldTick(null, EventArgs.Empty);
+
+        Assert.Contains("Other Series", vm.BreadcrumbSeries); // landed on issue4, not the placeholder
+    }
+
+    [Fact]
+    public void NextPage_AtTheListsLastIssue_NoOps_InsteadOfFallingBackToSeriesOrder()
+    {
+        // issue1 is last in the list here, even though its series-order successor (issue2) exists.
+        int listId = CreateReadingList(_issue4Id, _issue1Id);
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id, listId);
+        vm.NextPageCommand.Execute(null);
+        vm.NextPageCommand.Execute(null);
+        Assert.Equal("PAGE 3 / 3", vm.PageLabel);
+
+        vm.NextPageCommand.Execute(null);
+
+        Assert.Equal("PAGE 3 / 3", vm.PageLabel);
+        Assert.Contains("#1", vm.IssueTitle);
+        Assert.Equal(ChapterTransitionState.Hidden, vm.ChapterTransitionState);
+    }
+
+    [Fact]
+    public void LoadIssue_WithThePlainOverload_ClearsAnyPreviousReadingListAnchor()
+    {
+        // Under this list, issue2 is NOT the last item - if the anchor survived the plain LoadIssue
+        // below, NextPage would advance to issue4 instead of no-op'ing on plain series order.
+        int listId = CreateReadingList(_issue1Id, _issue2Id, _issue4Id);
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id, listId);
+
+        vm.LoadIssue(_issue2Id); // plain single-arg overload - no reading-list id
+
+        vm.NextPageCommand.Execute(null);
+        Assert.Equal("PAGE 2 / 2", vm.PageLabel);
+        vm.NextPageCommand.Execute(null); // past the last page - series order has no successor for issue2
+
+        Assert.Equal("PAGE 2 / 2", vm.PageLabel);
+        Assert.Contains("#2", vm.IssueTitle);
     }
 }

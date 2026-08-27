@@ -9,12 +9,18 @@ using CommunityToolkit.Mvvm.Input;
 using cYo.Common.Collections;
 using Microsoft.EntityFrameworkCore;
 using Paperbunkr.App.Models;
+using Paperbunkr.App.Plugins;
 using Paperbunkr.App.Services;
+using Paperbunkr.Data;
 using Paperbunkr.Data.Entities;
 using Paperbunkr.Data.Metadata;
 using Paperbunkr.Data.ReadingLists;
 
 namespace Paperbunkr.App.ViewModels;
+
+/// <summary>Which tab Library's "View &amp; Sort" popup shows (docs/superpowers/specs/2026-08-27-
+/// library-browsing-4b-toolbar-rework-design.md §4). Top-level so XAML <c>x:Static</c> can name it.</summary>
+public enum ViewSortTab { View, Sort, Group }
 
 /// <summary>
 /// Library grid + toolbar, ported from LibraryScreen.dc.html (Claude Design project 43c40b25),
@@ -27,6 +33,32 @@ public partial class LibraryScreenViewModel : ViewModelBase
     private readonly Action<int> _goDetail;
     private readonly Action<int> _goReaderForIssue;
     private readonly Action<int, int, bool> _goToNewIssueProperties;
+    private readonly Action<int> _onQuickRate;
+    private readonly Action<int> _goIssueProperties;
+    private readonly Action<IReadOnlyList<int>> _goBulkIssueProperties;
+    private readonly Action<IReadOnlyList<int>> _goBulkSeriesProperties;
+    private readonly Action<string, string> _showToast;
+    private readonly Action _goLibraryFolders;
+
+    /// <summary>
+    /// Multi-selection (docs/superpowers/specs/2026-08-24-library-multiselect-slice1-design.md) for
+    /// Library's issue-granularity grids - shared with <c>DetailTabsViewModel</c>'s own selection via
+    /// <see cref="TileSelectionController{TCard}"/>, since both screens want the identical toggle/
+    /// shift-range shape. Series-granularity selection is explicitly out of scope for this slice.
+    /// </summary>
+    public TileSelectionController<IssueListRow> Selection { get; } = new();
+
+    /// <summary>
+    /// Series-granularity counterpart to <see cref="Selection"/> (docs/superpowers/specs/2026-08-24-
+    /// library-multiselect-slice3-design.md) - a separate controller/id-space rather than reusing
+    /// <see cref="Selection"/>, since <see cref="IssueListRow.Id"/> and
+    /// <see cref="SeriesCardSample.SeriesId"/> are different id spaces and the two granularities'
+    /// card templates never render at the same time (<see cref="IsSeriesGranularity"/> gates which
+    /// one is visible).
+    /// </summary>
+    public TileSelectionController<SeriesCardSample> SeriesSelection { get; } = new();
+
+    private PluginHostService? _pluginHost;
 
     private ContentType? _activeContentType;
     private int? _activeCategoryId;
@@ -44,17 +76,34 @@ public partial class LibraryScreenViewModel : ViewModelBase
     private static readonly TimeSpan SearchHistoryDebounce = TimeSpan.FromMilliseconds(800);
     private DispatcherTimer? _searchHistoryDebounceTimer;
 
-    public LibraryScreenViewModel(Action<int> goDetail, Action<int> goReaderForIssue, Action<int, int, bool> goToNewIssueProperties)
+    public LibraryScreenViewModel(
+        Action<int> goDetail,
+        Action<int> goReaderForIssue,
+        Action<int, int, bool> goToNewIssueProperties,
+        Action<int>? onQuickRate = null,
+        Action<int>? goIssueProperties = null,
+        Action<IReadOnlyList<int>>? goBulkIssueProperties = null,
+        Action<string, string>? showToast = null,
+        Action<IReadOnlyList<int>>? goBulkSeriesProperties = null,
+        Action? goLibraryFolders = null)
     {
         _goDetail = goDetail;
         _goReaderForIssue = goReaderForIssue;
         _goToNewIssueProperties = goToNewIssueProperties;
+        _onQuickRate = onQuickRate ?? (_ => { });
+        _goIssueProperties = goIssueProperties ?? (_ => { });
+        _goBulkIssueProperties = goBulkIssueProperties ?? (_ => { });
+        _showToast = showToast ?? ((_, _) => { });
+        _goBulkSeriesProperties = goBulkSeriesProperties ?? (_ => { });
+        _goLibraryFolders = goLibraryFolders ?? (() => { });
         Covers = new ObservableCollection<SeriesCardSample>();
         Groups = new ObservableCollection<SeriesCardGroup>();
         ContentTypes = new ObservableCollection<ContentTypeSummary>();
         Collections = new ObservableCollection<CategorySummary>();
         ExistingSeriesNames = new ObservableCollection<string>();
-        IssueList = new IssueListScreenViewModel(goReaderForIssue);
+        ReadingLists = new ObservableCollection<ReadingListOption>();
+        DetailsColumns = new ObservableCollection<DetailsColumn>();
+        IssueList = new IssueListScreenViewModel(goReaderForIssue, isSelected: Selection.IsSelected);
         // Two independent axes now (docs/superpowers/specs/2026-08-18-library-book-centric-
         // redesign-design.md Slice 3, then the same-session follow-up that brought series-cards
         // back as a real option instead of a full replacement): LibraryViewMode is the layout
@@ -86,6 +135,15 @@ public partial class LibraryScreenViewModel : ViewModelBase
                 OnPropertyChanged(nameof(ActiveGroupLabel));
             }
 
+            if (e.PropertyName is nameof(IssueListScreenViewModel.SortField)
+                or nameof(IssueListScreenViewModel.SortDirection)
+                or nameof(IssueListScreenViewModel.GroupField)
+                or nameof(IssueListScreenViewModel.IsGrouped)
+                or nameof(IssueListScreenViewModel.HasAnyResults))
+            {
+                RaiseChipAndEmptyState();
+            }
+
             // IssueList's own sort/group persists on every change, same as every other Library
             // field's own On*Changed hook already does - see AppSettings.LibraryIssueListSortField.
             if (e.PropertyName is nameof(IssueListScreenViewModel.SortField)
@@ -96,6 +154,7 @@ public partial class LibraryScreenViewModel : ViewModelBase
             }
         };
         LoadLibrarySettings();
+        InitializeDetailsColumns();
 
         // Seeds history entry #1 with the just-loaded state, matching CE's own behavior of the
         // very first BookList assignment already counting as the first history entry - so
@@ -211,6 +270,7 @@ public partial class LibraryScreenViewModel : ViewModelBase
         _groupField = settings.LibraryGroupField;
         _viewMode = settings.LibraryViewMode;
         _gridDensity = settings.LibraryGridDensity;
+        _showTileTitles = settings.LibraryShowTileTitles;
         _showUnreadBadge = settings.LibraryShowUnreadBadge;
         _showPublisherBadge = settings.LibraryShowPublisherBadge;
         _showLanguageBadge = settings.LibraryShowLanguageBadge;
@@ -221,6 +281,7 @@ public partial class LibraryScreenViewModel : ViewModelBase
         _filterUnreadOnly = settings.LibraryFilterUnreadOnly;
         _filterMissingIssues = settings.LibraryFilterMissingIssues;
         _filterTrackedOnly = settings.LibraryFilterTrackedOnly;
+        _detailsColumnsSetting = settings.LibraryDetailsColumns;
 #pragma warning restore MVVMTK0034
 
         // Stale-reference fallback: a category deleted since last session falls back to "All
@@ -261,6 +322,7 @@ public partial class LibraryScreenViewModel : ViewModelBase
         settings.LibraryIssueListGroupField = IssueList.GroupField;
         settings.LibraryViewMode = ViewMode;
         settings.LibraryGridDensity = GridDensity;
+        settings.LibraryShowTileTitles = ShowTileTitles;
         settings.LibraryShowUnreadBadge = ShowUnreadBadge;
         settings.LibraryShowPublisherBadge = ShowPublisherBadge;
         settings.LibraryShowLanguageBadge = ShowLanguageBadge;
@@ -273,12 +335,132 @@ public partial class LibraryScreenViewModel : ViewModelBase
         settings.LibraryFilterUnreadOnly = FilterUnreadOnly;
         settings.LibraryFilterMissingIssues = FilterMissingIssues;
         settings.LibraryFilterTrackedOnly = FilterTrackedOnly;
+        // DetailsColumns is populated just after LoadLibrarySettings(); until then (the IssueList
+        // seeding relay can fire SaveLibrarySettings mid-construction) keep the stored value as-is
+        // rather than clobbering a real customization with an empty string.
+        settings.LibraryDetailsColumns = DetailsColumns.Count == 0 ? _detailsColumnsSetting : SerializeDetailsColumns();
 
         context.SaveChanges();
     }
 
+    // --- Configurable Details table columns (docs/superpowers/specs/2026-08-27-library-browsing-4b-
+    // toolbar-rework-design.md §8) - Issue granularity only; Series keeps a fixed template. ---
+
+    private string? _detailsColumnsSetting;
+
+    /// <summary>
+    /// The Details table's columns, in display order. Every <see cref="IssueListFieldCatalog.ColumnFields"/>
+    /// descriptor is present; <see cref="DetailsColumn.IsVisible"/> marks which ones render. The
+    /// stored setting only records the visible set (in order); any remaining fields are appended
+    /// hidden so the right-click header menu can offer them.
+    /// </summary>
+    public ObservableCollection<DetailsColumn> DetailsColumns { get; }
+
+    /// <summary>Raised when a column's visibility changes - the view rebuilds its generated column
+    /// grid in response (a hand-rolled table, no <c>DataGrid</c>).</summary>
+    public event EventHandler? DetailsColumnsChanged;
+
+    private void InitializeDetailsColumns()
+    {
+        var visibleFields = ParseDetailsColumnsSetting(_detailsColumnsSetting);
+        var visibleSet = visibleFields.ToHashSet();
+
+        // Visible columns first, in stored order; then every other column-eligible field, hidden.
+        foreach (var field in visibleFields)
+        {
+            AddDetailsColumn(field, isVisible: true);
+        }
+
+        foreach (var descriptor in IssueListFieldCatalog.ColumnFields)
+        {
+            if (!visibleSet.Contains(descriptor.Field))
+            {
+                AddDetailsColumn(descriptor.Field, isVisible: false);
+            }
+        }
+    }
+
+    private static readonly HashSet<IssueListSortField> WideDetailsColumns = new()
+    {
+        IssueListSortField.Title, IssueListSortField.Series, IssueListSortField.FilePath,
+        IssueListSortField.FileDirectory, IssueListSortField.FileName, IssueListSortField.Characters,
+        IssueListSortField.Teams, IssueListSortField.Locations,
+    };
+
+    private void AddDetailsColumn(IssueListSortField field, bool isVisible)
+    {
+        if (!IssueListFieldCatalog.SortFields.TryGetValue(field, out var descriptor) || descriptor.Display is null)
+        {
+            return;
+        }
+
+        var column = new DetailsColumn
+        {
+            Field = field,
+            DisplayName = descriptor.DisplayName,
+            IsVisible = isVisible,
+            Width = WideDetailsColumns.Contains(field) ? 220 : 150,
+        };
+        column.PropertyChanged += OnDetailsColumnChanged;
+        DetailsColumns.Add(column);
+    }
+
+    private void OnDetailsColumnChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(DetailsColumn.IsVisible))
+        {
+            SaveLibrarySettings();
+            DetailsColumnsChanged?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
+    /// <summary>Parses the comma-joined enum-name list; unknown / non-column-eligible names are
+    /// skipped, and a null/empty/all-invalid setting falls back to the curated default set.</summary>
+    private static List<IssueListSortField> ParseDetailsColumnsSetting(string? setting)
+    {
+        var result = new List<IssueListSortField>();
+        if (!string.IsNullOrWhiteSpace(setting))
+        {
+            var eligible = IssueListFieldCatalog.ColumnFields.Select(d => d.Field).ToHashSet();
+            foreach (var token in setting.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            {
+                if (Enum.TryParse<IssueListSortField>(token, out var field) && eligible.Contains(field) && !result.Contains(field))
+                {
+                    result.Add(field);
+                }
+            }
+        }
+
+        return result.Count > 0 ? result : IssueListFieldCatalog.DefaultDetailsColumns.ToList();
+    }
+
+    private string SerializeDetailsColumns() =>
+        string.Join(",", DetailsColumns.Where(c => c.IsVisible).Select(c => c.Field.ToString()));
+
+    /// <summary>
+    /// A Details-table header click: sort by that field, or - if it's already the active sort field -
+    /// flip the direction. Writes through <see cref="IssueList"/>'s existing sort pipeline, so the
+    /// toolbar's <c>Sorted:</c> chip and the shared row rendering both reflect it.
+    /// </summary>
+    [RelayCommand]
+    private void SetDetailsSort(IssueListSortField field)
+    {
+        if (IssueList.SortField == field)
+        {
+            IssueList.ToggleSortDirectionCommand.Execute(null);
+        }
+        else
+        {
+            IssueList.SetSortFieldCommand.Execute(field);
+        }
+    }
+
     /// <summary>Typeahead source for the "Add a physical book" flyout (docs/superpowers/specs/2026-08-16-reveal-in-explorer-and-fileless-entries-design.md §2).</summary>
     public ObservableCollection<string> ExistingSeriesNames { get; }
+
+    /// <summary>Backs the action bar's "Add to Reading List" flyout (docs/superpowers/specs/
+    /// 2026-08-24-library-multiselect-slice2-design.md §2) - refreshed on every <see cref="LoadFromDatabase"/>.</summary>
+    public ObservableCollection<ReadingListOption> ReadingLists { get; }
 
     [ObservableProperty]
     private string _newIssueSeriesName = string.Empty;
@@ -343,6 +525,7 @@ public partial class LibraryScreenViewModel : ViewModelBase
         OnPropertyChanged(nameof(ShowAlphabetIndex));
         OnPropertyChanged(nameof(SortLabel));
         OnPropertyChanged(nameof(ActiveSortLabel));
+        RaiseChipAndEmptyState();
         SaveLibrarySettings();
         LoadFromDatabase();
     }
@@ -354,6 +537,7 @@ public partial class LibraryScreenViewModel : ViewModelBase
     {
         OnPropertyChanged(nameof(SortLabel));
         OnPropertyChanged(nameof(ActiveSortLabel));
+        RaiseChipAndEmptyState();
         SaveLibrarySettings();
         LoadFromDatabase();
     }
@@ -381,6 +565,7 @@ public partial class LibraryScreenViewModel : ViewModelBase
         OnPropertyChanged(nameof(GroupLabel));
         OnPropertyChanged(nameof(ActiveGroupLabel));
         OnPropertyChanged(nameof(ShowAlphabetIndex));
+        RaiseChipAndEmptyState();
         SaveLibrarySettings();
         LoadFromDatabase();
     }
@@ -407,6 +592,7 @@ public partial class LibraryScreenViewModel : ViewModelBase
         OnPropertyChanged(nameof(ActiveGroupLabel));
         OnPropertyChanged(nameof(HasAnyResults));
         OnPropertyChanged(nameof(ShowAlphabetIndex));
+        RaiseChipAndEmptyState();
         SaveLibrarySettings();
     }
 
@@ -436,10 +622,15 @@ public partial class LibraryScreenViewModel : ViewModelBase
     public void LoadFromDatabase()
     {
         using var context = PaperbunkrDb.CreateContext();
+        // Include(Tags) - MatchesSearch and IssueListRow both read Issue.JoinedGenre()/JoinedTags()
+        // (docs/superpowers/specs/2026-08-23-weighted-categorized-tags-design.md); without it every
+        // issue would look like it has no Genre/Tags at all, breaking Library search and the Comic
+        // List's Genre/Tags columns for everyone.
         var series = context.Series
-            .Include(s => s.Issues)
+            .Include(s => s.Issues).ThenInclude(i => i.Tags)
             .Include(s => s.Categories)
             .Include(s => s.TrackingLinks)
+            .Include(s => s.Titles)
             .OrderBy(s => s.SortName ?? s.Name)
             .ToList();
 
@@ -449,6 +640,14 @@ public partial class LibraryScreenViewModel : ViewModelBase
         foreach (string name in series.Select(s => s.Name).Distinct().OrderBy(n => n))
         {
             ExistingSeriesNames.Add(name);
+        }
+
+        // "Add to Reading List" flyout (docs/superpowers/specs/2026-08-24-library-multiselect-
+        // slice2-design.md §2) - same ordering ReadingScreenViewModel's own sidebar uses.
+        ReadingLists.Clear();
+        foreach (var list in context.ReadingLists.OrderBy(l => l.SortOrder))
+        {
+            ReadingLists.Add(new ReadingListOption { Id = list.Id, Name = list.Name });
         }
 
         ContentTypes.Clear();
@@ -551,6 +750,10 @@ public partial class LibraryScreenViewModel : ViewModelBase
         OnPropertyChanged(nameof(IsAllSeriesActive));
         OnPropertyChanged(nameof(HasCollections));
         OnPropertyChanged(nameof(HasAnyResults));
+        OnPropertyChanged(nameof(ShowEmptyState));
+        OnPropertyChanged(nameof(EmptyStateMessage));
+        OnPropertyChanged(nameof(EmptyStateActionLabel));
+        OnPropertyChanged(nameof(EmptyStateActionCommand));
     }
 
     /// <summary>
@@ -607,7 +810,12 @@ public partial class LibraryScreenViewModel : ViewModelBase
     /// </summary>
     private bool MatchesSearch(Series s, string query) => SearchMode switch
     {
-        SearchMode.Series => Contains(s.Name, query) || s.Issues.Any(i =>
+        // Contains(s.Titles, query) has no CE equivalent (CE never modeled alternate titles at all) -
+        // a deliberate new-Paperbunkr addition to both Series and All modes, same "deliberate new
+        // feature, not parity" footing as ReadingStatus (docs/superpowers/specs/2026-08-19-metadata-
+        // model-multi-value-titles-design.md), not a silent departure from the otherwise-strict CE
+        // field-for-field parity this method documents above.
+        SearchMode.Series => Contains(s.Name, query) || ContainsAnyTitle(s, query) || s.Issues.Any(i =>
             Contains(i.AlternateSeries, query) || Contains(i.Format, query) ||
             Contains(i.SeriesGroup, query) || Contains(i.StoryArc, query)),
         SearchMode.Writer => s.Issues.Any(i => Contains(i.Writer, query)),
@@ -617,24 +825,24 @@ public partial class LibraryScreenViewModel : ViewModelBase
             Contains(i.Letterer, query) || Contains(i.CoverArtist, query)),
         SearchMode.Descriptive => s.Issues.Any(i =>
             Contains(i.Notes, query) || Contains(i.Summary, query) || Contains(i.Review, query) ||
-            Contains(i.Tags, query) || Contains(i.MainCharacterOrTeam, query) || Contains(i.Teams, query) ||
+            Contains(i.JoinedTags(), query) || Contains(i.MainCharacterOrTeam, query) || Contains(i.Teams, query) ||
             Contains(i.Locations, query) || Contains(i.ScanInformation, query)),
         SearchMode.File => s.Issues.Any(i => Contains(i.FilePath, query)),
         SearchMode.Catalog => s.Issues.Any(i =>
             Contains(i.BookAge, query) || Contains(i.BookCollectionStatus, query) || Contains(i.BookNotes, query) ||
             Contains(i.BookOwner, query) || Contains(i.BookStore, query) || Contains(i.BookLocation, query) ||
             Contains(i.ISBN, query)),
-        _ => Contains(s.Name, query) || Contains(s.Publisher, query) || Contains(s.Genre, query) || s.Issues.Any(i =>
+        _ => Contains(s.Name, query) || ContainsAnyTitle(s, query) || Contains(s.Publisher, query) || Contains(s.Genre, query) || s.Issues.Any(i =>
             Contains(i.AlternateSeries, query) || Contains(i.EffectiveTitle(), query) ||
             Contains(i.SeriesGroup, query) || Contains(i.StoryArc, query) ||
             Contains(i.Writer, query) || Contains(i.Penciller, query) || Contains(i.Inker, query) ||
             Contains(i.Colorist, query) || Contains(i.Letterer, query) || Contains(i.Editor, query) ||
             Contains(i.Translator, query) || Contains(i.CoverArtist, query) ||
             Contains(i.Summary, query) || Contains(i.Notes, query) || Contains(i.Review, query) ||
-            Contains(i.FilePath, query) || Contains(i.Genre, query) || Contains(i.Publisher, query) ||
+            Contains(i.FilePath, query) || Contains(i.JoinedGenre(), query) || Contains(i.Publisher, query) ||
             Contains(i.Imprint, query) || Contains(i.Volume, query) || Contains(i.Number, query) ||
             Contains(i.AlternateNumber, query) || Contains(i.Format, query) || Contains(i.AgeRating, query) ||
-            Contains(i.Tags, query) || Contains(i.MainCharacterOrTeam, query) || Contains(i.Teams, query) ||
+            Contains(i.JoinedTags(), query) || Contains(i.MainCharacterOrTeam, query) || Contains(i.Teams, query) ||
             Contains(i.Locations, query) || Contains(i.BookAge, query) || Contains(i.BookCollectionStatus, query) ||
             Contains(i.BookNotes, query) || Contains(i.BookOwner, query) || Contains(i.BookStore, query) ||
             Contains(i.BookLocation, query) || Contains(i.ISBN, query) || Contains(i.ScanInformation, query)),
@@ -642,6 +850,9 @@ public partial class LibraryScreenViewModel : ViewModelBase
 
     private static bool Contains(string? value, string query) =>
         !string.IsNullOrEmpty(value) && value.Contains(query, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>Matches native/romanized/localized alternate titles (docs/superpowers/specs/2026-08-19-metadata-model-multi-value-titles-design.md) - lets e.g. a native-script search find a series whose primary <see cref="Series.Name"/> is the localized title, or vice versa.</summary>
+    private static bool ContainsAnyTitle(Series s, string query) => s.Titles.Any(t => Contains(t.Value, query));
 
     [RelayCommand]
     private void SelectAllSeries()
@@ -696,6 +907,7 @@ public partial class LibraryScreenViewModel : ViewModelBase
 
     partial void OnSearchQueryChanged(string value)
     {
+        RaiseChipAndEmptyState();
         SaveLibrarySettings();
         LoadFromDatabase();
 
@@ -732,6 +944,7 @@ public partial class LibraryScreenViewModel : ViewModelBase
     partial void OnSearchModeChanged(SearchMode value)
     {
         OnPropertyChanged(nameof(SearchModeLabel));
+        RaiseChipAndEmptyState();
         SaveLibrarySettings();
         LoadFromDatabase();
     }
@@ -744,6 +957,7 @@ public partial class LibraryScreenViewModel : ViewModelBase
 
     partial void OnFilterUnreadOnlyChanged(bool value)
     {
+        RaiseChipAndEmptyState();
         SaveLibrarySettings();
         LoadFromDatabase();
     }
@@ -753,6 +967,7 @@ public partial class LibraryScreenViewModel : ViewModelBase
 
     partial void OnFilterMissingIssuesChanged(bool value)
     {
+        RaiseChipAndEmptyState();
         SaveLibrarySettings();
         LoadFromDatabase();
     }
@@ -762,6 +977,7 @@ public partial class LibraryScreenViewModel : ViewModelBase
 
     partial void OnFilterTrackedOnlyChanged(bool value)
     {
+        RaiseChipAndEmptyState();
         SaveLibrarySettings();
         LoadFromDatabase();
     }
@@ -774,50 +990,160 @@ public partial class LibraryScreenViewModel : ViewModelBase
         ? SortField == LibrarySortField.Name && !IsGrouped
         : IssueList.SortField == IssueListSortField.Series && !IssueList.IsGrouped;
 
+    // --- Toolbar chrome (docs/superpowers/specs/2026-08-27-library-browsing-4b-toolbar-rework-
+    // design.md §2-§5) - one "View & Sort" tabbed popup replacing the old Filter/Sort/Group/Display
+    // pills, plus a chips row carrying the live filter/sort/group state. ---
+
     [ObservableProperty]
     private string? _activeDropdown;
 
-    public bool IsFilterOpen => ActiveDropdown == "filter";
-    public bool IsSortOpen => ActiveDropdown == "sort";
-    public bool IsGroupOpen => ActiveDropdown == "group";
-    public bool IsDisplayOpen => ActiveDropdown == "display";
-    public bool IsAddOpen => ActiveDropdown == "add";
+    public bool IsViewSortOpen => ActiveDropdown == "viewSort";
     public bool IsSearchModeOpen => ActiveDropdown == "searchMode";
+
+    /// <summary>The "+ Add filter" chip's small popup (the old Filter popup's checkbox content).</summary>
+    public bool IsAddFilterOpen => ActiveDropdown == "addFilter";
+
+    /// <summary>Selection action bar's "Add to List" flyout (docs/superpowers/specs/2026-08-24-
+    /// library-multiselect-slice2-design.md §2) - same single-active-dropdown mechanism.</summary>
+    public bool IsAddToListOpen => ActiveDropdown == "addToList";
 
     partial void OnActiveDropdownChanged(string? value)
     {
-        OnPropertyChanged(nameof(IsFilterOpen));
-        OnPropertyChanged(nameof(IsSortOpen));
-        OnPropertyChanged(nameof(IsGroupOpen));
-        OnPropertyChanged(nameof(IsDisplayOpen));
-        OnPropertyChanged(nameof(IsAddOpen));
+        OnPropertyChanged(nameof(IsViewSortOpen));
         OnPropertyChanged(nameof(IsSearchModeOpen));
+        OnPropertyChanged(nameof(IsAddFilterOpen));
+        OnPropertyChanged(nameof(IsAddToListOpen));
+    }
+
+    [ObservableProperty]
+    private ViewSortTab _viewSortActiveTab = ViewSortTab.View;
+
+    public bool IsViewTabActive => ViewSortActiveTab == ViewSortTab.View;
+    public bool IsSortTabActive => ViewSortActiveTab == ViewSortTab.Sort;
+    public bool IsGroupTabActive => ViewSortActiveTab == ViewSortTab.Group;
+
+    partial void OnViewSortActiveTabChanged(ViewSortTab value)
+    {
+        OnPropertyChanged(nameof(IsViewTabActive));
+        OnPropertyChanged(nameof(IsSortTabActive));
+        OnPropertyChanged(nameof(IsGroupTabActive));
+    }
+
+    [RelayCommand]
+    private void ToggleViewSort() => ActiveDropdown = ActiveDropdown == "viewSort" ? null : "viewSort";
+
+    /// <summary>Opens the View &amp; Sort popup on a specific tab - the chips row's
+    /// <c>Sorted:</c>/<c>Grouped:</c> chips use this to jump straight to the matching tab.</summary>
+    [RelayCommand]
+    private void OpenViewSortTab(ViewSortTab tab)
+    {
+        ViewSortActiveTab = tab;
+        ActiveDropdown = "viewSort";
     }
 
     [RelayCommand]
     private void ToggleSearchMode() => ActiveDropdown = ActiveDropdown == "searchMode" ? null : "searchMode";
 
     [RelayCommand]
-    private void ToggleFilter() => ActiveDropdown = ActiveDropdown == "filter" ? null : "filter";
+    private void ToggleAddFilter() => ActiveDropdown = ActiveDropdown == "addFilter" ? null : "addFilter";
 
     [RelayCommand]
-    private void ToggleSort() => ActiveDropdown = ActiveDropdown == "sort" ? null : "sort";
+    private void ToggleAddToList() => ActiveDropdown = ActiveDropdown == "addToList" ? null : "addToList";
+
+    /// <summary>The "+" button - opens the centered Add-issue overlay (design §6), a full
+    /// FloatingPanel rather than the old light-dismiss popup.</summary>
+    [ObservableProperty]
+    private bool _isAddIssueOpen;
 
     [RelayCommand]
-    private void ToggleGroup() => ActiveDropdown = ActiveDropdown == "group" ? null : "group";
-
-    [RelayCommand]
-    private void ToggleDisplay() => ActiveDropdown = ActiveDropdown == "display" ? null : "display";
-
-    [RelayCommand]
-    private void ToggleAdd()
+    private void OpenAddIssue()
     {
-        ActiveDropdown = ActiveDropdown == "add" ? null : "add";
         NewIssueSeriesName = string.Empty;
         NewIssueNumber = string.Empty;
         NewIssueContentType = ContentType.Comic;
         NewIssueReadingMode = ReadingMode.RightToLeft;
+        IsAddIssueOpen = true;
     }
+
+    [RelayCommand]
+    private void CloseAddIssue() => IsAddIssueOpen = false;
+
+    // --- Chips row + empty state ---
+
+    public bool HasActiveFilters =>
+        FilterUnreadOnly || FilterMissingIssues || FilterTrackedOnly || SearchMode != SearchMode.All;
+
+    private bool SeriesSortIsDefault => SortField == LibrarySortField.DateAdded && SortDirection == SortDirection.Descending;
+    private bool IssueSortIsDefault => IssueList.SortField == IssueListSortField.Added && IssueList.SortDirection == SortDirection.Descending;
+
+    public bool IsSortNonDefault => IsSeriesGranularity ? !SeriesSortIsDefault : !IssueSortIsDefault;
+    public bool IsGroupNonDefault => IsSeriesGranularity ? IsGrouped : IssueList.IsGrouped;
+
+    public bool HasVisibleChips => HasActiveFilters || IsSortNonDefault || IsGroupNonDefault;
+
+    public bool ShowGroupChip => IsGroupNonDefault;
+    public bool ShowSearchScopeChip => SearchMode != SearchMode.All;
+    public string SearchScopeChipLabel => SearchModeLabel;
+
+    /// <summary>Re-raises every chip/empty-state computed property - called from every filter/sort/
+    /// group/search/granularity change hook (and the IssueList relay in the constructor).</summary>
+    private void RaiseChipAndEmptyState()
+    {
+        OnPropertyChanged(nameof(HasActiveFilters));
+        OnPropertyChanged(nameof(IsSortNonDefault));
+        OnPropertyChanged(nameof(IsGroupNonDefault));
+        OnPropertyChanged(nameof(HasVisibleChips));
+        OnPropertyChanged(nameof(ShowGroupChip));
+        OnPropertyChanged(nameof(ShowSearchScopeChip));
+        OnPropertyChanged(nameof(SearchScopeChipLabel));
+        OnPropertyChanged(nameof(ShowEmptyState));
+        OnPropertyChanged(nameof(EmptyStateMessage));
+        OnPropertyChanged(nameof(EmptyStateActionLabel));
+        OnPropertyChanged(nameof(EmptyStateActionCommand));
+    }
+
+    /// <summary>Clears the filter toggles and resets the search scope to All; leaves the sidebar
+    /// content-type/category filter and the search text alone (design §2).</summary>
+    [RelayCommand]
+    private void ClearAllFilters()
+    {
+        FilterUnreadOnly = false;
+        FilterMissingIssues = false;
+        FilterTrackedOnly = false;
+        SearchMode = SearchMode.All;
+    }
+
+    [RelayCommand] private void ClearUnreadFilter() => FilterUnreadOnly = false;
+    [RelayCommand] private void ClearMissingFilter() => FilterMissingIssues = false;
+    [RelayCommand] private void ClearTrackedFilter() => FilterTrackedOnly = false;
+    [RelayCommand] private void ClearSearchScope() => SearchMode = SearchMode.All;
+
+    public bool ShowEmptyState => !HasAnyResults;
+
+    public string EmptyStateMessage
+    {
+        get
+        {
+            if (!string.IsNullOrWhiteSpace(SearchQuery))
+            {
+                return $"No results for “{SearchQuery.Trim()}”.";
+            }
+
+            return HasActiveFilters ? "No comics match this filter." : "This library is empty.";
+        }
+    }
+
+    private bool FiltersOrSearchActive => HasActiveFilters || !string.IsNullOrWhiteSpace(SearchQuery);
+
+    public string EmptyStateActionLabel => FiltersOrSearchActive ? "Clear filters" : "Scan folders";
+
+    public IRelayCommand EmptyStateActionCommand =>
+        FiltersOrSearchActive ? ClearAllFiltersCommand : OpenLibraryFoldersCommand;
+
+    /// <summary>Empty-state "Scan folders" action - hands off to Preferences → Libraries via the
+    /// ctor callback (no-op default keeps the VM standalone-testable).</summary>
+    [RelayCommand]
+    private void OpenLibraryFolders() => _goLibraryFolders();
 
     /// <summary>Reveals THIS tile's own issue file directly (docs/superpowers/specs/
     /// 2026-08-18-library-book-centric-redesign-design.md Slice 3) - simpler and more correct than
@@ -834,12 +1160,214 @@ public partial class LibraryScreenViewModel : ViewModelBase
         }
     }
 
+    /// <summary>Called once from <c>App.axaml.cs</c> after <see cref="PluginHostService.Initialize"/> - the host doesn't exist yet when this ViewModel is constructed in <c>MainViewModel</c>'s own constructor.</summary>
+    public void AttachHost(PluginHostService host)
+    {
+        _pluginHost = host;
+        OnPropertyChanged(nameof(HasPluginHost));
+    }
+
+    public bool HasPluginHost => _pluginHost is not null;
+
+    /// <summary>
+    /// Real Library-hook trigger (docs/superpowers/specs/2026-08-24-plugin-api-v2-design.md §5) -
+    /// the right-clicked tile's context menu. Now that Library has a real multi-selection model
+    /// (docs/superpowers/specs/2026-08-24-library-multiselect-slice1-design.md), this dispatches by
+    /// selection-union like every other context-menu command (<see cref="EditIssueProperties"/>,
+    /// <see cref="RevealIssue"/>): right-clicking a lone unselected tile runs against just that one
+    /// issue, right-clicking while other tiles are checked runs against the whole selection. Any
+    /// result (e.g. Duplicate Finder's match dialog) is surfaced by the plugin command itself via
+    /// <c>IApplication.AskQuestion</c>, not by this method.
+    /// </summary>
+    [RelayCommand]
+    private async Task RunLibraryPlugins(int issueId) => await RunLibraryPluginsOn(Selection.UnionForAction(issueId));
+
+    /// <summary>Action bar counterpart, same as <see cref="BulkEditSelection"/>/<see cref="MarkSelectionRead"/> - runs against the whole current selection with no right-click target involved.</summary>
+    [RelayCommand]
+    private async Task RunLibraryPluginsOnSelection() => await RunLibraryPluginsOn(Selection.SelectedIds.ToList());
+
+    private async Task RunLibraryPluginsOn(IReadOnlyList<int> issueIds)
+    {
+        if (_pluginHost is null || issueIds.Count == 0)
+        {
+            return;
+        }
+
+        using var context = PaperbunkrDb.CreateContext();
+        var issues = context.Issues.Where(i => issueIds.Contains(i.Id)).ToList();
+        if (issues.Count == 0)
+        {
+            return;
+        }
+
+        await _pluginHost.RunLibraryHookAsync(issues);
+    }
+
     /// <summary>Opens the clicked tile's series in Detail (docs/superpowers/specs/
     /// 2026-08-18-library-book-centric-redesign-design.md Slice 3 open question #1) - tiles
     /// themselves now open the Reader directly (<see cref="IssueListScreenViewModel.OpenIssueCommand"/>),
     /// so this is the tile context menu's own entry point to series-level actions/metadata.</summary>
     [RelayCommand]
     private void GoToSeries(int seriesId) => _goDetail(seriesId);
+
+    /// <summary>
+    /// Tile context menu's "Mark as Read"/"Mark as Unread" (docs/superpowers/specs/2026-08-23-mark-
+    /// as-read-design.md), extended to the selection union in docs/superpowers/specs/2026-08-24-
+    /// library-multiselect-slice2-design.md §1 - same union-then-loop shape as
+    /// <see cref="DeleteIssueCommand"/> in Slice 1.
+    /// </summary>
+    [RelayCommand]
+    private void MarkIssueRead(int issueId) => MarkIssuesRead(Selection.UnionForAction(issueId));
+
+    /// <summary>Action bar's "Mark as Read" button - marks the whole current selection.</summary>
+    [RelayCommand]
+    private void MarkSelectionRead() => MarkIssuesRead(Selection.SelectedIds.ToList());
+
+    private void MarkIssuesRead(IReadOnlyList<int> issueIds)
+    {
+        using var context = PaperbunkrDb.CreateContext();
+        int marked = 0;
+        foreach (int issueId in issueIds)
+        {
+            var issue = context.Issues.Find(issueId);
+            if (issue is null)
+            {
+                continue;
+            }
+
+            IssueReadStateResolver.MarkAsRead(issue);
+            marked++;
+        }
+
+        context.SaveChanges();
+        LoadFromDatabase();
+
+        if (marked > 1)
+        {
+            _showToast("Marked as read", $"Marked {marked} issues as read.");
+        }
+    }
+
+    [RelayCommand]
+    private void MarkIssueUnread(int issueId) => MarkIssuesUnread(Selection.UnionForAction(issueId));
+
+    /// <summary>Action bar's "Mark as Unread" button - marks the whole current selection.</summary>
+    [RelayCommand]
+    private void MarkSelectionUnread() => MarkIssuesUnread(Selection.SelectedIds.ToList());
+
+    private void MarkIssuesUnread(IReadOnlyList<int> issueIds)
+    {
+        using var context = PaperbunkrDb.CreateContext();
+        int marked = 0;
+        foreach (int issueId in issueIds)
+        {
+            var issue = context.Issues.Find(issueId);
+            if (issue is null)
+            {
+                continue;
+            }
+
+            IssueReadStateResolver.MarkAsUnread(issue);
+            marked++;
+        }
+
+        context.SaveChanges();
+        LoadFromDatabase();
+
+        if (marked > 1)
+        {
+            _showToast("Marked as unread", $"Marked {marked} issues as unread.");
+        }
+    }
+
+    /// <summary>
+    /// Action bar's "Add to List" flyout (docs/superpowers/specs/2026-08-24-library-multiselect-
+    /// slice2-design.md §2) - adds the whole current selection to an existing reading list, skipping
+    /// any issue already a member (no DB-level uniqueness constraint on <see cref="Paperbunkr.Data.Entities.ReadingListItem"/>,
+    /// so this is an application-level guard).
+    /// </summary>
+    [RelayCommand]
+    private void AddSelectionToReadingList(int readingListId)
+    {
+        using var context = PaperbunkrDb.CreateContext();
+        var list = context.ReadingLists.Find(readingListId);
+        if (list is null)
+        {
+            return;
+        }
+
+        AddIssuesToReadingList(context, list, Selection.SelectedIds.ToList());
+        context.SaveChanges();
+        ActiveDropdown = null;
+    }
+
+    /// <summary>"New Reading List…" flyout entry - creates a list the same way
+    /// <c>ReadingScreenViewModel.CreateNew</c> does, then immediately adds the current selection to it.</summary>
+    [RelayCommand]
+    private void CreateReadingListAndAddSelection()
+    {
+        using var context = PaperbunkrDb.CreateContext();
+        var now = DateTime.UtcNow;
+        var list = new ReadingList
+        {
+            Name = "New Reading List",
+            SortOrder = context.ReadingLists.Count(),
+            Type = ReadingListType.User,
+            CreatedAt = now,
+            UpdatedAt = now,
+        };
+        context.ReadingLists.Add(list);
+        // list.Id is only assigned once this actually persists - AddIssuesToReadingList needs the
+        // real id to set ReadingListItem.ReadingListId, so this must run before that call (a real
+        // bug caught by CreateReadingListAndAddSelection_CreatesListAndAddsWholeSelection: without
+        // this, the item inserts below violated their FK constraint against an unpersisted Id 0).
+        context.SaveChanges();
+
+        AddIssuesToReadingList(context, list, Selection.SelectedIds.ToList());
+        context.SaveChanges();
+        ActiveDropdown = null;
+        LoadFromDatabase();
+    }
+
+    private void AddIssuesToReadingList(PaperbunkrDbContext context, ReadingList list, IReadOnlyList<int> issueIds)
+    {
+        var existingIssueIds = context.ReadingListItems
+            .Where(i => i.ReadingListId == list.Id)
+            .Select(i => i.IssueId)
+            .ToHashSet();
+
+        int nextOrder = context.ReadingListItems.Count(i => i.ReadingListId == list.Id);
+        int added = 0;
+        int skipped = 0;
+        foreach (int issueId in issueIds)
+        {
+            if (existingIssueIds.Contains(issueId))
+            {
+                skipped++;
+                continue;
+            }
+
+            context.ReadingListItems.Add(new ReadingListItem
+            {
+                ReadingListId = list.Id,
+                IssueId = issueId,
+                SortOrder = nextOrder++,
+            });
+            added++;
+        }
+
+        string message = (added, skipped) switch
+        {
+            (0, > 0) => $"All {skipped} already in \"{list.Name}\".",
+            (_, 0) => $"Added {added} to \"{list.Name}\".",
+            _ => $"Added {added} to \"{list.Name}\" ({skipped} already in list).",
+        };
+        _showToast("Added to reading list", message);
+    }
+
+    /// <summary>Quick Rating + free-text Review in one popup (docs/ce-feature-inventory.md §A) - opens the lightweight overlay instead of the full single-book Issue Properties editor.</summary>
+    [RelayCommand]
+    private void OpenQuickRate(int issueId) => _onQuickRate(issueId);
 
     /// <summary>Series-card equivalent of <see cref="RevealIssueCommand"/> - a series card has no
     /// single file of its own, so this reveals its first issue's folder instead (docs/superpowers/
@@ -854,6 +1382,197 @@ public partial class LibraryScreenViewModel : ViewModelBase
         {
             RevealInExplorerHelper.RevealSeries(series);
         }
+    }
+
+    /// <summary>
+    /// Tile context menu's "Delete Issue" (docs/superpowers/specs/2026-08-22-delete-functionality-
+    /// design.md) - a nested-submenu confirm ("Delete Issue" → "Yes, delete") rather than
+    /// <c>TwoStepConfirm</c>'s timed re-click: a context menu closes after every click, so there's
+    /// no persistently-visible button to re-click within a window: a submenu is the natural
+    /// equivalent - deliberate, requires opening a second menu level, not a single misclick away.
+    /// Moves the file to the Recycle Bin (confirmed with the user, not a silent permanent delete)
+    /// via <see cref="LibraryDeletionHelper"/>, which also removes any reading-list/event
+    /// cross-references first (<c>ReadingListItem</c>/<c>EventMembership</c>'s FKs to Issue are
+    /// both Restrict, not Cascade).
+    /// </summary>
+    [RelayCommand]
+    private void DeleteIssue(int issueId) => DeleteIssues(Selection.UnionForAction(issueId));
+
+    /// <summary>Action bar's "Delete" button (docs/superpowers/specs/2026-08-24-library-multiselect-
+    /// slice1-design.md §6) - deletes the whole current selection, same underlying loop as the
+    /// per-tile <see cref="DeleteIssueCommand"/>.</summary>
+    [RelayCommand]
+    private void DeleteSelection() => DeleteIssues(Selection.SelectedIds.ToList());
+
+    private void DeleteIssues(IReadOnlyList<int> issueIds)
+    {
+        using var context = PaperbunkrDb.CreateContext();
+        foreach (int issueId in issueIds)
+        {
+            var issue = context.Issues.Find(issueId);
+            if (issue is null)
+            {
+                continue;
+            }
+
+            LibraryDeletionHelper.RemoveIssue(context, issue);
+        }
+
+        context.SaveChanges();
+        Selection.Clear();
+        SelectionCount = 0;
+        LoadFromDatabase();
+    }
+
+    /// <summary>
+    /// Tile context menu's new "Edit Properties…" entry (docs/superpowers/specs/2026-08-24-library-
+    /// multiselect-slice1-design.md §5) - Library's first issue metadata-edit entry point (previously
+    /// only reachable via Detail). Dispatches by selection-union count, same as
+    /// <c>DetailTabsViewModel.EditIssueProperties</c>.
+    /// </summary>
+    [RelayCommand]
+    private void EditIssueProperties(int issueId) => OpenIssueEditor(Selection.UnionForAction(issueId));
+
+    /// <summary>Action bar's "Bulk Edit" button - edits the whole current selection.</summary>
+    [RelayCommand]
+    private void BulkEditSelection() => OpenIssueEditor(Selection.SelectedIds.ToList());
+
+    private void OpenIssueEditor(IReadOnlyList<int> issueIds)
+    {
+        if (issueIds.Count == 0)
+        {
+            return;
+        }
+
+        if (issueIds.Count == 1)
+        {
+            _goIssueProperties(issueIds[0]);
+        }
+        else
+        {
+            _goBulkIssueProperties(issueIds);
+        }
+    }
+
+    /// <summary>
+    /// Gesture entry point for tile clicks with Ctrl/Shift held, and for the per-tile selection
+    /// checkbox (always <paramref name="isShiftHeld"/> false there). Plain clicks never call this -
+    /// they keep navigating to Reader/Detail exactly as before this feature existed. See docs/
+    /// superpowers/specs/2026-08-24-library-multiselect-slice1-design.md §3.
+    /// </summary>
+    public void ToggleIssueSelection(IssueListRow row, bool isShiftHeld)
+    {
+        Selection.Toggle(GetOrderedVisibleIssueRows(), row, isShiftHeld);
+        SelectionCount = Selection.Count;
+    }
+
+    [RelayCommand]
+    private void ToggleIssueSelectionCheckbox(IssueListRow row) => ToggleIssueSelection(row, isShiftHeld: false);
+
+    [RelayCommand]
+    private void ClearSelection()
+    {
+        Selection.Clear(GetOrderedVisibleIssueRows());
+        SelectionCount = 0;
+    }
+
+    /// <summary>The currently displayed order for shift-range selection - the flattened group order
+    /// when grouped (matches what the user actually sees top-to-bottom), the flat row order
+    /// otherwise. <see cref="IssueListScreenViewModel.Rows"/>/<see cref="IssueListScreenViewModel.Groups"/>
+    /// are mutually exclusive at any given time (see <see cref="IssueListScreenViewModel.Render"/>).</summary>
+    private IList<IssueListRow> GetOrderedVisibleIssueRows() =>
+        IssueList.IsGrouped
+            ? IssueList.Groups.SelectMany(g => g.Items).ToList()
+            : IssueList.Rows;
+
+    [ObservableProperty]
+    private int _selectionCount;
+
+    public bool HasSelection => SelectionCount > 0;
+
+    /// <summary>Drives the toolbar's normal-controls-vs-action-bar switch across both granularities
+    /// (docs/superpowers/specs/2026-08-24-library-multiselect-slice3-design.md) - a plain
+    /// <c>!HasSelection</c> binding would leave the normal toolbar visible underneath the series
+    /// action bar, since the two selections are tracked independently.</summary>
+    public bool HasAnySelection => HasSelection || HasSeriesSelection;
+
+    public string DeleteConfirmLabel => SelectionCount > 1 ? $"Yes, delete {SelectionCount} issues" : "Yes, delete this issue";
+
+    partial void OnSelectionCountChanged(int value)
+    {
+        OnPropertyChanged(nameof(HasSelection));
+        OnPropertyChanged(nameof(HasAnySelection));
+        OnPropertyChanged(nameof(DeleteConfirmLabel));
+    }
+
+    /// <summary>Series-granularity counterpart to <see cref="ToggleIssueSelection"/> - same
+    /// checkbox/ctrl-click/shift-click gestures, see docs/superpowers/specs/2026-08-24-library-
+    /// multiselect-slice3-design.md.</summary>
+    public void ToggleSeriesSelection(SeriesCardSample card, bool isShiftHeld)
+    {
+        SeriesSelection.Toggle(GetOrderedVisibleSeriesCards(), card, isShiftHeld);
+        SeriesSelectionCount = SeriesSelection.Count;
+    }
+
+    [RelayCommand]
+    private void ToggleSeriesSelectionCheckbox(SeriesCardSample card) => ToggleSeriesSelection(card, isShiftHeld: false);
+
+    [RelayCommand]
+    private void ClearSeriesSelection()
+    {
+        SeriesSelection.Clear(GetOrderedVisibleSeriesCards());
+        SeriesSelectionCount = 0;
+    }
+
+    /// <summary>The currently displayed order for shift-range selection - the flattened group order
+    /// when grouped, the flat card order otherwise. <see cref="Covers"/>/<see cref="Groups"/> are
+    /// mutually exclusive at any given time, same rationale as <see cref="GetOrderedVisibleIssueRows"/>.</summary>
+    private IList<SeriesCardSample> GetOrderedVisibleSeriesCards() =>
+        IsGrouped ? Groups.SelectMany(g => g.Items).ToList() : Covers;
+
+    [ObservableProperty]
+    private int _seriesSelectionCount;
+
+    public bool HasSeriesSelection => SeriesSelectionCount > 0;
+
+    public string DeleteSeriesConfirmLabel => SeriesSelectionCount > 1 ? $"Yes, delete {SeriesSelectionCount} series" : "Yes, delete this series";
+
+    partial void OnSeriesSelectionCountChanged(int value)
+    {
+        OnPropertyChanged(nameof(HasSeriesSelection));
+        OnPropertyChanged(nameof(HasAnySelection));
+        OnPropertyChanged(nameof(DeleteSeriesConfirmLabel));
+    }
+
+    /// <summary>Action bar's "Bulk Edit" button (series granularity) - opens
+    /// <see cref="BulkSeriesPropertiesScreenViewModel"/> for the whole current selection.</summary>
+    [RelayCommand]
+    private void BulkEditSeriesSelection() => _goBulkSeriesProperties(SeriesSelection.SelectedIds.ToList());
+
+    /// <summary>Action bar's "Delete" button (series granularity) - deletes every currently selected series.</summary>
+    [RelayCommand]
+    private void DeleteSeriesSelection() => DeleteSeriesList(SeriesSelection.SelectedIds.ToList());
+
+    /// <summary>Series-tile equivalent of <see cref="DeleteIssueCommand"/> - deletes every issue in the series (each one's file recycled, same as <see cref="DeleteIssueCommand"/>) and the series itself. Extended to the selection union in docs/superpowers/specs/2026-08-24-library-multiselect-slice3-design.md, same union-then-loop shape Slice 1 used for <see cref="DeleteIssueCommand"/>.</summary>
+    [RelayCommand]
+    private void DeleteSeries(int seriesId) => DeleteSeriesList(SeriesSelection.UnionForAction(seriesId));
+
+    private void DeleteSeriesList(IReadOnlyList<int> seriesIds)
+    {
+        using var context = PaperbunkrDb.CreateContext();
+        foreach (int seriesId in seriesIds)
+        {
+            var series = context.Series.Include(s => s.Issues).FirstOrDefault(s => s.Id == seriesId);
+            if (series is null)
+            {
+                continue;
+            }
+
+            LibraryDeletionHelper.RemoveSeries(context, series);
+        }
+
+        context.SaveChanges();
+        LoadFromDatabase();
     }
 
     /// <summary>Series card click, opens Detail - the per-issue tile equivalent is
@@ -915,6 +1634,32 @@ public partial class LibraryScreenViewModel : ViewModelBase
     [RelayCommand] private void SetSeriesStatusCompleted(int seriesId) => SetSeriesStatus(seriesId, SeriesStatus.Completed);
     [RelayCommand] private void SetSeriesStatusCancelled(int seriesId) => SetSeriesStatus(seriesId, SeriesStatus.Cancelled);
     [RelayCommand] private void SetSeriesStatusHiatus(int seriesId) => SetSeriesStatus(seriesId, SeriesStatus.Hiatus);
+
+    /// <summary>
+    /// Tile context menu's "Set Reading Status" picker (docs/superpowers/specs/2026-08-19-metadata-
+    /// model-reading-status-design.md) - same one-command-per-value shape as
+    /// <see cref="SetSeriesStatus"/> above, and the user's own reading-progress relationship with the
+    /// series rather than the publisher's release status. No <see cref="LoadFromDatabase"/> reload,
+    /// same reasoning as <see cref="SetSeriesStatus"/>.
+    /// </summary>
+    private void SetSeriesReadingStatus(int seriesId, ReadingStatus status)
+    {
+        using var context = PaperbunkrDb.CreateContext();
+        var series = context.Series.Find(seriesId);
+        if (series is not null)
+        {
+            series.ReadingStatus = status;
+            context.SaveChanges();
+        }
+    }
+
+    [RelayCommand] private void SetSeriesReadingStatusUnknown(int seriesId) => SetSeriesReadingStatus(seriesId, ReadingStatus.Unknown);
+    [RelayCommand] private void SetSeriesReadingStatusPlanned(int seriesId) => SetSeriesReadingStatus(seriesId, ReadingStatus.Planned);
+    [RelayCommand] private void SetSeriesReadingStatusReading(int seriesId) => SetSeriesReadingStatus(seriesId, ReadingStatus.Reading);
+    [RelayCommand] private void SetSeriesReadingStatusCompleted(int seriesId) => SetSeriesReadingStatus(seriesId, ReadingStatus.Completed);
+    [RelayCommand] private void SetSeriesReadingStatusPaused(int seriesId) => SetSeriesReadingStatus(seriesId, ReadingStatus.Paused);
+    [RelayCommand] private void SetSeriesReadingStatusDropped(int seriesId) => SetSeriesReadingStatus(seriesId, ReadingStatus.Dropped);
+    [RelayCommand] private void SetSeriesReadingStatusReReading(int seriesId) => SetSeriesReadingStatus(seriesId, ReadingStatus.ReReading);
 
     private void SetSeriesReadingMode(int seriesId, ReadingMode mode)
     {
@@ -981,11 +1726,11 @@ public partial class LibraryScreenViewModel : ViewModelBase
     }
 
     [ObservableProperty]
-    private LibraryViewMode _viewMode = LibraryViewMode.ComfortableGrid;
+    private LibraryViewMode _viewMode = LibraryViewMode.PosterGrid;
 
-    public bool IsCompactGrid => ViewMode == LibraryViewMode.CompactGrid;
-    public bool IsComfortableGrid => ViewMode == LibraryViewMode.ComfortableGrid;
-    public bool IsCoverOnlyGrid => ViewMode == LibraryViewMode.CoverOnlyGrid;
+    /// <summary>Phase 4a: the single poster grid, replacing Compact/Comfortable/Cover-only (docs/
+    /// superpowers/specs/2026-08-27-library-browsing-4a-poster-grid-design.md).</summary>
+    public bool IsPosterGrid => ViewMode == LibraryViewMode.PosterGrid;
     public bool IsPanoramaGrid => ViewMode == LibraryViewMode.PanoramaGrid;
     public bool IsListView => ViewMode == LibraryViewMode.List;
     public bool IsDetailsView => ViewMode == LibraryViewMode.Details;
@@ -994,9 +1739,7 @@ public partial class LibraryScreenViewModel : ViewModelBase
 
     partial void OnViewModeChanged(LibraryViewMode value)
     {
-        OnPropertyChanged(nameof(IsCompactGrid));
-        OnPropertyChanged(nameof(IsComfortableGrid));
-        OnPropertyChanged(nameof(IsCoverOnlyGrid));
+        OnPropertyChanged(nameof(IsPosterGrid));
         OnPropertyChanged(nameof(IsPanoramaGrid));
         OnPropertyChanged(nameof(IsListView));
         OnPropertyChanged(nameof(IsDetailsView));
@@ -1014,9 +1757,7 @@ public partial class LibraryScreenViewModel : ViewModelBase
 
     public string DisplayModeLabel => ViewMode switch
     {
-        LibraryViewMode.CompactGrid => "Compact grid",
-        LibraryViewMode.ComfortableGrid => "Comfortable grid",
-        LibraryViewMode.CoverOnlyGrid => "Cover-only grid",
+        LibraryViewMode.PosterGrid => "Poster grid",
         LibraryViewMode.PanoramaGrid => "Panorama grid",
         LibraryViewMode.List => "List",
         LibraryViewMode.Details => "Details",
@@ -1044,12 +1785,10 @@ public partial class LibraryScreenViewModel : ViewModelBase
             double clamped = Math.Clamp(value, 0.6, 1.6);
             if (SetProperty(ref _gridDensity, clamped))
             {
-                OnPropertyChanged(nameof(CompactCardWidth));
-                OnPropertyChanged(nameof(CompactCardHeight));
-                OnPropertyChanged(nameof(ComfortableCardWidth));
-                OnPropertyChanged(nameof(ComfortableCardHeight));
-                OnPropertyChanged(nameof(CoverOnlyCardWidth));
-                OnPropertyChanged(nameof(CoverOnlyCardHeight));
+                OnPropertyChanged(nameof(PosterCardWidth));
+                OnPropertyChanged(nameof(PosterCoverHeight));
+                OnPropertyChanged(nameof(PosterCardHeight));
+                OnPropertyChanged(nameof(EffectiveShowTileTitles));
                 OnPropertyChanged(nameof(TilesThumbWidth));
                 OnPropertyChanged(nameof(TilesThumbHeight));
                 OnPropertyChanged(nameof(TilesCardWidth));
@@ -1058,15 +1797,43 @@ public partial class LibraryScreenViewModel : ViewModelBase
         }
     }
 
-    public double CompactCardWidth => 110 * GridDensity;
-    public double CompactCardHeight => 160 * GridDensity;
-    public double ComfortableCardWidth => 150 * GridDensity;
-    public double ComfortableCardHeight => 216 * GridDensity;
-    public double CoverOnlyCardWidth => 150 * GridDensity;
-    public double CoverOnlyCardHeight => 216 * GridDensity;
+    /// <summary>Poster-grid tile title row height reserved in <see cref="PosterCardHeight"/> when
+    /// titles show, so the <c>VirtualizingWrapPanel</c>'s <c>ItemHeight</c> is right in both toggle
+    /// states (the old <c>ComfortableGrid</c> overflowed its box with the text row).</summary>
+    private const double PosterTitleRowHeight = 34;
+
+    /// <summary>Below this card width the title line is too cramped to read, so it auto-hides
+    /// regardless of <see cref="ShowTileTitles"/> (docs/superpowers/specs/2026-08-27-library-
+    /// browsing-4a-poster-grid-design.md §2).</summary>
+    private const double PosterTitleHideThreshold = 108;
+
+    public double PosterCardWidth => 150 * GridDensity;
+
+    /// <summary>The cover box height (no title row) - what the tile's inner cover Border binds.</summary>
+    public double PosterCoverHeight => 216 * GridDensity;
+
+    /// <summary>Cover box + a fixed title-row allowance when titles show - what the
+    /// <c>VirtualizingWrapPanel</c>'s <c>ItemHeight</c> binds so it reserves the right space.</summary>
+    public double PosterCardHeight => PosterCoverHeight + (EffectiveShowTileTitles ? PosterTitleRowHeight : 0);
+
     public double TilesThumbWidth => 48 * GridDensity;
     public double TilesThumbHeight => 68 * GridDensity;
     public double TilesCardWidth => 260 * GridDensity;
+
+    /// <summary>Phase 4a: poster tile title row on/off. Persisted via
+    /// <c>AppSettings.LibraryShowTileTitles</c>; see <see cref="EffectiveShowTileTitles"/> for the
+    /// density-gated value the grid actually binds.</summary>
+    [ObservableProperty]
+    private bool _showTileTitles = true;
+
+    partial void OnShowTileTitlesChanged(bool value)
+    {
+        OnPropertyChanged(nameof(EffectiveShowTileTitles));
+        OnPropertyChanged(nameof(PosterCardHeight));
+        SaveLibrarySettings();
+    }
+
+    public bool EffectiveShowTileTitles => ShowTileTitles && PosterCardWidth >= PosterTitleHideThreshold;
 
     /// <summary>Panorama grid's fixed tile height - XAML binds here rather than a hardcoded literal, so this and <see cref="SeriesCardSample.PanoramaWidth"/>'s own height math can't drift apart.</summary>
     public double PanoramaCardHeight => SeriesCardSample.PanoramaHeight;

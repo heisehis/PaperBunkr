@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -26,23 +27,26 @@ namespace Paperbunkr.App.ViewModels;
 /// </summary>
 public partial class DetailScreenViewModel : ViewModelBase
 {
-    public DetailScreenViewModel(Action goBack, Action<int> goToReader, Action<int> goToProperties, Action<IReadOnlyList<int>> goToBulkProperties)
+    public DetailScreenViewModel(Action goBack, Action<int> goToReader, Action<int> goToProperties, Action<IReadOnlyList<int>> goToBulkProperties, Action<int>? goDetailForSeries = null, Action<string>? goLibraryWithSearch = null, Action<int>? onQuickRate = null)
     {
         _goBack = goBack;
         _goToReader = goToReader;
         _goToProperties = goToProperties;
         _goToBulkProperties = goToBulkProperties;
+        _goDetailForSeries = goDetailForSeries ?? (_ => { });
         CoverBrush = SeriesCardSample.Gradient("#442a1c", "#c9803f");
-        Tabs = new DetailTabsViewModel(goToProperties, goToBulkProperties, RefreshForSelection);
-        Meta = new DetailMetaViewModel();
-        Pills = new DetailPillsViewModel();
+        Tabs = new DetailTabsViewModel(goToProperties, goToBulkProperties, RefreshForSelection, onQuickRate);
+        Meta = new DetailMetaViewModel(goLibraryWithSearch);
+        Pills = new DetailPillsViewModel(goLibraryWithSearch, ReweightTag);
     }
 
     private readonly Action _goBack;
     private readonly Action<int> _goToReader;
     private readonly Action<int> _goToProperties;
     private readonly Action<IReadOnlyList<int>> _goToBulkProperties;
+    private readonly Action<int> _goDetailForSeries;
     private int? _continueIssueId;
+    private int? _coverIssueId;
     private int? _seriesId;
     private bool _isLoadingSeries;
     private Bitmap? _seriesCoverImage;
@@ -74,6 +78,14 @@ public partial class DetailScreenViewModel : ViewModelBase
     [ObservableProperty]
     private ContentType _selectedContentType;
 
+    /// <summary>
+    /// Reclassifying away from Comic re-invokes <see cref="_goDetailForSeries"/> (docs/superpowers/
+    /// specs/2026-08-23-manga-detail-screen-design.md), which routes to
+    /// <see cref="MangaDetailScreenViewModel"/> instead when the new <see cref="ContentType"/> is
+    /// Manga/Manhua/Manhwa - a misclassification is a one-click fix from either screen, not a dead
+    /// end. Reclassifying between Comic and Unknown (both stay on this screen) just reloads in
+    /// place via the same call, which is harmless.
+    /// </summary>
     partial void OnSelectedContentTypeChanged(ContentType value)
     {
         if (_isLoadingSeries || _seriesId is not int seriesId)
@@ -90,6 +102,7 @@ public partial class DetailScreenViewModel : ViewModelBase
 
         series.ContentType = value;
         context.SaveChanges();
+        _goDetailForSeries(seriesId);
     }
 
     [ObservableProperty]
@@ -108,7 +121,9 @@ public partial class DetailScreenViewModel : ViewModelBase
     public void LoadSeries(int seriesId)
     {
         using var context = PaperbunkrDb.CreateContext();
-        var series = context.Series.Include(s => s.Issues).ThenInclude(i => i.MetadataProposals).FirstOrDefault(s => s.Id == seriesId);
+        var series = context.Series.Include(s => s.Issues).ThenInclude(i => i.MetadataProposals)
+            .Include(s => s.Issues).ThenInclude(i => i.Tags)
+            .FirstOrDefault(s => s.Id == seriesId);
         if (series is null)
         {
             return;
@@ -119,8 +134,11 @@ public partial class DetailScreenViewModel : ViewModelBase
 
         var card = SeriesCardSample.FromSeries(series);
         CoverBrush = card.CoverBrush;
-        CoverImage = card.CoverImage;
-        _seriesCoverImage = card.CoverImage;
+        _coverIssueId = card.CoverIssueId;
+        // Single-item, low-volume display (unlike the Library grid) - eager decode here is fine.
+        var seriesCover = card.CoverIssueId is int coverIssueId ? CoverImageCache.Get(coverIssueId) : null;
+        CoverImage = seriesCover;
+        _seriesCoverImage = seriesCover;
         SeriesTitle = series.Name;
         CoverTitle = series.Name.ToUpperInvariant();
         SelectedContentType = series.ContentType;
@@ -178,6 +196,27 @@ public partial class DetailScreenViewModel : ViewModelBase
     }
 
     /// <summary>
+    /// Right-click reweight popover's persist step (docs/superpowers/specs/2026-08-23-weighted-
+    /// categorized-tags-design.md) - <see cref="DetailPillsViewModel"/> stays DB-free, this is the
+    /// one write seam it's given. Only re-fetches/updates the single matching <see cref="IssueTag"/>
+    /// row (never touches Value/Category), matching the "Weight-only" scope the design gives this
+    /// popover - Category stays editable only from the Issue Properties Editor.
+    /// </summary>
+    private void ReweightTag(int issueId, IssueTagField field, string value, IssueTagWeight weight)
+    {
+        using var context = PaperbunkrDb.CreateContext();
+        var tag = context.Issues.Where(i => i.Id == issueId).SelectMany(i => i.Tags)
+            .FirstOrDefault(t => t.Field == field && t.Value == value);
+        if (tag is null)
+        {
+            return;
+        }
+
+        tag.Weight = weight;
+        context.SaveChanges();
+    }
+
+    /// <summary>
     /// Switches <see cref="CoverImage"/>/<see cref="Meta"/>/<see cref="Pills"/> between the series
     /// aggregate (0 or 2+ issues selected) and one issue's own data (exactly 1 selected) - invoked
     /// via <see cref="Tabs"/>' selection-changed callback (docs/superpowers/specs/
@@ -198,7 +237,7 @@ public partial class DetailScreenViewModel : ViewModelBase
         if (Tabs.SelectedIssueIds.Count == 1)
         {
             int issueId = Tabs.SelectedIssueIds.Single();
-            var issue = context.Issues.Include(i => i.Series).Include(i => i.MetadataProposals).FirstOrDefault(i => i.Id == issueId);
+            var issue = context.Issues.Include(i => i.Series).Include(i => i.MetadataProposals).Include(i => i.Tags).FirstOrDefault(i => i.Id == issueId);
             if (issue is null)
             {
                 return;
@@ -211,7 +250,7 @@ public partial class DetailScreenViewModel : ViewModelBase
         }
         else
         {
-            var series = context.Series.Include(s => s.Issues).FirstOrDefault(s => s.Id == seriesId);
+            var series = context.Series.Include(s => s.Issues).ThenInclude(i => i.Tags).FirstOrDefault(s => s.Id == seriesId);
             if (series is null)
             {
                 return;
@@ -271,4 +310,35 @@ public partial class DetailScreenViewModel : ViewModelBase
             _goToReader(issueId);
         }
     }
+
+    // --- Cover art override (docs/superpowers/specs/2026-08-23-cover-art-override-design.md) -
+    // same pair as MangaDetailScreenViewModel's own, see that class's doc comment for the CE-
+    // deviation rationale (any cover, linked or not, unlike CE's SetCustomBookThumbnail). ---
+
+    [RelayCommand]
+    private async Task ChangeCoverAsync(int issueId)
+    {
+        string? path = await new FilePickerService().PickImageFileAsync("Choose Cover Image");
+        if (path is null)
+        {
+            return;
+        }
+
+        if (new CoverThumbnailService().TrySetCustomCover(issueId, path))
+        {
+            ReloadCurrentSeries();
+        }
+    }
+
+    [RelayCommand]
+    private void ResetCover(int issueId)
+    {
+        using var context = PaperbunkrDb.CreateContext();
+        string? filePath = context.Issues.Find(issueId)?.FilePath;
+        new CoverThumbnailService().ResetCover(issueId, filePath);
+        ReloadCurrentSeries();
+    }
+
+    [RelayCommand]
+    private Task ChangeSeriesCoverAsync() => _coverIssueId is int issueId ? ChangeCoverAsync(issueId) : Task.CompletedTask;
 }

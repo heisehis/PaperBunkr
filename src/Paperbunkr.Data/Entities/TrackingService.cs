@@ -12,5 +12,8 @@ public enum TrackingService
     MyAnimeList,
     Kitsu,
     Metron,
-    ComicVine
+    ComicVine,
+    Shikimori,
+    Bangumi,
+    MangaBaka
 }

@@ -168,6 +168,36 @@ public class AppSettingsTests : IDisposable
         Assert.Equal(Entities.PageLayoutMode.Double, reloaded.DefaultPageLayoutMode);
     }
 
+    /// <summary>
+    /// New columns from migration <c>AddRenderingBackendSettings</c> (docs/superpowers/specs/
+    /// 2026-08-27-hardware-accelerated-rendering-design.md) round-trip with their defaults - the
+    /// standard "existing rows come back with new columns at their defaults" migration test, same
+    /// shape as the other <c>GetOrCreateAppSettings_*</c> cases above.
+    /// </summary>
+    [Fact]
+    public void GetOrCreateAppSettings_RenderingBackendFields_DefaultToAutoAndFalse()
+    {
+        var settings = _context.GetOrCreateAppSettings();
+
+        Assert.Equal(Entities.RenderBackend.Auto, settings.RenderingBackend);
+        Assert.False(settings.PreferNativeOpenGl);
+    }
+
+    [Fact]
+    public void GetOrCreateAppSettings_RenderingBackendFields_PersistAcrossContexts()
+    {
+        var settings = _context.GetOrCreateAppSettings();
+        settings.RenderingBackend = Entities.RenderBackend.Software;
+        settings.PreferNativeOpenGl = true;
+        _context.SaveChanges();
+
+        using var freshContext = new PaperbunkrDbContext(_options);
+        var reloaded = freshContext.GetOrCreateAppSettings();
+
+        Assert.Equal(Entities.RenderBackend.Software, reloaded.RenderingBackend);
+        Assert.True(reloaded.PreferNativeOpenGl);
+    }
+
     [Fact]
     public void GetOrCreateAppSettings_IsIdempotent_DoesNotDuplicateRow()
     {

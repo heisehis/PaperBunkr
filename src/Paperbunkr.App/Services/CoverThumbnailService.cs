@@ -84,6 +84,60 @@ public class CoverThumbnailService
     }
 
     /// <summary>
+    /// Overrides an issue's displayed cover with a user-picked local image, regardless of whether
+    /// the issue has a real linked file - a deliberate deviation from ComicRackCE, whose own
+    /// <c>SetCustomBookThumbnail</c> (MainForm.cs) refuses linked books entirely, confirmed by
+    /// checking CE source per this project's standing rule (docs/superpowers/specs/2026-08-23-
+    /// cover-art-override-design.md). Always overwrites, unlike <see cref="TryGenerateThumbnail"/>'s
+    /// presence-check - that's what makes this an override rather than a fill-the-gap generation.
+    /// Uses <see cref="CoverImageCache.InvalidateMemoryOnly"/>, not <see cref="CoverImageCache.Invalidate"/> -
+    /// the latter would delete the very file this method just wrote.
+    /// </summary>
+    public bool TrySetCustomCover(int issueId, string sourceImagePath)
+    {
+        string destPath = CoverThumbnailPaths.GetCachePath(issueId);
+        try
+        {
+            using var source = new Bitmap(sourceImagePath);
+            var size = source.PixelSize;
+            int longest = Math.Max(size.Width, size.Height);
+            if (longest <= 0)
+            {
+                return false;
+            }
+
+            double scale = Math.Min(1.0, (double)ThumbnailLongestEdge / longest);
+            var target = new PixelSize(
+                Math.Max(1, (int)Math.Round(size.Width * scale)),
+                Math.Max(1, (int)Math.Round(size.Height * scale)));
+
+            using Bitmap scaled = source.CreateScaledBitmap(target, BitmapInterpolationMode.HighQuality);
+            scaled.Save(destPath, new JpegBitmapEncoderOptions { Quality = JpegQuality });
+            CoverImageCache.InvalidateMemoryOnly(issueId);
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Reverts a custom cover: deletes the cached file (real <see cref="CoverImageCache.Invalidate"/>
+    /// this time - the file itself must go) and, if the issue actually has a linked file, regenerates
+    /// the real decoded-page-1 cover immediately rather than leaving the cover blank until something
+    /// else happens to call <see cref="TryGenerateThumbnail"/> again.
+    /// </summary>
+    public void ResetCover(int issueId, string? filePath)
+    {
+        CoverImageCache.Invalidate(issueId);
+        if (!string.IsNullOrEmpty(filePath))
+        {
+            TryGenerateThumbnail(issueId, filePath);
+        }
+    }
+
+    /// <summary>
     /// Generates thumbnails for every Issue that has a file path but no cached thumbnail yet.
     /// Presence-based - re-running after adding new comics only fills the gaps. One bad file
     /// doesn't stop the batch.

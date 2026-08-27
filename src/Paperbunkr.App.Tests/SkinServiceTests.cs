@@ -1,4 +1,5 @@
 using System.IO.Compression;
+using Avalonia;
 using Microsoft.EntityFrameworkCore;
 using Paperbunkr.App.Services;
 using Paperbunkr.Data;
@@ -115,6 +116,14 @@ public class SkinServiceTests : IDisposable
 
             var resources = Avalonia.Application.Current!.Resources;
             Assert.Equal(Avalonia.Media.Color.Parse("#111111"), resources["PbBgColor"]);
+
+            // This fixture predates the elevation-scale expansion (docs/superpowers/specs/2026-08-24-
+            // design-language-foundation-design.md) and deliberately omits surface0/glow/radiusSm -
+            // proves an older/third-party theme.json still loads and falls back to SkinColors'
+            // code-level defaults instead of failing or leaving stale resources behind.
+            Assert.Equal(Avalonia.Media.Color.Parse("#000000"), resources["PbSurface0Color"]);
+            Assert.Equal(Avalonia.Media.Color.Parse("#66E0995A"), resources["PbGlowColor"]);
+            Assert.Equal(new CornerRadius(5), resources["PbRadiusSm"]);
         }
         finally
         {

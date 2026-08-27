@@ -15,18 +15,24 @@ namespace Paperbunkr.App.Views;
 internal static class PageTransitionMath
 {
     /// <summary>
-    /// Slide offsets along the paged reader's (always horizontal) main axis, for a turn in
-    /// <paramref name="direction"/> at animation <paramref name="progress"/> (0 = turn just started,
-    /// 1 = turn complete). A <see cref="PageTransitionDirection.Right"/> turn (spatial "forward")
-    /// brings the incoming page in from the right edge while the outgoing page exits left; a
-    /// <see cref="PageTransitionDirection.Left"/> turn mirrors this - matching <see cref="PageCanvas"/>'s
-    /// existing spatial Left/Right naming (docs/superpowers/specs/2026-08-07-reader-rtl-navigation-
-    /// design.md §3), not reading-direction semantics.
+    /// Slide offsets along the turn's main axis, for a turn in <paramref name="direction"/> at
+    /// animation <paramref name="progress"/> (0 = turn just started, 1 = turn complete). The main
+    /// axis is the viewport's width for <see cref="PageTransitionDirection.Left"/>/
+    /// <see cref="PageTransitionDirection.Right"/> and its height for
+    /// <see cref="PageTransitionDirection.Up"/>/<see cref="PageTransitionDirection.Down"/> - the
+    /// caller passes the right <paramref name="mainAxisExtent"/> and applies the returned offsets
+    /// to the matching axis. A "forward" turn (<see cref="PageTransitionDirection.Right"/> or
+    /// <see cref="PageTransitionDirection.Down"/>) brings the incoming page in from the trailing
+    /// edge while the outgoing page exits toward the leading edge; a backward turn
+    /// (<see cref="PageTransitionDirection.Left"/>/<see cref="PageTransitionDirection.Up"/>) mirrors
+    /// it. This is spatial, not reading-direction, naming (docs/superpowers/specs/2026-08-07-reader-
+    /// rtl-navigation-design.md §3; vertical directions per 2026-08-27-vertical-paged-reading-mode-
+    /// design.md).
     /// </summary>
     public static (double OutgoingOffset, double IncomingOffset) SlideOffset(PageTransitionDirection direction, double progress, double mainAxisExtent)
     {
         double p = Math.Clamp(progress, 0, 1);
-        double sign = direction == PageTransitionDirection.Right ? 1 : -1;
+        double sign = direction is PageTransitionDirection.Right or PageTransitionDirection.Down ? 1 : -1;
 
         double outgoingOffset = -sign * p * mainAxisExtent;
         double incomingOffset = sign * (1 - p) * mainAxisExtent;

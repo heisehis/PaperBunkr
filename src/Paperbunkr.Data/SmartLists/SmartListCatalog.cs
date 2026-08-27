@@ -34,6 +34,7 @@ public static class SmartListCatalog
             new(SmartListField.ContentType, "Content Type", SmartListDataType.Text),
             new(SmartListField.ReadingMode, "Reading Mode", SmartListDataType.Text),
             new(SmartListField.SeriesComplete, "Series Complete", SmartListDataType.Toggle),
+            new(SmartListField.ReadingStatus, "Reading Status", SmartListDataType.Text),
 
             // ComicInfo text fields
             new(SmartListField.Title, "Title", SmartListDataType.Text),
@@ -131,10 +132,11 @@ public static class SmartListCatalog
             // fix. The Series-level columns still exist (populated once at CE-migration time,
             // ContentType/ReadingMode/SeriesComplete have no per-issue equivalent to be stale
             // against) but are no longer the source of truth once an issue has its own value.
-            [SmartListField.Genre] = i => i.Genre ?? string.Empty,
+            [SmartListField.Genre] = i => i.JoinedGenre() ?? string.Empty,
             [SmartListField.Publisher] = i => i.Publisher ?? string.Empty,
             [SmartListField.ContentType] = i => i.Series?.ContentType.ToString() ?? string.Empty,
             [SmartListField.ReadingMode] = i => i.Series?.ReadingMode.ToString() ?? string.Empty,
+            [SmartListField.ReadingStatus] = i => i.Series?.ReadingStatus.ToString() ?? string.Empty,
 
             [SmartListField.Title] = i => i.Title ?? string.Empty,
             [SmartListField.Number] = i => i.EffectiveNumber() ?? string.Empty,
@@ -163,7 +165,7 @@ public static class SmartListCatalog
             [SmartListField.Teams] = i => i.Teams ?? string.Empty,
             [SmartListField.Locations] = i => i.Locations ?? string.Empty,
             [SmartListField.MainCharacterOrTeam] = i => i.MainCharacterOrTeam ?? string.Empty,
-            [SmartListField.Tags] = i => i.Tags ?? string.Empty,
+            [SmartListField.Tags] = i => i.JoinedTags() ?? string.Empty,
 
             [SmartListField.File] = i => string.IsNullOrEmpty(i.FilePath) ? string.Empty : Path.GetFileName(i.FilePath),
             [SmartListField.FullPath] = i => i.FilePath ?? string.Empty,

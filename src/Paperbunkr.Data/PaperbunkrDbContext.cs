@@ -22,6 +22,12 @@ public class PaperbunkrDbContext : DbContext
 
     public DbSet<IssueBookmark> IssueBookmarks => Set<IssueBookmark>();
 
+    public DbSet<IssuePage> IssuePages => Set<IssuePage>();
+
+    public DbSet<IssueTag> IssueTags => Set<IssueTag>();
+
+    public DbSet<SeriesTitle> SeriesTitles => Set<SeriesTitle>();
+
     public DbSet<SmartList> SmartLists => Set<SmartList>();
 
     public DbSet<SmartListCondition> SmartListConditions => Set<SmartListCondition>();
@@ -29,6 +35,8 @@ public class PaperbunkrDbContext : DbContext
     public DbSet<ReadingList> ReadingLists => Set<ReadingList>();
 
     public DbSet<ReadingListItem> ReadingListItems => Set<ReadingListItem>();
+
+    public DbSet<ReadingListTag> ReadingListTags => Set<ReadingListTag>();
 
     public DbSet<SeriesConflict> SeriesConflicts => Set<SeriesConflict>();
 
@@ -52,6 +60,8 @@ public class PaperbunkrDbContext : DbContext
 
     public DbSet<AppSettings> AppSettings => Set<AppSettings>();
 
+    public DbSet<ProviderCredential> ProviderCredentials => Set<ProviderCredential>();
+
     public DbSet<VirtualTagDefinition> VirtualTagDefinitions => Set<VirtualTagDefinition>();
 
     public DbSet<WatchedFolder> WatchedFolders => Set<WatchedFolder>();
@@ -65,6 +75,8 @@ public class PaperbunkrDbContext : DbContext
     public DbSet<BookBookmark> BookBookmarks => Set<BookBookmark>();
 
     public DbSet<BookFolder> BookFolders => Set<BookFolder>();
+
+    public DbSet<PluginCommandState> PluginCommandStates => Set<PluginCommandState>();
 
     public PaperbunkrDbContext(DbContextOptions<PaperbunkrDbContext> options)
         : base(options)
@@ -115,6 +127,10 @@ public class PaperbunkrDbContext : DbContext
             builder.Property(s => s.Status).HasConversion<string>().HasMaxLength(32)
                 .HasDefaultValue(SeriesStatus.Unknown)
                 .HasSentinel(SeriesStatus.Unknown);
+
+            builder.Property(s => s.ReadingStatus).HasConversion<string>().HasMaxLength(32)
+                .HasDefaultValue(ReadingStatus.Unknown)
+                .HasSentinel(ReadingStatus.Unknown);
             // Series.IsComplete is computed (Status == Completed), not mapped - EF would otherwise
             // try to persist a get-only property with no backing column.
             builder.Ignore(s => s.IsComplete);
@@ -127,6 +143,11 @@ public class PaperbunkrDbContext : DbContext
                 .OnDelete(DeleteBehavior.Cascade);
 
             builder.HasMany(s => s.TrackingLinks)
+                .WithOne(t => t.Series)
+                .HasForeignKey(t => t.SeriesId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            builder.HasMany(s => s.Titles)
                 .WithOne(t => t.Series)
                 .HasForeignKey(t => t.SeriesId)
                 .OnDelete(DeleteBehavior.Cascade);
@@ -145,6 +166,11 @@ public class PaperbunkrDbContext : DbContext
 
             builder.HasMany(s => s.Continuities)
                 .WithMany(c => c.Series);
+
+            builder.HasMany(s => s.MetadataProposals)
+                .WithOne(mp => mp.Series)
+                .HasForeignKey(mp => mp.SeriesId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<Issue>(builder =>
@@ -171,6 +197,11 @@ public class PaperbunkrDbContext : DbContext
                 .HasForeignKey(bm => bm.IssueId)
                 .OnDelete(DeleteBehavior.Cascade);
 
+            builder.HasMany(i => i.Tags)
+                .WithOne(t => t.Issue)
+                .HasForeignKey(t => t.IssueId)
+                .OnDelete(DeleteBehavior.Cascade);
+
             builder.HasMany(i => i.MetadataProposals)
                 .WithOne(mp => mp.Issue)
                 .HasForeignKey(mp => mp.IssueId)
@@ -181,6 +212,34 @@ public class PaperbunkrDbContext : DbContext
         {
             builder.HasKey(bm => bm.Id);
             builder.HasIndex(bm => bm.IssueId);
+        });
+
+        modelBuilder.Entity<IssuePage>(builder =>
+        {
+            builder.HasKey(p => p.Id);
+            builder.Property(p => p.PageType).HasConversion<string>().HasMaxLength(32);
+            builder.HasIndex(p => new { p.IssueId, p.PageNumber }).IsUnique();
+        });
+
+        // Brand-new table (like MetadataProposal below) - no existing rows to backfill via EF's own
+        // HasDefaultValue/HasSentinel; the migration backfills existing Genre/Tags CSV data via raw
+        // SQL before dropping those columns instead (docs/superpowers/specs/2026-08-23-weighted-
+        // categorized-tags-design.md).
+        modelBuilder.Entity<IssueTag>(builder =>
+        {
+            builder.HasKey(t => t.Id);
+            builder.Property(t => t.Field).HasConversion<string>().HasMaxLength(32);
+            builder.Property(t => t.Weight).HasConversion<string>().HasMaxLength(32);
+            builder.Property(t => t.Value).IsRequired();
+            builder.HasIndex(t => t.IssueId);
+        });
+
+        modelBuilder.Entity<SeriesTitle>(builder =>
+        {
+            builder.HasKey(t => t.Id);
+            builder.Property(t => t.Value).IsRequired();
+            builder.Property(t => t.Type).HasConversion<string>().HasMaxLength(32);
+            builder.HasIndex(t => t.SeriesId);
         });
 
         modelBuilder.Entity<Category>(builder =>
@@ -251,6 +310,11 @@ public class PaperbunkrDbContext : DbContext
                 .HasForeignKey(i => i.ReadingListId)
                 .OnDelete(DeleteBehavior.Cascade);
 
+            builder.HasMany(r => r.Tags)
+                .WithOne(t => t.ReadingList)
+                .HasForeignKey(t => t.ReadingListId)
+                .OnDelete(DeleteBehavior.Cascade);
+
             // SetNull, not Cascade/Restrict - deleting the linked StoryEvent shouldn't delete a
             // curated reading list built from it or block the event's own deletion, just detach
             // the list back to a plain (still Type=Event-classified, if it was) list.
@@ -274,6 +338,16 @@ public class PaperbunkrDbContext : DbContext
                 .WithMany()
                 .HasForeignKey(i => i.IssueId)
                 .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // Brand-new table (docs/superpowers/specs/2026-08-23-reading-list-tags-design.md) - no
+        // existing rows to backfill, same shape as IssueTag's block above.
+        modelBuilder.Entity<ReadingListTag>(builder =>
+        {
+            builder.HasKey(t => t.Id);
+            builder.Property(t => t.Weight).HasConversion<string>().HasMaxLength(32);
+            builder.Property(t => t.Value).IsRequired();
+            builder.HasIndex(t => t.ReadingListId);
         });
 
         modelBuilder.Entity<SeriesConflict>(builder =>
@@ -312,7 +386,11 @@ public class PaperbunkrDbContext : DbContext
             builder.Property(p => p.Field).HasConversion<string>().HasMaxLength(32);
             builder.Property(p => p.Source).HasConversion<string>().HasMaxLength(32);
             builder.Property(p => p.Status).HasConversion<string>().HasMaxLength(32);
+            // Nullable - null is an unambiguous "not provider-sourced," same treatment as
+            // AppSettings.LibraryActiveContentType above, no HasDefaultValue/HasSentinel needed.
+            builder.Property(p => p.ProviderKey).HasConversion<string>().HasMaxLength(32);
             builder.HasIndex(p => p.Status);
+            builder.HasIndex(p => p.SeriesId);
         });
 
         // Brand-new tables (like MetadataProposal above) - no existing rows to backfill.
@@ -510,10 +588,12 @@ public class PaperbunkrDbContext : DbContext
             builder.Property(a => a.LibraryGroupField).HasConversion<string>().HasMaxLength(32)
                 .HasDefaultValue(LibraryGroupField.None)
                 .HasSentinel(LibraryGroupField.None);
-            // Same treatment - CompactGrid (0) is the CLR default, desired default is ComfortableGrid.
+            // PosterGrid (0) is both the CLR default and the desired default here (Phase 4a
+            // collapsed Compact/Comfortable/CoverOnly into it) - same coincide-and-still-set-it-for-
+            // consistency case as LibraryGroupField.None / PageTransitionStyle.None above.
             builder.Property(a => a.LibraryViewMode).HasConversion<string>().HasMaxLength(32)
-                .HasDefaultValue(LibraryViewMode.ComfortableGrid)
-                .HasSentinel(LibraryViewMode.CompactGrid);
+                .HasDefaultValue(LibraryViewMode.PosterGrid)
+                .HasSentinel(LibraryViewMode.PosterGrid);
             // Same treatment - Number (0) is the CLR default, desired default is Added.
             builder.Property(a => a.LibraryIssueListSortField).HasConversion<string>().HasMaxLength(32)
                 .HasDefaultValue(IssueListSortField.Added)
@@ -535,6 +615,7 @@ public class PaperbunkrDbContext : DbContext
                 .HasDefaultValue(SearchMode.All)
                 .HasSentinel(SearchMode.All);
             builder.Property(a => a.LibraryGridDensity).HasDefaultValue(1.0);
+            builder.Property(a => a.LibraryShowTileTitles).HasDefaultValue(true);
             builder.Property(a => a.LibraryShowUnreadBadge).HasDefaultValue(true);
             builder.Property(a => a.LibraryShowPublisherBadge).HasDefaultValue(false);
             builder.Property(a => a.LibraryShowLanguageBadge).HasDefaultValue(false);
@@ -553,6 +634,14 @@ public class PaperbunkrDbContext : DbContext
             builder.Property(a => a.MetadataResolutionPolicy).HasConversion<string>().HasMaxLength(32)
                 .HasDefaultValue(MetadataResolutionPolicy.Automatic)
                 .HasSentinel(MetadataResolutionPolicy.Automatic);
+            // Same enum-as-string HasSentinel treatment as the columns above - Auto is both the CLR
+            // default and the desired default. HasDefaultValue matters: this ALTER TABLE runs
+            // against a table that already has the AppSettings singleton row, which needs a valid
+            // parseable value backfilled into the new NOT NULL column.
+            builder.Property(a => a.RenderingBackend).HasConversion<string>().HasMaxLength(32)
+                .HasDefaultValue(RenderBackend.Auto)
+                .HasSentinel(RenderBackend.Auto);
+            builder.Property(a => a.PreferNativeOpenGl).HasDefaultValue(false);
         });
 
         modelBuilder.Entity<VirtualTagDefinition>(builder =>

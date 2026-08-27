@@ -89,8 +89,8 @@ public class HomeScreenTests : IDisposable
         window.FindFirstDescendant(cf => cf.ByAutomationId("HomeRailButton"))!.AsButton().Invoke();
 
         var card = window.FindFirstDescendant(cf => cf.ByAutomationId("HomeRecentlyAddedList"))!
-            .FindFirstDescendant(cf => cf.ByControlType(FlaUI.Core.Definitions.ControlType.Button))!;
-        card.AsButton().Invoke();
+            .FindFirstDescendant(cf => cf.ByAutomationId("PosterTileCard"))!;
+        card.Click();
 
         Assert.Null(window.FindFirstDescendant(cf => cf.ByAutomationId("HomeContinueReadingHeader")));
     }

@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Compiles/runs each Command's .csx script at runtime (docs/superpowers/specs/
+         2026-08-24-plugin-api-v2-design.md §2/§3) - the C# scripting initializer replacing CE's
+         IronPython PythonPluginInitializer. -->
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Scripting" Version="4.11.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Paperbunkr.Data\Paperbunkr.Data.csproj" />
+  </ItemGroup>
+
+</Project>

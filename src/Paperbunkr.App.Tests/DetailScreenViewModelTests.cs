@@ -1,3 +1,4 @@
+using System.Linq;
 using Microsoft.EntityFrameworkCore;
 using Paperbunkr.App.Services;
 using Paperbunkr.App.ViewModels;
@@ -89,7 +90,7 @@ public class DetailScreenViewModelTests : IDisposable
     {
         var vm = new DetailScreenViewModel(goBack: () => { }, goToReader: _ => { }, goToProperties: _ => { }, goToBulkProperties: _ => { });
         vm.LoadSeries(_seriesId);
-        Assert.Equal("Unknown", vm.Meta.Writer);
+        Assert.Empty(vm.Meta.Writer);
 
         var bulkVm = new BulkIssuePropertiesScreenViewModel(() => { });
         bulkVm.Load(new[] { _issueId });
@@ -98,7 +99,7 @@ public class DetailScreenViewModelTests : IDisposable
 
         vm.ReloadCurrentSeries();
 
-        Assert.Equal("New Writer Name", vm.Meta.Writer);
+        Assert.Equal(new[] { "New Writer Name" }, vm.Meta.Writer.Select(p => p.Value));
     }
 
     [Fact]
@@ -116,7 +117,7 @@ public class DetailScreenViewModelTests : IDisposable
 
         vm.Tabs.ToggleIssueSelection(issueCard, isShiftHeld: false);
 
-        Assert.Equal("Solo Writer", vm.Meta.Writer);
+        Assert.Equal(new[] { "Solo Writer" }, vm.Meta.Writer.Select(p => p.Value));
         Assert.True(vm.CanEdit);
         Assert.Equal("Edit Issue", vm.EditButtonLabel);
     }
@@ -162,11 +163,11 @@ public class DetailScreenViewModelTests : IDisposable
         var card2 = vm.Tabs.Issues.First(i => i.Id == issue2Id);
 
         vm.Tabs.ToggleIssueSelection(card1, isShiftHeld: false);
-        Assert.Equal("Writer One", vm.Meta.Writer);
+        Assert.Equal(new[] { "Writer One" }, vm.Meta.Writer.Select(p => p.Value));
 
         vm.Tabs.ToggleIssueSelection(card2, isShiftHeld: false);
 
-        Assert.Equal("Writer One, Writer Two", vm.Meta.Writer);
+        Assert.Equal(new[] { "Writer One", "Writer Two" }, vm.Meta.Writer.Select(p => p.Value));
         Assert.Equal("Edit 2 Issues", vm.EditButtonLabel);
     }
 

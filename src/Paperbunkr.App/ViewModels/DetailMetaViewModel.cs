@@ -1,3 +1,6 @@
+using System;
+using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Linq;
 using Paperbunkr.App.Models;
 using Paperbunkr.Data.Entities;
@@ -12,6 +15,13 @@ namespace Paperbunkr.App.ViewModels;
 /// per-field lambdas. <see cref="LoadSeries"/> aggregates across a series' issues (unchanged
 /// behavior); <see cref="LoadIssue"/> (new) shows one issue's own values when exactly one issue is
 /// selected on the Detail screen.
+///
+/// Each credit became a <see cref="TagPillViewModel"/> collection (docs/superpowers/specs/2026-08-23-
+/// weighted-categorized-tags-design.md's click-to-search, extended past Genre/Tags per direct user
+/// follow-up) rather than a plain joined string - reuses the same pill VM Genre/Tags already use,
+/// just with no Category and <c>Weight</c> left at its default <c>Unset</c> (renders identically to
+/// a plain chip, since credits have no weight concept) and no reweight callback (right-click is
+/// Genre/Tags-only).
 /// </summary>
 public partial class DetailMetaViewModel : ViewModelBase
 {
@@ -21,41 +31,45 @@ public partial class DetailMetaViewModel : ViewModelBase
     private static readonly BulkFieldDescriptor ColoristField = BulkFieldRegistry.Find("Colorist");
     private static readonly BulkFieldDescriptor LettererField = BulkFieldRegistry.Find("Letterer");
 
-    public string Writer { get; private set; } = "Unknown";
-    public string Artist { get; private set; } = "Unknown";
-    public string CoverArtist { get; private set; } = "Unknown";
-    public string Colorist { get; private set; } = "Unknown";
-    public string Letterer { get; private set; } = "Unknown";
+    private readonly Action<string> _goLibraryWithSearch;
+
+    /// <summary>Test-friendly default - most tests build this VM with no navigation wiring at all.</summary>
+    public DetailMetaViewModel(Action<string>? goLibraryWithSearch = null)
+    {
+        _goLibraryWithSearch = goLibraryWithSearch ?? (_ => { });
+    }
+
+    public ObservableCollection<TagPillViewModel> Writer { get; } = new();
+    public ObservableCollection<TagPillViewModel> Artist { get; } = new();
+    public ObservableCollection<TagPillViewModel> CoverArtist { get; } = new();
+    public ObservableCollection<TagPillViewModel> Colorist { get; } = new();
+    public ObservableCollection<TagPillViewModel> Letterer { get; } = new();
 
     public void LoadSeries(Series series)
     {
         var issues = series.Issues;
-        Writer = CsvFieldAggregator.Join(issues.Select(WriterField.Get));
-        Artist = CsvFieldAggregator.Join(issues.Select(ArtistField.Get));
-        CoverArtist = CsvFieldAggregator.Join(issues.Select(CoverArtistField.Get));
-        Colorist = CsvFieldAggregator.Join(issues.Select(ColoristField.Get));
-        Letterer = CsvFieldAggregator.Join(issues.Select(LettererField.Get));
-
-        RaiseAllChanged();
+        Fill(Writer, issues.Select(WriterField.Get));
+        Fill(Artist, issues.Select(ArtistField.Get));
+        Fill(CoverArtist, issues.Select(CoverArtistField.Get));
+        Fill(Colorist, issues.Select(ColoristField.Get));
+        Fill(Letterer, issues.Select(LettererField.Get));
     }
 
     public void LoadIssue(Issue issue)
     {
-        Writer = CsvFieldAggregator.Join(new[] { WriterField.Get(issue) });
-        Artist = CsvFieldAggregator.Join(new[] { ArtistField.Get(issue) });
-        CoverArtist = CsvFieldAggregator.Join(new[] { CoverArtistField.Get(issue) });
-        Colorist = CsvFieldAggregator.Join(new[] { ColoristField.Get(issue) });
-        Letterer = CsvFieldAggregator.Join(new[] { LettererField.Get(issue) });
-
-        RaiseAllChanged();
+        Fill(Writer, new[] { WriterField.Get(issue) });
+        Fill(Artist, new[] { ArtistField.Get(issue) });
+        Fill(CoverArtist, new[] { CoverArtistField.Get(issue) });
+        Fill(Colorist, new[] { ColoristField.Get(issue) });
+        Fill(Letterer, new[] { LettererField.Get(issue) });
     }
 
-    private void RaiseAllChanged()
+    private void Fill(ObservableCollection<TagPillViewModel> target, IEnumerable<string?> rawValues)
     {
-        OnPropertyChanged(nameof(Writer));
-        OnPropertyChanged(nameof(Artist));
-        OnPropertyChanged(nameof(CoverArtist));
-        OnPropertyChanged(nameof(Colorist));
-        OnPropertyChanged(nameof(Letterer));
+        target.Clear();
+        foreach (string value in CsvFieldAggregator.Distinct(rawValues))
+        {
+            target.Add(new TagPillViewModel(value, category: null, IssueTagWeight.Unset, _goLibraryWithSearch, reweight: null));
+        }
     }
 }

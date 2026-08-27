@@ -28,14 +28,16 @@ public partial class HomeScreenViewModel : ViewModelBase
     private readonly Action<int> _goDetailForSeries;
     private readonly Action<int> _goReaderForIssue;
     private readonly Action<string> _goLibraryWithSearch;
+    private readonly Action<int, int> _goReaderForIssueInReadingList;
     private readonly Random _random = new();
     private readonly DispatcherTimer _spotlightTimer;
 
-    public HomeScreenViewModel(Action<int> goDetailForSeries, Action<int> goReaderForIssue, Action<string> goLibraryWithSearch)
+    public HomeScreenViewModel(Action<int> goDetailForSeries, Action<int> goReaderForIssue, Action<string> goLibraryWithSearch, Action<int, int> goReaderForIssueInReadingList)
     {
         _goDetailForSeries = goDetailForSeries;
         _goReaderForIssue = goReaderForIssue;
         _goLibraryWithSearch = goLibraryWithSearch;
+        _goReaderForIssueInReadingList = goReaderForIssueInReadingList;
         ContinueReading = new ObservableCollection<HomeContinueReadingCard>();
         RecentlyAdded = new ObservableCollection<SeriesCardSample>();
         BecauseYouRead = new ObservableCollection<BecauseYouReadRow>();
@@ -139,6 +141,10 @@ public partial class HomeScreenViewModel : ViewModelBase
             {
                 Series = SeriesCardSample.FromSeries(candidate.Series),
                 ResumeIssueId = candidate.ResumeIssue.Id,
+                ResumeProgressFraction = candidate.ResumeIssue.ReadPercentage() / 100.0,
+                ResumeIssueBadge = string.IsNullOrWhiteSpace(candidate.ResumeIssue.EffectiveNumber())
+                    ? "#?"
+                    : $"#{candidate.ResumeIssue.EffectiveNumber()}",
             });
         }
 
@@ -222,7 +228,7 @@ public partial class HomeScreenViewModel : ViewModelBase
     {
         if (ReadingListSpotlight is not null)
         {
-            _goReaderForIssue(ReadingListSpotlight.FirstUnreadIssueId);
+            _goReaderForIssueInReadingList(ReadingListSpotlight.FirstUnreadIssueId, ReadingListSpotlight.ReadingListId);
         }
     }
 

@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.EntityFrameworkCore;
 using cYo.Projects.ComicRack.Engine;
 using cYo.Projects.ComicRack.Engine.IO.Provider;
 using Paperbunkr.Data;
@@ -27,7 +28,9 @@ public record LibraryMetadataSyncResult(int IssuesUpdated);
 /// the same <see cref="IInfoStorage"/> cast <c>ComicBook.RefreshInfoFromFile</c> uses internally) -
 /// embedded metadata wins per-field over <see cref="ComicNameInfo.FromFilePath(string)"/> filename
 /// parsing, which stays as the fallback for files with no embedded info or an unsupported format.
-/// No live <c>FileSystemWatcher</c> auto-import - still a real, deliberately deferred follow-up.
+/// <see cref="ImportNewFilesAsync"/> is the live-watch entry point
+/// (docs/superpowers/specs/2026-08-23-live-folder-watch-scanning-design.md) added later - it shares
+/// the same <see cref="ImportFiles"/> logic as a full <see cref="ScanAllAsync"/> pass.
 /// </summary>
 public class LibraryFolderScanner
 {
@@ -71,6 +74,47 @@ public class LibraryFolderScanner
                     .Where(f => supportedExtensions.Contains(Path.GetExtension(f)) && !existingPaths.Contains(f)));
         }
 
+        return ImportFiles(context, candidateFiles, progress, ct);
+    }
+
+    /// <summary>
+    /// Live-watch entry point (docs/superpowers/specs/2026-08-23-live-folder-watch-scanning-design.md
+    /// §3) - imports a specific, already-known set of file paths (a debounced batch of
+    /// <c>FileSystemWatcher</c> <c>Created</c> events) rather than enumerating an entire watched
+    /// folder. Applies the same extension/not-already-in-library filtering <see cref="ScanAll"/>
+    /// does before handing off to the shared <see cref="ImportFiles"/> import logic, so a
+    /// live-watched new file gets identical embedded-metadata/proposal/series-matching treatment to
+    /// one picked up by a manual "Scan Now".
+    /// </summary>
+    public async Task<LibraryFolderScanResult> ImportNewFilesAsync(IReadOnlyCollection<string> files, IProgress<(int Done, int Total)> progress, CancellationToken ct = default)
+    {
+        return await Task.Run(
+            () =>
+            {
+                using var context = _contextFactory();
+
+                var supportedExtensions = new HashSet<string>(Providers.Readers.GetFileExtensions(), StringComparer.OrdinalIgnoreCase);
+                var existingPaths = new HashSet<string>(
+                    context.Issues.Where(i => i.FilePath != null).Select(i => i.FilePath!),
+                    StringComparer.OrdinalIgnoreCase);
+
+                var candidateFiles = files
+                    .Where(f => supportedExtensions.Contains(Path.GetExtension(f)) && !existingPaths.Contains(f))
+                    .ToList();
+
+                return ImportFiles(context, candidateFiles, progress, ct);
+            },
+            ct);
+    }
+
+    /// <summary>
+    /// Shared per-file import body for both <see cref="ScanAll"/> (an entire watched folder's new
+    /// files) and <see cref="ImportNewFilesAsync"/> (a live-watch debounced batch) - same embedded
+    /// metadata handling, filename-parsing fallback, series find-or-create, and metadata-proposal
+    /// creation regardless of which caller found the files.
+    /// </summary>
+    private LibraryFolderScanResult ImportFiles(PaperbunkrDbContext context, List<string> candidateFiles, IProgress<(int Done, int Total)> progress, CancellationToken ct)
+    {
         int total = candidateFiles.Count;
         int done = 0;
         progress.Report((0, total));
@@ -155,6 +199,15 @@ public class LibraryFolderScanner
                         var (contentType, readingMode) = CeLibraryMigrator.MapMangaField(embeddedInfo.Manga);
                         series.ContentType = contentType;
                         series.ReadingMode = readingMode;
+                    }
+                    // Falls back to LanguageISO when the Manga field itself is absent/Unknown
+                    // (docs/superpowers/specs/2026-08-23-language-iso-content-type-heuristic-design.md)
+                    // - the embedded Manga field always wins when present since it's a deliberate
+                    // classification, not an inference. Same isNewSeries guard and rationale as above.
+                    else if (isNewSeries && LanguageIsoClassifier.TryClassify(issue.LanguageISO, out var languageContentType, out var languageReadingMode))
+                    {
+                        series.ContentType = languageContentType;
+                        series.ReadingMode = languageReadingMode;
                     }
                 }
 
@@ -249,7 +302,11 @@ public class LibraryFolderScanner
     {
         using var context = _contextFactory();
 
-        var issues = context.Issues.Where(i => i.FilePath != null).ToList();
+        // Include(Tags) - MapStoryFields' onlyIfBlank guard and its diff-not-replace MergeFrom both
+        // read Issue.Tags (docs/superpowers/specs/2026-08-23-weighted-categorized-tags-design.md);
+        // without it every issue looks like it has no existing Genre/Tags at all, so the guard would
+        // never fire and every run would re-add every value as a brand-new duplicate row.
+        var issues = context.Issues.Include(i => i.Tags).Where(i => i.FilePath != null).ToList();
         int total = issues.Count;
         int done = 0;
         progress.Report((0, total));

@@ -1,0 +1,153 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Paperbunkr.App.ViewModels"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="700" d:DesignHeight="640"
+             x:Class="Paperbunkr.App.Views.BulkSeriesPropertiesScreen"
+             x:DataType="vm:BulkSeriesPropertiesScreenViewModel">
+
+    <!-- Same style names/shapes as BulkIssuePropertiesScreen.axaml - Avalonia styles don't share
+         across files, so this mirrors rather than references them. -->
+    <UserControl.Styles>
+        <Style Selector="Button.headerAction">
+            <Setter Property="Padding" Value="14,8" />
+            <Setter Property="CornerRadius" Value="5" />
+            <Setter Property="FontSize" Value="12.5" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style Selector="Button.headerAction.ghost">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
+        </Style>
+        <Style Selector="Button.headerAction.primary">
+            <Setter Property="Background" Value="{DynamicResource PbAccentBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Foreground" Value="{DynamicResource PbBadgeTextBrush}" />
+        </Style>
+
+        <Style Selector="Border.groupBox">
+            <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="7" />
+            <Setter Property="ClipToBounds" Value="True" />
+        </Style>
+        <Style Selector="Border.groupHeader">
+            <Setter Property="Background" Value="{DynamicResource PbChromeBrush}" />
+            <Setter Property="Padding" Value="14,11" />
+        </Style>
+
+        <Style Selector="Button.toolbarPill">
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
+            <Setter Property="Background" Value="{DynamicResource PbChromeBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
+            <Setter Property="CornerRadius" Value="999" />
+            <Setter Property="Padding" Value="12,6" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+        </Style>
+        <Style Selector="Button.modeOption">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="6,5" />
+            <Setter Property="CornerRadius" Value="5" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="HorizontalContentAlignment" Value="Left" />
+            <Setter Property="FontSize" Value="12.5" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
+        </Style>
+    </UserControl.Styles>
+
+    <UserControl.Resources>
+        <DataTemplate x:Key="SeriesFieldRowTemplate" x:DataType="vm:SeriesBulkFieldViewModel">
+            <Grid ColumnDefinitions="Auto,160,*" Margin="0,0,0,10">
+                <CheckBox Grid.Column="0" IsChecked="{Binding IsStaged}" VerticalAlignment="Center" Margin="0,0,8,0" />
+                <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                    <TextBlock Text="{Binding Label}" FontSize="12.5" Foreground="{DynamicResource PbTextBrush}" />
+                    <TextBlock Text="{Binding Caveat}" IsVisible="{Binding HasCaveat}" FontSize="10.5"
+                               Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" MaxWidth="150" />
+                </StackPanel>
+
+                <TextBox Grid.Column="2" Text="{Binding Value}" IsVisible="{Binding IsTextKind}" />
+
+                <!-- Fixed-choice picker - same flyout-of-buttons idiom BulkIssuePropertiesScreen.axaml uses. -->
+                <Button x:Name="EnumPickerButton" Grid.Column="2" Classes="toolbarPill" Content="{Binding Value}" HorizontalAlignment="Left"
+                        IsVisible="{Binding IsEnumKind}">
+                    <Button.Flyout>
+                        <Flyout Placement="Bottom">
+                            <StackPanel Width="160">
+                                <ItemsControl ItemsSource="{Binding Options}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="x:String">
+                                            <Button Classes="modeOption" Content="{Binding}"
+                                                    Command="{Binding #EnumPickerButton.((vm:SeriesBulkFieldViewModel)DataContext).SetValueCommand}"
+                                                    CommandParameter="{Binding}" />
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </Flyout>
+                    </Button.Flyout>
+                </Button>
+            </Grid>
+        </DataTemplate>
+    </UserControl.Resources>
+
+    <!-- Borderless floating panel over the caller's dimmed backdrop (docs/superpowers/specs/2026-08-23-
+         issue-editor-borderless-overlay-design.md) - same treatment as BulkIssuePropertiesScreen.axaml. -->
+    <Border Width="700" MaxHeight="640" CornerRadius="10" Background="{DynamicResource PbBgBrush}"
+            BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1">
+        <DockPanel LastChildFill="True">
+
+            <Grid DockPanel.Dock="Top" Margin="28,20,28,16" ColumnDefinitions="*,Auto">
+                <StackPanel Grid.Column="0" VerticalAlignment="Bottom">
+                    <TextBlock Text="Edit Series" FontSize="22" FontWeight="Bold" Foreground="{DynamicResource PbTextBrush}" />
+                    <TextBlock Text="{Binding HeaderLabel}" FontSize="12.5" Foreground="{DynamicResource PbTextFaintBrush}" Margin="0,4,0,0" />
+                    <TextBlock Text="Only checked fields are applied - leave a field unchecked to keep every series' own value."
+                               FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" Margin="0,4,0,0" />
+                </StackPanel>
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10" VerticalAlignment="Bottom">
+                    <Button Classes="headerAction ghost" Command="{Binding CancelCommand}">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <Border Classes="icon" Background="{DynamicResource PbTextMutedBrush}">
+                                <Border.OpacityMask>
+                                    <ImageBrush Source="/Assets/Icons/Close_Circle.png" Stretch="Uniform" />
+                                </Border.OpacityMask>
+                            </Border>
+                            <TextBlock Text="Cancel" />
+                        </StackPanel>
+                    </Button>
+                    <Button Classes="headerAction primary" Command="{Binding SaveCommand}">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <Border Classes="icon" Background="{DynamicResource PbBadgeTextBrush}">
+                                <Border.OpacityMask>
+                                    <ImageBrush Source="/Assets/Icons/Save.png" Stretch="Uniform" />
+                                </Border.OpacityMask>
+                            </Border>
+                            <TextBlock Text="Apply" />
+                        </StackPanel>
+                    </Button>
+                </StackPanel>
+            </Grid>
+            <Border DockPanel.Dock="Top" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,0,0,1" Margin="0,0,0,24" />
+
+            <ScrollViewer>
+                <StackPanel Margin="28,0,28,40" Spacing="20">
+                    <Border Classes="groupBox">
+                        <StackPanel>
+                            <Border Classes="groupHeader">
+                                <TextBlock Text="Fields" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
+                            </Border>
+                            <ItemsControl Margin="14" ItemsSource="{Binding Fields}" ItemTemplate="{StaticResource SeriesFieldRowTemplate}" />
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+            </ScrollViewer>
+        </DockPanel>
+    </Border>
+</UserControl>

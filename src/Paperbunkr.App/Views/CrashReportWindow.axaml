@@ -1,0 +1,44 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" d:DesignWidth="640" d:DesignHeight="480"
+        x:Class="Paperbunkr.App.Views.CrashReportWindow"
+        Title="Paperbunkr - Unexpected Error"
+        Width="640" Height="480" MinWidth="480" MinHeight="360"
+        WindowStartupLocation="CenterScreen"
+        Topmost="True"
+        Background="{DynamicResource PbSurface3Brush}">
+
+    <!--
+        Deliberately plain code-behind, no ViewModel/bindings for the report content or button
+        outcomes - this dialog exists specifically to survive whatever just went wrong elsewhere in
+        the app, so it keeps its own moving parts to a minimum. See docs/superpowers/specs/
+        2026-08-23-app-chrome-crash-reporter-and-tray-design.md §2.
+    -->
+    <Grid RowDefinitions="Auto,*,Auto" Margin="20">
+        <TextBlock Grid.Row="0" Text="Paperbunkr ran into an unexpected error."
+                   FontWeight="Bold" FontSize="15" Foreground="{DynamicResource PbTextBrush}"
+                   Margin="0,0,0,12" TextWrapping="Wrap" />
+
+        <Border Grid.Row="1" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1" CornerRadius="{DynamicResource PbRadius}">
+            <ScrollViewer>
+                <TextBox x:Name="ReportTextBox" IsReadOnly="True" AcceptsReturn="True" TextWrapping="NoWrap"
+                         FontFamily="Consolas,monospace" FontSize="11.5" Background="Transparent" BorderThickness="0"
+                         Foreground="{DynamicResource PbTextMutedBrush}" Padding="10" />
+            </ScrollViewer>
+        </Border>
+
+        <Grid Grid.Row="2" ColumnDefinitions="Auto,Auto,*,Auto,Auto,Auto" Margin="0,14,0,0">
+            <Button Classes="secondary" Grid.Column="0" x:Name="CopyButton" Content="Copy to Clipboard" Click="OnCopyClick" Margin="0,0,8,0" />
+            <Button Classes="secondary" Grid.Column="1" x:Name="SaveButton" Content="Save As…" Click="OnSaveClick" />
+
+            <Button Classes="secondary" Grid.Column="3" x:Name="ContinueButton" Content="Continue" Click="OnContinueClick"
+                    IsVisible="False" Margin="0,0,8,0" />
+            <Button Classes="secondary" Grid.Column="4" x:Name="ExitButton" Content="Exit" Click="OnExitClick" Margin="0,0,8,0" />
+            <!-- Now uses the shared Button.primary primitive (Styles/Primitives.axaml) - see
+                 docs/superpowers/specs/2026-08-24-design-language-foundation-design.md. -->
+            <Button Classes="primary" Grid.Column="5" x:Name="RestartButton" Content="Restart" Click="OnRestartClick" />
+        </Grid>
+    </Grid>
+</Window>

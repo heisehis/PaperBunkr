@@ -170,4 +170,69 @@ public class IssueListFieldCatalogTests
         Assert.Equal("Dawn of War III", descriptor.GroupKey(dawnOfWar));
         Assert.NotEqual(descriptor.GroupKey(damnationCrusade), descriptor.GroupKey(dawnOfWar));
     }
+
+    // --- Phase 4b: configurable Details-table columns
+    // (docs/superpowers/specs/2026-08-27-library-browsing-4b-toolbar-rework-design.md §8) ---
+
+    [Fact]
+    public void ColumnFields_EveryDescriptor_HasNonNullDisplay()
+    {
+        Assert.NotEmpty(IssueListFieldCatalog.ColumnFields);
+        Assert.All(IssueListFieldCatalog.ColumnFields, d => Assert.NotNull(d.Display));
+    }
+
+    [Fact]
+    public void Status_IsSortOnly_NotOfferedAsAColumn()
+    {
+        Assert.Null(IssueListFieldCatalog.SortFields[IssueListSortField.Status].Display);
+        Assert.DoesNotContain(IssueListFieldCatalog.ColumnFields, d => d.Field == IssueListSortField.Status);
+    }
+
+    [Fact]
+    public void ColumnFields_Display_NeverThrows_ForFullyNullAndFullyPopulatedRow()
+    {
+        var nullRow = new IssueListRow { SeriesName = "S", Title = "T", CoverBrush = Brush };
+        var fullRow = new IssueListRow
+        {
+            SeriesName = "S", Title = "T", CoverBrush = Brush,
+            Number = "12", Writer = "W", Publisher = "P", Genre = "G", Format = "Digital", Tags = "a, b",
+            AddedTime = new DateTime(2024, 1, 2), OpenedTime = new DateTime(2024, 3, 4),
+            ReleasedTime = new DateTime(2023, 12, 1), FileModifiedTime = new DateTime(2024, 5, 6),
+            FileCreationTime = new DateTime(2024, 5, 5),
+            Year = 2024, PageCount = 22, FileSize = 5_242_880, Rating = 4.5f, CommunityRating = 3.75f,
+            ReadPercentage = 66.6, OpenCount = 3, BookmarkCount = 2, Count = 50, Month = 7, Day = 15,
+            Volume = "2", Penciller = "Pe", Inker = "In", Colorist = "Co", Letterer = "Le",
+            CoverArtist = "Ca", Editor = "Ed", Translator = "Tr", Characters = "Ch", Teams = "Te",
+            Locations = "Lo", BookPrice = 3.99f, BookAge = "Modern", BookStore = "St", BookOwner = "Ow",
+            BookCondition = "Mint", BookCollectionStatus = "Owned", BookLocation = "Shelf 1", ISBN = "123",
+            IsRead = true, Imprint = "Im", LanguageIso = "en", AgeRating = "T", StoryArc = "Arc",
+            SeriesGroup = "SG", FilePath = @"C:\c\x.cbz", FileName = "x.cbz", FileDirectory = @"C:\c",
+            FileFormat = "CBZ", AlternateSeries = "AS", AlternateNumber = "AN", ScanInformation = "scan",
+        };
+
+        foreach (var descriptor in IssueListFieldCatalog.ColumnFields)
+        {
+            var ex1 = Record.Exception(() => descriptor.Display!(nullRow));
+            Assert.Null(ex1);
+            var ex2 = Record.Exception(() => descriptor.Display!(fullRow));
+            Assert.Null(ex2);
+        }
+
+        Assert.Equal("5 MB", IssueListFieldCatalog.SortFields[IssueListSortField.FileSize].Display!(fullRow));
+        Assert.Equal("67%", IssueListFieldCatalog.SortFields[IssueListSortField.ReadPercentage].Display!(fullRow));
+        Assert.Equal("2024-01-02", IssueListFieldCatalog.SortFields[IssueListSortField.Added].Display!(fullRow));
+        Assert.Equal("Read", IssueListFieldCatalog.SortFields[IssueListSortField.Read].Display!(fullRow));
+        Assert.Equal("Unread", IssueListFieldCatalog.SortFields[IssueListSortField.Read].Display!(nullRow));
+    }
+
+    [Fact]
+    public void DefaultDetailsColumns_AllResolve_AndAreColumnEligible()
+    {
+        Assert.NotEmpty(IssueListFieldCatalog.DefaultDetailsColumns);
+        foreach (var field in IssueListFieldCatalog.DefaultDetailsColumns)
+        {
+            Assert.True(IssueListFieldCatalog.SortFields.TryGetValue(field, out var d), $"No descriptor for {field}");
+            Assert.NotNull(d!.Display);
+        }
+    }
 }

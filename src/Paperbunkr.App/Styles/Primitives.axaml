@@ -1,0 +1,172 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!--
+        Component primitives (docs/superpowers/specs/2026-08-24-design-language-foundation-design.md
+        Component Primitives section). Implemented as style classes rather than literal Avalonia
+        ControlTheme records - these are new visual treatments for existing control types
+        (Button/Border), not template overrides of a control with its own default template, so a
+        plain Style is the right tool. PosterTile (the one primitive with real content slots -
+        cover/title/badge/progress) is a UserControl instead - see Views/PosterTile.axaml.
+    -->
+
+    <!-- Button variants - replace default FluentTheme button chrome with Pb* tokens + motion. -->
+    <Style Selector="Button.primary">
+        <Setter Property="Background" Value="{DynamicResource PbAccentBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Foreground" Value="{DynamicResource PbBadgeTextBrush}" />
+        <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusSm}" />
+        <Setter Property="Padding" Value="14,8" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Transitions">
+            <Transitions>
+                <BrushTransition Property="Background" Duration="{DynamicResource PbMotionFast}" Easing="{StaticResource PbMotionEase}" />
+            </Transitions>
+        </Setter>
+    </Style>
+    <Style Selector="Button.primary:pointerover">
+        <Setter Property="Background" Value="{DynamicResource PbAccentTextBrush}" />
+    </Style>
+
+    <Style Selector="Button.secondary">
+        <Setter Property="Background" Value="{DynamicResource PbSurface2Brush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Foreground" Value="{DynamicResource PbTextBrush}" />
+        <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusSm}" />
+        <Setter Property="Padding" Value="14,8" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Transitions">
+            <Transitions>
+                <BrushTransition Property="Background" Duration="{DynamicResource PbMotionFast}" Easing="{StaticResource PbMotionEase}" />
+            </Transitions>
+        </Setter>
+    </Style>
+    <Style Selector="Button.secondary:pointerover">
+        <Setter Property="Background" Value="{DynamicResource PbSurface3Brush}" />
+    </Style>
+
+    <Style Selector="Button.ghost">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
+        <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusSm}" />
+        <Setter Property="Padding" Value="14,8" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Transitions">
+            <Transitions>
+                <BrushTransition Property="BorderBrush" Duration="{DynamicResource PbMotionFast}" Easing="{StaticResource PbMotionEase}" />
+            </Transitions>
+        </Setter>
+    </Style>
+    <Style Selector="Button.ghost:pointerover">
+        <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
+    </Style>
+
+    <!-- Chip/pill - generalizes the pattern already established in Views/DetailPills.axaml. Two
+         separate selectors (not a comma-list) since Border and Button share no common base type
+         with Background/BorderBrush/CornerRadius/Padding declared on it. -->
+    <Style Selector="Border.pbChip">
+        <Setter Property="Background" Value="{DynamicResource PbSurface2Brush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="999" />
+        <Setter Property="Padding" Value="12,5" />
+    </Style>
+    <Style Selector="Button.pbChip">
+        <Setter Property="Background" Value="{DynamicResource PbSurface2Brush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="999" />
+        <Setter Property="Padding" Value="12,5" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Transitions">
+            <Transitions>
+                <BrushTransition Property="BorderBrush" Duration="{DynamicResource PbMotionFast}" Easing="{StaticResource PbMotionEase}" />
+            </Transitions>
+        </Setter>
+    </Style>
+    <Style Selector="Button.pbChip:pointerover">
+        <Setter Property="BorderBrush" Value="{DynamicResource PbBadgeBrush}" />
+    </Style>
+
+    <!--
+        FloatingPanel chrome - the shared outer container for overlay-style views (design doc's
+        FloatingPanel migration: ReadingListPropertiesOverlay, IssuePropertiesScreen,
+        BulkIssuePropertiesScreen, QuickRateOverlay, MigrationOverlay all apply this class to their
+        root Border in place of their previous ad-hoc Background/CornerRadius/BorderThickness).
+        PbElevationShadow is genuine depth (always-on), distinct from the glow-ring hover/focus
+        treatment PosterTile uses.
+    -->
+    <Styles.Resources>
+        <BoxShadows x:Key="PbElevationShadow">0 16 40 -8 #99000000</BoxShadows>
+        <!-- Literal color, not {DynamicResource PbGlowColor} - BoxShadows is parsed from a single
+             string and doesn't support markup extensions inside it, so this won't live-update on
+             skin switch (an accepted implementation-time limitation for this phase; alternate
+             skins beyond "default" aren't this phase's focus). Matches default skin's PbGlowColor. -->
+        <BoxShadows x:Key="PbGlowRing">0 0 0 2 #66E0995A</BoxShadows>
+    </Styles.Resources>
+
+    <!-- PosterTile - see Views/PosterTile.axaml. Root there is a Border (not Button) specifically
+         so BoxShadow (needed for the glow ring) is unambiguously supported. -->
+    <Style Selector="Border.posterTile">
+        <Setter Property="Background" Value="{DynamicResource PbSurface2Brush}" />
+        <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusSm}" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Transitions">
+            <Transitions>
+                <BoxShadowsTransition Property="BoxShadow" Duration="{DynamicResource PbMotionFast}" Easing="{StaticResource PbMotionEase}" />
+            </Transitions>
+        </Setter>
+    </Style>
+    <Style Selector="Border.posterTile:pointerover">
+        <Setter Property="BoxShadow" Value="{StaticResource PbGlowRing}" />
+    </Style>
+    <Style Selector="Border.posterTile:focus-visible">
+        <Setter Property="BoxShadow" Value="{StaticResource PbGlowRing}" />
+    </Style>
+
+    <!-- Poster cover scrim (docs/superpowers/specs/2026-08-27-library-browsing-4a-poster-grid-
+         design.md) - a soft bottom fade on cover art: slight at rest for a consistent finished
+         edge + badge legibility, stronger when the card is hovered/focused. Shared class so both
+         PosterTile (Home) and the Library grid templates use one definition. Sits inside the
+         clipped cover Border, never intercepts clicks. -->
+    <Style Selector="Border.posterScrim">
+        <Setter Property="IsHitTestVisible" Value="False" />
+        <Setter Property="Opacity" Value="0.55" />
+        <Setter Property="Background">
+            <LinearGradientBrush StartPoint="0%,0%" EndPoint="0%,100%">
+                <GradientStop Offset="0.45" Color="#00000000" />
+                <GradientStop Offset="1.0" Color="#B3000000" />
+            </LinearGradientBrush>
+        </Setter>
+        <Setter Property="Transitions">
+            <Transitions>
+                <DoubleTransition Property="Opacity" Duration="{DynamicResource PbMotionFast}" Easing="{StaticResource PbMotionEase}" />
+            </Transitions>
+        </Setter>
+    </Style>
+    <Style Selector="Border.posterTile:pointerover Border.posterScrim">
+        <Setter Property="Opacity" Value="1.0" />
+    </Style>
+    <Style Selector="Border.posterTile:focus-visible Border.posterScrim">
+        <Setter Property="Opacity" Value="1.0" />
+    </Style>
+
+    <Style Selector="Border.floatingPanel">
+        <Setter Property="Background" Value="{DynamicResource PbSurface3Brush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusLg}" />
+        <Setter Property="BoxShadow" Value="{StaticResource PbElevationShadow}" />
+        <Setter Property="Transitions">
+            <Transitions>
+                <DoubleTransition Property="Opacity" Duration="{DynamicResource PbMotionFast}" Easing="{StaticResource PbMotionEase}" />
+            </Transitions>
+        </Setter>
+    </Style>
+</Styles>

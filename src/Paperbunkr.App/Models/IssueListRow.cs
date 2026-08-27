@@ -1,6 +1,6 @@
 using System;
 using Avalonia.Media;
-using Avalonia.Media.Imaging;
+using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace Paperbunkr.App.Models;
 
@@ -10,8 +10,19 @@ namespace Paperbunkr.App.Models;
 /// same rationale as <see cref="SeriesCardSample"/>: avoid holding live EF-tracked entities for a
 /// potentially-library-wide list, and precompute the one cross-entity field (<see cref="SeriesName"/>)
 /// once instead of re-joining per sort click.
+///
+/// <para>
+/// An <see cref="ObservableObject"/> (was a plain init-only POCO) since <see cref="IsSelected"/>
+/// (docs/superpowers/specs/2026-08-24-library-multiselect-slice1-design.md) needs live change
+/// notification for a tile's selected-state visuals - identical rationale to
+/// <see cref="IssueCardSample"/>'s own earlier conversion. Every other property stays exactly as it
+/// was: <c>init</c>-only, rebuilt fresh on every reload/re-sort/re-group by
+/// <c>IssueListScreenViewModel.Render</c> - which is also why that method must re-stamp
+/// <see cref="IsSelected"/> from the live selection set on every rebuild, or a re-sort would silently
+/// wipe the visible selection.
+/// </para>
 /// </summary>
-public sealed class IssueListRow
+public sealed partial class IssueListRow : ObservableObject, ISelectableCard
 {
     public int Id { get; init; }
     public int SeriesId { get; init; }
@@ -82,10 +93,6 @@ public sealed class IssueListRow
     // --- Slice 3 fields (docs/superpowers/specs/2026-08-18-library-book-centric-redesign-design.md) -
     // Library's card templates retargeted from SeriesCardSample to this type need these. ---
 
-    /// <summary>Real decoded cover art for THIS issue specifically, not a series "cover issue"
-    /// heuristic - <see cref="CoverBrush"/> is the placeholder shown underneath while this is null.</summary>
-    public Bitmap? CoverImage { get; init; }
-
     public string? ContentTypeLabel { get; init; }
 
     /// <summary>Gates the tile context menu's Reading Direction submenu, same rationale as the old
@@ -101,4 +108,7 @@ public sealed class IssueListRow
     /// math as the old series-card version - just fed by this issue's own cover instead of a
     /// series' chosen "cover issue".</summary>
     public double PanoramaWidth { get; init; }
+
+    [ObservableProperty]
+    private bool _isSelected;
 }

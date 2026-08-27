@@ -2,6 +2,9 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              x:Class="Paperbunkr.App.App"
              xmlns:local="using:Paperbunkr.App"
+             xmlns:anim="using:Avalonia.Animation"
+             xmlns:sty="using:FluentAvalonia.Styling"
+             xmlns:dialogHost="clr-namespace:DialogHostAvalonia;assembly=DialogHost.Avalonia"
              RequestedThemeVariant="Dark">
              <!-- Paperbunkr commits to a single dark identity (near-black + amber accent) rather than
                   following the OS light/dark preference - see docs/wireframe_prototype_prompt.md. -->
@@ -10,8 +13,11 @@
         <!-- Design tokens from the Claude Design "Paperbunkr App" wireframe (project 43c40b25).
              These are the app's own visual identity, distinct from the installable .crpck skin
              system in docs/onboarding.md §13 - skins theme content chrome, not this shell. -->
-        <Color x:Key="PbBgColor">#14161B</Color>
-        <Color x:Key="PbChromeColor">#1C1F26</Color>
+        <!-- Darkened per direct user feedback during Phase 3 brainstorming ("really dark, if not
+             black") - these must stay value-twins of PbSurface1Color/PbSurface2Color below (the
+             invariant Phase 1 set up between the legacy Bg/Chrome names and the elevation scale). -->
+        <Color x:Key="PbBgColor">#0A0B0D</Color>
+        <Color x:Key="PbChromeColor">#131519</Color>
         <Color x:Key="PbBorderColor">#2A2E37</Color>
         <Color x:Key="PbTextColor">#ECE7DB</Color>
         <Color x:Key="PbTextMutedColor">#B3ADA0</Color>
@@ -36,8 +42,69 @@
         <SolidColorBrush x:Key="PbBadgeTextBrush" Color="{StaticResource PbBadgeTextColor}" />
         <SolidColorBrush x:Key="PbSuccessBrush" Color="{StaticResource PbSuccessColor}" />
 
+        <!-- Elevation scale + glow/hero-gradient tokens (docs/superpowers/specs/2026-08-24-design-
+             language-foundation-design.md). WCAG AA contrast checked by hand against these exact
+             values: PbText on PbSurface1 ~13.6:1, PbTextMuted on PbSurface2 ~8:1, PbAccentText on
+             PbSurface2 ~6.9:1 - all clear of the 4.5:1 body-text minimum. -->
+        <Color x:Key="PbSurface0Color">#000000</Color>
+        <Color x:Key="PbSurface1Color">#0A0B0D</Color>
+        <Color x:Key="PbSurface2Color">#131519</Color>
+        <Color x:Key="PbSurface3Color">#1B1E24</Color>
+        <Color x:Key="PbGlowColor">#66E0995A</Color>
+        <Color x:Key="PbHeroGradientStartColor">#00000000</Color>
+        <Color x:Key="PbHeroGradientEndColor">#FF000000</Color>
+
+        <SolidColorBrush x:Key="PbSurface0Brush" Color="{StaticResource PbSurface0Color}" />
+        <SolidColorBrush x:Key="PbSurface1Brush" Color="{StaticResource PbSurface1Color}" />
+        <SolidColorBrush x:Key="PbSurface2Brush" Color="{StaticResource PbSurface2Color}" />
+        <SolidColorBrush x:Key="PbSurface3Brush" Color="{StaticResource PbSurface3Color}" />
+        <SolidColorBrush x:Key="PbGlowBrush" Color="{StaticResource PbGlowColor}" />
+
         <x:Double x:Key="PbSpacingUnit">4</x:Double>
-        <x:Double x:Key="PbRadius">7</x:Double>
+
+        <!-- Genuinely CornerRadius-typed, not x:Double - a Style Setter's DynamicResource
+             resolution does NOT run the CornerRadius TypeConverter the way a plain XAML attribute
+             does (confirmed the hard way: System.InvalidCastException, "Unable to cast object of
+             type 'System.Double' to type 'Avalonia.CornerRadius'", thrown from
+             Avalonia.PropertyStore.EffectiveValue`1.GetValue during Style application). SkinService
+             must assign real CornerRadius values here too, not doubles - see its ApplySkinResources. -->
+        <CornerRadius x:Key="PbRadius">7</CornerRadius>
+        <CornerRadius x:Key="PbRadiusSm">5</CornerRadius>
+        <CornerRadius x:Key="PbRadiusLg">14</CornerRadius>
+
+        <!-- Motion tokens (design doc, "snappy & responsive") - PbMotionFast is overwritten to
+             TimeSpan.Zero live by SkinService.ApplyReducedMotion when the user enables the
+             Preferences > Appearance > Reduced Motion toggle, so consumers just bind to it rather
+             than checking a flag themselves. -->
+        <x:TimeSpan x:Key="PbMotionFast">0:0:0.15</x:TimeSpan>
+        <CubicEaseOut x:Key="PbMotionEase" />
+
+        <!-- Slower, dedicated duration for content crossfades (docs/superpowers/specs/2026-08-24-
+             home-screen-design.md's dynamic/reactive follow-up) - distinct from PbMotionFast's
+             150ms interaction speed, matching the hero's own auto-rotation feel rather than a
+             button-hover feel. Also zeroed by SkinService.ApplyReducedMotion, same as PbMotionFast. -->
+        <x:TimeSpan x:Key="PbMotionSlow">0:0:0.7</x:TimeSpan>
+
+        <!-- Directional screen-slide (docs/superpowers/specs/2026-08-24-navigation-shell-motion-
+             system-design.md) - direction comes from MainViewModel.IsTransitionReversed
+             (TransitioningContentControl.IsTransitionReversed), not this resource. Duration/Easing
+             are captured once when this resource is constructed (a StaticResource, per the
+             CornerRadius finding above) - NOT re-read live, so Reduced Motion does NOT affect
+             screen-slide speed, only the Setter-based Transitions (buttons, FloatingPanel, rail
+             width) from Phase 1/this phase. Confirmed by reading PageSlide's own source - Duration
+             is a plain settable property read once by TransitioningContentControl at transition
+             start, not bound to anything live. Accepted as-is: screen-slide always runs at full
+             speed even with Reduced Motion on - a real, deliberate gap, not an oversight. -->
+        <anim:PageSlide x:Key="PbScreenSlide" Duration="{StaticResource PbMotionFast}" Orientation="Horizontal"
+                        SlideInEasing="{StaticResource PbMotionEase}" SlideOutEasing="{StaticResource PbMotionEase}" />
+
+        <!-- Bundled fonts (design doc's Typography section). PbDisplayFontFamily (Bebas Neue) is
+             for hero/heading text only, referenced directly via StaticResource in Styles/Typography.axaml
+             - it never goes through the Preferences font-override mechanism. PbDefaultFontFamily
+             (Source Serif 4) is NOT referenced here as PbFontFamily's value - SkinService.
+             ApplyFontResource sets that live (it's what "no override" now resolves to; see that
+             file's DefaultFontFamily field for why it's set in code, not XAML). -->
+        <FontFamily x:Key="PbDisplayFontFamily">avares://Paperbunkr.App/Assets/Fonts/#Bebas Neue</FontFamily>
     </Application.Resources>
 
     <Application.DataTemplates>
@@ -45,7 +112,34 @@
     </Application.DataTemplates>
 
     <Application.Styles>
-        <FluentTheme />
+        <!-- FluentAvaloniaTheme replaces Avalonia's built-in <FluentTheme> (running both is
+             explicitly unsupported - amwx.github.io/FluentAvaloniaDocs/pages/FATheme). It ships the
+             same stock Fluent control templates plus the extra WinUI controls (NavigationView,
+             Frame, TabView, InfoBar, etc.).
+             Accent: FluentAvalonia's stock-control accent system (TextBox focus borders,
+             CheckBox/ToggleSwitch checked states, ScrollBar hover, selection highlights) reads the
+             SystemAccentColor* resources, NOT the Pb* tokens - those only cover elements this app
+             custom-styles itself. CustomAccentColor seeds SystemAccentColor + its 6 tonal variants
+             from our amber. PbAccentColor is a plain XAML value here (StaticResource), so this
+             captures the *default* skin's accent; a live skin switch updates it via
+             SkinService.ApplyAccentColor (FluentAvaloniaTheme.CustomAccentColor, set in code). -->
+        <sty:FluentAvaloniaTheme CustomAccentColor="{StaticResource PbAccentColor}"
+                                 PreferSystemTheme="False"
+                                 PreferUserAccentColor="False" />
+
+        <!-- AvaloniaEdit's control theme (syntax-highlighting text editor) - Fluent variant to
+             match FluentAvaloniaTheme above. -->
+        <StyleInclude Source="avares://AvaloniaEdit/Themes/Fluent/AvaloniaEdit.xaml" />
+
+        <!-- DialogHost.Avalonia overlay-dialog control styles. -->
+        <dialogHost:DialogHostStyles />
+
+        <!-- Design language foundation (docs/superpowers/specs/2026-08-24-design-language-
+             foundation-design.md) - type scale + component primitives. Kept last so the app's own
+             styling wins over the theme packages above. -->
+        <StyleInclude Source="avares://Paperbunkr.App/Styles/Typography.axaml" />
+        <StyleInclude Source="avares://Paperbunkr.App/Styles/Primitives.axaml" />
+        <StyleInclude Source="avares://Paperbunkr.App/Styles/Icons.axaml" />
 
         <!-- Preferences > Appearance > Font override (docs/superpowers/specs/
              2026-08-07-preferences-skin-system-design.md §3) - a genuine global override via

@@ -344,6 +344,31 @@ public class BulkIssuePropertiesScreenViewModelTests : IDisposable
     }
 
     [Fact]
+    public void ReadingStatus_Staged_SingleSeriesSelection_WritesThroughToTheOwningSeries()
+    {
+        var vm = CreateViewModel();
+        vm.Load(new[] { _issueAId, _issueBId });
+        vm.MainFields.Single(f => f.Label == "Reading Status").Value = nameof(ReadingStatus.Dropped);
+
+        vm.SaveCommand.Execute(null);
+
+        Assert.Equal(ReadingStatus.Dropped, GetSeries(_seriesOneId).ReadingStatus);
+    }
+
+    [Fact]
+    public void ReadingStatus_Staged_MultiSeriesSelection_WritesThroughToEveryDistinctSeries()
+    {
+        var vm = CreateViewModel();
+        vm.Load(new[] { _issueAId, _issueCId }); // spans seriesOne and seriesTwo
+        vm.MainFields.Single(f => f.Label == "Reading Status").Value = nameof(ReadingStatus.Reading);
+
+        vm.SaveCommand.Execute(null);
+
+        Assert.Equal(ReadingStatus.Reading, GetSeries(_seriesOneId).ReadingStatus);
+        Assert.Equal(ReadingStatus.Reading, GetSeries(_seriesTwoId).ReadingStatus);
+    }
+
+    [Fact]
     public void SeriesAffectedCount_ReflectsDistinctSeriesInSelection()
     {
         var vm = CreateViewModel();

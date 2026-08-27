@@ -51,7 +51,9 @@ internal sealed record ReaderContinuousVisualData(Size Bounds, IReadOnlyList<Con
 internal enum PageTransitionDirection
 {
     Left,
-    Right
+    Right,
+    Up,
+    Down
 }
 
 /// <summary>
@@ -462,7 +464,7 @@ public sealed class ReaderPageVisualHandler : CompositionCustomVisualHandler
         }
 
         RenderSpread(context, data.Bounds, data.Bitmap, data.SecondaryBitmap, data.Zoom, data.PanOffsetX, data.PanOffsetY,
-            data.FitMode, data.FitOnlyIfOversized, data.HighQuality, data.IsRightToLeft, lease, colorFilter, offsetX: 0, alpha: 1.0);
+            data.FitMode, data.FitOnlyIfOversized, data.HighQuality, data.IsRightToLeft, lease, colorFilter, offset: default, alpha: 1.0);
     }
 
     /// <summary>
@@ -477,13 +479,14 @@ public sealed class ReaderPageVisualHandler : CompositionCustomVisualHandler
     /// <see cref="Data.Entities.ReadingMode.RightToLeft"/> (spec §4 - same spatial convention
     /// <see cref="PageCanvas"/>'s Left/Right commands already use, not reading-direction-relative
     /// naming). Rotation is inert for spreads (spec's named simplification) - always 0 here.
-    /// <paramref name="offsetX"/>/<paramref name="alpha"/> let <see cref="RenderTransition"/> apply
+    /// <paramref name="offset"/>/<paramref name="alpha"/> let <see cref="RenderTransition"/> apply
     /// the same slide offset/crossfade alpha to both halves as one visual unit, same as a solo page's
-    /// own transition.
+    /// own transition. The offset is a <see cref="Vector"/> so a vertical page-turn
+    /// (<see cref="Data.Entities.ReadingMode.TopToBottom"/>) can slide the spread along Y.
     /// </summary>
     private static void RenderSpread(ImmediateDrawingContext context, Rect bounds, Bitmap primary, Bitmap secondary,
         double zoom, double panOffsetX, double panOffsetY, ImageFitMode fitMode, bool fitOnlyIfOversized, bool highQuality,
-        bool isRightToLeft, ISkiaSharpApiLease? lease, SKColorFilter? colorFilter, double offsetX, double alpha,
+        bool isRightToLeft, ISkiaSharpApiLease? lease, SKColorFilter? colorFilter, Vector offset, double alpha,
         SKImage? primaryCachedImage = null, SKImage? secondaryCachedImage = null)
     {
         if (alpha <= 0)
@@ -496,7 +499,7 @@ public sealed class ReaderPageVisualHandler : CompositionCustomVisualHandler
         var spreadSize = SpreadLayoutMath.ComputeCombinedSize(primaryPixelSize, secondaryPixelSize);
 
         var combinedPlan = ComputeDrawPlan(bounds, spreadSize.Combined, zoom, panOffsetX, panOffsetY, fitMode, fitOnlyIfOversized, rotationDegrees: 0);
-        var shiftedDestRect = combinedPlan.DestRect.Translate(new Vector(offsetX, 0));
+        var shiftedDestRect = combinedPlan.DestRect.Translate(offset);
 
         // For RTL, the fraction passed to SplitSpread flips too, not just which output rect gets
         // labeled "primary" - SplitSpread always gives its Left result leftWidthFraction's share, so
@@ -532,22 +535,25 @@ public sealed class ReaderPageVisualHandler : CompositionCustomVisualHandler
 
         if (data.Style == Data.Entities.PageTransitionStyle.Slide)
         {
-            var (outgoingOffset, incomingOffset) = PageTransitionMath.SlideOffset(data.Direction, progress, data.Bounds.Width);
-            DrawTransitionSide(context, data.OldBitmap, data.OldSecondaryBitmap, oldImage, oldSecondaryImage, data, data.OldIsRightToLeft, outgoingOffset, alpha: 1.0, lease, colorFilter);
-            DrawTransitionSide(context, data.NewBitmap, data.NewSecondaryBitmap, newImage, newSecondaryImage, data, data.IsRightToLeft, incomingOffset, alpha: 1.0, lease, colorFilter);
+            bool vertical = data.Direction is PageTransitionDirection.Up or PageTransitionDirection.Down;
+            double extent = vertical ? data.Bounds.Height : data.Bounds.Width;
+            var (outgoingOffset, incomingOffset) = PageTransitionMath.SlideOffset(data.Direction, progress, extent);
+            Vector Slide(double o) => vertical ? new Vector(0, o) : new Vector(o, 0);
+            DrawTransitionSide(context, data.OldBitmap, data.OldSecondaryBitmap, oldImage, oldSecondaryImage, data, data.OldIsRightToLeft, Slide(outgoingOffset), alpha: 1.0, lease, colorFilter);
+            DrawTransitionSide(context, data.NewBitmap, data.NewSecondaryBitmap, newImage, newSecondaryImage, data, data.IsRightToLeft, Slide(incomingOffset), alpha: 1.0, lease, colorFilter);
             return;
         }
 
         var (outgoingAlpha, incomingAlpha) = PageTransitionMath.CrossfadeAlpha(progress);
-        DrawTransitionSide(context, data.OldBitmap, data.OldSecondaryBitmap, oldImage, oldSecondaryImage, data, data.OldIsRightToLeft, offsetX: 0, outgoingAlpha, lease, colorFilter);
-        DrawTransitionSide(context, data.NewBitmap, data.NewSecondaryBitmap, newImage, newSecondaryImage, data, data.IsRightToLeft, offsetX: 0, incomingAlpha, lease, colorFilter);
+        DrawTransitionSide(context, data.OldBitmap, data.OldSecondaryBitmap, oldImage, oldSecondaryImage, data, data.OldIsRightToLeft, offset: default, outgoingAlpha, lease, colorFilter);
+        DrawTransitionSide(context, data.NewBitmap, data.NewSecondaryBitmap, newImage, newSecondaryImage, data, data.IsRightToLeft, offset: default, incomingAlpha, lease, colorFilter);
     }
 
     /// <summary>
     /// Draws one side (old or new) of an in-flight turn (docs/superpowers/specs/2026-08-15-reader-
     /// double-page-spread-design.md §5) - solo when <paramref name="secondaryBitmap"/> is null (same
     /// as before spreads existed), a spread via <see cref="RenderSpread"/> otherwise, both sharing the
-    /// same <paramref name="offsetX"/>/<paramref name="alpha"/> so a paired side moves/fades as one
+    /// same <paramref name="offset"/>/<paramref name="alpha"/> so a paired side moves/fades as one
     /// visual unit rather than its two halves animating independently. <paramref name="isRightToLeft"/>
     /// is a parameter rather than read from <paramref name="data"/> directly so the caller can pass
     /// <see cref="ReaderPageTransitionData.OldIsRightToLeft"/> for the old side and
@@ -557,7 +563,7 @@ public sealed class ReaderPageVisualHandler : CompositionCustomVisualHandler
     /// turn, since Slide never needs the lease path unless a color filter is separately active.
     /// </summary>
     private static void DrawTransitionSide(ImmediateDrawingContext context, Bitmap? bitmap, Bitmap? secondaryBitmap,
-        SKImage? cachedImage, SKImage? secondaryCachedImage, ReaderPageTransitionData data, bool isRightToLeft, double offsetX, double alpha,
+        SKImage? cachedImage, SKImage? secondaryCachedImage, ReaderPageTransitionData data, bool isRightToLeft, Vector offset, double alpha,
         ISkiaSharpApiLease? lease, SKColorFilter? colorFilter)
     {
         if (bitmap is null || alpha <= 0)
@@ -569,13 +575,13 @@ public sealed class ReaderPageVisualHandler : CompositionCustomVisualHandler
         {
             var pixelSize = bitmap.PixelSize;
             var plan = ComputeDrawPlan(data.Bounds, pixelSize, data.Zoom, data.PanOffsetX, data.PanOffsetY, data.FitMode, data.FitOnlyIfOversized, data.RotationDegrees);
-            var offsetPlan = plan with { DestRect = plan.DestRect.Translate(new Vector(offsetX, 0)), CenterX = plan.CenterX + offsetX };
+            var offsetPlan = plan with { DestRect = plan.DestRect.Translate(offset), CenterX = plan.CenterX + offset.X, CenterY = plan.CenterY + offset.Y };
             DrawBitmap(context, bitmap, pixelSize, offsetPlan, data.RotationDegrees, data.HighQuality, lease, colorFilter, alpha, cachedImage);
             return;
         }
 
         RenderSpread(context, data.Bounds, bitmap, secondaryBitmap, data.Zoom, data.PanOffsetX, data.PanOffsetY,
-            data.FitMode, data.FitOnlyIfOversized, data.HighQuality, isRightToLeft, lease, colorFilter, offsetX, alpha, cachedImage, secondaryCachedImage);
+            data.FitMode, data.FitOnlyIfOversized, data.HighQuality, isRightToLeft, lease, colorFilter, offset, alpha, cachedImage, secondaryCachedImage);
     }
 
     /// <summary>

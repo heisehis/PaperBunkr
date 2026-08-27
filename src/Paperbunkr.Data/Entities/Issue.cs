@@ -9,14 +9,14 @@ namespace Paperbunkr.Data.Entities;
 /// equivalent — see <see cref="Series"/>) plus adds <see cref="StoryArcNumber"/> and
 /// <see cref="ReadingModeOverride"/>, both new.
 ///
-/// <see cref="Publisher"/>/<see cref="Genre"/> below were originally meant to be dropped as
-/// series-level duplicates too, per that same onboarding.md §6 plan — reintroduced once the Issue
-/// Properties/Bulk editors (docs/superpowers/specs/2026-08-07-bulk-issue-editing-design.md) made
-/// per-issue editing of them a real feature, matching CE's own <c>ComicBook</c> shape (both are
-/// real per-issue ComicInfo.xml fields there too). <see cref="Series.Genre"/>/
-/// <see cref="Series.Publisher"/> still exist (populated once at CE-migration time) but are no
-/// longer the source of truth once an issue has its own value — see
-/// <c>SmartListCatalog.TextSelectors</c>.
+/// <see cref="Publisher"/> below was originally meant to be dropped as a series-level duplicate
+/// too, per that same onboarding.md §6 plan — reintroduced once the Issue Properties/Bulk editors
+/// (docs/superpowers/specs/2026-08-07-bulk-issue-editing-design.md) made per-issue editing of it a
+/// real feature, matching CE's own <c>ComicBook</c> shape (a real per-issue ComicInfo.xml field
+/// there too). <see cref="Series.Publisher"/> still exists (populated once at CE-migration time)
+/// but is no longer the source of truth once an issue has its own value — see
+/// <c>SmartListCatalog.TextSelectors</c>. Genre followed the same path but has since moved again —
+/// see <see cref="Tags"/>.
 /// </summary>
 public class Issue
 {
@@ -99,8 +99,6 @@ public class Issue
 
     public string? Imprint { get; set; }
 
-    public string? Genre { get; set; }
-
     public string? Web { get; set; }
 
     public int? PageCount { get; set; }
@@ -117,7 +115,12 @@ public class Issue
 
     public string? Locations { get; set; }
 
-    public string? Tags { get; set; }
+    /// <summary>
+    /// Weighted, categorized tag values (docs/superpowers/specs/2026-08-23-weighted-categorized-
+    /// tags-design.md) - replaces the old flat <c>Genre</c>/<c>Tags</c> CSV strings. Holds both
+    /// the old Genre-field and Tags-field values, distinguished by <see cref="IssueTag.Field"/>.
+    /// </summary>
+    public List<IssueTag> Tags { get; set; } = new();
 
     /// <summary>
     /// Nullable escape hatch for a single issue (e.g. a one-shot) that reads differently from its

@@ -163,4 +163,74 @@ public class SmartScreenViewModelTests : IDisposable
     }
 
     private static Color FirstStopColor(IBrush brush) => Assert.IsType<LinearGradientBrush>(brush).GradientStops[0].Color;
+
+    // --- Delete a custom list (docs/superpowers/specs/2026-08-22-delete-functionality-design.md) ---
+
+    /// <summary>This test fixture's DB only calls <c>context.Database.EnsureCreated()</c> (bare EF Core schema creation), not the app's own <c>PaperbunkrDb.EnsureCreated</c> which additionally seeds the real system smart lists - so a test needing one present has to seed it directly.</summary>
+    private static int SeedSystemList(string name)
+    {
+        using var context = PaperbunkrDb.CreateContext();
+        var list = new SmartList { Name = name, IsSystem = true, SortOrder = context.SmartLists.Count() };
+        context.SmartLists.Add(list);
+        context.SaveChanges();
+        return list.Id;
+    }
+
+    [Fact]
+    public void BuiltInAndMaintenanceLists_HaveNoDeleteConfirm()
+    {
+        SeedSystemList("All Series");
+        var vm = new SmartScreenViewModel(goToSeries: _ => { });
+
+        Assert.NotEmpty(vm.BuiltInLists);
+        Assert.All(vm.BuiltInLists, l => Assert.Null(l.DeleteConfirm));
+        Assert.All(vm.MaintenanceLists, l => Assert.Null(l.DeleteConfirm));
+    }
+
+    [Fact]
+    public void DeleteConfirm_Trigger_RequiresTwoClicks_ThenRemovesTheCustomList()
+    {
+        SeedSystemList("All Series"); // something to fall back to once the active custom list is gone
+        var vm = new SmartScreenViewModel(goToSeries: _ => { });
+        vm.CreateNewCommand.Execute(null);
+        var summary = vm.CustomLists.Single();
+        Assert.NotNull(summary.DeleteConfirm);
+
+        summary.DeleteConfirm!.TriggerCommand.Execute(null);
+        Assert.Single(vm.CustomLists); // still armed, not yet deleted
+
+        summary.DeleteConfirm.TriggerCommand.Execute(null);
+        Assert.Empty(vm.CustomLists);
+
+        using var context = PaperbunkrDb.CreateContext();
+        Assert.False(context.SmartLists.Any(l => l.Id == summary.Id));
+    }
+
+    [Fact]
+    public void Delete_OfTheActiveCustomList_FallsBackToABuiltInList()
+    {
+        SeedSystemList("All Series");
+        var vm = new SmartScreenViewModel(goToSeries: _ => { });
+        vm.CreateNewCommand.Execute(null); // becomes active
+        var summary = vm.CustomLists.Single();
+
+        summary.DeleteConfirm!.TriggerCommand.Execute(null);
+        summary.DeleteConfirm.TriggerCommand.Execute(null);
+
+        Assert.Empty(vm.CustomLists);
+        Assert.Equal("All Series", vm.ListName); // fell back to the built-in list, not a blank screen
+    }
+
+    [Fact]
+    public void Delete_NeverOffered_CannotDeleteASystemList()
+    {
+        int systemListId = SeedSystemList("All Series");
+
+        var vm = new SmartScreenViewModel(goToSeries: _ => { });
+        var summary = vm.BuiltInLists.Concat(vm.MaintenanceLists).First(l => l.Id == systemListId);
+
+        Assert.Null(summary.DeleteConfirm); // no delete affordance exists for a system list at all
+        using var verifyContext = PaperbunkrDb.CreateContext();
+        Assert.True(verifyContext.SmartLists.Any(l => l.Id == systemListId));
+    }
 }

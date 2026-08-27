@@ -106,13 +106,16 @@ public sealed class AppFixture : IDisposable
     }
 
     /// <summary>
-    /// Resolves the compiled Paperbunkr.App.exe next to this test assembly's own output
-    /// (both build to <c>src/*/bin/{Configuration}/net8.0/</c> under the same solution) rather than
-    /// a hardcoded absolute path, so Debug/Release both work without configuration.
+    /// Resolves the compiled Paperbunkr.App.exe next to this test assembly's own output (both build
+    /// under <c>src/*/bin/{Configuration}/</c> in the same solution) rather than a hardcoded absolute
+    /// path, so Debug/Release both work without configuration. The target framework folder is
+    /// discovered rather than hardcoded - the app (<c>net10.0</c>) and this test project
+    /// (<c>net10.0-windows</c>) don't share a TFM folder name, and a stale build from a previous
+    /// retarget must not be picked up.
     /// </summary>
     private static string FindAppExePath()
     {
-        // AppContext.BaseDirectory: .../src/Paperbunkr.App.UiTests/bin/{Config}/net8.0/
+        // AppContext.BaseDirectory: .../src/Paperbunkr.App.UiTests/bin/{Config}/{tfm}/
         var netDir = new DirectoryInfo(AppContext.BaseDirectory);
         string config = netDir.Parent?.Name
             ?? throw new InvalidOperationException($"Could not determine build configuration from '{netDir.FullName}'.");
@@ -122,11 +125,23 @@ public sealed class AppFixture : IDisposable
             throw new InvalidOperationException($"Could not locate the src/ directory from '{netDir.FullName}'.");
         }
 
-        string exePath = Path.Combine(srcDir, "Paperbunkr.App", "bin", config, "net8.0", "Paperbunkr.App.exe");
-        if (!File.Exists(exePath))
+        string appBinDir = Path.Combine(srcDir, "Paperbunkr.App", "bin", config);
+        if (!Directory.Exists(appBinDir))
         {
             throw new FileNotFoundException(
-                $"Paperbunkr.App.exe not found at '{exePath}' - build the solution first.", exePath);
+                $"Paperbunkr.App build output not found at '{appBinDir}' - build the solution first.", appBinDir);
+        }
+
+        // Newest wins, so a leftover exe under an old TFM folder from a previous retarget can't
+        // shadow the current build.
+        string? exePath = Directory
+            .EnumerateFiles(appBinDir, "Paperbunkr.App.exe", SearchOption.AllDirectories)
+            .OrderByDescending(File.GetLastWriteTimeUtc)
+            .FirstOrDefault();
+        if (exePath is null)
+        {
+            throw new FileNotFoundException(
+                $"Paperbunkr.App.exe not found under '{appBinDir}' - build the solution first.", appBinDir);
         }
 
         return exePath;

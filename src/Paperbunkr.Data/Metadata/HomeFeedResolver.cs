@@ -27,10 +27,15 @@ public static class HomeFeedResolver
     /// <summary>Series with at least one <see cref="IssueMetadataExtensions.IsInProgress"/> issue,
     /// paired with whichever such issue was opened most recently (a series could have more than one
     /// in-progress issue in unusual cases - the most-recently-touched one wins as the resume target).
-    /// Sorted by that issue's <see cref="Issue.OpenedTime"/> descending.</summary>
+    /// Sorted by that issue's <see cref="Issue.OpenedTime"/> descending. Excludes series the user has
+    /// marked <see cref="ReadingStatus.Dropped"/> (docs/superpowers/specs/2026-08-19-metadata-model-
+    /// reading-status-design.md) - a dropped series resurfacing here would contradict the status the
+    /// user just set.</summary>
     public static IReadOnlyList<ContinueReadingCandidate> GetContinueReading(PaperbunkrDbContext context, int limit = 10)
     {
-        var series = context.Series.Include(s => s.Issues).ToList();
+        var series = context.Series.Include(s => s.Issues)
+            .Where(s => s.ReadingStatus != ReadingStatus.Dropped)
+            .ToList();
 
         var candidates = new List<ContinueReadingCandidate>();
         foreach (var s in series)
@@ -96,7 +101,7 @@ public static class HomeFeedResolver
     /// </summary>
     public static IReadOnlyList<Issue> GetSpotlightPicks(PaperbunkrDbContext context, Random random, int count = 6)
     {
-        var allIssues = context.Issues.Include(i => i.Series).ToList();
+        var allIssues = context.Issues.Include(i => i.Series).Include(i => i.Tags).ToList();
         var candidates = allIssues.Where(i => i.IsUnread()).ToList();
         if (candidates.Count == 0)
         {
@@ -106,14 +111,14 @@ public static class HomeFeedResolver
         var genreFrequency = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         foreach (var issue in allIssues.Where(i => i.HasBeenRead()))
         {
-            foreach (string token in TextTokenizer.Tokenize(issue.Genre))
+            foreach (string token in TextTokenizer.Tokenize(issue.JoinedGenre()))
             {
                 genreFrequency[token] = genreFrequency.GetValueOrDefault(token) + 1;
             }
         }
 
         var remaining = candidates
-            .Select(c => (Issue: c, Weight: TextTokenizer.Tokenize(c.Genre).Sum(g => genreFrequency.GetValueOrDefault(g))))
+            .Select(c => (Issue: c, Weight: TextTokenizer.Tokenize(c.JoinedGenre()).Sum(g => genreFrequency.GetValueOrDefault(g))))
             .ToList();
 
         var picks = new List<Issue>();
@@ -153,8 +158,11 @@ public static class HomeFeedResolver
     /// exist at all.</summary>
     public static ReadingList? GetReadingListSpotlight(PaperbunkrDbContext context, Random random)
     {
+        // ThenInclude(Tags) on Issue - ReadingListSpotlightSample.Compute reads Issue.JoinedGenre()
+        // (docs/superpowers/specs/2026-08-23-weighted-categorized-tags-design.md).
         var lists = context.ReadingLists
             .Include(l => l.Items).ThenInclude(item => item.Issue!).ThenInclude(i => i.Series)
+            .Include(l => l.Items).ThenInclude(item => item.Issue!).ThenInclude(i => i.Tags)
             .ToList();
 
         var candidates = lists

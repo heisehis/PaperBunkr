@@ -1,0 +1,27 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" d:DesignWidth="420" d:DesignHeight="180"
+        x:Class="Paperbunkr.App.Views.PluginQuestionDialog"
+        Title="Paperbunkr"
+        Width="420" SizeToContent="Height" MinHeight="150"
+        WindowStartupLocation="CenterOwner"
+        CanResize="False"
+        Background="{DynamicResource PbSurface3Brush}">
+
+    <!--
+        Backs IApplication.AskQuestion (docs/superpowers/specs/2026-08-24-plugin-api-v2-design.md
+        §4) - the one modal a plugin command can show without the host owning any UI logic itself.
+        Plain code-behind, same minimal-moving-parts reasoning as CrashReportWindow.
+    -->
+    <Grid RowDefinitions="Auto,Auto" Margin="20">
+        <TextBlock Grid.Row="0" x:Name="QuestionText" TextWrapping="Wrap" FontSize="13"
+                   Foreground="{DynamicResource PbTextBrush}" Margin="0,0,0,16" />
+
+        <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+            <Button Classes="secondary" x:Name="OptionButton" Click="OnOptionClick" />
+            <Button Classes="primary" x:Name="PrimaryButton" Click="OnPrimaryClick" />
+        </StackPanel>
+    </Grid>
+</Window>

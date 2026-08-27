@@ -10,7 +10,7 @@ namespace Paperbunkr.App.Models;
 /// 2026-08-07-bulk-issue-editing-design.md §1) needs live change notification for the tile's
 /// selected-border visual state.
 /// </summary>
-public sealed partial class IssueCardSample : ObservableObject
+public sealed partial class IssueCardSample : ObservableObject, ISelectableCard
 {
     public int Id { get; init; }
 

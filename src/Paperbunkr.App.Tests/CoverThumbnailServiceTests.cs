@@ -1,8 +1,13 @@
+using System.Threading;
 using Avalonia.Media.Imaging;
 using Microsoft.EntityFrameworkCore;
 using Paperbunkr.App.Services;
 using Paperbunkr.Data;
 using Paperbunkr.Data.Entities;
+using SdColor = System.Drawing.Color;
+using SdBitmap = System.Drawing.Bitmap;
+using SdGraphics = System.Drawing.Graphics;
+using SdImageFormat = System.Drawing.Imaging.ImageFormat;
 
 namespace Paperbunkr.App.Tests;
 
@@ -96,6 +101,120 @@ public class CoverThumbnailServiceTests : IDisposable
 
         Assert.False(result);
         Assert.False(File.Exists(CoverThumbnailPaths.GetCachePath(4)));
+    }
+
+    // --- Cover art override (docs/superpowers/specs/2026-08-23-cover-art-override-design.md) ---
+
+    private static string CreateTestImage(int width = 32, int height = 48)
+    {
+        string path = Path.Combine(Path.GetTempPath(), $"paperbunkr_custom_cover_test_{Guid.NewGuid():N}.png");
+        using var bitmap = new SdBitmap(width, height);
+        using (var g = SdGraphics.FromImage(bitmap))
+        {
+            g.Clear(SdColor.CornflowerBlue);
+        }
+
+        bitmap.Save(path, SdImageFormat.Png);
+        return path;
+    }
+
+    [Fact]
+    public void TrySetCustomCover_WritesDecodableJpeg_EvenWithoutAnyLinkedFile()
+    {
+        string imagePath = CreateTestImage();
+        try
+        {
+            var service = new CoverThumbnailService();
+
+            bool result = service.TrySetCustomCover(issueId: 10, imagePath);
+
+            Assert.True(result);
+            string path = CoverThumbnailPaths.GetCachePath(10);
+            Assert.True(File.Exists(path));
+            using var bitmap = new Bitmap(path);
+            Assert.True(bitmap.PixelSize.Width > 0 && bitmap.PixelSize.Height > 0);
+        }
+        finally
+        {
+            try { if (File.Exists(imagePath)) File.Delete(imagePath); } catch (IOException) { }
+        }
+    }
+
+    [Fact]
+    public void TrySetCustomCover_OverwritesAnExistingCachedThumbnail()
+    {
+        CbzFixture.Create(_cbzPath, pageCount: 1);
+        var service = new CoverThumbnailService();
+        service.TryGenerateThumbnail(issueId: 11, _cbzPath);
+        string path = CoverThumbnailPaths.GetCachePath(11);
+        var originalWrite = File.GetLastWriteTimeUtc(path);
+
+        string imagePath = CreateTestImage();
+        try
+        {
+            Thread.Sleep(10); // ensure a distinguishable write timestamp on fast filesystems
+            bool result = service.TrySetCustomCover(11, imagePath);
+
+            Assert.True(result);
+            Assert.True(File.GetLastWriteTimeUtc(path) > originalWrite);
+        }
+        finally
+        {
+            try { if (File.Exists(imagePath)) File.Delete(imagePath); } catch (IOException) { }
+        }
+    }
+
+    [Fact]
+    public void TrySetCustomCover_ReturnsFalse_ForUnreadableImagePath()
+    {
+        var service = new CoverThumbnailService();
+
+        bool result = service.TrySetCustomCover(issueId: 12, Path.Combine(Path.GetTempPath(), $"does_not_exist_{Guid.NewGuid():N}.png"));
+
+        Assert.False(result);
+    }
+
+    [Fact]
+    public void ResetCover_WithLinkedFile_RegeneratesFromTheRealPage()
+    {
+        CbzFixture.Create(_cbzPath, pageCount: 1);
+        var service = new CoverThumbnailService();
+        string imagePath = CreateTestImage();
+        try
+        {
+            service.TrySetCustomCover(13, imagePath);
+            string path = CoverThumbnailPaths.GetCachePath(13);
+            Assert.True(File.Exists(path));
+
+            service.ResetCover(13, _cbzPath);
+
+            Assert.True(File.Exists(path)); // regenerated from the linked file, not left blank
+        }
+        finally
+        {
+            try { if (File.Exists(imagePath)) File.Delete(imagePath); } catch (IOException) { }
+        }
+    }
+
+    [Fact]
+    public void ResetCover_WithNoLinkedFile_LeavesCoverBlank()
+    {
+        var service = new CoverThumbnailService();
+        string imagePath = CreateTestImage();
+        try
+        {
+            service.TrySetCustomCover(14, imagePath);
+            string path = CoverThumbnailPaths.GetCachePath(14);
+            Assert.True(File.Exists(path));
+
+            service.ResetCover(14, filePath: null);
+
+            Assert.False(File.Exists(path));
+        }
+        finally
+        {
+            try { if (File.Exists(imagePath)) File.Delete(imagePath); } catch (IOException) { }
+        }
     }
 
     [Fact]

@@ -24,6 +24,7 @@ public class PreferencesScreenViewModelTests : IDisposable
     private readonly string _dbPath;
     private readonly DbContextOptions<PaperbunkrDbContext> _dbOptions;
     private readonly string _scanRoot;
+    private readonly string _graphicsCachePath;
 
     public PreferencesScreenViewModelTests()
     {
@@ -50,6 +51,12 @@ public class PreferencesScreenViewModelTests : IDisposable
         _originalDbPathOverride = PaperbunkrDbContext.DatabasePathOverride;
         PaperbunkrDbContext.DatabasePathOverride = _dbPath;
 
+        // The Advanced tab's rendering-backend rows write a graphics.json cache
+        // (docs/superpowers/specs/2026-08-27-hardware-accelerated-rendering-design.md) - keep that
+        // off the real %AppData%, same static-override isolation approach as everything above.
+        _graphicsCachePath = Path.Combine(root, "graphics.json");
+        GraphicsBootstrap.CachePathOverride = _graphicsCachePath;
+
         _scanRoot = Path.Combine(root, "scan");
         Directory.CreateDirectory(_scanRoot);
     }
@@ -60,6 +67,7 @@ public class PreferencesScreenViewModelTests : IDisposable
         SkinPaths.ExtractedDirectory = _originalExtractedDirectory;
         CoverThumbnailPaths.ThumbnailDirectory = _originalThumbnailDirectory;
         PaperbunkrDbContext.DatabasePathOverride = _originalDbPathOverride;
+        GraphicsBootstrap.CachePathOverride = null;
 
         Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
         try
@@ -79,7 +87,8 @@ public class PreferencesScreenViewModelTests : IDisposable
         MigrationOverlayViewModel? migration = null,
         Action? openMigration = null,
         Action<ToastProgressViewModel>? showProgressToast = null,
-        Action<ToastProgressViewModel>? closeProgressToast = null)
+        Action<ToastProgressViewModel>? closeProgressToast = null,
+        Action? reloadFolderWatch = null)
     {
         var skinService = new SkinService(() => new PaperbunkrDbContext(_dbOptions));
         var scanner = new LibraryFolderScanner(() => new PaperbunkrDbContext(_dbOptions));
@@ -95,9 +104,12 @@ public class PreferencesScreenViewModelTests : IDisposable
             keyBindingService,
             showToast ?? ((_, _) => { }),
             migration ?? new MigrationOverlayViewModel(filePicker ?? new NoOpFilePicker(), _ => { }),
+            new PluginScreenViewModel(),
             openMigration ?? (() => { }),
             showProgressToast ?? (_ => { }),
             closeProgressToast ?? (_ => { }),
+            reloadFolderWatch ?? (() => { }),
+            () => { },
             () => new PaperbunkrDbContext(_dbOptions));
     }
 
@@ -148,6 +160,22 @@ public class PreferencesScreenViewModelTests : IDisposable
 
         using var context = new PaperbunkrDbContext(_dbOptions);
         Assert.Equal("Consolas", context.GetOrCreateAppSettings().SelectedFontFamily);
+    }
+
+    /// <summary>docs/superpowers/specs/2026-08-24-design-language-foundation-design.md - same load/apply/persist shape as <see cref="SelectedFontFamily_Change_PersistsToAppSettings"/>.</summary>
+    [Fact]
+    public void ReducedMotion_Change_PersistsToAppSettings_AndAppliesLive()
+    {
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+        Assert.False(vm.ReducedMotion);
+
+        vm.ReducedMotion = true;
+
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        Assert.True(context.GetOrCreateAppSettings().ReducedMotion);
+        Assert.Equal(TimeSpan.Zero, Avalonia.Application.Current!.Resources["PbMotionFast"]);
+        Assert.Equal(TimeSpan.Zero, Avalonia.Application.Current!.Resources["PbMotionSlow"]);
     }
 
     [Fact]
@@ -232,6 +260,34 @@ public class PreferencesScreenViewModelTests : IDisposable
         Assert.False(context.GetOrCreateAppSettings().ReverseRtlNavigation);
     }
 
+    // App chrome (docs/superpowers/specs/2026-08-23-app-chrome-crash-reporter-and-tray-design.md §4)
+    [Fact]
+    public void EnsureLoaded_PopulatesMinimizeToTrayFromAppSettings()
+    {
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            context.GetOrCreateAppSettings().MinimizeToTray = true;
+            context.SaveChanges();
+        }
+
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+
+        Assert.True(vm.MinimizeToTray);
+    }
+
+    [Fact]
+    public void TogglingMinimizeToTray_PersistsToAppSettings()
+    {
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+
+        vm.MinimizeToTray = true;
+
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        Assert.True(context.GetOrCreateAppSettings().MinimizeToTray);
+    }
+
     [Fact]
     public void EnsureLoaded_PopulatesHighQualityPageDisplayFromAppSettings()
     {
@@ -257,6 +313,47 @@ public class PreferencesScreenViewModelTests : IDisposable
 
         using var context = new PaperbunkrDbContext(_dbOptions);
         Assert.False(context.GetOrCreateAppSettings().HighQualityPageDisplay);
+    }
+
+    // Rendering group on the Advanced tab
+    // (docs/superpowers/specs/2026-08-27-hardware-accelerated-rendering-design.md §10)
+    [Fact]
+    public void EnsureLoaded_PopulatesRenderingBackendFromAppSettings()
+    {
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            var s = context.GetOrCreateAppSettings();
+            s.RenderingBackend = RenderBackend.Software;
+            s.PreferNativeOpenGl = true;
+            context.SaveChanges();
+        }
+
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+
+        Assert.Equal(RenderBackend.Software, vm.RenderingBackend);
+        Assert.True(vm.PreferNativeOpenGl);
+    }
+
+    [Fact]
+    public void ChangingRenderingBackend_PersistsToAppSettingsAndGraphicsCache()
+    {
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+
+        vm.RenderingBackend = RenderBackend.Gpu;
+        vm.PreferNativeOpenGl = true;
+
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            var s = context.GetOrCreateAppSettings();
+            Assert.Equal(RenderBackend.Gpu, s.RenderingBackend);
+            Assert.True(s.PreferNativeOpenGl);
+        }
+
+        var (config, source) = GraphicsBootstrap.Resolve();
+        Assert.Equal(new GraphicsConfig(RenderBackend.Gpu, true), config);
+        Assert.Equal("graphics.json", source);
     }
 
     // Reader tab additions (docs/superpowers/specs/2026-08-10-preferences-reader-tab-design.md)
@@ -413,6 +510,70 @@ public class PreferencesScreenViewModelTests : IDisposable
         Assert.Equal(KeyboardCommandRegistry.Commands.Count, total);
         Assert.Contains(vm.NavigationKeyBindings, r => r.CommandId == KeyboardCommandRegistry.ReaderPageTurnLeft && r.SelectedKey.Gesture == new KeyGesture(Key.Left));
         Assert.Contains(vm.NavigationKeyBindings, r => r.CommandId == KeyboardCommandRegistry.ReaderPageTurnRight && r.SelectedKey.Gesture == new KeyGesture(Key.Right));
+    }
+
+    /// <summary>docs/superpowers/specs/2026-08-25-reader-chrome-design.md - a genuine new gap closed, not a restyle: import/export never existed before this (confirmed via grep, zero hits anywhere in src/).</summary>
+    [Fact]
+    public async Task ExportThenImportKeyBindings_RoundTripsARemappedBinding()
+    {
+        string path = Path.Combine(Path.GetTempPath(), $"paperbunkr_keybindings_test_{Guid.NewGuid():N}.json");
+        try
+        {
+            var vm = CreateViewModel(new FileRoundTripPicker { SavePathToReturn = path, OpenPathToReturn = path });
+            vm.EnsureLoaded();
+            var row = vm.NavigationKeyBindings.Single(r => r.CommandId == KeyboardCommandRegistry.ReaderPageTurnLeft);
+            row.SelectedKey = row.Options.Single(o => o.Gesture == new KeyGesture(Key.J));
+
+            await vm.ExportKeyBindingsCommand.ExecuteAsync(null);
+
+            // A second, independently-loaded VM (same underlying database) picks up the exported
+            // file and re-applies it - proves the file round-trips the real gesture, not just that
+            // the in-memory VM still remembers its own change.
+            using (var context = new PaperbunkrDbContext(_dbOptions))
+            {
+                context.KeyBindings.Single(k => k.CommandId == KeyboardCommandRegistry.ReaderPageTurnLeft).Key = "K";
+                context.SaveChanges();
+            }
+
+            await vm.ImportKeyBindingsCommand.ExecuteAsync(null);
+
+            var reloaded = vm.NavigationKeyBindings.Single(r => r.CommandId == KeyboardCommandRegistry.ReaderPageTurnLeft);
+            Assert.Equal(new KeyGesture(Key.J), reloaded.SelectedKey.Gesture);
+        }
+        finally
+        {
+            if (File.Exists(path)) File.Delete(path);
+        }
+    }
+
+    /// <summary>Per-entry tolerance, not all-or-nothing (docs/superpowers/specs/2026-08-25-reader-chrome-design.md) - mirrors KeyBindingService.GetKey's own catch (ArgumentException) fallback philosophy, applied at import time.</summary>
+    [Fact]
+    public async Task ImportKeyBindings_WithOneCorruptEntry_StillAppliesTheValidOnes()
+    {
+        string path = Path.Combine(Path.GetTempPath(), $"paperbunkr_keybindings_corrupt_test_{Guid.NewGuid():N}.json");
+        try
+        {
+            File.WriteAllText(path, $$"""
+                [
+                    {"CommandId": "{{KeyboardCommandRegistry.ReaderPageTurnLeft}}", "Gesture": "J"},
+                    {"CommandId": "{{KeyboardCommandRegistry.ReaderPageTurnRight}}", "Gesture": "not a real gesture"}
+                ]
+                """);
+            var vm = CreateViewModel(new FileRoundTripPicker { OpenPathToReturn = path });
+            vm.EnsureLoaded();
+
+            await vm.ImportKeyBindingsCommand.ExecuteAsync(null);
+
+            var left = vm.NavigationKeyBindings.Single(r => r.CommandId == KeyboardCommandRegistry.ReaderPageTurnLeft);
+            Assert.Equal(new KeyGesture(Key.J), left.SelectedKey.Gesture);
+            // The corrupt entry didn't throw and didn't block the valid one - right still holds its default.
+            var right = vm.NavigationKeyBindings.Single(r => r.CommandId == KeyboardCommandRegistry.ReaderPageTurnRight);
+            Assert.Equal(new KeyGesture(Key.Right), right.SelectedKey.Gesture);
+        }
+        finally
+        {
+            if (File.Exists(path)) File.Delete(path);
+        }
     }
 
     [Fact]
@@ -700,6 +861,18 @@ public class PreferencesScreenViewModelTests : IDisposable
         Assert.True(vm.IsAdvancedTab);
     }
 
+    /// <summary>docs/superpowers/specs/2026-08-24-navigation-shell-motion-system-design.md - Plugins moved from a standalone rail screen into this tab.</summary>
+    [Fact]
+    public void GoPlugins_SetsActiveTabFlag()
+    {
+        var vm = CreateViewModel();
+
+        vm.GoPluginsCommand.Execute(null);
+
+        Assert.True(vm.IsPluginsTab);
+        Assert.False(vm.IsAdvancedTab);
+    }
+
     [Fact]
     public void OpenMigrationCommand_InvokesInjectedCallback()
     {
@@ -835,6 +1008,21 @@ public class PreferencesScreenViewModelTests : IDisposable
         public Task<string?> PickSaveFileAsync(string title, string suggestedFileName, string extension, string extensionLabel) => Task.FromResult<string?>(null);
 
         public Task<string?> PickFolderAsync(string title) => Task.FromResult(FolderToReturn);
+
+        public Task SetClipboardTextAsync(string text) => Task.CompletedTask;
+    }
+
+    /// <summary>Returns a configurable file path for both open/save dialogs - used by the keyboard-shortcut import/export round-trip tests, neither existing fake above supports this.</summary>
+    private sealed class FileRoundTripPicker : IFilePickerService
+    {
+        public string? OpenPathToReturn { get; set; }
+        public string? SavePathToReturn { get; set; }
+
+        public Task<string?> PickOpenFileAsync(string title, string extension, string extensionLabel) => Task.FromResult(OpenPathToReturn);
+
+        public Task<string?> PickSaveFileAsync(string title, string suggestedFileName, string extension, string extensionLabel) => Task.FromResult(SavePathToReturn);
+
+        public Task<string?> PickFolderAsync(string title) => Task.FromResult<string?>(null);
 
         public Task SetClipboardTextAsync(string text) => Task.CompletedTask;
     }

@@ -1,8 +1,8 @@
 {
   "name": "Default",
   "colors": {
-    "bg": "#14161B",
-    "chrome": "#1C1F26",
+    "bg": "#0A0B0D",
+    "chrome": "#131519",
     "border": "#2A2E37",
     "text": "#ECE7DB",
     "textMuted": "#B3ADA0",
@@ -12,9 +12,18 @@
     "accentSoft": "#29C9803F",
     "badge": "#D7AC4C",
     "badgeText": "#241505",
-    "success": "#5FA889"
+    "success": "#5FA889",
+    "surface0": "#000000",
+    "surface1": "#0A0B0D",
+    "surface2": "#131519",
+    "surface3": "#1B1E24",
+    "glow": "#66E0995A",
+    "heroGradientStart": "#00000000",
+    "heroGradientEnd": "#FF000000"
   },
   "spacingUnit": 4,
   "radius": 7,
+  "radiusSm": 5,
+  "radiusLg": 14,
   "icons": {}
 }

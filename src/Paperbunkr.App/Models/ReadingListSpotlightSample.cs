@@ -39,7 +39,7 @@ public sealed class ReadingListSpotlightSample
                 continue;
             }
 
-            foreach (string token in TextTokenizer.Tokenize(item.Issue.Genre))
+            foreach (string token in TextTokenizer.Tokenize(item.Issue.JoinedGenre()))
             {
                 genreFrequency[token] = genreFrequency.GetValueOrDefault(token) + 1;
             }

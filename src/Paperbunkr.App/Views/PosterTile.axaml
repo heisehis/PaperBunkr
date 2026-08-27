@@ -1,0 +1,45 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:conv="using:Avalonia.Data.Converters"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="140" d:DesignHeight="210"
+             x:Class="Paperbunkr.App.Views.PosterTile"
+             x:Name="ThisControl">
+
+    <!--
+        PosterTile primitive (docs/superpowers/specs/2026-08-24-design-language-foundation-design.md).
+        Root is a Border (Classes="posterTile", Focusable="True"), not a Button - see PosterTile.axaml.cs
+        for why. All internal bindings go through #ThisControl (the UserControl's own x:Name) rather
+        than plain {Binding ...}, since this control's DataContext is whatever the consumer sets it
+        to (a book/issue view model in Phases 3-4), not this control's own StyledProperties.
+    -->
+    <Border x:Name="Root" Classes="posterTile" Focusable="True" AutomationProperties.AutomationId="PosterTileCard">
+        <Grid RowDefinitions="*,Auto" Width="140">
+            <Border Grid.Row="0" Height="196" ClipToBounds="True" CornerRadius="{DynamicResource PbRadiusSm}">
+                <Grid>
+                    <Image Source="{Binding #ThisControl.CoverSource}" Stretch="UniformToFill" />
+
+                    <Border Classes="posterScrim" />
+
+                    <Border HorizontalAlignment="Right" VerticalAlignment="Top" Margin="6" Classes="pbChip"
+                            IsVisible="{Binding #ThisControl.BadgeText, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}">
+                        <TextBlock Text="{Binding #ThisControl.BadgeText}" Classes="pbTextCaption"
+                                   Foreground="{DynamicResource PbBadgeBrush}" FontWeight="SemiBold" />
+                    </Border>
+
+                    <ProgressBar VerticalAlignment="Bottom" Height="3" Minimum="0" Maximum="1"
+                                 Value="{Binding #ThisControl.ProgressFraction}"
+                                 IsVisible="{Binding #ThisControl.ShowProgress}"
+                                 Background="Transparent" Foreground="{DynamicResource PbAccentTextBrush}" />
+                </Grid>
+            </Border>
+
+            <StackPanel Grid.Row="1" Margin="0,10,0,0" Spacing="2">
+                <TextBlock Text="{Binding #ThisControl.TitleText}" FontWeight="SemiBold" FontSize="12"
+                           Foreground="{DynamicResource PbTextBrush}" TextTrimming="CharacterEllipsis" />
+                <TextBlock Text="{Binding #ThisControl.MetaText}" Classes="pbTextCaption" />
+            </StackPanel>
+        </Grid>
+    </Border>
+</UserControl>

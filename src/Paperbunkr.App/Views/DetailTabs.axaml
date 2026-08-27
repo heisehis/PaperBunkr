@@ -2,6 +2,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Paperbunkr.App.ViewModels"
              xmlns:models="using:Paperbunkr.App.Models"
+             xmlns:conv="using:Avalonia.Data.Converters"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d" d:DesignWidth="900" d:DesignHeight="400"
@@ -55,9 +56,9 @@
     </UserControl.Styles>
 
     <StackPanel>
-        <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,0,0,1" Margin="0,24,0,0">
+        <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,0,0,1" Margin="0,24,0,0" IsVisible="{Binding ShowTabStrip}">
             <StackPanel Orientation="Horizontal" Spacing="22">
-                <Button Classes="tab" Classes.active="{Binding IsIssuesTab}" Command="{Binding GoIssuesCommand}">
+                <Button Classes="tab" Classes.active="{Binding IsIssuesTab}" Command="{Binding GoIssuesCommand}" IsVisible="{Binding ShowIssuesTab}">
                     <StackPanel Orientation="Horizontal" Spacing="7">
                         <TextBlock Text="Issues" />
                         <TextBlock Classes="tabCount" Text="{Binding Issues.Count}" VerticalAlignment="Center" />
@@ -101,6 +102,23 @@
                                           Command="{Binding #IssuesList.((vm:DetailTabsViewModel)DataContext).RevealIssueCommand}"
                                           CommandParameter="{Binding}"
                                           IsEnabled="{Binding HasFile}" />
+                                <Separator />
+                                <MenuItem Header="Mark as Read"
+                                          Command="{Binding #IssuesList.((vm:DetailTabsViewModel)DataContext).MarkIssueReadCommand}"
+                                          CommandParameter="{Binding}" />
+                                <MenuItem Header="Mark as Unread"
+                                          Command="{Binding #IssuesList.((vm:DetailTabsViewModel)DataContext).MarkIssueUnreadCommand}"
+                                          CommandParameter="{Binding}" />
+                                <MenuItem Header="Quick Rate…"
+                                          Command="{Binding #IssuesList.((vm:DetailTabsViewModel)DataContext).QuickRateCommand}"
+                                          CommandParameter="{Binding}" />
+                                <Separator />
+                                <MenuItem Header="Set Cover…"
+                                          Command="{Binding #IssuesList.((vm:DetailTabsViewModel)DataContext).ChangeIssueCoverCommand}"
+                                          CommandParameter="{Binding}" />
+                                <MenuItem Header="Reset Cover"
+                                          Command="{Binding #IssuesList.((vm:DetailTabsViewModel)DataContext).ResetIssueCoverCommand}"
+                                          CommandParameter="{Binding}" />
                             </ContextMenu>
                         </Border.ContextMenu>
                         <Grid>
@@ -302,6 +320,172 @@
                         HorizontalAlignment="Left" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
             </StackPanel>
         </Grid>
+
+        <!-- External metadata (docs/superpowers/specs/2026-08-19-metadata-model-anilist-search-and-
+             link-design.md) - completes the search/match UI Phase 5b's own spec deferred. Same
+             search-flyout idiom as the Related tab's "+ Add Related Series" above, but async
+             (network) rather than a local DB query, hence the loading/error states. -->
+        <StackPanel IsVisible="{Binding IsDetailsTab}" Margin="0,24,0,0" Spacing="8">
+            <StackPanel Orientation="Horizontal" Spacing="10">
+                <TextBlock Text="External Metadata" FontSize="12.5" FontWeight="SemiBold"
+                           Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
+                <Button Content="+ Link External Metadata"
+                        Command="{Binding ToggleSearchMetadataCommand}" Padding="10,5" FontSize="12" CornerRadius="5"
+                        Background="{DynamicResource PbAccentBrush}" Foreground="{DynamicResource PbBadgeTextBrush}" BorderThickness="0" />
+            </StackPanel>
+
+            <Border IsVisible="{Binding IsSearchingMetadata}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
+                    CornerRadius="6" Padding="12">
+                <StackPanel Spacing="8">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <ComboBox ItemsSource="{x:Static vm:DetailTabsViewModel.MetadataProviderOptions}"
+                                  SelectedItem="{Binding SelectedMetadataProvider}" Width="130" FontSize="12" />
+                        <TextBox Text="{Binding MetadataSearchQuery}" Watermark="Search…" FontSize="12" Width="220" />
+                        <Button Content="Search" Command="{Binding SearchMetadataCommand}" Padding="10,5" FontSize="12" CornerRadius="5" />
+                    </StackPanel>
+                    <TextBlock IsVisible="{Binding IsMetadataSearchInProgress}" Text="Searching…" FontSize="12"
+                               Foreground="{DynamicResource PbTextFaintBrush}" />
+                    <TextBlock IsVisible="{Binding MetadataSearchError, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}"
+                               Text="{Binding MetadataSearchError}" FontSize="12" Foreground="{DynamicResource PbTextFaintBrush}" />
+                    <ItemsControl ItemsSource="{Binding MetadataSearchResults}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="models:AniListMatchSample">
+                                <Grid ColumnDefinitions="Auto,*,Auto" Margin="0,3">
+                                    <Border Grid.Column="0" CornerRadius="4" Padding="6,2" Margin="0,0,8,0" VerticalAlignment="Center"
+                                            Classes.auto="{Binding TierClass, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter=auto}"
+                                            Classes.review="{Binding TierClass, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter=review}"
+                                            Classes.reject="{Binding TierClass, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter=reject}">
+                                        <Border.Styles>
+                                            <Style Selector="Border.auto"><Setter Property="Background" Value="#2E7D32" /></Style>
+                                            <Style Selector="Border.review"><Setter Property="Background" Value="#8A6D1D" /></Style>
+                                            <Style Selector="Border.reject"><Setter Property="Background" Value="{DynamicResource PbSurfaceAltBrush}" /></Style>
+                                        </Border.Styles>
+                                        <TextBlock Text="{Binding TierLabel}" FontSize="10" Foreground="White" />
+                                    </Border>
+                                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                        <TextBlock Text="{Binding Title}" FontSize="12.5" Foreground="{DynamicResource PbTextMutedBrush}" />
+                                        <TextBlock Text="{Binding ConfidencePercent, StringFormat='{}{0}% match'}" FontSize="10.5"
+                                                   Foreground="{DynamicResource PbTextFaintBrush}" />
+                                    </StackPanel>
+                                    <Button Grid.Column="2" Content="Link" Padding="10,4" FontSize="11.5" CornerRadius="5"
+                                            Background="{DynamicResource PbAccentBrush}" Foreground="{DynamicResource PbBadgeTextBrush}" BorderThickness="0"
+                                            Command="{Binding $parent[ItemsControl].((vm:DetailTabsViewModel)DataContext).LinkMetadataCommand}"
+                                            CommandParameter="{Binding}" />
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </Border>
+
+            <TextBlock IsVisible="{Binding !HasExternalLinks}" Text="Not linked to any external metadata source yet." FontSize="12.5"
+                       Foreground="{DynamicResource PbTextFaintBrush}" />
+            <ItemsControl ItemsSource="{Binding ExternalLinks}">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="models:ExternalLinkSample">
+                        <Border Background="{DynamicResource PbSurfaceAltBrush}" CornerRadius="12" Padding="10,4" Margin="0,0,6,6">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <TextBlock Text="{Binding ProviderLabel}" FontSize="11.5" FontWeight="SemiBold"
+                                           Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
+                                <Button Content="✕" Padding="0" Width="16" Height="16" FontSize="9.5" CornerRadius="8"
+                                        Background="Transparent" BorderThickness="0" Foreground="{DynamicResource PbTextFaintBrush}"
+                                        Command="{Binding $parent[ItemsControl].((vm:DetailTabsViewModel)DataContext).UnlinkMetadataCommand}"
+                                        CommandParameter="{Binding}"
+                                        ToolTip.Tip="Remove this link" />
+                            </StackPanel>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </StackPanel>
+
+        <!-- Trackers (docs/superpowers/specs/2026-08-23-tracker-write-back-sync-design.md) -
+             deliberately separate from External Metadata above: linking here writes to the user's
+             real account on the chosen service, not just this app's own database. -->
+        <StackPanel IsVisible="{Binding IsDetailsTab}" Margin="0,24,0,0" Spacing="8">
+            <StackPanel Orientation="Horizontal" Spacing="10">
+                <TextBlock Text="Trackers" FontSize="12.5" FontWeight="SemiBold"
+                           Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
+                <Button Content="+ Link for Tracking"
+                        Command="{Binding ToggleLinkTrackerCommand}" Padding="10,5" FontSize="12" CornerRadius="5"
+                        Background="{DynamicResource PbAccentBrush}" Foreground="{DynamicResource PbBadgeTextBrush}" BorderThickness="0" />
+                <Button Content="Sync to Trackers" IsVisible="{Binding HasTrackerLinks}"
+                        Command="{Binding SyncToTrackersCommand}" Padding="10,5" FontSize="12" CornerRadius="5"
+                        Background="{DynamicResource PbSurfaceAltBrush}" Foreground="{DynamicResource PbTextMutedBrush}" BorderThickness="0" />
+            </StackPanel>
+
+            <Border IsVisible="{Binding IsLinkingTracker}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
+                    CornerRadius="6" Padding="12">
+                <StackPanel Spacing="8">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <ComboBox ItemsSource="{x:Static vm:DetailTabsViewModel.TrackerServiceOptions}"
+                                  SelectedItem="{Binding SelectedTrackerService}" Width="140" FontSize="12" />
+                        <TextBox Text="{Binding TrackerSearchQuery}" Watermark="Search title…" FontSize="12" Width="220" />
+                        <Button Content="Search" Command="{Binding SearchTrackerCommand}" Padding="10,5" FontSize="12" CornerRadius="5" />
+                    </StackPanel>
+                    <TextBlock IsVisible="{Binding IsTrackerSearchInProgress}" Text="Searching…" FontSize="12"
+                               Foreground="{DynamicResource PbTextFaintBrush}" />
+                    <TextBlock IsVisible="{Binding TrackerSearchError, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}"
+                               Text="{Binding TrackerSearchError}" FontSize="12" Foreground="{DynamicResource PbTextFaintBrush}" />
+                    <ItemsControl ItemsSource="{Binding TrackerSearchResults}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="models:TrackerMatchSample">
+                                <Grid ColumnDefinitions="Auto,*,Auto" Margin="0,3">
+                                    <Border Grid.Column="0" CornerRadius="4" Padding="6,2" Margin="0,0,8,0" VerticalAlignment="Center"
+                                            Classes.auto="{Binding TierClass, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter=auto}"
+                                            Classes.review="{Binding TierClass, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter=review}"
+                                            Classes.reject="{Binding TierClass, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter=reject}">
+                                        <Border.Styles>
+                                            <Style Selector="Border.auto"><Setter Property="Background" Value="#2E7D32" /></Style>
+                                            <Style Selector="Border.review"><Setter Property="Background" Value="#8A6D1D" /></Style>
+                                            <Style Selector="Border.reject"><Setter Property="Background" Value="{DynamicResource PbSurfaceAltBrush}" /></Style>
+                                        </Border.Styles>
+                                        <TextBlock Text="{Binding TierLabel}" FontSize="10" Foreground="White" />
+                                    </Border>
+                                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                        <TextBlock Text="{Binding Title}" FontSize="12.5" Foreground="{DynamicResource PbTextMutedBrush}" />
+                                        <TextBlock Text="{Binding ConfidencePercent, StringFormat='{}{0}% match'}" FontSize="10.5"
+                                                   Foreground="{DynamicResource PbTextFaintBrush}" />
+                                    </StackPanel>
+                                    <Button Grid.Column="2" Content="{Binding LinkConfirm.Label}" Padding="10,4" FontSize="11.5" CornerRadius="5"
+                                            Background="{DynamicResource PbAccentBrush}" Foreground="{DynamicResource PbBadgeTextBrush}" BorderThickness="0"
+                                            Command="{Binding LinkConfirm.TriggerCommand}" />
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </Border>
+
+            <TextBlock IsVisible="{Binding TrackerSyncStatus, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}"
+                       Text="{Binding TrackerSyncStatus}" FontSize="12" Foreground="{DynamicResource PbTextFaintBrush}" />
+
+            <TextBlock IsVisible="{Binding !HasTrackerLinks}" Text="Not linked to any tracker yet." FontSize="12.5"
+                       Foreground="{DynamicResource PbTextFaintBrush}" />
+            <ItemsControl ItemsSource="{Binding TrackerLinks}">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="models:TrackerLinkSample">
+                        <Border Background="{DynamicResource PbSurfaceAltBrush}" CornerRadius="12" Padding="10,4" Margin="0,0,6,6">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <TextBlock Text="{Binding Service}" FontSize="11.5" FontWeight="SemiBold"
+                                           Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
+                                <Button Content="✕" Padding="0" Width="16" Height="16" FontSize="9.5" CornerRadius="8"
+                                        Background="Transparent" BorderThickness="0" Foreground="{DynamicResource PbTextFaintBrush}"
+                                        Command="{Binding $parent[ItemsControl].((vm:DetailTabsViewModel)DataContext).UnlinkTrackerCommand}"
+                                        CommandParameter="{Binding}"
+                                        ToolTip.Tip="Remove this tracker link" />
+                            </StackPanel>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </StackPanel>
 
         <!-- Activity tab - no activity-log schema/feature exists yet, so this is left as a real
              empty state rather than faked per-series log entries. -->

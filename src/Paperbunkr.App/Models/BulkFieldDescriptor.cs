@@ -92,8 +92,12 @@ public static class BulkFieldRegistry
         Text("Alternate Number", Main, i => i.AlternateNumber, (i, v) => i.AlternateNumber = v),
         Text("Series Group", Main, i => i.SeriesGroup, (i, v) => i.SeriesGroup = v),
         Text("Story Arc", Main, i => i.StoryArc, (i, v) => i.StoryArc = v),
-        Text("Genre", Main, i => i.Genre, (i, v) => i.Genre = v, isList: true),
-        Text("Tags", Main, i => i.Tags, (i, v) => i.Tags = v, isList: true),
+        // Genre/Tags read/write through the structured IssueTag collection now (docs/superpowers/
+        // specs/2026-08-23-weighted-categorized-tags-design.md) - Get still returns the same
+        // joined comma string as before, and Set still diffs rather than replaces (MergeFrom),
+        // preserving Category/Weight for any value that survives the edit.
+        Text("Genre", Main, i => i.JoinedGenre(), (i, v) => i.MergeFrom(IssueTagField.Genre, new[] { v }), isList: true),
+        Text("Tags", Main, i => i.JoinedTags(), (i, v) => i.MergeFrom(IssueTagField.Tags, new[] { v }), isList: true),
         // Series-owned, reached through Issue.Series - the first bulk field to write through to the
         // owning Series rather than the Issue itself (docs/superpowers/specs/2026-08-16-manga-
         // content-type-classification-design.md §1). Bulk-saving iterates selected Issues once per
@@ -109,6 +113,13 @@ public static class BulkFieldRegistry
             i => i.Series.Status.ToString(),
             (i, v) => i.Series.Status = Enum.Parse<SeriesStatus>(v ?? nameof(SeriesStatus.Unknown)),
             Options: Enum.GetNames<SeriesStatus>()),
+        // Series-owned, same shape as Status above (docs/superpowers/specs/2026-08-19-metadata-
+        // model-reading-status-design.md) - the user's own reading-progress relationship with the
+        // series, not the publisher's release status.
+        new("Reading Status", Main, FieldKind.Enum, IsListField: false,
+            i => i.Series.ReadingStatus.ToString(),
+            (i, v) => i.Series.ReadingStatus = Enum.Parse<ReadingStatus>(v ?? nameof(ReadingStatus.Unknown)),
+            Options: Enum.GetNames<ReadingStatus>()),
         Text("Publisher", Main, i => i.Publisher, (i, v) => i.Publisher = v),
         Text("Imprint", Main, i => i.Imprint, (i, v) => i.Imprint = v),
         Text("Format", Main, i => i.Format, (i, v) => i.Format = v),

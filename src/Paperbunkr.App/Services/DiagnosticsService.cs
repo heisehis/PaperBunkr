@@ -5,7 +5,9 @@ using System.Linq;
 using System.Reflection;
 using System.Text;
 using System.Threading.Tasks;
+using Avalonia;
 using Avalonia.Threading;
+using Paperbunkr.App.Views;
 
 namespace Paperbunkr.App.Services;
 
@@ -13,12 +15,12 @@ namespace Paperbunkr.App.Services;
 /// Startup-milestone breadcrumbs and crash capture, written to plain-text files under
 /// <c>%AppData%\Paperbunkr\logs</c>. Mirrors ComicRackCE's own diagnostic report shape
 /// (<c>cYo.Common.Runtime.Diagnostic.WriteProgramInfo</c> + <c>CrashDialog.OnBark</c>'s
-/// program-info/exception-chain/timestamp layout) rather than inventing a new one, but as a
-/// file sink instead of CE's WinForms crash dialog - no direct Avalonia equivalent exists yet,
-/// and the immediate problem this solves is "a startup failure produces zero durable evidence,"
-/// not "the user needs an in-app crash reporter." Built after a live session where a genuinely
-/// silent Database.Migrate() interruption took an hour of forensic SQL/EF probing to diagnose
-/// with no log to consult - see docs/superpowers/specs (crash diagnostics infra) for context.
+/// program-info/exception-chain/timestamp layout) rather than inventing a new one. Originally built
+/// as a pure file sink (a live session had a genuinely silent <c>Database.Migrate()</c> interruption
+/// take an hour of forensic SQL/EF probing to diagnose with no log to consult) with no in-app crash
+/// dialog - <see cref="Views.CrashReportWindow"/> (docs/superpowers/specs/
+/// 2026-08-23-app-chrome-crash-reporter-and-tray-design.md) added that on top of the same capture
+/// hooks, still with zero change to what gets logged or where.
 /// </summary>
 public static class DiagnosticsService
 {
@@ -61,23 +63,110 @@ public static class DiagnosticsService
         }
 
         AppDomain.CurrentDomain.UnhandledException += (_, e) =>
-            LogCrash("AppDomain.UnhandledException", e.ExceptionObject as Exception, e.IsTerminating);
+        {
+            var exception = e.ExceptionObject as Exception;
+            LogCrash("AppDomain.UnhandledException", exception, e.IsTerminating);
+            // allowContinue: false - the CLR terminates the process the instant this handler
+            // returns regardless of anything we do here, so offering a Continue button would
+            // misrepresent what's about to happen. Always resolves to a clean, explicit exit
+            // instead of letting the runtime's own unhandled-exception termination run (which on
+            // Windows can surface an OS-level "stopped working" prompt).
+            ShowCrashDialogAndExit("AppDomain.UnhandledException", exception, allowContinue: false);
+        };
 
         TaskScheduler.UnobservedTaskException += (_, e) =>
         {
+            // isTerminating: false - the app keeps running with no visible break (the fault was
+            // already swallowed by the time this fires), so no dialog: showing a crash-style
+            // interruption for something the user never actually experienced would be a new,
+            // unwarranted regression, not a feature. Log only.
             LogCrash("TaskScheduler.UnobservedTaskException", e.Exception, isTerminating: false);
             e.SetObserved();
         };
 
         Dispatcher.UIThread.UnhandledException += (_, e) =>
         {
-            // Not marking e.Handled: Avalonia has no equivalent to WinForms' "swallow and keep
-            // running" for UI-thread exceptions, and pretending otherwise would leave the app in
-            // an unknown state. This only guarantees the crash is logged before the process exits.
             LogCrash("Dispatcher.UIThread.UnhandledException", e.Exception, isTerminating: true);
+            // Unlike AppDomain.UnhandledException, this source genuinely supports swallow-and-
+            // continue: DispatcherUnhandledExceptionEventArgs.Handled (verified against Avalonia's
+            // own Avalonia.Base.xml docs - correcting this comment's own prior claim that no such
+            // thing existed) suppresses the crash exactly like WinForms' own
+            // ThreadExceptionEventArgs.Handled, which CE's Abort button relied on.
+            var outcome = ShowCrashDialog("Dispatcher.UIThread.UnhandledException", e.Exception, allowContinue: true);
+            if (outcome == CrashOutcome.Continue)
+            {
+                e.Handled = true;
+                return;
+            }
+
+            ActOnCrashOutcome(outcome);
         };
 
         LogMilestone("Diagnostics installed.");
+    }
+
+    /// <summary>
+    /// Shows <see cref="CrashReportWindow"/> for a source that never offers Continue, then always
+    /// exits (Restart relaunches first) - the shared tail end of the
+    /// <see cref="AppDomain.UnhandledException"/> path. If no outcome could be obtained (dialog
+    /// unavailable - see <see cref="ShowCrashDialog"/>), still exits explicitly rather than falling
+    /// through to the CLR's own termination.
+    /// </summary>
+    private static void ShowCrashDialogAndExit(string context, Exception? exception, bool allowContinue)
+    {
+        var outcome = ShowCrashDialog(context, exception, allowContinue);
+        ActOnCrashOutcome(outcome);
+        Environment.Exit(1);
+    }
+
+    private static void ActOnCrashOutcome(CrashOutcome? outcome)
+    {
+        if (outcome != CrashOutcome.Restart)
+        {
+            return;
+        }
+
+        try
+        {
+            string? exePath = Environment.ProcessPath;
+            if (exePath is not null)
+            {
+                Process.Start(exePath);
+            }
+        }
+        catch
+        {
+            // A failed relaunch must not prevent the exit that's about to happen anyway.
+        }
+
+        Environment.Exit(0);
+    }
+
+    /// <summary>
+    /// Blocks the calling thread (any thread - marshals to the UI thread if needed) until the user
+    /// responds to <see cref="CrashReportWindow"/>, or returns <c>null</c> if the dialog couldn't be
+    /// shown at all (Avalonia not yet running - an early-startup crash, or the dialog itself threw).
+    /// Never lets a failure here mask the original crash, which is already durably logged by the
+    /// time this runs.
+    /// </summary>
+    private static CrashOutcome? ShowCrashDialog(string context, Exception? exception, bool allowContinue)
+    {
+        try
+        {
+            if (Application.Current is null)
+            {
+                return null;
+            }
+
+            string report = BuildReport(context, exception, isTerminating: allowContinue is false);
+            return Dispatcher.UIThread.CheckAccess()
+                ? CrashReportWindow.ShowModal(report, allowContinue)
+                : Dispatcher.UIThread.Invoke(() => CrashReportWindow.ShowModal(report, allowContinue));
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     /// <summary>Appends a timestamped breadcrumb to startup.log - cheap enough to call liberally around startup phases.</summary>
@@ -99,18 +188,9 @@ public static class DiagnosticsService
             string fileName = $"crash-{DateTime.Now:yyyyMMdd-HHmmss-fff}.log";
             string path = Path.Combine(LogDirectory, fileName);
 
-            var sb = new StringBuilder();
-            WriteProgramInfo(sb);
-            sb.AppendLine(new string('-', 20));
-            sb.AppendLine($"Context      : {context}");
-            sb.AppendLine($"Terminating  : {isTerminating}");
-            AppendException(sb, exception);
-            sb.AppendLine(new string('-', 20));
-            sb.AppendLine($"Report generated at: {DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}");
-
             lock (WriteLock)
             {
-                File.WriteAllText(path, sb.ToString());
+                File.WriteAllText(path, BuildReport(context, exception, isTerminating));
             }
 
             LogMilestone($"CRASH [{context}] terminating={isTerminating} -> {fileName}");
@@ -120,6 +200,24 @@ public static class DiagnosticsService
         {
             // A failure while logging a crash must never mask or replace the original crash.
         }
+    }
+
+    /// <summary>
+    /// Builds the full report text (program info + exception chain, same shape as CE's own crash
+    /// dialog content) - shared by <see cref="LogCrash"/>'s file write and
+    /// <see cref="CrashReportWindow"/>'s displayed text, so the two are always identical.
+    /// </summary>
+    private static string BuildReport(string context, Exception? exception, bool isTerminating)
+    {
+        var sb = new StringBuilder();
+        WriteProgramInfo(sb);
+        sb.AppendLine(new string('-', 20));
+        sb.AppendLine($"Context      : {context}");
+        sb.AppendLine($"Terminating  : {isTerminating}");
+        AppendException(sb, exception);
+        sb.AppendLine(new string('-', 20));
+        sb.AppendLine($"Report generated at: {DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}");
+        return sb.ToString();
     }
 
     private static void WriteProgramInfo(StringBuilder sb)

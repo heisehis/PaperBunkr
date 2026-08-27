@@ -146,7 +146,7 @@ public class AniListMetadataProviderTests
     }
 
     [Fact]
-    public async Task SearchAsync_TooManyRequests_ReturnsEmpty_WithoutThrowing()
+    public async Task SearchAsync_TooManyRequests_ThrowsProviderUnavailable()
     {
         var provider = CreateProvider(new StubHandler((_, _) =>
         {
@@ -155,28 +155,35 @@ public class AniListMetadataProviderTests
             return response;
         }));
 
-        var results = await provider.SearchAsync("anything", CancellationToken.None);
-
-        Assert.Empty(results);
+        await Assert.ThrowsAsync<MetadataProviderUnavailableException>(() => provider.SearchAsync("anything", CancellationToken.None));
     }
 
     [Fact]
-    public async Task SearchAsync_ServiceUnavailable_ReturnsEmpty_WithoutThrowing()
+    public async Task SearchAsync_ServiceUnavailable_ThrowsProviderUnavailable()
     {
         // AniList's own documented shape for a severe outage: HTTP 403 with a GraphQL error body.
         var provider = CreateProvider(new StubHandler((_, _) => JsonResponse(HttpStatusCode.Forbidden, GraphQlErrorResponseJson)));
 
-        var results = await provider.SearchAsync("anything", CancellationToken.None);
-
-        Assert.Empty(results);
+        await Assert.ThrowsAsync<MetadataProviderUnavailableException>(() => provider.SearchAsync("anything", CancellationToken.None));
     }
 
     [Fact]
-    public async Task SearchAsync_NetworkFailure_ReturnsEmpty_WithoutThrowing()
+    public async Task SearchAsync_NetworkFailure_ThrowsProviderUnavailable()
     {
         var provider = CreateProvider(new StubHandler((_, _) => throw new HttpRequestException("connection refused")));
 
-        var results = await provider.SearchAsync("anything", CancellationToken.None);
+        await Assert.ThrowsAsync<MetadataProviderUnavailableException>(() => provider.SearchAsync("anything", CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task SearchAsync_SuccessfulCallWithZeroMedia_ReturnsEmpty_DoesNotThrow()
+    {
+        // The genuine "no such series" case - a successful call whose Page.media is an empty array,
+        // not a null/failed response - must stay distinguishable from the failure cases above.
+        const string emptyResultsJson = """{ "data": { "Page": { "media": [] } } }""";
+        var provider = CreateProvider(new StubHandler((_, _) => JsonResponse(HttpStatusCode.OK, emptyResultsJson)));
+
+        var results = await provider.SearchAsync("some nonexistent title", CancellationToken.None);
 
         Assert.Empty(results);
     }

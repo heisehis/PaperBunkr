@@ -409,6 +409,94 @@ public class LibraryFolderScannerTests : IDisposable
         Assert.Equal(ContentType.Unknown, series.ContentType); // Series.ContentType's own property initializer
     }
 
+    // ===================== LanguageISO content-type heuristic (docs/superpowers/specs/
+    // 2026-08-23-language-iso-content-type-heuristic-design.md) =====================
+
+    [Fact]
+    public async Task ScanAllAsync_LanguageIsoJapanese_NoEmbeddedManga_NewSeries_SetsContentTypeMangaAndRightToLeft()
+    {
+        var embedded = new cYo.Projects.ComicRack.Engine.ComicInfo
+        {
+            Series = "One Piece",
+            LanguageISO = "ja",
+        };
+        CbzFixture.Create(Path.Combine(_scanRoot, "One Piece 001.cbz"), pageCount: 1, embedded);
+        AddWatchedFolder(_scanRoot);
+
+        await CreateScanner().ScanAllAsync(new Progress<(int, int)>());
+
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        var series = Assert.Single(context.Series);
+        Assert.Equal(ContentType.Manga, series.ContentType);
+        Assert.Equal(ReadingMode.RightToLeft, series.ReadingMode);
+    }
+
+    [Fact]
+    public async Task ScanAllAsync_LanguageIsoKorean_NewSeries_SetsContentTypeManhwaAndWebtoon()
+    {
+        var embedded = new cYo.Projects.ComicRack.Engine.ComicInfo
+        {
+            Series = "Solo Leveling",
+            LanguageISO = "ko",
+        };
+        CbzFixture.Create(Path.Combine(_scanRoot, "Solo Leveling 001.cbz"), pageCount: 1, embedded);
+        AddWatchedFolder(_scanRoot);
+
+        await CreateScanner().ScanAllAsync(new Progress<(int, int)>());
+
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        var series = Assert.Single(context.Series);
+        Assert.Equal(ContentType.Manhwa, series.ContentType);
+        Assert.Equal(ReadingMode.Webtoon, series.ReadingMode);
+    }
+
+    /// <summary>The embedded Manga field is a deliberate classification; LanguageISO is only an
+    /// inference. Confirms the field wins even when it disagrees with what LanguageISO would imply.</summary>
+    [Fact]
+    public async Task ScanAllAsync_EmbeddedMangaFieldPresent_LanguageIsoIgnored()
+    {
+        var embedded = new cYo.Projects.ComicRack.Engine.ComicInfo
+        {
+            Series = "One Piece",
+            Manga = cYo.Projects.ComicRack.Engine.MangaYesNo.No,
+            LanguageISO = "ja",
+        };
+        CbzFixture.Create(Path.Combine(_scanRoot, "One Piece 001.cbz"), pageCount: 1, embedded);
+        AddWatchedFolder(_scanRoot);
+
+        await CreateScanner().ScanAllAsync(new Progress<(int, int)>());
+
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        var series = Assert.Single(context.Series);
+        Assert.Equal(ContentType.Comic, series.ContentType);
+        Assert.Equal(ReadingMode.LeftToRight, series.ReadingMode);
+    }
+
+    [Fact]
+    public async Task ScanAllAsync_LanguageIsoHeuristic_ExistingSeries_NeverOverwritesItsContentType()
+    {
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            context.Series.Add(new Series { Name = "One Piece", ContentType = ContentType.Comic, ReadingMode = ReadingMode.LeftToRight });
+            context.SaveChanges();
+        }
+
+        var embedded = new cYo.Projects.ComicRack.Engine.ComicInfo
+        {
+            Series = "One Piece",
+            LanguageISO = "ja",
+        };
+        CbzFixture.Create(Path.Combine(_scanRoot, "One Piece 001.cbz"), pageCount: 1, embedded);
+        AddWatchedFolder(_scanRoot);
+
+        await CreateScanner().ScanAllAsync(new Progress<(int, int)>());
+
+        using var verify = new PaperbunkrDbContext(_dbOptions);
+        var series = Assert.Single(verify.Series);
+        Assert.Equal(ContentType.Comic, series.ContentType);
+        Assert.Equal(ReadingMode.LeftToRight, series.ReadingMode);
+    }
+
     // --- Series-reassignment proposals (docs/superpowers/specs/2026-08-17-metadata-model-phase2b-
     // series-reassignment-design.md) ---
 

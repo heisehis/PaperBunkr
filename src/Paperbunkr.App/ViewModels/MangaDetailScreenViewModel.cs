@@ -204,7 +204,7 @@ public partial class MangaDetailScreenViewModel : ViewModelBase
 
         var card = SeriesCardSample.FromSeries(series);
         _coverIssueId = card.CoverIssueId;
-        CoverImage = card.CoverIssueId is int coverIssueId ? CoverImageCache.Get(coverIssueId) : null;
+        CoverImage = card.CoverKey is string coverKey ? CoverImageCache.Get(coverKey) : null;
         BackdropImage = CoverImage is not null ? BackdropBlurRenderer.Render(CoverImage, new PixelSize(1600, 420)) : null;
         SeriesTitle = series.Name;
         SelectedContentType = series.ContentType;

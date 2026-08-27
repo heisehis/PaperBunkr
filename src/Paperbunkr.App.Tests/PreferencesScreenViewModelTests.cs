@@ -907,7 +907,8 @@ public class PreferencesScreenViewModelTests : IDisposable
         Assert.Equal("Added 1 issue across 1 series.", vm.ScanStatus);
         using var verifyContext = new PaperbunkrDbContext(_dbOptions);
         var issue = Assert.Single(verifyContext.Issues);
-        Assert.True(File.Exists(CoverThumbnailPaths.GetCachePath(issue.Id)));
+        string stem = CoverFingerprint.Stem(issue.Id, issue.FilePath, issue.FileSize);
+        Assert.True(File.Exists(CoverThumbnailPaths.GetCachePath(stem)));
     }
 
     [Fact]

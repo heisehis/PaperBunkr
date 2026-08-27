@@ -142,7 +142,7 @@ public partial class DetailTabsViewModel : ViewModelBase
                 Title = string.IsNullOrWhiteSpace(issue.EffectiveNumber()) ? "#?" : $"#{issue.EffectiveNumber()}",
                 IsUnread = issue.LastPageRead is null or 0,
                 CoverBrush = coverBrush,
-                CoverImage = CoverImageCache.Get(issue.Id),
+                CoverImage = CoverImageCache.Get(issue.Id, issue.FilePath, issue.FileSize),
                 FilePath = issue.FilePath,
             });
         }
@@ -1057,6 +1057,12 @@ public partial class DetailTabsViewModel : ViewModelBase
             return;
         }
 
+        using var context = _contextFactory();
+        var info = context.Issues
+            .Where(i => i.Id == issueId)
+            .Select(i => new { i.FilePath, i.FileSize })
+            .FirstOrDefault();
+
         var old = Issues[index];
         Issues[index] = new IssueCardSample
         {
@@ -1065,7 +1071,7 @@ public partial class DetailTabsViewModel : ViewModelBase
             Title = old.Title,
             IsUnread = old.IsUnread,
             CoverBrush = old.CoverBrush,
-            CoverImage = CoverImageCache.Get(issueId),
+            CoverImage = CoverImageCache.Get(issueId, info?.FilePath, info?.FileSize),
             FilePath = old.FilePath,
             IsSelected = old.IsSelected,
         };

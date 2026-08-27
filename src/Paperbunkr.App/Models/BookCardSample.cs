@@ -41,7 +41,7 @@ public sealed class BookCardSample
             // second copy of the same hash-to-color logic - purely a visual placeholder helper,
             // not a data coupling between the comic and book schemas.
             CoverBrush = SeriesCardSample.CoverBrushFor(book.Title),
-            CoverImage = BookCoverImageCache.Get(book.Id),
+            CoverImage = BookCoverImageCache.Get(book.Id, book.FilePath),
         };
     }
 }

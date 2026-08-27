@@ -64,7 +64,9 @@ public sealed class ReadingListSpotlightSample
             Tags = tags,
             FirstUnreadIssueId = firstUnreadIssueId,
             CoverBrush = SeriesCardSample.CoverBrushFor(firstSeriesName),
-            CoverImage = firstIssue is not null ? CoverImageCache.Get(firstIssue.Id) : null,
+            CoverImage = firstIssue is not null
+                ? CoverImageCache.Get(firstIssue.Id, firstIssue.FilePath, firstIssue.FileSize)
+                : null,
         };
     }
 }

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading;
@@ -15,9 +16,14 @@ namespace Paperbunkr.App.Services;
 /// Generates cover thumbnails for Books (docs/superpowers/specs/
 /// 2026-08-09-novels-epub-pdf-support-design.md §3), mirroring <see cref="CoverThumbnailService"/>
 /// for comics. EPUB covers come straight from the book's own embedded cover image
-/// (<see cref="EpubBookSource"/>); PDF has no equivalent embedded-cover concept, so its cover
-/// reuses the same <see cref="PageImageDecoder"/> pipeline the comic library already uses for PDF
-/// page rendering - PDF is already a supported comic archive format there, just decoding page 0.
+/// (<see cref="EpubBookSource"/>); PDF reuses the <see cref="PageImageDecoder"/> page-0 pipeline.
+///
+/// <para>
+/// Cache files are named <c>{bookId}-{fingerprint}.jpg</c> where the fingerprint is the book's
+/// current file path (docs/superpowers/specs/2026-08-27-cover-thumbnail-identity-validation-
+/// design.md) - path-only, since Books have no persisted size. A rebuild that reassigns
+/// <c>Book.Id</c> can no longer serve the previous book's cover for a reused id.
+/// </para>
 /// </summary>
 public class BookCoverThumbnailService
 {
@@ -38,21 +44,30 @@ public class BookCoverThumbnailService
     }
 
     /// <summary>
-    /// Generates and caches <paramref name="bookId"/>'s cover. Returns false (without throwing) for
-    /// a missing/unsupported/corrupt file or a book with no embedded cover - callers treat that as
+    /// Generates and caches <paramref name="bookId"/>'s cover at its fingerprinted path, sweeping
+    /// any stale <c>{bookId}-*.jpg</c> sibling. Returns false (without throwing) for a
+    /// missing/unsupported/corrupt file or a book with no embedded cover - callers treat that as
     /// "skip, try again next run", same contract as <see cref="CoverThumbnailService.TryGenerateThumbnail"/>.
     /// </summary>
     public bool TryGenerateThumbnail(int bookId, string filePath, BookFormat format)
     {
-        string destPath = BookCoverThumbnailPaths.GetCachePath(bookId);
+        string stem = CoverFingerprint.Stem(bookId, filePath, null);
+        string destPath = BookCoverThumbnailPaths.GetCachePath(stem);
         if (File.Exists(destPath))
         {
             return true;
         }
 
-        return format == BookFormat.Epub
+        bool ok = format == BookFormat.Epub
             ? TryGenerateFromEpubCover(filePath, destPath)
             : TryGenerateFromPdfFirstPage(filePath, destPath);
+
+        if (ok)
+        {
+            SweepStaleSiblings(bookId, keepStem: stem);
+        }
+
+        return ok;
     }
 
     private static bool TryGenerateFromEpubCover(string filePath, string destPath)
@@ -118,8 +133,10 @@ public class BookCoverThumbnailService
     }
 
     /// <summary>
-    /// Generates thumbnails for every Book that has no cached thumbnail yet. Presence-based, one
-    /// bad file doesn't stop the batch - same contract as <see cref="CoverThumbnailService.GenerateAllAsync"/>.
+    /// Generates thumbnails for every Book with no cached thumbnail for its current fingerprint,
+    /// then deletes orphaned cache files whose stem no longer matches any current book. Presence-
+    /// based, one bad file doesn't stop the batch - same contract as
+    /// <see cref="CoverThumbnailService.GenerateAllAsync"/>.
     /// </summary>
     public async Task GenerateAllAsync(IProgress<(int Done, int Total)> progress, CancellationToken ct = default)
     {
@@ -127,10 +144,17 @@ public class BookCoverThumbnailService
             () =>
             {
                 using var context = _contextFactory();
-                var candidates = context.Books
+                var all = context.Books
                     .Select(b => new { b.Id, b.FilePath, b.Format })
-                    .ToList()
-                    .Where(b => !File.Exists(BookCoverThumbnailPaths.GetCachePath(b.Id)))
+                    .ToList();
+
+                var validStems = new HashSet<string>(
+                    all.Select(b => CoverFingerprint.Stem(b.Id, b.FilePath, null)),
+                    StringComparer.Ordinal);
+
+                var candidates = all
+                    .Where(b => !File.Exists(BookCoverThumbnailPaths.GetCachePath(
+                        CoverFingerprint.Stem(b.Id, b.FilePath, null))))
                     .ToList();
 
                 int total = candidates.Count;
@@ -152,7 +176,45 @@ public class BookCoverThumbnailService
 
                     progress.Report((++done, total));
                 }
+
+                CollectOrphans(validStems);
             },
             ct);
+    }
+
+    private static void SweepStaleSiblings(int bookId, string keepStem)
+    {
+        string keepName = keepStem + ".jpg";
+        foreach (string path in BookCoverThumbnailPaths.EnumerateForBook(bookId).ToList())
+        {
+            if (!string.Equals(Path.GetFileName(path), keepName, StringComparison.OrdinalIgnoreCase))
+            {
+                try
+                {
+                    File.Delete(path);
+                }
+                catch (IOException)
+                {
+                }
+            }
+        }
+    }
+
+    private static void CollectOrphans(HashSet<string> validStems)
+    {
+        foreach (string path in BookCoverThumbnailPaths.EnumerateAll().ToList())
+        {
+            string stem = Path.GetFileNameWithoutExtension(path);
+            if (!validStems.Contains(stem))
+            {
+                try
+                {
+                    File.Delete(path);
+                }
+                catch (IOException)
+                {
+                }
+            }
+        }
     }
 }

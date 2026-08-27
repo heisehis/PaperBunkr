@@ -136,7 +136,7 @@ public partial class DetailScreenViewModel : ViewModelBase
         CoverBrush = card.CoverBrush;
         _coverIssueId = card.CoverIssueId;
         // Single-item, low-volume display (unlike the Library grid) - eager decode here is fine.
-        var seriesCover = card.CoverIssueId is int coverIssueId ? CoverImageCache.Get(coverIssueId) : null;
+        var seriesCover = card.CoverKey is string coverKey ? CoverImageCache.Get(coverKey) : null;
         CoverImage = seriesCover;
         _seriesCoverImage = seriesCover;
         SeriesTitle = series.Name;
@@ -243,7 +243,7 @@ public partial class DetailScreenViewModel : ViewModelBase
                 return;
             }
 
-            CoverImage = CoverImageCache.Get(issue.Id);
+            CoverImage = CoverImageCache.Get(issue.Id, issue.FilePath, issue.FileSize);
             Summary = string.IsNullOrWhiteSpace(issue.Summary) ? "No summary available." : issue.Summary;
             Meta.LoadIssue(issue);
             Pills.LoadIssue(issue, enabledVirtualTags);

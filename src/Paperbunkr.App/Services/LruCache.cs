@@ -91,6 +91,31 @@ public sealed class LruCache<TKey, TValue> where TKey : notnull
         return true;
     }
 
+    /// <summary>Drops every entry whose key matches <paramref name="predicate"/>, without
+    /// disposing (same rationale as <see cref="Remove"/>). Used to evict all of an id's
+    /// fingerprint-keyed cover entries at once when that id's row is deleted.</summary>
+    public void RemoveWhere(Func<TKey, bool> predicate)
+    {
+        List<TKey>? doomed = null;
+        foreach (var key in _values.Keys)
+        {
+            if (predicate(key))
+            {
+                (doomed ??= new List<TKey>()).Add(key);
+            }
+        }
+
+        if (doomed is null)
+        {
+            return;
+        }
+
+        foreach (var key in doomed)
+        {
+            Remove(key);
+        }
+    }
+
     private void Touch(TKey key)
     {
         if (_recencyNodes.TryGetValue(key, out var node))

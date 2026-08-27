@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -754,6 +755,43 @@ public partial class LibraryScreenViewModel : ViewModelBase
         OnPropertyChanged(nameof(EmptyStateMessage));
         OnPropertyChanged(nameof(EmptyStateActionLabel));
         OnPropertyChanged(nameof(EmptyStateActionCommand));
+
+        KickCoverReconcile();
+    }
+
+    // 0 = idle, 1 = a reconcile pass is running. Static: one library-wide cover cache, and
+    // LoadFromDatabase runs on every rail navigation - without this guard, quick back-and-forth
+    // navigation would stack redundant full passes.
+    private static int s_coverReconcileRunning;
+
+    /// <summary>
+    /// Fire-and-forget cover-cache reconciliation on library load (docs/superpowers/specs/
+    /// 2026-08-27-cover-thumbnail-identity-validation-design.md) - regenerates any cover whose
+    /// fingerprint no longer matches its issue and sweeps orphaned files. Presence-based, so a
+    /// pass with nothing to do is cheap (one query + a File.Exists per issue + one dir listing).
+    /// </summary>
+    private static void KickCoverReconcile()
+    {
+        if (Interlocked.CompareExchange(ref s_coverReconcileRunning, 1, 0) != 0)
+        {
+            return;
+        }
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await new CoverThumbnailService().GenerateAllAsync(new Progress<(int Done, int Total)>());
+            }
+            catch
+            {
+                // Best-effort - startup and the "Generate Covers" button also reconcile.
+            }
+            finally
+            {
+                Interlocked.Exchange(ref s_coverReconcileRunning, 0);
+            }
+        });
     }
 
     /// <summary>

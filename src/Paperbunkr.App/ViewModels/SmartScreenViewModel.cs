@@ -246,7 +246,7 @@ public partial class SmartScreenViewModel : ViewModelBase
                 Title = string.IsNullOrWhiteSpace(issue.EffectiveNumber()) ? "#?" : $"#{issue.EffectiveNumber()}",
                 IsUnread = issue.LastPageRead is null or 0,
                 CoverBrush = SeriesCardSample.CoverBrushFor(issue.Series!.Name),
-                CoverImage = CoverImageCache.Get(issue.Id),
+                CoverImage = CoverImageCache.Get(issue.Id, issue.FilePath, issue.FileSize),
             });
         }
 

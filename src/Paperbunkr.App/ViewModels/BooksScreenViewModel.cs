@@ -92,6 +92,32 @@ public partial class BooksScreenViewModel : ViewModelBase
         _goReaderForBook(book.BookId, book.Format);
     }
 
+    /// <summary>
+    /// Tile context menu's "Delete Book" (docs/superpowers/specs/2026-08-22-delete-functionality-
+    /// design.md) - same nested-submenu confirm as Library's Delete Series/Issue (a context menu
+    /// closes after every click, so there's no persistently-visible button for TwoStepConfirm's
+    /// timed re-click to apply to). Moves the file to the Recycle Bin (confirmed with the user),
+    /// same as Library - <see cref="Entities.Book"/> has no reading-list/event-style cross-
+    /// references to worry about (<see cref="Entities.BookBookmark"/>'s FK is the only thing
+    /// pointing at it, and that's <c>DeleteBehavior.Cascade</c>), so no shared helper needed here.
+    /// </summary>
+    [RelayCommand]
+    private void DeleteBook(int bookId)
+    {
+        using var context = PaperbunkrDb.CreateContext();
+        var book = context.Books.Find(bookId);
+        if (book is null)
+        {
+            return;
+        }
+
+        RecycleBinHelper.SendToRecycleBin(book.FilePath);
+        context.Books.Remove(book);
+        context.SaveChanges();
+        BookCoverImageCache.Invalidate(bookId);
+        LoadFromDatabase();
+    }
+
     [RelayCommand]
     private async Task AddFolder()
     {

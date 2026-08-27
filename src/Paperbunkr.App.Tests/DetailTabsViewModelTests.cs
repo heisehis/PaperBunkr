@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Paperbunkr.App.ViewModels;
 using Paperbunkr.Data;
 using Paperbunkr.Data.Entities;
+using Paperbunkr.Data.Metadata;
 
 namespace Paperbunkr.App.Tests;
 
@@ -50,8 +51,22 @@ public class DetailTabsViewModelTests : IDisposable
         }
     }
 
-    private DetailTabsViewModel CreateViewModel(Action<int>? goToProperties = null, Action<IReadOnlyList<int>>? goToBulkProperties = null, Action? onSelectionChanged = null) =>
-        new(goToProperties ?? (_ => { }), goToBulkProperties ?? (_ => { }), onSelectionChanged, () => new PaperbunkrDbContext(_dbOptions));
+    private DetailTabsViewModel CreateViewModel(Action<int>? goToProperties = null, Action<IReadOnlyList<int>>? goToBulkProperties = null, Action? onSelectionChanged = null, IMetadataProvider? metadataProvider = null) =>
+        new(goToProperties ?? (_ => { }), goToBulkProperties ?? (_ => { }), onSelectionChanged, () => new PaperbunkrDbContext(_dbOptions), metadataProvider);
+
+    /// <summary>No-network stand-in for <see cref="AniListMetadataProvider"/> - see docs/superpowers/specs/2026-08-19-metadata-model-anilist-search-and-link-design.md.</summary>
+    private sealed class FakeMetadataProvider : IMetadataProvider
+    {
+        public ExternalMetadataProvider ProviderKey => ExternalMetadataProvider.AniList;
+        public List<MetadataSearchResult> SearchResults { get; } = new();
+        public ExternalMediaMetadata? GetResult { get; set; }
+
+        public Task<IReadOnlyList<MetadataSearchResult>> SearchAsync(string query, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<MetadataSearchResult>>(SearchResults);
+
+        public Task<ExternalMediaMetadata?> GetAsync(string externalId, CancellationToken cancellationToken) =>
+            Task.FromResult(GetResult);
+    }
 
     private Series LoadSeriesEntity()
     {
@@ -145,6 +160,85 @@ public class DetailTabsViewModelTests : IDisposable
         var exception = Record.Exception(() => vm.RevealIssueCommand.Execute(third));
 
         Assert.Null(exception);
+    }
+
+    // --- Mark as Read/Unread (docs/superpowers/specs/2026-08-23-mark-as-read-design.md) ---
+
+    [Fact]
+    public void MarkIssueRead_NoSelection_MarksOnlyTheClickedIssue()
+    {
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            foreach (var issue in context.Issues)
+            {
+                issue.PageCount = 20;
+            }
+
+            context.SaveChanges();
+        }
+
+        var vm = CreateViewModel();
+        vm.LoadSeries(LoadSeriesEntity());
+        var target = vm.Issues.First(i => i.Title == "#1");
+
+        vm.MarkIssueReadCommand.Execute(target);
+
+        using var verifyContext = new PaperbunkrDbContext(_dbOptions);
+        Assert.Equal(19, verifyContext.Issues.First(i => i.Number == "1").LastPageRead);
+        Assert.Null(verifyContext.Issues.First(i => i.Number == "2").LastPageRead);
+        Assert.False(vm.Issues.First(i => i.Title == "#1").IsUnread);
+    }
+
+    [Fact]
+    public void MarkIssueRead_WithSelection_MarksTheWholeUnion_NotJustTheClickedTile()
+    {
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            foreach (var issue in context.Issues)
+            {
+                issue.PageCount = 20;
+            }
+
+            context.SaveChanges();
+        }
+
+        var vm = CreateViewModel();
+        vm.LoadSeries(LoadSeriesEntity());
+        var first = vm.Issues.First(i => i.Title == "#1");
+        var second = vm.Issues.First(i => i.Title == "#2");
+        var third = vm.Issues.First(i => i.Title == "#3");
+        vm.ToggleIssueSelection(first, isShiftHeld: false);
+        vm.ToggleIssueSelection(second, isShiftHeld: false);
+
+        vm.MarkIssueReadCommand.Execute(third); // right-click an unselected tile - unions it in, same as EditIssueProperties/RevealIssue
+
+        using var verifyContext = new PaperbunkrDbContext(_dbOptions);
+        Assert.Equal(19, verifyContext.Issues.First(i => i.Number == "1").LastPageRead);
+        Assert.Equal(19, verifyContext.Issues.First(i => i.Number == "2").LastPageRead);
+        Assert.Equal(19, verifyContext.Issues.First(i => i.Number == "3").LastPageRead);
+    }
+
+    [Fact]
+    public void MarkIssueUnread_ZeroesLastPageRead_AndFlipsTheTileBackToUnread()
+    {
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            var issue = context.Issues.First(i => i.Number == "1");
+            issue.PageCount = 20;
+            issue.LastPageRead = 19;
+            context.SaveChanges();
+        }
+
+        var vm = CreateViewModel();
+        vm.LoadSeries(LoadSeriesEntity());
+        var target = vm.Issues.First(i => i.Title == "#1");
+        Assert.False(target.IsUnread);
+
+        vm.MarkIssueUnreadCommand.Execute(target);
+
+        using var verifyContext = new PaperbunkrDbContext(_dbOptions);
+        Assert.Equal(0, verifyContext.Issues.First(i => i.Number == "1").LastPageRead);
+        Assert.True(vm.Issues.First(i => i.Title == "#1").IsUnread);
     }
 
     [Fact]
@@ -512,5 +606,94 @@ public class DetailTabsViewModelTests : IDisposable
         var sameEvent = Assert.Single(vm.SameEvent);
         Assert.Equal(otherId, sameEvent.SeriesId);
         Assert.True(vm.HasSameEvent);
+    }
+
+    // ===================== External Metadata (docs/superpowers/specs/2026-08-19-metadata-model-anilist-search-and-link-design.md) =====================
+
+    [Fact]
+    public void LoadSeries_NoExternalLinks_ShowsEmptyState()
+    {
+        var vm = CreateViewModel();
+
+        vm.LoadSeries(LoadSeriesEntity());
+
+        Assert.False(vm.HasExternalLinks);
+        Assert.Empty(vm.ExternalLinks);
+    }
+
+    [Fact]
+    public void LoadSeries_ExistingExternalLink_PopulatesExternalLinks()
+    {
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            context.ExternalMediaIds.Add(new ExternalMediaId { SeriesId = _seriesId, Provider = ExternalMetadataProvider.AniList, ExternalId = "30013", Url = "https://anilist.co/manga/30013" });
+            context.SaveChanges();
+        }
+
+        var vm = CreateViewModel();
+        vm.LoadSeries(LoadSeriesEntity());
+
+        var link = Assert.Single(vm.ExternalLinks);
+        Assert.Equal("AniList", link.ProviderLabel);
+        Assert.Equal("30013", link.ExternalId);
+        Assert.True(vm.HasExternalLinks);
+    }
+
+    [Fact]
+    public async Task SearchMetadataAsync_PopulatesResultsScoredAgainstSeriesName()
+    {
+        var provider = new FakeMetadataProvider();
+        provider.SearchResults.Add(new MetadataSearchResult("1", "Test Series", "https://example/1"));
+        provider.SearchResults.Add(new MetadataSearchResult("2", "Completely Different", "https://example/2"));
+        var vm = CreateViewModel(metadataProvider: provider);
+        vm.LoadSeries(LoadSeriesEntity());
+        vm.ToggleSearchMetadataCommand.Execute(null);
+        vm.MetadataSearchQuery = "test series";
+
+        await vm.SearchMetadataCommand.ExecuteAsync(null);
+
+        Assert.Equal(2, vm.MetadataSearchResults.Count);
+        Assert.Equal("1", vm.MetadataSearchResults[0].ExternalId);
+        Assert.Equal("Best match", vm.MetadataSearchResults[0].TierLabel);
+    }
+
+    [Fact]
+    public async Task LinkMetadataAsync_CreatesLinkAndClosesSearch()
+    {
+        var provider = new FakeMetadataProvider
+        {
+            GetResult = new ExternalMediaMetadata("30013", "Test Series", "https://anilist.co/manga/30013", null, null, null, null),
+        };
+        var vm = CreateViewModel(metadataProvider: provider);
+        vm.LoadSeries(LoadSeriesEntity());
+        vm.ToggleSearchMetadataCommand.Execute(null);
+        var candidate = new Paperbunkr.App.Models.AniListMatchSample { ExternalId = "30013", Title = "Test Series", Confidence = 1.0, Tier = MatchTier.Auto };
+
+        await vm.LinkMetadataCommand.ExecuteAsync(candidate);
+
+        var link = Assert.Single(vm.ExternalLinks);
+        Assert.Equal("30013", link.ExternalId);
+        Assert.False(vm.IsSearchingMetadata);
+    }
+
+    [Fact]
+    public void UnlinkMetadata_RemovesTheLinkButKeepsTheSeries()
+    {
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            context.ExternalMediaIds.Add(new ExternalMediaId { SeriesId = _seriesId, Provider = ExternalMetadataProvider.AniList, ExternalId = "30013" });
+            context.SaveChanges();
+        }
+
+        var vm = CreateViewModel();
+        vm.LoadSeries(LoadSeriesEntity());
+        var link = Assert.Single(vm.ExternalLinks);
+
+        vm.UnlinkMetadataCommand.Execute(link);
+
+        Assert.Empty(vm.ExternalLinks);
+        using var verifyContext = new PaperbunkrDbContext(_dbOptions);
+        Assert.NotNull(verifyContext.Series.Find(_seriesId));
+        Assert.Empty(verifyContext.ExternalMediaIds.Where(e => e.SeriesId == _seriesId));
     }
 }

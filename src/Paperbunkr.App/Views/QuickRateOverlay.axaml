@@ -1,0 +1,65 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Paperbunkr.App.ViewModels"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="360" d:DesignHeight="320"
+             x:Class="Paperbunkr.App.Views.QuickRateOverlay"
+             x:DataType="vm:QuickRateScreenViewModel">
+
+    <!-- Cancel/Save now use the shared Button.ghost/Button.primary primitives (Styles/Primitives.axaml)
+         in place of this file's former local "headerAction" styles - see docs/superpowers/specs/
+         2026-08-24-design-language-foundation-design.md Component Primitives section. -->
+    <UserControl.Styles>
+        <Style Selector="TextBlock.fieldLabel">
+            <Setter Property="FontSize" Value="10.5" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextFaintBrush}" />
+            <Setter Property="Margin" Value="0,0,0,4" />
+        </Style>
+        <Style Selector="Button.star">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="2" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style Selector="Button.star Path.pbIcon">
+            <Setter Property="Width" Value="20" />
+            <Setter Property="Height" Value="20" />
+            <Setter Property="Stroke" Value="{DynamicResource PbTextFaintBrush}" />
+        </Style>
+        <Style Selector="Button.star.filled Path.pbIcon">
+            <Setter Property="Stroke" Value="{DynamicResource PbAccentBrush}" />
+        </Style>
+    </UserControl.Styles>
+
+    <Border Width="360" Classes="floatingPanel">
+        <StackPanel Margin="20,18,20,18" Spacing="16">
+            <StackPanel>
+                <TextBlock Text="Quick Rate" FontSize="17" FontWeight="Bold" Foreground="{DynamicResource PbTextBrush}" />
+                <TextBlock Text="{Binding HeaderLabel}" FontSize="12.5" Foreground="{DynamicResource PbTextFaintBrush}" Margin="0,4,0,0" />
+                <Border Height="1" Background="{DynamicResource PbBorderBrush}" Margin="0,14,0,0" />
+            </StackPanel>
+
+            <StackPanel>
+                <TextBlock Classes="fieldLabel" Text="RATING" />
+                <StackPanel Orientation="Horizontal" Spacing="3">
+                    <Button Classes="star" Classes.filled="{Binding Star1}" Command="{Binding SetStar1Command}"><Path Classes="pbIcon" Data="{StaticResource PbIconStar}" /></Button>
+                    <Button Classes="star" Classes.filled="{Binding Star2}" Command="{Binding SetStar2Command}"><Path Classes="pbIcon" Data="{StaticResource PbIconStar}" /></Button>
+                    <Button Classes="star" Classes.filled="{Binding Star3}" Command="{Binding SetStar3Command}"><Path Classes="pbIcon" Data="{StaticResource PbIconStar}" /></Button>
+                    <Button Classes="star" Classes.filled="{Binding Star4}" Command="{Binding SetStar4Command}"><Path Classes="pbIcon" Data="{StaticResource PbIconStar}" /></Button>
+                    <Button Classes="star" Classes.filled="{Binding Star5}" Command="{Binding SetStar5Command}"><Path Classes="pbIcon" Data="{StaticResource PbIconStar}" /></Button>
+                </StackPanel>
+            </StackPanel>
+
+            <StackPanel>
+                <TextBlock Classes="fieldLabel" Text="REVIEW" />
+                <TextBox Text="{Binding Review}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="90" />
+            </StackPanel>
+
+            <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+                <Button Classes="ghost" FontSize="12.5" Content="Cancel" Command="{Binding CancelCommand}" />
+                <Button Classes="primary" FontSize="12.5" Content="Save" Command="{Binding SaveCommand}" />
+            </StackPanel>
+        </StackPanel>
+    </Border>
+</UserControl>

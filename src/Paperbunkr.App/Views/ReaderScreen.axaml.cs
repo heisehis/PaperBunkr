@@ -82,14 +82,6 @@ public partial class ReaderScreen : UserControl
             {
                 container.BringIntoView();
             }
-
-            // Same follow behavior, extended to the fullscreen scrubber overlay (§7) - it's a second,
-            // independent thumbnail strip over the same Thumbnails collection, not linked to the side
-            // rail's own scroll position.
-            if (ScrubberItemsControl.ContainerFromIndex(pageIndex) is Control scrubberContainer)
-            {
-                scrubberContainer.BringIntoView();
-            }
         });
     }
 
@@ -121,34 +113,84 @@ public partial class ReaderScreen : UserControl
     }
 
     /// <summary>
-    /// The actual Window-level effect of docs/superpowers/specs/2026-08-10-reader-polish-continuous-
-    /// scroll-chrome-overlays-design.md §7's fullscreen toggle - the ViewModel only tracks the
-    /// boolean, this is the one place that touches <c>Window.WindowState</c> and the rail's pixel
-    /// width (a fixed-width column doesn't collapse just because its content's <c>IsVisible</c>
-    /// does, unlike the toolbar/bottom-bar's <c>Auto</c>-sized rows).
-    /// Same <see cref="Paperbunkr.App.Services.FilePickerService"/>-precedented way of reaching the app's single window
-    /// (<c>IClassicDesktopStyleApplicationLifetime.MainWindow</c>), since this app is one window
-    /// with rail-nav content-switching, not one window per screen.
+    /// The actual Window-level effect of the fullscreen toggle - the ViewModel only tracks the
+    /// boolean, this is the one place that touches <c>Window.WindowState</c>. The thumbnail rail no
+    /// longer collapses here (docs/superpowers/specs/2026-08-25-reader-chrome-design.md) - it's
+    /// persistent in both windowed and fullscreen now, unlike the old top-toolbar/bottom-bar rows
+    /// this replaced. Same <see cref="Paperbunkr.App.Services.FilePickerService"/>-precedented way
+    /// of reaching the app's single window (<c>IClassicDesktopStyleApplicationLifetime.MainWindow</c>),
+    /// since this app is one window with rail-nav content-switching, not one window per screen.
     /// </summary>
     private void ApplyFullscreenState(bool isFullscreen)
     {
-        ReaderBodyGrid.ColumnDefinitions[0].Width = isFullscreen ? new GridLength(0) : new GridLength(96);
-
         if (Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime { MainWindow: { } window })
         {
             window.WindowState = isFullscreen ? WindowState.FullScreen : WindowState.Normal;
         }
     }
 
-    /// <summary>Feeds <see cref="ReaderScreenViewModel.NotifyCursorActivity"/> (spec §7's "reappearing on mouse move") - a no-op outside fullscreen, guarded on the ViewModel side.</summary>
+    /// <summary>Feeds <see cref="ReaderScreenViewModel.NotifyCursorActivity"/> - applies in both windowed and fullscreen now (docs/superpowers/specs/2026-08-25-reader-chrome-design.md), unlike the fullscreen-only guard this replaced.</summary>
     private void OnReaderPointerMoved(object? sender, PointerEventArgs e) => _viewModel?.NotifyCursorActivity();
 
-    /// <summary>P6 fix (docs/alpha-todo.md) - click-to-jump on the thumbnail rail. Also handles the fullscreen scrubber overlay's thumbnails (§7), which reuse the same <see cref="ReaderThumbnailSample"/> DataContext shape and click behavior.</summary>
+    /// <summary>Drives IsViewClusterCollapsed (docs/superpowers/specs/2026-08-25-reader-chrome-design.md) - the ~720px threshold below which the View cluster's fit-mode/zoom controls would start crowding the Page-turn cluster, derived from the two clusters' real content widths during that phase's brainstorm.</summary>
+    private void OnReaderSizeChanged(object? sender, SizeChangedEventArgs e)
+    {
+        if (_viewModel is not null)
+        {
+            _viewModel.IsViewClusterCollapsed = e.NewSize.Width < 720;
+        }
+    }
+
+    /// <summary>P6 fix (docs/alpha-todo.md) - click-to-jump on the thumbnail rail.</summary>
     private void OnThumbnailPointerPressed(object? sender, PointerPressedEventArgs e)
     {
         if (sender is Border { DataContext: ReaderThumbnailSample thumbnail } && DataContext is ReaderScreenViewModel viewModel)
         {
             viewModel.SelectThumbnailCommand.Execute(thumbnail);
+        }
+    }
+
+    // ===================== Thumbnail rail auto-hide (docs/superpowers/specs/2026-08-25-reader-
+    // chrome-design.md follow-up) - pure hover UI state, not modeled in the ViewModel since nothing
+    // outside this view cares about it. Two independent triggers (the edge strip and the rail
+    // itself) both keep it open; it only collapses once the pointer has left both. =====================
+
+    private bool _hoveringRailTrigger;
+    private bool _hoveringRailOverlay;
+
+    private void OnRailHoverEntered(object? sender, PointerEventArgs e)
+    {
+        if (ReferenceEquals(sender, RailEdgeTrigger))
+        {
+            _hoveringRailTrigger = true;
+        }
+        else
+        {
+            _hoveringRailOverlay = true;
+        }
+
+        RailOverlay.Classes.Remove("hidden");
+    }
+
+    private void OnRailHoverExited(object? sender, PointerEventArgs e)
+    {
+        if (ReferenceEquals(sender, RailEdgeTrigger))
+        {
+            _hoveringRailTrigger = false;
+        }
+        else
+        {
+            _hoveringRailOverlay = false;
+        }
+
+        UpdateRailVisibility();
+    }
+
+    private void UpdateRailVisibility()
+    {
+        if (!_hoveringRailTrigger && !_hoveringRailOverlay)
+        {
+            RailOverlay.Classes.Add("hidden");
         }
     }
 }

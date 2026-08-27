@@ -9,6 +9,45 @@ namespace Paperbunkr.App.Tests;
 /// </summary>
 public class ReaderLayoutModelTests
 {
+    // ===================== ComputeOverscrollBump (docs/superpowers/specs/2026-08-23-reader-
+    // chapter-transition-design.md) =====================
+
+    [Fact]
+    public void ComputeOverscrollBump_ZeroPull_ReturnsZero() =>
+        Assert.Equal(0, ReaderLayoutModel.ComputeOverscrollBump(pullDistance: 0, maxBump: 36));
+
+    [Fact]
+    public void ComputeOverscrollBump_NonPositiveMaxBump_ReturnsZero() =>
+        Assert.Equal(0, ReaderLayoutModel.ComputeOverscrollBump(pullDistance: 100, maxBump: 0));
+
+    [Fact]
+    public void ComputeOverscrollBump_SmallPull_StaysWellUnderMaxBump()
+    {
+        double bump = ReaderLayoutModel.ComputeOverscrollBump(pullDistance: 10, maxBump: 36);
+
+        Assert.True(bump > 0);
+        Assert.True(bump < 10); // damped, not 1:1
+    }
+
+    /// <summary>Diminishing-returns curve: never reaches (let alone exceeds) maxBump, however far pullDistance grows - the whole point of the rubber-band shape.</summary>
+    [Fact]
+    public void ComputeOverscrollBump_LargePull_ApproachesButNeverReachesMaxBump()
+    {
+        double bump = ReaderLayoutModel.ComputeOverscrollBump(pullDistance: 100_000, maxBump: 36);
+
+        Assert.True(bump < 36);
+        Assert.True(bump > 35.9); // close to the asymptote
+    }
+
+    [Fact]
+    public void ComputeOverscrollBump_MonotonicallyIncreasesWithPullDistance()
+    {
+        double small = ReaderLayoutModel.ComputeOverscrollBump(pullDistance: 20, maxBump: 36);
+        double large = ReaderLayoutModel.ComputeOverscrollBump(pullDistance: 200, maxBump: 36);
+
+        Assert.True(large > small);
+    }
+
     [Fact]
     public void ComputeSinglePageLayout_ReturnsOnePage_FillingViewport()
     {

@@ -1,3 +1,4 @@
+using System.Linq;
 using Paperbunkr.App.ViewModels;
 using Paperbunkr.Data.Entities;
 
@@ -17,13 +18,17 @@ public class DetailPillsViewModelTests
     {
         var vm = new DetailPillsViewModel();
         var series = new Series { Name = "Test Series", Genre = "This Should Never Appear" };
-        series.Issues.Add(new Issue { Genre = "Superhero" });
-        series.Issues.Add(new Issue { Genre = "Superhero, Crime" });
+        var issue1 = new Issue();
+        issue1.MergeFrom(IssueTagField.Genre, new[] { "Superhero" });
+        series.Issues.Add(issue1);
+        var issue2 = new Issue();
+        issue2.MergeFrom(IssueTagField.Genre, new[] { "Superhero, Crime" });
+        series.Issues.Add(issue2);
 
         vm.LoadSeries(series);
 
-        Assert.Equal(new[] { "Superhero", "Crime" }, vm.Genres);
-        Assert.DoesNotContain("This Should Never Appear", vm.Genres);
+        Assert.Equal(new[] { "Crime", "Superhero" }, vm.Genres.Select(g => g.Value)); // alphabetical, not insertion order
+        Assert.DoesNotContain("This Should Never Appear", vm.Genres.Select(g => g.Value));
     }
 
     [Fact]
@@ -36,21 +41,88 @@ public class DetailPillsViewModelTests
 
         vm.LoadSeries(series);
 
-        Assert.Equal(new[] { "Justice League", "Suicide Squad" }, vm.Teams);
-        Assert.Equal(new[] { "Gotham City", "Metropolis" }, vm.Locations);
+        Assert.Equal(new[] { "Justice League", "Suicide Squad" }, vm.Teams.Select(p => p.Value));
+        Assert.Equal(new[] { "Gotham City", "Metropolis" }, vm.Locations.Select(p => p.Value));
     }
 
     [Fact]
     public void LoadIssue_ShowsOnlyThatIssuesOwnTags()
     {
         var vm = new DetailPillsViewModel();
-        var issue = new Issue { Genre = "Superhero, Crime", Teams = "Justice League", Locations = "Gotham City" };
+        var issue = new Issue { Teams = "Justice League", Locations = "Gotham City" };
+        issue.MergeFrom(IssueTagField.Genre, new[] { "Superhero, Crime" });
 
         vm.LoadIssue(issue);
 
-        Assert.Equal(new[] { "Superhero", "Crime" }, vm.Genres);
-        Assert.Equal(new[] { "Justice League" }, vm.Teams);
-        Assert.Equal(new[] { "Gotham City" }, vm.Locations);
+        Assert.Equal(new[] { "Crime", "Superhero" }, vm.Genres.Select(g => g.Value)); // alphabetical, not insertion order
+        Assert.Equal(new[] { "Justice League" }, vm.Teams.Select(p => p.Value));
+        Assert.Equal(new[] { "Gotham City" }, vm.Locations.Select(p => p.Value));
+    }
+
+    [Fact]
+    public void LoadSeries_SameGenreDifferentWeightsAcrossIssues_TakesTheHighestWeight()
+    {
+        var vm = new DetailPillsViewModel();
+        var series = new Series { Name = "Test Series" };
+        var issue1 = new Issue();
+        issue1.MergeFrom(IssueTagField.Genre, new[] { "Time Skip" });
+        issue1.Tags.Single().Weight = IssueTagWeight.Incidental;
+        var issue2 = new Issue();
+        issue2.MergeFrom(IssueTagField.Genre, new[] { "Time Skip" });
+        issue2.Tags.Single().Weight = IssueTagWeight.Core;
+        series.Issues.Add(issue1);
+        series.Issues.Add(issue2);
+
+        vm.LoadSeries(series);
+
+        var pill = Assert.Single(vm.Genres);
+        Assert.Equal(IssueTagWeight.Core, pill.Weight);
+    }
+
+    [Fact]
+    public void LoadSeries_ReweightIsDisabled_NoSingleIssueToWriteTo()
+    {
+        var vm = new DetailPillsViewModel();
+        var series = new Series { Name = "Test Series" };
+        var issue = new Issue();
+        issue.MergeFrom(IssueTagField.Genre, new[] { "Horror" });
+        series.Issues.Add(issue);
+
+        vm.LoadSeries(series);
+
+        Assert.False(Assert.Single(vm.Genres).CanReweight);
+    }
+
+    [Fact]
+    public void LoadIssue_SearchCommand_InvokesCallbackWithTheTagValue()
+    {
+        string? searched = null;
+        var vm = new DetailPillsViewModel(goLibraryWithSearch: q => searched = q);
+        var issue = new Issue();
+        issue.MergeFrom(IssueTagField.Genre, new[] { "Horror" });
+
+        vm.LoadIssue(issue);
+        var pill = Assert.Single(vm.Genres);
+        pill.SearchCommand.Execute(null);
+
+        Assert.Equal("Horror", searched);
+    }
+
+    [Fact]
+    public void LoadIssue_ReweightCommand_InvokesCallbackWithIssueFieldValueWeight_AndUpdatesLocalWeight()
+    {
+        (int IssueId, IssueTagField Field, string Value, IssueTagWeight Weight)? reweighted = null;
+        var vm = new DetailPillsViewModel(reweightTag: (issueId, field, value, weight) => reweighted = (issueId, field, value, weight));
+        var issue = new Issue { Id = 42 };
+        issue.MergeFrom(IssueTagField.Genre, new[] { "Horror" });
+
+        vm.LoadIssue(issue);
+        var pill = Assert.Single(vm.Genres);
+        Assert.True(pill.CanReweight);
+        pill.SetWeightCommand.Execute(IssueTagWeight.Core);
+
+        Assert.Equal((42, IssueTagField.Genre, "Horror", IssueTagWeight.Core), reweighted);
+        Assert.Equal(IssueTagWeight.Core, pill.Weight);
     }
 
     [Fact]

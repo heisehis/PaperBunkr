@@ -3,7 +3,7 @@
   <PropertyGroup>
     <!-- -windows suffix required for UseWindowsForms below (NETSDK1136) - fine since this project
          is inherently Windows-only anyway (FlaUI/UIA3 has no cross-platform story). -->
-    <TargetFramework>net8.0-windows</TargetFramework>
+    <TargetFramework>net10.0-windows</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
 
@@ -18,8 +18,8 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="coverlet.collector" Version="6.0.0" />
-    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.8.0" />
+    <PackageReference Include="coverlet.collector" Version="6.0.4" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
     <PackageReference Include="xunit" Version="2.5.3" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.5.3" />
     <!-- Real Windows UI Automation (UIA3) driver - drives the actually-compiled, actually-rendered
@@ -34,6 +34,14 @@
 
   <ItemGroup>
     <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- FlaUI tests each drive a real on-screen app window - xUnit's default parallel test
+         collections would launch several at once and let them steal each other's window focus,
+         producing spurious failures that only reproduce when the full suite runs, not in isolation
+         (confirmed 2026-08-22: every UiTests test passes alone, 15/15 fail together). -->
+    <None Include="xunit.runner.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>

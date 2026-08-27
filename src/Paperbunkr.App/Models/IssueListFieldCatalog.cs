@@ -1,11 +1,22 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
+using System.Linq;
 using Paperbunkr.Data.Entities;
 
 namespace Paperbunkr.App.Models;
 
 /// <summary>One <see cref="IssueListSortField"/>'s comparison logic and display label.</summary>
-public sealed record IssueListSortFieldDescriptor(IssueListSortField Field, string DisplayName, Comparison<IssueListRow> Compare);
+public sealed record IssueListSortFieldDescriptor(IssueListSortField Field, string DisplayName, Comparison<IssueListRow> Compare)
+{
+    /// <summary>
+    /// Cell-text projection for this field when it's shown as a column in Library's configurable
+    /// Details table (docs/superpowers/specs/2026-08-27-library-browsing-4b-toolbar-rework-design.md
+    /// §8). <see langword="null"/> means the field is sort-only and not offered as a column
+    /// (e.g. <see cref="IssueListSortField.Status"/>). Must be null-safe for a fully-unpopulated row.
+    /// </summary>
+    public Func<IssueListRow, string?>? Display { get; init; }
+}
 
 /// <summary>One <see cref="IssueListGroupField"/>'s bucketing/ordering logic and display label. <see cref="GroupKey"/> also serves as the resulting group's display header.</summary>
 public sealed record IssueListGroupFieldDescriptor(IssueListGroupField Field, string DisplayName, Func<IssueListRow, string> GroupKey, Comparison<string> GroupOrder);
@@ -18,7 +29,11 @@ public sealed record IssueListGroupFieldDescriptor(IssueListGroupField Field, st
 /// </summary>
 public static class IssueListFieldCatalog
 {
-    public static readonly IReadOnlyDictionary<IssueListSortField, IssueListSortFieldDescriptor> SortFields = new Dictionary<IssueListSortField, IssueListSortFieldDescriptor>
+    public static readonly IReadOnlyDictionary<IssueListSortField, IssueListSortFieldDescriptor> SortFields = BuildSortFields();
+
+    private static Dictionary<IssueListSortField, IssueListSortFieldDescriptor> BuildSortFields()
+    {
+        var d = new Dictionary<IssueListSortField, IssueListSortFieldDescriptor>
     {
         [IssueListSortField.Number] = new(IssueListSortField.Number, "Number", SortStrategies.IssueNumber()),
         [IssueListSortField.Series] = new(IssueListSortField.Series, "Series",
@@ -93,6 +108,123 @@ public static class IssueListFieldCatalog
         [IssueListSortField.Day] = new(IssueListSortField.Day, "Day", SortStrategies.Numeric(r => r.Day)),
         [IssueListSortField.ScanInformation] = new(IssueListSortField.ScanInformation, "Scan Information", SortStrategies.CaseInsensitiveString(r => r.ScanInformation)),
     };
+
+        // Per-field cell-text projection for the configurable Details table (design §8). Everything
+        // except Status is column-eligible; each projection is null-safe for a fully-unpopulated row.
+        void Col(IssueListSortField field, Func<IssueListRow, string?> display) =>
+            d[field] = d[field] with { Display = display };
+
+        Col(IssueListSortField.Number, r => r.Number);
+        Col(IssueListSortField.Series, r => r.SeriesName);
+        Col(IssueListSortField.Title, r => r.Title);
+        Col(IssueListSortField.Writer, r => r.Writer);
+        Col(IssueListSortField.Publisher, r => r.Publisher);
+        Col(IssueListSortField.Genre, r => r.Genre);
+        Col(IssueListSortField.Format, r => r.Format);
+        Col(IssueListSortField.Added, r => Date(r.AddedTime));
+        Col(IssueListSortField.Opened, r => Date(r.OpenedTime));
+        Col(IssueListSortField.Released, r => Date(r.ReleasedTime));
+        Col(IssueListSortField.Year, r => r.Year?.ToString(CultureInfo.InvariantCulture));
+        Col(IssueListSortField.PageCount, r => r.PageCount?.ToString(CultureInfo.InvariantCulture));
+        Col(IssueListSortField.FileSize, r => FormatFileSize(r.FileSize));
+        Col(IssueListSortField.Rating, r => r.Rating?.ToString("0.#", CultureInfo.InvariantCulture));
+        Col(IssueListSortField.CommunityRating, r => r.CommunityRating?.ToString("0.#", CultureInfo.InvariantCulture));
+        Col(IssueListSortField.ReadPercentage, r => $"{r.ReadPercentage:0}%");
+        Col(IssueListSortField.OpenCount, r => r.OpenCount.ToString(CultureInfo.InvariantCulture));
+        Col(IssueListSortField.Tags, r => r.Tags);
+        Col(IssueListSortField.Volume, r => r.Volume);
+        Col(IssueListSortField.Penciller, r => r.Penciller);
+        Col(IssueListSortField.Inker, r => r.Inker);
+        Col(IssueListSortField.Colorist, r => r.Colorist);
+        Col(IssueListSortField.Letterer, r => r.Letterer);
+        Col(IssueListSortField.CoverArtist, r => r.CoverArtist);
+        Col(IssueListSortField.Editor, r => r.Editor);
+        Col(IssueListSortField.Translator, r => r.Translator);
+        Col(IssueListSortField.Characters, r => r.Characters);
+        Col(IssueListSortField.Teams, r => r.Teams);
+        Col(IssueListSortField.Locations, r => r.Locations);
+        Col(IssueListSortField.BookPrice, r => r.BookPrice?.ToString("0.00", CultureInfo.InvariantCulture));
+        Col(IssueListSortField.BookAge, r => r.BookAge);
+        Col(IssueListSortField.BookStore, r => r.BookStore);
+        Col(IssueListSortField.BookOwner, r => r.BookOwner);
+        Col(IssueListSortField.BookCondition, r => r.BookCondition);
+        Col(IssueListSortField.BookCollectionStatus, r => r.BookCollectionStatus);
+        Col(IssueListSortField.BookLocation, r => r.BookLocation);
+        Col(IssueListSortField.ISBN, r => r.ISBN);
+        Col(IssueListSortField.Read, r => r.IsRead ? "Read" : "Unread");
+        Col(IssueListSortField.Imprint, r => r.Imprint);
+        Col(IssueListSortField.Language, r => r.LanguageIso);
+        Col(IssueListSortField.AgeRating, r => r.AgeRating);
+        Col(IssueListSortField.StoryArc, r => r.StoryArc);
+        Col(IssueListSortField.SeriesGroup, r => r.SeriesGroup);
+        Col(IssueListSortField.FilePath, r => r.FilePath);
+        Col(IssueListSortField.BookmarkCount, r => r.BookmarkCount.ToString(CultureInfo.InvariantCulture));
+        Col(IssueListSortField.FileName, r => r.FileName);
+        Col(IssueListSortField.FileDirectory, r => r.FileDirectory);
+        Col(IssueListSortField.FileModified, r => Date(r.FileModifiedTime));
+        Col(IssueListSortField.FileCreated, r => Date(r.FileCreationTime));
+        Col(IssueListSortField.FileFormat, r => r.FileFormat);
+        Col(IssueListSortField.Count, r => r.Count?.ToString(CultureInfo.InvariantCulture));
+        Col(IssueListSortField.AlternateSeries, r => r.AlternateSeries);
+        Col(IssueListSortField.AlternateNumber, r => r.AlternateNumber);
+        Col(IssueListSortField.Month, r => r.Month?.ToString(CultureInfo.InvariantCulture));
+        Col(IssueListSortField.Day, r => r.Day?.ToString(CultureInfo.InvariantCulture));
+        Col(IssueListSortField.ScanInformation, r => r.ScanInformation);
+
+        return d;
+    }
+
+    private static string? Date(DateTime? value) => value?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+
+    /// <summary>Human-readable byte size for the File Size column; null passes through.</summary>
+    private static string? FormatFileSize(long? bytes)
+    {
+        if (bytes is not { } b || b < 0)
+        {
+            return null;
+        }
+
+        string[] units = { "B", "KB", "MB", "GB", "TB" };
+        double size = b;
+        int unit = 0;
+        while (size >= 1024 && unit < units.Length - 1)
+        {
+            size /= 1024;
+            unit++;
+        }
+
+        return unit == 0
+            ? $"{b} B"
+            : $"{size.ToString("0.#", CultureInfo.InvariantCulture)} {units[unit]}";
+    }
+
+    /// <summary>
+    /// The curated column set a fresh <see cref="Paperbunkr.Data.Entities.AppSettings.LibraryDetailsColumns"/>
+    /// (null) falls back to (design §8) - a readable default that covers the fields most Library
+    /// users actually scan by.
+    /// </summary>
+    public static readonly IssueListSortField[] DefaultDetailsColumns =
+    {
+        IssueListSortField.Title,
+        IssueListSortField.Series,
+        IssueListSortField.Number,
+        IssueListSortField.Volume,
+        IssueListSortField.Year,
+        IssueListSortField.PageCount,
+        IssueListSortField.Publisher,
+        IssueListSortField.Format,
+        IssueListSortField.Rating,
+        IssueListSortField.Added,
+        IssueListSortField.ReadPercentage,
+    };
+
+    /// <summary>
+    /// Every <see cref="SortFields"/> descriptor that carries a non-null <see cref="IssueListSortFieldDescriptor.Display"/>,
+    /// i.e. the fields that can appear as a Details-table column, in stable <see cref="SortFields"/>
+    /// insertion order. Backs the right-click "Columns" header menu.
+    /// </summary>
+    public static readonly IReadOnlyList<IssueListSortFieldDescriptor> ColumnFields =
+        SortFields.Values.Where(d => d.Display is not null).ToList();
 
     public static readonly IReadOnlyDictionary<IssueListGroupField, IssueListGroupFieldDescriptor> GroupFields = new Dictionary<IssueListGroupField, IssueListGroupFieldDescriptor>
     {

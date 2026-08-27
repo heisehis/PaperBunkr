@@ -29,6 +29,9 @@ public partial class BulkFieldViewModel : ObservableObject
     /// <summary>Candidate values for an <see cref="IsEnumKind"/> row's flyout (docs/superpowers/specs/2026-08-16-manga-content-type-classification-design.md §1).</summary>
     public IReadOnlyList<string> Options => Descriptor.Options ?? [];
 
+    /// <summary>Token catalog for an <see cref="IsTextKind"/> row's token-insert flyout (docs/ce-feature-inventory.md §A).</summary>
+    public IReadOnlyList<string> TokenOptions => TemplateTokenCatalog.Names;
+
     [ObservableProperty]
     private string _value = string.Empty;
 
@@ -87,4 +90,14 @@ public partial class BulkFieldViewModel : ObservableObject
 
     /// <summary>Invoked by an <see cref="IsEnumKind"/> row's flyout options (docs/superpowers/specs/2026-08-16-manga-content-type-classification-design.md §1).</summary>
     [RelayCommand] private void SetValue(string value) => Value = value;
+
+    /// <summary>
+    /// Templated/token text field editor (docs/ce-feature-inventory.md §A) - inserts the literal
+    /// placeholder (e.g. <c>{Series}</c>), not a resolved value, since one staged template has to
+    /// expand differently per selected issue at Save time (<see cref="TemplateTokenCatalog.Expand"/>,
+    /// called from <see cref="BulkIssuePropertiesScreenViewModel.Save"/>). Appends rather than
+    /// inserting at the caret - this row has no reference to the real Avalonia TextBox to ask where
+    /// the caret is.
+    /// </summary>
+    [RelayCommand] private void InsertToken(string token) => Value += "{" + token + "}";
 }

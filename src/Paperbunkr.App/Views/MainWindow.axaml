@@ -25,19 +25,26 @@
     </Window.KeyBindings>
 
     <Window.Styles>
-        <!-- Rail nav button: 44x44, rounded, active state = accent-soft fill + accent text -->
+        <!-- Rail nav button: 44x44, rounded, active state = accent-soft fill + accent text
+             (docs/superpowers/specs/2026-08-24-navigation-shell-motion-system-design.md - rail
+             restyled with Phase 1's surface/accent tokens; the glow-ring hover/focus treatment
+             stays scoped to PosterTile/FloatingPanel, not applied here). -->
+        <!-- Width is intentionally NOT set here (was a fixed 44) - Button.rail now stretches to
+             fill whatever width Border.navRail currently has (64 collapsed, 200 expanded), with a
+             fixed left Padding so the icon sits at the same visual offset in both states and only
+             the label (which appears after it) gets more room when expanded. -->
         <Style Selector="Button.rail">
-            <Setter Property="Width" Value="44" />
             <Setter Property="Height" Value="44" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
             <Setter Property="Margin" Value="0,0,0,2" />
-            <Setter Property="Padding" Value="0" />
+            <Setter Property="Padding" Value="12,0,0,0" />
             <Setter Property="CornerRadius" Value="7" />
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="BorderThickness" Value="1" />
             <Setter Property="BorderBrush" Value="Transparent" />
             <Setter Property="Foreground" Value="{DynamicResource PbTextFaintBrush}" />
             <Setter Property="FontSize" Value="11" />
-            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="HorizontalContentAlignment" Value="Left" />
             <Setter Property="VerticalContentAlignment" Value="Center" />
         </Style>
         <Style Selector="Button.rail:pointerover /template/ ContentPresenter">
@@ -48,22 +55,41 @@
             <Setter Property="Foreground" Value="{DynamicResource PbAccentTextBrush}" />
             <Setter Property="FontWeight" Value="Bold" />
         </Style>
-        <Style Selector="Button.rail.plugin">
-            <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
-        </Style>
 
         <!-- Rail nav icon: follows the button's own Foreground so the existing
-             pointerover/active Setters (below) recolor the icon along with everything else. -->
-        <Style Selector="Button.rail Border.icon">
+             pointerover/active Setters (below) recolor the icon along with everything else.
+             Path.pbIcon (Styles/Icons.axaml) instead of the old Border.icon/OpacityMask pattern -
+             Stroke instead of Background is the recolor hook now. -->
+        <Style Selector="Button.rail Path.pbIcon">
             <Setter Property="Width" Value="20" />
             <Setter Property="Height" Value="20" />
-            <Setter Property="Background" Value="{DynamicResource PbTextFaintBrush}" />
+            <Setter Property="Stroke" Value="{DynamicResource PbTextFaintBrush}" />
         </Style>
-        <Style Selector="Button.rail:pointerover Border.icon">
-            <Setter Property="Background" Value="{DynamicResource PbTextFaintBrush}" />
+        <Style Selector="Button.rail:pointerover Path.pbIcon">
+            <Setter Property="Stroke" Value="{DynamicResource PbTextFaintBrush}" />
         </Style>
-        <Style Selector="Button.rail.active Border.icon">
-            <Setter Property="Background" Value="{DynamicResource PbAccentTextBrush}" />
+        <Style Selector="Button.rail.active Path.pbIcon">
+            <Setter Property="Stroke" Value="{DynamicResource PbAccentTextBrush}" />
+        </Style>
+
+        <!-- Rail expand/collapse (docs/superpowers/specs/2026-08-24-navigation-shell-motion-system-
+             design.md) - width transition uses the same PbMotionFast/PbMotionEase tokens as every
+             Phase 1 primitive. Label fades in once there's room for it. -->
+        <Style Selector="Border.navRail">
+            <Setter Property="Width" Value="64" />
+            <Setter Property="Transitions">
+                <Transitions>
+                    <DoubleTransition Property="Width" Duration="{DynamicResource PbMotionFast}" Easing="{StaticResource PbMotionEase}" />
+                </Transitions>
+            </Setter>
+        </Style>
+        <Style Selector="Border.navRail.expanded">
+            <Setter Property="Width" Value="200" />
+        </Style>
+        <Style Selector="TextBlock.railLabel">
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="Margin" Value="10,0,0,0" />
+            <Setter Property="VerticalAlignment" Value="Center" />
         </Style>
 
         <!-- Sidebar nav row -->
@@ -139,94 +165,106 @@
              visual tree. Hidden directly off Reader.IsFullscreen (a stable ReaderScreenViewModel
              instance, per MainViewModel.Reader) rather than adding a MainViewModel-level mirror
              property - one source of truth. -->
-        <Border DockPanel.Dock="Left" Width="64" Background="{DynamicResource PbChromeBrush}"
+        <!-- Collapsed 64px / expanded 200px (docs/superpowers/specs/2026-08-24-navigation-shell-
+             motion-system-design.md) - hover expands as a temporary overlay (see PointerEntered/
+             PointerExited below), pinning (ToggleNavRailPinCommand) makes it permanent/reflowing.
+             Every button's own position/size when collapsed is unchanged from before this phase -
+             HomeRailButton/PreferencesRailButton stay directly clickable without hovering first,
+             since existing UI automation tests click them in the default collapsed state. -->
+        <!-- ToolTip.ServiceEnabled (inherited attached property) set once here disables tooltips
+             for every button inside while expanded - the label already showing the same text made
+             the floating tooltip bubble redundant, found via direct user testing. -->
+        <Border Classes="navRail" Classes.expanded="{Binding IsNavRailExpanded}"
+                DockPanel.Dock="Left" Background="{DynamicResource PbChromeBrush}"
                 BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,0,1,0"
-                IsVisible="{Binding !Reader.IsFullscreen}">
+                IsVisible="{Binding !Reader.IsFullscreen}"
+                ToolTip.ServiceEnabled="{Binding !IsNavRailExpanded}"
+                PointerEntered="RailPointerEntered" PointerExited="RailPointerExited">
             <Grid RowDefinitions="Auto,*,Auto" Margin="0,14,0,10">
 
-                <StackPanel Grid.Row="0" HorizontalAlignment="Center" Spacing="2">
+                <StackPanel Grid.Row="0" Margin="10,0" Spacing="2">
                     <Border Width="26" Height="26" CornerRadius="6" BorderThickness="1.5"
-                            BorderBrush="{DynamicResource PbAccentBrush}" Margin="0,0,0,12" />
+                            BorderBrush="{DynamicResource PbAccentBrush}" Margin="0,0,0,12" HorizontalAlignment="Center" />
 
                     <Button Classes="rail" Classes.active="{Binding IsHome}"
                             Command="{Binding GoHomeCommand}" ToolTip.Tip="Home"
                             AutomationProperties.AutomationId="HomeRailButton">
-                        <Border Classes="icon">
-                            <Border.OpacityMask>
-                                <ImageBrush Source="/Assets/Icons/Home.png" Stretch="Uniform" />
-                            </Border.OpacityMask>
-                        </Border>
+                        <StackPanel Orientation="Horizontal">
+                            <Path Classes="pbIcon" Data="{StaticResource PbIconHome}" />
+                            <TextBlock Classes="railLabel" Text="Home" IsVisible="{Binding IsNavRailExpanded}" />
+                        </StackPanel>
                     </Button>
                     <Button Classes="rail" Classes.active="{Binding IsLibrary}"
                             Command="{Binding GoLibraryCommand}" ToolTip.Tip="Library"
                             AutomationProperties.AutomationId="LibraryRailButton">
-                        <Border Classes="icon">
-                            <Border.OpacityMask>
-                                <ImageBrush Source="/Assets/Icons/Book.png" Stretch="Uniform" />
-                            </Border.OpacityMask>
-                        </Border>
+                        <StackPanel Orientation="Horizontal">
+                            <Path Classes="pbIcon" Data="{StaticResource PbIconBook}" />
+                            <TextBlock Classes="railLabel" Text="Library" IsVisible="{Binding IsNavRailExpanded}" />
+                        </StackPanel>
                     </Button>
                     <Button Classes="rail" Classes.active="{Binding IsBooks}"
                             Command="{Binding GoBooksCommand}" ToolTip.Tip="Books">
-                        <Border Classes="icon">
-                            <Border.OpacityMask>
-                                <ImageBrush Source="/Assets/Icons/Layers.png" Stretch="Uniform" />
-                            </Border.OpacityMask>
-                        </Border>
+                        <StackPanel Orientation="Horizontal">
+                            <Path Classes="pbIcon" Data="{StaticResource PbIconLayers}" />
+                            <TextBlock Classes="railLabel" Text="Books" IsVisible="{Binding IsNavRailExpanded}" />
+                        </StackPanel>
                     </Button>
                     <Button Classes="rail" Classes.active="{Binding IsSmart}"
                             Command="{Binding GoSmartCommand}" ToolTip.Tip="Smart Lists">
-                        <Border Classes="icon">
-                            <Border.OpacityMask>
-                                <ImageBrush Source="/Assets/Icons/Filter.png" Stretch="Uniform" />
-                            </Border.OpacityMask>
-                        </Border>
+                        <StackPanel Orientation="Horizontal">
+                            <Path Classes="pbIcon" Data="{StaticResource PbIconFilter}" />
+                            <TextBlock Classes="railLabel" Text="Smart Lists" IsVisible="{Binding IsNavRailExpanded}" />
+                        </StackPanel>
                     </Button>
                     <Button Classes="rail" Classes.active="{Binding IsReading}"
                             Command="{Binding GoReadingCommand}" ToolTip.Tip="Reading Lists">
-                        <Border Classes="icon">
-                            <Border.OpacityMask>
-                                <ImageBrush Source="/Assets/Icons/Bookmark.png" Stretch="Uniform" />
-                            </Border.OpacityMask>
-                        </Border>
+                        <StackPanel Orientation="Horizontal">
+                            <Path Classes="pbIcon" Data="{StaticResource PbIconBookmark}" />
+                            <TextBlock Classes="railLabel" Text="Reading Lists" IsVisible="{Binding IsNavRailExpanded}" />
+                        </StackPanel>
                     </Button>
                     <Button Classes="rail" Classes.active="{Binding IsEvents}"
                             Command="{Binding GoEventsCommand}" ToolTip.Tip="Story Events">
-                        <Border Classes="icon">
-                            <Border.OpacityMask>
-                                <ImageBrush Source="/Assets/Icons/Star.png" Stretch="Uniform" />
-                            </Border.OpacityMask>
-                        </Border>
-                    </Button>
-
-                    <Border Width="28" Height="1" Background="{DynamicResource PbBorderBrush}" Margin="0,8" />
-
-                    <Button Classes="rail plugin" Classes.active="{Binding IsPlugin}"
-                            Command="{Binding GoPluginCommand}" ToolTip.Tip="Plugins">
-                        <Border Classes="icon">
-                            <Border.OpacityMask>
-                                <ImageBrush Source="/Assets/Icons/Puzzle.png" Stretch="Uniform" />
-                            </Border.OpacityMask>
-                        </Border>
+                        <StackPanel Orientation="Horizontal">
+                            <Path Classes="pbIcon" Data="{StaticResource PbIconStar}" />
+                            <TextBlock Classes="railLabel" Text="Story Events" IsVisible="{Binding IsNavRailExpanded}" />
+                        </StackPanel>
                     </Button>
                 </StackPanel>
 
-                <StackPanel Grid.Row="2" HorizontalAlignment="Center" Spacing="2">
-                    <Button Classes="rail" Classes.active="{Binding IsPreferences}"
-                            Command="{Binding GoPreferencesCommand}" ToolTip.Tip="Preferences">
-                        <Border Classes="icon">
-                            <Border.OpacityMask>
-                                <ImageBrush Source="/Assets/Icons/Settings.png" Stretch="Uniform" />
-                            </Border.OpacityMask>
-                        </Border>
+                <StackPanel Grid.Row="2" Margin="10,0" Spacing="2">
+                    <!-- Undo/Redo for metadata edits (docs/ce-feature-inventory.md §A) - app-wide, not
+                         screen-specific, so the rail nav's utility row (alongside Preferences below)
+                         is the one place they're always reachable regardless of what's on screen. -->
+                    <Button Classes="rail" Command="{Binding UndoCommand}" ToolTip.Tip="Undo last metadata edit">
+                        <StackPanel Orientation="Horizontal">
+                            <Path Classes="pbIcon" Data="{StaticResource PbIconUndo}" />
+                            <TextBlock Classes="railLabel" Text="Undo" IsVisible="{Binding IsNavRailExpanded}" />
+                        </StackPanel>
                     </Button>
-                    <Button Classes="rail" Classes.active="{Binding IsReader}"
-                            Command="{Binding GoReaderCommand}" ToolTip.Tip="Reader">
-                        <Border Classes="icon">
-                            <Border.OpacityMask>
-                                <ImageBrush Source="/Assets/Icons/Book_Open.png" Stretch="Uniform" />
-                            </Border.OpacityMask>
-                        </Border>
+                    <Button Classes="rail" Command="{Binding RedoCommand}" ToolTip.Tip="Redo">
+                        <StackPanel Orientation="Horizontal">
+                            <Path Classes="pbIcon" Data="{StaticResource PbIconUndo}" RenderTransform="scaleX(-1)" />
+                            <TextBlock Classes="railLabel" Text="Redo" IsVisible="{Binding IsNavRailExpanded}" />
+                        </StackPanel>
+                    </Button>
+                    <Border Width="28" Height="1" Background="{DynamicResource PbBorderBrush}" Margin="0,4" />
+                    <Button Classes="rail" Classes.active="{Binding IsPreferences}"
+                            Command="{Binding GoPreferencesCommand}" ToolTip.Tip="Preferences"
+                            AutomationProperties.AutomationId="PreferencesRailButton">
+                        <StackPanel Orientation="Horizontal">
+                            <Path Classes="pbIcon" Data="{StaticResource PbIconSettings}" />
+                            <TextBlock Classes="railLabel" Text="Preferences" IsVisible="{Binding IsNavRailExpanded}" />
+                        </StackPanel>
+                    </Button>
+                    <Button Classes="rail" Classes.active="{Binding NavRailPinned}"
+                            Command="{Binding ToggleNavRailPinCommand}"
+                            ToolTip.Tip="Pin nav rail open" IsVisible="{Binding IsNavRailExpanded}">
+                        <StackPanel Orientation="Horizontal">
+                            <Path Classes="pbIcon" Data="{StaticResource PbIconPin}" />
+                            <TextBlock Classes="railLabel" Text="Pin" IsVisible="{Binding !NavRailPinned}" />
+                            <TextBlock Classes="railLabel" Text="Unpin" IsVisible="{Binding NavRailPinned}" />
+                        </StackPanel>
                     </Button>
                 </StackPanel>
             </Grid>
@@ -323,14 +361,29 @@
                         <ItemsControl x:Name="CustomSmartLists" ItemsSource="{Binding Smart.CustomLists}">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate x:DataType="models:SmartListSummary">
-                                    <Button Classes="sideItemButton" Classes.active="{Binding IsActive}"
-                                            Command="{Binding #CustomSmartLists.((vm:MainViewModel)DataContext).Smart.SelectListCommand}"
-                                            CommandParameter="{Binding}">
-                                        <Grid ColumnDefinitions="*,Auto">
-                                            <TextBlock Grid.Column="0" Classes="sideItemLabel" Text="{Binding Name}" FontSize="13" Foreground="{DynamicResource PbTextMutedBrush}" />
-                                            <Border Grid.Column="1" Classes="countBadge"><TextBlock Classes="count" Text="{Binding MatchCount}" Foreground="{DynamicResource PbTextFaintBrush}" /></Border>
-                                        </Grid>
-                                    </Button>
+                                    <Grid ColumnDefinitions="*,Auto">
+                                        <Button Grid.Column="0" Classes="sideItemButton" Classes.active="{Binding IsActive}"
+                                                Command="{Binding #CustomSmartLists.((vm:MainViewModel)DataContext).Smart.SelectListCommand}"
+                                                CommandParameter="{Binding}">
+                                            <Grid ColumnDefinitions="*,Auto">
+                                                <TextBlock Grid.Column="0" Classes="sideItemLabel" Text="{Binding Name}" FontSize="13" Foreground="{DynamicResource PbTextMutedBrush}" />
+                                                <Border Grid.Column="1" Classes="countBadge"><TextBlock Classes="count" Text="{Binding MatchCount}" Foreground="{DynamicResource PbTextFaintBrush}" /></Border>
+                                            </Grid>
+                                        </Button>
+                                        <Button Grid.Column="1" Classes="headerAction ghost" Padding="6" Margin="2,0,0,0"
+                                                Command="{Binding DeleteConfirm.TriggerCommand}" ToolTip.Tip="{Binding DeleteConfirm.Label}">
+                                            <Panel>
+                                                <Border Classes="icon" Width="11" Height="11" Background="{DynamicResource PbTextFaintBrush}"
+                                                        IsVisible="{Binding !DeleteConfirm.IsArmed}">
+                                                    <Border.OpacityMask><ImageBrush Source="/Assets/Icons/Trash_Empty.png" Stretch="Uniform" /></Border.OpacityMask>
+                                                </Border>
+                                                <Border Classes="icon" Width="11" Height="11" Background="{DynamicResource PbBadgeBrush}"
+                                                        IsVisible="{Binding DeleteConfirm.IsArmed}">
+                                                    <Border.OpacityMask><ImageBrush Source="/Assets/Icons/Trash_Empty.png" Stretch="Uniform" /></Border.OpacityMask>
+                                                </Border>
+                                            </Panel>
+                                        </Button>
+                                    </Grid>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
@@ -384,18 +437,47 @@
                         <TextBlock Text="Reading Lists" FontSize="16" FontWeight="Bold"
                                    Foreground="{DynamicResource PbTextBrush}" Margin="8,0,8,14" />
 
+                        <!-- Tag-click filter (docs/superpowers/specs/2026-08-23-reading-list-tags-
+                             design.md) - shown only while active, since there's no search box to
+                             just empty out instead. -->
+                        <Border IsVisible="{Binding Reading.HasActiveTagFilter}" Background="{DynamicResource PbAccentSoftBrush}"
+                                CornerRadius="999" Padding="10,4" Margin="8,0,8,10">
+                            <Grid ColumnDefinitions="*,Auto">
+                                <TextBlock Grid.Column="0" Text="{Binding Reading.ActiveTagFilter, StringFormat='Tag: {0}'}"
+                                           FontSize="11.5" Foreground="{DynamicResource PbAccentTextBrush}" VerticalAlignment="Center" />
+                                <Button Grid.Column="1" Content="✕" Padding="0" Width="16" Height="16" FontSize="9.5" CornerRadius="8"
+                                        Background="Transparent" BorderThickness="0" Foreground="{DynamicResource PbAccentTextBrush}"
+                                        Command="{Binding Reading.ClearTagFilterCommand}" ToolTip.Tip="Clear tag filter" />
+                            </Grid>
+                        </Border>
+
                         <ItemsControl x:Name="ReadingLists" ItemsSource="{Binding Reading.Lists}">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate x:DataType="models:ReadingListSummary">
-                                    <Button Classes="sideItemButton" Classes.active="{Binding IsActive}"
-                                            Command="{Binding #ReadingLists.((vm:MainViewModel)DataContext).Reading.SelectListCommand}"
-                                            CommandParameter="{Binding}">
-                                        <Grid ColumnDefinitions="*,Auto">
-                                            <TextBlock Grid.Column="0" Classes="sideItemLabel" Text="{Binding Name}" FontSize="13"
-                                                       Foreground="{DynamicResource PbTextMutedBrush}" TextTrimming="CharacterEllipsis" />
-                                            <Border Grid.Column="1" Classes="countBadge"><TextBlock Classes="count" Text="{Binding TotalCount}" Foreground="{DynamicResource PbTextFaintBrush}" /></Border>
-                                        </Grid>
-                                    </Button>
+                                    <Grid ColumnDefinitions="*,Auto">
+                                        <Button Grid.Column="0" Classes="sideItemButton" Classes.active="{Binding IsActive}"
+                                                Command="{Binding #ReadingLists.((vm:MainViewModel)DataContext).Reading.SelectListCommand}"
+                                                CommandParameter="{Binding}">
+                                            <Grid ColumnDefinitions="*,Auto">
+                                                <TextBlock Grid.Column="0" Classes="sideItemLabel" Text="{Binding Name}" FontSize="13"
+                                                           Foreground="{DynamicResource PbTextMutedBrush}" TextTrimming="CharacterEllipsis" />
+                                                <Border Grid.Column="1" Classes="countBadge"><TextBlock Classes="count" Text="{Binding TotalCount}" Foreground="{DynamicResource PbTextFaintBrush}" /></Border>
+                                            </Grid>
+                                        </Button>
+                                        <Button Grid.Column="1" Classes="headerAction ghost" Padding="6" Margin="2,0,0,0"
+                                                Command="{Binding DeleteConfirm.TriggerCommand}" ToolTip.Tip="{Binding DeleteConfirm.Label}">
+                                            <Panel>
+                                                <Border Classes="icon" Width="11" Height="11" Background="{DynamicResource PbTextFaintBrush}"
+                                                        IsVisible="{Binding !DeleteConfirm.IsArmed}">
+                                                    <Border.OpacityMask><ImageBrush Source="/Assets/Icons/Trash_Empty.png" Stretch="Uniform" /></Border.OpacityMask>
+                                                </Border>
+                                                <Border Classes="icon" Width="11" Height="11" Background="{DynamicResource PbBadgeBrush}"
+                                                        IsVisible="{Binding DeleteConfirm.IsArmed}">
+                                                    <Border.OpacityMask><ImageBrush Source="/Assets/Icons/Trash_Empty.png" Stretch="Uniform" /></Border.OpacityMask>
+                                                </Border>
+                                            </Panel>
+                                        </Button>
+                                    </Grid>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
@@ -425,15 +507,30 @@
                         <ItemsControl x:Name="StoryEvents" ItemsSource="{Binding Events.Events}">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate x:DataType="models:StoryEventSummary">
-                                    <Button Classes="sideItemButton" Classes.active="{Binding IsActive}"
-                                            Command="{Binding #StoryEvents.((vm:MainViewModel)DataContext).Events.SelectEventCommand}"
-                                            CommandParameter="{Binding}">
-                                        <Grid ColumnDefinitions="*,Auto">
-                                            <TextBlock Grid.Column="0" Classes="sideItemLabel" Text="{Binding Name}" FontSize="13"
-                                                       Foreground="{DynamicResource PbTextMutedBrush}" TextTrimming="CharacterEllipsis" />
-                                            <Border Grid.Column="1" Classes="countBadge"><TextBlock Classes="count" Text="{Binding MemberCount}" Foreground="{DynamicResource PbTextFaintBrush}" /></Border>
-                                        </Grid>
-                                    </Button>
+                                    <Grid ColumnDefinitions="*,Auto">
+                                        <Button Grid.Column="0" Classes="sideItemButton" Classes.active="{Binding IsActive}"
+                                                Command="{Binding #StoryEvents.((vm:MainViewModel)DataContext).Events.SelectEventCommand}"
+                                                CommandParameter="{Binding}">
+                                            <Grid ColumnDefinitions="*,Auto">
+                                                <TextBlock Grid.Column="0" Classes="sideItemLabel" Text="{Binding Name}" FontSize="13"
+                                                           Foreground="{DynamicResource PbTextMutedBrush}" TextTrimming="CharacterEllipsis" />
+                                                <Border Grid.Column="1" Classes="countBadge"><TextBlock Classes="count" Text="{Binding MemberCount}" Foreground="{DynamicResource PbTextFaintBrush}" /></Border>
+                                            </Grid>
+                                        </Button>
+                                        <Button Grid.Column="1" Classes="headerAction ghost" Padding="6" Margin="2,0,0,0"
+                                                Command="{Binding DeleteConfirm.TriggerCommand}" ToolTip.Tip="{Binding DeleteConfirm.Label}">
+                                            <Panel>
+                                                <Border Classes="icon" Width="11" Height="11" Background="{DynamicResource PbTextFaintBrush}"
+                                                        IsVisible="{Binding !DeleteConfirm.IsArmed}">
+                                                    <Border.OpacityMask><ImageBrush Source="/Assets/Icons/Trash_Empty.png" Stretch="Uniform" /></Border.OpacityMask>
+                                                </Border>
+                                                <Border Classes="icon" Width="11" Height="11" Background="{DynamicResource PbBadgeBrush}"
+                                                        IsVisible="{Binding DeleteConfirm.IsArmed}">
+                                                    <Border.OpacityMask><ImageBrush Source="/Assets/Icons/Trash_Empty.png" Stretch="Uniform" /></Border.OpacityMask>
+                                                </Border>
+                                            </Panel>
+                                        </Button>
+                                    </Grid>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
@@ -460,27 +557,42 @@
 
         <!-- ============ Main content ============ -->
         <Grid>
-            <ContentControl IsVisible="{Binding IsHome}" Content="{Binding Home}">
-                <ContentControl.ContentTemplate>
-                    <DataTemplate x:DataType="vm:HomeScreenViewModel">
+            <!-- The 7 rail-ordered lateral screens (docs/superpowers/specs/2026-08-24-navigation-
+                 shell-motion-system-design.md) share one TransitioningContentControl - direction
+                 comes from MainViewModel.IsTransitionReversed (computed from rail-order comparison
+                 in OnCurrentScreenChanging), content from ActiveScreenContent. The drill-down
+                 screens below (BookReader/PdfReader/Detail/MangaDetail/Reader) are unchanged from
+                 before this phase - still individually always-instantiated, still an instant
+                 IsVisible cut, deliberately out of scope here. -->
+            <TransitioningContentControl IsVisible="{Binding IsLateralScreen}"
+                                          Content="{Binding ActiveScreenContent}"
+                                          IsTransitionReversed="{Binding IsTransitionReversed}"
+                                          PageTransition="{StaticResource PbScreenSlide}">
+                <TransitioningContentControl.DataTemplates>
+                    <DataTemplate DataType="vm:HomeScreenViewModel">
                         <views:HomeScreen />
                     </DataTemplate>
-                </ContentControl.ContentTemplate>
-            </ContentControl>
-            <ContentControl IsVisible="{Binding IsLibrary}" Content="{Binding Library}">
-                <ContentControl.ContentTemplate>
-                    <DataTemplate x:DataType="vm:LibraryScreenViewModel">
+                    <DataTemplate DataType="vm:LibraryScreenViewModel">
                         <views:LibraryScreen />
                     </DataTemplate>
-                </ContentControl.ContentTemplate>
-            </ContentControl>
-            <ContentControl IsVisible="{Binding IsBooks}" Content="{Binding Books}">
-                <ContentControl.ContentTemplate>
-                    <DataTemplate x:DataType="vm:BooksScreenViewModel">
+                    <DataTemplate DataType="vm:BooksScreenViewModel">
                         <views:BooksScreen />
                     </DataTemplate>
-                </ContentControl.ContentTemplate>
-            </ContentControl>
+                    <DataTemplate DataType="vm:SmartScreenViewModel">
+                        <views:SmartScreen />
+                    </DataTemplate>
+                    <DataTemplate DataType="vm:ReadingScreenViewModel">
+                        <views:ReadingScreen />
+                    </DataTemplate>
+                    <DataTemplate DataType="vm:EventsScreenViewModel">
+                        <views:EventsScreen />
+                    </DataTemplate>
+                    <DataTemplate DataType="vm:PreferencesScreenViewModel">
+                        <views:PreferencesScreen />
+                    </DataTemplate>
+                </TransitioningContentControl.DataTemplates>
+            </TransitioningContentControl>
+
             <ContentControl IsVisible="{Binding IsBookReader}" Content="{Binding BookReader}">
                 <ContentControl.ContentTemplate>
                     <DataTemplate x:DataType="vm:BookReaderScreenViewModel">
@@ -502,38 +614,10 @@
                     </DataTemplate>
                 </ContentControl.ContentTemplate>
             </ContentControl>
-            <ContentControl IsVisible="{Binding IsSmart}" Content="{Binding Smart}">
+            <ContentControl IsVisible="{Binding IsMangaDetail}" Content="{Binding MangaDetail}">
                 <ContentControl.ContentTemplate>
-                    <DataTemplate x:DataType="vm:SmartScreenViewModel">
-                        <views:SmartScreen />
-                    </DataTemplate>
-                </ContentControl.ContentTemplate>
-            </ContentControl>
-            <ContentControl IsVisible="{Binding IsReading}" Content="{Binding Reading}">
-                <ContentControl.ContentTemplate>
-                    <DataTemplate x:DataType="vm:ReadingScreenViewModel">
-                        <views:ReadingScreen />
-                    </DataTemplate>
-                </ContentControl.ContentTemplate>
-            </ContentControl>
-            <ContentControl IsVisible="{Binding IsEvents}" Content="{Binding Events}">
-                <ContentControl.ContentTemplate>
-                    <DataTemplate x:DataType="vm:EventsScreenViewModel">
-                        <views:EventsScreen />
-                    </DataTemplate>
-                </ContentControl.ContentTemplate>
-            </ContentControl>
-            <ContentControl IsVisible="{Binding IsPlugin}" Content="{Binding Plugin}">
-                <ContentControl.ContentTemplate>
-                    <DataTemplate x:DataType="vm:PluginScreenViewModel">
-                        <views:PluginScreen />
-                    </DataTemplate>
-                </ContentControl.ContentTemplate>
-            </ContentControl>
-            <ContentControl IsVisible="{Binding IsPreferences}" Content="{Binding Preferences}">
-                <ContentControl.ContentTemplate>
-                    <DataTemplate x:DataType="vm:PreferencesScreenViewModel">
-                        <views:PreferencesScreen />
+                    <DataTemplate x:DataType="vm:MangaDetailScreenViewModel">
+                        <views:MangaDetailScreen />
                     </DataTemplate>
                 </ContentControl.ContentTemplate>
             </ContentControl>
@@ -541,20 +625,6 @@
                 <ContentControl.ContentTemplate>
                     <DataTemplate x:DataType="vm:ReaderScreenViewModel">
                         <views:ReaderScreen />
-                    </DataTemplate>
-                </ContentControl.ContentTemplate>
-            </ContentControl>
-            <ContentControl IsVisible="{Binding IsIssueProperties}" Content="{Binding IssueProperties}">
-                <ContentControl.ContentTemplate>
-                    <DataTemplate x:DataType="vm:IssuePropertiesScreenViewModel">
-                        <views:IssuePropertiesScreen />
-                    </DataTemplate>
-                </ContentControl.ContentTemplate>
-            </ContentControl>
-            <ContentControl IsVisible="{Binding IsBulkIssueProperties}" Content="{Binding BulkIssueProperties}">
-                <ContentControl.ContentTemplate>
-                    <DataTemplate x:DataType="vm:BulkIssuePropertiesScreenViewModel">
-                        <views:BulkIssuePropertiesScreen />
                     </DataTemplate>
                 </ContentControl.ContentTemplate>
             </ContentControl>
@@ -571,6 +641,122 @@
                     Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
                     Command="{Binding CloseMigrationOverlayCommand}" ToolTip.Tip="Close"
                     AutomationProperties.AutomationId="MigrationOverlayCloseButton">
+                <Border Classes="icon" Width="13" Height="13">
+                    <Border.OpacityMask>
+                        <ImageBrush Source="/Assets/Icons/Close_Circle.png" Stretch="Uniform" />
+                    </Border.OpacityMask>
+                </Border>
+            </Button>
+        </Grid>
+    </Border>
+
+    <!-- ============ Reading List properties overlay (docs/superpowers/specs/2026-08-23-reading-
+         list-tags-design.md) - same backdrop-popup pattern as the Migration overlay above, not a
+         screen swap ============ -->
+    <Border IsVisible="{Binding IsReadingListPropertiesOverlayOpen}" Background="#B0000000">
+        <Grid HorizontalAlignment="Center" VerticalAlignment="Center">
+            <views:ReadingListPropertiesOverlay DataContext="{Binding ReadingListProperties}" />
+            <Button Classes="rail" Width="28" Height="28"
+                    HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-14,-14,0"
+                    Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
+                    Command="{Binding CloseReadingListPropertiesOverlayCommand}" ToolTip.Tip="Close"
+                    AutomationProperties.AutomationId="ReadingListPropertiesOverlayCloseButton">
+                <Border Classes="icon" Width="13" Height="13">
+                    <Border.OpacityMask>
+                        <ImageBrush Source="/Assets/Icons/Close_Circle.png" Stretch="Uniform" />
+                    </Border.OpacityMask>
+                </Border>
+            </Button>
+        </Grid>
+    </Border>
+
+    <!-- ============ Quick Rate overlay (docs/ce-feature-inventory.md §A "Quick Rating + free-text
+         Review in one popup") - same backdrop-popup pattern as Reading List Properties above ============ -->
+    <Border IsVisible="{Binding IsQuickRateOverlayOpen}" Background="#B0000000">
+        <Grid HorizontalAlignment="Center" VerticalAlignment="Center">
+            <views:QuickRateOverlay DataContext="{Binding QuickRate}" />
+            <Button Classes="rail" Width="28" Height="28"
+                    HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-14,-14,0"
+                    Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
+                    Command="{Binding CloseQuickRateOverlayCommand}" ToolTip.Tip="Close"
+                    AutomationProperties.AutomationId="QuickRateOverlayCloseButton">
+                <Border Classes="icon" Width="13" Height="13">
+                    <Border.OpacityMask>
+                        <ImageBrush Source="/Assets/Icons/Close_Circle.png" Stretch="Uniform" />
+                    </Border.OpacityMask>
+                </Border>
+            </Button>
+        </Grid>
+    </Border>
+
+    <!-- ============ Design Showcase overlay (docs/superpowers/specs/2026-08-24-design-language-
+         foundation-design.md, debug-only) - same backdrop-popup pattern as Quick Rate above ============ -->
+    <Border IsVisible="{Binding IsDesignShowcaseOverlayOpen}" Background="#B0000000">
+        <Grid HorizontalAlignment="Center" VerticalAlignment="Center">
+            <views:DesignShowcaseOverlay DataContext="{Binding DesignShowcase}" />
+            <Button Classes="rail" Width="28" Height="28"
+                    HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-14,-14,0"
+                    Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
+                    Command="{Binding CloseDesignShowcaseOverlayCommand}" ToolTip.Tip="Close"
+                    AutomationProperties.AutomationId="DesignShowcaseOverlayCloseButton">
+                <Border Classes="icon" Width="13" Height="13">
+                    <Border.OpacityMask>
+                        <ImageBrush Source="/Assets/Icons/Close_Circle.png" Stretch="Uniform" />
+                    </Border.OpacityMask>
+                </Border>
+            </Button>
+        </Grid>
+    </Border>
+
+    <!-- ============ Issue Properties overlay (docs/superpowers/specs/2026-08-23-issue-editor-
+         borderless-overlay-design.md) - same backdrop-popup pattern as Migration/Reading List
+         Properties above, replacing the old full-screen CurrentScreen swap ============ -->
+    <Border IsVisible="{Binding IsIssuePropertiesOverlayOpen}" Background="#B0000000">
+        <Grid HorizontalAlignment="Center" VerticalAlignment="Center">
+            <views:IssuePropertiesScreen DataContext="{Binding IssueProperties}" />
+            <Button Classes="rail" Width="28" Height="28"
+                    HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-14,-14,0"
+                    Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
+                    Command="{Binding CloseIssuePropertiesOverlayCommand}" ToolTip.Tip="Close"
+                    AutomationProperties.AutomationId="IssuePropertiesOverlayCloseButton">
+                <Border Classes="icon" Width="13" Height="13">
+                    <Border.OpacityMask>
+                        <ImageBrush Source="/Assets/Icons/Close_Circle.png" Stretch="Uniform" />
+                    </Border.OpacityMask>
+                </Border>
+            </Button>
+        </Grid>
+    </Border>
+
+    <!-- ============ Bulk Issue Editing overlay (docs/superpowers/specs/2026-08-23-issue-editor-
+         borderless-overlay-design.md) ============ -->
+    <Border IsVisible="{Binding IsBulkIssuePropertiesOverlayOpen}" Background="#B0000000">
+        <Grid HorizontalAlignment="Center" VerticalAlignment="Center">
+            <views:BulkIssuePropertiesScreen DataContext="{Binding BulkIssueProperties}" />
+            <Button Classes="rail" Width="28" Height="28"
+                    HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-14,-14,0"
+                    Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
+                    Command="{Binding CloseBulkIssuePropertiesOverlayCommand}" ToolTip.Tip="Close"
+                    AutomationProperties.AutomationId="BulkIssuePropertiesOverlayCloseButton">
+                <Border Classes="icon" Width="13" Height="13">
+                    <Border.OpacityMask>
+                        <ImageBrush Source="/Assets/Icons/Close_Circle.png" Stretch="Uniform" />
+                    </Border.OpacityMask>
+                </Border>
+            </Button>
+        </Grid>
+    </Border>
+
+    <!-- ============ Bulk Series Editing overlay (docs/superpowers/specs/2026-08-24-library-
+         multiselect-slice3-design.md) ============ -->
+    <Border IsVisible="{Binding IsBulkSeriesPropertiesOverlayOpen}" Background="#B0000000">
+        <Grid HorizontalAlignment="Center" VerticalAlignment="Center">
+            <views:BulkSeriesPropertiesScreen DataContext="{Binding BulkSeriesProperties}" />
+            <Button Classes="rail" Width="28" Height="28"
+                    HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-14,-14,0"
+                    Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
+                    Command="{Binding CloseBulkSeriesPropertiesOverlayCommand}" ToolTip.Tip="Close"
+                    AutomationProperties.AutomationId="BulkSeriesPropertiesOverlayCloseButton">
                 <Border Classes="icon" Width="13" Height="13">
                     <Border.OpacityMask>
                         <ImageBrush Source="/Assets/Icons/Close_Circle.png" Stretch="Uniform" />

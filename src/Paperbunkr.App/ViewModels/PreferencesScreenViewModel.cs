@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -10,7 +11,10 @@ using Microsoft.EntityFrameworkCore;
 using Paperbunkr.App.Models;
 using Paperbunkr.App.Services;
 using Paperbunkr.Data;
+using Paperbunkr.Data.Credentials;
 using Paperbunkr.Data.Entities;
+using Paperbunkr.Data.Tracking;
+using Paperbunkr.Data.Tracking.Adapters;
 using Paperbunkr.Data.VirtualTags;
 
 namespace Paperbunkr.App.ViewModels;
@@ -35,11 +39,14 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     private readonly KeyBindingService _keyBindingService;
     private readonly Action<string, string> _showToast;
     private readonly Action _openMigration;
+    private readonly Action _openDesignShowcase;
     private readonly Action<ToastProgressViewModel> _showProgressToast;
     private readonly Action<ToastProgressViewModel> _closeProgressToast;
+    private readonly Action _reloadFolderWatch;
     private readonly Func<PaperbunkrDbContext> _contextFactory;
     private bool _isLoaded;
     private bool _suppressFontApply;
+    private bool _suppressMotionApply;
     private bool _suppressBehaviorApply;
     private bool _suppressVirtualTagApply;
     private bool _suppressBackupSettingsApply;
@@ -55,10 +62,13 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         KeyBindingService keyBindingService,
         Action<string, string> showToast,
         MigrationOverlayViewModel migration,
+        PluginScreenViewModel plugin,
         Action openMigration,
         Action<ToastProgressViewModel> showProgressToast,
-        Action<ToastProgressViewModel> closeProgressToast)
-        : this(skinService, filePicker, libraryScanner, fileAssociationService, backupService, keyBindingService, showToast, migration, openMigration, showProgressToast, closeProgressToast, PaperbunkrDb.CreateContext)
+        Action<ToastProgressViewModel> closeProgressToast,
+        Action reloadFolderWatch,
+        Action openDesignShowcase)
+        : this(skinService, filePicker, libraryScanner, fileAssociationService, backupService, keyBindingService, showToast, migration, plugin, openMigration, showProgressToast, closeProgressToast, reloadFolderWatch, openDesignShowcase, PaperbunkrDb.CreateContext)
     {
     }
 
@@ -72,11 +82,15 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         KeyBindingService keyBindingService,
         Action<string, string> showToast,
         MigrationOverlayViewModel migration,
+        PluginScreenViewModel plugin,
         Action openMigration,
         Action<ToastProgressViewModel> showProgressToast,
         Action<ToastProgressViewModel> closeProgressToast,
+        Action reloadFolderWatch,
+        Action openDesignShowcase,
         Func<PaperbunkrDbContext> contextFactory)
     {
+        _openDesignShowcase = openDesignShowcase;
         _skinService = skinService;
         _filePicker = filePicker;
         _libraryScanner = libraryScanner;
@@ -85,9 +99,11 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         _keyBindingService = keyBindingService;
         _showToast = showToast;
         Migration = migration;
+        Plugin = plugin;
         _openMigration = openMigration;
         _showProgressToast = showProgressToast;
         _closeProgressToast = closeProgressToast;
+        _reloadFolderWatch = reloadFolderWatch;
         _contextFactory = contextFactory;
         Skins = new ObservableCollection<SkinSummary>();
         FontFamilies = new ObservableCollection<string>();
@@ -125,6 +141,9 @@ public partial class PreferencesScreenViewModel : ViewModelBase
 
     public static readonly ImageBackgroundMode[] BackgroundModeOptions = Enum.GetValues<ImageBackgroundMode>();
 
+    /// <summary>docs/superpowers/specs/2026-08-27-hardware-accelerated-rendering-design.md §10.</summary>
+    public static readonly RenderBackend[] RenderBackendOptions = Enum.GetValues<RenderBackend>();
+
     public ObservableCollection<VirtualTagSummary> VirtualTags { get; }
 
     public ObservableCollection<WatchedFolderSummary> WatchedFolders { get; }
@@ -137,6 +156,9 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     /// </summary>
     public MigrationOverlayViewModel Migration { get; }
 
+    /// <summary>docs/superpowers/specs/2026-08-24-navigation-shell-motion-system-design.md - the same instance <see cref="MainViewModel"/> owns (constructed there, passed in) - Plugins moved from a standalone rail screen to a Preferences tab, this ViewModel doesn't own the lifetime.</summary>
+    public PluginScreenViewModel Plugin { get; }
+
     /// <summary>
     /// Opens the migration overlay, which still renders at the shell root (unchanged) - this just
     /// relays to <see cref="MainViewModel"/>'s own open logic (<c>Migration.Open()</c> +
@@ -144,6 +166,16 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     /// </summary>
     [RelayCommand]
     private void OpenMigration() => _openMigration();
+
+    /// <summary>docs/superpowers/specs/2026-08-24-design-language-foundation-design.md - debug-only, see <see cref="IsDebugBuild"/>.</summary>
+    [RelayCommand]
+    private void OpenDesignShowcase() => _openDesignShowcase();
+
+#if DEBUG
+    public bool IsDebugBuild => true;
+#else
+    public bool IsDebugBuild => false;
+#endif
 
     [ObservableProperty]
     private string _activeTab = "appearance";
@@ -153,9 +185,14 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     public bool IsLibrariesTab => ActiveTab == "libraries";
     public bool IsReaderTab => ActiveTab == "reader";
     public bool IsAdvancedTab => ActiveTab == "advanced";
+    public bool IsPluginsTab => ActiveTab == "plugins";
 
     [ObservableProperty]
     private string? _selectedFontFamily;
+
+    /// <summary>docs/superpowers/specs/2026-08-24-design-language-foundation-design.md - shortens UI transitions to effectively instant when true.</summary>
+    [ObservableProperty]
+    private bool _reducedMotion;
 
     [ObservableProperty]
     private bool _openLastPage;
@@ -165,6 +202,15 @@ public partial class PreferencesScreenViewModel : ViewModelBase
 
     [ObservableProperty]
     private bool _reverseRtlNavigation;
+
+    /// <summary>
+    /// Advanced tab toggle (docs/superpowers/specs/2026-08-23-app-chrome-crash-reporter-and-tray-
+    /// design.md §4) - lives here alongside the other AppSettings-backed toggles even though its UI
+    /// checkbox is on the Advanced tab, not Behavior, matching this property block's existing
+    /// "grouped by storage, not by tab" shape. CE default false (<c>Settings.MinimizeToTray</c>).
+    /// </summary>
+    [ObservableProperty]
+    private bool _minimizeToTray;
 
     [ObservableProperty]
     private bool _highQualityPageDisplay;
@@ -225,6 +271,18 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     private double _pageMarginPercentWidth = 0.05;
 
     /// <summary>
+    /// Avalonia GPU rendering backend (docs/superpowers/specs/2026-08-27-hardware-accelerated-
+    /// rendering-design.md). Restart-only: changing it persists to <see cref="AppSettings"/> and
+    /// the <c>graphics.json</c> bootstrap cache immediately, but only takes effect on next launch.
+    /// </summary>
+    [ObservableProperty]
+    private RenderBackend _renderingBackend = RenderBackend.Auto;
+
+    /// <summary>See <see cref="RenderingBackend"/> - tries native OpenGL (WGL) before ANGLE when true.</summary>
+    [ObservableProperty]
+    private bool _preferNativeOpenGl;
+
+    /// <summary>
     /// User direction: CE's own background-color picker (<c>ComicDisplaySettingsDialog</c>'s
     /// <c>cpBackgroundColor.FillKnownColors(includingSystem: false)</c>) fills a full swatch list off
     /// every named .NET color - a curated subset here instead of porting that whole list verbatim, as
@@ -267,6 +325,7 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         OnPropertyChanged(nameof(IsLibrariesTab));
         OnPropertyChanged(nameof(IsReaderTab));
         OnPropertyChanged(nameof(IsAdvancedTab));
+        OnPropertyChanged(nameof(IsPluginsTab));
     }
 
     [RelayCommand]
@@ -283,6 +342,9 @@ public partial class PreferencesScreenViewModel : ViewModelBase
 
     [RelayCommand]
     private void GoAdvanced() => ActiveTab = "advanced";
+
+    [RelayCommand]
+    private void GoPlugins() => ActiveTab = "plugins";
 
     /// <summary>Lazily loads skins/fonts the first time the screen is navigated to, same pattern as SmartScreenViewModel/ReadingScreenViewModel's EnsureListLoaded.</summary>
     public void EnsureLoaded()
@@ -310,12 +372,17 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         SelectedFontFamily = _skinService.GetSelectedFontFamily() ?? "System Default";
         _suppressFontApply = false;
 
+        _suppressMotionApply = true;
+        ReducedMotion = _skinService.GetReducedMotion();
+        _suppressMotionApply = false;
+
         using var context = _contextFactory();
         var settings = context.GetOrCreateAppSettings();
         _suppressBehaviorApply = true;
         OpenLastPage = settings.OpenLastPage;
         AutoNavigateComics = settings.AutoNavigateComics;
         ReverseRtlNavigation = settings.ReverseRtlNavigation;
+        MinimizeToTray = settings.MinimizeToTray;
         HighQualityPageDisplay = settings.HighQualityPageDisplay;
         ResetZoomOnPageChange = settings.ResetZoomOnPageChange;
         MouseWheelSpeed = settings.MouseWheelSpeed;
@@ -332,6 +399,8 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         BackgroundColor = settings.BackgroundColor;
         PageMarginEnabled = settings.PageMarginEnabled;
         PageMarginPercentWidth = settings.PageMarginPercentWidth;
+        RenderingBackend = settings.RenderingBackend;
+        PreferNativeOpenGl = settings.PreferNativeOpenGl;
         _suppressBehaviorApply = false;
 
         var firstIssue = context.Issues.Include(i => i.Series).OrderBy(i => i.Id).FirstOrDefault();
@@ -352,6 +421,8 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         RefreshBackups();
 
         RefreshKeyBindings();
+        RefreshSourceCredentials(context);
+        RefreshTrackerConnectionState(context);
     }
 
     // ===================== Keyboard Shortcuts (docs/alpha-roadmap.md P5 follow-up) =====================
@@ -376,6 +447,47 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         }
 
         RecomputeKeyBindingConflict();
+    }
+
+    /// <summary>Real gap closed, not a restyle (docs/superpowers/specs/2026-08-25-reader-chrome-
+    /// design.md) - confirmed via grep this never existed anywhere in the codebase before. Mirrors
+    /// ReadingScreenViewModel's ImportCbl/ExportCbl shape exactly (same _filePicker calls, same
+    /// open-context-then-call-IO-class structure).</summary>
+    [RelayCommand]
+    private async Task ImportKeyBindings()
+    {
+        string? path = await _filePicker.PickOpenFileAsync("Import Keyboard Shortcuts", "json", "Keyboard Shortcut Layout");
+        if (path is null)
+        {
+            return;
+        }
+
+        int applied;
+        try
+        {
+            applied = KeyBindingIO.Import(_keyBindingService, path);
+        }
+        catch (InvalidDataException ex)
+        {
+            _showToast("Couldn't import keyboard shortcuts", ex.Message);
+            return;
+        }
+
+        RefreshKeyBindings();
+        _showToast("Keyboard shortcuts imported", $"Applied {applied} binding{(applied == 1 ? "" : "s")}.");
+    }
+
+    [RelayCommand]
+    private async Task ExportKeyBindings()
+    {
+        string? path = await _filePicker.PickSaveFileAsync("Export Keyboard Shortcuts", "paperbunkr-shortcuts.json", "json", "Keyboard Shortcut Layout");
+        if (path is null)
+        {
+            return;
+        }
+
+        KeyBindingIO.Export(_keyBindingService, path);
+        _showToast("Keyboard shortcuts exported", $"Saved to {path}.");
     }
 
     /// <summary>
@@ -440,11 +552,23 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         _skinService.ApplyFont(value);
     }
 
+    partial void OnReducedMotionChanged(bool value)
+    {
+        if (_suppressMotionApply)
+        {
+            return;
+        }
+
+        _skinService.ApplyReducedMotion(value);
+    }
+
     partial void OnOpenLastPageChanged(bool value) => PersistBehaviorSetting(s => s.OpenLastPage = value);
 
     partial void OnAutoNavigateComicsChanged(bool value) => PersistBehaviorSetting(s => s.AutoNavigateComics = value);
 
     partial void OnReverseRtlNavigationChanged(bool value) => PersistBehaviorSetting(s => s.ReverseRtlNavigation = value);
+
+    partial void OnMinimizeToTrayChanged(bool value) => PersistBehaviorSetting(s => s.MinimizeToTray = value);
 
     partial void OnHighQualityPageDisplayChanged(bool value) => PersistBehaviorSetting(s => s.HighQualityPageDisplay = value);
 
@@ -531,6 +655,32 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         using var context = _contextFactory();
         apply(context.GetOrCreateAppSettings());
         context.SaveChanges();
+    }
+
+    partial void OnRenderingBackendChanged(RenderBackend value) => PersistRenderingSetting();
+
+    partial void OnPreferNativeOpenGlChanged(bool value) => PersistRenderingSetting();
+
+    /// <summary>
+    /// Persists both rendering fields to <see cref="AppSettings"/> and immediately syncs the
+    /// <c>graphics.json</c> bootstrap cache (docs/superpowers/specs/2026-08-27-hardware-accelerated-
+    /// rendering-design.md §2) so there's no launch lag - the change still only takes effect on the
+    /// next launch, which the UI states.
+    /// </summary>
+    private void PersistRenderingSetting()
+    {
+        if (_suppressBehaviorApply)
+        {
+            return;
+        }
+
+        using var context = _contextFactory();
+        var settings = context.GetOrCreateAppSettings();
+        settings.RenderingBackend = RenderingBackend;
+        settings.PreferNativeOpenGl = PreferNativeOpenGl;
+        context.SaveChanges();
+
+        GraphicsBootstrap.SyncCache(RenderingBackend, PreferNativeOpenGl);
     }
 
     [RelayCommand]
@@ -696,7 +846,7 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         WatchedFolders.Clear();
         foreach (var folder in context.WatchedFolders.OrderBy(w => w.Path))
         {
-            WatchedFolders.Add(new WatchedFolderSummary { Id = folder.Id, Path = folder.Path });
+            WatchedFolders.Add(new WatchedFolderSummary { Id = folder.Id, Path = folder.Path, Watch = folder.Watch });
         }
     }
 
@@ -719,6 +869,7 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         }
 
         RefreshWatchedFolders();
+        _reloadFolderWatch();
     }
 
     [RelayCommand]
@@ -735,6 +886,29 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         }
 
         RefreshWatchedFolders();
+        _reloadFolderWatch();
+    }
+
+    /// <summary>
+    /// Bound to the row checkbox's <c>Command</c> (docs/superpowers/specs/
+    /// 2026-08-23-live-folder-watch-scanning-design.md §4) - by the time this runs,
+    /// <see cref="WatchedFolderSummary.Watch"/> already reflects the post-click state (standard
+    /// <c>ToggleButton</c> behavior), so this just persists it and rebuilds the live watchers.
+    /// </summary>
+    [RelayCommand]
+    private void ToggleWatch(WatchedFolderSummary folder)
+    {
+        using (var context = _contextFactory())
+        {
+            var entity = context.WatchedFolders.FirstOrDefault(w => w.Id == folder.Id);
+            if (entity is not null)
+            {
+                entity.Watch = folder.Watch;
+                context.SaveChanges();
+            }
+        }
+
+        _reloadFolderWatch();
     }
 
     [RelayCommand]
@@ -981,5 +1155,181 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         }
 
         RefreshBackups();
+    }
+
+    // ===================== Reading List Sources (docs/superpowers/specs/2026-08-22-cbl-manager-
+    // arc-lookup-design.md §5) - ComicVine/Metron credentials, backed by CredentialStore. =====================
+
+    [ObservableProperty]
+    private string _comicVineApiKey = string.Empty;
+
+    [ObservableProperty]
+    private string _metronUsername = string.Empty;
+
+    [ObservableProperty]
+    private string _metronPassword = string.Empty;
+
+    [ObservableProperty]
+    private string? _sourcesStatus;
+
+    private void RefreshSourceCredentials(PaperbunkrDbContext context)
+    {
+        ComicVineApiKey = CredentialStore.Get(context, "ComicVine", CredentialKind.ApiKey) ?? string.Empty;
+        MetronUsername = CredentialStore.Get(context, "Metron", CredentialKind.Username) ?? string.Empty;
+        MetronPassword = CredentialStore.Get(context, "Metron", CredentialKind.Password) ?? string.Empty;
+    }
+
+    [RelayCommand]
+    private void SaveComicVineCredentials()
+    {
+        using var context = _contextFactory();
+        CredentialStore.Set(context, "ComicVine", CredentialKind.ApiKey, ComicVineApiKey);
+        SourcesStatus = "ComicVine API key saved.";
+    }
+
+    [RelayCommand]
+    private void SaveMetronCredentials()
+    {
+        using var context = _contextFactory();
+        CredentialStore.Set(context, "Metron", CredentialKind.Username, MetronUsername);
+        CredentialStore.Set(context, "Metron", CredentialKind.Password, MetronPassword);
+        SourcesStatus = "Metron credentials saved.";
+    }
+
+    // ===================== Trackers (docs/superpowers/specs/2026-08-23-tracker-write-back-sync-
+    // design.md) - AniList/MyAnimeList/Shikimori use browser OAuth (each needs the user's own
+    // registered Client ID, same "user registers their own app" model as every OAuth flow here, not
+    // a Paperbunkr-wide embedded client), Bangumi uses a pasted Personal Access Token instead
+    // (deliberate asymmetry - see the design spec's own "why the four aren't uniform" section).
+    // =====================
+
+    [ObservableProperty] private string _aniListClientId = string.Empty;
+    [ObservableProperty] private string _aniListPastedToken = string.Empty;
+    [ObservableProperty] private bool _isAniListConnected;
+
+    [ObservableProperty] private string _myAnimeListClientId = string.Empty;
+    [ObservableProperty] private string _myAnimeListPastedCode = string.Empty;
+    [ObservableProperty] private bool _isMyAnimeListConnected;
+    private string? _myAnimeListCodeVerifier;
+
+    [ObservableProperty] private string _shikimoriClientId = string.Empty;
+    [ObservableProperty] private string _shikimoriClientSecret = string.Empty;
+    [ObservableProperty] private string _shikimoriPastedCode = string.Empty;
+    [ObservableProperty] private bool _isShikimoriConnected;
+
+    [ObservableProperty] private string _bangumiPersonalAccessToken = string.Empty;
+    [ObservableProperty] private bool _isBangumiConnected;
+
+    [ObservableProperty] private string _mangaBakaPersonalAccessToken = string.Empty;
+    [ObservableProperty] private bool _isMangaBakaConnected;
+
+    [ObservableProperty] private string? _trackersStatus;
+
+    private void RefreshTrackerConnectionState(PaperbunkrDbContext context)
+    {
+        IsAniListConnected = CredentialStore.HasCredentials(context, nameof(TrackingService.AniList), CredentialKind.OAuthAccessToken);
+        IsMyAnimeListConnected = CredentialStore.HasCredentials(context, nameof(TrackingService.MyAnimeList), CredentialKind.OAuthAccessToken);
+        IsShikimoriConnected = CredentialStore.HasCredentials(context, nameof(TrackingService.Shikimori), CredentialKind.OAuthAccessToken);
+        IsBangumiConnected = CredentialStore.HasCredentials(context, nameof(TrackingService.Bangumi), CredentialKind.ApiKey);
+        IsMangaBakaConnected = CredentialStore.HasCredentials(context, nameof(TrackingService.MangaBaka), CredentialKind.ApiKey);
+
+        AniListClientId = CredentialStore.Get(context, nameof(TrackingService.AniList), CredentialKind.OAuthClientId) ?? string.Empty;
+        MyAnimeListClientId = CredentialStore.Get(context, nameof(TrackingService.MyAnimeList), CredentialKind.OAuthClientId) ?? string.Empty;
+        ShikimoriClientId = CredentialStore.Get(context, nameof(TrackingService.Shikimori), CredentialKind.OAuthClientId) ?? string.Empty;
+        ShikimoriClientSecret = CredentialStore.Get(context, nameof(TrackingService.Shikimori), CredentialKind.OAuthClientSecret) ?? string.Empty;
+    }
+
+    [RelayCommand]
+    private void ConnectAniList()
+    {
+        using var context = _contextFactory();
+        CredentialStore.Set(context, nameof(TrackingService.AniList), CredentialKind.OAuthClientId, AniListClientId);
+        Process.Start(new ProcessStartInfo { FileName = AniListTrackerAdapter.BuildAuthorizationUrl(AniListClientId), UseShellExecute = true });
+        TrackersStatus = "Complete sign-in in your browser, then paste the token back here.";
+    }
+
+    [RelayCommand]
+    private void CompleteAniListConnect()
+    {
+        using var context = _contextFactory();
+        AniListTrackerAdapter.CompleteConnect(context, AniListPastedToken);
+        AniListPastedToken = string.Empty;
+        RefreshTrackerConnectionState(context);
+        TrackersStatus = "AniList connected.";
+    }
+
+    [RelayCommand]
+    private void ConnectMyAnimeList()
+    {
+        using var context = _contextFactory();
+        CredentialStore.Set(context, nameof(TrackingService.MyAnimeList), CredentialKind.OAuthClientId, MyAnimeListClientId);
+        _myAnimeListCodeVerifier = MyAnimeListTrackerAdapter.GenerateCodeVerifier();
+        Process.Start(new ProcessStartInfo
+        {
+            FileName = MyAnimeListTrackerAdapter.BuildAuthorizationUrl(MyAnimeListClientId, _myAnimeListCodeVerifier),
+            UseShellExecute = true,
+        });
+        TrackersStatus = "The page after sign-in will fail to load - that's expected. Copy the \"code\" value from its address bar and paste it back here.";
+    }
+
+    [RelayCommand]
+    private async Task CompleteMyAnimeListConnectAsync()
+    {
+        if (_myAnimeListCodeVerifier is null)
+        {
+            TrackersStatus = "Click Connect first.";
+            return;
+        }
+
+        using var context = _contextFactory();
+        var adapter = new MyAnimeListTrackerAdapter(TrackerHttpClients.MyAnimeList, MyAnimeListClientId);
+        bool connected = await adapter.CompleteConnectAsync(context, MyAnimeListClientId, _myAnimeListCodeVerifier, MyAnimeListPastedCode, default);
+
+        MyAnimeListPastedCode = string.Empty;
+        _myAnimeListCodeVerifier = null;
+        RefreshTrackerConnectionState(context);
+        TrackersStatus = connected ? "MyAnimeList connected." : "Couldn't connect to MyAnimeList. Check your Client ID and try again.";
+    }
+
+    [RelayCommand]
+    private void ConnectShikimori()
+    {
+        using var context = _contextFactory();
+        CredentialStore.Set(context, nameof(TrackingService.Shikimori), CredentialKind.OAuthClientId, ShikimoriClientId);
+        CredentialStore.Set(context, nameof(TrackingService.Shikimori), CredentialKind.OAuthClientSecret, ShikimoriClientSecret);
+        Process.Start(new ProcessStartInfo { FileName = ShikimoriTrackerAdapter.BuildAuthorizationUrl(ShikimoriClientId), UseShellExecute = true });
+        TrackersStatus = "Shikimori will show you a code to copy - paste it back here.";
+    }
+
+    [RelayCommand]
+    private async Task CompleteShikimoriConnectAsync()
+    {
+        using var context = _contextFactory();
+        var adapter = new ShikimoriTrackerAdapter(TrackerHttpClients.Shikimori);
+        bool connected = await adapter.CompleteConnectAsync(context, ShikimoriClientId, ShikimoriClientSecret, ShikimoriPastedCode, default);
+
+        ShikimoriPastedCode = string.Empty;
+        RefreshTrackerConnectionState(context);
+        TrackersStatus = connected ? "Shikimori connected." : "Couldn't connect to Shikimori. Check your Client ID/Secret and try again.";
+    }
+
+    [RelayCommand]
+    private void SaveBangumiToken()
+    {
+        using var context = _contextFactory();
+        BangumiTrackerAdapter.CompleteConnect(context, BangumiPersonalAccessToken);
+        BangumiPersonalAccessToken = string.Empty;
+        RefreshTrackerConnectionState(context);
+        TrackersStatus = "Bangumi token saved.";
+    }
+
+    [RelayCommand]
+    private void SaveMangaBakaToken()
+    {
+        using var context = _contextFactory();
+        MangaBakaTrackerAdapter.CompleteConnect(context, MangaBakaPersonalAccessToken);
+        MangaBakaPersonalAccessToken = string.Empty;
+        RefreshTrackerConnectionState(context);
+        TrackersStatus = "MangaBaka token saved.";
     }
 }

@@ -10,6 +10,7 @@ using Avalonia.Controls;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
+using FluentAvalonia.Styling;
 using Paperbunkr.App.Models;
 using Paperbunkr.Data;
 using SkiaSharp;
@@ -124,6 +125,8 @@ public class SkinService
         var settings = context.GetOrCreateAppSettings();
         ApplySkinResources(LoadSkin(settings.ActiveSkinKey));
         ApplyFontResource(settings.SelectedFontFamily);
+        Application.Current!.Resources["PbMotionFast"] = settings.ReducedMotion ? TimeSpan.Zero : DefaultMotionFast;
+        Application.Current!.Resources["PbMotionSlow"] = settings.ReducedMotion ? TimeSpan.Zero : DefaultMotionSlow;
     }
 
     private static void ApplySkinResources(SkinTheme theme)
@@ -142,9 +145,48 @@ public class SkinService
         SetColorAndBrush(resources, "PbBadge", theme.Colors.Badge);
         SetColorAndBrush(resources, "PbBadgeText", theme.Colors.BadgeText);
         SetColorAndBrush(resources, "PbSuccess", theme.Colors.Success);
+        SetColorAndBrush(resources, "PbSurface0", theme.Colors.Surface0);
+        SetColorAndBrush(resources, "PbSurface1", theme.Colors.Surface1);
+        SetColorAndBrush(resources, "PbSurface2", theme.Colors.Surface2);
+        SetColorAndBrush(resources, "PbSurface3", theme.Colors.Surface3);
+        SetColorAndBrush(resources, "PbGlow", theme.Colors.Glow);
+
+        resources["PbHeroGradientStartColor"] = Color.Parse(theme.Colors.HeroGradientStart);
+        resources["PbHeroGradientEndColor"] = Color.Parse(theme.Colors.HeroGradientEnd);
+
+        ApplyAccentColor(theme.Colors.Accent);
 
         resources["PbSpacingUnit"] = theme.SpacingUnit;
-        resources["PbRadius"] = theme.Radius;
+
+        // CornerRadius, not double - see the matching comment on PbRadius in App.axaml for why.
+        resources["PbRadius"] = new CornerRadius(theme.Radius);
+        resources["PbRadiusSm"] = new CornerRadius(theme.RadiusSm);
+        resources["PbRadiusLg"] = new CornerRadius(theme.RadiusLg);
+    }
+
+    /// <summary>
+    /// Pushes the skin's accent into FluentAvalonia's stock-control accent system
+    /// (<see cref="FluentAvaloniaTheme.CustomAccentColor"/>), which seeds SystemAccentColor and its
+    /// 6 tonal variants. This is the FluentAvalonia equivalent of the old
+    /// <c>FluentTheme.Palettes</c> <c>Accent="{DynamicResource PbAccentColor}"</c> binding - it
+    /// keeps a live skin switch recoloring stock controls (TextBox focus, ToggleSwitch, ScrollBar,
+    /// selection), not just the app's own Pb*-token UI.
+    /// </summary>
+    private static void ApplyAccentColor(string accentHex)
+    {
+        if (Application.Current is null || !Color.TryParse(accentHex, out var accent))
+        {
+            return;
+        }
+
+        foreach (var style in Application.Current.Styles)
+        {
+            if (style is FluentAvaloniaTheme faTheme)
+            {
+                faTheme.CustomAccentColor = accent;
+                return;
+            }
+        }
     }
 
     private static void SetColorAndBrush(IResourceDictionary resources, string keyPrefix, string hex)
@@ -173,18 +215,50 @@ public class SkinService
         context.SaveChanges();
     }
 
+    /// <summary>
+    /// The new bundled-default body font (docs/superpowers/specs/2026-08-24-design-language-
+    /// foundation-design.md Typography section) - what "no override" resolves to. Deliberately a
+    /// live default value, not an absent key, unlike the pre-this-phase behavior: ApplyFontResource
+    /// used to Remove("PbFontFamily") when there was no override, relying on Avalonia's graceful
+    /// fallback to the FluentTheme/OS default for an unresolved DynamicResource. Bebas Neue
+    /// (PbDisplayFontFamily, App.axaml) is a separate, non-overridable resource for hero/heading
+    /// text only - it never goes through this override mechanism.
+    /// </summary>
+    private static readonly FontFamily DefaultFontFamily =
+        new("avares://Paperbunkr.App/Assets/Fonts/#Source Serif 4, Georgia, serif");
+
     private static void ApplyFontResource(string? fontFamilyName)
     {
         var resources = Application.Current!.Resources;
-        if (fontFamilyName is null)
-        {
-            resources.Remove("PbFontFamily");
-        }
-        else
-        {
-            resources["PbFontFamily"] = new FontFamily(fontFamilyName);
-        }
+        resources["PbFontFamily"] = fontFamilyName is null ? DefaultFontFamily : new FontFamily(fontFamilyName);
     }
+
+    /// <summary>Returns the currently persisted reduced-motion preference.</summary>
+    public bool GetReducedMotion()
+    {
+        using var context = _contextFactory();
+        return context.GetOrCreateAppSettings().ReducedMotion;
+    }
+
+    /// <summary>
+    /// Applies the reduced-motion preference live and persists it. When enabled, PbMotionFast
+    /// resolves to TimeSpan.Zero so every consumer that binds to it (rather than checking a flag
+    /// itself) is automatically instant - same "overwrite the resource" approach ApplyFontResource
+    /// already uses.
+    /// </summary>
+    public void ApplyReducedMotion(bool enabled)
+    {
+        Application.Current!.Resources["PbMotionFast"] = enabled ? TimeSpan.Zero : DefaultMotionFast;
+        Application.Current!.Resources["PbMotionSlow"] = enabled ? TimeSpan.Zero : DefaultMotionSlow;
+
+        using var context = _contextFactory();
+        var settings = context.GetOrCreateAppSettings();
+        settings.ReducedMotion = enabled;
+        context.SaveChanges();
+    }
+
+    private static readonly TimeSpan DefaultMotionFast = TimeSpan.FromMilliseconds(150);
+    private static readonly TimeSpan DefaultMotionSlow = TimeSpan.FromMilliseconds(700);
 
     /// <summary>Cross-platform replacement for GDI+'s InstalledFontCollection - prepends "System Default" (no override).</summary>
     public IReadOnlyList<string> GetInstalledFontFamilies()

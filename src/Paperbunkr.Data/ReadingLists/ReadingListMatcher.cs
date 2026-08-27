@@ -30,7 +30,13 @@ public static class ReadingListMatcher
                 && string.Equals(i.EffectiveNumber(), number, StringComparison.OrdinalIgnoreCase))
             .ToList();
 
-        return Narrow(candidates, volume, year, format).FirstOrDefault();
+        // Prefer a real Issue over a placeholder standing in for the same Series+Number - matters
+        // for arc Refresh (docs/superpowers/specs/2026-08-22-cbl-manager-arc-lookup-design.md §4),
+        // where a placeholder created by an earlier Create/Refresh and a genuinely-added real copy
+        // can both exist as separate Issue rows for the same key.
+        return Narrow(candidates, volume, year, format)
+            .OrderBy(i => i.IsPlaceholder ? 1 : 0)
+            .FirstOrDefault();
     }
 
     /// <summary>

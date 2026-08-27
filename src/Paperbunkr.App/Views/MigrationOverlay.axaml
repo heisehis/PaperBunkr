@@ -39,7 +39,7 @@
                     <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
                         <Button Classes="rowAction" Content="Relink…" Command="{Binding RelinkCommand}" />
                         <Button Classes="rowAction" Content="Dismiss" Command="{Binding DismissCommand}" />
-                        <Button Classes="rowAction destructive" Content="{Binding RemoveLabel}" Command="{Binding RemoveCommand}" />
+                        <Button Classes="rowAction destructive" Content="{Binding DeleteConfirm.Label}" Command="{Binding DeleteConfirm.TriggerCommand}" />
                     </StackPanel>
                 </Grid>
             </Border>
@@ -134,8 +134,7 @@
         </Style>
     </UserControl.Styles>
 
-    <Border Width="580" MaxHeight="640" CornerRadius="10" Background="{DynamicResource PbBgBrush}"
-            BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1">
+    <Border Width="580" MaxHeight="640" Classes="floatingPanel">
         <DockPanel LastChildFill="True">
 
             <!-- Header: title + Migrate/Needs Review tabs -->
@@ -160,32 +159,20 @@
                         <StackPanel IsVisible="{Binding Migration.IsLocate}" Spacing="12">
                             <TextBlock Text="Locate your ComicRack CE library" FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}" />
                             <StackPanel Orientation="Horizontal" Spacing="5" IsVisible="{Binding Migration.DefaultPathFound}">
-                                <Border Classes="icon" Width="13" Height="13" Background="{DynamicResource PbAccentTextBrush}">
-                                    <Border.OpacityMask>
-                                        <ImageBrush Source="/Assets/Icons/Circle_Check.png" Stretch="Uniform" />
-                                    </Border.OpacityMask>
-                                </Border>
+                                <Path Classes="pbIcon" Data="{StaticResource PbIconCircleCheck}" Width="13" Height="13" Stroke="{DynamicResource PbAccentTextBrush}" />
                                 <TextBlock Text="Found the default CE install" Foreground="{DynamicResource PbAccentTextBrush}" FontSize="12.5" />
                             </StackPanel>
                             <Grid ColumnDefinitions="*,Auto">
                                 <TextBox Grid.Column="0" Text="{Binding Migration.SelectedPath}" PlaceholderText="Path to ComicDb.xml" />
                                 <Button Grid.Column="1" Margin="8,0,0,0" Command="{Binding Migration.BrowseCommand}">
                                     <StackPanel Orientation="Horizontal" Spacing="5">
-                                        <Border Classes="icon" Width="13" Height="13">
-                                            <Border.OpacityMask>
-                                                <ImageBrush Source="/Assets/Icons/Folder_Open.png" Stretch="Uniform" />
-                                            </Border.OpacityMask>
-                                        </Border>
+                                        <Path Classes="pbIcon" Data="{StaticResource PbIconFolderOpen}" Width="13" Height="13" />
                                         <TextBlock Text="Browse…" />
                                     </StackPanel>
                                 </Button>
                             </Grid>
                             <StackPanel Orientation="Horizontal" Spacing="5" IsVisible="{Binding Migration.HasErrorMessage}">
-                                <Border Classes="icon" Width="13" Height="13" Background="#E06060">
-                                    <Border.OpacityMask>
-                                        <ImageBrush Source="/Assets/Icons/Circle_Warning.png" Stretch="Uniform" />
-                                    </Border.OpacityMask>
-                                </Border>
+                                <Path Classes="pbIcon" Data="{StaticResource PbIconCircleWarning}" Width="13" Height="13" Stroke="#E06060" />
                                 <TextBlock Text="{Binding Migration.ErrorMessage}" Foreground="#E06060" FontSize="12.5" />
                             </StackPanel>
                             <Button Classes="primaryWide" Content="Scan" Command="{Binding Migration.ScanCommand}" HorizontalAlignment="Left" />

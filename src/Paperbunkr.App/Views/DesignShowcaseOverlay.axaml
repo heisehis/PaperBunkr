@@ -1,0 +1,47 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:views="using:Paperbunkr.App.Views"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="640" d:DesignHeight="520"
+             x:Class="Paperbunkr.App.Views.DesignShowcaseOverlay">
+
+    <!--
+        Debug-only proof of Step 5's primitives (docs/superpowers/specs/2026-08-24-design-language-
+        foundation-design.md) - static sample content, no real data. Root Border uses
+        Classes="floatingPanel" itself, dogfooding that primitive rather than styling this overlay
+        by hand.
+    -->
+    <Border Classes="floatingPanel" Width="640" Padding="24">
+        <StackPanel Spacing="20">
+            <TextBlock Classes="pbTextHeading" Text="Design Showcase" />
+
+            <StackPanel Spacing="8">
+                <TextBlock Classes="pbTextCaption" Text="POSTER TILE" />
+                <StackPanel Orientation="Horizontal" Spacing="14">
+                    <views:PosterTile TitleText="Wasteland" MetaText="Vol. 3 · 22 issues" />
+                    <views:PosterTile TitleText="Nightfall" MetaText="Vol. 1 · 6 issues" BadgeText="4.8" />
+                    <views:PosterTile TitleText="Ashen Court" MetaText="Vol. 2 · 14 issues" BadgeText="4.2" ShowProgress="True" ProgressFraction="0.6" />
+                </StackPanel>
+            </StackPanel>
+
+            <StackPanel Spacing="8">
+                <TextBlock Classes="pbTextCaption" Text="CHIP" />
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <Border Classes="pbChip"><TextBlock Classes="pbTextCaption" Text="Action" /></Border>
+                    <Border Classes="pbChip"><TextBlock Classes="pbTextCaption" Text="Sci-Fi" /></Border>
+                    <Button Classes="pbChip"><TextBlock Classes="pbTextCaption" Text="Clickable" /></Button>
+                </StackPanel>
+            </StackPanel>
+
+            <StackPanel Spacing="8">
+                <TextBlock Classes="pbTextCaption" Text="BUTTON" />
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <Button Classes="primary" Content="Primary" />
+                    <Button Classes="secondary" Content="Secondary" />
+                    <Button Classes="ghost" Content="Ghost" />
+                </StackPanel>
+            </StackPanel>
+        </StackPanel>
+    </Border>
+</UserControl>

@@ -1,4 +1,5 @@
 using System.IO.Compression;
+using Avalonia;
 using Avalonia.Media;
 using Avalonia.Platform;
 using Microsoft.EntityFrameworkCore;
@@ -93,7 +94,16 @@ public class WindowsElevenSkinTests : IDisposable
         Assert.Equal(Color.Parse("#F3F3F3"), resources["PbBgColor"]);
         Assert.Equal(Color.Parse("#0078D4"), resources["PbAccentColor"]);
         Assert.Equal(Color.Parse("#107C10"), resources["PbSuccessColor"]);
-        Assert.Equal(8.0, resources["PbRadius"]);
+        Assert.Equal(new CornerRadius(8), resources["PbRadius"]);
+
+        // Elevation scale (docs/superpowers/specs/2026-08-24-design-language-foundation-design.md) -
+        // windows_11's real light-theme values, not the "default" skin's dark ones.
+        Assert.Equal(Color.Parse("#F3F3F3"), resources["PbSurface0Color"]);
+        Assert.Equal(Color.Parse("#FFFFFF"), resources["PbSurface1Color"]);
+        Assert.Equal(Color.Parse("#FAFAFA"), resources["PbSurface2Color"]);
+        Assert.Equal(Color.Parse("#4D0078D4"), resources["PbGlowColor"]);
+        Assert.Equal(new CornerRadius(6), resources["PbRadiusSm"]);
+        Assert.Equal(new CornerRadius(16), resources["PbRadiusLg"]);
 
         Assert.True(service.GetAvailableSkins().Single(s => s.Key == "windows_11").IsActive);
     }

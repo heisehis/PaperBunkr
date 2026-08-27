@@ -37,6 +37,18 @@ public class Series
     public SeriesStatus Status { get; set; } = SeriesStatus.Unknown;
 
     /// <summary>
+    /// The user's own reading-progress relationship with this series (Planned/Reading/Completed/
+    /// Paused/Dropped/ReReading) - independent of <see cref="Status"/> above, which is the
+    /// publisher's status, not the reader's. New (docs/superpowers/specs/2026-08-19-metadata-model-
+    /// reading-status-design.md). Set automatically to <see cref="Entities.ReadingStatus.Reading"/>
+    /// on an issue's first open (<c>ReaderScreenViewModel.Load</c>) when still
+    /// <see cref="Entities.ReadingStatus.Unknown"/> or <see cref="Entities.ReadingStatus.Planned"/>;
+    /// every other transition is user-driven (Library context menu, Bulk Edit) - matching this
+    /// codebase's existing minimal-automation stance for series-level state.
+    /// </summary>
+    public ReadingStatus ReadingStatus { get; set; } = ReadingStatus.Unknown;
+
+    /// <summary>
     /// Computed, not stored - <c>Status == Completed</c>. Kept as a property (not removed outright)
     /// so every existing reader (Smart Lists' <c>SeriesComplete</c> selector, Detail screen) keeps
     /// working unchanged; avoids a second source of truth per this phase's design doc.
@@ -56,6 +68,9 @@ public class Series
 
     public Issue? CoverIssue { get; set; }
 
+    /// <summary>Alternate (native/romanized/localized) titles - see <see cref="SeriesTitle"/>'s own doc comment. <see cref="Name"/> above remains the primary/sort title.</summary>
+    public List<SeriesTitle> Titles { get; set; } = new();
+
     public List<Issue> Issues { get; set; } = new();
 
     public List<Category> Categories { get; set; } = new();
@@ -64,4 +79,7 @@ public class Series
 
     /// <summary>M:M with <see cref="Continuity"/> (docs/superpowers/specs/2026-08-17-metadata-model-phase4a-continuity-design.md) - a series can belong to more than one continuity.</summary>
     public List<Continuity> Continuities { get; set; } = new();
+
+    /// <summary>Series-scoped proposals (Summary/Status/Genre) - see <see cref="MetadataProposal.SeriesId"/>'s own doc comment (docs/superpowers/specs/2026-08-23-apply-from-provider-design.md). Mirrors <see cref="Issue.MetadataProposals"/>.</summary>
+    public List<MetadataProposal> MetadataProposals { get; set; } = new();
 }

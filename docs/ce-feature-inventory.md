@@ -103,54 +103,62 @@ Nothing in this document was left un-triaged.
 ### A. Comic metadata editing
 | Feature | Status |
 |---|---|
-| Single-book properties editor (all ComicInfo fields, cover, pages, scripts tabs) | 🔨 decided: build — Detail screen only edits ContentType today |
-| Bulk multi-book edit (mixed-value tracking) | 🔨 decided: build |
-| Copy/paste metadata fields between books | 🔨 decided: build |
-| Templated/token text field editor (insert `{property}`) | 🔨 decided: build |
-| Rating (numeric) | ✅ `Issue.Rating` field + Favorites smart list exist; 🔨 decided: build the UI |
-| Quick Rating + free-text Review in one popup | 🔨 decided: build (Review text isn't even a schema field yet) |
-| Undo/Redo for metadata edits | 🔨 decided: build |
-| Per-page type tagging (cover/story/ad/deleted) | 🔨 decided: build |
-| Per-page persisted rotation override | 🔨 decided: build |
-| Named bookmarks (set/remove/prev/next) — distinct from `LastPageRead` | 🔨 decided: build |
+| Single-book properties editor (all ComicInfo fields, cover, pages, scripts tabs) | ✅ shipped 2026-08-07, converted to a borderless overlay 2026-08-23 (docs/superpowers/specs/2026-08-23-issue-editor-borderless-overlay-design.md) |
+| Bulk multi-book edit (mixed-value tracking) | ✅ shipped 2026-08-07, same overlay conversion 2026-08-23 |
+| Copy/paste metadata fields between books | ✅ shipped 2026-08-23 — Copy/Paste buttons in the single-book editor header |
+| Templated/token text field editor (insert `{property}`) | ✅ shipped 2026-08-23 — both editors; single-book resolves immediately, bulk expands per issue at Save |
+| Rating (numeric) | ✅ `Issue.Rating` field + Favorites smart list + full-editor star UI shipped 2026-08-07 |
+| Quick Rating + free-text Review in one popup | ✅ shipped 2026-08-23 — "Quick Rate…" on Library and Detail's issue tiles |
+| Undo/Redo for metadata edits | ✅ shipped 2026-08-23 — multi-level history stack, rail nav Undo/Redo buttons |
+| Per-page type tagging (cover/story/ad/deleted) | ✅ shipped 2026-08-23 — new `IssuePage` entity, Reader thumbnail right-click |
+| Per-page persisted rotation override | ✅ shipped 2026-08-23 — same `IssuePage` entity; paged mode only, not continuous scroll |
+| Named bookmarks (set/remove/prev/next) — distinct from `LastPageRead` | ✅ shipped 2026-08-23 — inline rename on existing bookmark flyout rows |
 
 ### B. Reader (§8, Beta) — the itemized "CRReaderOverhaul" checklist
+**Re-verified against live code 2026-08-23 — this table had drifted badly stale (9 of 16 rows below
+were marked 📋/🔨 despite already being shipped).** Verification method: direct code search, not
+memory files (see [[project_paperbunkr_metadata_editing_extras]]-adjacent session notes for why
+memory alone isn't trustworthy here).
+
 | Feature | Status |
 |---|---|
 | Paged left-to-right reading, real page decode | ✅ shipped (Alpha) |
 | Fit modes: Original / Fit All / Fit Width (+ adaptive) / Fit Height / Best Fit | ✅ shipped 2026-08-10, minus `FitWidthAdaptive` — named deviation, see docs/superpowers/specs/2026-08-10-reader-polish-core-viewing-controls-design.md §1 |
 | Zoom: in/out, toggle, presets (100/125/150/200/400%), custom | ✅ shipped 2026-08-10 (custom zoom/pan gestures were already Alpha; presets added) |
-| Page layout: single / double-page spread / adaptive spread detection | 📋 |
+| Page layout: single / double-page spread / adaptive spread detection | ✅ shipped — `PageLayoutMode`/`ToggleDoublePageMode`/`SpreadLayoutMath` (docs/superpowers/specs/2026-08-15-reader-double-page-spread-design.md); CE's 3 modes deliberately collapsed to 2 (`Double` behaves like CE's `DoubleAdaptive`); a per-page manual Near/Far override stays a real, separate gap (no `PagesView`-style screen exists) |
 | Reading direction: RTL (manga), with flip-parts vs flip-pages sub-modes | ✅ shipped — `ReaderScreenViewModel.ToggleReadingMode`/RTL page-turn flip, per docs/superpowers/specs/2026-08-07-reader-rtl-navigation-design.md |
-| Rotation: relative/absolute + autorotate landscape pages | ✅ shipped 2026-08-10 — session-only (not persisted per-book), matching CE's own precedent |
-| Magnifier/loupe overlay tool | 📋 |
-| Page transition animations (fade/slide/paging) + zoom-in/out-on-page-change | 📋 |
-| Fullscreen + minimal-UI chrome-reduction mode | 📋 |
-| On-screen overlays: nav scrubber bar, page/status text, part-info, clock/battery | 📋 |
-| Image adjustment: brightness/contrast/saturation/gamma/sharpen, live (not baked into files) | 📋 |
-| Background: solid/texture/paper-texture, page margins | 📋 |
-| Continuous/webtoon vertical scroll | 📋 — **not** a CE feature at all; confirmed genuinely new work, not parity |
-| Split-page "part" navigation for zoomed pages, type-to-jump-to-page, scroll page-turn throttling | 📋 |
-| Touch gestures: 9-zone tap mapping + double-tap, flick, media keys | 🔨 decided: build (not previously named even implicitly) |
-| Fully remappable keyboard shortcuts, import/export layout | 🔨 decided: build |
-| Auto-scrolling / hands-free reading mode | 🔨 decided: build |
+| Rotation: relative/absolute + autorotate landscape pages | ✅ shipped 2026-08-10 — session-only (not persisted per-book), matching CE's own precedent. Per-page *persisted* rotation override also shipped separately 2026-08-23, see §A |
+| Magnifier/loupe overlay tool | 📋 confirmed still not started — CE's `MagnifierStyle`/`IComicDisplayConfig` exist only as dormant ported code in `Paperbunkr.Engine`, zero references anywhere in `Paperbunkr.App` |
+| Page transition animations (fade/slide/paging) + zoom-in/out-on-page-change | ✅ shipped — `PageTransitionStyle`/`PageTransitionMath`/`ReaderPageVisualHandler` (docs/superpowers/specs/2026-08-13-reader-page-transition-animations-design.md) |
+| Fullscreen + minimal-UI chrome-reduction mode | ✅ shipped — `ReaderScreenViewModel.IsFullscreen`/`ToggleFullscreen`/`ShowFullscreenOverlays` |
+| On-screen overlays: nav scrubber bar, page/status text, part-info, clock/battery | ⚠️ partial — nav scrubber (thumbnail rail) and page/status text both real and shipped; "part-info" doesn't apply, confirmed no CE-style "Part" concept exists in Paperbunkr at all; clock/battery genuinely not built |
+| Image adjustment: brightness/contrast/saturation/gamma/sharpen, live (not baked into files) | ⚠️ partial — brightness/contrast/saturation/gamma shipped and live (`Services/ImageAdjustmentMath.cs`, ported from CE's `ImageProcessing.cs`); sharpen and AutoContrast/WhitePoint explicitly skipped, real remaining gap |
+| Background: solid/texture/paper-texture, page margins | ⚠️ partial — solid-color background + page margins shipped (`AppSettings.ImageBackgroundMode`/`PageMarginEnabled` etc., global-only by design, no per-issue override); paper/texture background mode genuinely not built |
+| Continuous/webtoon vertical scroll | ✅ shipped — **not** a CE feature at all, confirmed genuinely new work, not parity (docs/superpowers/specs/2026-08-10-reader-polish-continuous-scroll-chrome-overlays-design.md) |
+| Split-page "part" navigation for zoomed pages, type-to-jump-to-page, scroll page-turn throttling | ⚠️ partial — page-turn throttling shipped (`ReaderScreenViewModel`'s rapid-paging guard); split-page part navigation doesn't apply (no Part concept, confirmed absent); type-to-jump-to-page genuinely not built (only click-to-jump via the thumbnail rail) |
+| Touch gestures: 9-zone tap mapping + double-tap, flick, media keys | ✅ shipped (minus media keys) — 3×3 zone grid, double-tap, flick, pinch all real in `PageCanvas.cs` (docs/superpowers/specs/2026-08-09-reader-gestures-and-grid-navigation-design.md); media keys were an explicit scope cut in that same spec (cross-platform Avalonia support too inconsistent), not an oversight |
+| Fully remappable keyboard shortcuts, import/export layout | ✅ shipped — `KeyboardCommandRegistry`/`KeyBindingService` cover ~24 Reader commands (docs/superpowers/specs/2026-08-16-remappable-reader-shortcuts-design.md); import/export of the layout specifically not independently re-verified |
+| Auto-scrolling / hands-free reading mode | ✅ shipped (docs/superpowers/specs/2026-08-16-reader-auto-scroll-design.md) — deliberate deviation from CE's own differently-behaving toggle, documented as such |
 
 ### C. Library browsing
+**Re-verified against live code 2026-08-23 — 7 of 12 rows below were marked 🔨 despite already
+being shipped.**
+
 | Feature | Status |
 |---|---|
-| Grid view with real cover art | ✅ shipped tonight |
-| List/detail row view | ✅ shipped tonight |
-| Filesystem folder browsing mode (not just library-backed) | 🔨 decided: build |
-| Browse history (back/forward through views) | 🔨 decided: build |
-| Saved "Workspaces" (display-setting presets) | 🔨 decided: build (full preset system) |
-| Saved "List Layouts" (grid column/sort/group presets) | 🔨 decided: build — directly relevant: `LibraryScreen.axaml`'s "Display ▾" dropdown already has decorative grid-density/sort UI stubbed in for this exact concept |
-| Pluggable sort/group strategies (by rating, community rating, read %, custom/virtual tags) | 🔨 decided: build — current sort is fixed by `SortName` |
-| Drag-and-drop (files/folders/reading-list files onto the app) | 🔨 decided: build |
-| Recent/MRU file list, Quick Open (recents+favorites overlay) | 🔨 decided: build |
-| Reveal-in-Explorer / copy-file-path | 🔨 decided: build (small) |
-| Folder-watch continuous scanning (independent of one-time CE migration) | 🔨 decided: build |
-| File metadata write-back (save edits into ComicInfo.xml/tags) | 🔨 decided: build — needs careful design (mutates user's files) |
-| Fileless book entries (catalog a physical book with no file) | 🔨 decided: build |
+| Grid view with real cover art | ✅ shipped |
+| List/detail row view | ✅ shipped |
+| Filesystem folder browsing mode (not just library-backed) | 📋 confirmed still not started |
+| Browse history (back/forward through views) | ✅ shipped — `LibraryBrowseState`/`_browseHistory` (`CursorList<T>`) (docs/superpowers/specs/2026-08-19-library-browse-history-design.md); search query tracked as a history step, sort/group/display deliberately excluded |
+| Saved "Workspaces" (display-setting presets) | 📋 confirmed still not started — explicitly scoped as a separate future sub-project in the List Layouts spec below, distinct from what shipped there |
+| Saved "List Layouts" (grid column/sort/group presets) | ✅ shipped — persists sort/group/view mode/grid density/overlay toggles/filters/sidebar selection (docs/superpowers/specs/2026-08-17-library-saved-list-layouts-design.md). This is persistence of the existing session-only UI, not named/multiple presets — that's "Workspaces" above, still open |
+| Pluggable sort/group strategies (by rating, community rating, read %, custom/virtual tags) | ⚠️ partial — `IssueListSortField` covers 60+ CE-parity fields including Rating/Community Rating/Read % (docs/superpowers/specs/2026-08-18-issue-list-pluggable-sort-group-design.md); Virtual Tags are **not** a sort/group axis despite being named in this row — real, specific remaining gap |
+| Drag-and-drop (files/folders/reading-list files onto the app) | 📋 confirmed still not started |
+| Recent/MRU file list, Quick Open (recents+favorites overlay) | 📋 confirmed still not started |
+| Reveal-in-Explorer / copy-file-path | ✅ shipped — `Services/RevealInExplorerHelper.cs` (docs/superpowers/specs/2026-08-16-reveal-in-explorer-and-fileless-entries-design.md §1) |
+| Folder-watch continuous scanning (independent of one-time CE migration) | ✅ shipped — `Services/LiveFolderWatchService.cs` |
+| File metadata write-back (save edits into ComicInfo.xml/tags) | ✅ shipped — `Services/ComicInfoWriteBackService.cs`, wired into both the single-book and bulk editors (currently scoped to Genre/Tags) |
+| Fileless book entries (catalog a physical book with no file) | ✅ shipped — `LibraryScreenViewModel.CreatePlaceholderIssue`/`ReadingListMatcher.ResolveOrCreatePlaceholder` (docs/superpowers/specs/2026-08-16-reveal-in-explorer-and-fileless-entries-design.md §2-3) |
 
 ### D. Smart Lists (cross-reference only, not a gap)
 Already shipped in Paperbunkr with CE field parity. CE's dual rule-builder/raw-query editing
@@ -171,17 +179,24 @@ see each tab's own design spec for what actually shipped and what was deliberate
 | Scripts | script/plugin package management |
 | Advanced | wireless device discovery (🚫 excluded), Explorer file-association integration, backup manager, memory/cache limits, database backup, file write-back toggle, language pack |
 
-**Virtual Tags** deserves its own callout: user-defined computed/templated metadata fields
-(name + prefix/caption/suffix rich-text template with an insert-field picker, live preview). Not
-mentioned anywhere in onboarding.md. Small, self-contained, and genuinely useful — a good
-candidate to scope independently of the full Preferences screen if you want an early win here.
+**Virtual Tags** — ✅ **shipped, re-verified 2026-08-23 (this callout was stale).** Full CRUD UI
+lives in `PreferencesScreen.axaml` (~lines 569-619): a list, Add/Delete, editable Name/CaptionFormat/
+Enabled fields, and a live `VirtualTagPreview`. Backed by a real `VirtualTagDefinition` entity and
+`VirtualTagTemplateEvaluator` (`{FieldName}` token templates). Not a "good candidate for an early
+win" — there's no remaining work here.
 
 ### F. Remote/server & device sync
+**Re-verified 2026-08-23**: CE's own `NetworkManager`/`ComicLibraryClient`/`ComicLibraryServer`/
+`RemoteComicBookProvider` classes are already ported into `Paperbunkr.Engine` (same "ported early,
+dormant until a design wires it up" pattern as other Engine-only code in this project) — but **zero
+references exist anywhere in `Paperbunkr.App`**. The App-layer feature is still entirely unbuilt;
+only the Engine has a head start.
+
 | Feature | Status |
 |---|---|
-| Client: connect to another ComicRack instance's shared library over the network | 🔨 decided: build — needs its own design spec first |
-| Server: host this library for other instances to browse (password-protected, per-list sharing) | 🔨 decided: build — needs its own design spec first |
-| Background job/task monitor for server activity | 🔨 decided: build — needs its own design spec first |
+| Client: connect to another ComicRack instance's shared library over the network | 🔨 decided: build — needs its own design spec first; `Paperbunkr.Engine.NetworkManager`/`ComicLibraryClient` exist as dormant ported CE code, not wired to anything |
+| Server: host this library for other instances to browse (password-protected, per-list sharing) | 🔨 decided: build — needs its own design spec first; `Paperbunkr.Engine.ComicLibraryServer` exists dormant, same as above |
+| Background job/task monitor for server activity | 🔨 decided: build — needs its own design spec first; no code anywhere yet, and depends on the server feature above |
 | Portable device sync (e-readers) | 🚫 already excluded (§15) |
 
 ### G. Plugin API (§10, Beta — already planned, now much better itemized)
@@ -193,13 +208,16 @@ needed now — this is reference detail for when §10's "functional against a re
 work actually starts.
 
 ### H. App chrome / infrastructure
+**Re-verified against live code 2026-08-23 — 3 of 8 rows below were marked 🔨 despite already
+being shipped.**
+
 | Feature | Status |
 |---|---|
-| Crash reporter dialog | 🔨 decided: build |
-| Backup manager (scheduled, on-startup/shutdown, retention, restore UI) | 🔨 decided: build — full in-app system, not just guidance |
+| Crash reporter dialog | ✅ shipped — `Views/CrashReportWindow.axaml`, wired into `Services/DiagnosticsService.cs`'s global exception handler, `CrashOutcome` maps the 4 CE-parity user choices |
+| Backup manager (scheduled, on-startup/shutdown, retention, restore UI) | ⚠️ partial — `Services/BackupService.cs` has real manual backup/restore/retention + a restore-list UI in Preferences; scheduled on-startup/on-shutdown triggers are explicitly deferred in the code's own doc comment, manual-only today |
 | Export comics to another format/location | ⛔ decided: dropped |
-| External "open with" app associations | 🔨 decided: build |
-| Minimize-to-tray | 🔨 decided: build |
+| External "open with" app associations | ✅ shipped — `Services/FileAssociationService.cs`/`WindowsShellFileAssociation.cs`, real UI in Preferences |
+| Minimize-to-tray | ✅ shipped — `Services/TrayIconService.cs`, wired end-to-end in `MainWindow.axaml.cs` (minimize/close interception, first-time notice), not just an unused service |
 | Built-in RSS "News Channels" reader | ⏸️ deferred — repurpose idea live, needs its own brainstorm |
 | GitHub-releases-API self-updater (fork-specific) | ⛔ dropped for now — revisit with a real release pipeline |
 | Multi-tab/multi-window book-open model | Confirmed architectural non-goal (see headline #5), not a gap |
@@ -208,15 +226,28 @@ work actually starts.
 
 ## Status
 
-Every item in this document has an explicit decision — only the News-reader repurpose is
-genuinely open-ended, and export/self-updater are the two clean drops. Everything else is decided:
-build, which is a large confirmed backlog. Sequencing plan so far:
+**This section is a historical snapshot from the document's original 2026-08-07 authoring and was
+never updated as work shipped — do not treat the sequencing plan below as current.** Sections A, B,
+C, E (Virtual Tags), F, and H were all re-verified against live code on 2026-08-23; see each
+section's own "re-verified" note for what actually shipped since this plan was written.
 
-1. **In progress:** Preferences screen, sub-project 1 (settings infrastructure + skin/theme
-   system) — see docs/superpowers/specs/2026-08-07-preferences-skin-system-design.md.
-2. **Queued, each its own future spec:** Preferences' remaining tabs (Reader/Behavior/Libraries/
-   Scripts/Advanced — Workspaces, backup manager, Virtual Tags, and folder-watch scanning config
-   all live inside these), reader-polish itemization (Beta-blocking), remote/server sharing (needs
-   real design work before any code), metadata editing (properties editor + bulk edit + file
-   write-back — touches real risk, worth its own careful spec), library-browsing extras, News-reader
-   repurposing (needs its own brainstorm first, since "repurpose" isn't a spec yet).
+Every item in this document has an explicit decision — only the News-reader repurpose is
+genuinely open-ended, and export/self-updater are the two clean drops. As of 2026-08-23, what's
+**genuinely still unbuilt** across the whole document (confirmed by direct code search, not by this
+stale sequencing plan):
+
+- **Reader (§B):** magnifier/loupe, sharpen/AutoContrast/WhitePoint image adjustment, paper/texture
+  background, clock/battery overlay, type-to-jump-to-page, a per-page manual Near/Far double-page
+  override.
+- **Library (§C):** filesystem folder browsing mode, saved "Workspaces" (named/multiple presets,
+  distinct from the already-shipped List Layouts persistence), drag-and-drop, Recent/MRU + Quick
+  Open, Virtual Tags as a sort/group axis.
+- **Remote/server (§F):** the entire App-layer feature — Engine-layer CE classes are ported and
+  dormant, but nothing in `Paperbunkr.App` calls them yet. Needs its own design spec before any
+  App-side code.
+- **App chrome (§H):** Backup manager's scheduled on-startup/on-shutdown triggers (manual
+  backup/restore already works).
+- **News-reader repurposing:** still genuinely open-ended, needs its own brainstorm.
+
+Everything else this document originally listed as "🔨 decided: build" in sections A, B, C, E, F,
+and H has since shipped — re-check the section itself rather than assuming from this summary alone.

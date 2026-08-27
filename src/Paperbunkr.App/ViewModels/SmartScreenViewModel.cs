@@ -160,12 +160,16 @@ public partial class SmartScreenViewModel : ViewModelBase
 
         foreach (var list in all)
         {
+            int listId = list.Id;
             var summary = new SmartListSummary
             {
                 Id = list.Id,
                 Name = list.Name,
                 MatchCount = SmartListQueryBuilder.MatchCount(context, list),
                 IsActive = list.Id == _activeSmartListId,
+                DeleteConfirm = list.IsSystem
+                    ? null
+                    : new TwoStepConfirm(() => DeleteSmartList(listId), idleLabel: "Delete", armedLabel: "Confirm delete?"),
             };
 
             if (!list.IsSystem)
@@ -181,6 +185,40 @@ public partial class SmartScreenViewModel : ViewModelBase
                 BuiltInLists.Add(summary);
             }
         }
+    }
+
+    /// <summary>
+    /// Deletes a custom smart list (docs/superpowers/specs/2026-08-22-delete-functionality-design.md) -
+    /// never offered for a built-in/maintenance list (<see cref="SmartListSummary.DeleteConfirm"/> is
+    /// null for those). <see cref="SmartListCondition"/>'s FK is <c>DeleteBehavior.Cascade</c>
+    /// (confirmed in <c>PaperbunkrDbContext.OnModelCreating</c>), so its conditions go with it - no
+    /// explicit removal loop needed. In real usage there's always at least the seeded built-in/
+    /// maintenance lists to fall back to - unlike Reading Lists, this screen can never end up with
+    /// nothing left to show. Always calls <see cref="RefreshSidebar"/> itself, even along the
+    /// "fell back to another list" branch: <see cref="EnsureListLoaded"/> only refreshes the
+    /// sidebar as a side effect of successfully loading *something* (via <see cref="LoadSmartList"/>) -
+    /// a real bug caught by its own test, where deleting the only list left the just-deleted entry
+    /// stuck showing in <see cref="CustomLists"/> because nothing was left to load.
+    /// </summary>
+    private void DeleteSmartList(int smartListId)
+    {
+        using var context = PaperbunkrDb.CreateContext();
+        var list = context.SmartLists.Find(smartListId);
+        if (list is null || list.IsSystem)
+        {
+            return;
+        }
+
+        context.SmartLists.Remove(list);
+        context.SaveChanges();
+
+        if (_activeSmartListId == smartListId)
+        {
+            _activeSmartListId = null;
+            EnsureListLoaded();
+        }
+
+        RefreshSidebar();
     }
 
     private void RecomputeMatchCount()

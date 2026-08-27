@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+using Avalonia;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Paperbunkr.App.Services;
@@ -17,9 +19,35 @@ public sealed class SpotlightIssueSample
     public required IBrush CoverBrush { get; init; }
     public Bitmap? CoverImage { get; init; }
 
+    /// <summary>"#12 · 24 pages · New" - real per-issue metadata, not decorative filler. "New" is
+    /// always accurate here (not a guess): <see cref="HomeFeedResolver.GetSpotlightPicks"/> only ever
+    /// selects from <see cref="IssueMetadataExtensions.IsUnread"/> issues, so every Spotlight pick
+    /// genuinely is new-to-the-reader. Segments with no real data (no page count yet) are omitted
+    /// rather than shown as "0 pages" or similar.</summary>
+    public required string Meta { get; init; }
+
+    /// <summary>Pre-rendered blurred backdrop for the hero card (docs/superpowers/specs/
+    /// 2026-08-24-home-screen-design.md) - same <see cref="BackdropBlurRenderer"/> technique
+    /// MangaDetailScreenViewModel already uses for its own header, not a live Avalonia Effect
+    /// (which only blurs a small square instead of filling the banner - a known Avalonia bug,
+    /// AvaloniaUI/Avalonia#11416, already worked around once in this codebase). The hero shows this
+    /// as pure atmosphere behind the real, undistorted <see cref="CoverImage"/> - the first attempt
+    /// at this card stretched the raw cover art directly, which is why it looked broken.</summary>
+    public Bitmap? BackdropImage { get; init; }
+
     public static SpotlightIssueSample FromIssue(Issue issue)
     {
         string seriesName = issue.Series?.Name ?? string.Empty;
+        var coverImage = CoverImageCache.Get(issue.Id);
+
+        string numberSegment = string.IsNullOrWhiteSpace(issue.EffectiveNumber()) ? "#?" : $"#{issue.EffectiveNumber()}";
+        var metaSegments = new List<string> { numberSegment };
+        if (issue.PageCount is > 0)
+        {
+            metaSegments.Add($"{issue.PageCount} pages");
+        }
+        metaSegments.Add("New");
+
         return new SpotlightIssueSample
         {
             IssueId = issue.Id,
@@ -28,9 +56,11 @@ public sealed class SpotlightIssueSample
             // "#?" when even Number is missing - a bare "#" (found via an actual on-screen check,
             // not just reasoning about it) reads as broken, not "untitled". Same fallback
             // DetailTabsViewModel already uses for the identical gap.
-            Title = issue.EffectiveTitle() ?? (string.IsNullOrWhiteSpace(issue.EffectiveNumber()) ? "#?" : $"#{issue.EffectiveNumber()}"),
+            Title = issue.EffectiveTitle() ?? numberSegment,
             CoverBrush = SeriesCardSample.CoverBrushFor(seriesName),
-            CoverImage = CoverImageCache.Get(issue.Id),
+            CoverImage = coverImage,
+            BackdropImage = coverImage is not null ? BackdropBlurRenderer.Render(coverImage, new PixelSize(1600, 300)) : null,
+            Meta = string.Join(" · ", metaSegments),
         };
     }
 }

@@ -50,4 +50,7 @@ public class ReadingList
     public StoryEvent? StoryEvent { get; set; }
 
     public List<ReadingListItem> Items { get; set; } = new();
+
+    /// <summary>Weighted/categorized tags on the list itself (docs/superpowers/specs/2026-08-23-reading-list-tags-design.md) - distinct from member issues' own <see cref="IssueTag"/>s.</summary>
+    public List<ReadingListTag> Tags { get; set; } = new();
 }

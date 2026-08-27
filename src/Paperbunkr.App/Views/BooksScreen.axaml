@@ -106,6 +106,15 @@
                         <Button Classes="card" Width="140" Margin="0,0,14,18"
                                 Command="{Binding $parent[UserControl].((vm:BooksScreenViewModel)DataContext).SelectBookCommand}"
                                 CommandParameter="{Binding}">
+                            <Button.ContextMenu>
+                                <ContextMenu>
+                                    <MenuItem Header="Delete Book">
+                                        <MenuItem Header="Yes, delete this book"
+                                                  Command="{Binding $parent[UserControl].((vm:BooksScreenViewModel)DataContext).DeleteBookCommand}"
+                                                  CommandParameter="{Binding BookId}" />
+                                    </MenuItem>
+                                </ContextMenu>
+                            </Button.ContextMenu>
                             <StackPanel Spacing="6">
                                 <Border Classes="bookCover" Background="{Binding CoverBrush}" Height="200">
                                     <Image Source="{Binding CoverImage}" Stretch="UniformToFill" />

@@ -33,9 +33,9 @@ public class HomeFeedResolverTests : IDisposable
         }
     }
 
-    private static int SeedSeries(PaperbunkrDbContext context, string name)
+    private static int SeedSeries(PaperbunkrDbContext context, string name, ReadingStatus readingStatus = ReadingStatus.Unknown)
     {
-        var series = new Series { Name = name };
+        var series = new Series { Name = name, ReadingStatus = readingStatus };
         context.Series.Add(series);
         context.SaveChanges();
         return series.Id;
@@ -51,8 +51,12 @@ public class HomeFeedResolverTests : IDisposable
             PageCount = pageCount,
             AddedTime = addedTime,
             OpenedTime = openedTime,
-            Genre = genre,
         };
+        if (genre is not null)
+        {
+            issue.MergeFrom(IssueTagField.Genre, new[] { genre });
+        }
+
         context.Issues.Add(issue);
         context.SaveChanges();
         return issue.Id;
@@ -83,6 +87,18 @@ public class HomeFeedResolverTests : IDisposable
         SeedIssue(context, unreadSeriesId, lastPageRead: null);
         int finishedSeriesId = SeedSeries(context, "Finished Series");
         SeedIssue(context, finishedSeriesId, lastPageRead: 100, pageCount: 100);
+
+        var results = HomeFeedResolver.GetContinueReading(context);
+
+        Assert.Empty(results);
+    }
+
+    [Fact]
+    public void GetContinueReading_ExcludesDroppedSeries()
+    {
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        int droppedSeriesId = SeedSeries(context, "Dropped Series", ReadingStatus.Dropped);
+        SeedIssue(context, droppedSeriesId, lastPageRead: 30, pageCount: 100, openedTime: DateTime.UtcNow);
 
         var results = HomeFeedResolver.GetContinueReading(context);
 

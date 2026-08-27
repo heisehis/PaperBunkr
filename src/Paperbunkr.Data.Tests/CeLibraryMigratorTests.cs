@@ -480,7 +480,7 @@ public class CeLibraryMigratorTests : IDisposable
 
         Assert.Equal("Existing Writer", issue.Writer); // preserved, not overwritten
         Assert.Equal("Incoming Publisher", issue.Publisher); // was blank, filled in
-        Assert.Equal("Incoming Genre", issue.Genre); // was blank, filled in
+        Assert.Equal("Incoming Genre", issue.JoinedGenre()); // was blank, filled in
     }
 
     [Fact]

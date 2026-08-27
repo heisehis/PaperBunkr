@@ -118,14 +118,29 @@ build/tests — this exact class of interaction bug only surfaces on-screen):
    control. 5 new `ZoomPanMathTests`. 406 tests pass across the whole solution; both fixes confirmed
    working via the user's own on-screen testing.
 
-**Still open, not part of this slice:** page layout (single/double-spread/adaptive), magnifier
-overlay, page transition animations, fullscreen/minimal-chrome mode, on-screen overlays (scrubber,
-page/status text, clock/battery), live image adjustment (brightness/contrast/saturation/gamma),
-background/texture/margins, **continuous/webtoon vertical scroll** (genuinely new, not CE parity —
-also the highest-risk unproven piece per onboarding.md §8's memory-management warning), split-page
-part navigation, touch gestures beyond what's already shipped, remappable keyboard shortcuts,
-auto-scrolling/hands-free mode. A Preferences → Reader tab (to make the fit-mode/auto-rotate
-global defaults user-editable, currently fixed code constants) is also still open.
+**Continuous/webtoon scroll, fullscreen, position tracking, live image adjustment, and
+background/margins shipped 2026-08-11**; **page transition animations shipped 2026-08-15**; **double-
+page spread shipped 2026-08-16**; **remappable reader keyboard shortcuts shipped 2026-08-16**;
+**auto-scroll/hands-free mode shipped 2026-08-16** — all committed `2026-08-22` (`c1e91a6`) after
+sitting tested-but-uncommitted for several sessions. This doc's "still open" list above had gone
+stale; full per-item detail (design specs, bugs found+fixed, test counts) lives in
+[`alpha-todo.md`](alpha-todo.md)'s "Bonus, ahead of schedule" section rather than duplicated here.
+**A Preferences → Reader tab already existed and is not open** — see the entry above this one.
+
+**Vertical paged reading mode shipped 2026-08-27** (`ReadingMode.TopToBottom`, design +
+plan under `docs/superpowers/specs/2026-08-27-vertical-paged-reading-mode-*.md`) — a paged
+top-to-bottom mode (one page fills the viewport like LTR, page-turns run along Y: Up/Down keys,
+wheel, top/bottom click-and-tap zones, vertical flick), with vertical `Slide` animation
+(`PageTransitionDirection` gained `Up`/`Down`). New `PageTurnGestureMath` pure helper.
+Automated tests green; on-screen gesture/animation verification done (user-confirmed 2026-08-27).
+
+**Still genuinely open:** magnifier overlay (explicitly skipped per user direction — "we have a zoom
+slider"), on-screen overlays (scrubber, page/status text, clock/battery), split-page part navigation,
+touch gestures beyond what's already shipped. **On-screen (not just automated-test) verification of
+double-page spread rendering/pairing, remappable-shortcut keypress wiring, and auto-scroll behavior
+is still pending** — same standing no-unattended-GUI-automation caveat that applied when those
+shipped; `Paperbunkr.App.UiTests` (see Library browsing extras below) has since closed this gap for
+other screens and could close it here too.
 
 ### Metadata editing extras
 Copy/paste fields between books, templated/token text field editor, Quick Rating + free-text
@@ -223,24 +238,51 @@ sidebar click enables Back, clicking Back actually returns to the prior selectio
 Still open, in rough sequence: saved Workspaces (CE's `DisplayWorkspace` — named/multiple presets,
 depends on List Layouts, now available); then independently, drag-and-drop import, Recent/MRU +
 Quick Open overlay (CE's own version is recency-grouped, not fuzzy-search — a deliberate deviation
-to decide on, not CE parity), filesystem folder browsing mode, live folder-watch scanning (CE's own
-is narrower than it sounds — rename-detection only, not full create/delete auto-import); file
-metadata write-back deliberately sequenced last (CE itself gates it behind explicit opt-in settings
-— real risk surface, mutates user files). A tracker/manga-UI research doc (Beta-scoped, see its own
-backlog entry) surfaced during this work — its Stage 6 "manga-specific detail view, selected by
-ContentType" depends on ContentType actually being real/editable/populated, which the Manga/
-ContentType entry above now provides.
+to decide on, not CE parity), filesystem folder browsing mode; file metadata write-back deliberately
+sequenced last (CE itself gates it behind explicit opt-in settings — real risk surface, mutates user
+files). A tracker/manga-UI research doc (Beta-scoped, see its own backlog entry) surfaced during
+this work — its Stage 6 "manga-specific detail view, selected by ContentType" depends on ContentType
+actually being real/editable/populated, which the Manga/ContentType entry above now provides.
 
-### Reading Lists: story-arc auto-build (CBL Manager port)
-Currently-nonfunctional "AniList"/"MyAnimeList"/"Auto-Build from Tracked Arc" buttons on the
-Reading Lists screen — Paperbunkr's own `.cbl` import/export (`CblReadingListIO`) already works,
-but nothing powers arc auto-build. `_reference/CBLManager/` is a real, separate ComicRack CE
-plugin (not part of Paperbunkr, same reference/porting treatment as `_reference/ComicRackCE`) that
-already does this against real sources: ComicVine, Metron, Comic Book Reading Orders,
-ReadingOrders.com — auto-pulls an arc's issues in reading order, matches against the owned
-library, and adds fileless placeholders for what's missing. Note: those sources don't match
-Paperbunkr's current UI labels ("AniList"/"MyAnimeList") — needs its own brainstorm → design spec
-(source selection, credentials, matching logic) before implementation, not a quick wire-up.
+**Live folder-watch scanning shipped 2026-08-23** (design spec `2026-08-23-live-folder-watch-
+scanning-design.md`) — checked CE's own `FileSystemWatcher` usage first rather than assuming: it's
+narrower than the name suggests, wiring only `Renamed` (path-sync, to avoid a renamed file
+transiently reading as missing) and never `Created`/`Deleted`. Paperbunkr deliberately goes beyond
+that (confirmed with the user, not assumed): per-folder `Watch` toggle in Preferences → Libraries;
+new `LiveFolderWatchService` debounces `Created`/`Deleted` bursts into one batch flush (so a bulk
+drag-drop produces one import pass and one toast, not hundreds), retries a locked/still-writing file
+before giving up on it for that flush, and applies `Renamed` immediately as CE-parity path-sync.
+`LibraryFolderScanner`'s per-file import body was extracted into a shared method so a live-watched
+file gets identical embedded-metadata/proposal/series-matching treatment to a manual Scan Now. Real
+pre-existing gap found and fixed along the way: nothing in the App layer ever set
+`Issue.FileIsMissing` from a real-time disk check before this — a natively-scanned file deleted
+outside the relink flow was never flagged missing at all; the watcher's `Deleted` handling is the
+first fix for that, not just a live-UI nicety. 8 new `Paperbunkr.App.Tests` (real `FileSystemWatcher`
+against a real temp directory, short debounce/retry windows via a test-only ctor seam) all passing;
+a Preferences on-screen checkbox test was written but couldn't be executed in this session's
+environment — even the pre-existing `HomeScreenTests` UI-automation baseline fails the same way here
+(`FlaUI`/UIA3 needs an interactive desktop this session doesn't have), not something this feature
+broke.
+
+### Reading Lists: story-arc auto-build (CBL Manager port) ✅ Shipped 2026-08-22
+Built and live-verified against all six sources (not just built — each one hit with a real request
+this session, including a live re-check of catalog sizes/markup since the original `CBLManager`
+port predates this by weeks): **ComicVine**, **Metron** (both credentialed, confirmed working with
+the user's own real accounts), **Comic Book Reading Orders**, **ComicArc**, **ReadingOrders.com**,
+**ReadThingsRight** (all four confirmed working; the latter three's initially-sparse-looking results
+turned out to be their real, genuinely small catalogs — not a bug, cross-checked live via each
+site's actual current markup). "Search Story Arc…" replaces the old disabled "Auto-Build from
+Tracked Arc" button; a live "Refresh" button appears on any arc-linked list. A same-session
+follow-up added curated browsing: picking a small-catalog source auto-lists its whole catalog with
+a count instead of requiring a query first, so someone unfamiliar with a source's coverage can
+browse rather than guess. AniList/MyAnimeList buttons are a *different* feature (personal tracker
+sync, not story-arc lookup) and stay disabled/deferred, unrelated to this backlog item. New
+credential store (`ProviderCredential`/`CredentialStore`) built generically enough to reuse for that
+future AniList tracker-sync pass. Design docs: `docs/superpowers/specs/2026-08-22-cbl-manager-arc-
+lookup-design.md`, `docs/superpowers/specs/2026-08-22-cover-memory-virtualization-design.md` (an
+unrelated memory-usage fix done the same session), `docs/superpowers/specs/2026-08-22-cbl-manager-
+curated-browse-design.md`. **Not yet committed as of this write-up** — still sitting as local
+changes in this working tree.
 
 ### Remote/server library sharing
 Client (connect to another instance's shared library) + server (host, password-protected,
@@ -271,15 +313,18 @@ driving use case yet; revisit if one shows up). Design specs:
   `ExternalRating` + the `IMetadataProvider` adapter contract, schema-only, zero adapters/network/UI.
 - **Phase 5b — Real AniList adapter**: `AniListMetadataProvider`, live GraphQL calls, rate-limit-
   aware (respects AniList's actual current 30 req/min degraded limit), licensing-verified against
-  AniList's real terms (`github.com/AniList/docs`). Backend-only — no UI caller yet. **Every other
-  provider (MAL/MangaDex/GCD/etc.) and all search/match UI are deliberately folded into the
-  tracker-service-sync item below, not built as a separate metadata-model phase** — that work should
-  reuse this adapter, not rebuild AniList integration from scratch.
+  AniList's real terms (`github.com/AniList/docs`). **No longer backend-only** — a real search-and-link
+  UI landed 2026-08-19 (`MetadataLinkResolver`/`TitleMatchScorer`, wired into `DetailTabsViewModel`;
+  still uncommitted as of this sync, see `alpha-todo.md`'s live-tracker section for status). Every
+  *other* provider (MAL/MangaDex/GCD/etc.) is still deliberately deferred — MangaDex has a sketched-
+  only design spec (R5, not implemented); full tracker-service *sync* (as opposed to read-only
+  search/link) remains the item below, and reuses this adapter rather than rebuilding it.
 - **Phase 6a — Recommendation engine**: `RecommendationResolver`, a relationally-anchored (not
   whole-library-similarity) 7-signal explainable scoring engine reusing the Phase 3/4a/4b resolvers.
-  Live-computed, not a persisted table. Backend-only — **no homepage screen exists yet to show "Because
-  you read X" modules on; the next time homepage/dashboard work comes up, reuse this resolver rather
-  than rebuilding recommendation logic.**
+  Live-computed, not a persisted table. **No longer backend-only — a real Home screen shipped
+  2026-08-22** (`c1e91a6`/`2b2da5e`), whose "Because You Read" module reuses
+  `RecommendationResolver.GetRecommendations` as-is, per this doc's own note above about doing
+  exactly that.
 
 ### Content-type classification & manga metadata scraping (onboarding.md §7/§9)
 Tracker-driven classification pipeline (MangaUpdates/AniList), MangaDex metadata scraping,
@@ -295,16 +340,134 @@ tracking status shown inline) ported from Mihon/Komikku's UX patterns, selected 
 alongside Paperbunkr's existing Western comic detail view. Full findings, per-service auth/API
 notes, and a staged implementation recommendation (data model → service abstraction → sync engine
 → token security → stats differentiation → Avalonia UI): [docs/tracker-manga-ui-research.md](tracker-manga-ui-research.md).
-Research only, not a design spec yet — needs its own brainstorm → design-spec pass before
-implementation, same as the other substantial-subsystem items in this backlog.
 
-### Plugin API v2 (onboarding.md §10)
-C# scripting initializer first, `pythonnet` interop as a follow-on spike. Needs a real test plugin
-to prove against. Explicitly Beta-scoped from the start.
+**Stage 6 (manga detail-page UI) designed + shipped 2026-08-23** (design spec
+`2026-08-23-manga-detail-screen-design.md`, brainstormed with the user off the research doc above).
+New `MangaDetailScreenViewModel`/`MangaDetailScreen.axaml`, routed by `ContentType` at
+`MainViewModel.GoDetailForSeries` — Manga/Manhua/Manhwa get a chapter-list-first screen (blurred-
+cover header via Avalonia's declarative `BlurEffect`, not a pre-rendered/cached bitmap; icon-led
+status/type/source rows; outlined-pill tag chips; a new list-row Chapters tab with read-state
+dimming, bookmark/missing icons, filter/sort, and row-click-to-read) while Comic/Unknown keep the
+existing `DetailScreenViewModel`. The Related/Details(tracker linking + external metadata)/Activity
+tabs are the same `DetailTabsViewModel` embedded, not duplicated (new `ShowIssuesTab`/`ShowTabStrip`
+flags let it suppress its own Issues tab + tab strip when hosted this way). Reclassifying a series'
+`ContentType` from either screen's header picker now re-routes live via a new `goDetailForSeries`
+callback threaded through both view models. Floating Resume button and the recommendations row from
+the research doc's reference screenshot were explicitly deferred, per the brainstorm. 732
+`Paperbunkr.App.Tests` passing (new `MangaDetailScreenViewModelTests`); on-screen verification of the
+new screen itself is still pending as of this write-up — build + tests pass and the app launches
+clean, but nobody has clicked through the actual rendered UI yet.
 
-### App chrome
+Stages 1–4 (the `Track`/`TrackingLink` entity, `ITrackerAdapter` abstraction with AniList/
+MyAnimeList/Shikimori/Bangumi adapters, one-way sync-to-tracker, and `CredentialStore`-backed token
+handling) were already implemented in the codebase — surfaced while researching this session's
+work, not built by it. MangaUpdates/Kitsu adapters, two-way sync, and Stage 5's statistics
+dashboard remain unbuilt.
+
+**Confirmed gap found 2026-08-23, deferred to a future session on the user's own call**: linking a
+series to external metadata (AniList or MangaBaka) has never applied the fetched data to any
+editable field. `MetadataLinkResolver.LinkAsync` only ever writes an `ExternalMediaId` reference,
+appends a raw-JSON `ExternalMetadataSnapshot` (audit log), and adds alt-titles to `SeriesTitle` -
+`Description`/`Status`/`ChapterCount`/`VolumeCount` are fetched and stored in the snapshot but never
+read back anywhere; `ExternalMetadataResolver.GetLatestSnapshot` is called only from its own unit
+tests, confirmed by grep. Been true since Phase 5b, not something this session broke. The existing
+`MetadataProposal` accept/reject system (filename/embedded-metadata inference) doesn't cover this
+cleanly either - it's Issue-scoped (Title/Format/Volume/Number/Count/Year/Series only), while
+Summary/Status are Series-level. A real "Apply from [Provider]" feature is needed, not a reuse of
+what's there.
+
+**MangaBaka tracker adapter shipped 2026-08-23** (design spec `2026-08-23-mangabaka-tracker-
+adapter-design.md`) — corrects this same session's own earlier "MangaBaka can't be a tracker"
+conclusion, found wrong after a user-supplied OpenAPI spec surfaced a real authenticated
+`PUT/PATCH /v1/my/library/{series_id}` endpoint. New `MangaBakaTrackerAdapter` (PAT-authenticated,
+no OAuth flow, mirrors `BangumiTrackerAdapter`'s own reasoning for skipping OAuth), a lossless 1:1
+`ReadingStatus`↔MangaBaka-`state` mapping (unlike Bangumi's forced 5-state collapse), wired into
+`DetailTabsViewModel`'s tracker picker/sync loop and a new Preferences PAT field (instructions
+pointing at the real page location the user found live: My profile → Settings → API and Apps → New
+token). `TrackingService.MangaBaka` needed no migration (string-backed enum storage).
+`MangaBakaMetadataProvider` also now implements `ITrackerSearchProvider` for free — search is
+shared with the metadata-provider half, only the push logic is new. 1152 tests passing (415 + 737,
+12 new for this adapter); the one open question flagged in the spec — whether `PUT` upserts a
+library entry on first push or needs a separate `POST` — is explicitly unverified, since it needs a
+real PAT to test against and none was generated this session (by design: the token was never meant
+to pass through this session at all, only entered directly into Preferences by the user later).
+
+**MangaBaka metadata-model/UI research memo added 2026-08-23**
+([docs/mangabaka-metadata-ui-research.md](../mangabaka-metadata-ui-research.md)) - the user's real
+interest in MangaBaka turned out to be broader than a tracker/metadata source: its site has a
+categorized+weighted tag taxonomy (Genres/Themes/Settings/Character Archetype/etc.), typed
+relations, a crowd-sourced multi-cover archive, ID-prefix/URL-paste cross-referencing, and
+tag-based + collaborative-filtering recommendation rails, gathered by actually browsing the live
+site (not just its API). Research only, not a design spec - feeds a future brainstorm before any
+of it gets built, same status this doc's other unimplemented research items carry.
+
+**Two follow-on features shipped same session, 2026-08-23**, from user feedback on the new manga
+screen: **cover art override** (design spec `2026-08-23-cover-art-override-design.md`) — a
+deliberate CE deviation letting any series/issue's displayed cover be replaced with a user-picked
+image regardless of file-linked status, three entry points (both screens' headers, the Western
+Issues tab tile menu, the manga Chapters tab row menu), reusing the existing on-disk thumbnail
+cache with no schema change; and a **second metadata provider, MangaBaka** (design spec
+`2026-08-23-mangabaka-metadata-provider-design.md`) — confirmed live that MangaBaka has no
+user-account/library API at all, so it's a search/link `IMetadataProvider` alongside AniList, not a
+tracker. The user's actual interest in MangaBaka is broader (its site's rich tag taxonomy, typed
+relations, recommendations) — flagged as a separate future research pass, not built this session.
+1136 tests passing (`Paperbunkr.App.Tests` 737 + `Paperbunkr.Data.Tests` 399, both suites run in
+full, not just the new cases); on-screen verification of all three items (manga screen itself, the
+cover-art entry points, the MangaBaka provider picker) is still pending as of this write-up.
+
+### Plugin API v2 (onboarding.md §10) — engine + 4 real hooks shipped 2026-08-24, remaining hooks/UI surfaces still open
+Design spec: `2026-08-24-plugin-api-v2-design.md`. Shipped this session: new `Paperbunkr.Plugins`
+project (`PluginEngine`, `Command`/`CSharpCommand`, `IPluginEnvironment` + all 5 sub-interfaces as
+typed abstractions, all 17 hook constants + typed globals/payload types, `XmlPluginInitializer`
+manifest parsing, Roslyn C# scripting compile via `Microsoft.CodeAnalysis.CSharp.Scripting` —
+`pythonnet`/IronPython replacement deliberately deferred, matching the design doc); real
+Paperbunkr-native adapters in `Paperbunkr.App/Plugins/` wired to actual services (library CRUD,
+cover thumbnails, page decode, reader navigation, skin key); `PluginCommandState` EF entity +
+migration for enable/disable persistence; a rebuilt Plugin screen (list/toggle/compile-error
+display, replacing the placeholder from `2026-08-09-plugin-screen-cleanup-design.md`); and a real
+"Duplicate Finder" test plugin (`src/Paperbunkr.Plugins.Tests/SamplePlugins/DuplicateFinder/`)
+exercising Startup/Library/CreateBookList end-to-end. **4 of 17 hooks have a real live trigger**
+(Startup, Shutdown, BookOpened, Library via the test plugin's engine-level invocation) — 10 tests in
+`Paperbunkr.Plugins.Tests` cover discovery/compile-success/compile-failure/dispatch/exception-
+capture/ConfigScript-pairing plus the full Duplicate Finder fixture end-to-end; 2 tests in
+`Paperbunkr.App.Tests` cover `PluginCommandState` persistence; full existing suite (814 App +
+447 Data) still green, no regressions. **On-screen verified 2026-08-24** — user screenshotted the
+Plugin screen showing Duplicate Finder's 3 commands with working checkboxes; one real bug found and
+fixed from that screenshot (hook badge bound to the long group description instead of the short
+hook name, overflowing illegibly — fixed to show `Hook` with the description as a tooltip instead).
+**Explicitly deferred, not yet wired to a live UI trigger:** Editor/Books/NewBooks/CreateBookList
+(sidebar)/ParseComicPath/NetSearch/ConfigScript/ReaderResized hooks (engine supports them, no menu/
+lifecycle anchor wired to a real screen yet — `IBrowser.SelectComics` is a documented no-op since
+Library grid's selection model isn't exposed for plugin control yet); the three net-new UI surfaces
+the design spec called for (ComicInfoHtml/UI info panel tab, QuickOpenHtml/UI command palette,
+DrawThumbnailOverlay paint hook) were not built this session despite being in scope on paper — full
+skeleton for all 17 hooks plus all 3 stub surfaces is a larger follow-on, not a quick add-on.
+
+### App chrome (crash reporter + minimize-to-tray shipped 2026-08-23/24)
 Crash reporter dialog, minimize-to-tray, external "open with" app associations.
 *(Backup manager and file association are already shipped as part of Alpha's Advanced tab.)*
+
+**Crash reporter dialog and minimize-to-tray shipped**, design spec
+`2026-08-23-app-chrome-crash-reporter-and-tray-design.md`. Built on the diagnostics/crash-capture
+infra that already existed (`DiagnosticsService` - see its own doc comment) rather than duplicating
+it: `CrashReportWindow` (a plain `Window`, not this app's usual borderless-overlay pattern, since it
+must survive whatever just broke) now shows on `AppDomain.UnhandledException` and
+`Dispatcher.UIThread.UnhandledException`, with Restart/Exit always offered and a real Continue option
+for the Dispatcher source specifically - found and used `DispatcherUnhandledExceptionEventArgs.Handled`
+along the way, correcting a stale comment in `DiagnosticsService` that claimed no such swallow-and-
+continue mechanism existed in Avalonia. `FreezeWatchdogService` adds CE's background freeze-watchdog
+(1s poll/10s threshold, matching `CrashWatchDog.LockWatcher`), reporting via a native `MessageBoxW`
+P/Invoke shim rather than an Avalonia window, since Avalonia has one Dispatcher/UI thread per process
+and can't render a window from the watchdog thread while the main one is stuck. Minimize-to-tray adds
+a Preferences → Advanced "Minimize to tray" toggle (off by default, matching CE) via `TrayIconService`
+wrapping Avalonia's `TrayIcon`; deliberately diverges from CE by also redirecting the window's own
+close (X) button to the tray while enabled - guarded by `WindowCloseReason` so OS/session shutdown and
+the tray's own Exit still pass through for a real quit rather than hanging the OS. 811 App.Tests
+(including 8 new `FreezeWatchdogServiceTests` driving `Tick()` with a fake clock/ping, and 2 new
+`PreferencesScreenViewModelTests`) + 447 Data.Tests passing; the app was confirmed to start cleanly
+with all the new wiring active (`startup.log` reaches "Startup complete." on every run), but the
+interactive parts (checkbox toggle, tray icon appearing, restore/exit) were **not** verified live
+on-screen - computer-use access was denied for this app, same as a prior session's manga-detail work.
 
 ### Novels: EPUB/PDF support (Phase 1+2 landed 2026-08-09/10, Phase 3 landed 2026-08-10)
 Not a CE-parity item — ComicRackCE has no prose-reading equivalent, see the design spec's own

@@ -19,5 +19,14 @@ public enum MetadataProposalField
     Number,
     Count,
     Year,
-    Series
+    Series,
+
+    /// <summary>Series-scoped (docs/superpowers/specs/2026-08-23-apply-from-provider-design.md) - unlike the 7 Issue-scoped members above, accepting this writes directly to <c>Series.Summary</c> rather than being read through an <c>Effective*</c> resolver overlay.</summary>
+    Summary,
+
+    /// <summary>Series-scoped - writes directly to <c>Series.Status</c> via a raw-string-to-<see cref="SeriesStatus"/> normalizer, not a passthrough of the provider's own status string.</summary>
+    Status,
+
+    /// <summary>Series-scoped - writes directly to <c>Series.Genre</c>. Does not affect <c>Issue.Genre</c>, the actual source of truth for filtering/display (see <see cref="Series.Genre"/>'s own doc comment).</summary>
+    Genre
 }

@@ -7,21 +7,89 @@
              x:Class="Paperbunkr.App.Views.PluginScreen"
              x:DataType="vm:PluginScreenViewModel">
 
-    <!-- No plugin engine exists yet (docs/superpowers/specs/2026-08-09-plugin-screen-cleanup-design.md)
-         - a genuine empty state, same treatment as Detail's Related/Activity tabs, rather than the
-         fake "Duplicate Finder" demo content this screen used to ship. -->
-    <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="6" MaxWidth="360">
-        <Border Classes="icon" Width="40" Height="40" Margin="0,0,0,10" HorizontalAlignment="Center">
-            <Border.OpacityMask>
-                <ImageBrush Source="/Assets/Icons/Puzzle.png" Stretch="Uniform" />
-            </Border.OpacityMask>
-        </Border>
-        <TextBlock Text="Plugins" FontSize="22" FontWeight="Bold" Foreground="{DynamicResource PbTextBrush}"
-                   HorizontalAlignment="Center" />
-        <TextBlock Text="No plugins installed yet." FontSize="13" Foreground="{DynamicResource PbTextMutedBrush}"
-                   HorizontalAlignment="Center" TextAlignment="Center" />
-        <TextBlock Text="Plugins will appear here once the plugin API ships." FontSize="12"
-                   Foreground="{DynamicResource PbTextFaintBrush}" HorizontalAlignment="Center"
-                   TextAlignment="Center" TextWrapping="Wrap" />
-    </StackPanel>
+    <!--
+        Real plugin list (docs/superpowers/specs/2026-08-24-plugin-api-v2-design.md §6), replacing
+        the permanent empty state from docs/superpowers/specs/2026-08-09-plugin-screen-cleanup-
+        design.md now that a real engine exists. The empty state below is kept for the genuine
+        zero-plugins case - it's no longer the only state.
+    -->
+    <Grid>
+        <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="6" MaxWidth="360"
+                    IsVisible="{Binding !HasPlugins}">
+            <Border Classes="icon" Width="40" Height="40" Margin="0,0,0,10" HorizontalAlignment="Center">
+                <Border.OpacityMask>
+                    <ImageBrush Source="/Assets/Icons/Puzzle.png" Stretch="Uniform" />
+                </Border.OpacityMask>
+            </Border>
+            <TextBlock Text="Plugins" FontSize="22" FontWeight="Bold" Foreground="{DynamicResource PbTextBrush}"
+                       HorizontalAlignment="Center" />
+            <TextBlock Text="No plugins installed yet." FontSize="13" Foreground="{DynamicResource PbTextMutedBrush}"
+                       HorizontalAlignment="Center" TextAlignment="Center" />
+            <TextBlock Text="Drop a plugin folder into %AppData%\Paperbunkr\plugins to get started." FontSize="12"
+                       Foreground="{DynamicResource PbTextFaintBrush}" HorizontalAlignment="Center"
+                       TextAlignment="Center" TextWrapping="Wrap" />
+        </StackPanel>
+
+        <ScrollViewer IsVisible="{Binding HasPlugins}" Padding="24">
+            <StackPanel Spacing="20" MaxWidth="720" HorizontalAlignment="Stretch">
+                <TextBlock Text="Plugins" FontSize="22" FontWeight="Bold" Foreground="{DynamicResource PbTextBrush}" />
+
+                <ItemsControl ItemsSource="{Binding Groups}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Border Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}"
+                                    BorderThickness="1" CornerRadius="8" Padding="16" Margin="0,0,0,14">
+                                <StackPanel Spacing="10">
+                                    <TextBlock Text="{Binding PluginKey}" FontSize="15" FontWeight="Bold"
+                                               Foreground="{DynamicResource PbTextBrush}" />
+
+                                    <ItemsControl ItemsSource="{Binding Commands}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto" Margin="0,6,0,6">
+                                                    <CheckBox Grid.Column="0" IsChecked="{Binding IsEnabled}" VerticalAlignment="Top" />
+
+                                                    <StackPanel Grid.Column="1" Spacing="2" Margin="8,0,8,0">
+                                                        <TextBlock Text="{Binding Name}" FontSize="13" FontWeight="Medium"
+                                                                   Foreground="{DynamicResource PbTextBrush}" />
+                                                        <TextBlock Text="{Binding Description}" FontSize="12"
+                                                                   Foreground="{DynamicResource PbTextMutedBrush}"
+                                                                   TextWrapping="Wrap" IsVisible="{Binding HasDescription}" />
+                                                        <TextBlock Text="{Binding CompileError}" FontSize="12"
+                                                                   Foreground="#E06060"
+                                                                   TextWrapping="Wrap" IsVisible="{Binding IsBroken}" />
+                                                    </StackPanel>
+
+                                                    <Border Grid.Column="2" Background="{DynamicResource PbBadgeBrush}"
+                                                            CornerRadius="4" Padding="6,2" VerticalAlignment="Top" Margin="0,0,8,0"
+                                                            ToolTip.Tip="{Binding HookGroupLabel}">
+                                                        <TextBlock Text="{Binding Hook}" FontSize="11"
+                                                                   Foreground="{DynamicResource PbBadgeTextBrush}" />
+                                                    </Border>
+
+                                                    <Button Grid.Column="3" Content="Run" FontSize="11" Padding="8,3"
+                                                            VerticalAlignment="Top" Margin="0,0,8,0"
+                                                            IsVisible="{Binding CanRunManually}"
+                                                            Command="{Binding RunCommand}"
+                                                            ToolTip.Tip="Runs this command now and shows its result as a toast - this hook needs no live selection/context, so it can be triggered on demand." />
+
+                                                    <Border Grid.Column="4" Classes="icon" Width="16" Height="16"
+                                                            VerticalAlignment="Top" IsVisible="{Binding HasConfigure}"
+                                                            ToolTip.Tip="This command has its own configuration script.">
+                                                        <Border.OpacityMask>
+                                                            <ImageBrush Source="/Assets/Icons/Settings.png" Stretch="Uniform" />
+                                                        </Border.OpacityMask>
+                                                    </Border>
+                                                </Grid>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </StackPanel>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
+        </ScrollViewer>
+    </Grid>
 </UserControl>

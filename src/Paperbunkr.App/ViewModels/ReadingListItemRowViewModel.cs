@@ -15,19 +15,25 @@ public partial class ReadingListItemRowViewModel : ViewModelBase
     private readonly Action<ReadingListItemRowViewModel> _onMoveDown;
     private readonly Action<ReadingListItemRowViewModel> _onRemove;
     private readonly Action<ReadingListItemRowViewModel> _onFieldChanged;
+    private readonly Action<ReadingListItemRowViewModel> _onLink;
+    private readonly Action<ReadingListItemRowViewModel> _onOpen;
 
     public ReadingListItemRowViewModel(
         ReadingListItem item,
         Action<ReadingListItemRowViewModel> onMoveUp,
         Action<ReadingListItemRowViewModel> onMoveDown,
         Action<ReadingListItemRowViewModel> onRemove,
-        Action<ReadingListItemRowViewModel> onFieldChanged)
+        Action<ReadingListItemRowViewModel> onFieldChanged,
+        Action<ReadingListItemRowViewModel> onLink,
+        Action<ReadingListItemRowViewModel> onOpen)
     {
         Item = item;
         _onMoveUp = onMoveUp;
         _onMoveDown = onMoveDown;
         _onRemove = onRemove;
         _onFieldChanged = onFieldChanged;
+        _onLink = onLink;
+        _onOpen = onOpen;
         _selectedRole = item.Role;
         _selectedRoleOption = item.Role is EventMembershipRole role ? RoleOptions.FirstOrDefault(o => o.Role == role) : null;
         _notes = item.Notes ?? string.Empty;
@@ -38,6 +44,15 @@ public partial class ReadingListItemRowViewModel : ViewModelBase
     public string Number => Item.Issue?.EffectiveNumber() ?? "?";
 
     public string Name => Item.Issue?.Title ?? Item.Issue?.Series?.Name ?? "Unknown";
+
+    /// <summary>
+    /// Resolved to a cover <c>Bitmap</c> lazily via <c>CoverImageConverter</c> (docs/superpowers/
+    /// specs/2026-08-22-cbl-manager-arc-cover-and-synopsis-design.md) - real gap found live: every
+    /// row in a reading list rendered a flat placeholder square with no cover art at all, unlike
+    /// every other issue-listing screen in the app (Library, Smart Lists) which already show one.
+    /// Null for a placeholder issue with no file, same as every other <c>CoverImageCache</c> caller.
+    /// </summary>
+    public int? CoverIssueId => Item.Issue?.Id;
 
     public bool IsOwned => Item.Issue is { FileIsMissing: false };
 
@@ -85,4 +100,10 @@ public partial class ReadingListItemRowViewModel : ViewModelBase
 
     [RelayCommand]
     private void Remove() => _onRemove(this);
+
+    [RelayCommand]
+    private void Link() => _onLink(this);
+
+    [RelayCommand]
+    private void Open() => _onOpen(this);
 }

@@ -77,14 +77,14 @@ public static class RecommendationResolver
         }
 
         var candidateSeries = context.Series
-            .Include(s => s.Issues)
+            .Include(s => s.Issues).ThenInclude(i => i.Tags)
             .Where(s => candidateIds.Contains(s.Id))
             .ToDictionary(s => s.Id);
 
-        var sourceSeriesWithIssues = context.Series.Include(s => s.Issues).First(s => s.Id == seriesId);
+        var sourceSeriesWithIssues = context.Series.Include(s => s.Issues).ThenInclude(i => i.Tags).First(s => s.Id == seriesId);
         var sourceCharacters = AggregateTokens(sourceSeriesWithIssues.Issues, i => i.Characters);
         var sourceCreators = AggregateCreatorTokens(sourceSeriesWithIssues.Issues);
-        var sourceTags = AggregateTokens(sourceSeriesWithIssues.Issues, i => i.Tags);
+        var sourceTags = AggregateTokens(sourceSeriesWithIssues.Issues, i => i.JoinedTags());
         var sourceGenre = TextTokenizer.Tokenize(sourceSeriesWithIssues.Genre);
 
         DateTime generatedAt = DateTime.UtcNow;
@@ -105,7 +105,7 @@ public static class RecommendationResolver
 
             var targetCharacters = AggregateTokens(target.Issues, i => i.Characters);
             var targetCreators = AggregateCreatorTokens(target.Issues);
-            var targetTags = AggregateTokens(target.Issues, i => i.Tags);
+            var targetTags = AggregateTokens(target.Issues, i => i.JoinedTags());
             var targetGenre = TextTokenizer.Tokenize(target.Genre);
 
             decimal characterScore = OverlapRatio(sourceCharacters, targetCharacters);

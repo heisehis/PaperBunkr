@@ -19,7 +19,11 @@ internal static class AniListNormalizer
         Description: media.Description,
         Status: media.Status,
         ChapterCount: media.Chapters,
-        VolumeCount: media.Volumes);
+        VolumeCount: media.Volumes,
+        TitleEnglish: media.Title?.English,
+        TitleRomaji: media.Title?.Romaji,
+        TitleNative: media.Title?.Native,
+        Genre: media.Genres is { Count: > 0 } genres ? string.Join(", ", genres) : null);
 
     /// <summary>English title when AniList has one, romaji otherwise - AniList's own MediaTitle
     /// object doesn't guarantee an English title exists, but every manga entry has a romaji one.</summary>

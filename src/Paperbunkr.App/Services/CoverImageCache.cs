@@ -77,4 +77,12 @@ public static class CoverImageCache
         _cache.Remove(issueId);
         CoverThumbnailPaths.DeleteCachedThumbnail(issueId);
     }
+
+    /// <summary>
+    /// Drops only the in-memory entry, leaving the on-disk file alone - for a caller that just
+    /// wrote fresh content to that exact cache path itself (docs/superpowers/specs/2026-08-23-
+    /// cover-art-override-design.md's custom-cover feature) and needs the next <see cref="Get"/> to
+    /// re-read it, unlike <see cref="Invalidate"/> which would delete the file it just wrote.
+    /// </summary>
+    public static void InvalidateMemoryOnly(int issueId) => _cache.Remove(issueId);
 }

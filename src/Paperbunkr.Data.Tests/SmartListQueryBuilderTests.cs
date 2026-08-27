@@ -28,6 +28,13 @@ public class SmartListQueryBuilderTests : IDisposable
     private readonly int _enabledTagId;
     private readonly int _disabledTagId;
 
+    /// <summary>Test-fixture helper: Genre used to be a plain string initializer; now it's a structured tag (docs/superpowers/specs/2026-08-23-weighted-categorized-tags-design.md).</summary>
+    private static Issue WithGenre(Issue issue, string genre = "Horror")
+    {
+        issue.MergeFrom(IssueTagField.Genre, new[] { genre });
+        return issue;
+    }
+
     public SmartListQueryBuilderTests()
     {
         _dbPath = Path.Combine(Path.GetTempPath(), $"paperbunkr_smartlist_test_{Guid.NewGuid():N}.db");
@@ -50,27 +57,27 @@ public class SmartListQueryBuilderTests : IDisposable
 
         // Genre/Publisher set on every issue here too (not just seriesA) - SmartListCatalog reads
         // the issue-level value (P3 audit fix), matching what Issue Properties/Bulk actually edit.
-        var issueRead = new Issue { SeriesId = seriesA.Id, Number = "1", PageCount = 100, LastPageRead = 99, Genre = "Horror", Publisher = "Acme" };
-        var issueReading = new Issue { SeriesId = seriesA.Id, Number = "2", PageCount = 100, LastPageRead = 50, Genre = "Horror", Publisher = "Acme" };
-        var issueNeverRead = new Issue { SeriesId = seriesA.Id, Number = "3", PageCount = 100, LastPageRead = null, Genre = "Horror", Publisher = "Acme" };
-        var issueFavorite = new Issue { SeriesId = seriesA.Id, Number = "4", Rating = 4, Genre = "Horror", Publisher = "Acme" };
-        var issueMissing = new Issue { SeriesId = seriesA.Id, Number = "5", FileIsMissing = true, Genre = "Horror", Publisher = "Acme" };
-        var issueRecentlyAdded = new Issue { SeriesId = seriesA.Id, Number = "6", AddedTime = DateTime.Now.AddDays(-1), Genre = "Horror", Publisher = "Acme" };
-        var issueOldAdded = new Issue { SeriesId = seriesA.Id, Number = "7", AddedTime = DateTime.Now.AddDays(-40), Genre = "Horror", Publisher = "Acme" };
+        var issueRead = WithGenre(new Issue { SeriesId = seriesA.Id, Number = "1", PageCount = 100, LastPageRead = 99, Publisher = "Acme" });
+        var issueReading = WithGenre(new Issue { SeriesId = seriesA.Id, Number = "2", PageCount = 100, LastPageRead = 50, Publisher = "Acme" });
+        var issueNeverRead = WithGenre(new Issue { SeriesId = seriesA.Id, Number = "3", PageCount = 100, LastPageRead = null, Publisher = "Acme" });
+        var issueFavorite = WithGenre(new Issue { SeriesId = seriesA.Id, Number = "4", Rating = 4, Publisher = "Acme" });
+        var issueMissing = WithGenre(new Issue { SeriesId = seriesA.Id, Number = "5", FileIsMissing = true, Publisher = "Acme" });
+        var issueRecentlyAdded = WithGenre(new Issue { SeriesId = seriesA.Id, Number = "6", AddedTime = DateTime.Now.AddDays(-1), Publisher = "Acme" });
+        var issueOldAdded = WithGenre(new Issue { SeriesId = seriesA.Id, Number = "7", AddedTime = DateTime.Now.AddDays(-40), Publisher = "Acme" });
 
         // Metadata duplicates: same Series/Format/Count/Number/Volume/LanguageISO/Year/Month/Day, different files.
-        var issueMetaDupA = new Issue
+        var issueMetaDupA = WithGenre(new Issue
         {
             SeriesId = seriesA.Id, Number = "10", Format = "CBZ", LanguageISO = "en", Year = 2020, Month = 1, Day = 1,
-            FilePath = @"C:\lib\a10.cbz", Genre = "Horror", Publisher = "Acme",
-        };
-        var issueMetaDupB = new Issue
+            FilePath = @"C:\lib\a10.cbz", Publisher = "Acme",
+        });
+        var issueMetaDupB = WithGenre(new Issue
         {
             SeriesId = seriesA.Id, Number = "10", Format = "CBZ", LanguageISO = "en", Year = 2020, Month = 1, Day = 1,
-            FilePath = @"C:\lib\a10_alt.cbz", Genre = "Horror", Publisher = "Acme",
-        };
+            FilePath = @"C:\lib\a10_alt.cbz", Publisher = "Acme",
+        });
         // Path duplicate: shares issueMetaDupA's exact FilePath but different metadata.
-        var issuePathDup = new Issue { SeriesId = seriesA.Id, Number = "99", FilePath = @"C:\lib\a10.cbz", Genre = "Horror", Publisher = "Acme" };
+        var issuePathDup = WithGenre(new Issue { SeriesId = seriesA.Id, Number = "99", FilePath = @"C:\lib\a10.cbz", Publisher = "Acme" });
 
         _context.Issues.AddRange(
             issueRead, issueReading, issueNeverRead, issueFavorite, issueMissing,
@@ -150,7 +157,7 @@ public class SmartListQueryBuilderTests : IDisposable
     {
         var series = new Series { Name = "Beta", Genre = "Comedy" }; // series-level says Comedy...
         _context.Series.Add(series);
-        var issue = new Issue { Series = series, Number = "1", Genre = "Horror" }; // ...but this issue was edited to Horror
+        var issue = WithGenre(new Issue { Series = series, Number = "1" }, "Horror"); // ...but this issue was edited to Horror
         _context.Issues.Add(issue);
         _context.SaveChanges();
 

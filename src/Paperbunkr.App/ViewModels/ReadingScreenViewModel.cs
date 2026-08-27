@@ -1,7 +1,10 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
+using Avalonia.Media.Imaging;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.EntityFrameworkCore;
@@ -11,6 +14,7 @@ using Paperbunkr.Data;
 using Paperbunkr.Data.Entities;
 using Paperbunkr.Data.Metadata;
 using Paperbunkr.Data.ReadingLists;
+using Paperbunkr.Data.ReadingLists.Sources;
 
 namespace Paperbunkr.App.ViewModels;
 
@@ -25,12 +29,20 @@ namespace Paperbunkr.App.ViewModels;
 public partial class ReadingScreenViewModel : ViewModelBase
 {
     private readonly IFilePickerService _filePicker;
+    private readonly Action<int, int> _goReaderForIssueInReadingList;
+    private readonly Action<int> _openProperties;
     private int? _activeReadingListId;
-    private bool _isLoadingList;
+    private IReadingListSource? _currentArcSource;
+    private string? _currentArcSourceKey;
 
-    public ReadingScreenViewModel(IFilePickerService filePicker)
+    /// <summary>All lists from the last <see cref="RefreshSidebar"/> query, before any tag filter - <see cref="Lists"/> is the filtered view actually shown.</summary>
+    private List<ReadingListSummary> _allListSummaries = new();
+
+    public ReadingScreenViewModel(IFilePickerService filePicker, Action<int, int> goReaderForIssueInReadingList, Action<int>? openProperties = null)
     {
         _filePicker = filePicker;
+        _goReaderForIssueInReadingList = goReaderForIssueInReadingList;
+        _openProperties = openProperties ?? (_ => { });
         Lists = new ObservableCollection<ReadingListSummary>();
         Groups = new ObservableCollection<ReadingListGroupViewModel>();
         SearchResults = new ObservableCollection<IssueSearchResult>();
@@ -42,8 +54,17 @@ public partial class ReadingScreenViewModel : ViewModelBase
     public ObservableCollection<IssueSearchResult> SearchResults { get; }
     public ObservableCollection<StoryEventSearchResult> StoryEventSearchResults { get; } = new();
 
-    /// <summary>Phase 4c overhaul (docs/superpowers/specs/2026-08-17-metadata-model-phase4c-reading-list-overhaul-design.md).</summary>
-    public static ReadingListTypeOption[] TypeOptions => ReadingListTypeOption.All;
+    /// <summary>Weighted/categorized tags on the active list itself (docs/superpowers/specs/2026-08-23-reading-list-tags-design.md) - distinct from its member issues' own IssueTags. CanReweight is always true here (a Reading List is always one concrete list, no series-vs-issue ambiguity).</summary>
+    public ObservableCollection<TagPillViewModel> Tags { get; } = new();
+
+    [RelayCommand]
+    private void OpenProperties()
+    {
+        if (_activeReadingListId is int listId)
+        {
+            _openProperties(listId);
+        }
+    }
 
     [ObservableProperty]
     private string _listName = string.Empty;
@@ -51,28 +72,9 @@ public partial class ReadingScreenViewModel : ViewModelBase
     [ObservableProperty]
     private string _subtitle = string.Empty;
 
+    /// <summary>Read-only display now - editing moved to the properties overlay (docs/superpowers/specs/2026-08-23-reading-list-tags-design.md); this was the one field on this screen with real inline immediate-persist before.</summary>
     [ObservableProperty]
-    private ReadingListType _selectedType = ReadingListType.User;
-
-    /// <summary>
-    /// Bound to the ComboBox's <c>SelectedItem</c> instead of <c>SelectedValue</c>/
-    /// <c>SelectedValueBinding</c> - the latter resolves its binding path against this
-    /// ViewModel's own DataContext, not the <c>ItemsSource</c> element type, so `{Binding Type}`
-    /// there was silently unresolvable (a real, permanent XAML bug, not a build-tooling artifact -
-    /// see docs/superpowers/specs/2026-08-18-selectedvaluebinding-xaml-fix-design.md).
-    /// </summary>
-    [ObservableProperty]
-    private ReadingListTypeOption _selectedTypeOption = TypeOptions.First(o => o.Type == ReadingListType.User);
-
-    partial void OnSelectedTypeOptionChanged(ReadingListTypeOption value) => SelectedType = value.Type;
-
-    partial void OnSelectedTypeChanged(ReadingListType value)
-    {
-        if (!_isLoadingList)
-        {
-            PersistTypeChange(value);
-        }
-    }
+    private string _typeLabel = string.Empty;
 
     [ObservableProperty]
     private string? _linkedStoryEventName;
@@ -110,16 +112,38 @@ public partial class ReadingScreenViewModel : ViewModelBase
     [ObservableProperty]
     private string _searchQuery = string.Empty;
 
+    /// <summary>
+    /// Live search, same as <see cref="OnStoryEventSearchQueryChanged"/> - the explicit
+    /// <see cref="SearchCommand"/>/button stays as a manual re-trigger, but typing alone is now
+    /// enough to see matches, which matters most for <see cref="LinkingRow"/> (relink is otherwise
+    /// a dead text box with no visible way to pick a comic until a separate click).
+    /// </summary>
+    partial void OnSearchQueryChanged(string value) => Search();
+
+    /// <summary>Whether the active list is linked to an external arc source (docs/superpowers/specs/2026-08-22-cbl-manager-arc-lookup-design.md §5) - governs the Refresh button's visibility.</summary>
+    [ObservableProperty]
+    private bool _isArcLinked;
+
+    /// <summary>"via ComicVine" etc. - null unless <see cref="IsArcLinked"/> (docs/superpowers/specs/2026-08-22-cbl-manager-arc-cover-and-synopsis-design.md).</summary>
+    [ObservableProperty]
+    private string? _arcSourceLabel;
+
+    /// <summary>Downloaded lazily by <see cref="LoadArcCoverAsync"/> once <see cref="LoadReadingList"/> knows the list has a cover URL - null until then, or if there's no cover/the download failed.</summary>
+    [ObservableProperty]
+    private Bitmap? _arcCoverImage;
+
     public void LoadReadingList(int readingListId)
     {
         _activeReadingListId = readingListId;
         StatusMessage = null;
+        LinkingRow = null;
 
         using var context = PaperbunkrDb.CreateContext();
         var list = context.ReadingLists
             .Include(r => r.Items).ThenInclude(i => i.Issue).ThenInclude(i => i!.Series)
             .Include(r => r.Items).ThenInclude(i => i.Issue).ThenInclude(i => i!.MetadataProposals)
             .Include(r => r.StoryEvent)
+            .Include(r => r.Tags)
             .FirstOrDefault(r => r.Id == readingListId);
         if (list is null)
         {
@@ -127,14 +151,25 @@ public partial class ReadingScreenViewModel : ViewModelBase
         }
 
         ListName = list.Name;
-        Subtitle = "Cross-series reading order · tracked list";
+        Subtitle = !string.IsNullOrEmpty(list.Description) ? list.Description : "Cross-series reading order · tracked list";
+        TypeLabel = ReadingListTypeOption.FormatLabel(list.Type);
 
-        _isLoadingList = true;
-        SelectedType = list.Type;
-        SelectedTypeOption = TypeOptions.First(o => o.Type == list.Type);
-        _isLoadingList = false;
+        Tags.Clear();
+        foreach (var tag in list.Tags.OrderBy(t => t.Value, StringComparer.OrdinalIgnoreCase))
+        {
+            Tags.Add(new TagPillViewModel(tag.Value, tag.Category, tag.Weight, FilterByTag, w => ReweightListTag(readingListId, tag.Value, w)));
+        }
+
         LinkedStoryEventName = list.StoryEvent?.Name;
         CreatedAtLabel = $"Created {list.CreatedAt:MMM d, yyyy}";
+        IsArcLinked = !string.IsNullOrEmpty(list.Source);
+        ArcSourceLabel = IsArcLinked ? $"via {ReadingListSourceRegistry.GetDisplayName(list.Source!)}" : null;
+
+        ArcCoverImage = ArcCoverImageCache.Get(list.Id);
+        if (ArcCoverImage is null && !string.IsNullOrEmpty(list.CoverImageUrl))
+        {
+            _ = LoadArcCoverAsync(list.Id, list.CoverImageUrl);
+        }
 
         var items = list.Items.OrderBy(i => i.SortOrder).ToList();
         TotalIssues = items.Count.ToString();
@@ -145,7 +180,7 @@ public partial class ReadingScreenViewModel : ViewModelBase
         foreach (var group in items.GroupBy(i => i.GroupLabel ?? string.Empty))
         {
             var rows = new ObservableCollection<ReadingListItemRowViewModel>(
-                group.Select(i => new ReadingListItemRowViewModel(i, MoveItemUp, MoveItemDown, RemoveItem, PersistFieldChange)));
+                group.Select(i => new ReadingListItemRowViewModel(i, MoveItemUp, MoveItemDown, RemoveItem, PersistFieldChange, StartLink, OpenIssue)));
             Groups.Add(new ReadingListGroupViewModel { Label = group.Key, Rows = rows });
         }
 
@@ -173,49 +208,123 @@ public partial class ReadingScreenViewModel : ViewModelBase
         }
     }
 
+    /// <summary>The tag a chip click narrowed <see cref="Lists"/> to, or null when unfiltered (docs/superpowers/specs/2026-08-23-reading-list-tags-design.md) - new capability, this screen had no sidebar search/filter before.</summary>
+    [ObservableProperty]
+    private string? _activeTagFilter;
+
+    public bool HasActiveTagFilter => ActiveTagFilter is not null;
+
+    partial void OnActiveTagFilterChanged(string? value)
+    {
+        OnPropertyChanged(nameof(HasActiveTagFilter));
+        ApplyTagFilter();
+    }
+
+    private void FilterByTag(string value) => ActiveTagFilter = value;
+
+    [RelayCommand]
+    private void ClearTagFilter() => ActiveTagFilter = null;
+
     public void RefreshSidebar()
     {
         using var context = PaperbunkrDb.CreateContext();
-        var all = context.ReadingLists.Include(r => r.Items).OrderBy(r => r.SortOrder).ToList();
+        var all = context.ReadingLists.Include(r => r.Items).Include(r => r.Tags).OrderBy(r => r.SortOrder).ToList();
 
-        Lists.Clear();
-        foreach (var list in all)
+        _allListSummaries = all.Select(list =>
         {
-            Lists.Add(new ReadingListSummary
+            int listId = list.Id;
+            return new ReadingListSummary
             {
                 Id = list.Id,
                 Name = list.Name,
                 TotalCount = list.Items.Count,
                 IsActive = list.Id == _activeReadingListId,
-            });
+                HasTag = value => list.Tags.Any(t => string.Equals(t.Value, value, StringComparison.OrdinalIgnoreCase)),
+                DeleteConfirm = new TwoStepConfirm(() => DeleteReadingList(listId), idleLabel: "Delete", armedLabel: "Confirm delete?"),
+            };
+        }).ToList();
+
+        ApplyTagFilter();
+    }
+
+    private void ApplyTagFilter()
+    {
+        Lists.Clear();
+        var filter = ActiveTagFilter;
+        foreach (var summary in _allListSummaries)
+        {
+            if (filter is null || summary.HasTag(filter))
+            {
+                Lists.Add(summary);
+            }
         }
 
         OnPropertyChanged(nameof(HasNoReadingLists));
         OnPropertyChanged(nameof(HasNoItems));
     }
 
-    // --- Phase 4c overhaul (docs/superpowers/specs/2026-08-17-metadata-model-phase4c-reading-
-    // list-overhaul-design.md): Type/StoryEvent link/per-item Role+Notes, all persisting
-    // immediately like every other edit on this screen. ---
-
-    private void PersistTypeChange(ReadingListType value)
+    private void ReweightListTag(int readingListId, string value, IssueTagWeight weight)
     {
-        if (_activeReadingListId is not int listId)
+        using var context = PaperbunkrDb.CreateContext();
+        var tag = context.ReadingListTags.FirstOrDefault(t => t.ReadingListId == readingListId && t.Value == value);
+        if (tag is null)
         {
             return;
         }
 
+        tag.Weight = weight;
+        context.SaveChanges();
+    }
+
+    /// <summary>
+    /// Deletes a whole reading list (docs/superpowers/specs/2026-08-22-delete-functionality-design.md) -
+    /// cascade-deletes its <see cref="ReadingListItem"/> rows at the database level
+    /// (<c>ReadingListId</c>'s FK is <c>DeleteBehavior.Cascade</c>, confirmed in
+    /// <c>PaperbunkrDbContext.OnModelCreating</c>), never the underlying <c>Issue</c>s themselves
+    /// (that FK is <c>Restrict</c> - an issue can belong to many lists). If the deleted list was the
+    /// active one, falls back to the next available list, or clears the screen entirely if none are
+    /// left.
+    /// </summary>
+    private void DeleteReadingList(int readingListId)
+    {
         using var context = PaperbunkrDb.CreateContext();
-        var list = context.ReadingLists.Find(listId);
+        var list = context.ReadingLists.Find(readingListId);
         if (list is null)
         {
             return;
         }
 
-        list.Type = value;
-        list.UpdatedAt = DateTime.UtcNow;
+        context.ReadingLists.Remove(list);
         context.SaveChanges();
+
+        if (_activeReadingListId == readingListId)
+        {
+            _activeReadingListId = null;
+            var nextId = context.ReadingLists.OrderBy(r => r.SortOrder).Select(r => (int?)r.Id).FirstOrDefault();
+            if (nextId is int id)
+            {
+                LoadReadingList(id);
+                return;
+            }
+
+            ListName = string.Empty;
+            Subtitle = string.Empty;
+            TypeLabel = string.Empty;
+            CreatedAtLabel = string.Empty;
+            Groups.Clear();
+            Tags.Clear();
+            TotalIssues = "0";
+            OwnedIssues = "0";
+            MissingIssues = "0";
+        }
+
+        RefreshSidebar();
     }
+
+    // --- Phase 4c overhaul (docs/superpowers/specs/2026-08-17-metadata-model-phase4c-reading-
+    // list-overhaul-design.md): StoryEvent link/per-item Role+Notes, persisting immediately like
+    // every other edit on this screen (Type moved to the properties overlay - docs/superpowers/
+    // specs/2026-08-23-reading-list-tags-design.md). ---
 
     private void PersistFieldChange(ReadingListItemRowViewModel row)
     {
@@ -361,6 +470,17 @@ public partial class ReadingScreenViewModel : ViewModelBase
         LoadReadingList(listId);
     }
 
+    /// <summary>Click-to-read (docs/superpowers/specs/2026-08-23-cbl-manager-manual-editing-and-list-aware-reading-design.md §2) - Missing rows have <see cref="StartLink"/> instead, no open action.</summary>
+    private void OpenIssue(ReadingListItemRowViewModel? row)
+    {
+        if (row is null || !row.IsOwned || _activeReadingListId is not int listId)
+        {
+            return;
+        }
+
+        _goReaderForIssueInReadingList(row.Item.IssueId, listId);
+    }
+
     private static void BumpUpdatedAt(PaperbunkrDbContext context, int listId)
     {
         var list = context.ReadingLists.Find(listId);
@@ -384,8 +504,9 @@ public partial class ReadingScreenViewModel : ViewModelBase
             .Include(i => i.Series)
             .Include(i => i.MetadataProposals)
             .AsEnumerable()
-            .Where(i => (i.Series?.Name ?? string.Empty).Contains(SearchQuery, StringComparison.OrdinalIgnoreCase)
-                || (i.EffectiveNumber() ?? string.Empty).Contains(SearchQuery, StringComparison.OrdinalIgnoreCase))
+            .Where(i => !i.IsPlaceholder
+                && ((i.Series?.Name ?? string.Empty).Contains(SearchQuery, StringComparison.OrdinalIgnoreCase)
+                    || (i.EffectiveNumber() ?? string.Empty).Contains(SearchQuery, StringComparison.OrdinalIgnoreCase)))
             .Take(20);
 
         foreach (var issue in matches)
@@ -407,14 +528,59 @@ public partial class ReadingScreenViewModel : ViewModelBase
         }
 
         using var context = PaperbunkrDb.CreateContext();
-        int nextOrder = context.ReadingListItems.Where(i => i.ReadingListId == listId).Select(i => (int?)i.SortOrder).Max() is int max ? max + 1 : 0;
-        context.ReadingListItems.Add(new ReadingListItem { ReadingListId = listId, IssueId = result.IssueId, SortOrder = nextOrder });
-        BumpUpdatedAt(context, listId);
-        context.SaveChanges();
+        if (LinkingRow is { } row)
+        {
+            ReadingListItemLinker.Relink(context, row.Item.Id, result.IssueId);
+            LinkingRow = null;
+        }
+        else
+        {
+            int nextOrder = context.ReadingListItems.Where(i => i.ReadingListId == listId).Select(i => (int?)i.SortOrder).Max() is int max ? max + 1 : 0;
+            context.ReadingListItems.Add(new ReadingListItem { ReadingListId = listId, IssueId = result.IssueId, SortOrder = nextOrder });
+            BumpUpdatedAt(context, listId);
+            context.SaveChanges();
+        }
 
         SearchResults.Clear();
         SearchQuery = string.Empty;
         LoadReadingList(listId);
+    }
+
+    /// <summary>
+    /// Manual relink (docs/superpowers/specs/2026-08-23-cbl-manager-manual-editing-and-list-aware-
+    /// reading-design.md §1) - puts the existing library search into "linking" mode instead of
+    /// adding a new row; the next <see cref="AddIssue"/> pick relinks <see cref="LinkingRow"/>
+    /// instead of appending.
+    /// </summary>
+    [ObservableProperty]
+    private ReadingListItemRowViewModel? _linkingRow;
+
+    partial void OnLinkingRowChanged(ReadingListItemRowViewModel? value)
+    {
+        OnPropertyChanged(nameof(IsLinking));
+        OnPropertyChanged(nameof(AddResultButtonLabel));
+        OnPropertyChanged(nameof(LinkingBannerText));
+    }
+
+    public bool IsLinking => LinkingRow is not null;
+
+    public string AddResultButtonLabel => LinkingRow is null ? "Add" : "Link";
+
+    public string? LinkingBannerText => LinkingRow is null ? null : $"Linking {LinkingRow.Name} #{LinkingRow.Number} — pick a result below, or Cancel";
+
+    private void StartLink(ReadingListItemRowViewModel row)
+    {
+        LinkingRow = row;
+        SearchResults.Clear();
+        SearchQuery = string.Empty;
+    }
+
+    [RelayCommand]
+    private void CancelLink()
+    {
+        LinkingRow = null;
+        SearchResults.Clear();
+        SearchQuery = string.Empty;
     }
 
     [RelayCommand]
@@ -434,6 +600,228 @@ public partial class ReadingScreenViewModel : ViewModelBase
         if (summary is not null)
         {
             LoadReadingList(summary.Id);
+        }
+    }
+
+    // --- External story-arc lookup (docs/superpowers/specs/2026-08-22-cbl-manager-arc-lookup-
+    // design.md §5): search a story arc across six sources, auto-build a matched ReadingList from
+    // it, and refresh an arc-linked list later. ---
+
+    public static ArcSourceOption[] ArcSourceOptions { get; } = ReadingListSourceRegistry.All
+        .Select(s => new ArcSourceOption(s.Key, s.DisplayName, s.RequiresCredentials, s.HasBrowsableCatalog))
+        .ToArray();
+
+    public ObservableCollection<ArcSearchResultRow> ArcSearchResults { get; } = new();
+
+    [ObservableProperty]
+    private bool _isArcSearchOpen;
+
+    [ObservableProperty]
+    private ArcSourceOption _selectedArcSource = ArcSourceOptions[0];
+
+    [ObservableProperty]
+    private string _arcSearchQuery = string.Empty;
+
+    [ObservableProperty]
+    private string? _arcSearchStatus;
+
+    partial void OnSelectedArcSourceChanged(ArcSourceOption value)
+    {
+        _currentArcSource = null;
+        _currentArcSourceKey = null;
+        ArcSearchResults.Clear();
+        ArcSearchQuery = string.Empty;
+        RefreshArcSourceStatus(value);
+    }
+
+    [RelayCommand]
+    private void ToggleArcSearch()
+    {
+        IsArcSearchOpen = !IsArcSearchOpen;
+        ArcSearchQuery = string.Empty;
+        ArcSearchResults.Clear();
+        ArcSearchStatus = null;
+
+        if (IsArcSearchOpen)
+        {
+            // SelectedArcSource's own [ObservableProperty] initializer sets its default value
+            // directly, bypassing the setter - so OnSelectedArcSourceChanged never fires for
+            // whatever source is selected by default when the panel is opened for the first time.
+            // Without this, the panel opened blank (no hint, no auto-browsed catalog) until the
+            // user manually switched sources once - a real bug found live, not a hypothetical.
+            RefreshArcSourceStatus(SelectedArcSource);
+        }
+    }
+
+    private void RefreshArcSourceStatus(ArcSourceOption source)
+    {
+        if (source.HasBrowsableCatalog)
+        {
+            _ = BrowseSourceCatalogAsync();
+        }
+        else
+        {
+            ArcSearchStatus = $"{source.DisplayName} is a live search - type a story arc or event name above.";
+        }
+    }
+
+    /// <summary>
+    /// Auto-loads a browsable source's whole catalog when it's selected (docs/superpowers/specs/
+    /// 2026-08-22-cbl-manager-curated-browse-design.md) - lets someone unfamiliar with a source's
+    /// reading lists browse what's actually available instead of needing to already know a title to
+    /// search for, and doubles as the "how many entries does this source have" scope indicator.
+    /// Reuses <see cref="IReadingListSource.SearchAsync"/> with an empty query, which the four
+    /// browsable adapters already treat as "match everything" - no new adapter method needed.
+    /// </summary>
+    private async Task BrowseSourceCatalogAsync()
+    {
+        var source = ResolveCurrentArcSource();
+        if (source is null)
+        {
+            return;
+        }
+
+        ArcSearchResults.Clear();
+        ArcSearchStatus = "Loading catalog…";
+        try
+        {
+            var results = await source.SearchAsync(string.Empty, CancellationToken.None);
+            foreach (var result in results.OrderBy(r => r.Name, StringComparer.OrdinalIgnoreCase))
+            {
+                ArcSearchResults.Add(new ArcSearchResultRow(result));
+            }
+
+            ArcSearchStatus = results.Count == 0
+                ? $"{source.DisplayName} has no titles available right now."
+                : $"{results.Count} title(s) available from {source.DisplayName} - browse below or narrow with a search.";
+        }
+        catch (ReadingListSourceException ex)
+        {
+            ArcSearchStatus = ex.Message;
+        }
+    }
+
+    [RelayCommand]
+    private async Task SearchArc()
+    {
+        if (string.IsNullOrWhiteSpace(ArcSearchQuery))
+        {
+            return;
+        }
+
+        var source = ResolveCurrentArcSource();
+        if (source is null)
+        {
+            return;
+        }
+
+        ArcSearchResults.Clear();
+        ArcSearchStatus = "Searching…";
+        try
+        {
+            var results = await source.SearchAsync(ArcSearchQuery, CancellationToken.None);
+            if (results.Count == 0)
+            {
+                ArcSearchStatus = "No story arcs found.";
+                return;
+            }
+
+            foreach (var result in results)
+            {
+                ArcSearchResults.Add(new ArcSearchResultRow(result));
+            }
+            ArcSearchStatus = null;
+        }
+        catch (ReadingListSourceException ex)
+        {
+            ArcSearchStatus = ex.Message;
+        }
+    }
+
+    [RelayCommand]
+    private async Task UseArc(ArcSearchResultRow? row)
+    {
+        if (row is null)
+        {
+            return;
+        }
+
+        var source = ResolveCurrentArcSource();
+        if (source is null)
+        {
+            return;
+        }
+
+        using var context = PaperbunkrDb.CreateContext();
+        try
+        {
+            var list = await ArcReadingListBuilder.CreateFromArcAsync(context, source, row.Result, CancellationToken.None);
+            StatusMessage = $"Created '{list.Name}' with {list.Items.Count} issue(s).";
+            IsArcSearchOpen = false;
+            ArcSearchResults.Clear();
+            ArcSearchQuery = string.Empty;
+            LoadReadingList(list.Id);
+        }
+        catch (Exception ex) when (ex is ReadingListSourceException or InvalidOperationException)
+        {
+            ArcSearchStatus = ex.Message;
+        }
+    }
+
+    [RelayCommand]
+    private async Task RefreshArcList()
+    {
+        if (_activeReadingListId is not int listId)
+        {
+            return;
+        }
+
+        using var context = PaperbunkrDb.CreateContext();
+        try
+        {
+            var result = await ArcReadingListBuilder.RefreshAsync(context, listId, CancellationToken.None);
+            StatusMessage = $"Added {result.AddedCount}, replaced {result.ReplacedPlaceholderCount} placeholder(s), {result.StillMissingCount} still missing.";
+            LoadReadingList(listId);
+        }
+        catch (Exception ex) when (ex is ReadingListSourceException or InvalidOperationException)
+        {
+            StatusMessage = ex.Message;
+        }
+    }
+
+    private IReadingListSource? ResolveCurrentArcSource()
+    {
+        if (_currentArcSource is not null && _currentArcSourceKey == SelectedArcSource.Key)
+        {
+            return _currentArcSource;
+        }
+
+        using var context = PaperbunkrDb.CreateContext();
+        var source = ReadingListSourceRegistry.Get(context, SelectedArcSource.Key);
+        if (source is null)
+        {
+            ArcSearchStatus = $"{SelectedArcSource.DisplayName} needs credentials - set them in Preferences → Advanced → Reading List Sources.";
+            return null;
+        }
+
+        _currentArcSource = source;
+        _currentArcSourceKey = SelectedArcSource.Key;
+        return source;
+    }
+
+    /// <summary>
+    /// Downloads and caches an arc-linked list's cover art in the background (docs/superpowers/
+    /// specs/2026-08-22-cbl-manager-arc-cover-and-synopsis-design.md) - never blocks
+    /// <see cref="LoadReadingList"/> itself. Guards against the list having since changed underneath
+    /// it (fast list-switching while a slow download is still in flight) by re-checking
+    /// <see cref="_activeReadingListId"/> before assigning the result.
+    /// </summary>
+    private async Task LoadArcCoverAsync(int readingListId, string coverImageUrl)
+    {
+        var bitmap = await ArcCoverImageCache.DownloadAndCacheAsync(readingListId, coverImageUrl, CancellationToken.None);
+        if (bitmap is not null && _activeReadingListId == readingListId)
+        {
+            ArcCoverImage = bitmap;
         }
     }
 

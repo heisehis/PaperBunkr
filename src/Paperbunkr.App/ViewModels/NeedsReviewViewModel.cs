@@ -174,9 +174,8 @@ public partial class NeedsReviewViewModel : ViewModelBase
         var issue = context.Issues.Find(issueId);
         if (issue is not null)
         {
-            context.Issues.Remove(issue);
+            LibraryDeletionHelper.RemoveIssue(context, issue);
             context.SaveChanges();
-            CoverImageCache.Invalidate(issueId);
         }
 
         Refresh();
@@ -264,6 +263,7 @@ public partial class NeedsReviewViewModel : ViewModelBase
         var proposals = context.MetadataProposals
             .Include(p => p.Issue).ThenInclude(i => i!.Series)
             .Include(p => p.Issue).ThenInclude(i => i!.MetadataProposals)
+            .Include(p => p.Series)
             .Where(p => p.Status == MetadataProposalStatus.Pending || p.Status == MetadataProposalStatus.Accepted)
             .OrderByDescending(p => p.CreatedAt)
             .ToList();
@@ -271,9 +271,13 @@ public partial class NeedsReviewViewModel : ViewModelBase
         foreach (var proposal in proposals)
         {
             int proposalId = proposal.Id;
-            string issueLabel = $"{proposal.Issue?.Series?.Name ?? "Unknown"} #{proposal.Issue?.EffectiveNumber() ?? "?"}";
+            // Series-scoped rows (Summary/Status/Genre, docs/superpowers/specs/2026-08-23-apply-
+            // from-provider-design.md) have no issue to name - just the series itself.
+            string label = proposal.SeriesId is not null
+                ? proposal.Series?.Name ?? "Unknown"
+                : $"{proposal.Issue?.Series?.Name ?? "Unknown"} #{proposal.Issue?.EffectiveNumber() ?? "?"}";
             MetadataProposalItems.Add(new MetadataProposalRowViewModel(
-                issueLabel,
+                label,
                 proposal.Field.ToString(),
                 proposal.CurrentValue,
                 proposal.ProposedValue,
@@ -310,6 +314,42 @@ public partial class NeedsReviewViewModel : ViewModelBase
         {
             SeriesReassignmentResolver.Apply(context, proposal);
         }
+
+        // Series-scoped Summary/Status/Genre proposals (docs/superpowers/specs/2026-08-23-apply-
+        // from-provider-design.md) arrive already Accepted and write straight to the Series field -
+        // unlike Issue-scoped proposals (never written to the raw field, only surfaced through an
+        // Effective* resolver), Reject here needs a real revert step, not just a status flip.
+        if (!accept && proposal.SeriesId is not null)
+        {
+            RevertSeriesField(context, proposal);
+        }
+    }
+
+    /// <summary>Writes <see cref="MetadataProposal.CurrentValue"/> (the pre-proposal snapshot) back into the Series field it came from, undoing <c>MetadataLinkResolver</c>'s auto-accept write.</summary>
+    private static void RevertSeriesField(PaperbunkrDbContext context, MetadataProposal proposal)
+    {
+        var series = context.Series.Find(proposal.SeriesId);
+        if (series is null)
+        {
+            return;
+        }
+
+        switch (proposal.Field)
+        {
+            case MetadataProposalField.Summary:
+                series.Summary = proposal.CurrentValue;
+                break;
+            case MetadataProposalField.Genre:
+                series.Genre = proposal.CurrentValue;
+                break;
+            case MetadataProposalField.Status:
+                series.Status = string.IsNullOrEmpty(proposal.CurrentValue)
+                    ? SeriesStatus.Unknown
+                    : Enum.Parse<SeriesStatus>(proposal.CurrentValue);
+                break;
+        }
+
+        context.SaveChanges();
     }
 
     /// <summary>

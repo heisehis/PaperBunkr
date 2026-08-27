@@ -120,17 +120,60 @@ public partial class EventsScreenViewModel : ViewModelBase
         Events.Clear();
         foreach (var storyEvent in all)
         {
+            int eventId = storyEvent.Id;
             Events.Add(new StoryEventSummary
             {
                 Id = storyEvent.Id,
                 Name = storyEvent.Name,
                 MemberCount = storyEvent.Members.Count,
                 IsActive = storyEvent.Id == _activeEventId,
+                DeleteConfirm = new TwoStepConfirm(() => DeleteEvent(eventId), idleLabel: "Delete", armedLabel: "Confirm delete?"),
             });
         }
 
         OnPropertyChanged(nameof(HasNoEvents));
         OnPropertyChanged(nameof(HasNoMembers));
+    }
+
+    /// <summary>
+    /// Deletes a whole story event (docs/superpowers/specs/2026-08-22-delete-functionality-design.md) -
+    /// cascade-deletes its <see cref="EventMembership"/> rows (confirmed <c>DeleteBehavior.Cascade</c>
+    /// in <c>PaperbunkrDbContext.OnModelCreating</c>, not the member <see cref="Issue"/>s
+    /// themselves). Any <see cref="ReadingList"/> linking to this event via
+    /// <c>ReadingList.StoryEventId</c> is left intact, just unlinked (that FK is
+    /// <c>DeleteBehavior.SetNull</c>) - deleting an event's own reading-order tracking never takes
+    /// the reading list itself down with it.
+    /// </summary>
+    private void DeleteEvent(int storyEventId)
+    {
+        using var context = PaperbunkrDb.CreateContext();
+        var storyEvent = context.StoryEvents.Find(storyEventId);
+        if (storyEvent is null)
+        {
+            return;
+        }
+
+        context.StoryEvents.Remove(storyEvent);
+        context.SaveChanges();
+
+        if (_activeEventId == storyEventId)
+        {
+            _activeEventId = null;
+            var nextId = context.StoryEvents.OrderBy(e => e.Name).Select(e => (int?)e.Id).FirstOrDefault();
+            if (nextId is int id)
+            {
+                LoadEvent(id);
+                return;
+            }
+
+            EventName = string.Empty;
+            Description = string.Empty;
+            TotalMembers = "0";
+            Members.Clear();
+            OnPropertyChanged(nameof(HasNoMembers));
+        }
+
+        RefreshSidebar();
     }
 
     private void MoveMemberUp(EventMemberRowViewModel row) => Reorder(row, offset: -1);

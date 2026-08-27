@@ -15,10 +15,15 @@ public static class SmartListQueryBuilder
 {
     public static List<Issue> Build(PaperbunkrDbContext ctx, SmartList list)
     {
+        // Include(Tags) - SmartListCatalog's Genre/Tags TextSelectors read Issue.Tags (docs/
+        // superpowers/specs/2026-08-23-weighted-categorized-tags-design.md); without it every issue
+        // would look like it has no Genre/Tags at all, silently breaking every Smart List condition
+        // on either field.
         var issues = ctx.Issues
             .Include(i => i.Series)
             .Include(i => i.CustomValues)
             .Include(i => i.MetadataProposals)
+            .Include(i => i.Tags)
             .ToList();
 
         HashSet<int>? duplicateIds = list.Conditions.Any(c => c.Field == SmartListField.Duplicate)

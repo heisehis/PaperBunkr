@@ -44,7 +44,12 @@ public class RecommendationResolverTests : IDisposable
 
     private static int SeedIssue(PaperbunkrDbContext context, int seriesId, string? characters = null, string? writer = null, string? tags = null)
     {
-        var issue = new Issue { SeriesId = seriesId, Characters = characters, Writer = writer, Tags = tags };
+        var issue = new Issue { SeriesId = seriesId, Characters = characters, Writer = writer };
+        if (tags is not null)
+        {
+            issue.MergeFrom(IssueTagField.Tags, new[] { tags });
+        }
+
         context.Issues.Add(issue);
         context.SaveChanges();
         return issue.Id;

@@ -153,6 +153,15 @@ public class PageCanvas : Control
         AvaloniaProperty.Register<PageCanvas, ICommand?>(nameof(ToggleAutoScrollCommand));
 
     /// <summary>
+    /// Fired once accumulated wheel-scroll pull past the continuous-mode scroll clamp crosses
+    /// <see cref="OverscrollThresholdPixels"/> (docs/superpowers/specs/2026-08-23-reader-chapter-
+    /// transition-design.md) - a bool parameter (true = pulled past the end, false = past the
+    /// start). Meaningless outside continuous mode, same as <see cref="ToggleAutoScrollCommand"/>.
+    /// </summary>
+    public static readonly StyledProperty<ICommand?> ChapterBoundaryOverscrollCommandProperty =
+        AvaloniaProperty.Register<PageCanvas, ICommand?>(nameof(ChapterBoundaryOverscrollCommand));
+
+    /// <summary>
     /// Always-context gestures (docs/superpowers/specs/2026-08-16-remappable-reader-shortcuts-
     /// design.md §1/§3) - F11 stays a hardcoded secondary fullscreen trigger in <see cref="OnKeyDown"/>
     /// (an OS-level convention, not really "a shortcut" in the remappable sense); this gesture is
@@ -238,6 +247,19 @@ public class PageCanvas : Control
     /// </summary>
     public static readonly StyledProperty<bool> AutoRotateProperty =
         AvaloniaProperty.Register<PageCanvas, bool>(nameof(AutoRotate));
+
+    /// <summary>
+    /// Per-page persisted rotation override (docs/ce-feature-inventory.md §A) - 0/90/180/270, same
+    /// non-validation convention as <see cref="ManualRotationDegrees"/>. Composed additively with the
+    /// session-only rotation in <see cref="EffectiveRotationDegrees"/> rather than replacing it, so
+    /// the two rotation sources (persisted per-page, and this session's manual/auto rotate) stack
+    /// instead of one silently overriding the other. Deliberately scoped to paged reading mode only -
+    /// continuous mode renders several visible pages at once from its own layout-window path (not
+    /// <see cref="EffectiveRotationDegrees"/>), and giving each visible page its own rotation there is
+    /// a larger, separate piece of work; not consulted there yet.
+    /// </summary>
+    public static readonly StyledProperty<int> PageRotationOverrideDegreesProperty =
+        AvaloniaProperty.Register<PageCanvas, int>(nameof(PageRotationOverrideDegrees));
 
     /// <summary>
     /// Continuous-mode support (docs/superpowers/specs/2026-08-10-reader-polish-continuous-scroll-
@@ -346,6 +368,23 @@ public class PageCanvas : Control
     private DateTime _touchPressTime;
     private CompositionCustomVisual? _visual;
 
+    /// <summary>
+    /// Accumulated wheel-scroll pull past the continuous-mode scroll clamp, signed (positive =
+    /// pulled past the end wanting to go forward, negative = past the start wanting to go
+    /// backward) - docs/superpowers/specs/2026-08-23-reader-chapter-transition-design.md. Reset to
+    /// 0 the moment a scroll actually moves <see cref="ScrollOffset"/> away from whichever boundary
+    /// it's currently pinned at, or once <see cref="ChapterBoundaryOverscrollCommand"/> fires.
+    /// Mouse-wheel input only this pass - drag/touch overscroll isn't wired to this yet, a known,
+    /// named gap rather than an oversight (see the design doc's own scope note).
+    /// </summary>
+    private double _overscrollPull;
+
+    /// <summary>Wheel-pull distance (see <see cref="_overscrollPull"/>) that triggers <see cref="ChapterBoundaryOverscrollCommand"/> - an arbitrary but generous threshold so a couple of stray wheel notches at the boundary (easy to do while just reading) doesn't accidentally jump a chapter.</summary>
+    private const double OverscrollThresholdPixels = 220;
+
+    /// <summary>Visual rubber-band cap (see <see cref="ReaderLayoutModel.ComputeOverscrollBump"/>) - how far the content can visually budge past the clamp regardless of how hard the pull grows.</summary>
+    private const double OverscrollMaxBumpPixels = 36;
+
     /// <summary>Set by <see cref="ExecuteDirectional"/> immediately before invoking <see cref="LeftCommand"/>/<see cref="RightCommand"/> - the only paths adjacent paged-mode navigation takes (spec §3.1), so a pending direction here means the next <see cref="PageProperty"/> change is a turn, not a jump. Cleared after being read, and whenever <see cref="DecoderProperty"/> changes (a different issue was opened).</summary>
     private PageTransitionDirection? _pendingTransitionDirection;
 
@@ -391,7 +430,7 @@ public class PageCanvas : Control
     private static readonly AvaloniaProperty[] RenderAffectingProperties =
     [
         PageProperty, SecondaryPageProperty, HighQualityDisplayProperty, ZoomLevelProperty, PanOffsetXProperty, PanOffsetYProperty,
-        FitModeProperty, FitOnlyIfOversizedProperty, ManualRotationDegreesProperty, AutoRotateProperty,
+        FitModeProperty, FitOnlyIfOversizedProperty, ManualRotationDegreesProperty, AutoRotateProperty, PageRotationOverrideDegreesProperty,
         ReadingModeProperty, DecoderProperty, PageCountProperty, ScrollOffsetProperty, PageMarginMultiplierProperty
     ];
 
@@ -614,6 +653,12 @@ public class PageCanvas : Control
         set => SetValue(ToggleAutoScrollCommandProperty, value);
     }
 
+    public ICommand? ChapterBoundaryOverscrollCommand
+    {
+        get => GetValue(ChapterBoundaryOverscrollCommandProperty);
+        set => SetValue(ChapterBoundaryOverscrollCommandProperty, value);
+    }
+
     public KeyGesture FullscreenToggleGesture
     {
         get => GetValue(FullscreenToggleGestureProperty);
@@ -728,6 +773,12 @@ public class PageCanvas : Control
         set => SetValue(ManualRotationDegreesProperty, value);
     }
 
+    public int PageRotationOverrideDegrees
+    {
+        get => GetValue(PageRotationOverrideDegreesProperty);
+        set => SetValue(PageRotationOverrideDegreesProperty, value);
+    }
+
     public bool AutoRotate
     {
         get => GetValue(AutoRotateProperty);
@@ -808,6 +859,30 @@ public class PageCanvas : Control
 
     private bool IsContinuous => ReadingMode is ReadingMode.VerticalContinuous or ReadingMode.HorizontalContinuous or ReadingMode.HorizontalContinuousRightToLeft or ReadingMode.Webtoon;
 
+    /// <summary>
+    /// Paged top-to-bottom mode (docs/superpowers/specs/2026-08-27-vertical-paged-reading-mode-
+    /// design.md) - the paged render path (not <see cref="IsContinuous"/>), but page-turn gestures
+    /// run along Y: Up/Down keys, the wheel (already vertical), top/bottom click-and-tap zones, and
+    /// vertical flick. Turn animations use <see cref="PageTransitionDirection.Up"/>/
+    /// <see cref="PageTransitionDirection.Down"/>.
+    /// </summary>
+    private bool IsPagedVertical => ReadingMode == ReadingMode.TopToBottom;
+
+    /// <summary>The (command, animation direction) pair for a forward turn, respecting <see cref="IsPagedVertical"/>.</summary>
+    private (ICommand? Command, PageTransitionDirection Direction) ForwardTurn =>
+        IsPagedVertical ? (RightCommand, PageTransitionDirection.Down) : (RightCommand, PageTransitionDirection.Right);
+
+    /// <summary>The (command, animation direction) pair for a backward turn, respecting <see cref="IsPagedVertical"/>.</summary>
+    private (ICommand? Command, PageTransitionDirection Direction) BackwardTurn =>
+        IsPagedVertical ? (LeftCommand, PageTransitionDirection.Up) : (LeftCommand, PageTransitionDirection.Left);
+
+    /// <summary>Runs a resolved zone/flick turn intent (<c>true</c> = forward, <c>false</c> = back).</summary>
+    private bool ExecuteTurn(bool forward)
+    {
+        var (command, direction) = forward ? ForwardTurn : BackwardTurn;
+        return ExecuteDirectional(command, direction);
+    }
+
     private ReaderLayoutModel.Axis ContinuousAxis => ReadingMode is ReadingMode.HorizontalContinuous or ReadingMode.HorizontalContinuousRightToLeft ? ReaderLayoutModel.Axis.Horizontal : ReaderLayoutModel.Axis.Vertical;
 
     private bool IsContinuousReversed => ReadingMode == ReadingMode.HorizontalContinuousRightToLeft;
@@ -830,7 +905,8 @@ public class PageCanvas : Control
     /// <summary>Double-tap zoom target for continuous/webtoon modes (user direction) - a second double-tap at this zoom level returns to 100%, matching <see cref="ZoomPanMath.DoubleClickZoom"/>'s paged-mode toggle shape but a different target level.</summary>
     private const double ContinuousDoubleTapZoom = 2.5;
 
-    private int EffectiveRotationDegrees() => ZoomPanMath.ComposeRotationDegrees(ManualRotationDegrees, AutoRotate, Page?.PixelSize ?? default);
+    private int EffectiveRotationDegrees() =>
+        (ZoomPanMath.ComposeRotationDegrees(ManualRotationDegrees, AutoRotate, Page?.PixelSize ?? default) + PageRotationOverrideDegrees) % 360;
 
     /// <summary>
     /// <see cref="Page"/>'s pixel size, swapped width/height for a 90/270 rotation - the shape
@@ -885,6 +961,46 @@ public class PageCanvas : Control
 
         double target = ReaderLayoutModel.ComputeStackOffsetOfPage(EstimatedPageSizes(), pageIndex, Bounds.Size, ContinuousAxis, ZoomLevel, ContinuousMainAxisGap);
         ScrollOffset = ClampScrollOffset(target);
+    }
+
+    /// <summary>
+    /// Applies a continuous-mode wheel-scroll delta, tracking chapter-boundary overscroll pull
+    /// (docs/superpowers/specs/2026-08-23-reader-chapter-transition-design.md) alongside the
+    /// ordinary clamped scroll. Pinned at a boundary and still pushing further past it accumulates
+    /// <see cref="_overscrollPull"/> (and bumps the visual render via <see cref="PushContinuousVisualData"/>,
+    /// since setting <see cref="ScrollOffset"/> to the same already-clamped value wouldn't itself
+    /// raise a property-changed re-render); scrolling back away from a boundary resets the pull.
+    /// </summary>
+    private void HandleContinuousWheelScroll(double wheelDeltaY)
+    {
+        double proposed = ScrollOffset - (wheelDeltaY * WheelPanStep * WheelScrollStepPixels);
+        double clamped = ClampScrollOffset(proposed);
+
+        if (clamped != ScrollOffset)
+        {
+            ScrollOffset = clamped;
+            if (_overscrollPull != 0)
+            {
+                _overscrollPull = 0;
+                PushContinuousVisualData();
+            }
+
+            return;
+        }
+
+        double overshoot = proposed - clamped;
+        _overscrollPull += overshoot;
+
+        if (Math.Abs(_overscrollPull) >= OverscrollThresholdPixels)
+        {
+            bool forward = _overscrollPull > 0;
+            _overscrollPull = 0;
+            PushContinuousVisualData();
+            TryExecuteWithParameter(ChapterBoundaryOverscrollCommand, forward);
+            return;
+        }
+
+        PushContinuousVisualData();
     }
 
     /// <summary>Clamps scroll position to <c>[0, total stack size - viewport main-axis size]</c>, so dragging/scrolling past either end just stops rather than running away into empty space.</summary>
@@ -990,6 +1106,10 @@ public class PageCanvas : Control
             // issue's first page shouldn't transition from the previous issue's last-shown page/pair.
             _lastRenderedPage = null;
             _lastRenderedSecondaryPage = null;
+
+            // A new issue just loaded (e.g. via the chapter-boundary overscroll this pull itself
+            // triggered) - yesterday's pull has no meaning against today's book's own boundaries.
+            _overscrollPull = 0;
         }
 
         // Real page-turn animation trigger (spec §3.1/§3.3): only PageProperty changes in paged mode
@@ -1217,7 +1337,15 @@ public class PageCanvas : Control
         }
 
         double crossAxisPan = ContinuousAxis == ReaderLayoutModel.Axis.Vertical ? PanOffsetX : PanOffsetY;
-        var layout = ReaderLayoutModel.ComputeContinuousLayout(estimatedSizes, ScrollOffset, Bounds.Size, ContinuousAxis,
+
+        // Chapter-boundary overscroll bump (docs/superpowers/specs/2026-08-23-reader-chapter-
+        // transition-design.md) - a purely visual offset layered on top of the real (already-clamped)
+        // ScrollOffset, never written back to it, so the rubber-band effect can't itself push the
+        // reader's actual position past a real page.
+        double bumpMagnitude = ReaderLayoutModel.ComputeOverscrollBump(Math.Abs(_overscrollPull), OverscrollMaxBumpPixels);
+        double effectiveScrollOffset = ScrollOffset + (Math.Sign(_overscrollPull) * bumpMagnitude);
+
+        var layout = ReaderLayoutModel.ComputeContinuousLayout(estimatedSizes, effectiveScrollOffset, Bounds.Size, ContinuousAxis,
             zoom: ZoomLevel * PageMarginMultiplier, crossAxisPanOffset: crossAxisPan, mainAxisGap: ContinuousMainAxisGap, reverseMainAxis: IsContinuousReversed);
 
         if (layout.Count == 0)
@@ -1311,7 +1439,7 @@ public class PageCanvas : Control
         }
         else
         {
-            InvokeZoneCommand(e.GetPosition(this).X);
+            InvokeZoneCommand(e.GetPosition(this));
         }
     }
 
@@ -1367,11 +1495,11 @@ public class PageCanvas : Control
         if (e.Pointer.Type == PointerType.Touch && _touchPressPosition is { } start && !CanPan())
         {
             var end = e.GetPosition(this);
-            double dx = end.X - start.X;
             var elapsed = DateTime.UtcNow - _touchPressTime;
-            if (elapsed.TotalMilliseconds <= MaxFlickDurationMs && Math.Abs(dx) >= MinFlickDistance && Math.Abs(dx) > Math.Abs(end.Y - start.Y))
+            if (elapsed.TotalMilliseconds <= MaxFlickDurationMs
+                && PageTurnGestureMath.ResolveFlick(end - start, IsPagedVertical, MinFlickDistance) is { } forward)
             {
-                ExecuteDirectional(dx < 0 ? RightCommand : LeftCommand, dx < 0 ? PageTransitionDirection.Right : PageTransitionDirection.Left);
+                ExecuteTurn(forward);
                 e.Handled = true;
             }
         }
@@ -1408,7 +1536,7 @@ public class PageCanvas : Control
             // AppSettings.MouseWheelSpeed-driven multiplier paged mode's plain-wheel pan already
             // uses; WheelScrollStepPixels gives it the same base-magnitude role KeyPanStep plays for
             // arrow keys below.
-            ScrollOffset = ClampScrollOffset(ScrollOffset - (e.Delta.Y * WheelPanStep * WheelScrollStepPixels));
+            HandleContinuousWheelScroll(e.Delta.Y);
             e.Handled = true;
             return;
         }
@@ -1435,11 +1563,11 @@ public class PageCanvas : Control
         }
         else if (e.Delta.Y < 0 || e.Delta.X > 0)
         {
-            ExecuteDirectional(RightCommand, PageTransitionDirection.Right);
+            ExecuteTurn(forward: true);
         }
         else if (e.Delta.Y > 0 || e.Delta.X < 0)
         {
-            ExecuteDirectional(LeftCommand, PageTransitionDirection.Left);
+            ExecuteTurn(forward: false);
         }
 
         e.Handled = true;
@@ -1587,11 +1715,29 @@ public class PageCanvas : Control
             return;
         }
 
-        if (LeftKey.Matches(e) && ExecuteDirectional(LeftCommand, PageTransitionDirection.Left))
+        // Vertical paged mode (docs/superpowers/specs/2026-08-27-vertical-paged-reading-mode-
+        // design.md §3): bare Up/Down turn the page. Additive - the remappable LeftKey/RightKey
+        // gestures below still fire too, routed through ExecuteTurn so they also animate vertically.
+        if (IsPagedVertical && e.KeyModifiers == KeyModifiers.None)
+        {
+            if (e.Key == Key.Up && ExecuteTurn(forward: false))
+            {
+                e.Handled = true;
+                return;
+            }
+
+            if (e.Key == Key.Down && ExecuteTurn(forward: true))
+            {
+                e.Handled = true;
+                return;
+            }
+        }
+
+        if (LeftKey.Matches(e) && ExecuteTurn(forward: false))
         {
             e.Handled = true;
         }
-        else if (RightKey.Matches(e) && ExecuteDirectional(RightCommand, PageTransitionDirection.Right))
+        else if (RightKey.Matches(e) && ExecuteTurn(forward: true))
         {
             e.Handled = true;
         }
@@ -1687,13 +1833,13 @@ public class PageCanvas : Control
 
         if (!IsContinuous)
         {
-            double dx = _pinchLastOrigin.X - _pinchStartOrigin.X;
-            double dy = _pinchLastOrigin.Y - _pinchStartOrigin.Y;
+            var delta = _pinchLastOrigin - _pinchStartOrigin;
             var elapsed = DateTime.UtcNow - _pinchStartTime;
             bool wasPrimarilyADrag = Math.Abs(_pinchLastScale - 1.0) < 0.15;
-            if (wasPrimarilyADrag && elapsed.TotalMilliseconds <= MaxFlickDurationMs && Math.Abs(dx) >= MinFlickDistance && Math.Abs(dx) > Math.Abs(dy))
+            if (wasPrimarilyADrag && elapsed.TotalMilliseconds <= MaxFlickDurationMs
+                && PageTurnGestureMath.ResolveFlick(delta, IsPagedVertical, MinFlickDistance) is { } forward)
             {
-                ExecuteDirectional(dx < 0 ? RightCommand : LeftCommand, dx < 0 ? PageTransitionDirection.Right : PageTransitionDirection.Left);
+                ExecuteTurn(forward);
             }
         }
 
@@ -1741,22 +1887,20 @@ public class PageCanvas : Control
 
     private void InvokeTouchZone(Point p)
     {
-        double third = Bounds.Width / 3;
-        if (p.X < third)
+        // Left/right thirds (top/bottom in vertical paged mode); middle third is a reserved no-op,
+        // per the 3-zone tap spec - no chrome/menu feature to call yet.
+        if (PageTurnGestureMath.ResolveZone(p, Bounds.Size, IsPagedVertical, divisions: 3) is { } forward)
         {
-            ExecuteDirectional(LeftCommand, PageTransitionDirection.Left);
+            ExecuteTurn(forward);
         }
-        else if (p.X > third * 2)
-        {
-            ExecuteDirectional(RightCommand, PageTransitionDirection.Right);
-        }
-        // center column (all 3 rows): reserved no-op, per spec §4 - no chrome/menu feature to call yet
     }
 
-    private void InvokeZoneCommand(double x)
+    private void InvokeZoneCommand(Point p)
     {
-        bool isLeft = x < Bounds.Width / 2;
-        ExecuteDirectional(isLeft ? LeftCommand : RightCommand, isLeft ? PageTransitionDirection.Left : PageTransitionDirection.Right);
+        if (PageTurnGestureMath.ResolveZone(p, Bounds.Size, IsPagedVertical, divisions: 2) is { } forward)
+        {
+            ExecuteTurn(forward);
+        }
     }
 
     /// <summary>
@@ -1816,6 +1960,17 @@ public class PageCanvas : Control
         }
 
         command.Execute(null);
+        return true;
+    }
+
+    private static bool TryExecuteWithParameter(ICommand? command, object? parameter)
+    {
+        if (command?.CanExecute(parameter) != true)
+        {
+            return false;
+        }
+
+        command.Execute(parameter);
         return true;
     }
 

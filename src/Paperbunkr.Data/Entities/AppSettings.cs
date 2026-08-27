@@ -16,6 +16,13 @@ public class AppSettings
     /// <summary>Selected font family name, or null for the app default (no override).</summary>
     public string? SelectedFontFamily { get; set; }
 
+    /// <summary>
+    /// Whether UI transitions (docs/superpowers/specs/2026-08-24-design-language-foundation-design.md
+    /// motion tokens) are shortened to effectively instant. Default false - the app ships with
+    /// "snappy & responsive" motion on by default, this is an opt-in accessibility/preference toggle.
+    /// </summary>
+    public bool ReducedMotion { get; set; }
+
     /// <summary>Whether opening an issue resumes at <see cref="Issue.LastPageRead"/>, or always starts at page 1. CE default: true.</summary>
     public bool OpenLastPage { get; set; } = true;
 
@@ -193,10 +200,17 @@ public class AppSettings
     public LibraryContentGranularity LibraryGranularity { get; set; } = LibraryContentGranularity.Issue;
 
     /// <summary>See <see cref="LibrarySortField"/>.</summary>
-    public LibraryViewMode LibraryViewMode { get; set; } = LibraryViewMode.ComfortableGrid;
+    public LibraryViewMode LibraryViewMode { get; set; } = LibraryViewMode.PosterGrid;
 
     /// <summary>See <see cref="LibrarySortField"/>.</summary>
     public double LibraryGridDensity { get; set; } = 1.0;
+
+    /// <summary>
+    /// Poster-grid tile title row on/off (UI rework Phase 4a - docs/superpowers/specs/
+    /// 2026-08-27-library-browsing-4a-poster-grid-design.md). Off reproduces the former
+    /// <c>CoverOnlyGrid</c>. Auto-hidden by the ViewModel below a card-width threshold regardless.
+    /// </summary>
+    public bool LibraryShowTileTitles { get; set; } = true;
 
     /// <summary>See <see cref="LibrarySortField"/>.</summary>
     public bool LibraryShowUnreadBadge { get; set; } = true;
@@ -242,6 +256,16 @@ public class AppSettings
     public bool LibraryFilterTrackedOnly { get; set; }
 
     /// <summary>
+    /// Library's configurable Details-table columns (docs/superpowers/specs/2026-08-27-library-
+    /// browsing-4b-toolbar-rework-design.md §8) - a comma-joined list of <see cref="IssueListSortField"/>
+    /// enum names in display order, e.g. <c>"Title,Series,Number,Volume,Year"</c>. Null means
+    /// "never configured" and falls back to <c>IssueListFieldCatalog.DefaultDetailsColumns</c>;
+    /// unknown/removed enum names are skipped on load. Nullable string, same rationale as
+    /// <see cref="LibrarySearchQuery"/> - no HasDefaultValue/HasSentinel needed.
+    /// </summary>
+    public string? LibraryDetailsColumns { get; set; }
+
+    /// <summary>
     /// Global policy governing newly-created <see cref="MetadataProposal"/> rows (docs/superpowers/
     /// specs/2026-08-17-metadata-model-phase2a-metadata-proposals-design.md) - one setting for the
     /// whole library, not per-issue (unlike CE's per-book <c>EnableProposed</c>), since there's no
@@ -249,4 +273,43 @@ public class AppSettings
     /// matches <c>LibraryFolderScanner</c>'s pre-existing filename-fallback UX exactly.
     /// </summary>
     public MetadataResolutionPolicy MetadataResolutionPolicy { get; set; } = MetadataResolutionPolicy.Automatic;
+
+    /// <summary>
+    /// Whether minimizing (and, deliberately diverging from CE - see docs/superpowers/specs/
+    /// 2026-08-23-app-chrome-crash-reporter-and-tray-design.md §4) closing the main window hides it
+    /// to a tray icon instead of exiting. CE default false (<c>Settings.MinimizeToTray</c>,
+    /// confirmed from <c>MainForm.cs</c>'s own opt-in Preferences toggle).
+    /// </summary>
+    public bool MinimizeToTray { get; set; }
+
+    /// <summary>
+    /// Whether the one-time "Paperbunkr is still running in the tray" explanation has already been
+    /// shown - functionally equivalent to CE's <c>HiddenMessageBoxes</c> bit for this message, scoped
+    /// to just this one flag since there's no other suppressible message in this app yet.
+    /// </summary>
+    public bool MinimizeToTrayNoticeShown { get; set; }
+
+    /// <summary>
+    /// Whether the nav rail's hover-expand (docs/superpowers/specs/2026-08-24-navigation-shell-
+    /// motion-system-design.md) is pinned permanently open (200px, real layout reflow) rather than
+    /// only expanding as a temporary hover overlay. Default false - collapsed 64px is the default look.
+    /// </summary>
+    public bool NavRailPinned { get; set; }
+
+    /// <summary>
+    /// Avalonia GPU rendering backend (docs/superpowers/specs/2026-08-27-hardware-accelerated-
+    /// rendering-design.md). Restart-only, and the source of truth - mirrored to a
+    /// <c>%AppData%\Paperbunkr\graphics.json</c> cache (read by <c>GraphicsBootstrap</c> before the
+    /// database is available at startup) and reconciled to it after the DB opens. No CE equivalent.
+    /// Default <see cref="RenderBackend.Auto"/> = GPU-first with software fallback.
+    /// </summary>
+    public RenderBackend RenderingBackend { get; set; } = RenderBackend.Auto;
+
+    /// <summary>
+    /// Whether native OpenGL (WGL) is tried before ANGLE/Direct3D in the rendering fallback chain
+    /// (spec §4). Default false - ANGLE is the better default on Windows; this is the "ANGLE is the
+    /// thing misbehaving on this box" knob. Restart-only, mirrored to <c>graphics.json</c> with
+    /// <see cref="RenderingBackend"/>.
+    /// </summary>
+    public bool PreferNativeOpenGl { get; set; }
 }

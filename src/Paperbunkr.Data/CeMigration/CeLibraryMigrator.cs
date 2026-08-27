@@ -422,7 +422,16 @@ public class CeLibraryMigrator
         issue.Translator = Pick(issue.Translator, NullIfEmpty(info.Translator));
         issue.Publisher = Pick(issue.Publisher, NullIfEmpty(info.Publisher));
         issue.Imprint = Pick(issue.Imprint, NullIfEmpty(info.Imprint));
-        issue.Genre = Pick(issue.Genre, NullIfEmpty(info.Genre));
+        // Genre/Tags don't fit Pick's blind-overwrite shape now that they're structured
+        // (docs/superpowers/specs/2026-08-23-weighted-categorized-tags-design.md) - MergeFrom
+        // always diffs rather than replaces, so onlyIfBlank instead means "skip entirely if this
+        // issue already has any tag for this field" (its closest equivalent to Pick's "current is
+        // not null"), preserving any Category/Weight the user already assigned either way.
+        if (!onlyIfBlank || !issue.HasAny(IssueTagField.Genre))
+        {
+            issue.MergeFrom(IssueTagField.Genre, new[] { info.Genre });
+        }
+
         issue.Web = Pick(issue.Web, NullIfEmpty(info.Web));
         issue.PageCount = Pick(issue.PageCount, info.PageCount > 0 ? info.PageCount : null);
         issue.LanguageISO = Pick(issue.LanguageISO, NullIfEmpty(info.LanguageISO));
@@ -431,7 +440,10 @@ public class CeLibraryMigrator
         issue.Characters = Pick(issue.Characters, NullIfEmpty(info.Characters));
         issue.Teams = Pick(issue.Teams, NullIfEmpty(info.Teams));
         issue.Locations = Pick(issue.Locations, NullIfEmpty(info.Locations));
-        issue.Tags = Pick(issue.Tags, NullIfEmpty(info.Tags));
+        if (!onlyIfBlank || !issue.HasAny(IssueTagField.Tags))
+        {
+            issue.MergeFrom(IssueTagField.Tags, new[] { info.Tags });
+        }
     }
 
     private static string? NullIfEmpty(string? value) => string.IsNullOrWhiteSpace(value) ? null : value;

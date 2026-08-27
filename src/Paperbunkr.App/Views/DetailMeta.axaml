@@ -13,32 +13,75 @@
             <Setter Property="Foreground" Value="{DynamicResource PbTextFaintBrush}" />
             <Setter Property="Margin" Value="0,0,0,5" />
         </Style>
+
+        <!-- Clickable credit-name chips (docs/superpowers/specs/2026-08-23-weighted-categorized-
+             tags-design.md's click-to-search, extended past Genre/Tags per direct user follow-up) -
+             a flat, borderless Button rather than the outlined tagPill treatment, closer to the
+             original flowing-text look these fields had (comma-separated names) while still being
+             a real click target. -->
+        <Style Selector="Button.creditName">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="0,0,6,0" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style Selector="Button.creditName:pointerover TextBlock.metaValue">
+            <Setter Property="TextDecorations" Value="Underline" />
+        </Style>
         <Style Selector="TextBlock.metaValue">
             <Setter Property="FontSize" Value="13.5" />
             <Setter Property="Foreground" Value="{DynamicResource PbTextBrush}" />
         </Style>
     </UserControl.Styles>
 
+    <UserControl.Resources>
+        <DataTemplate x:Key="CreditPillTemplate" x:DataType="vm:TagPillViewModel">
+            <Button Classes="creditName" Command="{Binding SearchCommand}">
+                <TextBlock Classes="metaValue" Text="{Binding Value}" />
+            </Button>
+        </DataTemplate>
+    </UserControl.Resources>
+
     <Grid RowDefinitions="Auto,Auto,Auto" ColumnDefinitions="*,*" Margin="0,20">
         <StackPanel Grid.Row="0" Grid.Column="0" Margin="0,0,28,14">
             <TextBlock Classes="metaLabel" Text="WRITER" />
-            <TextBlock Classes="metaValue" Text="{Binding Writer}" TextWrapping="Wrap" />
+            <ItemsControl ItemsSource="{Binding Writer}" ItemTemplate="{StaticResource CreditPillTemplate}">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+            </ItemsControl>
         </StackPanel>
         <StackPanel Grid.Row="0" Grid.Column="1" Margin="0,0,0,14">
             <TextBlock Classes="metaLabel" Text="ARTIST" />
-            <TextBlock Classes="metaValue" Text="{Binding Artist}" TextWrapping="Wrap" />
+            <ItemsControl ItemsSource="{Binding Artist}" ItemTemplate="{StaticResource CreditPillTemplate}">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+            </ItemsControl>
         </StackPanel>
         <StackPanel Grid.Row="1" Grid.Column="0" Margin="0,0,28,14">
             <TextBlock Classes="metaLabel" Text="COVER ARTIST" />
-            <TextBlock Classes="metaValue" Text="{Binding CoverArtist}" TextWrapping="Wrap" />
+            <ItemsControl ItemsSource="{Binding CoverArtist}" ItemTemplate="{StaticResource CreditPillTemplate}">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+            </ItemsControl>
         </StackPanel>
         <StackPanel Grid.Row="1" Grid.Column="1" Margin="0,0,0,14">
             <TextBlock Classes="metaLabel" Text="COLORIST" />
-            <TextBlock Classes="metaValue" Text="{Binding Colorist}" TextWrapping="Wrap" />
+            <ItemsControl ItemsSource="{Binding Colorist}" ItemTemplate="{StaticResource CreditPillTemplate}">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+            </ItemsControl>
         </StackPanel>
         <StackPanel Grid.Row="2" Grid.Column="0" Margin="0,0,28,0">
             <TextBlock Classes="metaLabel" Text="LETTERER" />
-            <TextBlock Classes="metaValue" Text="{Binding Letterer}" TextWrapping="Wrap" />
+            <ItemsControl ItemsSource="{Binding Letterer}" ItemTemplate="{StaticResource CreditPillTemplate}">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+            </ItemsControl>
         </StackPanel>
     </Grid>
 </UserControl>

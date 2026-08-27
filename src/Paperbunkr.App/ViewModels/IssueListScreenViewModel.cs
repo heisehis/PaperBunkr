@@ -26,11 +26,22 @@ namespace Paperbunkr.App.ViewModels;
 public partial class IssueListScreenViewModel : ViewModelBase
 {
     private readonly Action<int> _goReaderForIssue;
+    private readonly Func<int, bool> _isSelected;
     private List<Issue> _sourceIssues = new();
 
-    public IssueListScreenViewModel(Action<int> goReaderForIssue)
+    /// <summary>
+    /// <paramref name="isSelected"/> (docs/superpowers/specs/2026-08-24-library-multiselect-slice1-
+    /// design.md §2/§7) lets this view model re-stamp each freshly-built <see cref="IssueListRow"/>'s
+    /// <see cref="IssueListRow.IsSelected"/> from the owning <c>LibraryScreenViewModel</c>'s live
+    /// selection set. Necessary because <see cref="Render"/> discards and rebuilds every row on every
+    /// sort/group/filter change - without this, changing the sort field while a selection is active
+    /// would silently wipe it, since the old row instances (and their <c>IsSelected</c> flags) get
+    /// thrown away.
+    /// </summary>
+    public IssueListScreenViewModel(Action<int> goReaderForIssue, Func<int, bool>? isSelected = null)
     {
         _goReaderForIssue = goReaderForIssue;
+        _isSelected = isSelected ?? (_ => false);
         Rows = new ObservableCollection<IssueListRow>();
         Groups = new ObservableCollection<IssueListRowGroup>();
     }
@@ -98,13 +109,13 @@ public partial class IssueListScreenViewModel : ViewModelBase
         OnPropertyChanged(nameof(HasAnyResults));
     }
 
-    private static IssueListRow ToRow(Issue issue)
+    private IssueListRow ToRow(Issue issue)
     {
-        var coverImage = CoverImageCache.Get(issue.Id);
-        double aspectRatio = coverImage is { } bmp && bmp.PixelSize.Height > 0
-            ? (double)bmp.PixelSize.Width / bmp.PixelSize.Height
-            : SeriesCardSample.DefaultCoverAspectRatio;
-
+        // Cover is resolved lazily via CoverImageConverter, keyed on Id, only when this row's
+        // container is actually realized by VirtualizingWrapPanel - not decoded here regardless of
+        // visibility (docs/superpowers/specs/2026-08-22-cover-memory-virtualization-design.md).
+        // PanoramaWidth uses the default aspect ratio uniformly for the same reason - the real
+        // ratio isn't known without decoding, which is exactly what stays deferred.
         return new IssueListRow
         {
         Id = issue.Id,
@@ -115,9 +126,9 @@ public partial class IssueListScreenViewModel : ViewModelBase
         Title = issue.EffectiveTitle() ?? $"#{issue.EffectiveNumber()}",
         Writer = issue.Writer,
         Publisher = issue.Publisher,
-        Genre = issue.Genre,
+        Genre = issue.JoinedGenre(),
         Format = issue.EffectiveFormat(),
-        Tags = issue.Tags,
+        Tags = issue.JoinedTags(),
         AddedTime = issue.AddedTime,
         OpenedTime = issue.OpenedTime,
         ReleasedTime = issue.ReleasedTime,
@@ -169,9 +180,9 @@ public partial class IssueListScreenViewModel : ViewModelBase
         Day = issue.Day,
         ScanInformation = issue.ScanInformation,
         BookmarkCount = issue.Bookmarks.Count,
-        CoverImage = coverImage,
         ContentTypeLabel = issue.Series!.ContentType.ToString(),
-        PanoramaWidth = SeriesCardSample.ComputePanoramaWidth(aspectRatio),
+        PanoramaWidth = SeriesCardSample.ComputePanoramaWidth(SeriesCardSample.DefaultCoverAspectRatio),
+        IsSelected = _isSelected(issue.Id),
         };
     }
 

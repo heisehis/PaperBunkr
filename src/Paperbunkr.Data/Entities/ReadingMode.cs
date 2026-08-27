@@ -18,11 +18,18 @@ namespace Paperbunkr.Data.Entities;
 /// (no gap) - the distinction real webtoon/manhwa readers make between "continuous" and "webtoon"
 /// scroll, per user direction to check other apps' conventions. Webtoon is vertical-only (that's
 /// the format convention) - no HorizontalWebtoon value.
+///
+/// <see cref="TopToBottom"/> (docs/superpowers/specs/2026-08-27-vertical-paged-reading-mode-
+/// design.md) is a <em>paged</em> vertical mode - one page fills the viewport exactly like
+/// <see cref="LeftToRight"/> (same fit/zoom/rotation), but page-turns advance downward instead of
+/// rightward. Distinct from <see cref="VerticalContinuous"/>, which scrolls. No RTL variant -
+/// vertical reading has no left/right-origin ambiguity. Same string storage, no migration.
 /// </summary>
 public enum ReadingMode
 {
     LeftToRight,
     RightToLeft,
+    TopToBottom,
     VerticalContinuous,
     HorizontalContinuous,
     HorizontalContinuousRightToLeft,

@@ -45,10 +45,16 @@ public partial class ReaderScreenViewModel : ViewModelBase
     private readonly Action _goBack;
     private int? _loadedIssueId;
     private int? _loadedSeriesId;
+
+    /// <summary>Set only via <see cref="Load"/>'s <c>readingListId</c> param - when non-null, chapter-boundary navigation resolves "adjacent" through that reading list's own order instead of series order (docs/superpowers/specs/2026-08-23-cbl-manager-manual-editing-and-list-aware-reading-design.md §3).</summary>
+    private int? _activeReadingListId;
     private IPageImageDecoder? _decoder;
     private int _currentPageIndex;
     private int _loadGeneration;
     private bool _isRightToLeft;
+
+    /// <summary>Per-page type/rotation overrides for the currently-loaded issue, keyed by page number - kept in sync with <see cref="Thumbnails"/>, queried on every page change instead of re-hitting the database (docs/ce-feature-inventory.md §A).</summary>
+    private readonly Dictionary<int, IssuePage> _pageOverrides = new();
 
     /// <summary>Bookmarked page numbers for the currently-loaded issue - kept in sync with <see cref="Bookmarks"/>, queried on every page change instead of re-hitting the database.</summary>
     private readonly HashSet<int> _bookmarkedPages = new();
@@ -96,12 +102,63 @@ public partial class ReaderScreenViewModel : ViewModelBase
     /// </summary>
     private bool _settingScrollOffsetFromAutoScroll;
 
-    public ReaderScreenViewModel(Action goBack)
+    /// <summary>Convenience overload for the ~130 existing call sites (this class predates
+    /// <see cref="KeyBindingService"/> being injected here) that don't care about shortcut hints -
+    /// constructs a real service against whatever database is currently active, same as every other
+    /// screen's own direct-instantiation precedent elsewhere in this codebase.</summary>
+    public ReaderScreenViewModel(Action goBack) : this(goBack, new KeyBindingService())
+    {
+    }
+
+    public ReaderScreenViewModel(Action goBack, KeyBindingService keyBindingService)
     {
         _goBack = goBack;
+        _keyBindingService = keyBindingService;
         CoverBrush = SeriesCardSample.Gradient("#442a1c", "#c9803f");
         Thumbnails = new ObservableCollection<ReaderThumbnailSample>();
         Bookmarks = new ObservableCollection<IssueBookmarkSummary>();
+    }
+
+    private readonly KeyBindingService _keyBindingService;
+
+    /// <summary>Live shortcut-hint text for a toolbar/cluster control (docs/superpowers/specs/
+    /// 2026-08-25-reader-chrome-design.md) - reads <see cref="KeyBindingService"/> fresh on every
+    /// call rather than caching, so a hint reflects a remap made in Preferences without this
+    /// ViewModel needing to listen for change notifications from a service it doesn't own.
+    /// <paramref name="commandId"/> is one of <see cref="KeyboardCommandRegistry"/>'s ids. Avalonia's
+    /// {Binding} markup has no parameterized-method-call syntax, so XAML can't call this directly -
+    /// the named Xxx*Hint properties below are the actual binding targets, each a thin wrapper.</summary>
+    public string GetShortcutHint(string commandId) => $"({_keyBindingService.GetKey(commandId)})";
+
+    // Named hint properties - one per cluster/drawer control that has a real remappable shortcut.
+    // Plain get-only properties (not [ObservableProperty]) since the value only ever needs to be
+    // fresh at the moment something makes a hint newly relevant to look at - RefreshShortcutHints()
+    // (called from NotifyCursorActivity, which already fires on every pointer move over the Reader)
+    // raises the change notification for all of them, so a remap made in Preferences and then
+    // returning to this already-open Reader screen (which persists across navigation, per this
+    // codebase's rail-nav "toggle IsVisible, never destroy" pattern) is reflected well before the
+    // user could actually hover to see a tooltip.
+    public string RotateClockwiseHint => GetShortcutHint(KeyboardCommandRegistry.ReaderRotateClockwise);
+    public string RotateCounterClockwiseHint => GetShortcutHint(KeyboardCommandRegistry.ReaderRotateCounterClockwise);
+    public string AutoScrollHint => GetShortcutHint(KeyboardCommandRegistry.ReaderToggleAutoScroll);
+    public string ZoomInHint => GetShortcutHint(KeyboardCommandRegistry.ReaderZoomIn);
+    public string ZoomOutHint => GetShortcutHint(KeyboardCommandRegistry.ReaderZoomOut);
+    public string PageTurnLeftHint => GetShortcutHint(KeyboardCommandRegistry.ReaderPageTurnLeft);
+    public string PageTurnRightHint => GetShortcutHint(KeyboardCommandRegistry.ReaderPageTurnRight);
+    public string PreviousBookmarkHint => GetShortcutHint(KeyboardCommandRegistry.ReaderPreviousBookmark);
+    public string NextBookmarkHint => GetShortcutHint(KeyboardCommandRegistry.ReaderNextBookmark);
+
+    private void RefreshShortcutHints()
+    {
+        OnPropertyChanged(nameof(RotateClockwiseHint));
+        OnPropertyChanged(nameof(RotateCounterClockwiseHint));
+        OnPropertyChanged(nameof(AutoScrollHint));
+        OnPropertyChanged(nameof(ZoomInHint));
+        OnPropertyChanged(nameof(ZoomOutHint));
+        OnPropertyChanged(nameof(PageTurnLeftHint));
+        OnPropertyChanged(nameof(PageTurnRightHint));
+        OnPropertyChanged(nameof(PreviousBookmarkHint));
+        OnPropertyChanged(nameof(NextBookmarkHint));
     }
 
     public ObservableCollection<ReaderThumbnailSample> Thumbnails { get; }
@@ -359,6 +416,15 @@ public partial class ReaderScreenViewModel : ViewModelBase
     /// </summary>
     public event Action<int>? CurrentPageIndexChanged;
 
+    /// <summary>Fires from <see cref="LoadIssue"/> once an issue has finished loading - the Plugin API v2 BookOpened hook's anchor (docs/superpowers/specs/2026-08-24-plugin-api-v2-design.md §5).</summary>
+    public event Action<Issue>? IssueOpened;
+
+    /// <summary>The issue this screen currently has loaded, or null before the first <see cref="LoadIssue"/> call this session. Exposed for <c>Paperbunkr.Plugins.Automation.IComicDisplay</c>.</summary>
+    public Issue? LoadedIssue { get; private set; }
+
+    /// <summary>Read-only view of <see cref="_currentPageIndex"/> for <c>Paperbunkr.Plugins.Automation.IComicDisplay</c>.</summary>
+    public int CurrentPageIndex => _currentPageIndex;
+
     partial void OnCurrentContinuousPageIndexChanged(int value)
     {
         if (!IsContinuousMode || value < 0 || PageCount <= 0)
@@ -409,6 +475,16 @@ public partial class ReaderScreenViewModel : ViewModelBase
     /// <summary>Session-only (spec §3) - resets on every <see cref="Load"/>, never persisted. Composed with <see cref="AutoRotate"/> inside <see cref="Views.PageCanvas"/>, which is the layer that actually knows the current page bitmap's landscape/portrait shape.</summary>
     [ObservableProperty]
     private int _manualRotationDegrees;
+
+    /// <summary>
+    /// Per-page persisted rotation override (docs/ce-feature-inventory.md §A), unlike <see
+    /// cref="ManualRotationDegrees"/> above - this one survives across sessions because it's tied to
+    /// a specific page, not "however I left the book last time I closed it." Recomputed on every page
+    /// turn (<see cref="GoToPage"/>) from <see cref="_pageOverrides"/>; composed with the session-only
+    /// rotation inside <see cref="Views.PageCanvas.EffectiveRotationDegrees"/>.
+    /// </summary>
+    [ObservableProperty]
+    private int _pageRotationOverrideDegrees;
 
     /// <summary>Whether <see cref="ZoomLevel"/> resets to 1.0 on every page turn (docs/superpowers/specs/2026-08-10-preferences-reader-tab-design.md), read from <c>AppSettings.ResetZoomOnPageChange</c> on <see cref="Load"/>.</summary>
     private bool _resetZoomOnPageChange;
@@ -589,8 +665,15 @@ public partial class ReaderScreenViewModel : ViewModelBase
 
     partial void OnErrorMessageChanged(string? value) => OnPropertyChanged(nameof(HasError));
 
-    /// <summary>Loads a specific issue by id (e.g. from Detail's Continue button).</summary>
-    public void LoadIssue(int issueId)
+    /// <summary>
+    /// Loads a specific issue by id (e.g. from Detail's Continue button).
+    /// <paramref name="readingListId"/> anchors chapter-boundary navigation to that reading list's
+    /// order (docs/superpowers/specs/2026-08-23-cbl-manager-manual-editing-and-list-aware-reading-
+    /// design.md §3) - passed only by entry points that already know which list the issue came from
+    /// (Reading Lists' click-to-read, Home's "Try This Reading List" card); every other caller keeps
+    /// today's plain series-order behavior.
+    /// </summary>
+    public void LoadIssue(int issueId, int? readingListId = null)
     {
         using var context = PaperbunkrDb.CreateContext();
         var issue = context.Issues.Include(i => i.Series).Include(i => i.MetadataProposals).FirstOrDefault(i => i.Id == issueId);
@@ -599,7 +682,9 @@ public partial class ReaderScreenViewModel : ViewModelBase
             return;
         }
 
-        Load(issue, issue.Series, context);
+        Load(issue, issue.Series, context, readingListId: readingListId);
+        LoadedIssue = issue;
+        IssueOpened?.Invoke(issue);
     }
 
     /// <summary>
@@ -631,9 +716,15 @@ public partial class ReaderScreenViewModel : ViewModelBase
     /// <c>OpenLastPage</c> preference, which only governs *reopening* an issue from elsewhere
     /// (Detail's Continue button, the rail nav). Passing <see cref="int.MaxValue"/> is a
     /// deliberate "clamp to the last page" sentinel - the real page count isn't known until after
-    /// the decoder opens below.
+    /// the decoder opens below. <paramref name="readingListId"/> sets/clears
+    /// <see cref="_activeReadingListId"/> (docs/superpowers/specs/2026-08-23-cbl-manager-manual-
+    /// editing-and-list-aware-reading-design.md §3) - every caller must pass explicitly what it
+    /// intends: <see langword="null"/> (the default) always clears any previous anchor, so a fresh
+    /// open from a non-list entry point exits list mode; <see cref="NavigateToAdjacentIssue"/>'s own
+    /// call passes the *current* <see cref="_activeReadingListId"/> back through so the anchor
+    /// survives further boundary crossings.
     /// </summary>
-    private void Load(Issue issue, Series series, PaperbunkrDbContext context, int? forcedStartPage = null)
+    private void Load(Issue issue, Series series, PaperbunkrDbContext context, int? forcedStartPage = null, int? readingListId = null)
     {
         // Flushes the *previous* issue's throttled continuous-mode position (spec §6) before this
         // method reassigns _loadedIssueId below - otherwise up to PositionSaveDebounce's worth of
@@ -666,6 +757,7 @@ public partial class ReaderScreenViewModel : ViewModelBase
         CurrentPage = null;
         _loadedIssueId = issue.Id;
         _loadedSeriesId = series.Id;
+        _activeReadingListId = readingListId;
 
         // Real open-tracking (docs/superpowers/specs/2026-08-17-metadata-model-phase1-canonical-
         // metadata-design.md) - the first place either of these fields is actually written; confirmed
@@ -674,6 +766,17 @@ public partial class ReaderScreenViewModel : ViewModelBase
         // flips 0->1 on mark-as-read), this is a real counter, incremented on every load.
         issue.OpenCount++;
         issue.OpenedTime = DateTime.UtcNow;
+
+        // Light-touch nudge (docs/superpowers/specs/2026-08-19-metadata-model-reading-status-
+        // design.md) - only the Unknown->Reading transition is automatic; every other ReadingStatus
+        // change (Completed/Paused/Dropped/ReReading) is user-driven, matching this codebase's
+        // existing minimal-automation stance for series-level state (e.g. Status/ContentType are
+        // never auto-set either).
+        if (series.ReadingStatus is ReadingStatus.Unknown or ReadingStatus.Planned)
+        {
+            series.ReadingStatus = ReadingStatus.Reading;
+        }
+
         context.SaveChanges();
 
         CoverBrush = SeriesCardSample.CoverBrushFor(series.Name);
@@ -801,11 +904,29 @@ public partial class ReaderScreenViewModel : ViewModelBase
 
         IsCurrentPageBookmarked = _bookmarkedPages.Contains(_currentPageIndex);
 
+        // Per-page type tagging + persisted rotation override (docs/ce-feature-inventory.md §A) -
+        // sparse, same convention as Bookmarks above; a page with no row is Story/0deg by default.
+        _pageOverrides.Clear();
+        foreach (var pageOverride in context.IssuePages.Where(p => p.IssueId == issue.Id))
+        {
+            _pageOverrides[pageOverride.PageNumber] = pageOverride;
+        }
+
+        PageRotationOverrideDegrees = _pageOverrides.TryGetValue(_currentPageIndex, out var currentOverride) ? currentOverride.RotationDegrees : 0;
+
         Thumbnails.Clear();
         int thumbnailCount = Math.Min(pageCount, MaxThumbnails);
         for (int page = 0; page < thumbnailCount; page++)
         {
-            Thumbnails.Add(new ReaderThumbnailSample { CoverBrush = CoverBrush, IsSelected = page == _currentPageIndex, IsBookmarked = _bookmarkedPages.Contains(page) });
+            _pageOverrides.TryGetValue(page, out var pageOverride);
+            Thumbnails.Add(new ReaderThumbnailSample
+            {
+                CoverBrush = CoverBrush,
+                IsSelected = page == _currentPageIndex,
+                IsBookmarked = _bookmarkedPages.Contains(page),
+                PageType = pageOverride?.PageType ?? PageType.Story,
+                IsRotated = (pageOverride?.RotationDegrees ?? 0) != 0,
+            });
         }
 
         OnPropertyChanged(nameof(CoverBrush));
@@ -845,6 +966,7 @@ public partial class ReaderScreenViewModel : ViewModelBase
         ReadingModeLabel = effectiveMode switch
         {
             ReadingMode.RightToLeft => "Right to Left ▾",
+            ReadingMode.TopToBottom => "Vertical ▾",
             ReadingMode.VerticalContinuous => "Vertical (Continuous) ▾",
             ReadingMode.HorizontalContinuous => "Horizontal (Continuous) ▾",
             ReadingMode.HorizontalContinuousRightToLeft => "Horizontal RTL (Continuous) ▾",
@@ -1068,34 +1190,48 @@ public partial class ReaderScreenViewModel : ViewModelBase
     private bool _isFullscreen;
 
     /// <summary>
-    /// On-canvas status text/scrubber overlays (spec §7) - shown immediately on entering fullscreen,
-    /// then auto-hidden after <see cref="OverlayAutoHideDelay"/> of cursor inactivity and re-shown on
-    /// <see cref="NotifyCursorActivity"/>, matching the spec's "auto-hide after a few seconds of
-    /// cursor idle... reappearing on mouse move" (CE's <c>AutoHideCursor</c> UX pattern). Overlays
-    /// are the fullscreen-only replacement for the collapsed toolbar's page label/navigation, not a
-    /// windowed-mode feature - false whenever <see cref="IsFullscreen"/> is false.
+    /// Drives every floating chrome cluster/drawer trigger's visibility (docs/superpowers/specs/
+    /// 2026-08-25-reader-chrome-design.md) - shown on any cursor activity, then auto-hidden after
+    /// <see cref="OverlayAutoHideDelay"/> of inactivity, matching CE's <c>AutoHideCursor</c> UX
+    /// pattern. Originally fullscreen-only (named <c>ShowFullscreenOverlays</c>); this phase applies
+    /// the exact same mechanism to windowed mode too, retiring the old two-different-chrome-systems
+    /// split - <see cref="NotifyCursorActivity"/> no longer gates on <see cref="IsFullscreen"/>.
     /// </summary>
     [ObservableProperty]
-    private bool _showFullscreenOverlays;
+    private bool _showChrome = true;
+
+    /// <summary>Whether the Actions cluster's drawer is open (docs/superpowers/specs/2026-08-25-reader-chrome-design.md) - independent of <see cref="ShowChrome"/>: the drawer represents deliberate intent to see it, so it does not idle-fade.</summary>
+    [ObservableProperty]
+    private bool _isDrawerOpen;
+
+    /// <summary>True once the hosting window narrows below the View cluster's ~720px crowding
+    /// threshold (docs/superpowers/specs/2026-08-25-reader-chrome-design.md) - set from
+    /// <see cref="Views.ReaderScreen"/>'s own width tracking, not measured here. When true, the View
+    /// cluster shows only the reading-mode picker and fit-mode/zoom move into the drawer.</summary>
+    [ObservableProperty]
+    private bool _isViewClusterCollapsed;
+
+    /// <summary>Transient flag for the Actions cluster's bookmark-toggle glow pulse (docs/superpowers/specs/2026-08-25-reader-chrome-design.md) - true for one <see cref="PbGlowPulseDuration"/>-long window after each toggle, then cleared by <see cref="_bookmarkGlowTimer"/>. Not a hover/focus state like <c>PbGlowRing</c>'s usual trigger, so it needs its own one-shot timer rather than reusing a pseudo-class.</summary>
+    [ObservableProperty]
+    private bool _bookmarkJustToggled;
 
     private static readonly TimeSpan OverlayAutoHideDelay = TimeSpan.FromSeconds(3);
     private DispatcherTimer? _overlayAutoHideTimer;
+
+    /// <summary>Matches App.axaml's PbMotionFast value (150ms) - can't bind a C# DispatcherTimer to the XAML resource directly, so the value is duplicated here rather than reading Application.Current.Resources for a single timer interval.</summary>
+    private static readonly TimeSpan PbGlowPulseDuration = TimeSpan.FromMilliseconds(150);
+    private DispatcherTimer? _bookmarkGlowTimer;
 
     [RelayCommand]
     private void ToggleFullscreen()
     {
         IsFullscreen = !IsFullscreen;
-        if (IsFullscreen)
-        {
-            ShowFullscreenOverlays = true;
-            RestartOverlayAutoHideTimer();
-        }
-        else
-        {
-            _overlayAutoHideTimer?.Stop();
-            ShowFullscreenOverlays = false;
-        }
+        ShowChrome = true;
+        RestartOverlayAutoHideTimer();
     }
+
+    [RelayCommand]
+    private void ToggleDrawer() => IsDrawerOpen = !IsDrawerOpen;
 
     // ===================== Bookmarks (docs/superpowers/specs/2026-08-18-metadata-model-ui-gaps-status-and-bookmarks-design.md) =====================
 
@@ -1125,6 +1261,7 @@ public partial class ReaderScreenViewModel : ViewModelBase
         if (existing is not null)
         {
             DeleteBookmark(existing);
+            PulseBookmarkGlow();
             return;
         }
 
@@ -1150,6 +1287,26 @@ public partial class ReaderScreenViewModel : ViewModelBase
         _bookmarkedPages.Add(_currentPageIndex);
         IsCurrentPageBookmarked = true;
         SetThumbnailBookmarked(_currentPageIndex, true);
+        PulseBookmarkGlow();
+    }
+
+    /// <summary>One-shot glow pulse for the Actions cluster's bookmark toggle (docs/superpowers/specs/2026-08-25-reader-chrome-design.md) - not a hover/focus state, so it can't reuse PbGlowRing's usual pseudo-class trigger; this flips BookmarkJustToggled on then off after PbGlowPulseDuration.</summary>
+    private void PulseBookmarkGlow()
+    {
+        BookmarkJustToggled = true;
+
+        if (_bookmarkGlowTimer is null)
+        {
+            _bookmarkGlowTimer = new DispatcherTimer { Interval = PbGlowPulseDuration };
+            _bookmarkGlowTimer.Tick += (_, _) =>
+            {
+                _bookmarkGlowTimer!.Stop();
+                BookmarkJustToggled = false;
+            };
+        }
+
+        _bookmarkGlowTimer.Stop();
+        _bookmarkGlowTimer.Start();
     }
 
     [RelayCommand]
@@ -1187,6 +1344,48 @@ public partial class ReaderScreenViewModel : ViewModelBase
         }
     }
 
+    /// <summary>Named bookmarks (docs/ce-feature-inventory.md §A) - <see cref="IssueBookmark.Label"/>
+    /// already existed in the schema but nothing ever wrote a user-chosen value to it; every bookmark
+    /// got the same auto-generated "Page N" text. Switches the row into edit mode; <see
+    /// cref="CommitRenameBookmark"/> is the only thing that actually persists a new value.</summary>
+    [RelayCommand]
+    private void BeginRenameBookmark(IssueBookmarkSummary? bookmark)
+    {
+        if (bookmark is null)
+        {
+            return;
+        }
+
+        bookmark.EditText = bookmark.Label;
+        bookmark.IsEditing = true;
+    }
+
+    [RelayCommand]
+    private void CommitRenameBookmark(IssueBookmarkSummary? bookmark)
+    {
+        if (bookmark is null)
+        {
+            return;
+        }
+
+        bookmark.IsEditing = false;
+        string newLabel = string.IsNullOrWhiteSpace(bookmark.EditText) ? $"Page {bookmark.PageNumber + 1}" : bookmark.EditText.Trim();
+        if (newLabel == bookmark.Label)
+        {
+            return;
+        }
+
+        bookmark.Label = newLabel;
+
+        using var context = PaperbunkrDb.CreateContext();
+        var row = context.IssueBookmarks.Find(bookmark.Id);
+        if (row is not null)
+        {
+            row.Label = newLabel;
+            context.SaveChanges();
+        }
+    }
+
     [RelayCommand]
     private void PreviousBookmark()
     {
@@ -1207,6 +1406,85 @@ public partial class ReaderScreenViewModel : ViewModelBase
         }
     }
 
+    // ===================== Per-page type + rotation override (docs/ce-feature-inventory.md §A) =====================
+
+    /// <summary>
+    /// Shared by every Set* command below - resolves the thumbnail that was right-clicked to a page
+    /// number the same way <see cref="SelectThumbnail"/> does, upserts the row (fresh context, same
+    /// "inline, no separate resolver" convention as bookmarks), and deletes it again if the result is
+    /// back to the all-default Story/0deg state - keeps storage sparse, matching <see
+    /// cref="IssuePage"/>'s own doc comment. <paramref name="newType"/>/<paramref name="newRotation"/>
+    /// are each null when the caller isn't changing that half (a page-type command leaves rotation
+    /// alone and vice versa).
+    /// </summary>
+    private void SetPageOverride(ReaderThumbnailSample? thumbnail, PageType? newType, int? newRotation)
+    {
+        if (thumbnail is null || _loadedIssueId is not int issueId)
+        {
+            return;
+        }
+
+        int pageNumber = Thumbnails.IndexOf(thumbnail);
+        if (pageNumber < 0)
+        {
+            return;
+        }
+
+        using var context = PaperbunkrDb.CreateContext();
+        var row = context.IssuePages.FirstOrDefault(p => p.IssueId == issueId && p.PageNumber == pageNumber);
+        PageType effectiveType = newType ?? row?.PageType ?? PageType.Story;
+        int effectiveRotation = newRotation ?? row?.RotationDegrees ?? 0;
+
+        if (effectiveType == PageType.Story && effectiveRotation == 0)
+        {
+            if (row is not null)
+            {
+                context.IssuePages.Remove(row);
+                context.SaveChanges();
+            }
+
+            _pageOverrides.Remove(pageNumber);
+        }
+        else
+        {
+            if (row is null)
+            {
+                row = new IssuePage { IssueId = issueId, PageNumber = pageNumber };
+                context.IssuePages.Add(row);
+            }
+
+            row.PageType = effectiveType;
+            row.RotationDegrees = effectiveRotation;
+            context.SaveChanges();
+            _pageOverrides[pageNumber] = row;
+        }
+
+        Thumbnails[pageNumber] = new ReaderThumbnailSample
+        {
+            CoverBrush = CoverBrush,
+            CoverImage = thumbnail.CoverImage,
+            IsSelected = thumbnail.IsSelected,
+            IsBookmarked = thumbnail.IsBookmarked,
+            PageType = effectiveType,
+            IsRotated = effectiveRotation != 0,
+        };
+
+        if (pageNumber == _currentPageIndex)
+        {
+            PageRotationOverrideDegrees = effectiveRotation;
+        }
+    }
+
+    [RelayCommand] private void SetPageTypeStory(ReaderThumbnailSample? thumbnail) => SetPageOverride(thumbnail, PageType.Story, null);
+    [RelayCommand] private void SetPageTypeCover(ReaderThumbnailSample? thumbnail) => SetPageOverride(thumbnail, PageType.Cover, null);
+    [RelayCommand] private void SetPageTypeAdvertisement(ReaderThumbnailSample? thumbnail) => SetPageOverride(thumbnail, PageType.Advertisement, null);
+    [RelayCommand] private void SetPageTypeDeleted(ReaderThumbnailSample? thumbnail) => SetPageOverride(thumbnail, PageType.Deleted, null);
+
+    [RelayCommand] private void SetPageRotation0(ReaderThumbnailSample? thumbnail) => SetPageOverride(thumbnail, null, 0);
+    [RelayCommand] private void SetPageRotation90(ReaderThumbnailSample? thumbnail) => SetPageOverride(thumbnail, null, 90);
+    [RelayCommand] private void SetPageRotation180(ReaderThumbnailSample? thumbnail) => SetPageOverride(thumbnail, null, 180);
+    [RelayCommand] private void SetPageRotation270(ReaderThumbnailSample? thumbnail) => SetPageOverride(thumbnail, null, 270);
+
     /// <summary>Updates one thumbnail's <see cref="ReaderThumbnailSample.IsBookmarked"/> in place, without the full rebuild <see cref="UpdateThumbnailSelection"/> does for a page change - <see cref="ToggleBookmark"/>/<see cref="DeleteBookmark"/> don't change which page is current.</summary>
     private void SetThumbnailBookmarked(int page, bool isBookmarked)
     {
@@ -1216,7 +1494,11 @@ public partial class ReaderScreenViewModel : ViewModelBase
         }
 
         var existing = Thumbnails[page];
-        Thumbnails[page] = new ReaderThumbnailSample { CoverBrush = CoverBrush, CoverImage = existing.CoverImage, IsSelected = existing.IsSelected, IsBookmarked = isBookmarked };
+        Thumbnails[page] = new ReaderThumbnailSample
+        {
+            CoverBrush = CoverBrush, CoverImage = existing.CoverImage, IsSelected = existing.IsSelected, IsBookmarked = isBookmarked,
+            PageType = existing.PageType, IsRotated = existing.IsRotated,
+        };
     }
 
     /// <summary>
@@ -1281,16 +1563,12 @@ public partial class ReaderScreenViewModel : ViewModelBase
         }
     }
 
-    /// <summary>Called by <see cref="Views.ReaderScreen"/> on pointer movement over the Reader - a no-op outside fullscreen, same guard shape as every other fullscreen-only path here.</summary>
+    /// <summary>Called by <see cref="Views.ReaderScreen"/> on pointer movement over the Reader - applies in both windowed and fullscreen now (docs/superpowers/specs/2026-08-25-reader-chrome-design.md), unlike the fullscreen-only guard this replaced.</summary>
     public void NotifyCursorActivity()
     {
-        if (!IsFullscreen)
-        {
-            return;
-        }
-
-        ShowFullscreenOverlays = true;
+        ShowChrome = true;
         RestartOverlayAutoHideTimer();
+        RefreshShortcutHints();
     }
 
     private void RestartOverlayAutoHideTimer()
@@ -1301,7 +1579,7 @@ public partial class ReaderScreenViewModel : ViewModelBase
             _overlayAutoHideTimer.Tick += (_, _) =>
             {
                 _overlayAutoHideTimer!.Stop();
-                ShowFullscreenOverlays = false;
+                ShowChrome = false;
             };
         }
 
@@ -1386,7 +1664,11 @@ public partial class ReaderScreenViewModel : ViewModelBase
                     }
 
                     var existing = Thumbnails[capturedPage];
-                    Thumbnails[capturedPage] = new ReaderThumbnailSample { CoverBrush = CoverBrush, CoverImage = thumb, IsSelected = existing.IsSelected };
+                    Thumbnails[capturedPage] = new ReaderThumbnailSample
+                    {
+                        CoverBrush = CoverBrush, CoverImage = thumb, IsSelected = existing.IsSelected, IsBookmarked = existing.IsBookmarked,
+                        PageType = existing.PageType, IsRotated = existing.IsRotated,
+                    };
                 });
             }
         });
@@ -1492,7 +1774,8 @@ public partial class ReaderScreenViewModel : ViewModelBase
         }
     }
 
-    private void GoToPage(int pageIndex)
+    /// <summary>Public for <c>Paperbunkr.Plugins.Automation.IComicDisplay</c> (docs/superpowers/specs/2026-08-24-plugin-api-v2-design.md §4) - unchanged behavior otherwise, still the same method every in-app page-turn path already called.</summary>
+    public void GoToPage(int pageIndex)
     {
         if (_decoder is null || _loadedIssueId is not int issueId)
         {
@@ -1507,6 +1790,7 @@ public partial class ReaderScreenViewModel : ViewModelBase
 
         _currentPageIndex = pageIndex;
         UpdatePageLabelAndProgress();
+        PageRotationOverrideDegrees = _pageOverrides.TryGetValue(_currentPageIndex, out var pageOverride) ? pageOverride.RotationDegrees : 0;
 
         // AppSettings.ResetZoomOnPageChange (docs/superpowers/specs/2026-08-10-preferences-reader-
         // tab-design.md) - CE parity, off by default (matches Paperbunkr's own pre-existing
@@ -1544,7 +1828,11 @@ public partial class ReaderScreenViewModel : ViewModelBase
         for (int page = 0; page < thumbnailCount; page++)
         {
             var existing = Thumbnails[page];
-            Thumbnails[page] = new ReaderThumbnailSample { CoverBrush = CoverBrush, CoverImage = existing.CoverImage, IsSelected = page == _currentPageIndex, IsBookmarked = existing.IsBookmarked };
+            Thumbnails[page] = new ReaderThumbnailSample
+            {
+                CoverBrush = CoverBrush, CoverImage = existing.CoverImage, IsSelected = page == _currentPageIndex, IsBookmarked = existing.IsBookmarked,
+                PageType = existing.PageType, IsRotated = existing.IsRotated,
+            };
         }
 
         IsCurrentPageBookmarked = _bookmarkedPages.Contains(_currentPageIndex);
@@ -1643,7 +1931,7 @@ public partial class ReaderScreenViewModel : ViewModelBase
             return;
         }
 
-        NavigateToAdjacentIssue(forward: false);
+        TriggerChapterTransition(forward: false);
     }
 
     [RelayCommand]
@@ -1659,7 +1947,7 @@ public partial class ReaderScreenViewModel : ViewModelBase
             return;
         }
 
-        NavigateToAdjacentIssue(forward: true);
+        TriggerChapterTransition(forward: true);
     }
 
     /// <summary>
@@ -1697,39 +1985,286 @@ public partial class ReaderScreenViewModel : ViewModelBase
 
     /// <summary>
     /// "Reading beyond the start or end opens the next Book" (docs/superpowers/specs/
-    /// 2026-08-07-preferences-behavior-tab-design.md §3), gated by <c>AutoNavigateComics</c>.
-    /// Forward lands on the next issue's first page; backward lands on the previous issue's
-    /// *last* page, so backward reading flows continuously instead of restarting each issue.
-    /// No-ops at either end of the series, or when the setting is off - same as today's clamp.
+    /// 2026-08-07-preferences-behavior-tab-design.md §3), gated by <c>AutoNavigateComics</c> unless
+    /// <paramref name="bypassAutoNavigateSetting"/> (the explicit Previous/Next Chapter buttons,
+    /// docs/superpowers/specs/2026-08-23-reader-chapter-transition-design.md - a deliberate user
+    /// action, not the automatic behavior that setting governs). Forward lands on the next issue's
+    /// first page; backward lands on the previous issue's *last* page, so backward reading flows
+    /// continuously instead of restarting each issue. No-ops at either end of the series, or when
+    /// the setting is off and not bypassed - same as today's clamp.
     /// </summary>
-    private void NavigateToAdjacentIssue(bool forward)
+    private void NavigateToAdjacentIssue(bool forward, bool bypassAutoNavigateSetting = false)
     {
-        if (_loadedSeriesId is not int seriesId || _loadedIssueId is not int currentIssueId)
+        using var context = PaperbunkrDb.CreateContext();
+        if (!bypassAutoNavigateSetting && !context.GetOrCreateAppSettings().AutoNavigateComics)
         {
             return;
         }
 
-        using var context = PaperbunkrDb.CreateContext();
-        if (!context.GetOrCreateAppSettings().AutoNavigateComics)
+        if (!TryResolveAdjacentIssue(context, forward, out _, out var toIssue))
         {
             return;
+        }
+
+        // _activeReadingListId passed straight back through - the anchor survives this jump (spec
+        // §3) rather than being cleared like a fresh external LoadIssue call would.
+        Load(toIssue, toIssue.Series!, context, forcedStartPage: forward ? 0 : int.MaxValue, readingListId: _activeReadingListId);
+    }
+
+    /// <summary>
+    /// Shared adjacent-issue resolution for both <see cref="NavigateToAdjacentIssue"/> and
+    /// <see cref="TryGetAdjacentIssuePreview"/> (docs/superpowers/specs/2026-08-23-cbl-manager-
+    /// manual-editing-and-list-aware-reading-design.md §3) - each still creates and owns its own
+    /// <see cref="PaperbunkrDbContext"/> per <see cref="TryGetAdjacentIssuePreview"/>'s existing
+    /// remarks (one context needs to outlive a hold-timer delay, the other is disposed immediately),
+    /// this just removes the duplicated index-finding query the two used to carry separately. When
+    /// <see cref="_activeReadingListId"/> is set, resolves through that reading list's own
+    /// <c>SortOrder</c> instead of series order - a list can span multiple series - skipping over
+    /// Missing rows (not readable, same reason they have no click-to-read) to the next real one, and
+    /// stopping at the list's own boundary with no fallback to series order.
+    /// </summary>
+    private bool TryResolveAdjacentIssue(PaperbunkrDbContext context, bool forward, out Issue fromIssue, out Issue toIssue)
+    {
+        fromIssue = null!;
+        toIssue = null!;
+
+        if (_loadedIssueId is not int currentIssueId)
+        {
+            return false;
+        }
+
+        if (_activeReadingListId is int listId)
+        {
+            var items = context.ReadingListItems
+                .Where(i => i.ReadingListId == listId)
+                .Include(i => i.Issue).ThenInclude(i => i!.Series)
+                .Include(i => i.Issue).ThenInclude(i => i!.MetadataProposals)
+                .OrderBy(i => i.SortOrder)
+                .ToList();
+            int listIndex = items.FindIndex(i => i.IssueId == currentIssueId);
+            if (listIndex < 0)
+            {
+                return false;
+            }
+
+            fromIssue = items[listIndex].Issue!;
+            int step = forward ? 1 : -1;
+            for (int i = listIndex + step; i >= 0 && i < items.Count; i += step)
+            {
+                if (items[i].Issue is { FileIsMissing: false, Series: not null } candidate)
+                {
+                    toIssue = candidate;
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        if (_loadedSeriesId is not int seriesId)
+        {
+            return false;
         }
 
         var series = context.Series.Include(s => s.Issues).ThenInclude(i => i.MetadataProposals).FirstOrDefault(s => s.Id == seriesId);
         var orderedIssues = series?.Issues.OrderByNumber().ToList();
-        int index = orderedIssues?.FindIndex(i => i.Id == currentIssueId) ?? -1;
-        if (series is null || orderedIssues is null || index < 0)
+        int seriesIndex = orderedIssues?.FindIndex(i => i.Id == currentIssueId) ?? -1;
+        if (series is null || orderedIssues is null || seriesIndex < 0)
         {
-            return;
+            return false;
         }
 
-        int adjacentIndex = forward ? index + 1 : index - 1;
+        int adjacentIndex = forward ? seriesIndex + 1 : seriesIndex - 1;
         if (adjacentIndex < 0 || adjacentIndex >= orderedIssues.Count)
         {
+            return false;
+        }
+
+        fromIssue = orderedIssues[seriesIndex];
+        toIssue = orderedIssues[adjacentIndex];
+        toIssue.Series ??= series;
+        return true;
+    }
+
+    // ===================== Chapter transition (docs/superpowers/specs/2026-08-23-reader-chapter-
+    // transition-design.md) - visual feedback for NavigateToAdjacentIssue's boundary crossing, plus
+    // explicit manual chapter navigation. =====================
+
+    [ObservableProperty]
+    private ChapterTransitionState _chapterTransitionState = ChapterTransitionState.Hidden;
+
+    [ObservableProperty]
+    private string? _chapterTransitionFromLabel;
+
+    [ObservableProperty]
+    private string? _chapterTransitionToLabel;
+
+    [ObservableProperty]
+    private Bitmap? _chapterTransitionCoverImage;
+
+    private static readonly TimeSpan ChapterTransitionHoldDelay = TimeSpan.FromMilliseconds(1200);
+
+    /// <summary>Shorter hold for the explicit Previous/Next Chapter buttons (spec's "skip the paged-mode 1.2s auto-hold" - a deliberate action needs the card to be perceptible, not held for as long as the automatic boundary crossing's.</summary>
+    private static readonly TimeSpan ManualChapterTransitionHoldDelay = TimeSpan.FromMilliseconds(500);
+
+    /// <summary>Continuous mode only - gives Avalonia one render pass to actually paint the <see cref="ChapterTransitionState.Loading"/> state before the adjacent issue's (synchronous) decoder startup runs, so the spinner isn't just skipped over.</summary>
+    private static readonly TimeSpan ChapterTransitionLoadDeferDelay = TimeSpan.FromMilliseconds(50);
+
+    private DispatcherTimer? _chapterTransitionHoldTimer;
+    private DispatcherTimer? _chapterTransitionLoadDeferTimer;
+
+    /// <summary>Whether <see cref="OnChapterTransitionHoldTick"/> should run the real navigate on top of hiding the card - true for the automatic paged-mode path (<see cref="TriggerChapterTransition"/>), false when the navigate already happened before the card was shown (<see cref="ChapterBoundaryOverscroll"/>, <see cref="JumpChapterExplicitly"/>).</summary>
+    private bool _pendingChapterTransitionForward;
+    private bool _chapterTransitionHoldShouldNavigate;
+
+    /// <summary>Set by <see cref="ChapterBoundaryOverscroll"/> for <see cref="OnChapterTransitionLoadDeferTick"/> to read - a real <see cref="DispatcherTimer.Tick"/> carries no payload of its own, same reason <see cref="OnAutoScrollTick"/>'s tick reads back from instance state rather than a captured closure.</summary>
+    private bool _pendingChapterTransitionOverscrollForward;
+    private Issue? _pendingChapterTransitionFromIssue;
+    private Issue? _pendingChapterTransitionToIssue;
+
+    /// <summary>
+    /// Paged mode's boundary trigger (<see cref="NextPage"/>/<see cref="PreviousPage"/>, at the
+    /// last/first real page). Shows the card immediately (no <see cref="ChapterTransitionState.Loading"/>
+    /// state - the current issue's last page is already decoded and the adjacent issue's first-page
+    /// decode is fast enough here that a spinner would just flicker), holds it, then runs the real
+    /// navigate. Re-entrant presses while a transition is already showing are ignored.
+    /// </summary>
+    private void TriggerChapterTransition(bool forward)
+    {
+        if (ChapterTransitionState != ChapterTransitionState.Hidden)
+        {
             return;
         }
 
-        Load(orderedIssues[adjacentIndex], series, context, forcedStartPage: forward ? 0 : int.MaxValue);
+        if (!TryGetAdjacentIssuePreview(forward, bypassAutoNavigateSetting: false, out var fromIssue, out var toIssue))
+        {
+            return;
+        }
+
+        ShowChapterTransitionCard(fromIssue, toIssue);
+        _pendingChapterTransitionForward = forward;
+        _chapterTransitionHoldShouldNavigate = true;
+        StartChapterTransitionAutoHide(ChapterTransitionHoldDelay);
+    }
+
+    /// <summary>Continuous mode's boundary trigger - bound to <see cref="Views.PageCanvas.ChapterBoundaryOverscrollCommand"/>, fired once the scroll-boundary overscroll pull crosses its threshold. Unlike <see cref="TriggerChapterTransition"/>, the navigate happens first (behind a brief <see cref="ChapterTransitionState.Loading"/> state, via <see cref="OnChapterTransitionLoadDeferTick"/>) so the card can show the *new* issue's cover without a visible gap.</summary>
+    [RelayCommand]
+    private void ChapterBoundaryOverscroll(bool forward)
+    {
+        if (ChapterTransitionState != ChapterTransitionState.Hidden)
+        {
+            return;
+        }
+
+        if (!TryGetAdjacentIssuePreview(forward, bypassAutoNavigateSetting: false, out var fromIssue, out var toIssue))
+        {
+            return;
+        }
+
+        ChapterTransitionState = ChapterTransitionState.Loading;
+        _pendingChapterTransitionOverscrollForward = forward;
+        _pendingChapterTransitionFromIssue = fromIssue;
+        _pendingChapterTransitionToIssue = toIssue;
+
+        if (_chapterTransitionLoadDeferTimer is null)
+        {
+            _chapterTransitionLoadDeferTimer = new DispatcherTimer { Interval = ChapterTransitionLoadDeferDelay };
+            _chapterTransitionLoadDeferTimer.Tick += OnChapterTransitionLoadDeferTick;
+        }
+
+        _chapterTransitionLoadDeferTimer.Stop();
+        _chapterTransitionLoadDeferTimer.Start();
+    }
+
+    /// <summary>Test seam, same rationale as <see cref="OnAutoScrollTick"/> - lets a test simulate the deferred-load tick without waiting on a real <see cref="DispatcherTimer"/>.</summary>
+    internal void OnChapterTransitionLoadDeferTick(object? sender, EventArgs e)
+    {
+        _chapterTransitionLoadDeferTimer!.Stop();
+        bool forward = _pendingChapterTransitionOverscrollForward;
+        var fromIssue = _pendingChapterTransitionFromIssue!;
+        var toIssue = _pendingChapterTransitionToIssue!;
+        NavigateToAdjacentIssue(forward);
+        ShowChapterTransitionCard(fromIssue, toIssue);
+        _chapterTransitionHoldShouldNavigate = false;
+        StartChapterTransitionAutoHide(ChapterTransitionHoldDelay);
+    }
+
+    /// <summary>Explicit manual chapter navigation - unconditional, not gated by <c>AutoNavigateComics</c> (spec: an explicit button press is deliberate, not the automatic behavior that setting governs).</summary>
+    [RelayCommand]
+    private void NextChapter() => JumpChapterExplicitly(forward: true);
+
+    [RelayCommand]
+    private void PreviousChapter() => JumpChapterExplicitly(forward: false);
+
+    private void JumpChapterExplicitly(bool forward)
+    {
+        if (ChapterTransitionState != ChapterTransitionState.Hidden)
+        {
+            return;
+        }
+
+        if (!TryGetAdjacentIssuePreview(forward, bypassAutoNavigateSetting: true, out var fromIssue, out var toIssue))
+        {
+            return;
+        }
+
+        NavigateToAdjacentIssue(forward, bypassAutoNavigateSetting: true);
+        ShowChapterTransitionCard(fromIssue, toIssue);
+        _chapterTransitionHoldShouldNavigate = false;
+        StartChapterTransitionAutoHide(ManualChapterTransitionHoldDelay);
+    }
+
+    private void ShowChapterTransitionCard(Issue fromIssue, Issue toIssue)
+    {
+        ChapterTransitionFromLabel = $"#{fromIssue.EffectiveNumber() ?? "?"}";
+        ChapterTransitionToLabel = $"#{toIssue.EffectiveNumber() ?? "?"}";
+        ChapterTransitionCoverImage = CoverImageCache.Get(toIssue.Id);
+        ChapterTransitionState = ChapterTransitionState.Card;
+    }
+
+    private void StartChapterTransitionAutoHide(TimeSpan delay)
+    {
+        if (_chapterTransitionHoldTimer is null)
+        {
+            _chapterTransitionHoldTimer = new DispatcherTimer();
+            _chapterTransitionHoldTimer.Tick += OnChapterTransitionHoldTick;
+        }
+
+        _chapterTransitionHoldTimer.Stop();
+        _chapterTransitionHoldTimer.Interval = delay;
+        _chapterTransitionHoldTimer.Start();
+    }
+
+    /// <summary>Test seam, same rationale as <see cref="OnAutoScrollTick"/>.</summary>
+    internal void OnChapterTransitionHoldTick(object? sender, EventArgs e)
+    {
+        _chapterTransitionHoldTimer!.Stop();
+        ChapterTransitionState = ChapterTransitionState.Hidden;
+        if (_chapterTransitionHoldShouldNavigate)
+        {
+            _chapterTransitionHoldShouldNavigate = false;
+            NavigateToAdjacentIssue(_pendingChapterTransitionForward);
+        }
+    }
+
+    /// <summary>
+    /// Read-only lookup of the adjacent issue for display purposes (label/cover) via the shared
+    /// <see cref="TryResolveAdjacentIssue"/> query. Uses its own short-lived
+    /// <see cref="PaperbunkrDbContext"/>, disposed immediately - separate from the real navigate's
+    /// context, which needs to outlive this method since it can run after a hold-timer delay.
+    /// </summary>
+    private bool TryGetAdjacentIssuePreview(bool forward, bool bypassAutoNavigateSetting, out Issue fromIssue, out Issue toIssue)
+    {
+        fromIssue = null!;
+        toIssue = null!;
+
+        using var context = PaperbunkrDb.CreateContext();
+        if (!bypassAutoNavigateSetting && !context.GetOrCreateAppSettings().AutoNavigateComics)
+        {
+            return false;
+        }
+
+        return TryResolveAdjacentIssue(context, forward, out fromIssue, out toIssue);
     }
 
     /// <summary>Leaving the Reader entirely exits fullscreen (spec §7) - unlike page/book navigation, this is the one path where staying fullscreen wouldn't make sense (there's nothing left to view fullscreen).</summary>
@@ -1740,7 +2275,7 @@ public partial class ReaderScreenViewModel : ViewModelBase
         {
             IsFullscreen = false;
             _overlayAutoHideTimer?.Stop();
-            ShowFullscreenOverlays = false;
+            ShowChrome = false;
         }
 
         StopAutoScroll();

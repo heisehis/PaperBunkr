@@ -2,6 +2,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Paperbunkr.App.ViewModels"
              xmlns:views="using:Paperbunkr.App.Views"
+             xmlns:controls="using:Paperbunkr.App.Controls"
              xmlns:models="using:Paperbunkr.App.Models"
              xmlns:entities="using:Paperbunkr.Data.Entities"
              xmlns:conv="using:Avalonia.Data.Converters"
@@ -12,45 +13,9 @@
              x:DataType="vm:LibraryScreenViewModel">
 
     <UserControl.Styles>
-        <Style Selector="Button.toolbarPill">
-            <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
-            <Setter Property="Background" Value="{DynamicResource PbChromeBrush}" />
-            <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
-            <Setter Property="CornerRadius" Value="999" />
-            <Setter Property="Padding" Value="12,6" />
-            <Setter Property="FontSize" Value="12" />
-            <Setter Property="FontWeight" Value="SemiBold" />
-            <Setter Property="Cursor" Value="Hand" />
-        </Style>
-        <Style Selector="Button.toolbarPill.open">
-            <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
-            <Setter Property="Background" Value="{DynamicResource PbAccentSoftBrush}" />
-            <Setter Property="Foreground" Value="{DynamicResource PbAccentTextBrush}" />
-        </Style>
-        <Style Selector="Button.toolbarPill Border.icon">
-            <Setter Property="Width" Value="12" />
-            <Setter Property="Height" Value="12" />
-            <Setter Property="Background" Value="{DynamicResource PbTextMutedBrush}" />
-        </Style>
-        <Style Selector="Button.toolbarPill.open Border.icon">
-            <Setter Property="Background" Value="{DynamicResource PbAccentTextBrush}" />
-        </Style>
-
-        <Style Selector="Border.dropdown">
-            <Setter Property="Background" Value="{DynamicResource PbChromeBrush}" />
-            <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
-            <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="CornerRadius" Value="7" />
-            <Setter Property="Padding" Value="14" />
-            <Setter Property="BoxShadow" Value="0 8 24 -12 #99000000" />
-        </Style>
-        <Style Selector="TextBlock.dropdownRow">
-            <Setter Property="FontSize" Value="12.5" />
-            <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
-            <Setter Property="Margin" Value="0,3" />
-        </Style>
-
+        <!-- Toolbar-only styles (Button.toolbarPill / Border.dropdown / TextBlock.dropdownRow /
+             Button.modeOption) moved to Views/LibraryToolbar.axaml alongside the toolbar markup
+             (docs/superpowers/specs/2026-08-27-library-browsing-4b-toolbar-rework-design.md §1). -->
         <Style Selector="Button.card">
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="BorderThickness" Value="0" />
@@ -67,7 +32,30 @@
             <Setter Property="ClipToBounds" Value="True" />
         </Style>
 
-        <!-- Display dropdown's 7 mode-select rows -->
+        <!-- Poster-grid glow (UI rework Phase 4a) - the PbGlowRing that PosterTile gets on its root,
+             here on the inner cover Border of a Button.card since the card root stays a Button. -->
+        <Style Selector="Border.posterCover">
+            <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusSm}" />
+            <Setter Property="Transitions">
+                <Transitions>
+                    <BoxShadowsTransition Property="BoxShadow" Duration="{DynamicResource PbMotionFast}" Easing="{StaticResource PbMotionEase}" />
+                </Transitions>
+            </Setter>
+        </Style>
+        <Style Selector="Button.card:pointerover Border.posterCover">
+            <Setter Property="BoxShadow" Value="{StaticResource PbGlowRing}" />
+        </Style>
+        <Style Selector="Button.card:focus-within Border.posterCover">
+            <Setter Property="BoxShadow" Value="{StaticResource PbGlowRing}" />
+        </Style>
+
+        <!-- Poster-grid group section header (UI rework Phase 4a) - Bebas display type + count + rule. -->
+        <Style Selector="StackPanel.posterGroup > DockPanel">
+            <Setter Property="Margin" Value="0,0,0,12" />
+        </Style>
+
+        <!-- modeOption list rows - also used by LibraryToolbar.axaml (its own copy); kept here for
+             the Add-issue overlay's content-type / reading-mode pickers. -->
         <Style Selector="Button.modeOption">
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="BorderThickness" Value="0" />
@@ -85,13 +73,35 @@
             <Setter Property="FontWeight" Value="Bold" />
         </Style>
 
-        <!-- Group section header (docs/superpowers/specs/2026-08-09-library-toolbar-design.md Phase C) -->
-        <Style Selector="TextBlock.groupHeader">
-            <Setter Property="FontSize" Value="13" />
-            <Setter Property="FontWeight" Value="Bold" />
-            <Setter Property="Foreground" Value="{DynamicResource PbTextBrush}" />
-            <Setter Property="Margin" Value="0,0,0,10" />
+        <!-- Row-mode hover (4b §7) - List/Tiles rows get a surface-tint on hover. -->
+        <Style Selector="Border.libRow">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Transitions">
+                <Transitions>
+                    <BrushTransition Property="Background" Duration="{DynamicResource PbMotionFast}" Easing="{StaticResource PbMotionEase}" />
+                </Transitions>
+            </Setter>
         </Style>
+        <Style Selector="Button.card:pointerover Border.libRow">
+            <Setter Property="Background" Value="{DynamicResource PbSurface2Brush}" />
+        </Style>
+
+        <!-- Configurable Details table header cell (4b §8) - borderless click-to-sort button. -->
+        <Style Selector="Button.detailsHeader">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="0,2" />
+            <Setter Property="Margin" Value="0,0,10,0" />
+            <Setter Property="HorizontalContentAlignment" Value="Left" />
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="FontWeight" Value="Bold" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextFaintBrush}" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style Selector="Button.detailsHeader:pointerover">
+            <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
+        </Style>
+
 
         <!-- Continue Reading overlay button (docs/superpowers/specs/2026-08-09-library-toolbar-design.md Phase D) -->
         <Style Selector="Button.continueReading">
@@ -112,241 +122,33 @@
             <Setter Property="Height" Value="12" />
             <Setter Property="Background" Value="White" />
         </Style>
+
+        <!-- Multi-selection checkbox (docs/superpowers/specs/2026-08-24-library-multiselect-slice1-
+             design.md §3) - hover-revealed by default (Opacity 0 -> 1 on Border.cover:pointerover),
+             forced visible on every tile once anything is selected (the "forceVisible" class,
+             toggled from LibraryScreenViewModel.HasSelection) so the whole active selection stays
+             visible/adjustable without hunting for hover targets. -->
+        <Style Selector="CheckBox.tileSelect">
+            <Setter Property="Opacity" Value="0" />
+            <Setter Property="Transitions">
+                <Transitions>
+                    <DoubleTransition Property="Opacity" Duration="0:0:0.12" />
+                </Transitions>
+            </Setter>
+        </Style>
+        <Style Selector="Border.cover:pointerover CheckBox.tileSelect">
+            <Setter Property="Opacity" Value="1" />
+        </Style>
+        <Style Selector="CheckBox.tileSelect.forceVisible">
+            <Setter Property="Opacity" Value="1" />
+        </Style>
     </UserControl.Styles>
 
     <UserControl.Resources>
-        <DataTemplate x:Key="CompactGridItemTemplate" x:DataType="models:IssueListRow">
-            <Button Classes="card" Margin="0,0,14,14"
-                    Width="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).CompactCardWidth}"
-                    Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).IssueList.OpenIssueCommand}"
-                    CommandParameter="{Binding}" KeyDown="OnCardKeyDown">
-                <Button.ContextMenu>
-                    <ContextMenu>
-                        <MenuItem Header="Go to Series"
-                                  Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).GoToSeriesCommand}"
-                                  CommandParameter="{Binding SeriesId}" />
-                        <MenuItem Header="Show in Explorer"
-                                  Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).RevealIssueCommand}"
-                                  CommandParameter="{Binding Id}" IsEnabled="{Binding HasFile}" />
-                        <!-- docs/superpowers/specs/2026-08-16-manga-content-type-classification-design.md §2 -->
-                        <MenuItem Header="Set Content Type">
-                            <MenuItem Header="Comic" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesContentTypeComicCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Manga" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesContentTypeMangaCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Manhua" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesContentTypeManhuaCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Manhwa" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesContentTypeManhwaCommand}" CommandParameter="{Binding SeriesId}" />
-                        </MenuItem>
-                        <MenuItem Header="Set Reading Direction" IsVisible="{Binding IsMangaFamily}">
-                            <MenuItem Header="Left to Right" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingModeLeftToRightCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Right to Left" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingModeRightToLeftCommand}" CommandParameter="{Binding SeriesId}" />
-                        </MenuItem>
-                        <!-- docs/superpowers/specs/2026-08-18-metadata-model-ui-gaps-status-and-bookmarks-design.md -->
-                        <MenuItem Header="Set Status">
-                            <MenuItem Header="Unknown" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesStatusUnknownCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Ongoing" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesStatusOngoingCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Completed" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesStatusCompletedCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Cancelled" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesStatusCancelledCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Hiatus" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesStatusHiatusCommand}" CommandParameter="{Binding SeriesId}" />
-                        </MenuItem>
-                    </ContextMenu>
-                </Button.ContextMenu>
-                <Border Classes="cover" Background="{Binding CoverBrush}"
-                        Height="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).CompactCardHeight}">
-                    <Grid>
-                        <Image Source="{Binding CoverImage}" Stretch="UniformToFill" />
-                        <Border IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowUnreadBadge}">
-                            <Border IsVisible="{Binding !IsRead}" Background="#B814161B" CornerRadius="999" Padding="5,1"
-                                    HorizontalAlignment="Right" VerticalAlignment="Top" Margin="5">
-                                <TextBlock Text="●" FontFamily="Consolas,monospace" FontSize="9"
-                                           FontWeight="Bold" Foreground="White" />
-                            </Border>
-                        </Border>
-                        <Border IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowPublisherBadge}">
-                            <Border IsVisible="{Binding HasPublisher}" Background="#B814161B" CornerRadius="999" Padding="5,1"
-                                    HorizontalAlignment="Left" VerticalAlignment="Top" Margin="5">
-                                <TextBlock Text="{Binding Publisher}" FontSize="8" FontWeight="Bold" Foreground="White"
-                                           MaxWidth="60" TextTrimming="CharacterEllipsis" />
-                            </Border>
-                        </Border>
-                        <Border IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowLanguageBadge}">
-                            <Border IsVisible="{Binding HasLanguage}" Background="#B814161B" CornerRadius="999" Padding="5,1"
-                                    HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="5">
-                                <Panel>
-                                    <TextBlock Text="{Binding LanguageIso}" FontSize="8" FontWeight="Bold" Foreground="White"
-                                               IsVisible="{Binding !$parent[UserControl].((vm:LibraryScreenViewModel)DataContext).UseLanguageIcon}" />
-                                    <Border Classes="icon" Width="8" Height="8" Background="White"
-                                            IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).UseLanguageIcon}">
-                                        <Border.OpacityMask><ImageBrush Source="/Assets/Icons/Globe.png" Stretch="Uniform" /></Border.OpacityMask>
-                                    </Border>
-                                </Panel>
-                            </Border>
-                        </Border>
-                        <TextBlock Text="{Binding Title}" TextWrapping="Wrap" TextTrimming="CharacterEllipsis" MaxLines="2"
-                                   FontSize="11" FontWeight="Black" Foreground="#FFFFF8EC" VerticalAlignment="Bottom"
-                                   Margin="7,0,7,7" LineHeight="12" />
-                    </Grid>
-                </Border>
-            </Button>
-        </DataTemplate>
-
-        <DataTemplate x:Key="ComfortableGridItemTemplate" x:DataType="models:IssueListRow">
-            <Button Classes="card" Margin="0,0,20,20"
-                    Width="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ComfortableCardWidth}"
-                    Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).IssueList.OpenIssueCommand}"
-                    CommandParameter="{Binding}" KeyDown="OnCardKeyDown">
-                <Button.ContextMenu>
-                    <ContextMenu>
-                        <MenuItem Header="Go to Series"
-                                  Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).GoToSeriesCommand}"
-                                  CommandParameter="{Binding SeriesId}" />
-                        <MenuItem Header="Show in Explorer"
-                                  Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).RevealIssueCommand}"
-                                  CommandParameter="{Binding Id}" IsEnabled="{Binding HasFile}" />
-                        <!-- docs/superpowers/specs/2026-08-16-manga-content-type-classification-design.md §2 -->
-                        <MenuItem Header="Set Content Type">
-                            <MenuItem Header="Comic" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesContentTypeComicCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Manga" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesContentTypeMangaCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Manhua" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesContentTypeManhuaCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Manhwa" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesContentTypeManhwaCommand}" CommandParameter="{Binding SeriesId}" />
-                        </MenuItem>
-                        <MenuItem Header="Set Reading Direction" IsVisible="{Binding IsMangaFamily}">
-                            <MenuItem Header="Left to Right" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingModeLeftToRightCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Right to Left" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingModeRightToLeftCommand}" CommandParameter="{Binding SeriesId}" />
-                        </MenuItem>
-                        <!-- docs/superpowers/specs/2026-08-18-metadata-model-ui-gaps-status-and-bookmarks-design.md -->
-                        <MenuItem Header="Set Status">
-                            <MenuItem Header="Unknown" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesStatusUnknownCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Ongoing" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesStatusOngoingCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Completed" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesStatusCompletedCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Cancelled" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesStatusCancelledCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Hiatus" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesStatusHiatusCommand}" CommandParameter="{Binding SeriesId}" />
-                        </MenuItem>
-                    </ContextMenu>
-                </Button.ContextMenu>
-                <StackPanel>
-                    <Border Classes="cover" Background="{Binding CoverBrush}"
-                            Height="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ComfortableCardHeight}">
-                        <Grid>
-                            <Image Source="{Binding CoverImage}" Stretch="UniformToFill" />
-                            <Border IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowUnreadBadge}">
-                                <Border IsVisible="{Binding !IsRead}" Background="#B814161B"
-                                        CornerRadius="999" Padding="6,2" HorizontalAlignment="Right"
-                                        VerticalAlignment="Top" Margin="7">
-                                    <TextBlock Text="●" FontFamily="Consolas,monospace"
-                                               FontSize="10" FontWeight="Bold" Foreground="White" />
-                                </Border>
-                            </Border>
-                            <Border IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowPublisherBadge}">
-                                <Border IsVisible="{Binding HasPublisher}" Background="#B814161B" CornerRadius="999" Padding="6,2"
-                                        HorizontalAlignment="Left" VerticalAlignment="Top" Margin="7">
-                                    <TextBlock Text="{Binding Publisher}" FontSize="9" FontWeight="Bold" Foreground="White"
-                                               MaxWidth="70" TextTrimming="CharacterEllipsis" />
-                                </Border>
-                            </Border>
-                            <Border IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowLanguageBadge}">
-                                <Border IsVisible="{Binding HasLanguage}" Background="#B814161B" CornerRadius="999" Padding="6,2"
-                                        HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="7,7,7,34">
-                                    <Panel>
-                                        <TextBlock Text="{Binding LanguageIso}" FontSize="9" FontWeight="Bold" Foreground="White"
-                                                   IsVisible="{Binding !$parent[UserControl].((vm:LibraryScreenViewModel)DataContext).UseLanguageIcon}" />
-                                        <Border Classes="icon" Width="9" Height="9" Background="White"
-                                                IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).UseLanguageIcon}">
-                                            <Border.OpacityMask><ImageBrush Source="/Assets/Icons/Globe.png" Stretch="Uniform" /></Border.OpacityMask>
-                                        </Border>
-                                    </Panel>
-                                </Border>
-                            </Border>
-                            <TextBlock Text="{Binding Title}" TextWrapping="Wrap" FontSize="14" FontWeight="Black"
-                                       Foreground="#FFFFF8EC" VerticalAlignment="Bottom"
-                                       Margin="10,0,10,12" LineHeight="16" />
-                        </Grid>
-                    </Border>
-                    <TextBlock Text="{Binding SeriesName}" FontSize="12.5" FontWeight="SemiBold"
-                               Foreground="{DynamicResource PbTextBrush}" TextTrimming="CharacterEllipsis"
-                               Margin="0,8,0,0" ToolTip.Tip="{Binding SeriesName}" />
-                    <TextBlock Text="{Binding Number, StringFormat='#{0}'}" FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}"
-                               Margin="0,1,0,0" />
-                </StackPanel>
-            </Button>
-        </DataTemplate>
-
-        <DataTemplate x:Key="CoverOnlyGridItemTemplate" x:DataType="models:IssueListRow">
-            <Button Classes="card" Margin="0,0,20,20"
-                    Width="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).CoverOnlyCardWidth}"
-                    Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).IssueList.OpenIssueCommand}"
-                    CommandParameter="{Binding}" KeyDown="OnCardKeyDown">
-                <Button.ContextMenu>
-                    <ContextMenu>
-                        <MenuItem Header="Go to Series"
-                                  Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).GoToSeriesCommand}"
-                                  CommandParameter="{Binding SeriesId}" />
-                        <MenuItem Header="Show in Explorer"
-                                  Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).RevealIssueCommand}"
-                                  CommandParameter="{Binding Id}" IsEnabled="{Binding HasFile}" />
-                        <!-- docs/superpowers/specs/2026-08-16-manga-content-type-classification-design.md §2 -->
-                        <MenuItem Header="Set Content Type">
-                            <MenuItem Header="Comic" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesContentTypeComicCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Manga" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesContentTypeMangaCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Manhua" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesContentTypeManhuaCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Manhwa" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesContentTypeManhwaCommand}" CommandParameter="{Binding SeriesId}" />
-                        </MenuItem>
-                        <MenuItem Header="Set Reading Direction" IsVisible="{Binding IsMangaFamily}">
-                            <MenuItem Header="Left to Right" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingModeLeftToRightCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Right to Left" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingModeRightToLeftCommand}" CommandParameter="{Binding SeriesId}" />
-                        </MenuItem>
-                        <!-- docs/superpowers/specs/2026-08-18-metadata-model-ui-gaps-status-and-bookmarks-design.md -->
-                        <MenuItem Header="Set Status">
-                            <MenuItem Header="Unknown" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesStatusUnknownCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Ongoing" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesStatusOngoingCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Completed" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesStatusCompletedCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Cancelled" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesStatusCancelledCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Hiatus" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesStatusHiatusCommand}" CommandParameter="{Binding SeriesId}" />
-                        </MenuItem>
-                    </ContextMenu>
-                </Button.ContextMenu>
-                <Border Classes="cover" Background="{Binding CoverBrush}"
-                        Height="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).CoverOnlyCardHeight}">
-                    <Grid>
-                        <Image Source="{Binding CoverImage}" Stretch="UniformToFill" />
-                        <Border IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowUnreadBadge}">
-                            <Border IsVisible="{Binding !IsRead}" Background="#B814161B"
-                                    CornerRadius="999" Padding="6,2" HorizontalAlignment="Right"
-                                    VerticalAlignment="Top" Margin="7">
-                                <TextBlock Text="●" FontFamily="Consolas,monospace"
-                                           FontSize="10" FontWeight="Bold" Foreground="White" />
-                            </Border>
-                        </Border>
-                        <Border IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowPublisherBadge}">
-                            <Border IsVisible="{Binding HasPublisher}" Background="#B814161B" CornerRadius="999" Padding="6,2"
-                                    HorizontalAlignment="Left" VerticalAlignment="Top" Margin="7">
-                                <TextBlock Text="{Binding Publisher}" FontSize="9" FontWeight="Bold" Foreground="White"
-                                           MaxWidth="70" TextTrimming="CharacterEllipsis" />
-                            </Border>
-                        </Border>
-                        <Border IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowLanguageBadge}">
-                            <Border IsVisible="{Binding HasLanguage}" Background="#B814161B" CornerRadius="999" Padding="6,2"
-                                    HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="7,7,7,34">
-                                <Panel>
-                                    <TextBlock Text="{Binding LanguageIso}" FontSize="9" FontWeight="Bold" Foreground="White"
-                                               IsVisible="{Binding !$parent[UserControl].((vm:LibraryScreenViewModel)DataContext).UseLanguageIcon}" />
-                                    <Border Classes="icon" Width="9" Height="9" Background="White"
-                                            IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).UseLanguageIcon}">
-                                        <Border.OpacityMask><ImageBrush Source="/Assets/Icons/Globe.png" Stretch="Uniform" /></Border.OpacityMask>
-                                    </Border>
-                                </Panel>
-                            </Border>
-                        </Border>
-                        <TextBlock Text="{Binding Title}" TextWrapping="Wrap" FontSize="14" FontWeight="Black"
-                                   Foreground="#FFFFF8EC" VerticalAlignment="Bottom"
-                                   Margin="10,0,10,12" LineHeight="16" />
-                    </Grid>
-                </Border>
-            </Button>
-        </DataTemplate>
-
         <DataTemplate x:Key="PanoramaGridItemTemplate" x:DataType="models:IssueListRow">
             <Button Classes="card" Margin="0,0,20,20" Width="{Binding PanoramaWidth}"
                     Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).IssueList.OpenIssueCommand}"
-                    CommandParameter="{Binding}" KeyDown="OnCardKeyDown">
+                    CommandParameter="{Binding}" KeyDown="OnCardKeyDown" PointerPressed="OnTilePointerPressed">
                 <Button.ContextMenu>
                     <ContextMenu>
                         <MenuItem Header="Go to Series"
@@ -373,6 +175,40 @@
                             <MenuItem Header="Completed" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesStatusCompletedCommand}" CommandParameter="{Binding SeriesId}" />
                             <MenuItem Header="Cancelled" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesStatusCancelledCommand}" CommandParameter="{Binding SeriesId}" />
                             <MenuItem Header="Hiatus" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesStatusHiatusCommand}" CommandParameter="{Binding SeriesId}" />
+                        </MenuItem>
+                        <!-- docs/superpowers/specs/2026-08-19-metadata-model-reading-status-design.md -->
+                        <MenuItem Header="Set Reading Status">
+                            <MenuItem Header="Unknown" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusUnknownCommand}" CommandParameter="{Binding SeriesId}" />
+                            <MenuItem Header="Planned" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusPlannedCommand}" CommandParameter="{Binding SeriesId}" />
+                            <MenuItem Header="Reading" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusReadingCommand}" CommandParameter="{Binding SeriesId}" />
+                            <MenuItem Header="Completed" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusCompletedCommand}" CommandParameter="{Binding SeriesId}" />
+                            <MenuItem Header="Paused" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusPausedCommand}" CommandParameter="{Binding SeriesId}" />
+                            <MenuItem Header="Dropped" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusDroppedCommand}" CommandParameter="{Binding SeriesId}" />
+                            <MenuItem Header="Re-reading" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusReReadingCommand}" CommandParameter="{Binding SeriesId}" />
+                        </MenuItem>
+                        <MenuItem Header="Mark as Read"
+                                  Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).MarkIssueReadCommand}"
+                                  CommandParameter="{Binding Id}" />
+                        <MenuItem Header="Mark as Unread"
+                                  Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).MarkIssueUnreadCommand}"
+                                  CommandParameter="{Binding Id}" />
+                        <MenuItem Header="Quick Rate…"
+                                  Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).OpenQuickRateCommand}"
+                                  CommandParameter="{Binding Id}" />
+                        <!-- Plugin API v2 Library hook (docs/superpowers/specs/2026-08-24-plugin-api-v2-design.md
+                             §5) - runs every enabled Library-hook plugin command against this one
+                             issue. Only shown once a plugin host exists. -->
+                        <MenuItem Header="Find Duplicates"
+                                  Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).RunLibraryPluginsCommand}"
+                                  CommandParameter="{Binding Id}"
+                                  IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).HasPluginHost}" />
+                        <MenuItem Header="Edit Properties…"
+                                  Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).EditIssuePropertiesCommand}"
+                                  CommandParameter="{Binding Id}" />
+                        <MenuItem Header="Delete Issue">
+                            <MenuItem Header="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).DeleteConfirmLabel}"
+                                      Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).DeleteIssueCommand}"
+                                      CommandParameter="{Binding Id}" />
                         </MenuItem>
                     </ContextMenu>
                 </Button.ContextMenu>
@@ -382,7 +218,8 @@
                         <Grid>
                             <!-- Uniform (not UniformToFill) - the box is already sized to this cover's own
                                  aspect ratio, so nothing gets cropped; only extreme clamped outliers letterbox. -->
-                            <Image Source="{Binding CoverImage}" Stretch="Uniform" />
+                            <Image Source="{Binding Id, Converter={x:Static views:CoverImageConverter.Instance}}" Stretch="Uniform" />
+                            <Border Classes="posterScrim" />
                             <Border IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowUnreadBadge}">
                                 <Border IsVisible="{Binding !IsRead}" Background="#B814161B"
                                         CornerRadius="999" Padding="6,2" HorizontalAlignment="Right"
@@ -411,6 +248,10 @@
                                     </Panel>
                                 </Border>
                             </Border>
+                            <CheckBox Classes="tileSelect" Classes.forceVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).HasSelection}"
+                                      IsChecked="{Binding IsSelected, Mode=OneWay}"
+                                      Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ToggleIssueSelectionCheckboxCommand}"
+                                      CommandParameter="{Binding}" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="7" />
                         </Grid>
                     </Border>
                     <TextBlock Text="{Binding SeriesName}" FontSize="12.5" FontWeight="SemiBold"
@@ -425,7 +266,7 @@
         <DataTemplate x:Key="ListItemTemplate" x:DataType="models:IssueListRow">
             <Button Classes="card" HorizontalAlignment="Stretch" Margin="0,0,0,8"
                     Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).IssueList.OpenIssueCommand}"
-                    CommandParameter="{Binding}">
+                    CommandParameter="{Binding}" PointerPressed="OnTilePointerPressed">
                 <Button.ContextMenu>
                     <ContextMenu>
                         <MenuItem Header="Go to Series"
@@ -453,14 +294,53 @@
                             <MenuItem Header="Cancelled" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesStatusCancelledCommand}" CommandParameter="{Binding SeriesId}" />
                             <MenuItem Header="Hiatus" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesStatusHiatusCommand}" CommandParameter="{Binding SeriesId}" />
                         </MenuItem>
+                        <!-- docs/superpowers/specs/2026-08-19-metadata-model-reading-status-design.md -->
+                        <MenuItem Header="Set Reading Status">
+                            <MenuItem Header="Unknown" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusUnknownCommand}" CommandParameter="{Binding SeriesId}" />
+                            <MenuItem Header="Planned" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusPlannedCommand}" CommandParameter="{Binding SeriesId}" />
+                            <MenuItem Header="Reading" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusReadingCommand}" CommandParameter="{Binding SeriesId}" />
+                            <MenuItem Header="Completed" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusCompletedCommand}" CommandParameter="{Binding SeriesId}" />
+                            <MenuItem Header="Paused" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusPausedCommand}" CommandParameter="{Binding SeriesId}" />
+                            <MenuItem Header="Dropped" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusDroppedCommand}" CommandParameter="{Binding SeriesId}" />
+                            <MenuItem Header="Re-reading" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusReReadingCommand}" CommandParameter="{Binding SeriesId}" />
+                        </MenuItem>
+                        <MenuItem Header="Mark as Read"
+                                  Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).MarkIssueReadCommand}"
+                                  CommandParameter="{Binding Id}" />
+                        <MenuItem Header="Mark as Unread"
+                                  Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).MarkIssueUnreadCommand}"
+                                  CommandParameter="{Binding Id}" />
+                        <MenuItem Header="Quick Rate…"
+                                  Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).OpenQuickRateCommand}"
+                                  CommandParameter="{Binding Id}" />
+                        <!-- Plugin API v2 Library hook (docs/superpowers/specs/2026-08-24-plugin-api-v2-design.md
+                             §5) - runs every enabled Library-hook plugin command against this one
+                             issue. Only shown once a plugin host exists. -->
+                        <MenuItem Header="Find Duplicates"
+                                  Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).RunLibraryPluginsCommand}"
+                                  CommandParameter="{Binding Id}"
+                                  IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).HasPluginHost}" />
+                        <MenuItem Header="Edit Properties…"
+                                  Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).EditIssuePropertiesCommand}"
+                                  CommandParameter="{Binding Id}" />
+                        <MenuItem Header="Delete Issue">
+                            <MenuItem Header="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).DeleteConfirmLabel}"
+                                      Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).DeleteIssueCommand}"
+                                      CommandParameter="{Binding Id}" />
+                        </MenuItem>
                     </ContextMenu>
                 </Button.ContextMenu>
-                <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1" CornerRadius="6" Padding="10">
+                <Border Classes="libRow" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1" CornerRadius="{DynamicResource PbRadius}" Padding="10">
                     <Grid ColumnDefinitions="44,*,Auto">
-                        <Border Grid.Column="0" CornerRadius="4" Width="44" Height="63"
-                                Background="{Binding CoverBrush}" ClipToBounds="True">
-                            <Image Source="{Binding CoverImage}" Stretch="UniformToFill" />
-                        </Border>
+                        <Panel Grid.Column="0">
+                            <Border CornerRadius="{DynamicResource PbRadiusSm}" Width="44" Height="63"
+                                    Background="{Binding CoverBrush}" ClipToBounds="True">
+                                <Image Source="{Binding Id, Converter={x:Static views:CoverImageConverter.Instance}}" Stretch="UniformToFill" />
+                            </Border>
+                            <CheckBox IsChecked="{Binding IsSelected, Mode=OneWay}"
+                                      Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ToggleIssueSelectionCheckboxCommand}"
+                                      CommandParameter="{Binding}" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,-4,-4" />
+                        </Panel>
                         <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="12,0">
                             <TextBlock Text="{Binding Title}" FontSize="13" FontWeight="SemiBold"
                                        Foreground="{DynamicResource PbTextBrush}" TextTrimming="CharacterEllipsis" />
@@ -482,7 +362,7 @@
         <DataTemplate x:Key="DetailsItemTemplate" x:DataType="models:IssueListRow">
             <Button Classes="card" HorizontalAlignment="Stretch" Margin="0,0,0,4"
                     Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).IssueList.OpenIssueCommand}"
-                    CommandParameter="{Binding}">
+                    CommandParameter="{Binding}" PointerPressed="OnTilePointerPressed">
                 <Button.ContextMenu>
                     <ContextMenu>
                         <MenuItem Header="Go to Series"
@@ -510,23 +390,73 @@
                             <MenuItem Header="Cancelled" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesStatusCancelledCommand}" CommandParameter="{Binding SeriesId}" />
                             <MenuItem Header="Hiatus" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesStatusHiatusCommand}" CommandParameter="{Binding SeriesId}" />
                         </MenuItem>
+                        <!-- docs/superpowers/specs/2026-08-19-metadata-model-reading-status-design.md -->
+                        <MenuItem Header="Set Reading Status">
+                            <MenuItem Header="Unknown" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusUnknownCommand}" CommandParameter="{Binding SeriesId}" />
+                            <MenuItem Header="Planned" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusPlannedCommand}" CommandParameter="{Binding SeriesId}" />
+                            <MenuItem Header="Reading" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusReadingCommand}" CommandParameter="{Binding SeriesId}" />
+                            <MenuItem Header="Completed" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusCompletedCommand}" CommandParameter="{Binding SeriesId}" />
+                            <MenuItem Header="Paused" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusPausedCommand}" CommandParameter="{Binding SeriesId}" />
+                            <MenuItem Header="Dropped" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusDroppedCommand}" CommandParameter="{Binding SeriesId}" />
+                            <MenuItem Header="Re-reading" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusReReadingCommand}" CommandParameter="{Binding SeriesId}" />
+                        </MenuItem>
+                        <MenuItem Header="Mark as Read"
+                                  Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).MarkIssueReadCommand}"
+                                  CommandParameter="{Binding Id}" />
+                        <MenuItem Header="Mark as Unread"
+                                  Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).MarkIssueUnreadCommand}"
+                                  CommandParameter="{Binding Id}" />
+                        <MenuItem Header="Quick Rate…"
+                                  Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).OpenQuickRateCommand}"
+                                  CommandParameter="{Binding Id}" />
+                        <!-- Plugin API v2 Library hook (docs/superpowers/specs/2026-08-24-plugin-api-v2-design.md
+                             §5) - runs every enabled Library-hook plugin command against this one
+                             issue. Only shown once a plugin host exists. -->
+                        <MenuItem Header="Find Duplicates"
+                                  Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).RunLibraryPluginsCommand}"
+                                  CommandParameter="{Binding Id}"
+                                  IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).HasPluginHost}" />
+                        <MenuItem Header="Edit Properties…"
+                                  Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).EditIssuePropertiesCommand}"
+                                  CommandParameter="{Binding Id}" />
+                        <MenuItem Header="Delete Issue">
+                            <MenuItem Header="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).DeleteConfirmLabel}"
+                                      Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).DeleteIssueCommand}"
+                                      CommandParameter="{Binding Id}" />
+                        </MenuItem>
                     </ContextMenu>
                 </Button.ContextMenu>
-                <Grid ColumnDefinitions="52,*,110,70,70,140" Margin="0,6">
-                    <Border Grid.Column="0" Width="36" Height="50" CornerRadius="3" Background="{Binding CoverBrush}" ClipToBounds="True">
-                        <Image Source="{Binding CoverImage}" Stretch="UniformToFill" />
-                    </Border>
-                    <TextBlock Grid.Column="1" Text="{Binding Title}" FontSize="12.5" Foreground="{DynamicResource PbTextBrush}"
-                               VerticalAlignment="Center" Margin="10,0,0,0" TextTrimming="CharacterEllipsis" />
-                    <TextBlock Grid.Column="2" Text="{Binding SeriesName}" FontSize="12"
-                               Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
-                               ToolTip.Tip="{Binding SeriesName}" />
-                    <TextBlock Grid.Column="3" Text="{Binding Number}" FontFamily="Consolas,monospace" FontSize="12"
-                               Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
-                    <TextBlock Grid.Column="4" Text="●" IsVisible="{Binding !IsRead}" FontFamily="Consolas,monospace" FontSize="12"
-                               Foreground="{DynamicResource PbAccentTextBrush}" VerticalAlignment="Center" />
-                    <TextBlock Grid.Column="5" Text="{Binding Publisher}" FontSize="12" Foreground="{DynamicResource PbTextFaintBrush}"
-                               VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                <Grid ColumnDefinitions="52,*" Margin="0,6">
+                    <Panel Grid.Column="0">
+                        <Border Width="36" Height="50" CornerRadius="{DynamicResource PbRadiusSm}" Background="{Binding CoverBrush}" ClipToBounds="True">
+                            <Image Source="{Binding Id, Converter={x:Static views:CoverImageConverter.Instance}}" Stretch="UniformToFill" />
+                        </Border>
+                        <CheckBox IsChecked="{Binding IsSelected, Mode=OneWay}"
+                                  Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ToggleIssueSelectionCheckboxCommand}"
+                                  CommandParameter="{Binding}" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,-4,-4" />
+                    </Panel>
+                    <!-- Configurable columns (4b §8) - one horizontal cell per visible DetailsColumn;
+                         a hidden column drops out of the StackPanel so the header row (same source,
+                         same fixed widths) stays aligned. -->
+                    <ItemsControl Grid.Column="1" ItemsSource="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).DetailsColumns}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate><StackPanel Orientation="Horizontal" /></ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="models:DetailsColumn">
+                                <TextBlock IsVisible="{Binding IsVisible}" Width="{Binding Width}" Margin="0,0,10,0"
+                                           FontSize="12" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                                           Foreground="{DynamicResource PbTextMutedBrush}">
+                                    <TextBlock.Text>
+                                        <MultiBinding Converter="{x:Static views:DetailsCellConverter.Instance}">
+                                            <Binding Path="Field" />
+                                            <Binding Path="$parent[Button].DataContext" />
+                                        </MultiBinding>
+                                    </TextBlock.Text>
+                                </TextBlock>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
                 </Grid>
             </Button>
         </DataTemplate>
@@ -535,7 +465,7 @@
             <Button Classes="card" Margin="0,0,14,10"
                     Width="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).TilesCardWidth}"
                     Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).IssueList.OpenIssueCommand}"
-                    CommandParameter="{Binding}">
+                    CommandParameter="{Binding}" PointerPressed="OnTilePointerPressed">
                 <Button.ContextMenu>
                     <ContextMenu>
                         <MenuItem Header="Go to Series"
@@ -563,16 +493,55 @@
                             <MenuItem Header="Cancelled" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesStatusCancelledCommand}" CommandParameter="{Binding SeriesId}" />
                             <MenuItem Header="Hiatus" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesStatusHiatusCommand}" CommandParameter="{Binding SeriesId}" />
                         </MenuItem>
+                        <!-- docs/superpowers/specs/2026-08-19-metadata-model-reading-status-design.md -->
+                        <MenuItem Header="Set Reading Status">
+                            <MenuItem Header="Unknown" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusUnknownCommand}" CommandParameter="{Binding SeriesId}" />
+                            <MenuItem Header="Planned" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusPlannedCommand}" CommandParameter="{Binding SeriesId}" />
+                            <MenuItem Header="Reading" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusReadingCommand}" CommandParameter="{Binding SeriesId}" />
+                            <MenuItem Header="Completed" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusCompletedCommand}" CommandParameter="{Binding SeriesId}" />
+                            <MenuItem Header="Paused" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusPausedCommand}" CommandParameter="{Binding SeriesId}" />
+                            <MenuItem Header="Dropped" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusDroppedCommand}" CommandParameter="{Binding SeriesId}" />
+                            <MenuItem Header="Re-reading" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusReReadingCommand}" CommandParameter="{Binding SeriesId}" />
+                        </MenuItem>
+                        <MenuItem Header="Mark as Read"
+                                  Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).MarkIssueReadCommand}"
+                                  CommandParameter="{Binding Id}" />
+                        <MenuItem Header="Mark as Unread"
+                                  Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).MarkIssueUnreadCommand}"
+                                  CommandParameter="{Binding Id}" />
+                        <MenuItem Header="Quick Rate…"
+                                  Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).OpenQuickRateCommand}"
+                                  CommandParameter="{Binding Id}" />
+                        <!-- Plugin API v2 Library hook (docs/superpowers/specs/2026-08-24-plugin-api-v2-design.md
+                             §5) - runs every enabled Library-hook plugin command against this one
+                             issue. Only shown once a plugin host exists. -->
+                        <MenuItem Header="Find Duplicates"
+                                  Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).RunLibraryPluginsCommand}"
+                                  CommandParameter="{Binding Id}"
+                                  IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).HasPluginHost}" />
+                        <MenuItem Header="Edit Properties…"
+                                  Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).EditIssuePropertiesCommand}"
+                                  CommandParameter="{Binding Id}" />
+                        <MenuItem Header="Delete Issue">
+                            <MenuItem Header="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).DeleteConfirmLabel}"
+                                      Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).DeleteIssueCommand}"
+                                      CommandParameter="{Binding Id}" />
+                        </MenuItem>
                     </ContextMenu>
                 </Button.ContextMenu>
-                <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1" CornerRadius="6" Padding="8">
+                <Border Classes="libRow" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1" CornerRadius="{DynamicResource PbRadius}" Padding="8">
                     <Grid ColumnDefinitions="Auto,*">
-                        <Border Grid.Column="0" CornerRadius="4"
-                                Width="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).TilesThumbWidth}"
-                                Height="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).TilesThumbHeight}"
-                                Background="{Binding CoverBrush}" ClipToBounds="True">
-                            <Image Source="{Binding CoverImage}" Stretch="UniformToFill" />
-                        </Border>
+                        <Panel Grid.Column="0">
+                            <Border CornerRadius="{DynamicResource PbRadiusSm}"
+                                    Width="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).TilesThumbWidth}"
+                                    Height="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).TilesThumbHeight}"
+                                    Background="{Binding CoverBrush}" ClipToBounds="True">
+                                <Image Source="{Binding Id, Converter={x:Static views:CoverImageConverter.Instance}}" Stretch="UniformToFill" />
+                            </Border>
+                            <CheckBox IsChecked="{Binding IsSelected, Mode=OneWay}"
+                                      Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ToggleIssueSelectionCheckboxCommand}"
+                                      CommandParameter="{Binding}" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,-4,-4" />
+                        </Panel>
                         <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="10,0,0,0">
                             <TextBlock Text="{Binding Title}" FontSize="12.5" FontWeight="SemiBold"
                                        Foreground="{DynamicResource PbTextBrush}" TextTrimming="CharacterEllipsis" />
@@ -585,258 +554,14 @@
         </DataTemplate>
 
         <!-- ============ Series-granularity card templates ============
-             Mirrors the 7 per-issue templates above field-for-field, retargeted at SeriesCardSample
-             instead of IssueListRow - this is the original one-card-per-series behavior (docs/
-             superpowers/specs/2026-08-18-library-book-centric-redesign-design.md Slice 3 made
-             per-issue the only option; the same-session follow-up restored this as a real,
-             switchable Granularity instead of dropping it for good). -->
-        <DataTemplate x:Key="SeriesCompactGridItemTemplate" x:DataType="models:SeriesCardSample">
-            <Button Classes="card" Margin="0,0,14,14"
-                    Width="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).CompactCardWidth}"
-                    Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SelectCardCommand}"
-                    CommandParameter="{Binding}" KeyDown="OnCardKeyDown">
-                <Button.ContextMenu>
-                    <ContextMenu>
-                        <MenuItem Header="Show in Explorer"
-                                  Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).RevealSeriesCommand}"
-                                  CommandParameter="{Binding}" IsEnabled="{Binding HasFile}" />
-                        <MenuItem Header="Set Content Type">
-                            <MenuItem Header="Comic" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesContentTypeComicCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Manga" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesContentTypeMangaCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Manhua" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesContentTypeManhuaCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Manhwa" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesContentTypeManhwaCommand}" CommandParameter="{Binding SeriesId}" />
-                        </MenuItem>
-                        <MenuItem Header="Set Reading Direction" IsVisible="{Binding IsMangaFamily}">
-                            <MenuItem Header="Left to Right" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingModeLeftToRightCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Right to Left" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingModeRightToLeftCommand}" CommandParameter="{Binding SeriesId}" />
-                        </MenuItem>
-                        <MenuItem Header="Set Status">
-                            <MenuItem Header="Unknown" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesStatusUnknownCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Ongoing" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesStatusOngoingCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Completed" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesStatusCompletedCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Cancelled" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesStatusCancelledCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Hiatus" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesStatusHiatusCommand}" CommandParameter="{Binding SeriesId}" />
-                        </MenuItem>
-                    </ContextMenu>
-                </Button.ContextMenu>
-                <Border Classes="cover" Background="{Binding CoverBrush}"
-                        Height="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).CompactCardHeight}">
-                    <Grid>
-                        <Image Source="{Binding CoverImage}" Stretch="UniformToFill" />
-                        <Border IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowUnreadBadge}">
-                            <Border IsVisible="{Binding HasUnread}" Background="#B814161B" CornerRadius="999" Padding="5,1"
-                                    HorizontalAlignment="Right" VerticalAlignment="Top" Margin="5">
-                                <TextBlock Text="{Binding UnreadCount}" FontFamily="Consolas,monospace" FontSize="9"
-                                           FontWeight="Bold" Foreground="White" />
-                            </Border>
-                        </Border>
-                        <Border IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowPublisherBadge}">
-                            <Border IsVisible="{Binding HasPublisher}" Background="#B814161B" CornerRadius="999" Padding="5,1"
-                                    HorizontalAlignment="Left" VerticalAlignment="Top" Margin="5">
-                                <TextBlock Text="{Binding Publisher}" FontSize="8" FontWeight="Bold" Foreground="White"
-                                           MaxWidth="60" TextTrimming="CharacterEllipsis" />
-                            </Border>
-                        </Border>
-                        <Border IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowLanguageBadge}">
-                            <Border IsVisible="{Binding HasLanguage}" Background="#B814161B" CornerRadius="999" Padding="5,1"
-                                    HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="5">
-                                <Panel>
-                                    <TextBlock Text="{Binding LanguageIso}" FontSize="8" FontWeight="Bold" Foreground="White"
-                                               IsVisible="{Binding !$parent[UserControl].((vm:LibraryScreenViewModel)DataContext).UseLanguageIcon}" />
-                                    <Border Classes="icon" Width="8" Height="8" Background="White"
-                                            IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).UseLanguageIcon}">
-                                        <Border.OpacityMask><ImageBrush Source="/Assets/Icons/Globe.png" Stretch="Uniform" /></Border.OpacityMask>
-                                    </Border>
-                                </Panel>
-                            </Border>
-                        </Border>
-                        <Border IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowContinueReadingButton}">
-                            <Button Classes="continueReading" Width="24" Height="24" IsVisible="{Binding HasContinueReading}"
-                                    Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ContinueReadingCommand}"
-                                    CommandParameter="{Binding}"
-                                    HorizontalAlignment="Center" VerticalAlignment="Center">
-                                <Border Classes="icon">
-                                    <Border.OpacityMask><ImageBrush Source="/Assets/Icons/Play.png" Stretch="Uniform" /></Border.OpacityMask>
-                                </Border>
-                            </Button>
-                        </Border>
-                        <TextBlock Text="{Binding Title}" TextWrapping="Wrap" TextTrimming="CharacterEllipsis" MaxLines="2"
-                                   FontSize="11" FontWeight="Black" Foreground="#FFFFF8EC" VerticalAlignment="Bottom"
-                                   Margin="7,0,7,7" LineHeight="12" />
-                    </Grid>
-                </Border>
-            </Button>
-        </DataTemplate>
-
-        <DataTemplate x:Key="SeriesComfortableGridItemTemplate" x:DataType="models:SeriesCardSample">
-            <Button Classes="card" Margin="0,0,20,20"
-                    Width="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ComfortableCardWidth}"
-                    Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SelectCardCommand}"
-                    CommandParameter="{Binding}" KeyDown="OnCardKeyDown">
-                <Button.ContextMenu>
-                    <ContextMenu>
-                        <MenuItem Header="Show in Explorer"
-                                  Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).RevealSeriesCommand}"
-                                  CommandParameter="{Binding}" IsEnabled="{Binding HasFile}" />
-                        <MenuItem Header="Set Content Type">
-                            <MenuItem Header="Comic" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesContentTypeComicCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Manga" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesContentTypeMangaCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Manhua" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesContentTypeManhuaCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Manhwa" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesContentTypeManhwaCommand}" CommandParameter="{Binding SeriesId}" />
-                        </MenuItem>
-                        <MenuItem Header="Set Reading Direction" IsVisible="{Binding IsMangaFamily}">
-                            <MenuItem Header="Left to Right" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingModeLeftToRightCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Right to Left" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingModeRightToLeftCommand}" CommandParameter="{Binding SeriesId}" />
-                        </MenuItem>
-                        <MenuItem Header="Set Status">
-                            <MenuItem Header="Unknown" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesStatusUnknownCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Ongoing" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesStatusOngoingCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Completed" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesStatusCompletedCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Cancelled" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesStatusCancelledCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Hiatus" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesStatusHiatusCommand}" CommandParameter="{Binding SeriesId}" />
-                        </MenuItem>
-                    </ContextMenu>
-                </Button.ContextMenu>
-                <StackPanel>
-                    <Border Classes="cover" Background="{Binding CoverBrush}"
-                            Height="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ComfortableCardHeight}">
-                        <Grid>
-                            <Image Source="{Binding CoverImage}" Stretch="UniformToFill" />
-                            <Border IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowUnreadBadge}">
-                                <Border IsVisible="{Binding HasUnread}" Background="#B814161B"
-                                        CornerRadius="999" Padding="6,2" HorizontalAlignment="Right"
-                                        VerticalAlignment="Top" Margin="7">
-                                    <TextBlock Text="{Binding UnreadCount}" FontFamily="Consolas,monospace"
-                                               FontSize="10" FontWeight="Bold" Foreground="White" />
-                                </Border>
-                            </Border>
-                            <Border IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowPublisherBadge}">
-                                <Border IsVisible="{Binding HasPublisher}" Background="#B814161B" CornerRadius="999" Padding="6,2"
-                                        HorizontalAlignment="Left" VerticalAlignment="Top" Margin="7">
-                                    <TextBlock Text="{Binding Publisher}" FontSize="9" FontWeight="Bold" Foreground="White"
-                                               MaxWidth="70" TextTrimming="CharacterEllipsis" />
-                                </Border>
-                            </Border>
-                            <Border IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowLanguageBadge}">
-                                <Border IsVisible="{Binding HasLanguage}" Background="#B814161B" CornerRadius="999" Padding="6,2"
-                                        HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="7,7,7,34">
-                                    <Panel>
-                                        <TextBlock Text="{Binding LanguageIso}" FontSize="9" FontWeight="Bold" Foreground="White"
-                                                   IsVisible="{Binding !$parent[UserControl].((vm:LibraryScreenViewModel)DataContext).UseLanguageIcon}" />
-                                        <Border Classes="icon" Width="9" Height="9" Background="White"
-                                                IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).UseLanguageIcon}">
-                                            <Border.OpacityMask><ImageBrush Source="/Assets/Icons/Globe.png" Stretch="Uniform" /></Border.OpacityMask>
-                                        </Border>
-                                    </Panel>
-                                </Border>
-                            </Border>
-                            <Border IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowContinueReadingButton}">
-                                <Button Classes="continueReading" IsVisible="{Binding HasContinueReading}"
-                                        Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ContinueReadingCommand}"
-                                        CommandParameter="{Binding}"
-                                        HorizontalAlignment="Center" VerticalAlignment="Center">
-                                    <Border Classes="icon">
-                                        <Border.OpacityMask><ImageBrush Source="/Assets/Icons/Play.png" Stretch="Uniform" /></Border.OpacityMask>
-                                    </Border>
-                                </Button>
-                            </Border>
-                            <TextBlock Text="{Binding Title}" TextWrapping="Wrap" FontSize="14" FontWeight="Black"
-                                       Foreground="#FFFFF8EC" VerticalAlignment="Bottom"
-                                       Margin="10,0,10,12" LineHeight="16" />
-                        </Grid>
-                    </Border>
-                    <TextBlock Text="{Binding Name}" FontSize="12.5" FontWeight="SemiBold"
-                               Foreground="{DynamicResource PbTextBrush}" TextTrimming="CharacterEllipsis"
-                               Margin="0,8,0,0" />
-                    <TextBlock Text="{Binding Sub}" FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}"
-                               Margin="0,1,0,0" />
-                </StackPanel>
-            </Button>
-        </DataTemplate>
-
-        <DataTemplate x:Key="SeriesCoverOnlyGridItemTemplate" x:DataType="models:SeriesCardSample">
-            <Button Classes="card" Margin="0,0,20,20"
-                    Width="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).CoverOnlyCardWidth}"
-                    Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SelectCardCommand}"
-                    CommandParameter="{Binding}" KeyDown="OnCardKeyDown">
-                <Button.ContextMenu>
-                    <ContextMenu>
-                        <MenuItem Header="Show in Explorer"
-                                  Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).RevealSeriesCommand}"
-                                  CommandParameter="{Binding}" IsEnabled="{Binding HasFile}" />
-                        <MenuItem Header="Set Content Type">
-                            <MenuItem Header="Comic" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesContentTypeComicCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Manga" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesContentTypeMangaCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Manhua" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesContentTypeManhuaCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Manhwa" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesContentTypeManhwaCommand}" CommandParameter="{Binding SeriesId}" />
-                        </MenuItem>
-                        <MenuItem Header="Set Reading Direction" IsVisible="{Binding IsMangaFamily}">
-                            <MenuItem Header="Left to Right" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingModeLeftToRightCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Right to Left" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingModeRightToLeftCommand}" CommandParameter="{Binding SeriesId}" />
-                        </MenuItem>
-                        <MenuItem Header="Set Status">
-                            <MenuItem Header="Unknown" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesStatusUnknownCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Ongoing" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesStatusOngoingCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Completed" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesStatusCompletedCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Cancelled" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesStatusCancelledCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Hiatus" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesStatusHiatusCommand}" CommandParameter="{Binding SeriesId}" />
-                        </MenuItem>
-                    </ContextMenu>
-                </Button.ContextMenu>
-                <Border Classes="cover" Background="{Binding CoverBrush}"
-                        Height="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).CoverOnlyCardHeight}">
-                    <Grid>
-                        <Image Source="{Binding CoverImage}" Stretch="UniformToFill" />
-                        <Border IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowUnreadBadge}">
-                            <Border IsVisible="{Binding HasUnread}" Background="#B814161B"
-                                    CornerRadius="999" Padding="6,2" HorizontalAlignment="Right"
-                                    VerticalAlignment="Top" Margin="7">
-                                <TextBlock Text="{Binding UnreadCount}" FontFamily="Consolas,monospace"
-                                           FontSize="10" FontWeight="Bold" Foreground="White" />
-                            </Border>
-                        </Border>
-                        <Border IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowPublisherBadge}">
-                            <Border IsVisible="{Binding HasPublisher}" Background="#B814161B" CornerRadius="999" Padding="6,2"
-                                    HorizontalAlignment="Left" VerticalAlignment="Top" Margin="7">
-                                <TextBlock Text="{Binding Publisher}" FontSize="9" FontWeight="Bold" Foreground="White"
-                                           MaxWidth="70" TextTrimming="CharacterEllipsis" />
-                            </Border>
-                        </Border>
-                        <Border IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowLanguageBadge}">
-                            <Border IsVisible="{Binding HasLanguage}" Background="#B814161B" CornerRadius="999" Padding="6,2"
-                                    HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="7,7,7,34">
-                                <Panel>
-                                    <TextBlock Text="{Binding LanguageIso}" FontSize="9" FontWeight="Bold" Foreground="White"
-                                               IsVisible="{Binding !$parent[UserControl].((vm:LibraryScreenViewModel)DataContext).UseLanguageIcon}" />
-                                    <Border Classes="icon" Width="9" Height="9" Background="White"
-                                            IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).UseLanguageIcon}">
-                                        <Border.OpacityMask><ImageBrush Source="/Assets/Icons/Globe.png" Stretch="Uniform" /></Border.OpacityMask>
-                                    </Border>
-                                </Panel>
-                            </Border>
-                        </Border>
-                        <Border IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowContinueReadingButton}">
-                            <Button Classes="continueReading" IsVisible="{Binding HasContinueReading}"
-                                    Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ContinueReadingCommand}"
-                                    CommandParameter="{Binding}"
-                                    HorizontalAlignment="Center" VerticalAlignment="Center">
-                                <Border Classes="icon">
-                                    <Border.OpacityMask><ImageBrush Source="/Assets/Icons/Play.png" Stretch="Uniform" /></Border.OpacityMask>
-                                </Border>
-                            </Button>
-                        </Border>
-                        <TextBlock Text="{Binding Title}" TextWrapping="Wrap" FontSize="14" FontWeight="Black"
-                                   Foreground="#FFFFF8EC" VerticalAlignment="Bottom"
-                                   Margin="10,0,10,12" LineHeight="16" />
-                    </Grid>
-                </Border>
-            </Button>
-        </DataTemplate>
-
+             Mirrors the per-issue templates above field-for-field, retargeted at SeriesCardSample
+             instead of IssueListRow - the switchable one-card-per-series Granularity (docs/
+             superpowers/specs/2026-08-18-library-book-centric-redesign-design.md). Phase 4a's
+             PosterGridSeriesTemplate lives further down with its issue counterpart. -->
         <DataTemplate x:Key="SeriesPanoramaGridItemTemplate" x:DataType="models:SeriesCardSample">
             <Button Classes="card" Margin="0,0,20,20" Width="{Binding PanoramaWidth}"
                     Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SelectCardCommand}"
-                    CommandParameter="{Binding}" KeyDown="OnCardKeyDown">
+                    CommandParameter="{Binding}" KeyDown="OnCardKeyDown" PointerPressed="OnSeriesTilePointerPressed">
                 <Button.ContextMenu>
                     <ContextMenu>
                         <MenuItem Header="Show in Explorer"
@@ -858,6 +583,21 @@
                             <MenuItem Header="Completed" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesStatusCompletedCommand}" CommandParameter="{Binding SeriesId}" />
                             <MenuItem Header="Cancelled" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesStatusCancelledCommand}" CommandParameter="{Binding SeriesId}" />
                             <MenuItem Header="Hiatus" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesStatusHiatusCommand}" CommandParameter="{Binding SeriesId}" />
+                        </MenuItem>
+                        <!-- docs/superpowers/specs/2026-08-19-metadata-model-reading-status-design.md -->
+                        <MenuItem Header="Set Reading Status">
+                            <MenuItem Header="Unknown" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusUnknownCommand}" CommandParameter="{Binding SeriesId}" />
+                            <MenuItem Header="Planned" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusPlannedCommand}" CommandParameter="{Binding SeriesId}" />
+                            <MenuItem Header="Reading" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusReadingCommand}" CommandParameter="{Binding SeriesId}" />
+                            <MenuItem Header="Completed" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusCompletedCommand}" CommandParameter="{Binding SeriesId}" />
+                            <MenuItem Header="Paused" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusPausedCommand}" CommandParameter="{Binding SeriesId}" />
+                            <MenuItem Header="Dropped" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusDroppedCommand}" CommandParameter="{Binding SeriesId}" />
+                            <MenuItem Header="Re-reading" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusReReadingCommand}" CommandParameter="{Binding SeriesId}" />
+                        </MenuItem>
+                        <MenuItem Header="Delete Series">
+                            <MenuItem Header="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).DeleteSeriesConfirmLabel}"
+                                      Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).DeleteSeriesCommand}"
+                                      CommandParameter="{Binding SeriesId}" />
                         </MenuItem>
                     </ContextMenu>
                 </Button.ContextMenu>
@@ -867,7 +607,8 @@
                         <Grid>
                             <!-- Uniform (not UniformToFill) - the box is already sized to this cover's own
                                  aspect ratio, so nothing gets cropped; only extreme clamped outliers letterbox. -->
-                            <Image Source="{Binding CoverImage}" Stretch="Uniform" />
+                            <Image Source="{Binding CoverIssueId, Converter={x:Static views:CoverImageConverter.Instance}}" Stretch="Uniform" />
+                            <Border Classes="posterScrim" />
                             <Border IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowUnreadBadge}">
                                 <Border IsVisible="{Binding HasUnread}" Background="#B814161B"
                                         CornerRadius="999" Padding="6,2" HorizontalAlignment="Right"
@@ -906,6 +647,10 @@
                                     </Border>
                                 </Button>
                             </Border>
+                            <CheckBox Classes="tileSelect" Classes.forceVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).HasSeriesSelection}"
+                                      IsChecked="{Binding IsSelected, Mode=OneWay}"
+                                      Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ToggleSeriesSelectionCheckboxCommand}"
+                                      CommandParameter="{Binding}" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="5" />
                         </Grid>
                     </Border>
                     <TextBlock Text="{Binding Name}" FontSize="12.5" FontWeight="SemiBold"
@@ -920,7 +665,7 @@
         <DataTemplate x:Key="SeriesListItemTemplate" x:DataType="models:SeriesCardSample">
             <Button Classes="card" HorizontalAlignment="Stretch" Margin="0,0,0,8"
                     Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SelectCardCommand}"
-                    CommandParameter="{Binding}">
+                    CommandParameter="{Binding}" PointerPressed="OnSeriesTilePointerPressed">
                 <Button.ContextMenu>
                     <ContextMenu>
                         <MenuItem Header="Show in Explorer"
@@ -943,13 +688,37 @@
                             <MenuItem Header="Cancelled" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesStatusCancelledCommand}" CommandParameter="{Binding SeriesId}" />
                             <MenuItem Header="Hiatus" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesStatusHiatusCommand}" CommandParameter="{Binding SeriesId}" />
                         </MenuItem>
+                        <!-- docs/superpowers/specs/2026-08-19-metadata-model-reading-status-design.md -->
+                        <MenuItem Header="Set Reading Status">
+                            <MenuItem Header="Unknown" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusUnknownCommand}" CommandParameter="{Binding SeriesId}" />
+                            <MenuItem Header="Planned" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusPlannedCommand}" CommandParameter="{Binding SeriesId}" />
+                            <MenuItem Header="Reading" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusReadingCommand}" CommandParameter="{Binding SeriesId}" />
+                            <MenuItem Header="Completed" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusCompletedCommand}" CommandParameter="{Binding SeriesId}" />
+                            <MenuItem Header="Paused" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusPausedCommand}" CommandParameter="{Binding SeriesId}" />
+                            <MenuItem Header="Dropped" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusDroppedCommand}" CommandParameter="{Binding SeriesId}" />
+                            <MenuItem Header="Re-reading" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusReReadingCommand}" CommandParameter="{Binding SeriesId}" />
+                        </MenuItem>
+                        <MenuItem Header="Delete Series">
+                            <MenuItem Header="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).DeleteSeriesConfirmLabel}"
+                                      Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).DeleteSeriesCommand}"
+                                      CommandParameter="{Binding SeriesId}" />
+                        </MenuItem>
                     </ContextMenu>
                 </Button.ContextMenu>
                 <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1" CornerRadius="6" Padding="10">
                     <Grid ColumnDefinitions="44,*,Auto">
                         <Border Grid.Column="0" CornerRadius="4" Width="44" Height="63"
                                 Background="{Binding CoverBrush}" ClipToBounds="True">
-                            <Image Source="{Binding CoverImage}" Stretch="UniformToFill" />
+                            <Grid>
+                                <Image Source="{Binding CoverIssueId, Converter={x:Static views:CoverImageConverter.Instance}}" Stretch="UniformToFill" />
+                                <!-- Always visible (not hover-gated like the grid-card templates above) -
+                                     this thumbnail is too small to have a Border.cover-class hover parent
+                                     to key off, and a permanently tiny checkbox is unobtrusive at this scale. -->
+                                <CheckBox Classes="tileSelect forceVisible"
+                                          IsChecked="{Binding IsSelected, Mode=OneWay}"
+                                          Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ToggleSeriesSelectionCheckboxCommand}"
+                                          CommandParameter="{Binding}" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="1" Padding="0" MinWidth="14" MinHeight="14" />
+                            </Grid>
                         </Border>
                         <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="12,0">
                             <TextBlock Text="{Binding Name}" FontSize="13" FontWeight="SemiBold"
@@ -971,7 +740,7 @@
         <DataTemplate x:Key="SeriesDetailsItemTemplate" x:DataType="models:SeriesCardSample">
             <Button Classes="card" HorizontalAlignment="Stretch" Margin="0,0,0,4"
                     Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SelectCardCommand}"
-                    CommandParameter="{Binding}">
+                    CommandParameter="{Binding}" PointerPressed="OnSeriesTilePointerPressed">
                 <Button.ContextMenu>
                     <ContextMenu>
                         <MenuItem Header="Show in Explorer"
@@ -994,11 +763,32 @@
                             <MenuItem Header="Cancelled" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesStatusCancelledCommand}" CommandParameter="{Binding SeriesId}" />
                             <MenuItem Header="Hiatus" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesStatusHiatusCommand}" CommandParameter="{Binding SeriesId}" />
                         </MenuItem>
+                        <!-- docs/superpowers/specs/2026-08-19-metadata-model-reading-status-design.md -->
+                        <MenuItem Header="Set Reading Status">
+                            <MenuItem Header="Unknown" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusUnknownCommand}" CommandParameter="{Binding SeriesId}" />
+                            <MenuItem Header="Planned" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusPlannedCommand}" CommandParameter="{Binding SeriesId}" />
+                            <MenuItem Header="Reading" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusReadingCommand}" CommandParameter="{Binding SeriesId}" />
+                            <MenuItem Header="Completed" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusCompletedCommand}" CommandParameter="{Binding SeriesId}" />
+                            <MenuItem Header="Paused" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusPausedCommand}" CommandParameter="{Binding SeriesId}" />
+                            <MenuItem Header="Dropped" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusDroppedCommand}" CommandParameter="{Binding SeriesId}" />
+                            <MenuItem Header="Re-reading" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusReReadingCommand}" CommandParameter="{Binding SeriesId}" />
+                        </MenuItem>
+                        <MenuItem Header="Delete Series">
+                            <MenuItem Header="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).DeleteSeriesConfirmLabel}"
+                                      Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).DeleteSeriesCommand}"
+                                      CommandParameter="{Binding SeriesId}" />
+                        </MenuItem>
                     </ContextMenu>
                 </Button.ContextMenu>
                 <Grid ColumnDefinitions="52,*,110,70,70,140" Margin="0,6">
                     <Border Grid.Column="0" Width="36" Height="50" CornerRadius="3" Background="{Binding CoverBrush}" ClipToBounds="True">
-                        <Image Source="{Binding CoverImage}" Stretch="UniformToFill" />
+                        <Grid>
+                            <Image Source="{Binding CoverIssueId, Converter={x:Static views:CoverImageConverter.Instance}}" Stretch="UniformToFill" />
+                            <CheckBox Classes="tileSelect forceVisible"
+                                      IsChecked="{Binding IsSelected, Mode=OneWay}"
+                                      Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ToggleSeriesSelectionCheckboxCommand}"
+                                      CommandParameter="{Binding}" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="1" Padding="0" MinWidth="14" MinHeight="14" />
+                        </Grid>
                     </Border>
                     <TextBlock Grid.Column="1" Text="{Binding Name}" FontSize="12.5" Foreground="{DynamicResource PbTextBrush}"
                                VerticalAlignment="Center" Margin="10,0,0,0" TextTrimming="CharacterEllipsis" />
@@ -1018,7 +808,7 @@
             <Button Classes="card" Margin="0,0,14,10"
                     Width="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).TilesCardWidth}"
                     Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SelectCardCommand}"
-                    CommandParameter="{Binding}">
+                    CommandParameter="{Binding}" PointerPressed="OnSeriesTilePointerPressed">
                 <Button.ContextMenu>
                     <ContextMenu>
                         <MenuItem Header="Show in Explorer"
@@ -1041,6 +831,21 @@
                             <MenuItem Header="Cancelled" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesStatusCancelledCommand}" CommandParameter="{Binding SeriesId}" />
                             <MenuItem Header="Hiatus" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesStatusHiatusCommand}" CommandParameter="{Binding SeriesId}" />
                         </MenuItem>
+                        <!-- docs/superpowers/specs/2026-08-19-metadata-model-reading-status-design.md -->
+                        <MenuItem Header="Set Reading Status">
+                            <MenuItem Header="Unknown" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusUnknownCommand}" CommandParameter="{Binding SeriesId}" />
+                            <MenuItem Header="Planned" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusPlannedCommand}" CommandParameter="{Binding SeriesId}" />
+                            <MenuItem Header="Reading" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusReadingCommand}" CommandParameter="{Binding SeriesId}" />
+                            <MenuItem Header="Completed" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusCompletedCommand}" CommandParameter="{Binding SeriesId}" />
+                            <MenuItem Header="Paused" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusPausedCommand}" CommandParameter="{Binding SeriesId}" />
+                            <MenuItem Header="Dropped" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusDroppedCommand}" CommandParameter="{Binding SeriesId}" />
+                            <MenuItem Header="Re-reading" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusReReadingCommand}" CommandParameter="{Binding SeriesId}" />
+                        </MenuItem>
+                        <MenuItem Header="Delete Series">
+                            <MenuItem Header="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).DeleteSeriesConfirmLabel}"
+                                      Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).DeleteSeriesCommand}"
+                                      CommandParameter="{Binding SeriesId}" />
+                        </MenuItem>
                     </ContextMenu>
                 </Button.ContextMenu>
                 <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1" CornerRadius="6" Padding="8">
@@ -1049,7 +854,13 @@
                                 Width="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).TilesThumbWidth}"
                                 Height="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).TilesThumbHeight}"
                                 Background="{Binding CoverBrush}" ClipToBounds="True">
-                            <Image Source="{Binding CoverImage}" Stretch="UniformToFill" />
+                            <Grid>
+                                <Image Source="{Binding CoverIssueId, Converter={x:Static views:CoverImageConverter.Instance}}" Stretch="UniformToFill" />
+                                <CheckBox Classes="tileSelect forceVisible"
+                                          IsChecked="{Binding IsSelected, Mode=OneWay}"
+                                          Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ToggleSeriesSelectionCheckboxCommand}"
+                                          CommandParameter="{Binding}" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="1" Padding="0" MinWidth="14" MinHeight="14" />
+                            </Grid>
                         </Border>
                         <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="10,0,0,0">
                             <TextBlock Text="{Binding Name}" FontSize="12.5" FontWeight="SemiBold"
@@ -1061,316 +872,249 @@
                 </Border>
             </Button>
         </DataTemplate>
+
+        <!-- ============ Poster grid (UI rework Phase 4a) ============
+             The single grid template replacing Compact/Comfortable/Cover-only. Size comes from
+             PosterCardWidth/Height (the density slider); the title row shows per
+             EffectiveShowTileTitles. Root stays a Button so ContextMenu/Command/OnCardKeyDown/
+             OnTilePointerPressed carry over unchanged; the glow ring lives on the inner
+             Border.posterCover via a Button.card:pointerover selector. Scrim + pbChip + unread dot
+             per docs/superpowers/specs/2026-08-27-library-browsing-4a-poster-grid-design.md. -->
+        <DataTemplate x:Key="PosterGridIssueTemplate" x:DataType="models:IssueListRow">
+            <Button Classes="card" Margin="0"
+                    Width="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PosterCardWidth}"
+                    Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).IssueList.OpenIssueCommand}"
+                    CommandParameter="{Binding}" KeyDown="OnCardKeyDown" PointerPressed="OnTilePointerPressed">
+                <Button.ContextMenu>
+                    <ContextMenu>
+                        <MenuItem Header="Go to Series"
+                                  Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).GoToSeriesCommand}"
+                                  CommandParameter="{Binding SeriesId}" />
+                        <MenuItem Header="Show in Explorer"
+                                  Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).RevealIssueCommand}"
+                                  CommandParameter="{Binding Id}" IsEnabled="{Binding HasFile}" />
+                        <MenuItem Header="Set Content Type">
+                            <MenuItem Header="Comic" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesContentTypeComicCommand}" CommandParameter="{Binding SeriesId}" />
+                            <MenuItem Header="Manga" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesContentTypeMangaCommand}" CommandParameter="{Binding SeriesId}" />
+                            <MenuItem Header="Manhua" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesContentTypeManhuaCommand}" CommandParameter="{Binding SeriesId}" />
+                            <MenuItem Header="Manhwa" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesContentTypeManhwaCommand}" CommandParameter="{Binding SeriesId}" />
+                        </MenuItem>
+                        <MenuItem Header="Set Reading Direction" IsVisible="{Binding IsMangaFamily}">
+                            <MenuItem Header="Left to Right" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingModeLeftToRightCommand}" CommandParameter="{Binding SeriesId}" />
+                            <MenuItem Header="Right to Left" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingModeRightToLeftCommand}" CommandParameter="{Binding SeriesId}" />
+                        </MenuItem>
+                        <MenuItem Header="Set Status">
+                            <MenuItem Header="Unknown" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesStatusUnknownCommand}" CommandParameter="{Binding SeriesId}" />
+                            <MenuItem Header="Ongoing" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesStatusOngoingCommand}" CommandParameter="{Binding SeriesId}" />
+                            <MenuItem Header="Completed" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesStatusCompletedCommand}" CommandParameter="{Binding SeriesId}" />
+                            <MenuItem Header="Cancelled" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesStatusCancelledCommand}" CommandParameter="{Binding SeriesId}" />
+                            <MenuItem Header="Hiatus" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesStatusHiatusCommand}" CommandParameter="{Binding SeriesId}" />
+                        </MenuItem>
+                        <MenuItem Header="Set Reading Status">
+                            <MenuItem Header="Unknown" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusUnknownCommand}" CommandParameter="{Binding SeriesId}" />
+                            <MenuItem Header="Planned" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusPlannedCommand}" CommandParameter="{Binding SeriesId}" />
+                            <MenuItem Header="Reading" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusReadingCommand}" CommandParameter="{Binding SeriesId}" />
+                            <MenuItem Header="Completed" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusCompletedCommand}" CommandParameter="{Binding SeriesId}" />
+                            <MenuItem Header="Paused" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusPausedCommand}" CommandParameter="{Binding SeriesId}" />
+                            <MenuItem Header="Dropped" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusDroppedCommand}" CommandParameter="{Binding SeriesId}" />
+                            <MenuItem Header="Re-reading" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusReReadingCommand}" CommandParameter="{Binding SeriesId}" />
+                        </MenuItem>
+                        <MenuItem Header="Mark as Read"
+                                  Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).MarkIssueReadCommand}"
+                                  CommandParameter="{Binding Id}" />
+                        <MenuItem Header="Mark as Unread"
+                                  Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).MarkIssueUnreadCommand}"
+                                  CommandParameter="{Binding Id}" />
+                        <MenuItem Header="Quick Rate…"
+                                  Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).OpenQuickRateCommand}"
+                                  CommandParameter="{Binding Id}" />
+                        <MenuItem Header="Find Duplicates"
+                                  Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).RunLibraryPluginsCommand}"
+                                  CommandParameter="{Binding Id}"
+                                  IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).HasPluginHost}" />
+                        <MenuItem Header="Edit Properties…"
+                                  Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).EditIssuePropertiesCommand}"
+                                  CommandParameter="{Binding Id}" />
+                        <MenuItem Header="Delete Issue">
+                            <MenuItem Header="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).DeleteConfirmLabel}"
+                                      Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).DeleteIssueCommand}"
+                                      CommandParameter="{Binding Id}" />
+                        </MenuItem>
+                    </ContextMenu>
+                </Button.ContextMenu>
+                <Grid RowDefinitions="*,Auto">
+                    <Border Grid.Row="0" Classes="cover posterCover" Background="{Binding CoverBrush}"
+                            Height="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PosterCoverHeight}">
+                        <Grid>
+                            <Image Source="{Binding Id, Converter={x:Static views:CoverImageConverter.Instance}}" Stretch="UniformToFill" />
+                            <Border Classes="posterScrim" />
+                            <Border Classes="pbChip" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="6">
+                                <Border.IsVisible>
+                                    <MultiBinding Converter="{x:Static conv:BoolConverters.And}">
+                                        <Binding Path="HasPublisher" />
+                                        <Binding Path="$parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowPublisherBadge" />
+                                    </MultiBinding>
+                                </Border.IsVisible>
+                                <TextBlock Text="{Binding Publisher}" Classes="pbTextCaption" FontWeight="SemiBold"
+                                           Foreground="{DynamicResource PbBadgeBrush}" MaxWidth="72" TextTrimming="CharacterEllipsis" />
+                            </Border>
+                            <Ellipse Width="9" Height="9" Fill="{DynamicResource PbAccentTextBrush}" Stroke="Black" StrokeThickness="1.5"
+                                     HorizontalAlignment="Right" VerticalAlignment="Top" Margin="7">
+                                <Ellipse.IsVisible>
+                                    <MultiBinding Converter="{x:Static conv:BoolConverters.And}">
+                                        <Binding Path="!IsRead" />
+                                        <Binding Path="$parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowUnreadBadge" />
+                                    </MultiBinding>
+                                </Ellipse.IsVisible>
+                            </Ellipse>
+                            <CheckBox Classes="tileSelect" Classes.forceVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).HasSelection}"
+                                      IsChecked="{Binding IsSelected, Mode=OneWay}"
+                                      Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ToggleIssueSelectionCheckboxCommand}"
+                                      CommandParameter="{Binding}" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="6" />
+                        </Grid>
+                    </Border>
+                    <StackPanel Grid.Row="1" Margin="0,8,0,0" Spacing="1"
+                                IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).EffectiveShowTileTitles}">
+                        <TextBlock Text="{Binding SeriesName}" FontSize="12" FontWeight="SemiBold"
+                                   Foreground="{DynamicResource PbTextBrush}" TextTrimming="CharacterEllipsis"
+                                   ToolTip.Tip="{Binding SeriesName}" />
+                        <TextBlock Text="{Binding Number, StringFormat='#{0}'}" Classes="pbTextCaption" />
+                    </StackPanel>
+                </Grid>
+            </Button>
+        </DataTemplate>
+
+        <DataTemplate x:Key="PosterGridSeriesTemplate" x:DataType="models:SeriesCardSample">
+            <Button Classes="card" Margin="0"
+                    Width="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PosterCardWidth}"
+                    Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SelectCardCommand}"
+                    CommandParameter="{Binding}" KeyDown="OnCardKeyDown" PointerPressed="OnSeriesTilePointerPressed">
+                <Button.ContextMenu>
+                    <ContextMenu>
+                        <MenuItem Header="Show in Explorer"
+                                  Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).RevealSeriesCommand}"
+                                  CommandParameter="{Binding}" IsEnabled="{Binding HasFile}" />
+                        <MenuItem Header="Set Content Type">
+                            <MenuItem Header="Comic" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesContentTypeComicCommand}" CommandParameter="{Binding SeriesId}" />
+                            <MenuItem Header="Manga" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesContentTypeMangaCommand}" CommandParameter="{Binding SeriesId}" />
+                            <MenuItem Header="Manhua" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesContentTypeManhuaCommand}" CommandParameter="{Binding SeriesId}" />
+                            <MenuItem Header="Manhwa" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesContentTypeManhwaCommand}" CommandParameter="{Binding SeriesId}" />
+                        </MenuItem>
+                        <MenuItem Header="Set Reading Direction" IsVisible="{Binding IsMangaFamily}">
+                            <MenuItem Header="Left to Right" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingModeLeftToRightCommand}" CommandParameter="{Binding SeriesId}" />
+                            <MenuItem Header="Right to Left" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingModeRightToLeftCommand}" CommandParameter="{Binding SeriesId}" />
+                        </MenuItem>
+                        <MenuItem Header="Set Status">
+                            <MenuItem Header="Unknown" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesStatusUnknownCommand}" CommandParameter="{Binding SeriesId}" />
+                            <MenuItem Header="Ongoing" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesStatusOngoingCommand}" CommandParameter="{Binding SeriesId}" />
+                            <MenuItem Header="Completed" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesStatusCompletedCommand}" CommandParameter="{Binding SeriesId}" />
+                            <MenuItem Header="Cancelled" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesStatusCancelledCommand}" CommandParameter="{Binding SeriesId}" />
+                            <MenuItem Header="Hiatus" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesStatusHiatusCommand}" CommandParameter="{Binding SeriesId}" />
+                        </MenuItem>
+                        <MenuItem Header="Set Reading Status">
+                            <MenuItem Header="Unknown" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusUnknownCommand}" CommandParameter="{Binding SeriesId}" />
+                            <MenuItem Header="Planned" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusPlannedCommand}" CommandParameter="{Binding SeriesId}" />
+                            <MenuItem Header="Reading" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusReadingCommand}" CommandParameter="{Binding SeriesId}" />
+                            <MenuItem Header="Completed" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusCompletedCommand}" CommandParameter="{Binding SeriesId}" />
+                            <MenuItem Header="Paused" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusPausedCommand}" CommandParameter="{Binding SeriesId}" />
+                            <MenuItem Header="Dropped" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusDroppedCommand}" CommandParameter="{Binding SeriesId}" />
+                            <MenuItem Header="Re-reading" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusReReadingCommand}" CommandParameter="{Binding SeriesId}" />
+                        </MenuItem>
+                        <MenuItem Header="Delete Series">
+                            <MenuItem Header="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).DeleteSeriesConfirmLabel}"
+                                      Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).DeleteSeriesCommand}"
+                                      CommandParameter="{Binding SeriesId}" />
+                        </MenuItem>
+                    </ContextMenu>
+                </Button.ContextMenu>
+                <Grid RowDefinitions="*,Auto">
+                    <Border Grid.Row="0" Classes="cover posterCover" Background="{Binding CoverBrush}"
+                            Height="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PosterCoverHeight}">
+                        <Grid>
+                            <Image Source="{Binding CoverIssueId, Converter={x:Static views:CoverImageConverter.Instance}}" Stretch="UniformToFill" />
+                            <Border Classes="posterScrim" />
+                            <Border Classes="pbChip" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="6">
+                                <Border.IsVisible>
+                                    <MultiBinding Converter="{x:Static conv:BoolConverters.And}">
+                                        <Binding Path="HasPublisher" />
+                                        <Binding Path="$parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowPublisherBadge" />
+                                    </MultiBinding>
+                                </Border.IsVisible>
+                                <TextBlock Text="{Binding Publisher}" Classes="pbTextCaption" FontWeight="SemiBold"
+                                           Foreground="{DynamicResource PbBadgeBrush}" MaxWidth="72" TextTrimming="CharacterEllipsis" />
+                            </Border>
+                            <Border Background="{DynamicResource PbAccentBrush}" CornerRadius="999" Padding="5,1"
+                                    HorizontalAlignment="Right" VerticalAlignment="Top" Margin="6">
+                                <Border.IsVisible>
+                                    <MultiBinding Converter="{x:Static conv:BoolConverters.And}">
+                                        <Binding Path="HasUnread" />
+                                        <Binding Path="$parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowUnreadBadge" />
+                                    </MultiBinding>
+                                </Border.IsVisible>
+                                <TextBlock Text="{Binding UnreadCount}" FontFamily="Consolas,monospace" FontSize="9" FontWeight="Bold"
+                                           Foreground="{DynamicResource PbBadgeTextBrush}" />
+                            </Border>
+                            <Button Classes="continueReading" Width="26" Height="26"
+                                    Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ContinueReadingCommand}"
+                                    CommandParameter="{Binding}" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                <Button.IsVisible>
+                                    <MultiBinding Converter="{x:Static conv:BoolConverters.And}">
+                                        <Binding Path="HasContinueReading" />
+                                        <Binding Path="$parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowContinueReadingButton" />
+                                    </MultiBinding>
+                                </Button.IsVisible>
+                                <Border Classes="icon">
+                                    <Border.OpacityMask><ImageBrush Source="/Assets/Icons/Play.png" Stretch="Uniform" /></Border.OpacityMask>
+                                </Border>
+                            </Button>
+                            <CheckBox Classes="tileSelect" Classes.forceVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).HasSeriesSelection}"
+                                      IsChecked="{Binding IsSelected, Mode=OneWay}"
+                                      Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ToggleSeriesSelectionCheckboxCommand}"
+                                      CommandParameter="{Binding}" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="6" />
+                        </Grid>
+                    </Border>
+                    <StackPanel Grid.Row="1" Margin="0,8,0,0" Spacing="1"
+                                IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).EffectiveShowTileTitles}">
+                        <TextBlock Text="{Binding Name}" FontSize="12" FontWeight="SemiBold"
+                                   Foreground="{DynamicResource PbTextBrush}" TextTrimming="CharacterEllipsis"
+                                   ToolTip.Tip="{Binding Name}" />
+                        <TextBlock Text="{Binding Sub}" Classes="pbTextCaption" TextTrimming="CharacterEllipsis" />
+                    </StackPanel>
+                </Grid>
+            </Button>
+        </DataTemplate>
     </UserControl.Resources>
 
     <Grid RowDefinitions="Auto,*">
 
-        <!-- ============ Toolbar (pills variant) ============ -->
-        <Border Grid.Row="0" Padding="24,14" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,0,0,1">
-          <Panel>
-            <StackPanel Orientation="Horizontal" Spacing="8">
-                <!-- Browse history (docs/superpowers/specs/2026-08-19-library-browse-history-
-                     design.md) - CE's own IBrowseHistory/btBrowsePrev/btBrowseNext, ported onto
-                     the sidebar filter + search query. Plain text glyphs, same precedent
-                     BookReaderScreen.axaml already uses for its own prev/next buttons. -->
-                <Button Classes="toolbarPill" Content="‹" Padding="10,6" FontSize="14"
-                        Command="{Binding BrowsePreviousCommand}" IsEnabled="{Binding CanBrowsePrevious}"
-                        ToolTip.Tip="Back" AutomationProperties.AutomationId="LibraryBrowsePreviousButton" />
-                <Button Classes="toolbarPill" Content="›" Padding="10,6" FontSize="14"
-                        Command="{Binding BrowseNextCommand}" IsEnabled="{Binding CanBrowseNext}"
-                        ToolTip.Tip="Forward" AutomationProperties.AutomationId="LibraryBrowseNextButton" />
+        <!-- ============ Toolbar (extracted to Views/LibraryToolbar.axaml, 4b §1) ============ -->
+        <views:LibraryToolbar Grid.Row="0" />
 
-                <TextBox Width="260" Text="{Binding SearchQuery}" Watermark="Search all series…" FontSize="12.5"
-                         AutomationProperties.AutomationId="LibrarySearchBox" />
-
-                <Button x:Name="SearchModeButton" Classes="toolbarPill" Classes.open="{Binding IsSearchModeOpen}"
-                        Command="{Binding ToggleSearchModeCommand}" AutomationProperties.AutomationId="LibrarySearchModeButton"
-                        AutomationProperties.Name="{Binding SearchModeLabel, StringFormat='Search: {0}'}">
-                    <TextBlock Text="{Binding SearchModeLabel, StringFormat='{}{0} ▾'}" />
-                </Button>
-
-                <Button x:Name="FilterButton" Classes="toolbarPill" Classes.open="{Binding IsFilterOpen}"
-                        Command="{Binding ToggleFilterCommand}" AutomationProperties.AutomationId="LibraryFilterButton"
-                        AutomationProperties.Name="Filter">
-                    <StackPanel Orientation="Horizontal" Spacing="5">
-                        <Border Classes="icon"><Border.OpacityMask><ImageBrush Source="/Assets/Icons/Filter.png" Stretch="Uniform" /></Border.OpacityMask></Border>
-                        <TextBlock Text="Filter ▾" />
-                    </StackPanel>
-                </Button>
-                <Button x:Name="SortButton" Classes="toolbarPill" Classes.open="{Binding IsSortOpen}"
-                        Command="{Binding ToggleSortCommand}" AutomationProperties.AutomationId="LibrarySortButton"
-                        AutomationProperties.Name="{Binding ActiveSortLabel, StringFormat='Sort: {0}'}">
-                    <StackPanel Orientation="Horizontal" Spacing="5">
-                        <Border Classes="icon"><Border.OpacityMask><ImageBrush Source="/Assets/Icons/Sort_Ascending.png" Stretch="Uniform" /></Border.OpacityMask></Border>
-                        <TextBlock Text="{Binding ActiveSortLabel, StringFormat='Sort: {0} ▾'}" />
-                    </StackPanel>
-                </Button>
-                <Button x:Name="GroupButton" Classes="toolbarPill" Classes.open="{Binding IsGroupOpen}"
-                        Command="{Binding ToggleGroupCommand}" AutomationProperties.AutomationId="LibraryGroupButton"
-                        AutomationProperties.Name="{Binding ActiveGroupLabel, StringFormat='Group: {0}'}">
-                    <StackPanel Orientation="Horizontal" Spacing="5">
-                        <Border Classes="icon"><Border.OpacityMask><ImageBrush Source="/Assets/Icons/Layers.png" Stretch="Uniform" /></Border.OpacityMask></Border>
-                        <TextBlock Text="{Binding ActiveGroupLabel, StringFormat='Group: {0} ▾'}" />
-                    </StackPanel>
-                </Button>
-                <Button x:Name="DisplayButton" Classes="toolbarPill" Classes.open="{Binding IsDisplayOpen}"
-                        Command="{Binding ToggleDisplayCommand}" AutomationProperties.AutomationId="LibraryDisplayButton"
-                        AutomationProperties.Name="{Binding DisplayModeLabel, StringFormat='Display: {0}'}">
-                    <StackPanel Orientation="Horizontal" Spacing="5">
-                        <Border Classes="icon"><Border.OpacityMask><ImageBrush Source="/Assets/Icons/Window.png" Stretch="Uniform" /></Border.OpacityMask></Border>
-                        <TextBlock Text="{Binding DisplayModeLabel, StringFormat='Display: {0} ▾'}" />
-                    </StackPanel>
-                </Button>
-                <Button x:Name="AddButton" Classes="toolbarPill" Classes.open="{Binding IsAddOpen}"
-                        Command="{Binding ToggleAddCommand}" AutomationProperties.AutomationId="LibraryAddButton"
-                        AutomationProperties.Name="Add">
-                    <StackPanel Orientation="Horizontal" Spacing="5">
-                        <TextBlock Text="+ Add" />
-                    </StackPanel>
-                </Button>
-            </StackPanel>
-
-            <Popup PlacementTarget="{Binding #SearchModeButton}" Placement="BottomEdgeAlignedLeft" VerticalOffset="6"
-                   IsOpen="{Binding IsSearchModeOpen}" IsLightDismissEnabled="True">
-                <Border Classes="dropdown" Width="160">
-                    <StackPanel Spacing="1">
-                        <Button Classes="modeOption" Classes.active="{Binding SearchMode, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:SearchMode.All}}"
-                                Content="All" Command="{Binding SetSearchModeCommand}" CommandParameter="{x:Static entities:SearchMode.All}" AutomationProperties.AutomationId="LibrarySearchModeOption_All" />
-                        <Button Classes="modeOption" Classes.active="{Binding SearchMode, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:SearchMode.Series}}"
-                                Content="Series" Command="{Binding SetSearchModeCommand}" CommandParameter="{x:Static entities:SearchMode.Series}" AutomationProperties.AutomationId="LibrarySearchModeOption_Series" />
-                        <Button Classes="modeOption" Classes.active="{Binding SearchMode, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:SearchMode.Writer}}"
-                                Content="Writer" Command="{Binding SetSearchModeCommand}" CommandParameter="{x:Static entities:SearchMode.Writer}" AutomationProperties.AutomationId="LibrarySearchModeOption_Writer" />
-                        <Button Classes="modeOption" Classes.active="{Binding SearchMode, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:SearchMode.Artists}}"
-                                Content="Artists" Command="{Binding SetSearchModeCommand}" CommandParameter="{x:Static entities:SearchMode.Artists}" AutomationProperties.AutomationId="LibrarySearchModeOption_Artists" />
-                        <Button Classes="modeOption" Classes.active="{Binding SearchMode, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:SearchMode.Descriptive}}"
-                                Content="Descriptive" Command="{Binding SetSearchModeCommand}" CommandParameter="{x:Static entities:SearchMode.Descriptive}" AutomationProperties.AutomationId="LibrarySearchModeOption_Descriptive" />
-                        <Button Classes="modeOption" Classes.active="{Binding SearchMode, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:SearchMode.File}}"
-                                Content="File" Command="{Binding SetSearchModeCommand}" CommandParameter="{x:Static entities:SearchMode.File}" AutomationProperties.AutomationId="LibrarySearchModeOption_File" />
-                        <Button Classes="modeOption" Classes.active="{Binding SearchMode, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:SearchMode.Catalog}}"
-                                Content="Catalog" Command="{Binding SetSearchModeCommand}" CommandParameter="{x:Static entities:SearchMode.Catalog}" AutomationProperties.AutomationId="LibrarySearchModeOption_Catalog" />
-                    </StackPanel>
-                </Border>
-            </Popup>
-
-            <Popup PlacementTarget="{Binding #FilterButton}" Placement="BottomEdgeAlignedLeft" VerticalOffset="6"
-                   IsOpen="{Binding IsFilterOpen}" IsLightDismissEnabled="True">
-                <Border Classes="dropdown" Width="210">
-                    <StackPanel Spacing="4">
-                        <CheckBox Content="Unread only" FontSize="12.5" IsChecked="{Binding FilterUnreadOnly}" AutomationProperties.AutomationId="LibraryFilterUnreadOnly" />
-                        <CheckBox Content="Missing issues" FontSize="12.5" IsChecked="{Binding FilterMissingIssues}" AutomationProperties.AutomationId="LibraryFilterMissingIssues" />
-                        <CheckBox Content="Tracked series" FontSize="12.5" IsChecked="{Binding FilterTrackedOnly}" AutomationProperties.AutomationId="LibraryFilterTrackedOnly" />
-                    </StackPanel>
-                </Border>
-            </Popup>
-
-            <Popup PlacementTarget="{Binding #SortButton}" Placement="BottomEdgeAlignedLeft" VerticalOffset="6"
-                   IsOpen="{Binding IsSortOpen}" IsLightDismissEnabled="True">
-                <Border Classes="dropdown" Width="190">
-                  <Panel>
-                    <!-- Two independent Sort controls - which one shows depends on Granularity
-                         (docs/superpowers/specs/2026-08-18-library-book-centric-redesign-design.md
-                         Slice 3, then the same-session follow-up that brought series cards back).
-                         Issue granularity delegates to IssueList's field/direction; Series
-                         granularity uses this ViewModel's own SortField/SortDirection. -->
-                    <StackPanel Spacing="1" IsVisible="{Binding IsIssueGranularity}">
-                        <ItemsControl ItemsSource="{Binding IssueList.SortFieldOptions}">
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate x:DataType="models:IssueListSortFieldDescriptor">
-                                    <Button Classes="modeOption"
-                                            Classes.active="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).IssueList.SortField, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={Binding Field}}"
-                                            Content="{Binding DisplayName}"
-                                            Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).IssueList.SetSortFieldCommand}"
-                                            CommandParameter="{Binding Field}"
-                                            AutomationProperties.AutomationId="{Binding Field, StringFormat='ComicListSortOption_{0}'}" />
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-
-                        <Border Height="1" Background="{DynamicResource PbBorderBrush}" Margin="0,10" />
-
-                        <Button Classes="modeOption" Content="{Binding IssueList.SortDirection, StringFormat='Direction: {0}'}"
-                                Command="{Binding IssueList.ToggleSortDirectionCommand}" AutomationProperties.AutomationId="ComicListSortDirectionToggle" />
-                    </StackPanel>
-                    <StackPanel Spacing="1" IsVisible="{Binding IsSeriesGranularity}">
-                        <Button Classes="modeOption" Classes.active="{Binding SortField, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:LibrarySortField.Name}}"
-                                Content="Name" Command="{Binding SetSortFieldCommand}" CommandParameter="{x:Static entities:LibrarySortField.Name}" AutomationProperties.AutomationId="LibrarySortOption_Name" />
-                        <Button Classes="modeOption" Classes.active="{Binding SortField, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:LibrarySortField.DateAdded}}"
-                                Content="Date Added" Command="{Binding SetSortFieldCommand}" CommandParameter="{x:Static entities:LibrarySortField.DateAdded}" AutomationProperties.AutomationId="LibrarySortOption_DateAdded" />
-                        <Button Classes="modeOption" Classes.active="{Binding SortField, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:LibrarySortField.LastRead}}"
-                                Content="Last Read" Command="{Binding SetSortFieldCommand}" CommandParameter="{x:Static entities:LibrarySortField.LastRead}" AutomationProperties.AutomationId="LibrarySortOption_LastRead" />
-                        <Button Classes="modeOption" Classes.active="{Binding SortField, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:LibrarySortField.Size}}"
-                                Content="Size" Command="{Binding SetSortFieldCommand}" CommandParameter="{x:Static entities:LibrarySortField.Size}" AutomationProperties.AutomationId="LibrarySortOption_Size" />
-                        <Button Classes="modeOption" Classes.active="{Binding SortField, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:LibrarySortField.IssueCount}}"
-                                Content="Issue Count" Command="{Binding SetSortFieldCommand}" CommandParameter="{x:Static entities:LibrarySortField.IssueCount}" AutomationProperties.AutomationId="LibrarySortOption_IssueCount" />
-                        <Button Classes="modeOption" Classes.active="{Binding SortField, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:LibrarySortField.UnreadCount}}"
-                                Content="Unread Count" Command="{Binding SetSortFieldCommand}" CommandParameter="{x:Static entities:LibrarySortField.UnreadCount}" AutomationProperties.AutomationId="LibrarySortOption_UnreadCount" />
-                        <Button Classes="modeOption" Classes.active="{Binding SortField, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:LibrarySortField.Publisher}}"
-                                Content="Publisher" Command="{Binding SetSortFieldCommand}" CommandParameter="{x:Static entities:LibrarySortField.Publisher}" AutomationProperties.AutomationId="LibrarySortOption_Publisher" />
-
-                        <Border Height="1" Background="{DynamicResource PbBorderBrush}" Margin="0,10" />
-
-                        <Button Classes="modeOption" Content="{Binding SortDirection, StringFormat='Direction: {0}'}"
-                                Command="{Binding ToggleSortDirectionCommand}" AutomationProperties.AutomationId="LibrarySortDirectionToggle" />
-                    </StackPanel>
-                  </Panel>
-                </Border>
-            </Popup>
-
-            <Popup PlacementTarget="{Binding #GroupButton}" Placement="BottomEdgeAlignedLeft" VerticalOffset="6"
-                   IsOpen="{Binding IsGroupOpen}" IsLightDismissEnabled="True">
-                <Border Classes="dropdown" Width="190">
-                  <Panel>
-                    <!-- Two independent Group controls - see the Sort popup's comment. -->
-                    <StackPanel Spacing="1" IsVisible="{Binding IsIssueGranularity}">
-                        <Button Classes="modeOption" Classes.active="{Binding IssueList.GroupField, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:IssueListGroupField.None}}"
-                                Content="None" Command="{Binding IssueList.SetGroupFieldCommand}" CommandParameter="{x:Static entities:IssueListGroupField.None}" AutomationProperties.AutomationId="ComicListGroupOption_None" />
-                        <ItemsControl ItemsSource="{Binding IssueList.GroupFieldOptions}">
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate x:DataType="models:IssueListGroupFieldDescriptor">
-                                    <Button Classes="modeOption"
-                                            Classes.active="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).IssueList.GroupField, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={Binding Field}}"
-                                            Content="{Binding DisplayName}"
-                                            Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).IssueList.SetGroupFieldCommand}"
-                                            CommandParameter="{Binding Field}"
-                                            AutomationProperties.AutomationId="{Binding Field, StringFormat='ComicListGroupOption_{0}'}" />
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-                    </StackPanel>
-                    <StackPanel Spacing="1" IsVisible="{Binding IsSeriesGranularity}">
-                        <Button Classes="modeOption" Classes.active="{Binding GroupField, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:LibraryGroupField.None}}"
-                                Content="None" Command="{Binding SetGroupFieldCommand}" CommandParameter="{x:Static entities:LibraryGroupField.None}" AutomationProperties.AutomationId="LibraryGroupOption_None" />
-                        <Button Classes="modeOption" Classes.active="{Binding GroupField, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:LibraryGroupField.ContentType}}"
-                                Content="Content Type" Command="{Binding SetGroupFieldCommand}" CommandParameter="{x:Static entities:LibraryGroupField.ContentType}" AutomationProperties.AutomationId="LibraryGroupOption_ContentType" />
-                        <Button Classes="modeOption" Classes.active="{Binding GroupField, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:LibraryGroupField.Publisher}}"
-                                Content="Publisher" Command="{Binding SetGroupFieldCommand}" CommandParameter="{x:Static entities:LibraryGroupField.Publisher}" AutomationProperties.AutomationId="LibraryGroupOption_Publisher" />
-                        <Button Classes="modeOption" Classes.active="{Binding GroupField, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:LibraryGroupField.Alphabetical}}"
-                                Content="Alphabetical" Command="{Binding SetGroupFieldCommand}" CommandParameter="{x:Static entities:LibraryGroupField.Alphabetical}" AutomationProperties.AutomationId="LibraryGroupOption_Alphabetical" />
-                    </StackPanel>
-                  </Panel>
-                </Border>
-            </Popup>
-
-            <Popup PlacementTarget="{Binding #DisplayButton}" Placement="BottomEdgeAlignedRight" VerticalOffset="6"
-                   IsOpen="{Binding IsDisplayOpen}" IsLightDismissEnabled="True">
-                <Border Classes="dropdown" Width="220">
-                    <StackPanel Spacing="1">
-                        <!-- Card content: which granularity's data feeds every mode below (docs/
-                             superpowers/specs/2026-08-18-library-book-centric-redesign-design.md
-                             Slice 3, then the same-session follow-up that brought series cards back
-                             as a real, switchable option instead of a full replacement). -->
-                        <TextBlock Classes="dropdownRow" Text="Card content" Foreground="{DynamicResource PbTextBrush}" Margin="0,0,0,4" />
-                        <Button Classes="modeOption" Classes.active="{Binding IsIssueGranularity}" Content="Per-issue tiles"
-                                Command="{Binding SetGranularityCommand}" CommandParameter="{x:Static entities:LibraryContentGranularity.Issue}" AutomationProperties.AutomationId="LibraryGranularityOption_Issue" />
-                        <Button Classes="modeOption" Classes.active="{Binding IsSeriesGranularity}" Content="Series cards"
-                                Command="{Binding SetGranularityCommand}" CommandParameter="{x:Static entities:LibraryContentGranularity.Series}" AutomationProperties.AutomationId="LibraryGranularityOption_Series" />
-
-                        <Border Height="1" Background="{DynamicResource PbBorderBrush}" Margin="0,10" />
-
-                        <TextBlock Classes="dropdownRow" Text="Display mode" Foreground="{DynamicResource PbTextBrush}" Margin="0,0,0,4" />
-                        <Button Classes="modeOption" Classes.active="{Binding IsCompactGrid}" Content="Compact grid"
-                                Command="{Binding SetViewModeCommand}" CommandParameter="{x:Static entities:LibraryViewMode.CompactGrid}" AutomationProperties.AutomationId="LibraryViewModeOption_CompactGrid" />
-                        <Button Classes="modeOption" Classes.active="{Binding IsComfortableGrid}" Content="Comfortable grid"
-                                Command="{Binding SetViewModeCommand}" CommandParameter="{x:Static entities:LibraryViewMode.ComfortableGrid}" AutomationProperties.AutomationId="LibraryViewModeOption_ComfortableGrid" />
-                        <Button Classes="modeOption" Classes.active="{Binding IsCoverOnlyGrid}" Content="Cover-only grid"
-                                Command="{Binding SetViewModeCommand}" CommandParameter="{x:Static entities:LibraryViewMode.CoverOnlyGrid}" AutomationProperties.AutomationId="LibraryViewModeOption_CoverOnlyGrid" />
-                        <Button Classes="modeOption" Classes.active="{Binding IsPanoramaGrid}" Content="Panorama comfortable grid"
-                                Command="{Binding SetViewModeCommand}" CommandParameter="{x:Static entities:LibraryViewMode.PanoramaGrid}" AutomationProperties.AutomationId="LibraryViewModeOption_PanoramaGrid" />
-                        <Button Classes="modeOption" Classes.active="{Binding IsListView}" Content="List"
-                                Command="{Binding SetViewModeCommand}" CommandParameter="{x:Static entities:LibraryViewMode.List}" AutomationProperties.AutomationId="LibraryViewModeOption_List" />
-                        <Button Classes="modeOption" Classes.active="{Binding IsDetailsView}" Content="Details"
-                                Command="{Binding SetViewModeCommand}" CommandParameter="{x:Static entities:LibraryViewMode.Details}" AutomationProperties.AutomationId="LibraryViewModeOption_Details" />
-                        <Button Classes="modeOption" Classes.active="{Binding IsTilesView}" Content="Tiles"
-                                Command="{Binding SetViewModeCommand}" CommandParameter="{x:Static entities:LibraryViewMode.Tiles}" AutomationProperties.AutomationId="LibraryViewModeOption_Tiles" />
-                        <Button Classes="modeOption" Classes.active="{Binding IsIssueListView}" Content="Comic List"
-                                Command="{Binding SetViewModeCommand}" CommandParameter="{x:Static entities:LibraryViewMode.IssueList}" AutomationProperties.AutomationId="LibraryViewModeOption_IssueList" />
-
-                        <Border Height="1" Background="{DynamicResource PbBorderBrush}" Margin="0,10" />
-
-                        <TextBlock Classes="dropdownRow" Text="Grid density" Foreground="{DynamicResource PbTextBrush}" Margin="0,0,0,4" />
-                        <Slider Minimum="0.6" Maximum="1.6" Value="{Binding GridDensity}" />
-
-                        <Border Height="1" Background="{DynamicResource PbBorderBrush}" Margin="0,10" />
-
-                        <TextBlock Classes="dropdownRow" Text="Overlay" Foreground="{DynamicResource PbTextBrush}" Margin="0,0,0,4" />
-                        <CheckBox Content="Unread badge" FontSize="12.5" IsChecked="{Binding ShowUnreadBadge}" />
-                        <CheckBox Content="Publisher badge" FontSize="12.5" IsChecked="{Binding ShowPublisherBadge}" />
-                        <CheckBox Content="Language badge" FontSize="12.5" IsChecked="{Binding ShowLanguageBadge}" />
-                        <CheckBox Content="Use language icon" FontSize="12.5" IsChecked="{Binding UseLanguageIcon}" />
-                        <!-- Series-card-only: see ShowContinueReadingButton's own doc comment for why. -->
-                        <CheckBox Content="Continue reading button" FontSize="12.5" IsChecked="{Binding ShowContinueReadingButton}"
-                                  IsVisible="{Binding IsSeriesGranularity}" />
-                    </StackPanel>
-                </Border>
-            </Popup>
-
-            <!-- Manual "add a physical book" entry point (docs/superpowers/specs/2026-08-16-reveal-in-explorer-and-fileless-entries-design.md §2) -->
-            <Popup PlacementTarget="{Binding #AddButton}" Placement="BottomEdgeAlignedRight" VerticalOffset="6"
-                   IsOpen="{Binding IsAddOpen}" IsLightDismissEnabled="True">
-                <Border Classes="dropdown" Width="220">
-                    <StackPanel Spacing="8">
-                        <TextBlock Classes="dropdownRow" Text="Add a physical book" Foreground="{DynamicResource PbTextBrush}" Margin="0,0,0,4" />
-                        <AutoCompleteBox Watermark="Series name" Text="{Binding NewIssueSeriesName}"
-                                          ItemsSource="{Binding ExistingSeriesNames}" FontSize="12.5" />
-                        <TextBox Watermark="Number" Text="{Binding NewIssueNumber}" FontSize="12.5" />
-
-                        <!-- docs/superpowers/specs/2026-08-16-manga-content-type-classification-design.md §3 -->
-                        <Button Classes="toolbarPill" Content="{Binding NewIssueContentType}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left">
-                            <Button.Flyout>
-                                <Flyout Placement="Bottom">
-                                    <StackPanel Width="140">
-                                        <Button Classes="modeOption" Classes.active="{Binding NewIssueContentType, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:ContentType.Comic}}"
-                                                Content="Comic" Command="{Binding SetNewIssueContentTypeCommand}" CommandParameter="{x:Static entities:ContentType.Comic}" />
-                                        <Button Classes="modeOption" Classes.active="{Binding NewIssueContentType, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:ContentType.Manga}}"
-                                                Content="Manga" Command="{Binding SetNewIssueContentTypeCommand}" CommandParameter="{x:Static entities:ContentType.Manga}" />
-                                        <Button Classes="modeOption" Classes.active="{Binding NewIssueContentType, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:ContentType.Manhua}}"
-                                                Content="Manhua" Command="{Binding SetNewIssueContentTypeCommand}" CommandParameter="{x:Static entities:ContentType.Manhua}" />
-                                        <Button Classes="modeOption" Classes.active="{Binding NewIssueContentType, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:ContentType.Manhwa}}"
-                                                Content="Manhwa" Command="{Binding SetNewIssueContentTypeCommand}" CommandParameter="{x:Static entities:ContentType.Manhwa}" />
-                                    </StackPanel>
-                                </Flyout>
-                            </Button.Flyout>
-                        </Button>
-
-                        <Button Classes="toolbarPill" Content="{Binding NewIssueReadingMode}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
-                                IsVisible="{Binding ShowAddReadingModePicker}">
-                            <Button.Flyout>
-                                <Flyout Placement="Bottom">
-                                    <StackPanel Width="140">
-                                        <Button Classes="modeOption" Classes.active="{Binding NewIssueReadingMode, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:ReadingMode.LeftToRight}}"
-                                                Content="Left to Right" Command="{Binding SetNewIssueReadingModeCommand}" CommandParameter="{x:Static entities:ReadingMode.LeftToRight}" />
-                                        <Button Classes="modeOption" Classes.active="{Binding NewIssueReadingMode, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:ReadingMode.RightToLeft}}"
-                                                Content="Right to Left" Command="{Binding SetNewIssueReadingModeCommand}" CommandParameter="{x:Static entities:ReadingMode.RightToLeft}" />
-                                    </StackPanel>
-                                </Flyout>
-                            </Button.Flyout>
-                        </Button>
-
-                        <Button Classes="modeOption" Content="Create" Command="{Binding CreatePlaceholderIssueCommand}" />
-                    </StackPanel>
-                </Border>
-            </Popup>
-          </Panel>
-        </Border>
-
-        <!-- ============ Compact grid ============ -->
-        <ScrollViewer x:Name="CompactScrollViewer" Grid.Row="1" IsVisible="{Binding IsCompactGrid}">
+        <!-- ============ Poster grid (UI rework Phase 4a) - one grid replacing Compact/
+             Comfortable/Cover-only. Same 4-way inner split (Issue/Series x grouped/ungrouped);
+             PosterCardWidth/Height (density slider) size the wrap panel, EffectiveShowTileTitles
+             gates each tile's own text row. ============ -->
+        <ScrollViewer x:Name="PosterGridScrollViewer" Grid.Row="1" IsVisible="{Binding IsPosterGrid}">
             <Grid>
                 <Panel IsVisible="{Binding IsIssueGranularity}">
                     <ItemsControl IsVisible="{Binding !IssueList.IsGrouped}" ItemsSource="{Binding IssueList.Rows}"
-                                  ItemTemplate="{StaticResource CompactGridItemTemplate}" Margin="24,22,24,40">
+                                  ItemTemplate="{StaticResource PosterGridIssueTemplate}" Margin="24,22,24,40">
                         <ItemsControl.ItemsPanel>
-                            <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
+                            <ItemsPanelTemplate><controls:VirtualizingWrapPanel ItemWidth="{Binding PosterCardWidth}" ItemHeight="{Binding PosterCardHeight}" ItemSpacing="20" LineSpacing="20" /></ItemsPanelTemplate>
                         </ItemsControl.ItemsPanel>
                     </ItemsControl>
                     <ItemsControl IsVisible="{Binding IssueList.IsGrouped}" ItemsSource="{Binding IssueList.Groups}" Margin="24,22,24,40">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate x:DataType="models:IssueListRowGroup">
-                                <StackPanel Margin="0,0,0,18">
-                                    <TextBlock Text="{Binding Header}" Classes="groupHeader" />
-                                    <ItemsControl ItemsSource="{Binding Items}" ItemTemplate="{StaticResource CompactGridItemTemplate}">
+                                <StackPanel Classes="posterGroup" Margin="0,0,0,22">
+                                    <DockPanel>
+                                        <TextBlock DockPanel.Dock="Left" Text="{Binding Header}" Classes="pbTextHeading" VerticalAlignment="Center" />
+                                        <TextBlock DockPanel.Dock="Left" Text="{Binding Items.Count}" Classes="pbTextCaption" Margin="8,0,0,0" VerticalAlignment="Center" />
+                                        <Border Height="1" VerticalAlignment="Center" Margin="14,0,0,0" Background="{DynamicResource PbBorderBrush}" />
+                                    </DockPanel>
+                                    <ItemsControl ItemsSource="{Binding Items}" ItemTemplate="{StaticResource PosterGridIssueTemplate}">
                                         <ItemsControl.ItemsPanel>
-                                            <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
+                                            <ItemsPanelTemplate><controls:VirtualizingWrapPanel ItemWidth="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PosterCardWidth}" ItemHeight="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PosterCardHeight}" ItemSpacing="20" LineSpacing="20" /></ItemsPanelTemplate>
                                         </ItemsControl.ItemsPanel>
                                     </ItemsControl>
                                 </StackPanel>
@@ -1380,119 +1124,23 @@
                 </Panel>
                 <Panel IsVisible="{Binding IsSeriesGranularity}">
                     <ItemsControl IsVisible="{Binding !IsGrouped}" ItemsSource="{Binding Covers}"
-                                  ItemTemplate="{StaticResource SeriesCompactGridItemTemplate}" Margin="24,22,24,40">
+                                  ItemTemplate="{StaticResource PosterGridSeriesTemplate}" Margin="24,22,24,40">
                         <ItemsControl.ItemsPanel>
-                            <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
+                            <ItemsPanelTemplate><controls:VirtualizingWrapPanel ItemWidth="{Binding PosterCardWidth}" ItemHeight="{Binding PosterCardHeight}" ItemSpacing="20" LineSpacing="20" /></ItemsPanelTemplate>
                         </ItemsControl.ItemsPanel>
                     </ItemsControl>
                     <ItemsControl IsVisible="{Binding IsGrouped}" ItemsSource="{Binding Groups}" Margin="24,22,24,40">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate x:DataType="models:SeriesCardGroup">
-                                <StackPanel Margin="0,0,0,18">
-                                    <TextBlock Text="{Binding Header}" Classes="groupHeader" />
-                                    <ItemsControl ItemsSource="{Binding Items}" ItemTemplate="{StaticResource SeriesCompactGridItemTemplate}">
+                                <StackPanel Classes="posterGroup" Margin="0,0,0,22">
+                                    <DockPanel>
+                                        <TextBlock DockPanel.Dock="Left" Text="{Binding Header}" Classes="pbTextHeading" VerticalAlignment="Center" />
+                                        <TextBlock DockPanel.Dock="Left" Text="{Binding Items.Count}" Classes="pbTextCaption" Margin="8,0,0,0" VerticalAlignment="Center" />
+                                        <Border Height="1" VerticalAlignment="Center" Margin="14,0,0,0" Background="{DynamicResource PbBorderBrush}" />
+                                    </DockPanel>
+                                    <ItemsControl ItemsSource="{Binding Items}" ItemTemplate="{StaticResource PosterGridSeriesTemplate}">
                                         <ItemsControl.ItemsPanel>
-                                            <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
-                                        </ItemsControl.ItemsPanel>
-                                    </ItemsControl>
-                                </StackPanel>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                </Panel>
-            </Grid>
-        </ScrollViewer>
-
-        <!-- ============ Comfortable grid ============ -->
-        <ScrollViewer x:Name="ComfortableScrollViewer" Grid.Row="1" IsVisible="{Binding IsComfortableGrid}">
-            <Grid>
-                <Panel IsVisible="{Binding IsIssueGranularity}">
-                    <ItemsControl IsVisible="{Binding !IssueList.IsGrouped}" ItemsSource="{Binding IssueList.Rows}"
-                                  ItemTemplate="{StaticResource ComfortableGridItemTemplate}" Margin="24,22,24,40">
-                        <ItemsControl.ItemsPanel>
-                            <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
-                        </ItemsControl.ItemsPanel>
-                    </ItemsControl>
-                    <ItemsControl IsVisible="{Binding IssueList.IsGrouped}" ItemsSource="{Binding IssueList.Groups}" Margin="24,22,24,40">
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate x:DataType="models:IssueListRowGroup">
-                                <StackPanel Margin="0,0,0,18">
-                                    <TextBlock Text="{Binding Header}" Classes="groupHeader" />
-                                    <ItemsControl ItemsSource="{Binding Items}" ItemTemplate="{StaticResource ComfortableGridItemTemplate}">
-                                        <ItemsControl.ItemsPanel>
-                                            <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
-                                        </ItemsControl.ItemsPanel>
-                                    </ItemsControl>
-                                </StackPanel>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                </Panel>
-                <Panel IsVisible="{Binding IsSeriesGranularity}">
-                    <ItemsControl IsVisible="{Binding !IsGrouped}" ItemsSource="{Binding Covers}"
-                                  ItemTemplate="{StaticResource SeriesComfortableGridItemTemplate}" Margin="24,22,24,40">
-                        <ItemsControl.ItemsPanel>
-                            <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
-                        </ItemsControl.ItemsPanel>
-                    </ItemsControl>
-                    <ItemsControl IsVisible="{Binding IsGrouped}" ItemsSource="{Binding Groups}" Margin="24,22,24,40">
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate x:DataType="models:SeriesCardGroup">
-                                <StackPanel Margin="0,0,0,18">
-                                    <TextBlock Text="{Binding Header}" Classes="groupHeader" />
-                                    <ItemsControl ItemsSource="{Binding Items}" ItemTemplate="{StaticResource SeriesComfortableGridItemTemplate}">
-                                        <ItemsControl.ItemsPanel>
-                                            <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
-                                        </ItemsControl.ItemsPanel>
-                                    </ItemsControl>
-                                </StackPanel>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                </Panel>
-            </Grid>
-        </ScrollViewer>
-
-        <!-- ============ Cover-only grid ============ -->
-        <ScrollViewer x:Name="CoverOnlyScrollViewer" Grid.Row="1" IsVisible="{Binding IsCoverOnlyGrid}">
-            <Grid>
-                <Panel IsVisible="{Binding IsIssueGranularity}">
-                    <ItemsControl IsVisible="{Binding !IssueList.IsGrouped}" ItemsSource="{Binding IssueList.Rows}"
-                                  ItemTemplate="{StaticResource CoverOnlyGridItemTemplate}" Margin="24,22,24,40">
-                        <ItemsControl.ItemsPanel>
-                            <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
-                        </ItemsControl.ItemsPanel>
-                    </ItemsControl>
-                    <ItemsControl IsVisible="{Binding IssueList.IsGrouped}" ItemsSource="{Binding IssueList.Groups}" Margin="24,22,24,40">
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate x:DataType="models:IssueListRowGroup">
-                                <StackPanel Margin="0,0,0,18">
-                                    <TextBlock Text="{Binding Header}" Classes="groupHeader" />
-                                    <ItemsControl ItemsSource="{Binding Items}" ItemTemplate="{StaticResource CoverOnlyGridItemTemplate}">
-                                        <ItemsControl.ItemsPanel>
-                                            <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
-                                        </ItemsControl.ItemsPanel>
-                                    </ItemsControl>
-                                </StackPanel>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                </Panel>
-                <Panel IsVisible="{Binding IsSeriesGranularity}">
-                    <ItemsControl IsVisible="{Binding !IsGrouped}" ItemsSource="{Binding Covers}"
-                                  ItemTemplate="{StaticResource SeriesCoverOnlyGridItemTemplate}" Margin="24,22,24,40">
-                        <ItemsControl.ItemsPanel>
-                            <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
-                        </ItemsControl.ItemsPanel>
-                    </ItemsControl>
-                    <ItemsControl IsVisible="{Binding IsGrouped}" ItemsSource="{Binding Groups}" Margin="24,22,24,40">
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate x:DataType="models:SeriesCardGroup">
-                                <StackPanel Margin="0,0,0,18">
-                                    <TextBlock Text="{Binding Header}" Classes="groupHeader" />
-                                    <ItemsControl ItemsSource="{Binding Items}" ItemTemplate="{StaticResource SeriesCoverOnlyGridItemTemplate}">
-                                        <ItemsControl.ItemsPanel>
-                                            <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
+                                            <ItemsPanelTemplate><controls:VirtualizingWrapPanel ItemWidth="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PosterCardWidth}" ItemHeight="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PosterCardHeight}" ItemSpacing="20" LineSpacing="20" /></ItemsPanelTemplate>
                                         </ItemsControl.ItemsPanel>
                                     </ItemsControl>
                                 </StackPanel>
@@ -1517,7 +1165,7 @@
                         <ItemsControl.ItemTemplate>
                             <DataTemplate x:DataType="models:IssueListRowGroup">
                                 <StackPanel Margin="0,0,0,18">
-                                    <TextBlock Text="{Binding Header}" Classes="groupHeader" />
+                                    <DockPanel Margin="0,0,0,10"><TextBlock DockPanel.Dock="Left" Text="{Binding Header}" Classes="pbTextHeading" VerticalAlignment="Center" /><TextBlock DockPanel.Dock="Left" Text="{Binding Items.Count}" Classes="pbTextCaption" Margin="8,0,0,0" VerticalAlignment="Center" /><Border Height="1" VerticalAlignment="Center" Margin="14,0,0,0" Background="{DynamicResource PbBorderBrush}" /></DockPanel>
                                     <ItemsControl ItemsSource="{Binding Items}" ItemTemplate="{StaticResource PanoramaGridItemTemplate}">
                                         <ItemsControl.ItemsPanel>
                                             <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
@@ -1539,7 +1187,7 @@
                         <ItemsControl.ItemTemplate>
                             <DataTemplate x:DataType="models:SeriesCardGroup">
                                 <StackPanel Margin="0,0,0,18">
-                                    <TextBlock Text="{Binding Header}" Classes="groupHeader" />
+                                    <DockPanel Margin="0,0,0,10"><TextBlock DockPanel.Dock="Left" Text="{Binding Header}" Classes="pbTextHeading" VerticalAlignment="Center" /><TextBlock DockPanel.Dock="Left" Text="{Binding Items.Count}" Classes="pbTextCaption" Margin="8,0,0,0" VerticalAlignment="Center" /><Border Height="1" VerticalAlignment="Center" Margin="14,0,0,0" Background="{DynamicResource PbBorderBrush}" /></DockPanel>
                                     <ItemsControl ItemsSource="{Binding Items}" ItemTemplate="{StaticResource SeriesPanoramaGridItemTemplate}">
                                         <ItemsControl.ItemsPanel>
                                             <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
@@ -1563,7 +1211,7 @@
                         <ItemsControl.ItemTemplate>
                             <DataTemplate x:DataType="models:IssueListRowGroup">
                                 <StackPanel Margin="0,0,0,18">
-                                    <TextBlock Text="{Binding Header}" Classes="groupHeader" />
+                                    <DockPanel Margin="0,0,0,10"><TextBlock DockPanel.Dock="Left" Text="{Binding Header}" Classes="pbTextHeading" VerticalAlignment="Center" /><TextBlock DockPanel.Dock="Left" Text="{Binding Items.Count}" Classes="pbTextCaption" Margin="8,0,0,0" VerticalAlignment="Center" /><Border Height="1" VerticalAlignment="Center" Margin="14,0,0,0" Background="{DynamicResource PbBorderBrush}" /></DockPanel>
                                     <ItemsControl ItemsSource="{Binding Items}" ItemTemplate="{StaticResource ListItemTemplate}" />
                                 </StackPanel>
                             </DataTemplate>
@@ -1577,7 +1225,7 @@
                         <ItemsControl.ItemTemplate>
                             <DataTemplate x:DataType="models:SeriesCardGroup">
                                 <StackPanel Margin="0,0,0,18">
-                                    <TextBlock Text="{Binding Header}" Classes="groupHeader" />
+                                    <DockPanel Margin="0,0,0,10"><TextBlock DockPanel.Dock="Left" Text="{Binding Header}" Classes="pbTextHeading" VerticalAlignment="Center" /><TextBlock DockPanel.Dock="Left" Text="{Binding Items.Count}" Classes="pbTextCaption" Margin="8,0,0,0" VerticalAlignment="Center" /><Border Height="1" VerticalAlignment="Center" Margin="14,0,0,0" Background="{DynamicResource PbBorderBrush}" /></DockPanel>
                                     <ItemsControl ItemsSource="{Binding Items}" ItemTemplate="{StaticResource SeriesListItemTemplate}" />
                                 </StackPanel>
                             </DataTemplate>
@@ -1589,12 +1237,46 @@
 
         <!-- ============ Details ============ -->
         <DockPanel Grid.Row="1" IsVisible="{Binding IsDetailsView}" Margin="24,18,24,0">
-            <Grid DockPanel.Dock="Top" ColumnDefinitions="52,*,110,70,70,140" Margin="0,0,16,8" IsVisible="{Binding IsIssueGranularity}">
-                <TextBlock Grid.Column="1" Text="Title" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource PbTextFaintBrush}" Margin="10,0,0,0" />
-                <TextBlock Grid.Column="2" Text="Series" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource PbTextFaintBrush}" />
-                <TextBlock Grid.Column="3" Text="Number" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource PbTextFaintBrush}" />
-                <TextBlock Grid.Column="4" Text="Read" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource PbTextFaintBrush}" />
-                <TextBlock Grid.Column="5" Text="Publisher" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource PbTextFaintBrush}" />
+            <!-- Configurable, click-to-sort header (4b §8) - same DetailsColumns source + fixed
+                 widths as each data row, so hiding a column keeps both aligned. Right-click for the
+                 column picker. -->
+            <Grid DockPanel.Dock="Top" ColumnDefinitions="52,*" Margin="0,0,16,8" IsVisible="{Binding IsIssueGranularity}">
+                <ItemsControl Grid.Column="1" ItemsSource="{Binding DetailsColumns}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate><StackPanel Orientation="Horizontal" /></ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ContextMenu>
+                        <ContextMenu ItemsSource="{Binding DetailsColumns}">
+                            <ContextMenu.ItemTemplate>
+                                <DataTemplate x:DataType="models:DetailsColumn">
+                                    <MenuItem Header="{Binding DisplayName}" ToggleType="CheckBox"
+                                              IsChecked="{Binding IsVisible, Mode=TwoWay}" StaysOpenOnClick="True" />
+                                </DataTemplate>
+                            </ContextMenu.ItemTemplate>
+                        </ContextMenu>
+                    </ItemsControl.ContextMenu>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="models:DetailsColumn">
+                            <Button Classes="detailsHeader" IsVisible="{Binding IsVisible}" Width="{Binding Width}"
+                                    Command="{Binding $parent[ItemsControl].((vm:LibraryScreenViewModel)DataContext).SetDetailsSortCommand}"
+                                    CommandParameter="{Binding Field}"
+                                    AutomationProperties.AutomationId="{Binding Field, StringFormat='LibraryDetailsHeader_{0}'}">
+                                <TextBlock TextTrimming="CharacterEllipsis">
+                                    <Run Text="{Binding DisplayName}" />
+                                    <Run>
+                                        <Run.Text>
+                                            <MultiBinding Converter="{x:Static views:DetailsSortGlyphConverter.Instance}">
+                                                <Binding Path="Field" />
+                                                <Binding Path="$parent[ItemsControl].((vm:LibraryScreenViewModel)DataContext).IssueList.SortField" />
+                                                <Binding Path="$parent[ItemsControl].((vm:LibraryScreenViewModel)DataContext).IssueList.SortDirection" />
+                                            </MultiBinding>
+                                        </Run.Text>
+                                    </Run>
+                                </TextBlock>
+                            </Button>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
             </Grid>
             <Grid DockPanel.Dock="Top" ColumnDefinitions="52,*,110,70,70,140" Margin="0,0,16,8" IsVisible="{Binding IsSeriesGranularity}">
                 <TextBlock Grid.Column="1" Text="Name" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource PbTextFaintBrush}" Margin="10,0,0,0" />
@@ -1612,7 +1294,7 @@
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate x:DataType="models:IssueListRowGroup">
                                     <StackPanel Margin="0,0,0,14">
-                                        <TextBlock Text="{Binding Header}" Classes="groupHeader" />
+                                        <DockPanel Margin="0,0,0,10"><TextBlock DockPanel.Dock="Left" Text="{Binding Header}" Classes="pbTextHeading" VerticalAlignment="Center" /><TextBlock DockPanel.Dock="Left" Text="{Binding Items.Count}" Classes="pbTextCaption" Margin="8,0,0,0" VerticalAlignment="Center" /><Border Height="1" VerticalAlignment="Center" Margin="14,0,0,0" Background="{DynamicResource PbBorderBrush}" /></DockPanel>
                                         <ItemsControl ItemsSource="{Binding Items}" ItemTemplate="{StaticResource DetailsItemTemplate}" />
                                     </StackPanel>
                                 </DataTemplate>
@@ -1626,7 +1308,7 @@
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate x:DataType="models:SeriesCardGroup">
                                     <StackPanel Margin="0,0,0,14">
-                                        <TextBlock Text="{Binding Header}" Classes="groupHeader" />
+                                        <DockPanel Margin="0,0,0,10"><TextBlock DockPanel.Dock="Left" Text="{Binding Header}" Classes="pbTextHeading" VerticalAlignment="Center" /><TextBlock DockPanel.Dock="Left" Text="{Binding Items.Count}" Classes="pbTextCaption" Margin="8,0,0,0" VerticalAlignment="Center" /><Border Height="1" VerticalAlignment="Center" Margin="14,0,0,0" Background="{DynamicResource PbBorderBrush}" /></DockPanel>
                                         <ItemsControl ItemsSource="{Binding Items}" ItemTemplate="{StaticResource SeriesDetailsItemTemplate}" />
                                     </StackPanel>
                                 </DataTemplate>
@@ -1651,7 +1333,7 @@
                         <ItemsControl.ItemTemplate>
                             <DataTemplate x:DataType="models:IssueListRowGroup">
                                 <StackPanel Margin="0,0,0,18">
-                                    <TextBlock Text="{Binding Header}" Classes="groupHeader" />
+                                    <DockPanel Margin="0,0,0,10"><TextBlock DockPanel.Dock="Left" Text="{Binding Header}" Classes="pbTextHeading" VerticalAlignment="Center" /><TextBlock DockPanel.Dock="Left" Text="{Binding Items.Count}" Classes="pbTextCaption" Margin="8,0,0,0" VerticalAlignment="Center" /><Border Height="1" VerticalAlignment="Center" Margin="14,0,0,0" Background="{DynamicResource PbBorderBrush}" /></DockPanel>
                                     <ItemsControl ItemsSource="{Binding Items}" ItemTemplate="{StaticResource TilesItemTemplate}">
                                         <ItemsControl.ItemsPanel>
                                             <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
@@ -1673,7 +1355,7 @@
                         <ItemsControl.ItemTemplate>
                             <DataTemplate x:DataType="models:SeriesCardGroup">
                                 <StackPanel Margin="0,0,0,18">
-                                    <TextBlock Text="{Binding Header}" Classes="groupHeader" />
+                                    <DockPanel Margin="0,0,0,10"><TextBlock DockPanel.Dock="Left" Text="{Binding Header}" Classes="pbTextHeading" VerticalAlignment="Center" /><TextBlock DockPanel.Dock="Left" Text="{Binding Items.Count}" Classes="pbTextCaption" Margin="8,0,0,0" VerticalAlignment="Center" /><Border Height="1" VerticalAlignment="Center" Margin="14,0,0,0" Background="{DynamicResource PbBorderBrush}" /></DockPanel>
                                     <ItemsControl ItemsSource="{Binding Items}" ItemTemplate="{StaticResource SeriesTilesItemTemplate}">
                                         <ItemsControl.ItemsPanel>
                                             <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
@@ -1719,18 +1401,59 @@
             </ItemsControl>
         </Border>
 
-        <!-- P6 fix (docs/alpha-todo.md): none of the 7 display modes had a "no series match" empty
-             state - a zero-result search/filter combination (or an empty library) just rendered a
-             blank area below the toolbar. -->
-        <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="6" IsVisible="{Binding !HasAnyResults}"
-                    HorizontalAlignment="Center" VerticalAlignment="Center">
-            <Border Classes="icon" Width="13" Height="13">
-                <Border.OpacityMask>
-                    <ImageBrush Source="/Assets/Icons/Info.png" Stretch="Uniform" />
-                </Border.OpacityMask>
-            </Border>
-            <TextBlock Text="No series match your filters." FontSize="13" Foreground="{DynamicResource PbTextFaintBrush}" />
+        <!-- Empty state (4b §9) - message + action chosen by VM computed properties: a zero-result
+             search, a filter with no matches, or an entirely empty library. -->
+        <StackPanel Grid.Row="1" Spacing="12" IsVisible="{Binding ShowEmptyState}"
+                    HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="320">
+            <Path Classes="pbIcon" Width="34" Height="34" HorizontalAlignment="Center"
+                  Data="{StaticResource PbIconLayers}" Stroke="{DynamicResource PbTextFaintBrush}" />
+            <TextBlock Classes="pbTextBody" Text="{Binding EmptyStateMessage}" TextWrapping="Wrap"
+                       TextAlignment="Center" Foreground="{DynamicResource PbTextMutedBrush}" />
+            <Button Classes="secondary" HorizontalAlignment="Center"
+                    Content="{Binding EmptyStateActionLabel}" Command="{Binding EmptyStateActionCommand}"
+                    AutomationProperties.AutomationId="LibraryEmptyStateAction" />
         </StackPanel>
+
+        <!-- ============ Add-issue overlay (4b §6) - centered FloatingPanel over the grid, state on
+             LibraryScreenViewModel (no MainViewModel extraction). Escape / backdrop click close. ============ -->
+        <Border Grid.Row="0" Grid.RowSpan="2" IsVisible="{Binding IsAddIssueOpen}" Background="#B0000000"
+                PointerPressed="OnAddIssueBackdropPressed" />
+        <Border Grid.Row="0" Grid.RowSpan="2" IsVisible="{Binding IsAddIssueOpen}" Classes="floatingPanel"
+                Width="380" Padding="22" HorizontalAlignment="Center" VerticalAlignment="Center">
+            <StackPanel Spacing="12">
+                <TextBlock Text="Add issue to library" Classes="pbTextHeading" />
+                <AutoCompleteBox PlaceholderText="Series name" Text="{Binding NewIssueSeriesName}"
+                                 ItemsSource="{Binding ExistingSeriesNames}" FontSize="13" />
+                <TextBox PlaceholderText="Number" Text="{Binding NewIssueNumber}" FontSize="13" />
+
+                <TextBlock Text="Content type" Classes="pbTextCaption" />
+                <StackPanel Spacing="1">
+                    <Button Classes="modeOption" Classes.active="{Binding NewIssueContentType, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:ContentType.Comic}}"
+                            Content="Comic" Command="{Binding SetNewIssueContentTypeCommand}" CommandParameter="{x:Static entities:ContentType.Comic}" />
+                    <Button Classes="modeOption" Classes.active="{Binding NewIssueContentType, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:ContentType.Manga}}"
+                            Content="Manga" Command="{Binding SetNewIssueContentTypeCommand}" CommandParameter="{x:Static entities:ContentType.Manga}" />
+                    <Button Classes="modeOption" Classes.active="{Binding NewIssueContentType, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:ContentType.Manhua}}"
+                            Content="Manhua" Command="{Binding SetNewIssueContentTypeCommand}" CommandParameter="{x:Static entities:ContentType.Manhua}" />
+                    <Button Classes="modeOption" Classes.active="{Binding NewIssueContentType, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:ContentType.Manhwa}}"
+                            Content="Manhwa" Command="{Binding SetNewIssueContentTypeCommand}" CommandParameter="{x:Static entities:ContentType.Manhwa}" />
+                </StackPanel>
+
+                <StackPanel Spacing="1" IsVisible="{Binding ShowAddReadingModePicker}">
+                    <TextBlock Text="Reading direction" Classes="pbTextCaption" />
+                    <Button Classes="modeOption" Classes.active="{Binding NewIssueReadingMode, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:ReadingMode.LeftToRight}}"
+                            Content="Left to Right" Command="{Binding SetNewIssueReadingModeCommand}" CommandParameter="{x:Static entities:ReadingMode.LeftToRight}" />
+                    <Button Classes="modeOption" Classes.active="{Binding NewIssueReadingMode, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:ReadingMode.RightToLeft}}"
+                            Content="Right to Left" Command="{Binding SetNewIssueReadingModeCommand}" CommandParameter="{x:Static entities:ReadingMode.RightToLeft}" />
+                </StackPanel>
+
+                <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+                    <Button Classes="ghost" Content="Cancel" Command="{Binding CloseAddIssueCommand}"
+                            AutomationProperties.AutomationId="LibraryAddIssueCancel" />
+                    <Button Classes="primary" Content="Add" Command="{Binding CreatePlaceholderIssueCommand}"
+                            AutomationProperties.AutomationId="LibraryAddIssueConfirm" />
+                </StackPanel>
+            </StackPanel>
+        </Border>
 
     </Grid>
 </UserControl>

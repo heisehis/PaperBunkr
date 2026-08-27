@@ -3,7 +3,7 @@ using System.Linq;
 using Avalonia;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
-using Paperbunkr.App.Services;
+using CommunityToolkit.Mvvm.ComponentModel;
 using Paperbunkr.Data.Entities;
 
 namespace Paperbunkr.App.Models;
@@ -11,10 +11,21 @@ namespace Paperbunkr.App.Models;
 /// <summary>
 /// Library grid card. Originally sample data mirroring the "covers" array from the "Paperbunkr
 /// App" Claude Design wireframe (project 43c40b25); now also buildable from a real
-/// <see cref="Series"/> record (docs/onboarding.md §5-6) via <see cref="FromSeries"/>.
+/// <see cref="Series"/> record (docs/onboarding.md §5-6) via <see cref="FromSeries"/>. An
+/// <see cref="ObservableObject"/> since Slice 3 (docs/superpowers/specs/2026-08-24-library-
+/// multiselect-slice3-design.md) - same "was a plain init-only POCO, converted for live-notifying
+/// IsSelected" treatment <see cref="IssueListRow"/> got in Slice 1.
 /// </summary>
-public sealed class SeriesCardSample
+public sealed partial class SeriesCardSample : ObservableObject, ISelectableCard
 {
+    /// <summary>Explicit implementation - <see cref="SeriesId"/> is this model's real, long-established
+    /// public name for the same value; <see cref="ISelectableCard"/> only needs an <c>Id</c> accessor
+    /// reachable through the interface, not a second public property duplicating it.</summary>
+    int ISelectableCard.Id => SeriesId;
+
+    [ObservableProperty]
+    private bool _isSelected;
+
     public const double PanoramaHeight = 146;
     public const double PanoramaMinWidth = 110;
     public const double PanoramaMaxWidth = 320;
@@ -34,6 +45,15 @@ public sealed class SeriesCardSample
     /// <summary>Home screen's count-pill badge text (docs/superpowers/specs/2026-08-18-home-screen-
     /// design.md) - a plain <c>StringFormat</c> can't singularize "1 issue" on its own.</summary>
     public string IssueCountLabel => IssueCount == 1 ? "1 issue" : $"{IssueCount} issues";
+
+    /// <summary>Home screen's Recently Added row badge (docs/superpowers/specs/2026-08-24-home-
+    /// screen-design.md) - "New" when this series' newest issue was actually added recently (real
+    /// signal from <see cref="LastAddedTime"/>, not a hardcoded label), falling back to
+    /// <see cref="IssueCountLabel"/> once it ages out of that window. 7 days is a fresh, reasonable
+    /// default picked for this - no existing "recent" threshold precedent elsewhere in this codebase
+    /// to match (checked before picking a number).</summary>
+    public string RecentAddBadgeLabel =>
+        LastAddedTime is DateTime added && DateTime.UtcNow - added <= TimeSpan.FromDays(7) ? "New" : IssueCountLabel;
 
     public int UnreadCount { get; init; }
     public bool HasUnread => UnreadCount > 0;
@@ -69,11 +89,14 @@ public sealed class SeriesCardSample
     public double PanoramaWidth { get; init; }
 
     /// <summary>
-    /// Real decoded cover art (docs/superpowers/specs/2026-08-06-cover-thumbnails-design.md §3),
-    /// null until "Generate Covers" has processed this series' cover issue. <see cref="CoverBrush"/>
-    /// is the fallback the UI shows underneath while this is null.
+    /// Cover issue id, resolved to a <see cref="Bitmap"/> lazily via <c>CoverImageConverter</c>
+    /// (docs/superpowers/specs/2026-08-22-cover-memory-virtualization-design.md) rather than eagerly
+    /// decoded here - the whole point of <c>VirtualizingWrapPanel</c> is that a card not currently
+    /// realized never triggers a decode at all. Null if the series has no issues to derive a cover
+    /// from. <see cref="CoverBrush"/> is the fallback the UI shows underneath while a cover is
+    /// missing/not yet generated.
     /// </summary>
-    public Bitmap? CoverImage { get; init; }
+    public int? CoverIssueId { get; init; }
 
     public static IBrush Gradient(string fromHex, string toHex) => new LinearGradientBrush
     {
@@ -138,11 +161,13 @@ public sealed class SeriesCardSample
 
         var coverIssue = series.Issues.FirstOrDefault(i => i.Id == series.CoverIssueId)
             ?? series.Issues.OrderByNumber().FirstOrDefault();
-        var coverImage = coverIssue is not null ? CoverImageCache.Get(coverIssue.Id) : null;
 
-        double aspectRatio = coverImage is { } bmp && bmp.PixelSize.Height > 0
-            ? (double)bmp.PixelSize.Width / bmp.PixelSize.Height
-            : DefaultCoverAspectRatio;
+        // Always the default ratio, never a real decoded aspect ratio - Panorama's per-cover
+        // variable width relied on eagerly decoding every card's cover just to measure it, which is
+        // exactly the eager-decode-regardless-of-visibility behavior this lazy CoverIssueId design
+        // exists to eliminate. Traded off deliberately (confirmed with the user): Panorama cards
+        // render at a uniform default width now instead of shape-adapting per cover.
+        double aspectRatio = DefaultCoverAspectRatio;
 
         return new SeriesCardSample
         {
@@ -157,7 +182,7 @@ public sealed class SeriesCardSample
             Missing = series.Issues.Any(i => i.FileIsMissing),
             HasFile = series.Issues.Any(i => !string.IsNullOrEmpty(i.FilePath)),
             CoverBrush = CoverBrushFor(series.Name),
-            CoverImage = coverImage,
+            CoverIssueId = coverIssue?.Id,
             PanoramaWidth = ComputePanoramaWidth(aspectRatio),
             // LINQ's nullable Max() returns null for an all-null or empty sequence rather than throwing.
             LastAddedTime = series.Issues.Select(i => i.AddedTime).Max(),

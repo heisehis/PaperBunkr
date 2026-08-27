@@ -24,6 +24,7 @@ public partial class BulkIssuePropertiesScreenViewModel : ViewModelBase
 {
     private readonly Action _goBack;
     private readonly Func<PaperbunkrDbContext> _contextFactory;
+    private readonly Action<string, string>? _notify;
     private List<int> _issueIds = new();
     private BulkFieldViewModel? _contentTypeField;
     private BulkFieldViewModel? _readingModeField;
@@ -45,15 +46,23 @@ public partial class BulkIssuePropertiesScreenViewModel : ViewModelBase
         (i, v) => i.Series.ReadingMode = Enum.Parse<ReadingMode>(v ?? nameof(ReadingMode.LeftToRight)),
         Options: [nameof(ReadingMode.LeftToRight), nameof(ReadingMode.RightToLeft)]);
 
-    public BulkIssuePropertiesScreenViewModel(Action goBack) : this(goBack, PaperbunkrDb.CreateContext)
+    private readonly MetadataEditHistoryService _history;
+
+    /// <summary>Every selected issue's fields as of <see cref="Load"/>, before any edit - the Undo half of the entry <see cref="Save"/> records (docs/ce-feature-inventory.md §A "Undo/Redo").</summary>
+    private Dictionary<int, Dictionary<string, string?>> _beforeSnapshots = new();
+
+    public BulkIssuePropertiesScreenViewModel(Action goBack, Action<string, string>? notify = null, MetadataEditHistoryService? history = null)
+        : this(goBack, PaperbunkrDb.CreateContext, notify, history)
     {
     }
 
     /// <summary>Test-only seam - production always uses the default ctor (the real per-user database).</summary>
-    internal BulkIssuePropertiesScreenViewModel(Action goBack, Func<PaperbunkrDbContext> contextFactory)
+    internal BulkIssuePropertiesScreenViewModel(Action goBack, Func<PaperbunkrDbContext> contextFactory, Action<string, string>? notify = null, MetadataEditHistoryService? history = null)
     {
         _goBack = goBack;
         _contextFactory = contextFactory;
+        _notify = notify;
+        _history = history ?? MetadataEditHistoryService.Shared;
     }
 
     public ObservableCollection<BulkFieldViewModel> MainFields { get; } = new();
@@ -78,7 +87,10 @@ public partial class BulkIssuePropertiesScreenViewModel : ViewModelBase
         _issueIds = issueIds.ToList();
 
         using var context = _contextFactory();
-        var issues = context.Issues.Include(i => i.Series).Where(i => _issueIds.Contains(i.Id)).ToList();
+        // Include(Tags) - Genre/Tags' Get now reads Issue.Tags (docs/superpowers/specs/2026-08-23-
+        // weighted-categorized-tags-design.md); without it every issue would show blank Genre/Tags
+        // regardless of its real values.
+        var issues = context.Issues.Include(i => i.Series).Include(i => i.Tags).Where(i => _issueIds.Contains(i.Id)).ToList();
         if (issues.Count == 0)
         {
             return;
@@ -86,6 +98,8 @@ public partial class BulkIssuePropertiesScreenViewModel : ViewModelBase
 
         string seriesName = issues[0].Series?.Name ?? "Unknown Series";
         HeaderLabel = $"Editing {issues.Count} issues in {seriesName}";
+
+        _beforeSnapshots = issues.ToDictionary(i => i.Id, MetadataEditHistoryService.CaptureSnapshot);
 
         MainFields.Clear();
         ArtistFields.Clear();
@@ -198,11 +212,24 @@ public partial class BulkIssuePropertiesScreenViewModel : ViewModelBase
         // Include(Series) - the "Content Type"/"Reading Direction" fields' Set reaches through
         // Issue.Series (docs/superpowers/specs/2026-08-16-manga-content-type-classification-design.md
         // §1), which would otherwise be null here (this query didn't need it before those fields existed).
-        var issues = context.Issues.Include(i => i.Series).Where(i => _issueIds.Contains(i.Id)).ToList();
+        // Include(Tags) - Genre/Tags' Set now diffs against Issue.Tags (docs/superpowers/specs/
+        // 2026-08-23-weighted-categorized-tags-design.md); without it every issue would look like it
+        // has no existing tags at all, so MergeFrom would re-add every value as brand new instead of
+        // diffing, duplicating rows and losing any Category/Weight already set.
+        var issues = context.Issues.Include(i => i.Series).Include(i => i.Tags).Where(i => _issueIds.Contains(i.Id)).ToList();
         var stagedFields = AllFields.Where(f => f.IsStaged).ToList();
+
+        // Genre/Tags value-set changes trigger a CBZ ComicInfo.xml write-back after Save (docs/
+        // superpowers/specs/2026-08-23-weighted-categorized-tags-design.md) - tracked per issue
+        // since the shared added/removed token sets above don't tell you which specific issues in
+        // the selection actually ended up with a different value (one issue's tokens might already
+        // have included every "added" value and lacked every "removed" one).
+        var genreOrTagsChangedIssueIds = new HashSet<int>();
 
         foreach (var field in stagedFields)
         {
+            bool tracksFileWriteBack = field.Descriptor.Label is "Genre" or "Tags";
+
             if (field.Descriptor.IsListField)
             {
                 var currentTokens = ListFieldTokens.Parse(field.Value);
@@ -211,22 +238,46 @@ public partial class BulkIssuePropertiesScreenViewModel : ViewModelBase
 
                 foreach (var issue in issues)
                 {
-                    var issueTokens = ListFieldTokens.Parse(field.Descriptor.Get(issue));
+                    string? before = field.Descriptor.Get(issue);
+                    var issueTokens = ListFieldTokens.Parse(before);
                     issueTokens.ExceptWith(removed);
                     issueTokens.UnionWith(added);
-                    field.Descriptor.Set(issue, ListFieldTokens.Join(issueTokens));
+                    string joined = ListFieldTokens.Join(issueTokens);
+                    field.Descriptor.Set(issue, joined);
+
+                    if (tracksFileWriteBack && !string.Equals(before ?? string.Empty, joined, StringComparison.Ordinal))
+                    {
+                        genreOrTagsChangedIssueIds.Add(issue.Id);
+                    }
                 }
             }
             else
             {
+                // Templated/token text field editor (docs/ce-feature-inventory.md §A) - a staged
+                // value containing a placeholder like "{Series}" expands per issue here, right
+                // before it's written; a plain value with no "{" passes through Expand unchanged.
                 foreach (var issue in issues)
                 {
-                    field.Descriptor.Set(issue, field.Value);
+                    field.Descriptor.Set(issue, TemplateTokenCatalog.Expand(field.Value, issue));
                 }
             }
         }
 
         context.SaveChanges();
+
+        // Undo/Redo (docs/ce-feature-inventory.md §A) - only actually record an entry if some
+        // field was staged; an all-cancelled-out edit (every staged field ends up equal to what it
+        // started as) is harmless to skip, and avoids polluting the stack with no-op entries.
+        if (stagedFields.Count > 0)
+        {
+            _history.Record($"Edited {issues.Count} issue{(issues.Count == 1 ? "" : "s")}",
+                _beforeSnapshots, issues.ToDictionary(i => i.Id, MetadataEditHistoryService.CaptureSnapshot));
+        }
+
+        foreach (var issue in issues.Where(i => genreOrTagsChangedIssueIds.Contains(i.Id) && i.FilePath is not null))
+        {
+            IssuePropertiesScreenViewModel.TriggerComicInfoWriteBack(issue.FilePath!, issue.JoinedGenre(), issue.JoinedTags(), _notify);
+        }
 
         // Matches IssuePropertiesScreenViewModel's _isDirty reset (P6 follow-up, docs/alpha-todo.md) -
         // without this, HasUnsavedChanges() would still report true immediately post-Save, until the

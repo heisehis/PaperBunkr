@@ -16,6 +16,7 @@ public enum SmartListField
     ContentType,
     ReadingMode,
     SeriesComplete,
+    ReadingStatus,
 
     // ComicInfo text fields
     Title,

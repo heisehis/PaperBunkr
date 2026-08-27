@@ -1,0 +1,35 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!--
+        Type scale (docs/superpowers/specs/2026-08-24-design-language-foundation-design.md
+        Typography section). Hero/Heading use PbDisplayFontFamily (Bebas Neue) directly via
+        StaticResource - a deliberate branded choice for hero/heading moments, never overridden by
+        the Preferences font picker. Body/Caption inherit the app-wide {DynamicResource PbFontFamily}
+        default already set on TextBlock in App.axaml, so they don't need to set FontFamily
+        themselves - only size/weight/color differ.
+    -->
+
+    <Style Selector="TextBlock.pbTextHero">
+        <Setter Property="FontFamily" Value="{StaticResource PbDisplayFontFamily}" />
+        <Setter Property="FontSize" Value="42" />
+        <Setter Property="LineHeight" Value="42" />
+        <Setter Property="Foreground" Value="{DynamicResource PbTextBrush}" />
+    </Style>
+
+    <Style Selector="TextBlock.pbTextHeading">
+        <Setter Property="FontFamily" Value="{StaticResource PbDisplayFontFamily}" />
+        <Setter Property="FontSize" Value="22" />
+        <Setter Property="LineHeight" Value="22" />
+        <Setter Property="Foreground" Value="{DynamicResource PbTextBrush}" />
+    </Style>
+
+    <Style Selector="TextBlock.pbTextBody">
+        <Setter Property="FontSize" Value="13" />
+        <Setter Property="Foreground" Value="{DynamicResource PbTextBrush}" />
+    </Style>
+
+    <Style Selector="TextBlock.pbTextCaption">
+        <Setter Property="FontSize" Value="11" />
+        <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
+    </Style>
+</Styles>

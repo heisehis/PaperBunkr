@@ -237,4 +237,23 @@ public static class ReaderLayoutModel
 
         return offset;
     }
+
+    /// <summary>
+    /// Rubber-band damping for continuous mode's chapter-boundary overscroll bump
+    /// (docs/superpowers/specs/2026-08-23-reader-chapter-transition-design.md) - diminishing-returns
+    /// curve (same shape iOS-style overscroll uses) so the visual bump approaches but never exceeds
+    /// <paramref name="maxBump"/> however far past the clamp <paramref name="pullDistance"/> grows,
+    /// rather than tracking it 1:1 (which would let the content run away visually). Both parameters
+    /// are expected non-negative; a non-positive <paramref name="maxBump"/> returns 0 rather than
+    /// dividing by zero.
+    /// </summary>
+    public static double ComputeOverscrollBump(double pullDistance, double maxBump)
+    {
+        if (maxBump <= 0 || pullDistance <= 0)
+        {
+            return 0;
+        }
+
+        return maxBump * pullDistance / (pullDistance + maxBump);
+    }
 }

@@ -46,6 +46,24 @@ public class PageTransitionMathTests
         Assert.Equal(-right.IncomingOffset, left.IncomingOffset);
     }
 
+    [Theory]
+    [InlineData(0.0)]
+    [InlineData(0.25)]
+    [InlineData(0.5)]
+    [InlineData(1.0)]
+    public void SlideOffset_Down_MatchesRight_And_Up_MatchesLeft(double progress)
+    {
+        // Vertical paged mode (docs/superpowers/specs/2026-08-27-vertical-paged-reading-mode-design.md):
+        // Down is the "forward" turn like Right, Up is "backward" like Left. The caller applies the
+        // returned offsets to Y instead of X.
+        Assert.Equal(
+            PageTransitionMath.SlideOffset(PageTransitionDirection.Right, progress, 700),
+            PageTransitionMath.SlideOffset(PageTransitionDirection.Down, progress, 700));
+        Assert.Equal(
+            PageTransitionMath.SlideOffset(PageTransitionDirection.Left, progress, 700),
+            PageTransitionMath.SlideOffset(PageTransitionDirection.Up, progress, 700));
+    }
+
     [Fact]
     public void SlideOffset_ClampsProgressBelowZero()
     {

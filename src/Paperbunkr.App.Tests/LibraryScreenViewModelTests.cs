@@ -72,7 +72,7 @@ public class LibraryScreenViewModelTests : IDisposable
         context.Series.Add(series);
         context.SaveChanges();
 
-        context.Issues.Add(new Issue
+        var issue = new Issue
         {
             SeriesId = series.Id,
             Number = "1",
@@ -86,8 +86,13 @@ public class LibraryScreenViewModelTests : IDisposable
             // both series-level search (MatchesSearch's default fields) and issue-level sort/group
             // (IssueListFieldCatalog) see the same value.
             Publisher = publisher,
-            Genre = genre,
-        });
+        };
+        if (genre is not null)
+        {
+            issue.MergeFrom(IssueTagField.Genre, new[] { genre });
+        }
+
+        context.Issues.Add(issue);
         context.SaveChanges();
         return series.Id;
     }
@@ -333,13 +338,42 @@ public class LibraryScreenViewModelTests : IDisposable
         vm.SetViewModeCommand.Execute(LibraryViewMode.Tiles);
 
         Assert.True(vm.IsTilesView);
-        Assert.False(vm.IsComfortableGrid);
-        Assert.False(vm.IsCompactGrid);
-        Assert.False(vm.IsCoverOnlyGrid);
+        Assert.False(vm.IsPosterGrid);
         Assert.False(vm.IsPanoramaGrid);
         Assert.False(vm.IsListView);
         Assert.False(vm.IsDetailsView);
         Assert.Equal("Tiles", vm.DisplayModeLabel);
+    }
+
+    [Fact]
+    public void PosterGrid_IsDefault_AndCardWidthTracksDensity()
+    {
+        var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { }, goToNewIssueProperties: (_, _, _) => { });
+
+        Assert.Equal(LibraryViewMode.PosterGrid, vm.ViewMode);
+        Assert.True(vm.IsPosterGrid);
+        Assert.Equal("Poster grid", vm.DisplayModeLabel);
+        Assert.Equal(150, vm.PosterCardWidth);
+
+        vm.GridDensity = 1.5;
+        Assert.Equal(225, vm.PosterCardWidth);
+    }
+
+    [Fact]
+    public void ShowTileTitles_PersistsAndAutoHidesAtLowDensity()
+    {
+        var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { }, goToNewIssueProperties: (_, _, _) => { });
+
+        Assert.True(vm.EffectiveShowTileTitles);
+
+        vm.ShowTileTitles = false;
+        var reloaded = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { }, goToNewIssueProperties: (_, _, _) => { });
+        Assert.False(reloaded.ShowTileTitles);
+
+        reloaded.ShowTileTitles = true;
+        reloaded.GridDensity = 0.6; // 150 * 0.6 = 90 < 108 threshold
+        Assert.True(reloaded.ShowTileTitles);
+        Assert.False(reloaded.EffectiveShowTileTitles);
     }
 
     [Fact]
@@ -423,6 +457,25 @@ public class LibraryScreenViewModelTests : IDisposable
 
         vm.SearchQuery = "";
         Assert.Equal(2, vm.IssueList.Rows.Count);
+    }
+
+    [Fact]
+    public void SearchQuery_MatchesAlternateSeriesTitle()
+    {
+        int seriesId = CreateSeriesWithIssue("Attack on Titan");
+        using (var context = PaperbunkrDb.CreateContext())
+        {
+            context.SeriesTitles.Add(new SeriesTitle { SeriesId = seriesId, Value = "進撃の巨人", Type = SeriesTitleType.Native });
+            context.SaveChanges();
+        }
+        CreateSeriesWithIssue("Unrelated Series");
+        var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { }, goToNewIssueProperties: (_, _, _) => { });
+
+        vm.SearchQuery = "進撃";
+        Assert.Equal("Attack on Titan", Assert.Single(vm.IssueList.Rows).SeriesName);
+
+        vm.SearchMode = SearchMode.Series;
+        Assert.Equal("Attack on Titan", Assert.Single(vm.IssueList.Rows).SeriesName);
     }
 
     private static void SetIssueFields(int seriesId, Action<Issue> configure)
@@ -949,6 +1002,34 @@ public class LibraryScreenViewModelTests : IDisposable
         Assert.Equal(SeriesStatus.Unknown, context.Series.First(s => s.Id == seriesTwoId).Status);
     }
 
+    // ===================== Reading Status (docs/superpowers/specs/2026-08-19-metadata-model-reading-status-design.md) =====================
+
+    [Fact]
+    public void SetSeriesReadingStatusCompleted_PersistsToTheRightSeries()
+    {
+        int seriesId = CreateSeries("A Series", ContentType.Comic);
+        var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { }, goToNewIssueProperties: (_, _, _) => { });
+
+        vm.SetSeriesReadingStatusCompletedCommand.Execute(seriesId);
+
+        using var context = PaperbunkrDb.CreateContext();
+        Assert.Equal(ReadingStatus.Completed, context.Series.First(s => s.Id == seriesId).ReadingStatus);
+    }
+
+    [Fact]
+    public void SetSeriesReadingStatus_DoesNotTouchOtherSeries()
+    {
+        int seriesOneId = CreateSeries("Series One", ContentType.Comic);
+        int seriesTwoId = CreateSeries("Series Two", ContentType.Comic);
+        var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { }, goToNewIssueProperties: (_, _, _) => { });
+
+        vm.SetSeriesReadingStatusDroppedCommand.Execute(seriesOneId);
+
+        using var context = PaperbunkrDb.CreateContext();
+        Assert.Equal(ReadingStatus.Dropped, context.Series.First(s => s.Id == seriesOneId).ReadingStatus);
+        Assert.Equal(ReadingStatus.Unknown, context.Series.First(s => s.Id == seriesTwoId).ReadingStatus);
+    }
+
     [Fact]
     public void GoToSeries_InvokesGoDetailWithTheRightSeriesId()
     {
@@ -1118,6 +1199,64 @@ public class LibraryScreenViewModelTests : IDisposable
         Assert.Equal(0.8, settings.LibraryGridDensity);
     }
 
+    // --- Configurable Details table columns (docs/superpowers/specs/2026-08-27-library-browsing-4b-
+    // toolbar-rework-design.md §8) ---
+
+    [Fact]
+    public void DetailsColumns_NullSetting_FallsBackToCuratedDefault()
+    {
+        var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { }, goToNewIssueProperties: (_, _, _) => { });
+
+        var visible = vm.DetailsColumns.Where(c => c.IsVisible).Select(c => c.Field).ToArray();
+        Assert.Equal(IssueListFieldCatalog.DefaultDetailsColumns, visible);
+        // Every column-eligible field is present (hidden ones appended for the right-click menu).
+        Assert.Equal(IssueListFieldCatalog.ColumnFields.Count, vm.DetailsColumns.Count);
+    }
+
+    [Fact]
+    public void DetailsColumns_StoredList_ParsedInOrder_UnknownNamesSkipped()
+    {
+        SeedAppSettings(s => s.LibraryDetailsColumns = "Title,Bogus,Series,Status");
+
+        var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { }, goToNewIssueProperties: (_, _, _) => { });
+
+        var visible = vm.DetailsColumns.Where(c => c.IsVisible).Select(c => c.Field).ToArray();
+        // "Bogus" is not an enum value; "Status" is sort-only (not column-eligible) - both skipped.
+        Assert.Equal(new[] { IssueListSortField.Title, IssueListSortField.Series }, visible);
+    }
+
+    [Fact]
+    public void TogglingDetailsColumnVisibility_PersistsToAppSettings()
+    {
+        SeedAppSettings(s => s.LibraryDetailsColumns = "Title,Series");
+        var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { }, goToNewIssueProperties: (_, _, _) => { });
+
+        vm.DetailsColumns.Single(c => c.Field == IssueListSortField.Year).IsVisible = true;
+        vm.DetailsColumns.Single(c => c.Field == IssueListSortField.Series).IsVisible = false;
+
+        Assert.Equal("Title,Year", ReadAppSettings().LibraryDetailsColumns);
+
+        // A fresh VM reads the customization back.
+        var reloaded = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { }, goToNewIssueProperties: (_, _, _) => { });
+        Assert.Equal(
+            new[] { IssueListSortField.Title, IssueListSortField.Year },
+            reloaded.DetailsColumns.Where(c => c.IsVisible).Select(c => c.Field).ToArray());
+    }
+
+    [Fact]
+    public void SetDetailsSort_SetsField_ThenFlipsDirectionOnRepeat()
+    {
+        var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { }, goToNewIssueProperties: (_, _, _) => { });
+
+        vm.SetDetailsSortCommand.Execute(IssueListSortField.Year);
+        Assert.Equal(IssueListSortField.Year, vm.IssueList.SortField);
+        var firstDirection = vm.IssueList.SortDirection;
+
+        vm.SetDetailsSortCommand.Execute(IssueListSortField.Year);
+        Assert.Equal(IssueListSortField.Year, vm.IssueList.SortField);
+        Assert.NotEqual(firstDirection, vm.IssueList.SortDirection);
+    }
+
     [Fact]
     public void OverlayBadgeToggles_Changed_PersistToAppSettings()
     {
@@ -1218,5 +1357,523 @@ public class LibraryScreenViewModelTests : IDisposable
 
         Assert.True(vm.IsAllSeriesActive);
         Assert.DoesNotContain(vm.Collections, c => c.IsActive);
+    }
+
+    // --- Delete Series/Issue (docs/superpowers/specs/2026-08-22-delete-functionality-design.md) ---
+
+    [Fact]
+    public void DeleteIssue_RemovesTheIssue_ButLeavesTheSeries()
+    {
+        int seriesId = CreateSeriesWithIssue("Kilo Station");
+        int issueId;
+        using (var context = PaperbunkrDb.CreateContext())
+        {
+            issueId = context.Issues.Single(i => i.SeriesId == seriesId).Id;
+        }
+
+        var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { }, goToNewIssueProperties: (_, _, _) => { });
+        vm.DeleteIssueCommand.Execute(issueId);
+
+        using var verifyContext = PaperbunkrDb.CreateContext();
+        Assert.Null(verifyContext.Issues.Find(issueId));
+        Assert.NotNull(verifyContext.Series.Find(seriesId)); // the (now-empty) series itself survives
+    }
+
+    [Fact]
+    public void DeleteSeries_RemovesTheSeriesAndAllItsIssues()
+    {
+        int seriesId = CreateSeriesWithIssue("Kilo Station");
+
+        var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { }, goToNewIssueProperties: (_, _, _) => { });
+        vm.DeleteSeriesCommand.Execute(seriesId);
+
+        using var verifyContext = PaperbunkrDb.CreateContext();
+        Assert.Null(verifyContext.Series.Find(seriesId));
+        Assert.Empty(verifyContext.Issues.Where(i => i.SeriesId == seriesId));
+    }
+
+    [Fact]
+    public void DeleteIssue_RemovesReadingListReferencesFirst_SoTheDeleteDoesNotThrow()
+    {
+        // ReadingListItem.Issue's FK is Restrict, not Cascade - deleting a still-referenced Issue
+        // would throw a DbUpdateException unless the reference is removed first (real bug found and
+        // fixed in NeedsReviewViewModel.RemoveMissingFile while building this feature).
+        int seriesId = CreateSeriesWithIssue("Kilo Station");
+        int issueId;
+        using (var context = PaperbunkrDb.CreateContext())
+        {
+            issueId = context.Issues.Single(i => i.SeriesId == seriesId).Id;
+            var list = new ReadingList { Name = "Test List", CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow };
+            list.Items.Add(new ReadingListItem { IssueId = issueId, SortOrder = 0 });
+            context.ReadingLists.Add(list);
+            context.SaveChanges();
+        }
+
+        var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { }, goToNewIssueProperties: (_, _, _) => { });
+        var exception = Record.Exception(() => vm.DeleteIssueCommand.Execute(issueId));
+
+        Assert.Null(exception);
+        using var verifyContext = PaperbunkrDb.CreateContext();
+        Assert.Empty(verifyContext.ReadingListItems.Where(i => i.IssueId == issueId));
+    }
+
+    // --- Mark as Read/Unread (docs/superpowers/specs/2026-08-23-mark-as-read-design.md) ---
+
+    [Fact]
+    public void MarkIssueRead_SetsLastPageReadToLastValidIndex_AndRefreshesTheGrid()
+    {
+        int seriesId = CreateSeriesWithIssue("Kilo Station");
+        int issueId;
+        using (var context = PaperbunkrDb.CreateContext())
+        {
+            issueId = context.Issues.Single(i => i.SeriesId == seriesId).Id;
+            context.Issues.Find(issueId)!.PageCount = 20;
+            context.SaveChanges();
+        }
+
+        var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { }, goToNewIssueProperties: (_, _, _) => { });
+        vm.MarkIssueReadCommand.Execute(issueId);
+
+        using var verifyContext = PaperbunkrDb.CreateContext();
+        Assert.Equal(19, verifyContext.Issues.Find(issueId)!.LastPageRead);
+    }
+
+    [Fact]
+    public void MarkIssueUnread_ZeroesLastPageRead()
+    {
+        int seriesId = CreateSeriesWithIssue("Kilo Station", lastPageRead: 19);
+        int issueId;
+        using (var context = PaperbunkrDb.CreateContext())
+        {
+            issueId = context.Issues.Single(i => i.SeriesId == seriesId).Id;
+        }
+
+        var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { }, goToNewIssueProperties: (_, _, _) => { });
+        vm.MarkIssueUnreadCommand.Execute(issueId);
+
+        using var verifyContext = PaperbunkrDb.CreateContext();
+        Assert.Equal(0, verifyContext.Issues.Find(issueId)!.LastPageRead);
+    }
+
+    // --- Multi-selection (docs/superpowers/specs/2026-08-24-library-multiselect-slice1-design.md) ---
+
+    [Fact]
+    public void ToggleIssueSelection_UpdatesSelectionAndSelectionCount()
+    {
+        CreateSeriesWithIssue("Alpha One");
+        CreateSeriesWithIssue("Bravo Two");
+        var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { }, goToNewIssueProperties: (_, _, _) => { });
+
+        vm.ToggleIssueSelection(vm.IssueList.Rows[0], isShiftHeld: false);
+
+        Assert.True(vm.IssueList.Rows[0].IsSelected);
+        Assert.Equal(1, vm.SelectionCount);
+        Assert.True(vm.HasSelection);
+    }
+
+    [Fact]
+    public void ToggleIssueSelection_ShiftClick_SelectsRange()
+    {
+        CreateSeriesWithIssue("Alpha One");
+        CreateSeriesWithIssue("Bravo Two");
+        CreateSeriesWithIssue("Charlie Three");
+        var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { }, goToNewIssueProperties: (_, _, _) => { });
+
+        vm.ToggleIssueSelection(vm.IssueList.Rows[0], isShiftHeld: false);
+        vm.ToggleIssueSelection(vm.IssueList.Rows[2], isShiftHeld: true);
+
+        Assert.Equal(3, vm.SelectionCount);
+        Assert.All(vm.IssueList.Rows, r => Assert.True(r.IsSelected));
+    }
+
+    [Fact]
+    public void ClearSelection_ResetsCountAndVisibleFlags()
+    {
+        CreateSeriesWithIssue("Alpha One");
+        var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { }, goToNewIssueProperties: (_, _, _) => { });
+        vm.ToggleIssueSelection(vm.IssueList.Rows[0], isShiftHeld: false);
+
+        vm.ClearSelectionCommand.Execute(null);
+
+        Assert.Equal(0, vm.SelectionCount);
+        Assert.False(vm.HasSelection);
+        Assert.False(vm.IssueList.Rows[0].IsSelected);
+    }
+
+    /// <summary>Re-sorting rebuilds every <see cref="IssueListRow"/> from scratch
+    /// (<c>IssueListScreenViewModel.Render</c>) - this guards against the selection silently
+    /// vanishing because the old row instances (and their flags) were discarded.</summary>
+    [Fact]
+    public void ChangingSortField_PreservesSelectionAcrossRebuiltRows()
+    {
+        CreateSeriesWithIssue("Alpha One");
+        CreateSeriesWithIssue("Bravo Two");
+        var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { }, goToNewIssueProperties: (_, _, _) => { });
+        int selectedId = vm.IssueList.Rows[0].Id;
+        vm.ToggleIssueSelection(vm.IssueList.Rows[0], isShiftHeld: false);
+
+        vm.IssueList.SortDirection = vm.IssueList.SortDirection == SortDirection.Ascending
+            ? SortDirection.Descending
+            : SortDirection.Ascending;
+
+        Assert.Equal(1, vm.SelectionCount);
+        Assert.True(vm.IssueList.Rows.Single(r => r.Id == selectedId).IsSelected);
+    }
+
+    [Fact]
+    public void EditIssueProperties_NothingSelected_OpensSingleEditor()
+    {
+        int seriesId = CreateSeriesWithIssue("Alpha One");
+        int issueId;
+        using (var context = PaperbunkrDb.CreateContext())
+        {
+            issueId = context.Issues.Single(i => i.SeriesId == seriesId).Id;
+        }
+
+        int? openedSingle = null;
+        var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { }, goToNewIssueProperties: (_, _, _) => { },
+            goIssueProperties: id => openedSingle = id);
+
+        vm.EditIssuePropertiesCommand.Execute(issueId);
+
+        Assert.Equal(issueId, openedSingle);
+    }
+
+    [Fact]
+    public void EditIssueProperties_WithSelectionUnion_OpensBulkEditor()
+    {
+        CreateSeriesWithIssue("Alpha One");
+        CreateSeriesWithIssue("Bravo Two");
+        var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { }, goToNewIssueProperties: (_, _, _) => { });
+        vm.ToggleIssueSelection(vm.IssueList.Rows[0], isShiftHeld: false);
+
+        IReadOnlyList<int>? bulkIds = null;
+        var vmWithBulkCallback = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { }, goToNewIssueProperties: (_, _, _) => { },
+            goBulkIssueProperties: ids => bulkIds = ids);
+        vmWithBulkCallback.ToggleIssueSelection(vmWithBulkCallback.IssueList.Rows[0], isShiftHeld: false);
+
+        // Right-clicking the OTHER (unselected) row extends the union to both - same precedent as
+        // DetailTabsViewModel.EditIssueProperties.
+        vmWithBulkCallback.EditIssuePropertiesCommand.Execute(vmWithBulkCallback.IssueList.Rows[1].Id);
+
+        Assert.NotNull(bulkIds);
+        Assert.Equal(2, bulkIds!.Count);
+    }
+
+    [Fact]
+    public void DeleteIssue_WithSelectionUnion_DeletesEveryIssueInTheUnion()
+    {
+        CreateSeriesWithIssue("Alpha One");
+        CreateSeriesWithIssue("Bravo Two");
+        CreateSeriesWithIssue("Charlie Three");
+        var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { }, goToNewIssueProperties: (_, _, _) => { });
+        vm.ToggleIssueSelection(vm.IssueList.Rows[0], isShiftHeld: false);
+        vm.ToggleIssueSelection(vm.IssueList.Rows[1], isShiftHeld: false);
+
+        vm.DeleteIssueCommand.Execute(vm.IssueList.Rows[2].Id);
+
+        using var verifyContext = PaperbunkrDb.CreateContext();
+        Assert.Empty(verifyContext.Issues);
+        Assert.Equal(0, vm.SelectionCount);
+    }
+
+    [Fact]
+    public void DeleteSelection_DeletesTheWholeCurrentSelection()
+    {
+        CreateSeriesWithIssue("Alpha One");
+        CreateSeriesWithIssue("Bravo Two");
+        CreateSeriesWithIssue("Charlie Three");
+        var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { }, goToNewIssueProperties: (_, _, _) => { });
+        vm.ToggleIssueSelection(vm.IssueList.Rows[0], isShiftHeld: false);
+        vm.ToggleIssueSelection(vm.IssueList.Rows[1], isShiftHeld: false);
+
+        vm.DeleteSelectionCommand.Execute(null);
+
+        using var verifyContext = PaperbunkrDb.CreateContext();
+        Assert.Single(verifyContext.Issues);
+    }
+
+    [Fact]
+    public void BulkEditSelection_OpensBulkEditorForTheWholeSelection()
+    {
+        CreateSeriesWithIssue("Alpha One");
+        CreateSeriesWithIssue("Bravo Two");
+        IReadOnlyList<int>? bulkIds = null;
+        var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { }, goToNewIssueProperties: (_, _, _) => { },
+            goBulkIssueProperties: ids => bulkIds = ids);
+        vm.ToggleIssueSelection(vm.IssueList.Rows[0], isShiftHeld: false);
+        vm.ToggleIssueSelection(vm.IssueList.Rows[1], isShiftHeld: false);
+
+        vm.BulkEditSelectionCommand.Execute(null);
+
+        Assert.NotNull(bulkIds);
+        Assert.Equal(2, bulkIds!.Count);
+    }
+
+    // --- Slice 2: bulk mark read/unread + add to reading list
+    //     (docs/superpowers/specs/2026-08-24-library-multiselect-slice2-design.md) ---
+
+    [Fact]
+    public void MarkSelectionRead_MarksEveryIssueInSelection_AndToasts()
+    {
+        int seriesA = CreateSeriesWithIssue("Alpha One");
+        int seriesB = CreateSeriesWithIssue("Bravo Two");
+        using (var context = PaperbunkrDb.CreateContext())
+        {
+            foreach (var issue in context.Issues)
+            {
+                issue.PageCount = 10;
+            }
+            context.SaveChanges();
+        }
+
+        (string Title, string Message)? toast = null;
+        var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { }, goToNewIssueProperties: (_, _, _) => { },
+            showToast: (title, message) => toast = (title, message));
+        vm.ToggleIssueSelection(vm.IssueList.Rows[0], isShiftHeld: false);
+        vm.ToggleIssueSelection(vm.IssueList.Rows[1], isShiftHeld: false);
+
+        vm.MarkSelectionReadCommand.Execute(null);
+
+        using var verifyContext = PaperbunkrDb.CreateContext();
+        Assert.All(verifyContext.Issues, i => Assert.Equal(9, i.LastPageRead));
+        Assert.NotNull(toast);
+        Assert.Contains("2", toast!.Value.Message);
+    }
+
+    [Fact]
+    public void MarkIssueRead_SingleIssueNoSelection_DoesNotToast()
+    {
+        int seriesId = CreateSeriesWithIssue("Alpha One");
+        int issueId;
+        using (var context = PaperbunkrDb.CreateContext())
+        {
+            issueId = context.Issues.Single(i => i.SeriesId == seriesId).Id;
+            context.Issues.Find(issueId)!.PageCount = 10;
+            context.SaveChanges();
+        }
+
+        bool toasted = false;
+        var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { }, goToNewIssueProperties: (_, _, _) => { },
+            showToast: (_, _) => toasted = true);
+
+        vm.MarkIssueReadCommand.Execute(issueId);
+
+        Assert.False(toasted);
+    }
+
+    [Fact]
+    public void MarkSelectionUnread_ZeroesLastPageReadForEveryIssueInSelection()
+    {
+        CreateSeriesWithIssue("Alpha One", lastPageRead: 5);
+        CreateSeriesWithIssue("Bravo Two", lastPageRead: 7);
+        var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { }, goToNewIssueProperties: (_, _, _) => { });
+        vm.ToggleIssueSelection(vm.IssueList.Rows[0], isShiftHeld: false);
+        vm.ToggleIssueSelection(vm.IssueList.Rows[1], isShiftHeld: false);
+
+        vm.MarkSelectionUnreadCommand.Execute(null);
+
+        using var verifyContext = PaperbunkrDb.CreateContext();
+        Assert.All(verifyContext.Issues, i => Assert.Equal(0, i.LastPageRead));
+    }
+
+    [Fact]
+    public void CreateReadingListAndAddSelection_CreatesListAndAddsWholeSelection()
+    {
+        CreateSeriesWithIssue("Alpha One");
+        CreateSeriesWithIssue("Bravo Two");
+        (string Title, string Message)? toast = null;
+        var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { }, goToNewIssueProperties: (_, _, _) => { },
+            showToast: (title, message) => toast = (title, message));
+        vm.ToggleIssueSelection(vm.IssueList.Rows[0], isShiftHeld: false);
+        vm.ToggleIssueSelection(vm.IssueList.Rows[1], isShiftHeld: false);
+
+        vm.CreateReadingListAndAddSelectionCommand.Execute(null);
+
+        using var verifyContext = PaperbunkrDb.CreateContext();
+        var list = Assert.Single(verifyContext.ReadingLists);
+        Assert.Equal(2, verifyContext.ReadingListItems.Count(i => i.ReadingListId == list.Id));
+        Assert.NotNull(toast);
+        Assert.Contains("Added 2", toast!.Value.Message);
+        Assert.False(vm.IsAddToListOpen);
+    }
+
+    [Fact]
+    public void AddSelectionToReadingList_ExistingList_AddsSelectionWithoutDuplicates()
+    {
+        int seriesA = CreateSeriesWithIssue("Alpha One");
+        int seriesB = CreateSeriesWithIssue("Bravo Two");
+        int listId;
+        int alphaIssueId;
+        using (var context = PaperbunkrDb.CreateContext())
+        {
+            var now = DateTime.UtcNow;
+            var list = new ReadingList { Name = "Weekend Reads", Type = ReadingListType.User, CreatedAt = now, UpdatedAt = now };
+            context.ReadingLists.Add(list);
+            context.SaveChanges();
+            listId = list.Id;
+
+            alphaIssueId = context.Issues.Single(i => i.SeriesId == seriesA).Id;
+            // Alpha is already in the list - the bulk add must skip it, not duplicate it.
+            context.ReadingListItems.Add(new ReadingListItem { ReadingListId = listId, IssueId = alphaIssueId, SortOrder = 0 });
+            context.SaveChanges();
+        }
+
+        (string Title, string Message)? toast = null;
+        var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { }, goToNewIssueProperties: (_, _, _) => { },
+            showToast: (title, message) => toast = (title, message));
+        vm.ToggleIssueSelection(vm.IssueList.Rows[0], isShiftHeld: false);
+        vm.ToggleIssueSelection(vm.IssueList.Rows[1], isShiftHeld: false);
+
+        vm.AddSelectionToReadingListCommand.Execute(listId);
+
+        using var verifyContext = PaperbunkrDb.CreateContext();
+        Assert.Equal(2, verifyContext.ReadingListItems.Count(i => i.ReadingListId == listId));
+        Assert.Equal(1, verifyContext.ReadingListItems.Count(i => i.ReadingListId == listId && i.IssueId == alphaIssueId));
+        Assert.NotNull(toast);
+        Assert.Contains("1 already in list", toast!.Value.Message);
+    }
+
+    [Fact]
+    public void AddSelectionToReadingList_EverythingAlreadyMember_ToastsWithoutInserting()
+    {
+        int seriesId = CreateSeriesWithIssue("Alpha One");
+        int listId;
+        int issueId;
+        using (var context = PaperbunkrDb.CreateContext())
+        {
+            var now = DateTime.UtcNow;
+            var list = new ReadingList { Name = "Weekend Reads", Type = ReadingListType.User, CreatedAt = now, UpdatedAt = now };
+            context.ReadingLists.Add(list);
+            context.SaveChanges();
+            listId = list.Id;
+
+            issueId = context.Issues.Single(i => i.SeriesId == seriesId).Id;
+            context.ReadingListItems.Add(new ReadingListItem { ReadingListId = listId, IssueId = issueId, SortOrder = 0 });
+            context.SaveChanges();
+        }
+
+        (string Title, string Message)? toast = null;
+        var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { }, goToNewIssueProperties: (_, _, _) => { },
+            showToast: (title, message) => toast = (title, message));
+        vm.ToggleIssueSelection(vm.IssueList.Rows[0], isShiftHeld: false);
+
+        vm.AddSelectionToReadingListCommand.Execute(listId);
+
+        using var verifyContext = PaperbunkrDb.CreateContext();
+        Assert.Equal(1, verifyContext.ReadingListItems.Count(i => i.ReadingListId == listId));
+        Assert.NotNull(toast);
+        Assert.Contains("All 1 already", toast!.Value.Message);
+    }
+
+    [Fact]
+    public void LoadFromDatabase_PopulatesReadingListsInSortOrder()
+    {
+        using (var context = PaperbunkrDb.CreateContext())
+        {
+            var now = DateTime.UtcNow;
+            context.ReadingLists.Add(new ReadingList { Name = "Second", SortOrder = 1, Type = ReadingListType.User, CreatedAt = now, UpdatedAt = now });
+            context.ReadingLists.Add(new ReadingList { Name = "First", SortOrder = 0, Type = ReadingListType.User, CreatedAt = now, UpdatedAt = now });
+            context.SaveChanges();
+        }
+
+        var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { }, goToNewIssueProperties: (_, _, _) => { });
+
+        Assert.Equal(new[] { "First", "Second" }, vm.ReadingLists.Select(l => l.Name));
+    }
+
+    // --- Slice 3: series selection + bulk delete/edit (docs/superpowers/specs/2026-08-24-library-
+    //     multiselect-slice3-design.md) ---
+
+    [Fact]
+    public void ToggleSeriesSelection_PlainClick_TogglesSelection()
+    {
+        CreateSeriesWithIssue("Alpha One");
+        var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { }, goToNewIssueProperties: (_, _, _) => { });
+        var card = vm.Covers[0];
+
+        vm.ToggleSeriesSelection(card, isShiftHeld: false);
+        Assert.True(vm.HasSeriesSelection);
+        Assert.Equal(1, vm.SeriesSelectionCount);
+        Assert.True(card.IsSelected);
+
+        vm.ToggleSeriesSelection(card, isShiftHeld: false);
+        Assert.False(vm.HasSeriesSelection);
+        Assert.False(card.IsSelected);
+    }
+
+    [Fact]
+    public void ToggleSeriesSelection_ShiftClick_SelectsContiguousRange()
+    {
+        CreateSeriesWithIssue("Alpha One");
+        CreateSeriesWithIssue("Bravo Two");
+        CreateSeriesWithIssue("Charlie Three");
+        var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { }, goToNewIssueProperties: (_, _, _) => { });
+
+        vm.ToggleSeriesSelection(vm.Covers[0], isShiftHeld: false);
+        vm.ToggleSeriesSelection(vm.Covers[2], isShiftHeld: true);
+
+        Assert.Equal(3, vm.SeriesSelectionCount);
+        Assert.All(vm.Covers, c => Assert.True(c.IsSelected));
+    }
+
+    [Fact]
+    public void HasAnySelection_TrueWhenEitherGranularityHasASelection()
+    {
+        CreateSeriesWithIssue("Alpha One");
+        var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { }, goToNewIssueProperties: (_, _, _) => { });
+        Assert.False(vm.HasAnySelection);
+
+        vm.ToggleSeriesSelection(vm.Covers[0], isShiftHeld: false);
+        Assert.True(vm.HasAnySelection);
+
+        vm.ClearSeriesSelectionCommand.Execute(null);
+        Assert.False(vm.HasAnySelection);
+    }
+
+    [Fact]
+    public void DeleteSeriesSelection_DeletesEverySelectedSeries()
+    {
+        CreateSeriesWithIssue("Alpha One");
+        CreateSeriesWithIssue("Bravo Two");
+        var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { }, goToNewIssueProperties: (_, _, _) => { });
+        vm.ToggleSeriesSelection(vm.Covers[0], isShiftHeld: false);
+        vm.ToggleSeriesSelection(vm.Covers[1], isShiftHeld: false);
+
+        vm.DeleteSeriesSelectionCommand.Execute(null);
+
+        using var context = PaperbunkrDb.CreateContext();
+        Assert.Empty(context.Series);
+    }
+
+    [Fact]
+    public void DeleteSeries_UnselectedLoneCard_DeletesOnlyThatOne()
+    {
+        int keepId = CreateSeriesWithIssue("Alpha One");
+        int deleteId = CreateSeriesWithIssue("Bravo Two");
+        var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { }, goToNewIssueProperties: (_, _, _) => { });
+
+        vm.DeleteSeriesCommand.Execute(deleteId);
+
+        using var context = PaperbunkrDb.CreateContext();
+        var remaining = Assert.Single(context.Series);
+        Assert.Equal(keepId, remaining.Id);
+    }
+
+    [Fact]
+    public void BulkEditSeriesSelection_InvokesCallbackWithSelectedIds()
+    {
+        int seriesA = CreateSeriesWithIssue("Alpha One");
+        int seriesB = CreateSeriesWithIssue("Bravo Two");
+        IReadOnlyList<int>? receivedIds = null;
+        var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { }, goToNewIssueProperties: (_, _, _) => { },
+            goBulkSeriesProperties: ids => receivedIds = ids);
+        vm.ToggleSeriesSelection(vm.Covers.Single(c => c.SeriesId == seriesA), isShiftHeld: false);
+        vm.ToggleSeriesSelection(vm.Covers.Single(c => c.SeriesId == seriesB), isShiftHeld: false);
+
+        vm.BulkEditSeriesSelectionCommand.Execute(null);
+
+        Assert.NotNull(receivedIds);
+        Assert.Equal(new[] { seriesA, seriesB }, receivedIds!.OrderBy(id => id));
     }
 }

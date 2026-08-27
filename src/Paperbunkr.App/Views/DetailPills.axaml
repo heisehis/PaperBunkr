@@ -1,6 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Paperbunkr.App.ViewModels"
+             xmlns:entities="using:Paperbunkr.Data.Entities"
              xmlns:sys="using:System"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -34,6 +35,48 @@
         <Style Selector="Border.tagPill.highlight TextBlock.tagText">
             <Setter Property="Foreground" Value="{DynamicResource PbBadgeBrush}" />
         </Style>
+
+        <!-- Clickable Genre/Tags chips (docs/superpowers/specs/2026-08-23-weighted-categorized-
+             tags-design.md) - a Button rather than a Border so left-click/right-click both work with
+             this app's existing command-binding idiom (see LibraryScreen.axaml's card ContextMenus).
+             Weight-based FontWeight/Opacity come straight from the bound TagPillViewModel; a plain
+             Unset tag renders identically to the old non-interactive pill. -->
+        <Style Selector="Button.weightedTagPill">
+            <Setter Property="Background" Value="{DynamicResource PbChromeBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="999" />
+            <Setter Property="Padding" Value="12,5" />
+            <Setter Property="Margin" Value="0,0,8,0" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style Selector="Button.weightedTagPill:pointerover">
+            <Setter Property="BorderBrush" Value="{DynamicResource PbBadgeBrush}" />
+        </Style>
+
+        <!-- Same clickable chip, no weight styling - Teams/Locations aren't IssueTag-backed (plain
+             CE fields, no Category/Weight concept), just click-to-search (extended past Genre/Tags
+             per direct user follow-up). Highlight variant matches the old Border.tagPill.highlight
+             Teams look. -->
+        <Style Selector="Button.plainTagPill">
+            <Setter Property="Background" Value="{DynamicResource PbChromeBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="999" />
+            <Setter Property="Padding" Value="12,5" />
+            <Setter Property="Margin" Value="0,0,8,0" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style Selector="Button.plainTagPill.highlight">
+            <Setter Property="Background" Value="#24D7AC4C" />
+            <Setter Property="BorderBrush" Value="{DynamicResource PbBadgeBrush}" />
+        </Style>
+        <Style Selector="Button.plainTagPill.highlight TextBlock.tagText">
+            <Setter Property="Foreground" Value="{DynamicResource PbBadgeBrush}" />
+        </Style>
+        <Style Selector="Button.plainTagPill:pointerover">
+            <Setter Property="BorderBrush" Value="{DynamicResource PbBadgeBrush}" />
+        </Style>
     </UserControl.Styles>
 
     <StackPanel Margin="0,20,0,0">
@@ -46,8 +89,8 @@
                         <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
                     </ItemsControl.ItemsPanel>
                     <ItemsControl.ItemTemplate>
-                        <DataTemplate x:DataType="sys:String">
-                            <Border Classes="tagPill highlight" Margin="0,0,8,0"><TextBlock Classes="tagText" Text="{Binding}" /></Border>
+                        <DataTemplate x:DataType="vm:TagPillViewModel">
+                            <Button Classes="plainTagPill highlight" Command="{Binding SearchCommand}"><TextBlock Classes="tagText" Text="{Binding Value}" /></Button>
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
@@ -58,8 +101,8 @@
                         <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
                     </ItemsControl.ItemsPanel>
                     <ItemsControl.ItemTemplate>
-                        <DataTemplate x:DataType="sys:String">
-                            <Border Classes="tagPill" Margin="0,0,8,0"><TextBlock Classes="tagText" Text="{Binding}" /></Border>
+                        <DataTemplate x:DataType="vm:TagPillViewModel">
+                            <Button Classes="plainTagPill" Command="{Binding SearchCommand}"><TextBlock Classes="tagText" Text="{Binding Value}" /></Button>
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
@@ -70,8 +113,42 @@
                         <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
                     </ItemsControl.ItemsPanel>
                     <ItemsControl.ItemTemplate>
-                        <DataTemplate x:DataType="sys:String">
-                            <Border Classes="tagPill" Margin="0,0,8,0"><TextBlock Classes="tagText" Text="{Binding}" /></Border>
+                        <DataTemplate x:DataType="vm:TagPillViewModel">
+                            <Button Classes="weightedTagPill" Command="{Binding SearchCommand}"
+                                    ToolTip.Tip="{Binding Category}">
+                                <Button.ContextMenu>
+                                    <ContextMenu IsVisible="{Binding CanReweight}">
+                                        <MenuItem Header="Incidental" Command="{Binding SetWeightCommand}" CommandParameter="{x:Static entities:IssueTagWeight.Incidental}" />
+                                        <MenuItem Header="Recurrent" Command="{Binding SetWeightCommand}" CommandParameter="{x:Static entities:IssueTagWeight.Recurrent}" />
+                                        <MenuItem Header="Defining" Command="{Binding SetWeightCommand}" CommandParameter="{x:Static entities:IssueTagWeight.Defining}" />
+                                        <MenuItem Header="Core" Command="{Binding SetWeightCommand}" CommandParameter="{x:Static entities:IssueTagWeight.Core}" />
+                                    </ContextMenu>
+                                </Button.ContextMenu>
+                                <TextBlock Classes="tagText" Text="{Binding Value}" FontWeight="{Binding TextWeight}" Opacity="{Binding WeightOpacity}" />
+                            </Button>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+
+                <TextBlock Classes="pillGroupLabel" Text="Tags" />
+                <ItemsControl ItemsSource="{Binding Tags}" Margin="0,0,0,16">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:TagPillViewModel">
+                            <Button Classes="weightedTagPill" Command="{Binding SearchCommand}"
+                                    ToolTip.Tip="{Binding Category}">
+                                <Button.ContextMenu>
+                                    <ContextMenu IsVisible="{Binding CanReweight}">
+                                        <MenuItem Header="Incidental" Command="{Binding SetWeightCommand}" CommandParameter="{x:Static entities:IssueTagWeight.Incidental}" />
+                                        <MenuItem Header="Recurrent" Command="{Binding SetWeightCommand}" CommandParameter="{x:Static entities:IssueTagWeight.Recurrent}" />
+                                        <MenuItem Header="Defining" Command="{Binding SetWeightCommand}" CommandParameter="{x:Static entities:IssueTagWeight.Defining}" />
+                                        <MenuItem Header="Core" Command="{Binding SetWeightCommand}" CommandParameter="{x:Static entities:IssueTagWeight.Core}" />
+                                    </ContextMenu>
+                                </Button.ContextMenu>
+                                <TextBlock Classes="tagText" Text="{Binding Value}" FontWeight="{Binding TextWeight}" Opacity="{Binding WeightOpacity}" />
+                            </Button>
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>

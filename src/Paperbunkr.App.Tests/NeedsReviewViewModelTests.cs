@@ -199,6 +199,84 @@ public class NeedsReviewViewModelTests : IDisposable
         Assert.DoesNotContain(context.Series, s => s.Name == "Renamed Series");
     }
 
+    // --- Series-scoped Summary/Status/Genre proposals (docs/superpowers/specs/2026-08-23-apply-
+    // from-provider-design.md) - written directly on accept, unlike every Issue-scoped field above,
+    // so Reject needs a real revert step rather than just a status flip. ---
+
+    private int AddSeriesProposal(MetadataProposalField field, string? currentValue, string proposedValue)
+    {
+        using var context = new PaperbunkrDbContext(new DbContextOptionsBuilder<PaperbunkrDbContext>().UseSqlite($"Data Source={_dbPath}").Options);
+        int seriesId = context.Issues.Single(i => i.Id == _issueId).SeriesId;
+        var proposal = new MetadataProposal
+        {
+            SeriesId = seriesId,
+            Field = field,
+            CurrentValue = currentValue,
+            ProposedValue = proposedValue,
+            Source = MetadataProposalSource.MetadataProvider,
+            ProviderKey = ExternalMetadataProvider.MangaBaka,
+            Confidence = 1.0m,
+            Status = MetadataProposalStatus.Accepted,
+            ResolvedAt = DateTime.UtcNow,
+        };
+        context.MetadataProposals.Add(proposal);
+        context.SaveChanges();
+        return proposal.Id;
+    }
+
+    [Fact]
+    public void Refresh_SeriesScopedProposal_LabelIsJustTheSeriesName()
+    {
+        AddSeriesProposal(MetadataProposalField.Summary, null, "A synopsis.");
+
+        var vm = CreateViewModel();
+
+        var row = Assert.Single(vm.MetadataProposalItems);
+        Assert.Equal("Kilo Station", row.IssueLabel);
+        Assert.True(row.IsAlreadyAccepted);
+    }
+
+    [Fact]
+    public void RejectCommand_SeriesScopedProposal_RevertsFieldToSnapshottedCurrentValue()
+    {
+        using (var context = new PaperbunkrDbContext(new DbContextOptionsBuilder<PaperbunkrDbContext>().UseSqlite($"Data Source={_dbPath}").Options))
+        {
+            var series = context.Series.Single();
+            series.Summary = "Provider-written summary.";
+            context.SaveChanges();
+        }
+
+        AddSeriesProposal(MetadataProposalField.Summary, currentValue: "My own hand-written summary.", proposedValue: "Provider-written summary.");
+        var vm = CreateViewModel();
+        var row = Assert.Single(vm.MetadataProposalItems);
+
+        row.RejectCommand.Execute(null);
+
+        using var verifyContext = new PaperbunkrDbContext(new DbContextOptionsBuilder<PaperbunkrDbContext>().UseSqlite($"Data Source={_dbPath}").Options);
+        Assert.Equal("My own hand-written summary.", verifyContext.Series.Single().Summary);
+        Assert.Equal(MetadataProposalStatus.Rejected, verifyContext.MetadataProposals.Single().Status);
+    }
+
+    [Fact]
+    public void RejectCommand_SeriesScopedStatusProposal_RevertsToParsedPriorEnumValue()
+    {
+        using (var context = new PaperbunkrDbContext(new DbContextOptionsBuilder<PaperbunkrDbContext>().UseSqlite($"Data Source={_dbPath}").Options))
+        {
+            var series = context.Series.Single();
+            series.Status = SeriesStatus.Ongoing;
+            context.SaveChanges();
+        }
+
+        AddSeriesProposal(MetadataProposalField.Status, currentValue: "Completed", proposedValue: "Ongoing");
+        var vm = CreateViewModel();
+        var row = Assert.Single(vm.MetadataProposalItems);
+
+        row.RejectCommand.Execute(null);
+
+        using var verifyContext = new PaperbunkrDbContext(new DbContextOptionsBuilder<PaperbunkrDbContext>().UseSqlite($"Data Source={_dbPath}").Options);
+        Assert.Equal(SeriesStatus.Completed, verifyContext.Series.Single().Status);
+    }
+
     private sealed class NoOpFilePicker : IFilePickerService
     {
         public Task<string?> PickOpenFileAsync(string title, string extension, string extensionLabel) => Task.FromResult<string?>(null);

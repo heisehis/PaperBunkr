@@ -227,4 +227,53 @@ public class BookReaderScreenViewModelTests : IDisposable
         Assert.Empty(vm.SearchResults);
         Assert.False(vm.HasNoSearchResults);
     }
+
+    // --- Finished / ChapterCount (docs/superpowers/specs/2026-08-27-books-screen-chrome-and-home-
+    // strip-design.md) ---
+
+    private Book ReadBook(int id)
+    {
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        return context.Books.Single(b => b.Id == id);
+    }
+
+    [Fact]
+    public void LoadBook_PopulatesChapterCount_FromTheSource()
+    {
+        int bookId = AddBook(firstChapterEmpty: false);
+        CreateViewModel(bookId);
+
+        // The fixture EPUB has two chapters.
+        Assert.Equal(2, ReadBook(bookId).ChapterCount);
+    }
+
+    [Fact]
+    public void LoadBook_ClearsFinished_WhenReopeningForReading()
+    {
+        int bookId = AddBook(firstChapterEmpty: false);
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            context.Books.Single(b => b.Id == bookId).Finished = true;
+            context.SaveChanges();
+        }
+
+        CreateViewModel(bookId);
+
+        Assert.False(ReadBook(bookId).Finished);
+    }
+
+    [Fact]
+    public void NextPage_PastTheEndOfTheLastChapter_MarksFinished()
+    {
+        int bookId = AddBook(firstChapterEmpty: false);
+        var vm = CreateViewModel(bookId);
+
+        // Page well past the end - the terminal branch is a safe no-op once there.
+        for (int i = 0; i < 12; i++)
+        {
+            vm.NextPageCommand.Execute(null);
+        }
+
+        Assert.True(ReadBook(bookId).Finished);
+    }
 }

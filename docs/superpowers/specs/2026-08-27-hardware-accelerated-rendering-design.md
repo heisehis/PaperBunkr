@@ -1,11 +1,13 @@
 # Hardware-Accelerated Rendering — Design Spec
 
 *Date: 2026-08-27. Scope: make Avalonia's GPU rendering backend on Windows **explicit and
-observable** instead of implicit, add a pre-UI bootstrap config (`graphics.json` + env var) that
-can force GPU-only or software rendering, and capture the backend that actually won — plus any
-silent GPU-init failure or software fallback — into the existing `startup.log`. Windows-only.
-Does **not** add a Preferences UI (deferred), multi-GPU adapter selection, Vulkan, or any
-reader-specific performance work.*
+observable** instead of implicit; add a persisted `AppSettings.RenderingBackend` /
+`PreferNativeOpenGl` (Auto / GPU-only / Software) with an EF migration, mirrored to a pre-UI
+`graphics.json` cache (+ an env-var override) so the choice can be read before the database is
+available at startup; and capture the backend that actually won — plus any silent GPU-init
+failure or software fallback — into the existing `startup.log`. Windows-only. Does **not** add
+the Preferences UI (deferred), multi-GPU adapter selection, Vulkan, or any reader-specific
+performance work.*
 
 ## 1. Goals and non-goals
 
@@ -31,8 +33,9 @@ when a driver/RDP/VM makes GPU worse or broken).
 
 - **Preferences UI.** The Advanced tab already exists
   (`docs/superpowers/specs/2026-08-07-preferences-advanced-tab-design.md`) and is the natural home
-  for a rendering-backend dropdown. This spec designs the on-disk format so that UI is a thin
-  follow-up (read/write `graphics.json`, show a "restart required" note), but builds no UI.
+  for a rendering-backend dropdown. This spec adds the backing `AppSettings` fields and the
+  bootstrap cache so that UI is a thin follow-up (bind two fields, call one sync method, show a
+  "restart required" note), but builds no UI.
 - **`GraphicsAdapterSelectionCallback`** — picking a specific GPU on multi-GPU laptops. Real CE
   had nothing like it; no user request yet.
 - **Vulkan** (`Win32RenderingMode.Vulkan`) — still experimental on Win32 in Avalonia; not in the
@@ -45,52 +48,75 @@ choice here is a deliberate Paperbunkr deviation; there is no CE default to chec
 CE-shaped decision — writing diagnostics into a plain-text `startup.log` — already matches
 `DiagnosticsService`'s existing CE-mirroring report shape.
 
-## 2. Why a separate bootstrap file, not `AppSettings`
+## 2. Storage: `AppSettings` is the source of truth, `graphics.json` is a pre-UI cache
 
-Every other app setting lives in the singleton `AppSettings` row
-(`src/Paperbunkr.Data/Entities/AppSettings.cs`). The rendering backend deliberately does **not**,
-for one hard reason: **the graphics stack is chosen inside `Program.BuildAvaloniaApp()`, before
-Avalonia starts**, whereas the SQLite database isn't opened or migrated until
+The setting lives in the singleton `AppSettings` row
+(`src/Paperbunkr.Data/Entities/AppSettings.cs`), like every other app setting — two new fields,
+`RenderingBackend` (enum) and `PreferNativeOpenGl` (bool), with a migration. That is the value
+the (future) Advanced-tab UI reads and writes, and the value that survives a DB backup/restore.
+
+But **the graphics stack is chosen inside `Program.BuildAvaloniaApp()`, before Avalonia starts**,
+whereas the SQLite database isn't opened or migrated until
 `App.OnFrameworkInitializationCompleted` — much later. Reaching into an un-migrated database file
 at the very top of `Program.Main` (raw `SELECT`, bypassing EF, tolerating a missing table/column
 on fresh installs) would put a fragile DB read at precisely the startup phase where a silent
-`Database.Migrate()` stall once cost an hour of forensic debugging (see
-`DiagnosticsService`'s class comment and the project's memory notes).
+`Database.Migrate()` stall once cost an hour of forensic debugging (see `DiagnosticsService`'s
+class comment and the project's memory notes).
 
-Instead: a tiny standalone JSON file under the same `%AppData%\Paperbunkr\` root the logs already
-use, read with `System.Text.Json`, no EF, no SQLite, total error handling. This is the standard
-pattern for "config that must be read before the graphics/UI stack initializes."
+So there is a second artifact: **`graphics.json`**, a tiny standalone file under the same
+`%AppData%\Paperbunkr\` root the logs already use, read with `System.Text.Json` — no EF, no
+SQLite, total error handling. It is a **write-through cache of the two `AppSettings` fields**, not
+an independent config:
+
+- `Program.Main` reads `graphics.json` (the DB isn't available yet) to choose the backend.
+- After the DB is up (`App.OnFrameworkInitializationCompleted`, post-`EnsureCreated()`), a sync
+  step compares the live `AppSettings` values to `graphics.json` and rewrites the file if they
+  differ, logging a milestone. A DB restore, a manual DB edit, or a first run after this feature
+  ships therefore propagates to the cache on the *next* launch and takes effect the launch after
+  — a two-launch lag, documented and acceptable for a restart-only setting.
+- The future Advanced-tab UI eliminates the lag for the normal path by writing `AppSettings` and
+  calling the same sync method immediately, so the cache is current before the user restarts.
+
+On a fresh install with no `graphics.json` and no DB yet, `Main` gets `Auto` — which is also the
+`AppSettings` default, so the first launch is consistent and the first post-DB sync writes the
+cache for subsequent launches.
 
 ## 3. On-disk format and precedence
 
 **File:** `%AppData%\Paperbunkr\graphics.json` (sibling of `logs/`). Absent by default — a fresh
-install has no file and gets `Auto`.
+install has no file and gets `Auto`. Written by the post-DB sync step (§2), not hand-authored,
+though a user *may* edit it directly as an escape hatch when the app won't start.
 
 ```json
 {
   "backend": "auto",
-  "preferWgl": false
+  "preferNativeOpenGl": false
 }
 ```
 
 - `backend`: `"auto"` | `"gpu"` | `"software"` (case-insensitive). Unknown / missing → `Auto`.
-- `preferWgl`: when `true`, native OpenGL (WGL) is tried *before* ANGLE. Default `false`. Only
-  meaningful for `auto` and `gpu`. This is the one knob for "ANGLE is the thing misbehaving on
-  this box, try real GL first."
+  Mirrors `AppSettings.RenderingBackend`.
+- `preferNativeOpenGl`: when `true`, native OpenGL (WGL) is tried *before* ANGLE. Default
+  `false`. Only meaningful for `auto` and `gpu`. Mirrors `AppSettings.PreferNativeOpenGl`. This
+  is the one knob for "ANGLE is the thing misbehaving on this box, try real GL first."
 
 **Environment variable:** `PAPERBUNKR_RENDER` = `auto` | `gpu` | `software` (case-insensitive).
-When set to a recognized value it **overrides `backend` from the file entirely** (but not
-`preferWgl` — an env-only user still gets the file's `preferWgl`, or `false` if no file). An
-unrecognized value is ignored with a breadcrumb.
+A last-resort override read only at bootstrap — when set to a recognized value it **overrides
+`backend` for that launch** (but not `preferNativeOpenGl` — an env-only user still gets the
+file's value, or `false` if no file). It is **never written back** to `graphics.json` or
+`AppSettings`; unset the variable and the persisted setting applies again. An unrecognized value
+is ignored with a breadcrumb.
 
-**Precedence:** `PAPERBUNKR_RENDER` (if recognized) → `graphics.json` `backend` → `Auto`.
+**Bootstrap precedence (in `Main`):** `PAPERBUNKR_RENDER` (if recognized) → `graphics.json` → 
+`Auto`. The database is deliberately *not* consulted here — `graphics.json` is its stand-in
+until the sync step reconciles them.
 
 ## 4. Backend → `Win32RenderingMode` mapping
 
 `Win32RenderingMode` values available in Avalonia 12.1.1: `AngleEgl`, `Wgl`, `Vulkan`, `Software`.
 The array is a priority-ordered fallback chain (first element wins if it initializes).
 
-| `RenderBackend` | `preferWgl` | `RenderingMode` array |
+| `RenderBackend` | `PreferNativeOpenGl` | `RenderingMode` array |
 |---|---|---|
 | `Auto` (default) | `false` | `[AngleEgl, Wgl, Software]` |
 | `Auto` | `true` | `[Wgl, AngleEgl, Software]` |
@@ -103,8 +129,9 @@ The array is a priority-ordered fallback chain (first element wins if it initial
   dropping all the way to software. This is the meaningful behavioral improvement for goal 1.
 - **`Gpu`** removes the software fallback — for deliberately testing "is GPU actually working, or
   has it been silently falling back this whole time?" It *can* fail to start the app on a broken
-  GPU; that is intentional and documented (recovery: delete `graphics.json` or set
-  `PAPERBUNKR_RENDER=software`).
+  GPU; that is intentional and documented (recovery: set `PAPERBUNKR_RENDER=software`, or edit
+  `graphics.json`'s `backend` to `"software"`, or — once the Advanced-tab UI exists — change it
+  there).
 - **`Software`** is the escape hatch for broken drivers, RDP sessions, and VMs.
 
 `CompositionMode` is **left at its default** (`[WinUIComposition, DirectComposition,
@@ -113,47 +140,113 @@ problems are not what the user is seeing.
 
 ## 5. Components
 
-### `GraphicsBootstrap` — `src/Paperbunkr.App/Services/GraphicsBootstrap.cs`
-
-Pure, no Avalonia dependency, fully unit-testable.
+### `RenderBackend` enum — `src/Paperbunkr.Data/Entities/RenderBackend.cs`
 
 ```csharp
-public enum RenderBackend { Auto, Gpu, Software }
+namespace Paperbunkr.Data.Entities;
 
-public sealed record GraphicsConfig(RenderBackend Backend, bool PreferWgl)
+/// <summary>
+/// Avalonia GPU rendering backend selection, backing <see cref="AppSettings.RenderingBackend"/>
+/// (docs/superpowers/specs/2026-08-27-hardware-accelerated-rendering-design.md). No CE
+/// equivalent - CE was WinForms/GDI+ with no GPU rendering concept.
+/// </summary>
+public enum RenderBackend { Auto, Gpu, Software }
+```
+
+Lives in `Data.Entities` alongside `ImageFitMode` / `PageLayoutMode` (the codebase convention for
+enums that are `AppSettings` columns). `GraphicsBootstrap` in the App project references it.
+
+### `AppSettings` fields — `src/Paperbunkr.Data/Entities/AppSettings.cs`
+
+```csharp
+/// <summary>
+/// Avalonia GPU rendering backend (docs/superpowers/specs/2026-08-27-hardware-accelerated-
+/// rendering-design.md). Restart-only. Source of truth; mirrored to %AppData%\Paperbunkr\
+/// graphics.json (read before the DB is available at startup) by GraphicsBootstrap.SyncCache.
+/// No CE equivalent. Default Auto = GPU-first with software fallback.
+/// </summary>
+public RenderBackend RenderingBackend { get; set; } = RenderBackend.Auto;
+
+/// <summary>
+/// When true, native OpenGL (WGL) is tried before ANGLE/Direct3D in the rendering fallback
+/// chain (spec §4). Default false - ANGLE is the better default on Windows. Restart-only,
+/// mirrored to graphics.json with <see cref="RenderingBackend"/>.
+/// </summary>
+public bool PreferNativeOpenGl { get; set; }
+```
+
+Migration: `dotnet ef migrations add AddRenderingBackendSettings` in `src/Paperbunkr.Data`, two
+columns, defaults `Auto` / `false`. Follows the one-migration-per-spec convention noted in
+`AppSettings`'s own class comment.
+
+### `GraphicsBootstrap` — `src/Paperbunkr.App/Services/GraphicsBootstrap.cs`
+
+Pure, no Avalonia dependency (references only `Paperbunkr.Data.Entities` + BCL), fully
+unit-testable.
+
+```csharp
+public sealed record GraphicsConfig(RenderBackend Backend, bool PreferNativeOpenGl)
 {
     public static GraphicsConfig Default { get; } = new(RenderBackend.Auto, false);
 }
 
 public static class GraphicsBootstrap
 {
-    // Test-only redirect, same pattern as DiagnosticsService.LogDirectoryOverride.
-    internal static string? ConfigPathOverride { get; set; }
+    // Test-only redirects, same pattern as DiagnosticsService.LogDirectoryOverride.
+    internal static string? CachePathOverride { get; set; }
     internal static Func<string, string?>? EnvReaderOverride { get; set; }
 
-    public static string ConfigPath => ConfigPathOverride
+    public static string CachePath => CachePathOverride
         ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
                         "Paperbunkr", "graphics.json");
 
-    /// Resolves env var -> file -> Default. Never throws. Returns the config plus a
-    /// human-readable source string ("env", "graphics.json", "default (no config)",
-    /// "default (graphics.json unreadable)") for the startup breadcrumb.
+    /// Bootstrap read (called from Program.Main, DB not yet available):
+    /// env var -> graphics.json -> Default. Never throws. Source string is one of
+    /// "env", "graphics.json", "default (no cache)", "default (graphics.json unreadable)".
     public static (GraphicsConfig Config, string Source) Resolve();
 
     /// Maps a resolved config to the priority-ordered Win32RenderingMode fallback chain (§4).
     public static IReadOnlyList<Win32RenderingMode> ToRenderingModes(GraphicsConfig config);
+
+    /// Post-DB reconciliation (called from App.OnFrameworkInitializationCompleted).
+    /// Writes graphics.json to match the persisted settings iff it currently differs (or is
+    /// missing/corrupt). Returns true if it rewrote the file. Never throws.
+    public static bool SyncCache(RenderBackend backend, bool preferNativeOpenGl);
 }
 ```
 
 - `Resolve()` reads `EnvReaderOverride ?? Environment.GetEnvironmentVariable`, then tries
-  `File.ReadAllText(ConfigPath)` + `JsonSerializer.Deserialize` into a private DTO with
-  `[JsonStringEnumConverter]`-style tolerant parsing (do the enum parse by hand:
-  `Enum.TryParse(..., ignoreCase: true)`, fall back to `Auto`). Any `IOException` /
-  `JsonException` / unknown-value path: swallow, record it in the returned `Source` string,
-  return `Default` (or `Default with { PreferWgl = ... }` if only `backend` was bad).
+  `File.ReadAllText(CachePath)` + `JsonSerializer.Deserialize` into a private DTO. Enum parse by
+  hand (`Enum.TryParse(..., ignoreCase: true)`), fall back to `Auto`. Any `IOException` /
+  `JsonException` / unknown-value path: swallow, record it in the returned `Source`, return
+  `Default` (keeping a successfully-parsed `preferNativeOpenGl` if only `backend` was bad). The
+  env var overrides only `Backend`, never `PreferNativeOpenGl`, and is never persisted.
 - `ToRenderingModes` is the table in §4 as a `switch`.
-- **`GraphicsBootstrap` does not log directly** — it returns the `Source` string and lets
-  `Program` emit the milestone, so the pure unit stays free of `DiagnosticsService` coupling.
+- `SyncCache` serializes `{ backend, preferNativeOpenGl }` with `JsonSerializerOptions`
+  `{ WriteIndented = true }`, lowercase enum string. It reads the current file first and skips
+  the write when already equal (avoids touching the file's mtime every launch). `Directory.
+  CreateDirectory` on the parent first. All wrapped so a read-only `%AppData%` can't crash
+  startup — a failed sync just means the stale cache is used next launch, logged as a milestone.
+- **`GraphicsBootstrap` does not log directly** — callers (`Program`, `App`) emit milestones, so
+  the unit stays free of `DiagnosticsService` coupling.
+
+### `App.OnFrameworkInitializationCompleted` change — reconciliation
+
+Immediately after the existing `PaperbunkrDb.EnsureCreated()` call (DB now migrated and open):
+
+```csharp
+using (var ctx = PaperbunkrDb.CreateContext())
+{
+    var s = ctx.AppSettings.Single();
+    if (GraphicsBootstrap.SyncCache(s.RenderingBackend, s.PreferNativeOpenGl))
+        DiagnosticsService.LogMilestone(
+            $"graphics.json synced to settings: {s.RenderingBackend} preferNativeOpenGl={s.PreferNativeOpenGl} (restart to apply)");
+}
+```
+
+(`AppSettings` singleton access should reuse whatever accessor the codebase already has — if
+there's an `AppSettingsService` or similar, use it rather than a raw `Single()`; implementation
+detail for the plan.)
 
 ### `DiagnosticsLogSink` — `src/Paperbunkr.App/Services/DiagnosticsLogSink.cs`
 
@@ -189,7 +282,7 @@ public static void Main(string[] args)
     DiagnosticsService.Install();
     var (gfx, source) = GraphicsBootstrap.Resolve();
     DiagnosticsService.LogMilestone(
-        $"Render backend requested: {gfx.Backend} preferWgl={gfx.PreferWgl} (source: {source})");
+        $"Render backend requested: {gfx.Backend} preferNativeOpenGl={gfx.PreferNativeOpenGl} (source: {source})");
     try
     {
         BuildAvaloniaApp(gfx).StartWithClassicDesktopLifetime(args);
@@ -240,7 +333,7 @@ public static AppBuilder BuildAvaloniaApp(GraphicsConfig gfx)
 ```
 Program.Main
   -> DiagnosticsService.Install()                    (existing)
-  -> GraphicsBootstrap.Resolve()                     env var -> graphics.json -> Default
+  -> GraphicsBootstrap.Resolve()                     env var -> graphics.json -> Default(Auto)
   -> LogMilestone("Render backend requested: ...")   into startup.log
   -> BuildAvaloniaApp(gfx)
        -> .With(Win32PlatformOptions{ RenderingMode })
@@ -248,39 +341,57 @@ Program.Main
   -> StartWithClassicDesktopLifetime
        -> Avalonia picks a backend from the chain, emitting Platform/Win/Visual log events
             -> DiagnosticsLogSink forwards Warning+ ones as "[render] ..." into startup.log
+       -> App.OnFrameworkInitializationCompleted
+            -> PaperbunkrDb.EnsureCreated()          (existing; DB now migrated)
+            -> GraphicsBootstrap.SyncCache(settings.RenderingBackend, settings.PreferNativeOpenGl)
+                 rewrites graphics.json iff it differs -> milestone "synced ... (restart to apply)"
 ```
 
-Net observable result in `startup.log`: one line stating what was *requested*, and — only if
-Avalonia had trouble — follow-up `[render]` lines stating what failed and what it fell back to. A
-clean GPU start produces just the request line (Avalonia doesn't log at Warning+ on success),
-which is itself the signal: "requested Auto, no render warnings" = GPU is fine.
+The DB (`AppSettings`) is the source of truth; `graphics.json` trails it by up to one launch
+(§2), except when the future Advanced-tab UI writes both together.
+
+Net observable result in `startup.log`: one line stating what was *requested*, optionally a
+"synced" line if the cache was stale, and — only if Avalonia had trouble — follow-up `[render]`
+lines stating what failed and what it fell back to. A clean GPU start produces just the request
+line (Avalonia doesn't log at Warning+ on success), which is itself the signal: "requested Auto,
+no render warnings" = GPU is fine.
 
 ## 7. Error handling
 
 | Situation | Behavior |
 |---|---|
-| No `graphics.json` | `Auto`; breadcrumb `source: default (no config)` |
-| Malformed JSON / unreadable file | `Auto`; breadcrumb `source: default (graphics.json unreadable)`; no throw |
-| Unknown `backend` string | `Auto` (keep parsed `preferWgl`); breadcrumb notes the bad value |
+| No `graphics.json` (fresh install) | `Auto`; breadcrumb `source: default (no cache)`; first post-DB `SyncCache` writes it |
+| Malformed / unreadable `graphics.json` | `Auto`; breadcrumb `source: default (graphics.json unreadable)`; no throw; `SyncCache` overwrites it with the DB value |
+| Unknown `backend` string in file | `Auto` (keep parsed `preferNativeOpenGl`); breadcrumb notes the bad value |
 | Unknown `PAPERBUNKR_RENDER` value | Ignored; fall through to file/default; breadcrumb notes it |
-| `Gpu` mode, GPU init fails | App may fail to start (intentional). Recovery documented: delete `graphics.json` or `PAPERBUNKR_RENDER=software`. The `DiagnosticsLogSink` captures the failure reason first. |
+| `SyncCache` write fails (read-only `%AppData%`) | Swallowed; milestone notes it; stale cache used next launch; no startup crash |
+| DB read for reconciliation fails | Reconciliation skipped with a milestone; bootstrap already succeeded from the cache, so rendering is unaffected |
+| `Gpu` mode, GPU init fails | App may fail to start (intentional). Recovery: `PAPERBUNKR_RENDER=software`, edit `graphics.json`, or the future UI. `DiagnosticsLogSink` captures the failure reason first. |
 | `DiagnosticsLogSink.Log` throws | Swallowed per-call; never propagates into Avalonia's render path |
 | One sink in `CompositeLogSink` throws | Other sink(s) still receive the event |
 
 ## 8. Testing
 
-All headless (`Paperbunkr.App.Tests`), no real GPU required.
+All headless, no real GPU required.
 
 **`GraphicsBootstrapTests`:**
 - `PAPERBUNKR_RENDER=software` overrides `graphics.json` `backend: "gpu"` → `Software`.
-- `preferWgl` from the file is retained even when the env var overrides `backend`.
+- `preferNativeOpenGl` from the file is retained even when the env var overrides `backend`.
 - Valid file parses each of `auto` / `gpu` / `software` (case-insensitive).
-- Missing file → `GraphicsConfig.Default`, `Source` == "default (no config)".
+- Missing file → `GraphicsConfig.Default`, `Source` == "default (no cache)".
 - Malformed JSON → `Default`, `Source` mentions "unreadable", no exception.
-- Unknown `backend` value → `Auto` with `preferWgl` still honored.
+- Unknown `backend` value → `Auto` with `preferNativeOpenGl` still honored.
 - `ToRenderingModes` returns the exact ordered array from §4 for all six rows (order asserted).
-- Uses `ConfigPathOverride` (temp file) and `EnvReaderOverride` — no real env var / `%AppData%`
+- `SyncCache`: writes a well-formed file when none exists (returns `true`); rewrites when the
+  file differs (returns `true`); returns `false` without rewriting when the file already matches;
+  round-trips (`SyncCache` then `Resolve` yields the same config); swallows a write into a
+  non-existent drive path (returns `false`, no throw).
+- Uses `CachePathOverride` (temp file) and `EnvReaderOverride` — no real env var / `%AppData%`
   writes.
+
+**`AddRenderingBackendSettingsMigrationTests`** (`Paperbunkr.Data.Tests`, matching the existing
+`MetadataModelPhase2aMigrationTests` pattern): migrating a DB with a pre-existing `AppSettings`
+row yields `RenderingBackend = Auto`, `PreferNativeOpenGl = false`.
 
 **`CompositeLogSinkTests`:**
 - Event fans out to all inners.
@@ -304,23 +415,30 @@ FPS/overlay dev tools show the software renderer.
 ## 9. Files touched
 
 **New:**
+- `src/Paperbunkr.Data/Entities/RenderBackend.cs`
+- `src/Paperbunkr.Data/Migrations/<timestamp>_AddRenderingBackendSettings.cs` (+ `.Designer.cs`,
+  + snapshot update) — via `dotnet ef migrations add`
 - `src/Paperbunkr.App/Services/GraphicsBootstrap.cs`
 - `src/Paperbunkr.App/Services/DiagnosticsLogSink.cs`
 - `src/Paperbunkr.App/Services/CompositeLogSink.cs`
 - `src/Paperbunkr.App.Tests/GraphicsBootstrapTests.cs`
 - `src/Paperbunkr.App.Tests/CompositeLogSinkTests.cs`
 - `src/Paperbunkr.App.Tests/DiagnosticsLogSinkTests.cs`
+- `src/Paperbunkr.Data.Tests/AddRenderingBackendSettingsMigrationTests.cs`
 
 **Modified:**
+- `src/Paperbunkr.Data/Entities/AppSettings.cs` — `RenderingBackend`, `PreferNativeOpenGl` fields
 - `src/Paperbunkr.App/Program.cs` — resolve config, log request, pass to `BuildAvaloniaApp`,
-  `Win32PlatformOptions`, compose the log sink.
+  `Win32PlatformOptions`, compose the log sink
+- `src/Paperbunkr.App/App.axaml.cs` — `GraphicsBootstrap.SyncCache` call after `EnsureCreated()`
 
-**No migration, no `AppSettings` change, no XAML change.**
+**No XAML change.**
 
 ## 10. Follow-ups (out of scope, listed for the roadmap)
 
 - Advanced-tab "Rendering backend" dropdown (Auto / GPU only / Software) + "Prefer native
-  OpenGL" checkbox, writing `graphics.json`, with a "takes effect after restart" note.
+  OpenGL" checkbox, bound to the `AppSettings` fields, calling `GraphicsBootstrap.SyncCache` on
+  save, with a "takes effect after restart" note.
 - Surface the resolved-at-runtime backend (not just the request) in the Advanced tab / a
   diagnostics panel — needs a reliable Avalonia API to query the live backend; investigate
   `Compositor` GPU-context introspection.

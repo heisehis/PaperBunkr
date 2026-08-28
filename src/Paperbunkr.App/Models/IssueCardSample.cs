@@ -21,6 +21,7 @@ public sealed partial class IssueCardSample : ObservableObject, ISelectableCard
     /// </summary>
     public int SeriesId { get; init; }
 
+    /// <summary>Issue number label, e.g. "#5" (or "#?" when unnumbered).</summary>
     public required string Title { get; init; }
     public bool IsUnread { get; init; }
     public required IBrush CoverBrush { get; init; }
@@ -33,6 +34,34 @@ public sealed partial class IssueCardSample : ObservableObject, ISelectableCard
 
     /// <summary>Drives "Show in Explorer"'s IsEnabled without a converter - see FilePath's own doc comment.</summary>
     public bool HasFile => !string.IsNullOrEmpty(FilePath);
+
+    // --- Detail-screen Issues-tab List / Card view-mode columns (docs/superpowers/specs/
+    //     2026-08-28-detail-screens-streaming-redesign-design.md). Unused by the Smart Lists grid. ---
+
+    /// <summary>The issue's own title (not the number) - Card view's headline.</summary>
+    public string? FullTitle { get; init; }
+
+    public string? ArcTitle { get; init; }
+
+    public System.DateTime? CoverDate { get; init; }
+
+    public float? Rating { get; init; }
+
+    /// <summary>Fully read - dims the tile.</summary>
+    public bool IsRead { get; init; }
+
+    /// <summary>0..1 read progress - drives the thin in-progress bar.</summary>
+    public double ReadFraction { get; init; }
+
+    public bool IsInProgress => ReadFraction is > 0 and < 1;
+
+    public string CoverDateLabel => CoverDate?.ToString("MMM yyyy") ?? string.Empty;
+
+    public string RatingLabel => Rating is > 0 ? new string('★', System.Math.Clamp((int)System.Math.Round(Rating.Value), 1, 5)) : "—";
+
+    public string CardProgressLabel => IsInProgress ? $"{Title} · {(int)System.Math.Round(ReadFraction * 100)}%" : Title;
+
+    public string CardActionLabel => IsInProgress ? "Continue" : IsRead ? "Re-read" : "Read";
 
     [ObservableProperty]
     private bool _isSelected;

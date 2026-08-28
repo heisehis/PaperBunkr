@@ -292,7 +292,7 @@ original onboarding.md — needs its own brainstorm → design spec before any i
 ### Metadata Model platform (user-supplied `PAPERBUNKR_METADATA_MODEL.md`, 2026-08-17/18)
 79-section implementation spec covering canonical metadata, relationships, events/reading lists,
 external providers, and recommendations — its own §68 "Migration Strategy" defines 7 phases.
-**Phases 1-6a shipped, Phase 7 explicitly deferred** (not dropped — the source doc itself gates it:
+**Phases 1-6a shipped (plus net-new Phases 4d-4g, 2026-08-27), Phase 7 explicitly deferred, plus a Specials Tab design (2026-08-28, not yet implemented)** (not dropped — the source doc itself gates it:
 "Implement only when needed by the reader and collected-edition use cases," and there's no concrete
 driving use case yet; revisit if one shows up). Design specs:
 `docs/superpowers/specs/2026-08-17-metadata-model-phase{1,2a,2b,2c,3,4a,4b,4c,5a}-*-design.md`,
@@ -309,6 +309,95 @@ driving use case yet; revisit if one shows up). Design specs:
   Series), `StoryEvent`/`EventMembership` (+ a new Events screen), `ReadingList`/`ReadingListItem`
   gained `Type`/`CreatedAt`/`UpdatedAt`/`StoryEventId`/`Role`/`Notes` (CBL/CSV wire formats
   untouched — separate CE-plugin-tied overhaul planned).
+- **Phase 4d/4e/4f/4g — Event Relations, Format-Signal Suggestions, Continuity Browse, Age
+  Progression** (design specs `docs/superpowers/specs/2026-08-27-metadata-model-phase4{d,e,f,g}-*-
+  design.md`; shipped 2026-08-27, **uncommitted** on branch `books/browse-chrome` as of writing —
+  code + full new-and-existing test suites verified green, on-screen GUI pass not yet done):
+  - **4d** — `EventRelation`/`EventRelationEvidence` (one new EF migration,
+    `20260827193943_MetadataModelPhase4dEventRelations`; both endpoint FKs `Cascade`), reusing the
+    Phase 3 `RelationType`/`RelationEvidenceProvider` enums wholesale. `EventRelationResolver`
+    (source-side reads the stored type, target-side reads its `RelationTypeCatalog` inverse). New
+    "Connected Events" section on the Story Events detail pane: search-and-connect (picker scoped to
+    Prequel/Sequel/Continuation/Crossover/SameUniverse/SharedUniverse/Related/Other), per-card
+    unlink, click-to-walk-the-chain. Verified: 11 resolver/migration tests + 4 VM tests; cascade
+    both directions confirmed against a real pre-migration SQLite db.
+  - **4e** — `FormatSignalCatalog` (classifies CE's 16 shipped `[Book Formats]` defaults; only 10
+    carry an event signal, `Prologue`/`Epilogue`/`Minus 1` also map to an `EventMembershipRole`)
+    and `EventSuggestionResolver` (Format signal **plus** either issue `Year` in the event's date
+    range or event name in the issue's `SeriesGroup`/`StoryArc` — Format alone never surfaces a
+    row). New collapsible "Suggested for this Event" queue with per-row role picker + Add/Dismiss
+    (dismissals were session-only here; made persistent in the 2026-08-28 follow-up below).
+    `Issue.Format` got its first real editor — an autocomplete combo on both the single and bulk
+    Issue Properties editors, seeded with the CE vocabulary. **No migration** (additive over
+    existing `Issue.Format`). Verified: catalog + resolver Data tests + 4 VM tests.
+  - **4f** — Continuities mode: a segmented-control mode switcher (Events | Continuities | Timeline)
+    on the Story Events screen; the sidebar and detail pane swap per mode, lazy-loaded on switch.
+    `ContinuitySummary` sidebar rows, a member-series poster grid (click → series Detail),
+    `+ Add Series` / per-card remove / `+ New Continuity` — all writing through the same
+    `ContinuityResolver` calls the Related-tab UI uses (verified via `GetOtherSeriesSharingContinuity`
+    round-trip in tests), `GetOrCreate`'s case-insensitive dedup covered. **No migration** (pure
+    browse/edit UI over Phase 4a data). Verified: 6 VM tests + existing Events suite re-run green.
+  - **4g** — Timeline mode: `ComicAge` enum + `ComicAgeCatalog` (CE's five `[Book Ages]` stages;
+    `FromYear` seams verified at 1937/38, 1955/56, 1969/70, 1979/80), `BookAgeResolver`
+    (explicit CE label wins → year inference; the 1980-84 window returns `Modern` at `0.6m`
+    confidence with the disputed-window reason), `SeriesFamilyResolver` (BFS over `MediaRelation`
+    edges ∪ shared `Continuity`, cycle-guarded; documented not character-aware). Read-only
+    horizontal timeline: non-empty era sections only, year-ordered, cover thumbnails, unread dot,
+    reduced-confidence `?` badge with reason tooltip, click → reader. **No migration**. Verified:
+    `ComicAgeCatalog`/`BookAgeResolver`/`SeriesFamilyResolver` Data tests + 5 VM tests.
+  - Full-suite run after all four: `Paperbunkr.Data.Tests` 514/514, `Paperbunkr.App.Tests`
+    1063/1063, `Paperbunkr.Plugins.Tests` 11/11. `Paperbunkr.App.UiTests` not run (flaky in this
+    environment, per prior sessions).
+
+- **Phase 4d-4g deferred follow-ups — all implemented 2026-08-28** (second pass, same branch, still
+  **uncommitted**; one new migration `20260828104324_MetadataModelPhase4DeferredItems`:
+  `EventSuggestionDismissal` + `Character` + `CharacterAppearance` tables, all FKs `Cascade`.
+  Full-suite verified: `Paperbunkr.Data.Tests` 533/533, `Paperbunkr.App.Tests` 1098/1098,
+  `Paperbunkr.Plugins.Tests` 11/11; app smoke-launched, no XAML-weave crash):
+  - **BookAge editor** — free-text autocomplete field (CE's five `[Book Ages]` labels) on the
+    single and bulk Issue Properties editors, plus a `Character` index (`CharacterResolver`,
+    materialized from the free-text `Issue.Characters` field on every Save, one-time
+    `PaperbunkrDb.EnsureCreated` backfill guarded on "no `Character` rows yet").
+  - **Persisted suggestion dismissals** — `EventSuggestionResolver.Dismiss/Restore/GetDismissed`;
+    a "Dismissed" collapsible list on the Events pane with per-row Restore.
+  - **Transitive event graph** — `EventRelationResolver.GetEventFamily` (BFS with hop depth); an
+    "Event chain" collapsible, indented by depth, any node clickable.
+  - **Event-relation auto-suggestions** — `EventRelationSuggestionResolver` (shared significant
+    name word / overlapping-or-adjacent dates / shared member series); a "Suggested connections"
+    list with one-click Connect using the current relation-type picker.
+  - **Timeline scopes** — segmented `Series family | Continuity | Whole library` selector; a
+    "character-aware" toggle (`SeriesFamilyResolver.GetFamily(..., characterAware: true)` does one
+    extra one-hop expansion via `CharacterResolver.GetSeriesIdsSharingCharacterWith` — deliberately
+    bounded, not transitive, so a ubiquitous character doesn't pull in a whole publisher).
+  - **Bulk "review inferred ages"** — `BookAgeReviewResolver.GetInferred/Accept`; a collapsible
+    panel in Timeline listing issues whose age is year-inferred, per-row + Accept-all, writing the
+    CE-style label into `Issue.BookAge`. (The lightweight version 4g's spec described; not a full
+    `MetadataProposal` integration.)
+  - **Cross-continuity comparison** — `ContinuityResolver.GetOverlappingContinuities` /
+    `GetSeriesInBothContinuities`; a "Compare" affordance in Continuities mode showing overlap
+    counts and the shared-series set.
+  - **Continuity → reading list** — `ContinuityReadingListBuilder.CreateFromContinuity` builds a
+    `ReadingListType.PublicationOrder` list, issues interleaved chronologically across every member
+    series; a "Reading list" button in Continuities mode, then navigates to the Reading screen.
+  - **Continuity Smart List field** — new `SmartListField.Continuity` (enum-as-string, no
+    migration), reads `Series.Continuities` joined as text; `SmartListQueryBuilder` loads that nav
+    only when a Continuity condition is present.
+  - First-class `Character` entity landed here (the gap 4g's spec documented). It's an index over
+    `Issue.Characters`, not an editable entity — no character-management UI, and family expansion
+    is one-hop by design. A fuller character model / character-scoped browse remains future work.
+  - **Series Detail — Specials Tab** (designed 2026-08-28, following a Kavita comparison
+    session — see `event-section-planning` project memory; **not yet implemented**): design
+    spec `docs/superpowers/specs/2026-08-28-series-detail-specials-tab-design.md`. New
+    `SpecialFormatCatalog` (Kavita's real special-triggering Format values, intersected with
+    CE's actual 16-value list, plus 10 Kavita-only additions bundled into the Format
+    autocomplete — CE has none of these, confirmed by grep, so flagged as a deliberate
+    addition, not a port) + `Issue.IsSpecial()` extension. New Specials tab on the comic
+    `DetailScreen`, between Issues and Related, hidden when empty; pulls Format-flagged
+    issues fully out of the Issues tab rather than duplicating them, reusing the Issues tab's
+    existing Poster/List/Card templates and view-mode setting. **No migration** (reads the
+    already-shipped `Issue.Format`). Deliberately Format-only for this phase — Kavita's other
+    two detection mechanisms (no-parsed-`Number` auto-detection, `SP##` filename marker) and a
+    manual per-issue override are explicitly out of scope, per the design doc.
 - **Phase 5a — External Metadata schema**: `ExternalMediaId`/`ExternalMetadataSnapshot`/
   `ExternalRating` + the `IMetadataProvider` adapter contract, schema-only, zero adapters/network/UI.
 - **Phase 5b — Real AniList adapter**: `AniListMetadataProvider`, live GraphQL calls, rate-limit-

@@ -1,0 +1,237 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Paperbunkr.App.ViewModels"
+             xmlns:models="using:Paperbunkr.App.Models"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="640" d:DesignHeight="900"
+             x:Class="Paperbunkr.App.Views.Preferences.LibrarySection"
+             x:DataType="vm:PreferencesScreenViewModel">
+
+    <ScrollViewer>
+        <StackPanel Margin="28,20,28,40" Spacing="20">
+            <TextBlock Classes="pbTextHeading" Text="Library" />
+
+            <!-- Comic Library Folders (manages WatchedFolders) -->
+            <Border Classes="groupBox" Tag="library.comicFolders">
+                <StackPanel>
+                    <Border Classes="groupHeader">
+                        <TextBlock Text="Comic Library Folders" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
+                    </Border>
+                    <ItemsControl x:Name="WatchedFoldersList" ItemsSource="{Binding WatchedFolders}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="models:WatchedFolderSummary">
+                                <Border Classes="skinRow">
+                                    <Grid ColumnDefinitions="*,Auto,Auto,Auto" Margin="14,10">
+                                        <TextBlock Grid.Column="0" Text="{Binding Path}" FontSize="13" TextTrimming="CharacterEllipsis"
+                                                   Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
+                                        <CheckBox Grid.Column="1" Margin="0,0,10,0" FontSize="12.5" Content="Watch for changes"
+                                                  Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center"
+                                                  IsChecked="{Binding Watch}"
+                                                  Command="{Binding #WatchedFoldersList.((vm:PreferencesScreenViewModel)DataContext).ToggleWatchCommand}"
+                                                  CommandParameter="{Binding}"
+                                                  AutomationProperties.AutomationId="WatchedFolderWatchCheckBox" />
+                                        <Button Grid.Column="2" Classes="headerAction ghost" Margin="0,0,6,0"
+                                                Command="{Binding #WatchedFoldersList.((vm:PreferencesScreenViewModel)DataContext).OpenFolderCommand}"
+                                                CommandParameter="{Binding}">
+                                            <StackPanel Orientation="Horizontal" Spacing="5">
+                                                <Path Classes="pbIcon" Width="11" Height="11" Data="{StaticResource PbIconFolderOpen}" />
+                                                <TextBlock Text="Open" />
+                                            </StackPanel>
+                                        </Button>
+                                        <Button Grid.Column="3" Classes="headerAction ghost"
+                                                Command="{Binding #WatchedFoldersList.((vm:PreferencesScreenViewModel)DataContext).RemoveFolderCommand}"
+                                                CommandParameter="{Binding}">
+                                            <StackPanel Orientation="Horizontal" Spacing="5">
+                                                <Path Classes="pbIcon" Width="11" Height="11" Data="{StaticResource PbIconTrash}" />
+                                                <TextBlock Text="Remove" />
+                                            </StackPanel>
+                                        </Button>
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <StackPanel Margin="14" Spacing="10">
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <Button Classes="headerAction primary" Command="{Binding AddFolderCommand}">
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <Path Classes="pbIcon" Data="{StaticResource PbIconFolderAdd}" Stroke="{DynamicResource PbBadgeTextBrush}" />
+                                    <TextBlock Text="Add Folder…" />
+                                </StackPanel>
+                            </Button>
+                            <Button Classes="headerAction ghost" Command="{Binding ScanNowCommand}"
+                                    IsEnabled="{Binding !IsScanning}">
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <Path Classes="pbIcon" Data="{StaticResource PbIconFolderSearch}" />
+                                    <TextBlock Text="Scan Now" />
+                                </StackPanel>
+                            </Button>
+                            <Button Classes="headerAction ghost" Command="{Binding GenerateCoversCommand}"
+                                    IsEnabled="{Binding !IsGeneratingCovers}">
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <Path Classes="pbIcon" Data="{StaticResource PbIconBook}" />
+                                    <TextBlock Text="Generate Covers" />
+                                </StackPanel>
+                            </Button>
+                            <Button Classes="headerAction ghost" Command="{Binding SyncMetadataCommand}"
+                                    IsEnabled="{Binding !IsSyncingMetadata}"
+                                    ToolTip.Tip="Re-reads embedded ComicInfo.xml for issues already in the library and fills in any blank fields">
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <Path Classes="pbIcon" Data="{StaticResource PbIconRefresh}" />
+                                    <TextBlock Text="Sync Metadata" />
+                                </StackPanel>
+                            </Button>
+                        </StackPanel>
+                        <TextBlock Text="{Binding ScanStatus}" FontSize="12" Foreground="{DynamicResource PbTextFaintBrush}" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
+            <!-- Book Folders (novels: EPUB/PDF) -->
+            <Border Classes="groupBox" Tag="library.bookFolders">
+                <StackPanel>
+                    <Border Classes="groupHeader">
+                        <StackPanel>
+                            <TextBlock Text="Book Folders" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
+                            <TextBlock Text="EPUB and PDF novels" FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" Margin="0,2,0,0" />
+                        </StackPanel>
+                    </Border>
+                    <ItemsControl x:Name="BookFoldersList" ItemsSource="{Binding BookFolders}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="models:BookFolderSummary">
+                                <Border Classes="skinRow">
+                                    <Grid ColumnDefinitions="*,Auto,Auto" Margin="14,10">
+                                        <TextBlock Grid.Column="0" Text="{Binding Path}" FontSize="13" TextTrimming="CharacterEllipsis"
+                                                   Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
+                                        <Button Grid.Column="1" Classes="headerAction ghost" Margin="0,0,6,0"
+                                                Command="{Binding #BookFoldersList.((vm:PreferencesScreenViewModel)DataContext).OpenBookFolderCommand}"
+                                                CommandParameter="{Binding}"
+                                                AutomationProperties.AutomationId="PreferencesBookFolderOpen">
+                                            <StackPanel Orientation="Horizontal" Spacing="5">
+                                                <Path Classes="pbIcon" Width="11" Height="11" Data="{StaticResource PbIconFolderOpen}" />
+                                                <TextBlock Text="Open" />
+                                            </StackPanel>
+                                        </Button>
+                                        <Button Grid.Column="2" Classes="headerAction ghost"
+                                                Command="{Binding #BookFoldersList.((vm:PreferencesScreenViewModel)DataContext).RemoveBookFolderCommand}"
+                                                CommandParameter="{Binding}"
+                                                AutomationProperties.AutomationId="PreferencesBookFolderRemove">
+                                            <StackPanel Orientation="Horizontal" Spacing="5">
+                                                <Path Classes="pbIcon" Width="11" Height="11" Data="{StaticResource PbIconTrash}" />
+                                                <TextBlock Text="Remove" />
+                                            </StackPanel>
+                                        </Button>
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <StackPanel Margin="14" Spacing="10">
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <Button Classes="headerAction primary" Command="{Binding AddBookFolderCommand}"
+                                    AutomationProperties.AutomationId="PreferencesAddBookFolder">
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <Path Classes="pbIcon" Data="{StaticResource PbIconFolderAdd}" Stroke="{DynamicResource PbBadgeTextBrush}" />
+                                    <TextBlock Text="Add Folder…" />
+                                </StackPanel>
+                            </Button>
+                            <Button Classes="headerAction ghost" Command="{Binding ScanBooksNowCommand}"
+                                    IsEnabled="{Binding !IsScanningBooks}"
+                                    AutomationProperties.AutomationId="PreferencesScanBooksNow">
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <Path Classes="pbIcon" Data="{StaticResource PbIconFolderSearch}" />
+                                    <TextBlock Text="Scan Now" />
+                                </StackPanel>
+                            </Button>
+                        </StackPanel>
+                        <TextBlock Text="{Binding BookScanStatus}" FontSize="12" Foreground="{DynamicResource PbTextFaintBrush}" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
+            <!-- Migration -->
+            <Border Classes="groupBox" Tag="library.migration">
+                <StackPanel>
+                    <Border Classes="groupHeader">
+                        <TextBlock Text="Migrate from ComicRack CE" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
+                    </Border>
+                    <StackPanel Margin="14" Spacing="10">
+                        <TextBlock Text="Import your existing ComicRack Community Edition library - series, issues, and metadata."
+                                   FontSize="12" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" />
+                        <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                            <Button Classes="headerAction primary" Command="{Binding OpenMigrationCommand}">
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <Path Classes="pbIcon" Data="{StaticResource PbIconCloudUpload}" Stroke="{DynamicResource PbBadgeTextBrush}" />
+                                    <TextBlock Text="Migrate…" />
+                                </StackPanel>
+                            </Button>
+                            <Border Width="10" Height="10" CornerRadius="5" Background="{DynamicResource PbAccentBrush}"
+                                    IsVisible="{Binding Migration.NeedsReview.HasPendingItems}"
+                                    ToolTip.Tip="You have pending series conflicts to review" />
+                        </StackPanel>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
+            <!-- Virtual Tags -->
+            <Border Classes="groupBox" Tag="library.virtualTags">
+                <StackPanel>
+                    <Border Classes="groupHeader">
+                        <TextBlock Text="Virtual Tags" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
+                    </Border>
+                    <ItemsControl x:Name="VirtualTagsList" ItemsSource="{Binding VirtualTags}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="models:VirtualTagSummary">
+                                <Border Classes="skinRow">
+                                    <Button Classes="sideItemButton"
+                                            Command="{Binding #VirtualTagsList.((vm:PreferencesScreenViewModel)DataContext).SelectVirtualTagCommand}"
+                                            CommandParameter="{Binding}">
+                                        <Grid ColumnDefinitions="*,Auto">
+                                            <TextBlock Grid.Column="0" Text="{Binding Name}" FontSize="13"
+                                                       Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
+                                            <TextBlock Grid.Column="1" Text="Off" IsVisible="{Binding !IsEnabled}"
+                                                       FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" />
+                                        </Grid>
+                                    </Button>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <StackPanel Margin="14" Spacing="10">
+                        <Button Classes="headerAction ghost" Command="{Binding AddVirtualTagCommand}" HorizontalAlignment="Left">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <Path Classes="pbIcon" Width="11" Height="11" Data="{StaticResource PbIconPlus}" />
+                                <TextBlock Text="Add Virtual Tag" />
+                            </StackPanel>
+                        </Button>
+
+                        <StackPanel IsVisible="{Binding HasSelectedVirtualTag}" Spacing="10" Margin="0,10,0,0">
+                            <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,1,0,0" Margin="0,0,0,4" />
+                            <TextBlock Text="Name" FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" />
+                            <TextBox Text="{Binding VirtualTagName}" Width="320" HorizontalAlignment="Left" />
+
+                            <TextBlock Text="Caption Format (e.g. {Series} #{Number})" FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" />
+                            <TextBox Text="{Binding VirtualTagCaptionFormat}" Width="320" HorizontalAlignment="Left" />
+
+                            <CheckBox IsChecked="{Binding VirtualTagIsEnabled}" Foreground="{DynamicResource PbTextBrush}" FontSize="13" Content="Enabled" />
+
+                            <TextBlock Text="Preview" FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" />
+                            <TextBlock Text="{Binding VirtualTagPreview}" FontFamily="Consolas,monospace" FontSize="13"
+                                       Foreground="{DynamicResource PbAccentTextBrush}" />
+
+                            <Button Classes="headerAction ghost" Command="{Binding DeleteVirtualTagCommand}"
+                                    HorizontalAlignment="Left" Margin="0,6,0,0">
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <Path Classes="pbIcon" Width="11" Height="11" Data="{StaticResource PbIconTrash}" />
+                                    <TextBlock Text="Delete Tag" />
+                                </StackPanel>
+                            </Button>
+                        </StackPanel>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

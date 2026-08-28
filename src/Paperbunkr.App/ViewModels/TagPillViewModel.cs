@@ -50,10 +50,20 @@ public partial class TagPillViewModel : ObservableObject
         _ => 1.0,
     };
 
+    /// <summary>Style-class hook so a chip can render its weight visually (docs/superpowers/specs/
+    /// 2026-08-28-detail-screens-streaming-redesign-design.md follow-up) - "unset" / "incidental" /
+    /// "recurrent" / "defining" / "core", consumed as <c>Classes.core</c> etc. in DetailBand.axaml.</summary>
+    public string WeightClass => Weight.ToString().ToLowerInvariant();
+
+    /// <summary>A weight was actually assigned (not <see cref="IssueTagWeight.Unset"/>) - drives an optional leading dot.</summary>
+    public bool IsWeighted => Weight != IssueTagWeight.Unset;
+
     partial void OnWeightChanged(IssueTagWeight value)
     {
         OnPropertyChanged(nameof(TextWeight));
         OnPropertyChanged(nameof(WeightOpacity));
+        OnPropertyChanged(nameof(WeightClass));
+        OnPropertyChanged(nameof(IsWeighted));
     }
 
     [RelayCommand]

@@ -46,6 +46,9 @@ public class DetailScreenViewModelTests : IDisposable
         _issueId = issue.Id;
     }
 
+    private static string[] Writers(DetailScreenViewModel vm) =>
+        vm.Band.Groups.FirstOrDefault(g => g.IsCreditsGroup)?.Writers?.Select(p => p.Value).ToArray() ?? System.Array.Empty<string>();
+
     public void Dispose()
     {
         PaperbunkrDbContext.DatabasePathOverride = _originalDbPathOverride;
@@ -90,7 +93,7 @@ public class DetailScreenViewModelTests : IDisposable
     {
         var vm = new DetailScreenViewModel(goBack: () => { }, goToReader: _ => { }, goToProperties: _ => { }, goToBulkProperties: _ => { });
         vm.LoadSeries(_seriesId);
-        Assert.Empty(vm.Meta.Writer);
+        Assert.Empty(Writers(vm));
 
         var bulkVm = new BulkIssuePropertiesScreenViewModel(() => { });
         bulkVm.Load(new[] { _issueId });
@@ -99,7 +102,7 @@ public class DetailScreenViewModelTests : IDisposable
 
         vm.ReloadCurrentSeries();
 
-        Assert.Equal(new[] { "New Writer Name" }, vm.Meta.Writer.Select(p => p.Value));
+        Assert.Equal(new[] { "New Writer Name" }, Writers(vm));
     }
 
     [Fact]
@@ -117,7 +120,7 @@ public class DetailScreenViewModelTests : IDisposable
 
         vm.Tabs.ToggleIssueSelection(issueCard, isShiftHeld: false);
 
-        Assert.Equal(new[] { "Solo Writer" }, vm.Meta.Writer.Select(p => p.Value));
+        Assert.Equal(new[] { "Solo Writer" }, Writers(vm));
         Assert.True(vm.CanEdit);
         Assert.Equal("Edit Issue", vm.EditButtonLabel);
     }
@@ -163,12 +166,36 @@ public class DetailScreenViewModelTests : IDisposable
         var card2 = vm.Tabs.Issues.First(i => i.Id == issue2Id);
 
         vm.Tabs.ToggleIssueSelection(card1, isShiftHeld: false);
-        Assert.Equal(new[] { "Writer One" }, vm.Meta.Writer.Select(p => p.Value));
+        Assert.Equal(new[] { "Writer One" }, Writers(vm));
 
         vm.Tabs.ToggleIssueSelection(card2, isShiftHeld: false);
 
-        Assert.Equal(new[] { "Writer One", "Writer Two" }, vm.Meta.Writer.Select(p => p.Value));
+        Assert.Equal(new[] { "Writer One", "Writer Two" }, Writers(vm));
         Assert.Equal("Edit 2 Issues", vm.EditButtonLabel);
+    }
+
+    [Fact]
+    public void HeaderTitle_TracksLoadedSeries_AndRaisesPropertyChanged()
+    {
+        int otherSeriesId;
+        using (var context = PaperbunkrDb.CreateContext())
+        {
+            var other = new Series { Name = "A Completely Different Series" };
+            context.Series.Add(other);
+            context.SaveChanges();
+            otherSeriesId = other.Id;
+        }
+
+        var vm = new DetailScreenViewModel(goBack: () => { }, goToReader: _ => { }, goToProperties: _ => { }, goToBulkProperties: _ => { });
+        vm.LoadSeries(_seriesId);
+        Assert.Equal("Test Series", ((IDetailHeaderSource)vm).HeaderTitle);
+
+        var raised = new System.Collections.Generic.List<string?>();
+        vm.PropertyChanged += (_, e) => raised.Add(e.PropertyName);
+        vm.LoadSeries(otherSeriesId);
+
+        Assert.Equal("A Completely Different Series", ((IDetailHeaderSource)vm).HeaderTitle);
+        Assert.Contains(nameof(IDetailHeaderSource.HeaderTitle), raised);
     }
 
     [Fact]

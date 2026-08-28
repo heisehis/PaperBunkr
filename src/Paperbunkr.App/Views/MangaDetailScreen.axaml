@@ -1,170 +1,60 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Paperbunkr.App.ViewModels"
-             xmlns:entities="using:Paperbunkr.Data.Entities"
              xmlns:views="using:Paperbunkr.App.Views"
              xmlns:models="using:Paperbunkr.App.Models"
-             xmlns:sys="using:System"
              xmlns:conv="using:Avalonia.Data.Converters"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d" d:DesignWidth="1000" d:DesignHeight="900"
              x:Class="Paperbunkr.App.Views.MangaDetailScreen"
-             x:DataType="vm:MangaDetailScreenViewModel">
+             x:DataType="vm:MangaDetailScreenViewModel"
+             x:Name="Screen">
 
+    <!--
+        Manga/Manhua/Manhwa detail, rebuilt on the shared DetailHero / DetailBand / DetailTabs
+        controls for UI rework Phase 5 (docs/superpowers/specs/2026-08-28-detail-screens-streaming-
+        redesign-design.md). Distinct from the comic screen by its Chapters tab: a release feed with
+        volume section headers, scanlation groups, relative dates, and NEW badges - no cover tiles
+        (manga chapters have no variant covers). A tracker-progress ring + native-title line are a
+        deferred follow-up (needs provider-payload parsing).
+    -->
     <UserControl.Styles>
-        <Style Selector="Button.backLink">
-            <Setter Property="Background" Value="Transparent" />
-            <Setter Property="BorderThickness" Value="0" />
-            <Setter Property="Padding" Value="0" />
-            <Setter Property="Foreground" Value="{DynamicResource PbTextFaintBrush}" />
-            <Setter Property="FontSize" Value="12.5" />
-            <Setter Property="FontWeight" Value="SemiBold" />
-            <Setter Property="Cursor" Value="Hand" />
-        </Style>
-
         <Style Selector="ComboBox.contentTypePicker">
-            <Setter Property="Background" Value="#33000000" />
-            <Setter Property="BorderBrush" Value="#66FFFFFF" />
-            <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="CornerRadius" Value="999" />
-            <Setter Property="Padding" Value="9,1" />
-            <Setter Property="FontSize" Value="11" />
-            <Setter Property="FontWeight" Value="Bold" />
-            <Setter Property="Foreground" Value="White" />
-            <Setter Property="MinHeight" Value="0" />
-        </Style>
-
-        <Style Selector="Border.headerPill">
-            <Setter Property="Background" Value="#33000000" />
-            <Setter Property="BorderBrush" Value="#66FFFFFF" />
-            <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="CornerRadius" Value="999" />
-            <Setter Property="Padding" Value="9,3" />
-        </Style>
-        <Style Selector="TextBlock.headerPillText">
-            <Setter Property="FontSize" Value="11" />
-            <Setter Property="FontWeight" Value="Bold" />
-            <Setter Property="Foreground" Value="White" />
-        </Style>
-
-        <!-- Icon-led metadata rows (docs/superpowers/specs/2026-08-23-manga-detail-screen-design.md) -->
-        <Style Selector="StackPanel.metaRow">
-            <Setter Property="Orientation" Value="Horizontal" />
-            <Setter Property="Spacing" Value="8" />
-        </Style>
-        <Style Selector="TextBlock.metaRowText">
-            <Setter Property="FontSize" Value="12.5" />
-            <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
-            <Setter Property="VerticalAlignment" Value="Center" />
-        </Style>
-
-        <!-- Sourced attribution captions ("via MangaBaka") and the external-links chip row
-             (docs/superpowers/specs/2026-08-23-apply-from-provider-design.md). -->
-        <Style Selector="TextBlock.attributionText">
-            <Setter Property="FontSize" Value="10.5" />
-            <Setter Property="FontStyle" Value="Italic" />
-            <Setter Property="Foreground" Value="{DynamicResource PbTextFaintBrush}" />
-        </Style>
-        <Style Selector="Border.externalLinkChip">
-            <Setter Property="Background" Value="{DynamicResource PbChromeBrush}" />
-            <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
-            <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="CornerRadius" Value="999" />
-            <Setter Property="Padding" Value="9,3" />
-        </Style>
-        <Style Selector="TextBlock.externalLinkChipText">
-            <Setter Property="FontSize" Value="11" />
-            <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
-        </Style>
-
-        <!-- Outlined-pill tag chips: thin colored outline, transparent fill, rounded-full - per the
-             design doc's reference-screenshot notes, distinct from DetailTabs.axaml's filled pills. -->
-        <Style Selector="Border.outlinedChip">
-            <Setter Property="Background" Value="Transparent" />
-            <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
-            <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="CornerRadius" Value="999" />
-            <Setter Property="Padding" Value="10,3" />
-        </Style>
-        <Style Selector="TextBlock.outlinedChipText">
-            <Setter Property="FontSize" Value="11" />
-            <Setter Property="FontWeight" Value="SemiBold" />
-            <Setter Property="Foreground" Value="{DynamicResource PbAccentBrush}" />
-        </Style>
-
-        <!-- Clickable outlined-pill tag chip (docs/superpowers/specs/2026-08-23-weighted-
-             categorized-tags-design.md) - a Button rather than a Border so click-to-search works,
-             same idiom as DetailPills.axaml's weightedTagPill. -->
-        <Style Selector="Button.outlinedChipButton">
-            <Setter Property="Background" Value="Transparent" />
-            <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
-            <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="CornerRadius" Value="999" />
-            <Setter Property="Padding" Value="10,3" />
-            <Setter Property="Margin" Value="0,0,8,8" />
-            <Setter Property="Cursor" Value="Hand" />
-        </Style>
-
-        <!-- Action row: icon-over-label buttons in a wrap panel, not a fixed grid, so more can be
-             added later without a relayout (docs/superpowers/specs/2026-08-23-manga-detail-screen-
-             design.md). -->
-        <Style Selector="Button.mangaAction">
-            <Setter Property="Background" Value="{DynamicResource PbChromeBrush}" />
-            <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
-            <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="CornerRadius" Value="8" />
-            <Setter Property="Padding" Value="16,10" />
-            <Setter Property="Cursor" Value="Hand" />
-            <Setter Property="MinWidth" Value="96" />
-        </Style>
-        <Style Selector="Button.mangaAction.primary">
             <Setter Property="Background" Value="{DynamicResource PbAccentSoftBrush}" />
             <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
-        </Style>
-        <Style Selector="TextBlock.mangaActionLabel">
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="{DynamicResource PbRadius}" />
+            <Setter Property="Padding" Value="10,3" />
             <Setter Property="FontSize" Value="11" />
-            <Setter Property="FontWeight" Value="SemiBold" />
-            <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
-            <Setter Property="HorizontalAlignment" Value="Center" />
-        </Style>
-
-        <!-- Unified tab strip (Chapters/Related/Details/Activity) - same visual language as
-             DetailTabs.axaml's own Button.tab styles, redeclared here since this screen renders its
-             own single strip rather than that view's (see DetailTabsViewModel.ShowTabStrip). -->
-        <Style Selector="Button.tab">
-            <Setter Property="Background" Value="Transparent" />
-            <Setter Property="BorderThickness" Value="0,0,0,2" />
-            <Setter Property="BorderBrush" Value="Transparent" />
-            <Setter Property="CornerRadius" Value="0" />
-            <Setter Property="Padding" Value="0,0,0,12" />
-            <Setter Property="FontSize" Value="13" />
             <Setter Property="FontWeight" Value="Bold" />
-            <Setter Property="Foreground" Value="{DynamicResource PbTextFaintBrush}" />
-            <Setter Property="Cursor" Value="Hand" />
-        </Style>
-        <Style Selector="Button.tab.active">
-            <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
-            <Setter Property="Foreground" Value="{DynamicResource PbTextBrush}" />
-        </Style>
-        <Style Selector="TextBlock.tabCount">
-            <Setter Property="FontFamily" Value="Consolas,monospace" />
-            <Setter Property="FontSize" Value="10.5" />
-            <Setter Property="Foreground" Value="{DynamicResource PbTextFaintBrush}" />
-            <Setter Property="Background" Value="{DynamicResource PbChromeBrush}" />
-            <Setter Property="Padding" Value="6,1" />
+            <Setter Property="Foreground" Value="{DynamicResource PbAccentTextBrush}" />
+            <Setter Property="MinHeight" Value="0" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <Setter Property="HorizontalContentAlignment" Value="Left" />
         </Style>
 
-        <!-- Chapter filter/sort toolbar pills -->
         <Style Selector="Button.chapterFilterPill">
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
             <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="CornerRadius" Value="999" />
+            <Setter Property="CornerRadius" Value="{DynamicResource PbRadius}" />
             <Setter Property="Padding" Value="10,4" />
             <Setter Property="FontSize" Value="11.5" />
             <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
             <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Transitions">
+                <Transitions>
+                    <BrushTransition Property="Background" Duration="{DynamicResource PbMotionFast}" Easing="{StaticResource PbMotionEase}" />
+                    <BrushTransition Property="BorderBrush" Duration="{DynamicResource PbMotionFast}" Easing="{StaticResource PbMotionEase}" />
+                    <BrushTransition Property="Foreground" Duration="{DynamicResource PbMotionFast}" Easing="{StaticResource PbMotionEase}" />
+                </Transitions>
+            </Setter>
+        </Style>
+        <Style Selector="Button.chapterFilterPill:pointerover">
+            <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource PbAccentTextBrush}" />
         </Style>
         <Style Selector="Button.chapterFilterPill.active">
             <Setter Property="Background" Value="{DynamicResource PbAccentSoftBrush}" />
@@ -172,28 +62,31 @@
             <Setter Property="Foreground" Value="{DynamicResource PbAccentBrush}" />
         </Style>
 
-        <!-- Chapter list rows - list-row layout, deliberately no cover art (docs/superpowers/specs/
-             2026-08-23-manga-detail-screen-design.md: manga chapters don't have variant covers). -->
+        <Style Selector="TextBlock.volumeHeader">
+            <Setter Property="FontFamily" Value="{StaticResource PbDisplayFontFamily}" />
+            <Setter Property="FontSize" Value="15" />
+            <Setter Property="LetterSpacing" Value="1" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextFaintBrush}" />
+            <Setter Property="Margin" Value="0,14,0,4" />
+        </Style>
+
         <Style Selector="Button.chapterRow">
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="BorderThickness" Value="0,0,0,1" />
             <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
             <Setter Property="CornerRadius" Value="0" />
-            <Setter Property="Padding" Value="10,10" />
+            <Setter Property="Padding" Value="8,9" />
             <Setter Property="HorizontalContentAlignment" Value="Stretch" />
             <Setter Property="Cursor" Value="Hand" />
         </Style>
         <Style Selector="Button.chapterRow:pointerover">
-            <Setter Property="Background" Value="{DynamicResource PbSurfaceAltBrush}" />
+            <Setter Property="Background" Value="{DynamicResource PbSurface3Brush}" />
         </Style>
-        <Style Selector="Button.chapterRow.read TextBlock.chapterNumber">
-            <Setter Property="Opacity" Value="0.5" />
-        </Style>
-        <Style Selector="Button.chapterRow.read TextBlock.chapterTitle">
+        <Style Selector="Button.chapterRow.read">
             <Setter Property="Opacity" Value="0.5" />
         </Style>
         <Style Selector="TextBlock.chapterNumber">
-            <Setter Property="FontSize" Value="13.5" />
+            <Setter Property="FontSize" Value="13" />
             <Setter Property="FontWeight" Value="Bold" />
             <Setter Property="Foreground" Value="{DynamicResource PbTextBrush}" />
         </Style>
@@ -202,8 +95,14 @@
             <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
         </Style>
         <Style Selector="TextBlock.chapterMeta">
-            <Setter Property="FontSize" Value="11" />
+            <Setter Property="FontSize" Value="10.5" />
             <Setter Property="Foreground" Value="{DynamicResource PbTextFaintBrush}" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style Selector="Border.newBadge">
+            <Setter Property="Background" Value="{DynamicResource PbAccentBrush}" />
+            <Setter Property="CornerRadius" Value="3" />
+            <Setter Property="Padding" Value="4,0" />
             <Setter Property="VerticalAlignment" Value="Center" />
         </Style>
         <Style Selector="ProgressBar.chapterProgress">
@@ -216,276 +115,123 @@
     </UserControl.Styles>
 
     <ScrollViewer>
-        <StackPanel Margin="28,24,28,50">
+        <StackPanel Margin="0,0,0,50">
+            <Button Classes="backLink" Command="{Binding GoBackCommand}" Content="← Back to Library" Margin="28,20,28,12" />
 
-            <Button Classes="backLink" Command="{Binding GoBackCommand}" Content="← Back to Library" Margin="0,0,0,18" />
+            <views:DetailHero DataContext="{Binding}" />
 
-            <!-- Header: blurred-cover backdrop, pre-rendered once in C# (BackdropBlurRenderer) -
-                 not a live Avalonia Effect in this layout, which only blurred a small square
-                 instead of filling the banner (a known Avalonia bug, AvaloniaUI/Avalonia#11416,
-                 confirmed live and worked around rather than guessed at further in XAML). -->
-            <Border CornerRadius="12" ClipToBounds="True" Height="240" Margin="0,0,0,22">
-                <Grid>
-                    <Image Source="{Binding BackdropImage}" Stretch="UniformToFill" />
-                    <Border Background="#B3141414" />
+            <views:DetailBand DataContext="{Binding Band}">
+                <views:DetailBand.LeadingContent>
+                    <ComboBox Classes="contentTypePicker"
+                              ItemsSource="{Binding #Screen.((vm:MangaDetailScreenViewModel)DataContext).ContentTypeOptions}"
+                              SelectedItem="{Binding #Screen.((vm:MangaDetailScreenViewModel)DataContext).SelectedContentType}"
+                              ToolTip.Tip="Content Type" />
+                </views:DetailBand.LeadingContent>
+            </views:DetailBand>
 
-                    <Grid ColumnDefinitions="140,*" Margin="24" VerticalAlignment="Bottom">
-                        <Border Grid.Column="0" CornerRadius="8" BorderThickness="1" BorderBrush="#33FFFFFF"
-                                Width="140" Height="196" ClipToBounds="True" VerticalAlignment="Bottom">
-                            <Image Source="{Binding CoverImage}" Stretch="UniformToFill" />
-                        </Border>
-
-                        <StackPanel Grid.Column="1" Margin="22,0,0,0" VerticalAlignment="Bottom" Spacing="6">
+            <StackPanel Margin="28,0,28,0">
+                <!-- Unified tab strip -->
+                <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,0,0,1" Margin="0,18,0,0">
+                    <StackPanel Orientation="Horizontal" Spacing="22">
+                        <Button Classes="tab" Classes.active="{Binding IsChaptersTab}" Command="{Binding GoChaptersTabCommand}">
                             <StackPanel Orientation="Horizontal" Spacing="7">
-                                <ComboBox Classes="contentTypePicker" ItemsSource="{Binding ContentTypeOptions}"
-                                          SelectedItem="{Binding SelectedContentType}" ToolTip.Tip="Content Type" />
-                                <Border Classes="headerPill"><TextBlock Classes="headerPillText" Text="{Binding ReadingModeBadge}" /></Border>
+                                <TextBlock Text="Chapters" />
+                                <TextBlock Classes="tabCount" Text="{Binding Chapters.Count}" VerticalAlignment="Center" />
                             </StackPanel>
-                            <TextBlock Text="{Binding SeriesTitle}" FontSize="26" FontWeight="Bold" Foreground="White" TextWrapping="Wrap" />
-                        </StackPanel>
-                    </Grid>
-                </Grid>
-            </Border>
-
-            <!-- Meta badge row: icon-led metadata folded into one horizontal row (docs/superpowers/
-                 specs/2026-08-23-apply-from-provider-design.md's Meta-badge-row polish, matching
-                 MangaBaka's own Info-tab Meta row in spirit), plus chapter/volume count badges. -->
-            <WrapPanel Margin="0,0,0,4">
-                <StackPanel Classes="metaRow" Margin="0,0,18,7">
-                    <Border Classes="icon" Width="13" Height="13"><Border.OpacityMask><ImageBrush Source="/Assets/Icons/Circle_Check.png" Stretch="Uniform" /></Border.OpacityMask></Border>
-                    <TextBlock Classes="metaRowText" Text="{Binding StatusLabel}" />
-                    <TextBlock Classes="attributionText" Text="{Binding StatusAttribution}" IsVisible="{Binding StatusAttribution, Converter={x:Static conv:ObjectConverters.IsNotNull}}" />
-                </StackPanel>
-                <StackPanel Classes="metaRow" Margin="0,0,18,7">
-                    <Border Classes="icon" Width="13" Height="13"><Border.OpacityMask><ImageBrush Source="/Assets/Icons/Layers.png" Stretch="Uniform" /></Border.OpacityMask></Border>
-                    <TextBlock Classes="metaRowText" Text="{Binding SelectedContentType}" />
-                </StackPanel>
-                <StackPanel Classes="metaRow" Margin="0,0,18,7">
-                    <Border Classes="icon" Width="13" Height="13"><Border.OpacityMask><ImageBrush Source="/Assets/Icons/Globe.png" Stretch="Uniform" /></Border.OpacityMask></Border>
-                    <TextBlock Classes="metaRowText" Text="{Binding SourceLabel}" />
-                </StackPanel>
-                <StackPanel Classes="metaRow" Margin="0,0,18,7">
-                    <TextBlock Classes="metaRowText" Text="{Binding ChapterCountBadge}" />
-                </StackPanel>
-                <StackPanel Classes="metaRow" Margin="0,0,18,7" IsVisible="{Binding VolumeCountBadge, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}">
-                    <TextBlock Classes="metaRowText" Text="{Binding VolumeCountBadge}" />
-                </StackPanel>
-            </WrapPanel>
-
-            <!-- External-links chip row (docs/superpowers/specs/2026-08-23-apply-from-provider-
-                 design.md) - same ExternalMetadataResolver data DetailTabs.axaml's Details tab
-                 already shows, promoted to the header too. -->
-            <ItemsControl ItemsSource="{Binding ExternalLinks}" Margin="0,0,0,14" IsVisible="{Binding HasExternalLinks}">
-                <ItemsControl.ItemsPanel>
-                    <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
-                </ItemsControl.ItemsPanel>
-                <ItemsControl.ItemTemplate>
-                    <DataTemplate x:DataType="models:ExternalLinkSample">
-                        <Border Classes="externalLinkChip" Margin="0,0,8,0">
-                            <TextBlock Classes="externalLinkChipText" Text="{Binding ProviderLabel}" />
-                        </Border>
-                    </DataTemplate>
-                </ItemsControl.ItemTemplate>
-            </ItemsControl>
-
-            <!-- Expandable synopsis -->
-            <StackPanel Margin="0,0,0,14">
-                <TextBlock Text="{Binding Summary}" FontSize="13" Foreground="{DynamicResource PbTextMutedBrush}"
-                           TextWrapping="Wrap" MaxLines="3" TextTrimming="CharacterEllipsis"
-                           IsVisible="{Binding !IsSynopsisExpanded}" />
-                <TextBlock Text="{Binding Summary}" FontSize="13" Foreground="{DynamicResource PbTextMutedBrush}"
-                           TextWrapping="Wrap" IsVisible="{Binding IsSynopsisExpanded}" />
-                <Button Content="{Binding SynopsisToggleLabel}" Command="{Binding ToggleSynopsisCommand}"
-                        Background="Transparent" BorderThickness="0" Padding="0" Margin="0,4,0,0"
-                        FontSize="11.5" FontWeight="SemiBold" Foreground="{DynamicResource PbAccentBrush}" Cursor="Hand" HorizontalAlignment="Left" />
-                <TextBlock Classes="attributionText" Text="{Binding SummaryAttribution}" Margin="0,4,0,0"
-                           IsVisible="{Binding SummaryAttribution, Converter={x:Static conv:ObjectConverters.IsNotNull}}" />
-            </StackPanel>
-
-            <!-- Outlined-pill tag chips (docs/superpowers/specs/2026-08-23-weighted-categorized-
-                 tags-design.md) - click-to-search; no reweight popover here (Pills is always
-                 series-aggregated on this screen, see MangaDetailScreenViewModel's constructor
-                 comment), so CanReweight is always false and the ContextMenu never shows. -->
-            <ItemsControl ItemsSource="{Binding Pills.Genres}" Margin="0,0,0,18">
-                <ItemsControl.ItemsPanel>
-                    <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
-                </ItemsControl.ItemsPanel>
-                <ItemsControl.ItemTemplate>
-                    <DataTemplate x:DataType="vm:TagPillViewModel">
-                        <Button Classes="outlinedChipButton" Command="{Binding SearchCommand}" ToolTip.Tip="{Binding Category}">
-                            <Button.ContextMenu>
-                                <ContextMenu IsVisible="{Binding CanReweight}">
-                                    <MenuItem Header="Incidental" Command="{Binding SetWeightCommand}" CommandParameter="{x:Static entities:IssueTagWeight.Incidental}" />
-                                    <MenuItem Header="Recurrent" Command="{Binding SetWeightCommand}" CommandParameter="{x:Static entities:IssueTagWeight.Recurrent}" />
-                                    <MenuItem Header="Defining" Command="{Binding SetWeightCommand}" CommandParameter="{x:Static entities:IssueTagWeight.Defining}" />
-                                    <MenuItem Header="Core" Command="{Binding SetWeightCommand}" CommandParameter="{x:Static entities:IssueTagWeight.Core}" />
-                                </ContextMenu>
-                            </Button.ContextMenu>
-                            <TextBlock Classes="outlinedChipText" Text="{Binding Value}" FontWeight="{Binding TextWeight}" Opacity="{Binding WeightOpacity}" />
                         </Button>
-                    </DataTemplate>
-                </ItemsControl.ItemTemplate>
-            </ItemsControl>
-
-            <ItemsControl ItemsSource="{Binding Pills.Tags}" Margin="0,0,0,18">
-                <ItemsControl.ItemsPanel>
-                    <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
-                </ItemsControl.ItemsPanel>
-                <ItemsControl.ItemTemplate>
-                    <DataTemplate x:DataType="vm:TagPillViewModel">
-                        <Button Classes="outlinedChipButton" Command="{Binding SearchCommand}" ToolTip.Tip="{Binding Category}">
-                            <Button.ContextMenu>
-                                <ContextMenu IsVisible="{Binding CanReweight}">
-                                    <MenuItem Header="Incidental" Command="{Binding SetWeightCommand}" CommandParameter="{x:Static entities:IssueTagWeight.Incidental}" />
-                                    <MenuItem Header="Recurrent" Command="{Binding SetWeightCommand}" CommandParameter="{x:Static entities:IssueTagWeight.Recurrent}" />
-                                    <MenuItem Header="Defining" Command="{Binding SetWeightCommand}" CommandParameter="{x:Static entities:IssueTagWeight.Defining}" />
-                                    <MenuItem Header="Core" Command="{Binding SetWeightCommand}" CommandParameter="{x:Static entities:IssueTagWeight.Core}" />
-                                </ContextMenu>
-                            </Button.ContextMenu>
-                            <TextBlock Classes="outlinedChipText" Text="{Binding Value}" FontWeight="{Binding TextWeight}" Opacity="{Binding WeightOpacity}" />
+                        <Button Classes="tab" Classes.active="{Binding IsRelatedTabActive}" Command="{Binding GoRelatedTabCommand}">
+                            <StackPanel Orientation="Horizontal" Spacing="7">
+                                <TextBlock Text="Related" />
+                                <TextBlock Classes="tabCount" Text="{Binding Tabs.Related.Count}" VerticalAlignment="Center" />
+                            </StackPanel>
                         </Button>
-                    </DataTemplate>
-                </ItemsControl.ItemTemplate>
-            </ItemsControl>
+                        <Button Classes="tab" Classes.active="{Binding IsDetailsTabActive}" Command="{Binding GoDetailsTabCommand}" Content="Details" />
+                        <Button Classes="tab" Classes.active="{Binding IsActivityTabActive}" Command="{Binding GoActivityTabCommand}" Content="Activity" />
+                    </StackPanel>
+                </Border>
 
-            <!-- Action row: wrap-capable, not a fixed grid, so more buttons can be added later. -->
-            <WrapPanel Margin="0,0,0,24">
-                <Button Classes="mangaAction primary" Command="{Binding ContinueCommand}" Margin="0,0,10,10">
-                    <StackPanel Spacing="4">
-                        <Border Classes="icon" Width="16" Height="16" Background="{DynamicResource PbAccentBrush}" HorizontalAlignment="Center">
-                            <Border.OpacityMask><ImageBrush Source="/Assets/Icons/Play.png" Stretch="Uniform" /></Border.OpacityMask>
-                        </Border>
-                        <TextBlock Classes="mangaActionLabel" Text="{Binding ContinueLabel}" />
+                <!-- Chapters tab: release feed -->
+                <StackPanel IsVisible="{Binding IsChaptersTab}" Margin="0,16,0,0">
+                    <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,0,0,10">
+                        <Button Classes="chapterFilterPill" Classes.active="{Binding ChapterFilter, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static models:ChapterListFilter.All}}"
+                                Content="All" Command="{Binding SetChapterFilterCommand}" CommandParameter="{x:Static models:ChapterListFilter.All}" />
+                        <Button Classes="chapterFilterPill" Classes.active="{Binding ChapterFilter, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static models:ChapterListFilter.Unread}}"
+                                Content="Unread" Command="{Binding SetChapterFilterCommand}" CommandParameter="{x:Static models:ChapterListFilter.Unread}" />
+                        <Button Classes="chapterFilterPill" Classes.active="{Binding ChapterFilter, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static models:ChapterListFilter.Bookmarked}}"
+                                Content="Bookmarked" Command="{Binding SetChapterFilterCommand}" CommandParameter="{x:Static models:ChapterListFilter.Bookmarked}" />
+                        <Button Classes="chapterFilterPill" Classes.active="{Binding ChapterFilter, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static models:ChapterListFilter.Missing}}"
+                                Content="Missing" Command="{Binding SetChapterFilterCommand}" CommandParameter="{x:Static models:ChapterListFilter.Missing}" />
+                        <Border Width="1" Background="{DynamicResource PbBorderBrush}" Margin="6,2" />
+                        <Button Classes="chapterFilterPill" Classes.active="{Binding ChapterSortField, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static models:ChapterSortField.Number}}"
+                                Content="By Number" Command="{Binding SetChapterSortFieldCommand}" CommandParameter="{x:Static models:ChapterSortField.Number}" />
+                        <Button Classes="chapterFilterPill" Classes.active="{Binding ChapterSortField, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static models:ChapterSortField.Date}}"
+                                Content="By Date" Command="{Binding SetChapterSortFieldCommand}" CommandParameter="{x:Static models:ChapterSortField.Date}" />
+                        <Button Classes="chapterFilterPill" Command="{Binding ToggleChapterSortDirectionCommand}"
+                                Content="{Binding ChapterSortDirectionGlyph}" ToolTip.Tip="Toggle sort direction" />
                     </StackPanel>
-                </Button>
-                <Button Classes="mangaAction" Command="{Binding EditCommand}" IsEnabled="{Binding CanEdit}" Margin="0,0,10,10">
-                    <StackPanel Spacing="4">
-                        <Border Classes="icon" Width="16" Height="16" HorizontalAlignment="Center">
-                            <Border.OpacityMask><ImageBrush Source="/Assets/Icons/Edit_Pencil.png" Stretch="Uniform" /></Border.OpacityMask>
-                        </Border>
-                        <TextBlock Classes="mangaActionLabel" Text="Edit" />
-                    </StackPanel>
-                </Button>
-                <Button Classes="mangaAction" Command="{Binding GoDetailsTabCommand}" Margin="0,0,10,10">
-                    <StackPanel Spacing="4">
-                        <Border Classes="icon" Width="16" Height="16" HorizontalAlignment="Center">
-                            <Border.OpacityMask><ImageBrush Source="/Assets/Icons/Star.png" Stretch="Uniform" /></Border.OpacityMask>
-                        </Border>
-                        <TextBlock Classes="mangaActionLabel" Text="{Binding Tabs.TrackerStatusLabel}" />
-                    </StackPanel>
-                </Button>
-                <Button Classes="mangaAction" Command="{Binding ChangeSeriesCoverCommand}" Margin="0,0,10,10">
-                    <StackPanel Spacing="4">
-                        <Border Classes="icon" Width="16" Height="16" HorizontalAlignment="Center">
-                            <Border.OpacityMask><ImageBrush Source="/Assets/Icons/File_Upload.png" Stretch="Uniform" /></Border.OpacityMask>
-                        </Border>
-                        <TextBlock Classes="mangaActionLabel" Text="Cover" />
-                    </StackPanel>
-                </Button>
-            </WrapPanel>
 
-            <!-- Unified tab strip -->
-            <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,0,0,1">
-                <StackPanel Orientation="Horizontal" Spacing="22">
-                    <Button Classes="tab" Classes.active="{Binding IsChaptersTab}" Command="{Binding GoChaptersTabCommand}">
-                        <StackPanel Orientation="Horizontal" Spacing="7">
-                            <TextBlock Text="Chapters" />
-                            <TextBlock Classes="tabCount" Text="{Binding Chapters.Count}" VerticalAlignment="Center" />
-                        </StackPanel>
-                    </Button>
-                    <Button Classes="tab" Classes.active="{Binding IsRelatedTabActive}" Command="{Binding GoRelatedTabCommand}">
-                        <StackPanel Orientation="Horizontal" Spacing="7">
-                            <TextBlock Text="Related" />
-                            <TextBlock Classes="tabCount" Text="{Binding Tabs.Related.Count}" VerticalAlignment="Center" />
-                        </StackPanel>
-                    </Button>
-                    <Button Classes="tab" Classes.active="{Binding IsDetailsTabActive}" Command="{Binding GoDetailsTabCommand}" Content="Details" />
-                    <Button Classes="tab" Classes.active="{Binding IsActivityTabActive}" Command="{Binding GoActivityTabCommand}" Content="Activity" />
+                    <TextBlock IsVisible="{Binding !HasChapters}" Text="No chapters match this filter." FontSize="12.5"
+                               Foreground="{DynamicResource PbTextFaintBrush}" Margin="0,10,0,0" />
+
+                    <ItemsControl x:Name="ChapterGroupsList" ItemsSource="{Binding ChapterGroups}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="models:ChapterVolumeGroup">
+                                <StackPanel>
+                                    <TextBlock Classes="volumeHeader" Text="{Binding VolumeLabel}" />
+                                    <ItemsControl ItemsSource="{Binding Chapters}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate x:DataType="models:ChapterRowSample">
+                                                <Button Classes="chapterRow" Classes.read="{Binding IsRead}"
+                                                        Command="{Binding #ChapterGroupsList.((vm:MangaDetailScreenViewModel)DataContext).OpenChapterCommand}"
+                                                        CommandParameter="{Binding}">
+                                                    <Button.ContextMenu>
+                                                        <ContextMenu>
+                                                            <MenuItem Header="Edit Properties" Command="{Binding #ChapterGroupsList.((vm:MangaDetailScreenViewModel)DataContext).EditChapterPropertiesCommand}" CommandParameter="{Binding}" />
+                                                            <MenuItem Header="Show in Explorer" Command="{Binding #ChapterGroupsList.((vm:MangaDetailScreenViewModel)DataContext).RevealChapterCommand}" CommandParameter="{Binding}" />
+                                                            <Separator />
+                                                            <MenuItem Header="Mark as Read" Command="{Binding #ChapterGroupsList.((vm:MangaDetailScreenViewModel)DataContext).MarkChapterReadCommand}" CommandParameter="{Binding}" />
+                                                            <MenuItem Header="Mark as Unread" Command="{Binding #ChapterGroupsList.((vm:MangaDetailScreenViewModel)DataContext).MarkChapterUnreadCommand}" CommandParameter="{Binding}" />
+                                                            <Separator />
+                                                            <MenuItem Header="Set Cover…" Command="{Binding #ChapterGroupsList.((vm:MangaDetailScreenViewModel)DataContext).ChangeChapterCoverCommand}" CommandParameter="{Binding}" />
+                                                            <MenuItem Header="Reset Cover" Command="{Binding #ChapterGroupsList.((vm:MangaDetailScreenViewModel)DataContext).ResetChapterCoverCommand}" CommandParameter="{Binding}" />
+                                                        </ContextMenu>
+                                                    </Button.ContextMenu>
+                                                    <Grid>
+                                                        <Grid ColumnDefinitions="60,*,Auto,Auto,Auto,110" VerticalAlignment="Center">
+                                                            <TextBlock Grid.Column="0" Classes="chapterNumber" Text="{Binding DisplayNumber}" />
+                                                            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="7" Margin="8,0">
+                                                                <TextBlock Classes="chapterTitle" Text="{Binding Title}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                                                <Border Classes="newBadge" IsVisible="{Binding IsNew}">
+                                                                    <TextBlock Text="NEW" FontSize="8" FontWeight="Bold" Foreground="{DynamicResource PbBadgeTextBrush}" />
+                                                                </Border>
+                                                            </StackPanel>
+                                                            <Border Grid.Column="2" Classes="icon" Width="12" Height="12" Margin="0,0,8,0" IsVisible="{Binding HasBookmark}">
+                                                                <Border.OpacityMask><ImageBrush Source="/Assets/Icons/Bookmark.png" Stretch="Uniform" /></Border.OpacityMask>
+                                                            </Border>
+                                                            <Border Grid.Column="3" Classes="icon" Width="12" Height="12" Margin="0,0,8,0" IsVisible="{Binding IsMissing}"
+                                                                    Background="{DynamicResource PbBadgeBrush}">
+                                                                <Border.OpacityMask><ImageBrush Source="/Assets/Icons/Triangle_Warning.png" Stretch="Uniform" /></Border.OpacityMask>
+                                                            </Border>
+                                                            <TextBlock Grid.Column="4" Classes="chapterMeta" Text="{Binding ScanInformation}" Margin="0,0,10,0" IsVisible="{Binding HasScanInformation}" />
+                                                            <TextBlock Grid.Column="5" Classes="chapterMeta" Text="{Binding Date, StringFormat='{}{0:MMM d, yyyy}'}" HorizontalAlignment="Right" />
+                                                        </Grid>
+                                                        <ProgressBar Classes="chapterProgress" Value="{Binding ReadPercentage}" Minimum="0" Maximum="100" IsVisible="{Binding IsInProgress}" />
+                                                    </Grid>
+                                                </Button>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </StackPanel>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
                 </StackPanel>
-            </Border>
 
-            <!-- Chapters tab -->
-            <StackPanel IsVisible="{Binding IsChaptersTab}" Margin="0,18,0,0">
-                <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,0,0,14">
-                    <Button Classes="chapterFilterPill" Classes.active="{Binding ChapterFilter, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static models:ChapterListFilter.All}}"
-                            Content="All" Command="{Binding SetChapterFilterCommand}" CommandParameter="{x:Static models:ChapterListFilter.All}" />
-                    <Button Classes="chapterFilterPill" Classes.active="{Binding ChapterFilter, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static models:ChapterListFilter.Unread}}"
-                            Content="Unread" Command="{Binding SetChapterFilterCommand}" CommandParameter="{x:Static models:ChapterListFilter.Unread}" />
-                    <Button Classes="chapterFilterPill" Classes.active="{Binding ChapterFilter, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static models:ChapterListFilter.Bookmarked}}"
-                            Content="Bookmarked" Command="{Binding SetChapterFilterCommand}" CommandParameter="{x:Static models:ChapterListFilter.Bookmarked}" />
-                    <Button Classes="chapterFilterPill" Classes.active="{Binding ChapterFilter, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static models:ChapterListFilter.Missing}}"
-                            Content="Missing" Command="{Binding SetChapterFilterCommand}" CommandParameter="{x:Static models:ChapterListFilter.Missing}" />
-
-                    <Border Width="1" Background="{DynamicResource PbBorderBrush}" Margin="6,2" />
-
-                    <Button Classes="chapterFilterPill" Classes.active="{Binding ChapterSortField, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static models:ChapterSortField.Number}}"
-                            Content="By Number" Command="{Binding SetChapterSortFieldCommand}" CommandParameter="{x:Static models:ChapterSortField.Number}" />
-                    <Button Classes="chapterFilterPill" Classes.active="{Binding ChapterSortField, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static models:ChapterSortField.Date}}"
-                            Content="By Date" Command="{Binding SetChapterSortFieldCommand}" CommandParameter="{x:Static models:ChapterSortField.Date}" />
-                    <Button Classes="chapterFilterPill" Command="{Binding ToggleChapterSortDirectionCommand}"
-                            Content="{Binding ChapterSortDirectionGlyph}" ToolTip.Tip="Toggle sort direction" />
-                </StackPanel>
-
-                <TextBlock IsVisible="{Binding !HasChapters}" Text="No chapters match this filter." FontSize="12.5"
-                           Foreground="{DynamicResource PbTextFaintBrush}" Margin="0,10,0,0" />
-
-                <ItemsControl x:Name="ChaptersList" ItemsSource="{Binding Chapters}">
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate x:DataType="models:ChapterRowSample">
-                            <Button Classes="chapterRow" Classes.read="{Binding IsRead}"
-                                    Command="{Binding $parent[ItemsControl].((vm:MangaDetailScreenViewModel)DataContext).OpenChapterCommand}"
-                                    CommandParameter="{Binding}">
-                                <Button.ContextMenu>
-                                    <ContextMenu>
-                                        <MenuItem Header="Edit Properties"
-                                                  Command="{Binding #ChaptersList.((vm:MangaDetailScreenViewModel)DataContext).EditChapterPropertiesCommand}"
-                                                  CommandParameter="{Binding}" />
-                                        <MenuItem Header="Show in Explorer"
-                                                  Command="{Binding #ChaptersList.((vm:MangaDetailScreenViewModel)DataContext).RevealChapterCommand}"
-                                                  CommandParameter="{Binding}" />
-                                        <Separator />
-                                        <MenuItem Header="Mark as Read"
-                                                  Command="{Binding #ChaptersList.((vm:MangaDetailScreenViewModel)DataContext).MarkChapterReadCommand}"
-                                                  CommandParameter="{Binding}" />
-                                        <MenuItem Header="Mark as Unread"
-                                                  Command="{Binding #ChaptersList.((vm:MangaDetailScreenViewModel)DataContext).MarkChapterUnreadCommand}"
-                                                  CommandParameter="{Binding}" />
-                                        <Separator />
-                                        <MenuItem Header="Set Cover…"
-                                                  Command="{Binding #ChaptersList.((vm:MangaDetailScreenViewModel)DataContext).ChangeChapterCoverCommand}"
-                                                  CommandParameter="{Binding}" />
-                                        <MenuItem Header="Reset Cover"
-                                                  Command="{Binding #ChaptersList.((vm:MangaDetailScreenViewModel)DataContext).ResetChapterCoverCommand}"
-                                                  CommandParameter="{Binding}" />
-                                    </ContextMenu>
-                                </Button.ContextMenu>
-                                <Grid>
-                                    <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto,110" VerticalAlignment="Center">
-                                        <TextBlock Grid.Column="0" Classes="chapterNumber" Text="{Binding DisplayNumber}" Width="64" />
-                                        <TextBlock Grid.Column="1" Classes="chapterTitle" Text="{Binding Title}" Margin="10,0" TextTrimming="CharacterEllipsis" />
-                                        <Border Grid.Column="2" Classes="icon" Width="13" Height="13" Margin="0,0,10,0" IsVisible="{Binding HasBookmark}">
-                                            <Border.OpacityMask><ImageBrush Source="/Assets/Icons/Bookmark.png" Stretch="Uniform" /></Border.OpacityMask>
-                                        </Border>
-                                        <Border Grid.Column="3" Classes="icon" Width="13" Height="13" Margin="0,0,10,0" IsVisible="{Binding IsMissing}"
-                                                Background="{DynamicResource PbBadgeBrush}">
-                                            <Border.OpacityMask><ImageBrush Source="/Assets/Icons/Triangle_Warning.png" Stretch="Uniform" /></Border.OpacityMask>
-                                        </Border>
-                                        <TextBlock Grid.Column="4" Classes="chapterMeta" Text="{Binding ScanInformation}" Margin="0,0,10,0" IsVisible="{Binding HasScanInformation}" />
-                                        <TextBlock Grid.Column="5" Classes="chapterMeta" Text="{Binding Date, StringFormat='{}{0:MMM d, yyyy}'}" />
-                                    </Grid>
-                                    <ProgressBar Classes="chapterProgress" Value="{Binding ReadPercentage}" Minimum="0" Maximum="100" IsVisible="{Binding IsInProgress}" />
-                                </Grid>
-                            </Button>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
+                <!-- Related / Details / Activity - the shared DetailTabs content -->
+                <Border IsVisible="{Binding !IsChaptersTab}">
+                    <views:DetailTabs DataContext="{Binding Tabs}" />
+                </Border>
             </StackPanel>
-
-            <!-- Related/Details/Activity - the shared DetailTabsViewModel, not duplicated. -->
-            <Border IsVisible="{Binding !IsChaptersTab}">
-                <views:DetailTabs DataContext="{Binding Tabs}" />
-            </Border>
-
         </StackPanel>
     </ScrollViewer>
 </UserControl>

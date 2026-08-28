@@ -265,6 +265,13 @@ public partial class BulkIssuePropertiesScreenViewModel : ViewModelBase
 
         context.SaveChanges();
 
+        // Re-derive the Character index for every edited issue (docs/superpowers/specs/2026-08-27-
+        // metadata-model-phase4g-age-progression-design.md) - cheap no-op unless Characters changed.
+        foreach (var issue in issues)
+        {
+            Paperbunkr.Data.Metadata.CharacterResolver.SyncFromIssue(context, issue.Id);
+        }
+
         // Undo/Redo (docs/ce-feature-inventory.md §A) - only actually record an entry if some
         // field was staged; an all-cancelled-out edit (every staged field ends up equal to what it
         // started as) is harmless to skip, and avoids polluting the stack with no-op entries.

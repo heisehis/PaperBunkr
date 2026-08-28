@@ -438,4 +438,55 @@ public class BookDetailScreenViewModelTests : IDisposable
 
         Assert.Equal(seriesId, captured);
     }
+
+    // --- Streaming redesign (docs/superpowers/specs/2026-08-28-detail-screens-streaming-redesign-design.md) ---
+
+    [Fact]
+    public void BookMode_BandHasNoMetadataGroups()
+    {
+        var vm = CreateViewModel();
+        vm.LoadBook(AddBook("A Novel", author: "N. Novelist", summary: "A synopsis."));
+
+        Assert.Empty(vm.Band.Groups);
+        Assert.Equal("A synopsis.", vm.Band.Summary);
+        Assert.Equal("EPUB", vm.Band.StatusText);
+        Assert.Equal("N. Novelist", vm.Band.PublisherText);
+    }
+
+    [Fact]
+    public void BookMode_HeroFields()
+    {
+        var vm = CreateViewModel();
+        vm.LoadBook(AddBook("A Novel", author: "N. Novelist", format: BookFormat.Pdf, finished: true));
+
+        var hero = (IDetailHeaderSource)vm;
+        Assert.Equal("A Novel", hero.HeaderTitle);
+        Assert.Contains("N. Novelist", hero.MetaLine);
+        Assert.Contains("PDF", hero.MetaLine);
+        Assert.Contains("FINISHED", hero.MetaLine);
+        Assert.Null(hero.SecondaryTitle);
+        Assert.Null(hero.TrackerProgress);
+        Assert.Contains(hero.Actions, a => a.IsPrimary);
+    }
+
+    [Fact]
+    public void SeriesMode_HeroSwitchesTitleAndActions()
+    {
+        AddBook("Vol 1", series: "The Trilogy");
+        AddBook("Vol 2", series: "The Trilogy");
+        int seriesId;
+        using (var context = PaperbunkrDb.CreateContext())
+        {
+            seriesId = context.BookSeries.Single(s => s.Name == "The Trilogy").Id;
+        }
+
+        var vm = CreateViewModel();
+        vm.LoadSeries(seriesId);
+
+        var hero = (IDetailHeaderSource)vm;
+        Assert.Equal("The Trilogy", hero.HeaderTitle);
+        Assert.Contains("2 books", hero.MetaLine);
+        Assert.DoesNotContain(hero.Actions, a => a.IsPrimary);
+        Assert.Contains(hero.Actions, a => a.Label == "Edit all books");
+    }
 }

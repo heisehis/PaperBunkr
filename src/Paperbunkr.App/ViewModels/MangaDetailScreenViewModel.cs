@@ -4,6 +4,7 @@ using System.Collections.ObjectModel;
 using System.Linq;
 using System.Threading.Tasks;
 using Avalonia;
+using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -28,7 +29,7 @@ namespace Paperbunkr.App.ViewModels;
 /// embedded here with its own Issues tab suppressed (<see cref="DetailTabsViewModel.ShowIssuesTab"/>)
 /// - Related/Details(tracker linking + external metadata)/Activity are shared, not duplicated.
 /// </summary>
-public partial class MangaDetailScreenViewModel : ViewModelBase
+public partial class MangaDetailScreenViewModel : ViewModelBase, IDetailHeaderSource
 {
     public MangaDetailScreenViewModel(Action goBack, Action<int> goToReader, Action<int> goToProperties, Action<IReadOnlyList<int>> goToBulkProperties, Action<int>? goDetailForSeries = null, Action<string>? goLibraryWithSearch = null)
     {
@@ -37,12 +38,14 @@ public partial class MangaDetailScreenViewModel : ViewModelBase
         _goToProperties = goToProperties;
         _goToBulkProperties = goToBulkProperties;
         _goDetailForSeries = goDetailForSeries ?? (_ => { });
-        Tabs = new DetailTabsViewModel(goToProperties, goToBulkProperties) { ShowIssuesTab = false, ShowTabStrip = false };
+        Tabs = new DetailTabsViewModel(goToProperties, goToBulkProperties, navigateToSeries: _goDetailForSeries, openInReader: goToReader) { ShowIssuesTab = false, ShowTabStrip = false };
         // No reweight callback - LoadSeries below is always the series-aggregated view (chapter-list
         // screen, no single-issue pill focus like the Western DetailScreenViewModel has), so every
-        // pill's CanReweight is naturally false here regardless.
-        Pills = new DetailPillsViewModel(goLibraryWithSearch);
+        // chip's CanReweight is naturally false here regardless.
+        Band = new DetailBandViewModel(goLibraryWithSearch, () => Tabs.GoDetailsCommand.Execute(null));
+        CoverBrush = SeriesCardSample.Gradient("#26333a", "#7aa7b8");
         Chapters = new ObservableCollection<ChapterRowSample>();
+        ChapterGroups = new ObservableCollection<ChapterVolumeGroup>();
         ExternalLinks = new ObservableCollection<ExternalLinkSample>();
     }
 
@@ -58,8 +61,37 @@ public partial class MangaDetailScreenViewModel : ViewModelBase
     private List<ChapterRowSample> _allChapters = new();
 
     public DetailTabsViewModel Tabs { get; }
-    public DetailPillsViewModel Pills { get; }
+    public DetailBandViewModel Band { get; }
     public ObservableCollection<ChapterRowSample> Chapters { get; }
+
+    /// <summary>Chapters grouped by volume for the release-feed presentation (docs/superpowers/specs/
+    /// 2026-08-28-detail-screens-streaming-redesign-design.md). <see cref="Chapters"/> stays flat as
+    /// the data source; this is the view projection, rebuilt whenever <see cref="RenderChapters"/> runs.</summary>
+    public ObservableCollection<ChapterVolumeGroup> ChapterGroups { get; }
+
+    // --- IDetailHeaderSource ---
+
+    [ObservableProperty]
+    private IBrush _coverBrush;
+
+    public string HeaderTitle => SeriesTitle;
+
+    partial void OnSeriesTitleChanged(string value) => OnPropertyChanged(nameof(HeaderTitle));
+
+    [ObservableProperty]
+    private string? _secondaryTitle;
+
+    [ObservableProperty]
+    private string _metaLine = string.Empty;
+
+    DetailHeroProgress? IDetailHeaderSource.TrackerProgress => null;
+
+    public IReadOnlyList<DetailHeroAction> Actions => new[]
+    {
+        new DetailHeroAction(ContinueLabel, ContinueCommand, IsPrimary: true, IsEnabled: _continueIssueId is not null),
+        new DetailHeroAction("Edit", EditCommand, IsEnabled: CanEdit),
+        new DetailHeroAction("Change Cover", ChangeSeriesCoverCommand),
+    };
 
     /// <summary>Header chip row (docs/superpowers/specs/2026-08-23-apply-from-provider-design.md) -
     /// same data <c>DetailTabsViewModel.ExternalLinks</c> already shows in the Details tab, promoted
@@ -193,6 +225,7 @@ public partial class MangaDetailScreenViewModel : ViewModelBase
         var series = context.Series.Include(s => s.Issues).ThenInclude(i => i.MetadataProposals)
             .Include(s => s.Issues).ThenInclude(i => i.Tags)
             .Include(s => s.MetadataProposals)
+            .Include(s => s.Titles)
             .FirstOrDefault(s => s.Id == seriesId);
         if (series is null)
         {
@@ -204,9 +237,14 @@ public partial class MangaDetailScreenViewModel : ViewModelBase
 
         var card = SeriesCardSample.FromSeries(series);
         _coverIssueId = card.CoverIssueId;
+        CoverBrush = card.CoverBrush;
         CoverImage = card.CoverIssueId is int coverIssueId ? CoverImageCache.Get(coverIssueId) : null;
-        BackdropImage = CoverImage is not null ? BackdropBlurRenderer.Render(CoverImage, new PixelSize(1600, 420)) : null;
+        BackdropImage = CoverImage is not null ? BackdropBlurRenderer.Render(CoverImage, new PixelSize(1600, 680)) : null;
         SeriesTitle = series.Name;
+        SecondaryTitle = series.Titles
+            .Where(t => t.Type is SeriesTitleType.Native or SeriesTitleType.Romanized)
+            .Select(t => t.Value)
+            .FirstOrDefault(v => !string.Equals(v, series.Name, StringComparison.OrdinalIgnoreCase));
         SelectedContentType = series.ContentType;
         StatusLabel = series.Status switch
         {
@@ -276,26 +314,46 @@ public partial class MangaDetailScreenViewModel : ViewModelBase
 
         var enabledVirtualTags = context.VirtualTagDefinitions.Where(t => t.IsEnabled).OrderBy(t => t.SortOrder).ToList();
         Tabs.LoadSeries(series);
-        Pills.LoadSeries(series, enabledVirtualTags);
+        Band.LoadSeries(series, enabledVirtualTags);
+        Band.StatusText = StatusLabel;
+        Band.PublisherText = string.IsNullOrWhiteSpace(series.Publisher) ? string.Empty : series.Publisher!;
+        Band.Summary = Summary;
+        Band.IsSynopsisExpanded = false;
+
+        MetaLine = string.Join("  ·  ", new[]
+        {
+            StatusLabel,
+            SourceLabel is "Unknown" ? string.Empty : SourceLabel,
+            ReadingModeBadge,
+            ChapterCountBadge,
+        }.Where(s => !string.IsNullOrWhiteSpace(s)));
 
         _isLoadingSeries = false;
         OnPropertyChanged(nameof(CanEdit));
+        OnPropertyChanged(nameof(Actions));
     }
 
-    private static ChapterRowSample ToChapterRow(Issue issue) => new()
+    private static ChapterRowSample ToChapterRow(Issue issue)
     {
-        Id = issue.Id,
-        DisplayNumber = string.IsNullOrWhiteSpace(issue.EffectiveNumber()) ? "#?" : $"#{issue.EffectiveNumber()}",
-        NumberSortKey = issue.NumberSortKey(),
-        Title = issue.EffectiveTitle(),
-        IsRead = issue.HasBeenRead(),
-        IsInProgress = issue.IsInProgress(),
-        ReadPercentage = issue.ReadPercentage(),
-        BookmarkCount = issue.Bookmarks.Count,
-        IsMissing = issue.FileIsMissing,
-        ScanInformation = issue.ScanInformation,
-        Date = issue.ReleasedTime ?? issue.AddedTime,
-    };
+        var date = issue.ReleasedTime ?? issue.AddedTime;
+        bool read = issue.HasBeenRead();
+        return new ChapterRowSample
+        {
+            Id = issue.Id,
+            DisplayNumber = string.IsNullOrWhiteSpace(issue.EffectiveNumber()) ? "#?" : $"#{issue.EffectiveNumber()}",
+            NumberSortKey = issue.NumberSortKey(),
+            Title = issue.EffectiveTitle(),
+            Volume = issue.EffectiveVolume(),
+            IsRead = read,
+            IsNew = !read && date >= DateTime.Now.AddDays(-14),
+            IsInProgress = issue.IsInProgress(),
+            ReadPercentage = issue.ReadPercentage(),
+            BookmarkCount = issue.Bookmarks.Count,
+            IsMissing = issue.FileIsMissing,
+            ScanInformation = issue.ScanInformation,
+            Date = date,
+        };
+    }
 
     private void RenderChapters()
     {
@@ -317,7 +375,28 @@ public partial class MangaDetailScreenViewModel : ViewModelBase
             Chapters.Add(row);
         }
 
+        RebuildChapterGroups();
         OnPropertyChanged(nameof(HasChapters));
+    }
+
+    /// <summary>Groups the currently-visible <see cref="Chapters"/> by volume, "No volume" bucket last,
+    /// preserving <see cref="RenderChapters"/>' sort within each group.</summary>
+    private void RebuildChapterGroups()
+    {
+        ChapterGroups.Clear();
+        var ordered = Chapters
+            .GroupBy(c => string.IsNullOrWhiteSpace(c.Volume) ? null : c.Volume!.Trim())
+            .OrderBy(g => g.Key is null)
+            .ThenBy(g => g.Key, StringComparer.OrdinalIgnoreCase);
+
+        foreach (var group in ordered)
+        {
+            ChapterGroups.Add(new ChapterVolumeGroup
+            {
+                VolumeLabel = group.Key is null ? "No volume" : $"Volume {group.Key}",
+                Chapters = group.ToList(),
+            });
+        }
     }
 
     // --- Unified tab strip (Chapters/Related/Details/Activity) - this screen renders its own

@@ -140,6 +140,8 @@
         <StyleInclude Source="avares://Paperbunkr.App/Styles/Typography.axaml" />
         <StyleInclude Source="avares://Paperbunkr.App/Styles/Primitives.axaml" />
         <StyleInclude Source="avares://Paperbunkr.App/Styles/Icons.axaml" />
+        <StyleInclude Source="avares://Paperbunkr.App/Styles/DetailChrome.axaml" />
+        <StyleInclude Source="avares://Paperbunkr.App/Styles/ScreenChrome.axaml" />
 
         <!-- Preferences > Appearance > Font override (docs/superpowers/specs/
              2026-08-07-preferences-skin-system-design.md §3) - a genuine global override via

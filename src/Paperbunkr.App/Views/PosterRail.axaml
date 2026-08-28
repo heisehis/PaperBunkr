@@ -1,0 +1,105 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:models="using:Paperbunkr.App.Models"
+             xmlns:conv="using:Avalonia.Data.Converters"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="700" d:DesignHeight="180"
+             x:Class="Paperbunkr.App.Views.PosterRail"
+             x:Name="u">
+
+    <!--
+        A titled horizontal cover rail (docs/superpowers/specs/2026-08-28-detail-screens-streaming-
+        redesign-design.md). Used stacked on the Related tab: Related Series (editable), Same
+        Continuity / Same Event / More Like This (read-only). ClickCommand fires with the item's
+        Payload; RemoveCommand (when set) puts a hover ✕ on each card; ShowAddCard appends a
+        trailing dashed "+ Add" card bound to AddCommand.
+    -->
+    <UserControl.Styles>
+        <Style Selector="Button.railCard">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Width" Value="76" />
+        </Style>
+        <Style Selector="Border.railCover">
+            <Setter Property="Height" Value="112" />
+            <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusSm}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
+            <Setter Property="ClipToBounds" Value="True" />
+        </Style>
+        <Style Selector="Button.railCard:pointerover Border.railCover">
+            <Setter Property="BoxShadow" Value="{StaticResource PbGlowRing}" />
+        </Style>
+        <Style Selector="Button.railRemove">
+            <Setter Property="Width" Value="18" />
+            <Setter Property="Height" Value="18" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="FontSize" Value="10" />
+            <Setter Property="CornerRadius" Value="999" />
+            <Setter Property="Background" Value="#AA000000" />
+            <Setter Property="Foreground" Value="White" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Opacity" Value="0" />
+            <Setter Property="HorizontalAlignment" Value="Right" />
+            <Setter Property="VerticalAlignment" Value="Top" />
+            <Setter Property="Margin" Value="4" />
+        </Style>
+        <Style Selector="Button.railCard:pointerover Button.railRemove">
+            <Setter Property="Opacity" Value="1" />
+        </Style>
+    </UserControl.Styles>
+
+    <StackPanel Margin="0,0,0,16">
+        <StackPanel Orientation="Horizontal" Spacing="10" Margin="0,0,0,7">
+            <TextBlock Text="{Binding #u.Title}" FontSize="12" FontWeight="Bold" Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
+            <TextBlock Text="{Binding #u.ContextLabel}" FontSize="10" Foreground="{DynamicResource PbAccentTextBrush}"
+                       VerticalAlignment="Center" IsVisible="{Binding #u.ContextLabel, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
+        </StackPanel>
+
+        <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <ItemsControl ItemsSource="{Binding #u.ItemsSource}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate><StackPanel Orientation="Horizontal" Spacing="8" /></ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="models:PosterRailItem">
+                            <Button Classes="railCard" Command="{Binding #u.ClickCommand}" CommandParameter="{Binding Payload}">
+                                <StackPanel Spacing="4">
+                                    <Panel>
+                                        <Border Classes="railCover" Background="{Binding CoverBrush}">
+                                            <Image Source="{Binding CoverImage}" Stretch="UniformToFill" />
+                                        </Border>
+                                        <Button Classes="railRemove" Content="✕"
+                                                Command="{Binding #u.RemoveCommand}" CommandParameter="{Binding Payload}"
+                                                IsVisible="{Binding #u.RemoveCommand, Converter={x:Static conv:ObjectConverters.IsNotNull}}"
+                                                ToolTip.Tip="Remove" />
+                                    </Panel>
+                                    <TextBlock Text="{Binding Name}" FontSize="10.5" Foreground="{DynamicResource PbTextMutedBrush}"
+                                               TextWrapping="Wrap" MaxLines="2" TextTrimming="CharacterEllipsis" />
+                                    <TextBlock Text="{Binding SubLabel}" FontSize="9" Foreground="{DynamicResource PbTextFaintBrush}"
+                                               IsVisible="{Binding SubLabel, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
+                                </StackPanel>
+                            </Button>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+
+                <Button Classes="railCard" Command="{Binding #u.AddCommand}"
+                        IsVisible="{Binding #u.ShowAddCard}" VerticalAlignment="Top">
+                    <StackPanel Spacing="4">
+                        <Border Classes="railCover" BorderBrush="{DynamicResource PbTextFaintBrush}"
+                                Background="Transparent" BorderThickness="1">
+                            <TextBlock Text="+" FontSize="22" Foreground="{DynamicResource PbTextFaintBrush}"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <TextBlock Text="Add" FontSize="10.5" Foreground="{DynamicResource PbTextFaintBrush}" HorizontalAlignment="Center" />
+                    </StackPanel>
+                </Button>
+            </StackPanel>
+        </ScrollViewer>
+    </StackPanel>
+</UserControl>

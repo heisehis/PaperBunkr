@@ -89,13 +89,110 @@ public partial class ReadingScreenViewModel : ViewModelBase
     private string _storyEventSearchQuery = string.Empty;
 
     [ObservableProperty]
-    private string _totalIssues = "0";
+    private int _totalCount;
 
     [ObservableProperty]
-    private string _ownedIssues = "0";
+    private int _readCount;
 
     [ObservableProperty]
-    private string _missingIssues = "0";
+    private int _ownedCount;
+
+    [ObservableProperty]
+    private int _missingCount;
+
+    /// <summary>0..1 for the progress bar. 0 for an empty list (nothing to divide by).</summary>
+    public double ProgressFraction => TotalCount == 0 ? 0 : (double)ReadCount / TotalCount;
+
+    /// <summary>Caption under the progress bar.</summary>
+    public string ProgressLabel => (ReadCount, TotalCount) switch
+    {
+        (_, 0) => "Empty",
+        (0, var t) => $"Not started · {t} issues",
+        (var r, var t) when r >= t => "Finished",
+        (var r, var t) => $"{r} of {t} read",
+    };
+
+    /// <summary>Header meta line - the "0 missing" clause is dropped when there are none.</summary>
+    public string MetaLine
+    {
+        get
+        {
+            string s = $"{TotalCount} issues · {ReadCount} read";
+            if (MissingCount > 0)
+            {
+                s += $" · {MissingCount} missing";
+            }
+
+            if (!string.IsNullOrEmpty(CreatedAtLabel))
+            {
+                s += $" · {CreatedAtLabel.Replace("Created ", "created ")}";
+            }
+
+            return s;
+        }
+    }
+
+    partial void OnTotalCountChanged(int value)
+    {
+        OnPropertyChanged(nameof(ProgressFraction));
+        OnPropertyChanged(nameof(IsEmptyList));
+        OnPropertyChanged(nameof(ProgressLabel));
+        OnPropertyChanged(nameof(MetaLine));
+    }
+
+    partial void OnReadCountChanged(int value)
+    {
+        OnPropertyChanged(nameof(ProgressFraction));
+        OnPropertyChanged(nameof(ProgressLabel));
+        OnPropertyChanged(nameof(MetaLine));
+    }
+
+    partial void OnMissingCountChanged(int value) => OnPropertyChanged(nameof(MetaLine));
+
+    partial void OnCreatedAtLabelChanged(string value) => OnPropertyChanged(nameof(MetaLine));
+
+    /// <summary>The "Continue" target - first owned, unread item in reading order (see <see cref="RecomputeContinueTarget"/>).</summary>
+    [ObservableProperty]
+    private ReadingListItemRowViewModel? _continueTarget;
+
+    [ObservableProperty]
+    private string _continueLabel = string.Empty;
+
+    public bool HasContinueTarget => ContinueTarget is not null;
+
+    partial void OnContinueTargetChanged(ReadingListItemRowViewModel? value) => OnPropertyChanged(nameof(HasContinueTarget));
+
+    [RelayCommand]
+    private void Continue() => ContinueTarget?.OpenCommand.Execute(null);
+
+    [ObservableProperty]
+    private bool _synopsisExpanded;
+
+    public string SynopsisToggleLabel => SynopsisExpanded ? "less" : "more";
+
+    partial void OnSynopsisExpandedChanged(bool value) => OnPropertyChanged(nameof(SynopsisToggleLabel));
+
+    [RelayCommand]
+    private void ToggleSynopsis() => SynopsisExpanded = !SynopsisExpanded;
+
+    /// <summary>The "＋ Add issues" inline search panel in the action row.</summary>
+    [ObservableProperty]
+    private bool _isAddIssuesOpen;
+
+    [RelayCommand]
+    private void ToggleAddIssues()
+    {
+        IsAddIssuesOpen = !IsAddIssuesOpen;
+        if (!IsAddIssuesOpen)
+        {
+            SearchQuery = string.Empty;
+        }
+    }
+
+    /// <summary>Whether the active list has a real description to show as a synopsis block.</summary>
+    public bool HasSynopsis => !string.IsNullOrWhiteSpace(Subtitle);
+
+    partial void OnSubtitleChanged(string value) => OnPropertyChanged(nameof(HasSynopsis));
 
     [ObservableProperty]
     private string? _statusMessage;
@@ -104,10 +201,13 @@ public partial class ReadingScreenViewModel : ViewModelBase
 
     partial void OnStatusMessageChanged(string? value) => OnPropertyChanged(nameof(HasStatusMessage));
 
-    /// <summary>Real empty states (P6, docs/alpha-todo.md) - previously a fresh install or a database with no reading lists just rendered a blank header and zeroed stat cards, with nothing telling the user what to do.</summary>
+    /// <summary>Real empty states (P6, docs/alpha-todo.md) - previously a fresh install or a database with no reading lists just rendered a blank header, with nothing telling the user what to do.</summary>
     public bool HasNoReadingLists => Lists.Count == 0;
 
     public bool HasNoItems => !HasNoReadingLists && Groups.Count == 0;
+
+    /// <summary>An existing list with no items yet - drives the "Add issues to get started" state.</summary>
+    public bool IsEmptyList => !HasNoReadingLists && TotalCount == 0;
 
     [ObservableProperty]
     private string _searchQuery = string.Empty;
@@ -151,7 +251,7 @@ public partial class ReadingScreenViewModel : ViewModelBase
         }
 
         ListName = list.Name;
-        Subtitle = !string.IsNullOrEmpty(list.Description) ? list.Description : "Cross-series reading order · tracked list";
+        Subtitle = list.Description ?? string.Empty;
         TypeLabel = ReadingListTypeOption.FormatLabel(list.Type);
 
         Tags.Clear();
@@ -172,17 +272,29 @@ public partial class ReadingScreenViewModel : ViewModelBase
         }
 
         var items = list.Items.OrderBy(i => i.SortOrder).ToList();
-        TotalIssues = items.Count.ToString();
-        OwnedIssues = items.Count(i => i.Issue is { FileIsMissing: false }).ToString();
-        MissingIssues = items.Count(i => i.Issue is null || i.Issue.FileIsMissing).ToString();
 
         Groups.Clear();
         foreach (var group in items.GroupBy(i => i.GroupLabel ?? string.Empty))
         {
             var rows = new ObservableCollection<ReadingListItemRowViewModel>(
-                group.Select(i => new ReadingListItemRowViewModel(i, MoveItemUp, MoveItemDown, RemoveItem, PersistFieldChange, StartLink, OpenIssue)));
+                group.Select(i => new ReadingListItemRowViewModel(i, MoveItemUp, MoveItemDown, RemoveItem, PersistFieldChange, StartLink, OpenIssue, ToggleReadRow)));
             Groups.Add(new ReadingListGroupViewModel { Label = group.Key, Rows = rows });
         }
+
+        var allRows = Groups.SelectMany(g => g.Rows).ToList();
+        for (int i = 0; i < allRows.Count; i++)
+        {
+            allRows[i].Position = i + 1;
+        }
+
+        TotalCount = allRows.Count;
+        OwnedCount = allRows.Count(r => r.IsOwned);
+        MissingCount = allRows.Count(r => r.IsMissing);
+        ReadCount = allRows.Count(r => r.IsRead);
+        RecomputeContinueTarget(allRows);
+        OnPropertyChanged(nameof(HasNoItems));
+        OnPropertyChanged(nameof(ProgressLabel));
+        OnPropertyChanged(nameof(MetaLine));
 
         RefreshSidebar();
     }
@@ -228,16 +340,23 @@ public partial class ReadingScreenViewModel : ViewModelBase
     public void RefreshSidebar()
     {
         using var context = PaperbunkrDb.CreateContext();
-        var all = context.ReadingLists.Include(r => r.Items).Include(r => r.Tags).OrderBy(r => r.SortOrder).ToList();
+        var all = context.ReadingLists
+            .Include(r => r.Items).ThenInclude(i => i.Issue)
+            .Include(r => r.Tags)
+            .OrderBy(r => r.SortOrder)
+            .ToList();
 
         _allListSummaries = all.Select(list =>
         {
             int listId = list.Id;
+            var orderedItems = list.Items.OrderBy(i => i.SortOrder).ToList();
             return new ReadingListSummary
             {
                 Id = list.Id,
                 Name = list.Name,
-                TotalCount = list.Items.Count,
+                TotalCount = orderedItems.Count,
+                CoverIssueId = orderedItems.FirstOrDefault(i => i.Issue is not null)?.Issue?.Id,
+                ReadCount = orderedItems.Count(i => i.Issue?.HasBeenRead() == true),
                 IsActive = list.Id == _activeReadingListId,
                 HasTag = value => list.Tags.Any(t => string.Equals(t.Value, value, StringComparison.OrdinalIgnoreCase)),
                 DeleteConfirm = new TwoStepConfirm(() => DeleteReadingList(listId), idleLabel: "Delete", armedLabel: "Confirm delete?"),
@@ -313,9 +432,12 @@ public partial class ReadingScreenViewModel : ViewModelBase
             CreatedAtLabel = string.Empty;
             Groups.Clear();
             Tags.Clear();
-            TotalIssues = "0";
-            OwnedIssues = "0";
-            MissingIssues = "0";
+            TotalCount = 0;
+            OwnedCount = 0;
+            MissingCount = 0;
+            ReadCount = 0;
+            ContinueTarget = null;
+            ContinueLabel = string.Empty;
         }
 
         RefreshSidebar();
@@ -345,6 +467,78 @@ public partial class ReadingScreenViewModel : ViewModelBase
         item.Notes = row.Notes;
         list.UpdatedAt = DateTime.UtcNow;
         context.SaveChanges();
+    }
+
+    /// <summary>
+    /// "Continue" points at the first owned, not-yet-read item in reading order. If everything owned
+    /// is read, it becomes a "re-read from start" pointing at the first owned item. If nothing is
+    /// owned, there's no target and the button hides.
+    /// </summary>
+    private void RecomputeContinueTarget(IReadOnlyList<ReadingListItemRowViewModel> allRows)
+    {
+        foreach (var row in allRows)
+        {
+            row.IsNextUp = false;
+        }
+
+        var target = allRows.FirstOrDefault(r => r.IsOwned && !r.IsRead);
+        if (target is not null)
+        {
+            ContinueLabel = target.IsInProgress ? $"Resume — {target.Number}"
+                : ReadCount == 0 ? "Start reading"
+                : $"Continue — {target.Number}";
+        }
+        else
+        {
+            target = allRows.FirstOrDefault(r => r.IsOwned);
+            ContinueLabel = target is null ? string.Empty : "Re-read from start";
+        }
+
+        if (target is not null)
+        {
+            target.IsNextUp = true;
+        }
+
+        ContinueTarget = target;
+    }
+
+    /// <summary>
+    /// Manual mark-read / mark-unread for one row (docs/superpowers/specs/2026-08-23-mark-as-read-
+    /// design.md) - flips <see cref="Issue.LastPageRead"/> via <see cref="IssueReadStateResolver"/>
+    /// then reloads so progress + the Continue target recompute. No-ops for an unscanned issue with
+    /// no <see cref="Issue.PageCount"/>, same as every other mark-as-read surface in the app.
+    /// </summary>
+    private void ToggleReadRow(ReadingListItemRowViewModel row)
+    {
+        if (row.Item.Issue is null)
+        {
+            return;
+        }
+
+        using (var context = PaperbunkrDb.CreateContext())
+        {
+            var issue = context.Issues.Find(row.Item.Issue.Id);
+            if (issue is null)
+            {
+                return;
+            }
+
+            if (row.IsRead)
+            {
+                IssueReadStateResolver.MarkAsUnread(issue);
+            }
+            else
+            {
+                IssueReadStateResolver.MarkAsRead(issue);
+            }
+
+            context.SaveChanges();
+        }
+
+        if (_activeReadingListId is int listId)
+        {
+            LoadReadingList(listId);
+        }
     }
 
     [RelayCommand]
@@ -583,12 +777,23 @@ public partial class ReadingScreenViewModel : ViewModelBase
         SearchQuery = string.Empty;
     }
 
+    /// <summary>
+    /// Creates a blank list and opens it. <paramref name="name"/> comes from the New Reading List
+    /// dialog; the parameterless command keeps working for tests and any legacy caller.
+    /// </summary>
     [RelayCommand]
-    private void CreateNew()
+    private void CreateNew(string? name = null)
     {
         using var context = PaperbunkrDb.CreateContext();
         var now = DateTime.UtcNow;
-        var list = new ReadingList { Name = "New Reading List", SortOrder = context.ReadingLists.Count(), Type = ReadingListType.User, CreatedAt = now, UpdatedAt = now };
+        var list = new ReadingList
+        {
+            Name = string.IsNullOrWhiteSpace(name) ? "New Reading List" : name.Trim(),
+            SortOrder = context.ReadingLists.Count(),
+            Type = ReadingListType.User,
+            CreatedAt = now,
+            UpdatedAt = now,
+        };
         context.ReadingLists.Add(list);
         context.SaveChanges();
         LoadReadingList(list.Id);

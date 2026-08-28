@@ -183,14 +183,91 @@ public partial class PreferencesScreenViewModel : ViewModelBase
 #endif
 
     [ObservableProperty]
-    private string _activeTab = "appearance";
+    private PreferencesSection _activeSection = PreferencesSection.General;
 
-    public bool IsAppearanceTab => ActiveTab == "appearance";
-    public bool IsBehaviorTab => ActiveTab == "behavior";
-    public bool IsLibrariesTab => ActiveTab == "libraries";
-    public bool IsReaderTab => ActiveTab == "reader";
-    public bool IsAdvancedTab => ActiveTab == "advanced";
-    public bool IsPluginsTab => ActiveTab == "plugins";
+    public bool IsGeneralSection => ActiveSection == PreferencesSection.General;
+    public bool IsAppearanceSection => ActiveSection == PreferencesSection.Appearance;
+    public bool IsLibrarySection => ActiveSection == PreferencesSection.Library;
+    public bool IsReaderSection => ActiveSection == PreferencesSection.Reader;
+    public bool IsKeyboardShortcutsSection => ActiveSection == PreferencesSection.KeyboardShortcuts;
+    public bool IsConnectionsSection => ActiveSection == PreferencesSection.Connections;
+    public bool IsPluginsSection => ActiveSection == PreferencesSection.Plugins;
+    public bool IsAdvancedSection => ActiveSection == PreferencesSection.Advanced;
+
+    /// <summary>Sidebar order for the shell (docs/superpowers/specs/2026-08-28-preferences-rework-design.md).</summary>
+    public static IReadOnlyList<PreferencesSection> Sections => PreferencesSectionMeta.Order;
+
+    [ObservableProperty]
+    private string _searchQuery = string.Empty;
+
+    /// <summary>Group-card hits for the current <see cref="SearchQuery"/> - see <see cref="PreferenceIndex"/>.</summary>
+    public ObservableCollection<PreferenceSearchResultViewModel> SearchResults { get; } = new();
+
+    public bool IsSearching => !string.IsNullOrWhiteSpace(SearchQuery);
+
+    /// <summary>True while a search is active but nothing matched - drives the sidebar's empty note.</summary>
+    public bool NoSearchResults => IsSearching && SearchResults.Count == 0;
+
+    /// <summary>Raised when a search result is opened - the shell scrolls the group with this anchor
+    /// <c>Tag</c> into view and pulses it. Argument is <see cref="PreferenceIndexEntry.AnchorKey"/>.</summary>
+    public event Action<string>? ScrollToAnchorRequested;
+
+    partial void OnSearchQueryChanged(string value)
+    {
+        OnPropertyChanged(nameof(IsSearching));
+
+        SearchResults.Clear();
+        string q = value?.Trim() ?? string.Empty;
+        if (q.Length > 0)
+        {
+            foreach (var entry in PreferenceIndex.Entries)
+            {
+                if (MatchesSearch(entry, q))
+                {
+                    SearchResults.Add(new PreferenceSearchResultViewModel(entry));
+                }
+            }
+        }
+
+        OnPropertyChanged(nameof(NoSearchResults));
+    }
+
+    private static bool MatchesSearch(PreferenceIndexEntry entry, string query)
+    {
+        const StringComparison ci = StringComparison.OrdinalIgnoreCase;
+        if (PreferencesSectionMeta.Label(entry.Section).Contains(query, ci)
+            || entry.GroupTitle.Contains(query, ci)
+            || entry.Title.Contains(query, ci))
+        {
+            return true;
+        }
+
+        foreach (string keyword in entry.Keywords)
+        {
+            if (keyword.Contains(query, ci))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    [RelayCommand]
+    private void OpenSearchResult(PreferenceSearchResultViewModel? result)
+    {
+        if (result is null)
+        {
+            return;
+        }
+
+        ActiveSection = result.Section;
+        SearchQuery = string.Empty;
+        ScrollToAnchorRequested?.Invoke(result.AnchorKey);
+    }
+
+    [RelayCommand]
+    private void ClearSearch() => SearchQuery = string.Empty;
 
     [ObservableProperty]
     private string? _selectedFontFamily;
@@ -323,33 +400,41 @@ public partial class PreferencesScreenViewModel : ViewModelBase
 
     partial void OnInstallSkinErrorChanged(string? value) => OnPropertyChanged(nameof(HasInstallSkinError));
 
-    partial void OnActiveTabChanged(string value)
+    partial void OnActiveSectionChanged(PreferencesSection value)
     {
-        OnPropertyChanged(nameof(IsAppearanceTab));
-        OnPropertyChanged(nameof(IsBehaviorTab));
-        OnPropertyChanged(nameof(IsLibrariesTab));
-        OnPropertyChanged(nameof(IsReaderTab));
-        OnPropertyChanged(nameof(IsAdvancedTab));
-        OnPropertyChanged(nameof(IsPluginsTab));
+        OnPropertyChanged(nameof(IsGeneralSection));
+        OnPropertyChanged(nameof(IsAppearanceSection));
+        OnPropertyChanged(nameof(IsLibrarySection));
+        OnPropertyChanged(nameof(IsReaderSection));
+        OnPropertyChanged(nameof(IsKeyboardShortcutsSection));
+        OnPropertyChanged(nameof(IsConnectionsSection));
+        OnPropertyChanged(nameof(IsPluginsSection));
+        OnPropertyChanged(nameof(IsAdvancedSection));
     }
 
     [RelayCommand]
-    private void GoAppearance() => ActiveTab = "appearance";
+    private void GoGeneral() => ActiveSection = PreferencesSection.General;
 
     [RelayCommand]
-    private void GoBehavior() => ActiveTab = "behavior";
+    private void GoAppearance() => ActiveSection = PreferencesSection.Appearance;
 
     [RelayCommand]
-    private void GoLibraries() => ActiveTab = "libraries";
+    private void GoLibrary() => ActiveSection = PreferencesSection.Library;
 
     [RelayCommand]
-    private void GoReader() => ActiveTab = "reader";
+    private void GoReader() => ActiveSection = PreferencesSection.Reader;
 
     [RelayCommand]
-    private void GoAdvanced() => ActiveTab = "advanced";
+    private void GoKeyboardShortcuts() => ActiveSection = PreferencesSection.KeyboardShortcuts;
 
     [RelayCommand]
-    private void GoPlugins() => ActiveTab = "plugins";
+    private void GoConnections() => ActiveSection = PreferencesSection.Connections;
+
+    [RelayCommand]
+    private void GoPlugins() => ActiveSection = PreferencesSection.Plugins;
+
+    [RelayCommand]
+    private void GoAdvanced() => ActiveSection = PreferencesSection.Advanced;
 
     /// <summary>Lazily loads skins/fonts the first time the screen is navigated to, same pattern as SmartScreenViewModel/ReadingScreenViewModel's EnsureListLoaded.</summary>
     public void EnsureLoaded()

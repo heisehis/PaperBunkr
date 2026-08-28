@@ -1,0 +1,17 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Paperbunkr.App.ViewModels"
+             xmlns:views="using:Paperbunkr.App.Views"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="640" d:DesignHeight="480"
+             x:Class="Paperbunkr.App.Views.Preferences.PluginsSection"
+             x:DataType="vm:PreferencesScreenViewModel">
+
+    <ScrollViewer>
+        <StackPanel Margin="28,20,28,40" Spacing="20">
+            <TextBlock Classes="pbTextHeading" Text="Plugins" />
+            <views:PluginScreen DataContext="{Binding Plugin}" />
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

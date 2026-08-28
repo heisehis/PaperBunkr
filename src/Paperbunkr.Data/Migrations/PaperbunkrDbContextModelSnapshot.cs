@@ -530,6 +530,45 @@ namespace Paperbunkr.Data.Migrations
                     b.ToTable("Categories");
                 });
 
+            modelBuilder.Entity("Paperbunkr.Data.Entities.Character", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Name");
+
+                    b.ToTable("Characters");
+                });
+
+            modelBuilder.Entity("Paperbunkr.Data.Entities.CharacterAppearance", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("CharacterId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("IssueId")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("IssueId");
+
+                    b.HasIndex("CharacterId", "IssueId")
+                        .IsUnique();
+
+                    b.ToTable("CharacterAppearances");
+                });
+
             modelBuilder.Entity("Paperbunkr.Data.Entities.Continuity", b =>
                 {
                     b.Property<int>("Id")
@@ -586,6 +625,96 @@ namespace Paperbunkr.Data.Migrations
                     b.HasIndex("StoryEventId");
 
                     b.ToTable("EventMemberships");
+                });
+
+            modelBuilder.Entity("Paperbunkr.Data.Entities.EventRelation", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Notes")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("RelationType")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("SourceEventId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("TargetEventId")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SourceEventId");
+
+                    b.HasIndex("TargetEventId");
+
+                    b.ToTable("EventRelations");
+                });
+
+            modelBuilder.Entity("Paperbunkr.Data.Entities.EventRelationEvidence", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<decimal>("Confidence")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("EventRelationId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Provider")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ProviderRelationType")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ProviderSourceId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("RetrievedAt")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EventRelationId");
+
+                    b.ToTable("EventRelationEvidence");
+                });
+
+            modelBuilder.Entity("Paperbunkr.Data.Entities.EventSuggestionDismissal", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("DismissedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("IssueId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("StoryEventId")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("IssueId");
+
+                    b.HasIndex("StoryEventId", "IssueId")
+                        .IsUnique();
+
+                    b.ToTable("EventSuggestionDismissals");
                 });
 
             modelBuilder.Entity("Paperbunkr.Data.Entities.ExternalMediaId", b =>
@@ -1705,6 +1834,25 @@ namespace Paperbunkr.Data.Migrations
                     b.Navigation("Book");
                 });
 
+            modelBuilder.Entity("Paperbunkr.Data.Entities.CharacterAppearance", b =>
+                {
+                    b.HasOne("Paperbunkr.Data.Entities.Character", "Character")
+                        .WithMany("Appearances")
+                        .HasForeignKey("CharacterId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Paperbunkr.Data.Entities.Issue", "Issue")
+                        .WithMany()
+                        .HasForeignKey("IssueId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Character");
+
+                    b.Navigation("Issue");
+                });
+
             modelBuilder.Entity("Paperbunkr.Data.Entities.EventMembership", b =>
                 {
                     b.HasOne("Paperbunkr.Data.Entities.Issue", "Issue")
@@ -1715,6 +1863,55 @@ namespace Paperbunkr.Data.Migrations
 
                     b.HasOne("Paperbunkr.Data.Entities.StoryEvent", "StoryEvent")
                         .WithMany("Members")
+                        .HasForeignKey("StoryEventId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Issue");
+
+                    b.Navigation("StoryEvent");
+                });
+
+            modelBuilder.Entity("Paperbunkr.Data.Entities.EventRelation", b =>
+                {
+                    b.HasOne("Paperbunkr.Data.Entities.StoryEvent", "SourceEvent")
+                        .WithMany()
+                        .HasForeignKey("SourceEventId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Paperbunkr.Data.Entities.StoryEvent", "TargetEvent")
+                        .WithMany()
+                        .HasForeignKey("TargetEventId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("SourceEvent");
+
+                    b.Navigation("TargetEvent");
+                });
+
+            modelBuilder.Entity("Paperbunkr.Data.Entities.EventRelationEvidence", b =>
+                {
+                    b.HasOne("Paperbunkr.Data.Entities.EventRelation", "EventRelation")
+                        .WithMany("Evidence")
+                        .HasForeignKey("EventRelationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("EventRelation");
+                });
+
+            modelBuilder.Entity("Paperbunkr.Data.Entities.EventSuggestionDismissal", b =>
+                {
+                    b.HasOne("Paperbunkr.Data.Entities.Issue", "Issue")
+                        .WithMany()
+                        .HasForeignKey("IssueId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Paperbunkr.Data.Entities.StoryEvent", "StoryEvent")
+                        .WithMany()
                         .HasForeignKey("StoryEventId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
@@ -1974,6 +2171,16 @@ namespace Paperbunkr.Data.Migrations
             modelBuilder.Entity("Paperbunkr.Data.Entities.BookSeries", b =>
                 {
                     b.Navigation("Books");
+                });
+
+            modelBuilder.Entity("Paperbunkr.Data.Entities.Character", b =>
+                {
+                    b.Navigation("Appearances");
+                });
+
+            modelBuilder.Entity("Paperbunkr.Data.Entities.EventRelation", b =>
+                {
+                    b.Navigation("Evidence");
                 });
 
             modelBuilder.Entity("Paperbunkr.Data.Entities.Issue", b =>

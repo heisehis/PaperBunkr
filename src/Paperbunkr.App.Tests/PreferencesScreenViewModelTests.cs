@@ -114,13 +114,93 @@ public class PreferencesScreenViewModelTests : IDisposable
     }
 
     [Fact]
-    public void GoAppearance_SetsActiveTabFlag()
+    public void GoAppearance_SetsActiveSectionFlag()
     {
         var vm = CreateViewModel();
 
         vm.GoAppearanceCommand.Execute(null);
 
-        Assert.True(vm.IsAppearanceTab);
+        Assert.True(vm.IsAppearanceSection);
+    }
+
+    [Fact]
+    public void GoGeneral_SetsActiveSectionFlag()
+    {
+        var vm = CreateViewModel();
+        vm.GoAdvancedCommand.Execute(null);
+
+        vm.GoGeneralCommand.Execute(null);
+
+        Assert.True(vm.IsGeneralSection);
+        Assert.False(vm.IsAdvancedSection);
+    }
+
+    [Fact]
+    public void GoKeyboardShortcuts_SetsActiveSectionFlag()
+    {
+        var vm = CreateViewModel();
+
+        vm.GoKeyboardShortcutsCommand.Execute(null);
+
+        Assert.True(vm.IsKeyboardShortcutsSection);
+        Assert.False(vm.IsGeneralSection);
+    }
+
+    [Fact]
+    public void GoConnections_SetsActiveSectionFlag()
+    {
+        var vm = CreateViewModel();
+
+        vm.GoConnectionsCommand.Execute(null);
+
+        Assert.True(vm.IsConnectionsSection);
+        Assert.False(vm.IsGeneralSection);
+    }
+
+    [Fact]
+    public void SearchQuery_FiltersResults_AndOpenResultNavigatesAndPulses()
+    {
+        var vm = CreateViewModel();
+        string? pulsedAnchor = null;
+        vm.ScrollToAnchorRequested += a => pulsedAnchor = a;
+
+        vm.SearchQuery = "double page";
+
+        Assert.True(vm.IsSearching);
+        Assert.Contains(vm.SearchResults, r => r.AnchorKey == "reader.display");
+
+        var result = vm.SearchResults.First(r => r.AnchorKey == "reader.display");
+        vm.OpenSearchResultCommand.Execute(result);
+
+        Assert.True(vm.IsReaderSection);
+        Assert.Equal(string.Empty, vm.SearchQuery);
+        Assert.False(vm.IsSearching);
+        Assert.Equal("reader.display", pulsedAnchor);
+    }
+
+    [Fact]
+    public void SearchQuery_Empty_ClearsResults()
+    {
+        var vm = CreateViewModel();
+        vm.SearchQuery = "anilist";
+        Assert.NotEmpty(vm.SearchResults);
+
+        vm.SearchQuery = "   ";
+
+        Assert.Empty(vm.SearchResults);
+        Assert.False(vm.IsSearching);
+        Assert.False(vm.NoSearchResults);
+    }
+
+    [Fact]
+    public void SearchQuery_NoMatch_SetsNoSearchResults()
+    {
+        var vm = CreateViewModel();
+
+        vm.SearchQuery = "zzzznotasetting";
+
+        Assert.Empty(vm.SearchResults);
+        Assert.True(vm.NoSearchResults);
     }
 
     [Fact]
@@ -179,14 +259,15 @@ public class PreferencesScreenViewModelTests : IDisposable
     }
 
     [Fact]
-    public void GoBehavior_SetsActiveTabFlag()
+    public void GoGeneral_FromAppearance_SetsActiveSectionFlag()
     {
         var vm = CreateViewModel();
+        vm.GoAppearanceCommand.Execute(null);
 
-        vm.GoBehaviorCommand.Execute(null);
+        vm.GoGeneralCommand.Execute(null);
 
-        Assert.True(vm.IsBehaviorTab);
-        Assert.False(vm.IsAppearanceTab);
+        Assert.True(vm.IsGeneralSection);
+        Assert.False(vm.IsAppearanceSection);
     }
 
     [Fact]
@@ -223,14 +304,14 @@ public class PreferencesScreenViewModelTests : IDisposable
     }
 
     [Fact]
-    public void GoReader_SetsActiveTabFlag()
+    public void GoReader_SetsActiveSectionFlag()
     {
         var vm = CreateViewModel();
 
         vm.GoReaderCommand.Execute(null);
 
-        Assert.True(vm.IsReaderTab);
-        Assert.False(vm.IsAppearanceTab);
+        Assert.True(vm.IsReaderSection);
+        Assert.False(vm.IsGeneralSection);
     }
 
     [Fact]
@@ -659,13 +740,13 @@ public class PreferencesScreenViewModelTests : IDisposable
     }
 
     [Fact]
-    public void GoLibraries_SetsActiveTabFlag()
+    public void GoLibrary_SetsActiveSectionFlag()
     {
         var vm = CreateViewModel();
 
-        vm.GoLibrariesCommand.Execute(null);
+        vm.GoLibraryCommand.Execute(null);
 
-        Assert.True(vm.IsLibrariesTab);
+        Assert.True(vm.IsLibrarySection);
     }
 
     [Fact]
@@ -911,25 +992,25 @@ public class PreferencesScreenViewModelTests : IDisposable
     }
 
     [Fact]
-    public void GoAdvanced_SetsActiveTabFlag()
+    public void GoAdvanced_SetsActiveSectionFlag()
     {
         var vm = CreateViewModel();
 
         vm.GoAdvancedCommand.Execute(null);
 
-        Assert.True(vm.IsAdvancedTab);
+        Assert.True(vm.IsAdvancedSection);
     }
 
-    /// <summary>docs/superpowers/specs/2026-08-24-navigation-shell-motion-system-design.md - Plugins moved from a standalone rail screen into this tab.</summary>
+    /// <summary>docs/superpowers/specs/2026-08-24-navigation-shell-motion-system-design.md - Plugins moved from a standalone rail screen into this section.</summary>
     [Fact]
-    public void GoPlugins_SetsActiveTabFlag()
+    public void GoPlugins_SetsActiveSectionFlag()
     {
         var vm = CreateViewModel();
 
         vm.GoPluginsCommand.Execute(null);
 
-        Assert.True(vm.IsPluginsTab);
-        Assert.False(vm.IsAdvancedTab);
+        Assert.True(vm.IsPluginsSection);
+        Assert.False(vm.IsAdvancedSection);
     }
 
     [Fact]

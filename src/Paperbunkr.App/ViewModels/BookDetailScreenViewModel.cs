@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
+using Avalonia;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -28,7 +29,7 @@ namespace Paperbunkr.App.ViewModels;
 /// <see cref="LoadBook"/> to fill the chapter list and resolve bookmark chapter titles, then
 /// disposes the source immediately - only row snapshots are kept, never a live handle.
 /// </summary>
-public partial class BookDetailScreenViewModel : ViewModelBase
+public partial class BookDetailScreenViewModel : ViewModelBase, IDetailHeaderSource
 {
     private const int SynopsisCollapseThreshold = 280;
 
@@ -56,6 +57,45 @@ public partial class BookDetailScreenViewModel : ViewModelBase
         _goBulkEdit = goBulkEdit ?? (_ => { });
         _goEditSeries = goEditSeries ?? (_ => { });
         CoverBrush = SeriesCardSample.CoverBrushFor(string.Empty);
+        Band = new DetailBandViewModel();
+    }
+
+    /// <summary>"Lite" band - inline meta + synopsis only, no metadata groups (books carry none).</summary>
+    public DetailBandViewModel Band { get; }
+
+    // --- IDetailHeaderSource ---
+
+    [ObservableProperty]
+    private Bitmap? _backdropImage;
+
+    [ObservableProperty]
+    private string _metaLine = string.Empty;
+
+    public string HeaderTitle => IsSeriesMode ? SeriesName : Title;
+    string? IDetailHeaderSource.SecondaryTitle => null;
+    DetailHeroProgress? IDetailHeaderSource.TrackerProgress => null;
+
+    partial void OnTitleChanged(string value) => OnPropertyChanged(nameof(HeaderTitle));
+    partial void OnSeriesNameChanged(string value) => OnPropertyChanged(nameof(HeaderTitle));
+
+    public IReadOnlyList<DetailHeroAction> Actions => IsSeriesMode
+        ? new[]
+        {
+            new DetailHeroAction("Edit series", EditSeriesCommand),
+            new DetailHeroAction("Edit all books", EditAllSeriesBooksCommand),
+        }
+        : new[]
+        {
+            new DetailHeroAction(ContinueLabel, ContinueCommand, IsPrimary: true),
+            new DetailHeroAction("Edit", EditCommand),
+            new DetailHeroAction("Reveal in Explorer", RevealInExplorerCommand),
+        };
+
+    private void RaiseHeaderChanged()
+    {
+        OnPropertyChanged(nameof(Actions));
+        OnPropertyChanged(nameof(HeaderTitle));
+        OnPropertyChanged(nameof(MetaLine));
     }
 
     public ObservableCollection<BookChapterSummary> Chapters { get; } = new();
@@ -76,6 +116,7 @@ public partial class BookDetailScreenViewModel : ViewModelBase
     {
         OnPropertyChanged(nameof(IsBookMode));
         OnPropertyChanged(nameof(IsSeriesMode));
+        RaiseHeaderChanged();
     }
 
     // --- book mode: header / meta ---
@@ -211,6 +252,7 @@ public partial class BookDetailScreenViewModel : ViewModelBase
         FormatBadge = book.Format == BookFormat.Epub ? "EPUB" : "PDF";
         CoverBrush = SeriesCardSample.CoverBrushFor(book.Title);
         CoverImage = BookCoverImageCache.Get(bookId);
+        BackdropImage = CoverImage is not null ? BackdropBlurRenderer.Render(CoverImage, new PixelSize(1600, 680)) : null;
 
         HasSeries = book.BookSeries is not null;
         SeriesLinkLabel = book.BookSeries is null ? string.Empty : $"Part of {book.BookSeries.Name} ▸";
@@ -249,6 +291,19 @@ public partial class BookDetailScreenViewModel : ViewModelBase
         Summary = string.IsNullOrWhiteSpace(book.Summary) ? "No summary available." : book.Summary!;
         IsSynopsisExpanded = false;
         IsSynopsisToggleVisible = !string.IsNullOrWhiteSpace(book.Summary) && book.Summary!.Length > SynopsisCollapseThreshold;
+
+        MetaLine = string.Join("  ·  ", new[]
+        {
+            Author,
+            FormatBadge,
+            book.Finished ? "FINISHED" : string.Empty,
+        }.Where(s => !string.IsNullOrWhiteSpace(s)));
+        Band.Summary = Summary;
+        Band.IsSynopsisExpanded = false;
+        Band.StatusText = FormatBadge;
+        Band.PublisherText = Author;
+        Band.YearText = book.PublishedDate is { } pd ? pd.Year.ToString() : string.Empty;
+        RaiseHeaderChanged();
 
         BackLabel = _cameFromSeriesId is not null && book.BookSeries is not null
             ? $"← {book.BookSeries.Name}"
@@ -338,6 +393,13 @@ public partial class BookDetailScreenViewModel : ViewModelBase
         SeriesAuthor = series.Author ?? string.Empty;
         HasSeriesAuthor = !string.IsNullOrWhiteSpace(series.Author);
         SeriesBookCountLabel = series.Books.Count == 1 ? "1 book" : $"{series.Books.Count} books";
+
+        var representative = series.Books.OrderBy(b => b.Title, StringComparer.OrdinalIgnoreCase).FirstOrDefault();
+        CoverBrush = SeriesCardSample.CoverBrushFor(series.Name);
+        CoverImage = representative is not null ? BookCoverImageCache.Get(representative.Id) : null;
+        BackdropImage = CoverImage is not null ? BackdropBlurRenderer.Render(CoverImage, new PixelSize(1600, 680)) : null;
+        MetaLine = string.Join("  ·  ", new[] { SeriesAuthor, SeriesBookCountLabel }.Where(s => !string.IsNullOrWhiteSpace(s)));
+        Band.Summary = string.Empty;
 
         // EF relationship fixup already back-populates each book.BookSeries from the Include above,
         // so BookCardSample.FromBook's series line resolves without a second query.

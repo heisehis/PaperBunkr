@@ -18,6 +18,13 @@ public enum SmartListField
     SeriesComplete,
     ReadingStatus,
 
+    /// <summary>
+    /// The <c>Continuity</c> rows the issue's series belongs to, joined as text (docs/superpowers/
+    /// specs/2026-08-27-metadata-model-phase4f-continuity-browse-design.md's deferred continuity-
+    /// scoped Smart Lists). Not in CE - Continuity is a Paperbunkr-original grouping.
+    /// </summary>
+    Continuity,
+
     // ComicInfo text fields
     Title,
     Number,

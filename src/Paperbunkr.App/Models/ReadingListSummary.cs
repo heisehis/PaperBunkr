@@ -12,6 +12,15 @@ public class ReadingListSummary
 
     public int TotalCount { get; init; }
 
+    /// <summary>First item's cover, for the sidebar thumbnail (docs/superpowers/specs/2026-08-28-reading-lists-screen-redesign-design.md). Null → placeholder tile.</summary>
+    public int? CoverIssueId { get; init; }
+
+    /// <summary>Items whose issue is read (<see cref="Paperbunkr.Data.Metadata.IssueMetadataExtensions.HasBeenRead"/>).</summary>
+    public int ReadCount { get; init; }
+
+    /// <summary>0..1 for the sidebar progress bar (name + thin bar only — design v2 sidebar option A).</summary>
+    public double ProgressFraction => TotalCount == 0 ? 0 : (double)ReadCount / TotalCount;
+
     public bool IsActive { get; init; }
 
     /// <summary>Deletes the whole list (docs/superpowers/specs/2026-08-22-delete-functionality-design.md) - not to be confused with removing one item from within an open list.</summary>

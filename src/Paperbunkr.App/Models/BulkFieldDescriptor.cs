@@ -31,7 +31,8 @@ public sealed record BulkFieldDescriptor(
     bool IsListField,
     Func<Issue, string?> Get,
     Action<Issue, string?> Set,
-    IReadOnlyList<string>? Options = null);
+    IReadOnlyList<string>? Options = null,
+    IReadOnlyList<string>? Autocomplete = null);
 
 /// <summary>
 /// The full bulk-editable field set, verified field-by-field against CE's real
@@ -67,8 +68,8 @@ public static class BulkFieldRegistry
         All.FirstOrDefault(f => f.Label == label)
         ?? throw new ArgumentException($"No BulkFieldDescriptor with label '{label}'.", nameof(label));
 
-    private static BulkFieldDescriptor Text(string label, string group, Func<Issue, string?> get, Action<Issue, string?> set, bool isList = false) =>
-        new(label, group, FieldKind.Text, isList, get, (i, v) => set(i, Norm(v)));
+    private static BulkFieldDescriptor Text(string label, string group, Func<Issue, string?> get, Action<Issue, string?> set, bool isList = false, IReadOnlyList<string>? autocomplete = null) =>
+        new(label, group, FieldKind.Text, isList, get, (i, v) => set(i, Norm(v)), Autocomplete: autocomplete);
 
     private static BulkFieldDescriptor Numeric(string label, string group, Func<Issue, int?> get, Action<Issue, int?> set) =>
         new(label, group, FieldKind.Text, IsListField: false, i => get(i)?.ToString(), (i, v) => set(i, ParseInt(v)));
@@ -122,7 +123,13 @@ public static class BulkFieldRegistry
             Options: Enum.GetNames<ReadingStatus>()),
         Text("Publisher", Main, i => i.Publisher, (i, v) => i.Publisher = v),
         Text("Imprint", Main, i => i.Imprint, (i, v) => i.Imprint = v),
-        Text("Format", Main, i => i.Format, (i, v) => i.Format = v),
+        // Autocomplete seeded with CE's 16 shipped [Book Formats] defaults (docs/superpowers/specs/
+        // 2026-08-27-metadata-model-phase4e-format-signal-suggestions-design.md) - still free text.
+        Text("Format", Main, i => i.Format, (i, v) => i.Format = v, autocomplete: FormatSignalCatalog.CeDefaultFormats),
+        // Book Age - free text (docs/superpowers/specs/2026-08-27-metadata-model-phase4g-age-
+        // progression-design.md), autocomplete seeded with CE's five [Book Ages] defaults.
+        Text("Book Age", Main, i => i.BookAge, (i, v) => i.BookAge = v,
+            autocomplete: Enum.GetValues<ComicAge>().Select(a => ComicAgeCatalog.All[a].CeListLabel).ToArray()),
         Text("Age Rating", Main, i => i.AgeRating, (i, v) => i.AgeRating = v),
         Text("Language (ISO)", Main, i => i.LanguageISO, (i, v) => i.LanguageISO = v),
         new("Color Mode", Main, FieldKind.Enum, IsListField: false,

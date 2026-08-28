@@ -1,0 +1,120 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Paperbunkr.App.ViewModels"
+             xmlns:models="using:Paperbunkr.App.Models"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="640" d:DesignHeight="900"
+             x:Class="Paperbunkr.App.Views.Preferences.AdvancedSection"
+             x:DataType="vm:PreferencesScreenViewModel">
+
+    <ScrollViewer>
+        <StackPanel Margin="28,20,28,40" Spacing="20">
+            <TextBlock Classes="pbTextHeading" Text="Advanced" />
+
+            <!-- Rendering -->
+            <Border Classes="groupBox" Tag="advanced.rendering">
+                <StackPanel>
+                    <Border Classes="groupHeader">
+                        <TextBlock Text="Rendering" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
+                    </Border>
+                    <StackPanel Margin="14" Spacing="12">
+                        <Grid ColumnDefinitions="Auto,Auto" ColumnSpacing="10">
+                            <TextBlock Grid.Column="0" Text="Graphics backend" FontSize="13" VerticalAlignment="Center"
+                                       Foreground="{DynamicResource PbTextBrush}" />
+                            <ComboBox Grid.Column="1" ItemsSource="{x:Static vm:PreferencesScreenViewModel.RenderBackendOptions}"
+                                      SelectedItem="{Binding RenderingBackend}" Width="150" />
+                        </Grid>
+                        <TextBlock Text="Auto uses the GPU with a software fallback (recommended). Gpu forces the GPU with no fallback — the app may fail to start on a broken driver. Software forces the CPU renderer, for broken GPUs, remote desktop, or VMs."
+                                   FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" Margin="0,-6,0,0" />
+
+                        <CheckBox IsChecked="{Binding PreferNativeOpenGl}" Foreground="{DynamicResource PbTextBrush}" FontSize="13"
+                                  Content="Prefer native OpenGL over ANGLE" />
+                        <TextBlock Text="Only try this if the GPU renderer misbehaves — ANGLE (Direct3D) is the better default on Windows."
+                                   FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" Margin="0,-6,0,0" />
+
+                        <TextBlock Text="Changes take effect after restarting Paperbunkr." FontSize="11.5"
+                                   Foreground="{DynamicResource PbTextFaintBrush}" FontStyle="Italic" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
+            <!-- File Association -->
+            <Border Classes="groupBox" Tag="advanced.fileAssociation">
+                <StackPanel>
+                    <Border Classes="groupHeader">
+                        <TextBlock Text="File Association" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
+                    </Border>
+                    <ItemsControl x:Name="FileAssociationsList" ItemsSource="{Binding FileAssociations}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="models:FileAssociationSummary">
+                                <CheckBox IsChecked="{Binding IsAssociated, Mode=OneWay}"
+                                          Command="{Binding #FileAssociationsList.((vm:PreferencesScreenViewModel)DataContext).ToggleFileAssociationCommand}"
+                                          CommandParameter="{Binding}"
+                                          Padding="14,7" Margin="0">
+                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                        <TextBlock Text="{Binding Name}" FontSize="12.5" Foreground="{DynamicResource PbTextBrush}" />
+                                        <TextBlock Text="{Binding ExtensionList}" FontSize="11" FontFamily="Consolas,monospace"
+                                                   Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" />
+                                    </StackPanel>
+                                </CheckBox>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </Border>
+
+            <!-- Backup Manager -->
+            <Border Classes="groupBox" Tag="advanced.backup">
+                <StackPanel>
+                    <Border Classes="groupHeader">
+                        <TextBlock Text="Backup Manager" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
+                    </Border>
+                    <StackPanel Margin="14" Spacing="10">
+                        <TextBlock Text="Backup Location" FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" />
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <TextBox Text="{Binding BackupLocation}" Width="320" IsReadOnly="True" />
+                            <Button Classes="headerAction ghost" Command="{Binding BrowseBackupLocationCommand}">
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <Path Classes="pbIcon" Width="11" Height="11" Data="{StaticResource PbIconFolderOpen}" />
+                                    <TextBlock Text="Browse…" />
+                                </StackPanel>
+                            </Button>
+                        </StackPanel>
+
+                        <TextBlock Text="Backups to Keep" FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" Margin="0,6,0,0" />
+                        <NumericUpDown Value="{Binding BackupsToKeep}" Minimum="0" Maximum="99" Width="120" HorizontalAlignment="Left" />
+
+                        <Button Classes="headerAction primary" Command="{Binding BackupNowCommand}"
+                                HorizontalAlignment="Left" Margin="0,6,0,0">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <Path Classes="pbIcon" Data="{StaticResource PbIconArchive}" Stroke="{DynamicResource PbBadgeTextBrush}" />
+                                <TextBlock Text="Backup Now" />
+                            </StackPanel>
+                        </Button>
+                        <TextBlock Text="{Binding BackupStatus}" FontSize="12" Foreground="{DynamicResource PbTextFaintBrush}" />
+                    </StackPanel>
+
+                    <ItemsControl ItemsSource="{Binding Backups}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:BackupRowViewModel">
+                                <Border Classes="skinRow">
+                                    <Grid ColumnDefinitions="*,Auto" Margin="14,10">
+                                        <TextBlock Grid.Column="0" Text="{Binding FileName}" FontSize="13" FontFamily="Consolas,monospace"
+                                                   Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                                        <Button Grid.Column="1" Classes="headerAction ghost" Command="{Binding RestoreCommand}">
+                                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                                <Path Classes="pbIcon" Width="11" Height="11" Data="{StaticResource PbIconUndo}" />
+                                                <TextBlock Text="{Binding RestoreLabel}" />
+                                            </StackPanel>
+                                        </Button>
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </Border>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

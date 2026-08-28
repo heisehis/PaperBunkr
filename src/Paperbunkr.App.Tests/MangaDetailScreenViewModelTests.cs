@@ -325,4 +325,76 @@ public class MangaDetailScreenViewModelTests : IDisposable
         Assert.Null(exception);
         Assert.False(vm.Chapters.Single(c => c.DisplayNumber == "#3").IsRead);
     }
+
+    // --- Streaming redesign (docs/superpowers/specs/2026-08-28-detail-screens-streaming-redesign-design.md) ---
+
+    [Fact]
+    public void LoadSeries_SecondaryTitle_UsesNativeOrRomanizedAltTitle_NotThePrimaryName()
+    {
+        using (var context = new PaperbunkrDbContext(new DbContextOptionsBuilder<PaperbunkrDbContext>().UseSqlite($"Data Source={_dbPath}").Options))
+        {
+            var series = context.Series.Include(s => s.Titles).Single(s => s.Id == _seriesId);
+            series.Titles.Add(new SeriesTitle { Value = "テストマンガ", Type = SeriesTitleType.Native });
+            series.Titles.Add(new SeriesTitle { Value = "Test Manga", Type = SeriesTitleType.Romanized }); // equals primary name - skipped
+            context.SaveChanges();
+        }
+
+        var vm = CreateViewModel();
+        vm.LoadSeries(_seriesId);
+
+        Assert.Equal("テストマンガ", ((IDetailHeaderSource)vm).SecondaryTitle);
+    }
+
+    [Fact]
+    public void LoadSeries_NoAltTitles_SecondaryTitleIsNull()
+    {
+        var vm = CreateViewModel();
+        vm.LoadSeries(_seriesId);
+        Assert.Null(((IDetailHeaderSource)vm).SecondaryTitle);
+    }
+
+    [Fact]
+    public void LoadSeries_TrackerProgressIsNull()
+    {
+        var vm = CreateViewModel();
+        vm.LoadSeries(_seriesId);
+        Assert.Null(((IDetailHeaderSource)vm).TrackerProgress);
+    }
+
+    [Fact]
+    public void ChapterGroups_GroupsByVolume_NoVolumeBucketLast()
+    {
+        using (var context = new PaperbunkrDbContext(new DbContextOptionsBuilder<PaperbunkrDbContext>().UseSqlite($"Data Source={_dbPath}").Options))
+        {
+            context.Issues.Single(i => i.Number == "1").Volume = "1";
+            context.Issues.Single(i => i.Number == "2").Volume = "2";
+            // #3 keeps no volume
+            context.SaveChanges();
+        }
+
+        var vm = CreateViewModel();
+        vm.LoadSeries(_seriesId);
+
+        Assert.Equal(new[] { "Volume 1", "Volume 2", "No volume" }, vm.ChapterGroups.Select(g => g.VolumeLabel));
+        Assert.Equal("#3", vm.ChapterGroups.Last().Chapters.Single().DisplayNumber);
+    }
+
+    [Fact]
+    public void ChapterRow_IsNew_OnlyWhenUnreadAndReleasedWithinTwoWeeks()
+    {
+        using (var context = new PaperbunkrDbContext(new DbContextOptionsBuilder<PaperbunkrDbContext>().UseSqlite($"Data Source={_dbPath}").Options))
+        {
+            context.Issues.Single(i => i.Number == "3").ReleasedTime = DateTime.Now.AddDays(-3);   // unread + recent -> NEW
+            context.Issues.Single(i => i.Number == "2").ReleasedTime = DateTime.Now.AddDays(-40);  // unread + old   -> not NEW
+            context.Issues.Single(i => i.Number == "1").ReleasedTime = DateTime.Now.AddDays(-1);   // read + recent  -> not NEW
+            context.SaveChanges();
+        }
+
+        var vm = CreateViewModel();
+        vm.LoadSeries(_seriesId);
+
+        Assert.True(vm.Chapters.Single(c => c.DisplayNumber == "#3").IsNew);
+        Assert.False(vm.Chapters.Single(c => c.DisplayNumber == "#2").IsNew);
+        Assert.False(vm.Chapters.Single(c => c.DisplayNumber == "#1").IsNew);
+    }
 }

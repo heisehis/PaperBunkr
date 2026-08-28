@@ -15,7 +15,12 @@ public sealed class ChapterRowSample
     public required string DisplayNumber { get; init; }
     public float? NumberSortKey { get; init; }
     public string? Title { get; init; }
+    public string? Volume { get; init; }
     public bool IsRead { get; init; }
+
+    /// <summary>Unread and released within the last 14 days - shows a "NEW" badge in the release feed.</summary>
+    public bool IsNew { get; init; }
+
     public bool IsInProgress { get; init; }
     public double ReadPercentage { get; init; }
     public int BookmarkCount { get; init; }
@@ -25,6 +30,14 @@ public sealed class ChapterRowSample
 
     public bool HasBookmark => BookmarkCount > 0;
     public bool HasScanInformation => !string.IsNullOrWhiteSpace(ScanInformation);
+}
+
+/// <summary>A volume section in the manga release-feed Chapters tab (docs/superpowers/specs/
+/// 2026-08-28-detail-screens-streaming-redesign-design.md).</summary>
+public sealed class ChapterVolumeGroup
+{
+    public required string VolumeLabel { get; init; }
+    public required System.Collections.Generic.IReadOnlyList<ChapterRowSample> Chapters { get; init; }
 }
 
 /// <summary>Session-only filter state for the Chapters tab - not persisted, unlike the Library/

@@ -1,0 +1,83 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!--
+        Shared detail-screen chrome (docs/superpowers/specs/2026-08-28-detail-screens-streaming-
+        redesign-design.md). The tab-strip styles below were previously duplicated verbatim in
+        DetailTabs.axaml and MangaDetailScreen.axaml; lifted here so all three detail screens share
+        one definition. Also carries the DetailBand metadata-group label / "+N more" styles and the
+        cinematic hero action-button styles.
+    -->
+
+    <!-- ============ Tab strip ============ -->
+    <Style Selector="Button.tab">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0,0,0,2" />
+        <Setter Property="BorderBrush" Value="Transparent" />
+        <Setter Property="CornerRadius" Value="0" />
+        <Setter Property="Padding" Value="0,0,0,12" />
+        <Setter Property="FontSize" Value="13" />
+        <Setter Property="FontWeight" Value="Bold" />
+        <Setter Property="Foreground" Value="{DynamicResource PbTextFaintBrush}" />
+        <Setter Property="Cursor" Value="Hand" />
+    </Style>
+    <Style Selector="Button.tab.active">
+        <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource PbTextBrush}" />
+    </Style>
+    <Style Selector="TextBlock.tabCount">
+        <Setter Property="FontFamily" Value="Consolas,monospace" />
+        <Setter Property="FontSize" Value="10.5" />
+        <Setter Property="Foreground" Value="{DynamicResource PbTextFaintBrush}" />
+        <Setter Property="Background" Value="{DynamicResource PbChromeBrush}" />
+        <Setter Property="Padding" Value="6,1" />
+    </Style>
+
+    <!-- ============ Hero action buttons ============ -->
+    <Style Selector="Button.detailAction">
+        <Setter Property="Padding" Value="14,8" />
+        <Setter Property="CornerRadius" Value="5" />
+        <Setter Property="FontSize" Value="12.5" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Cursor" Value="Hand" />
+    </Style>
+    <Style Selector="Button.detailAction.primary">
+        <Setter Property="Background" Value="{DynamicResource PbAccentBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Foreground" Value="{DynamicResource PbBadgeTextBrush}" />
+    </Style>
+    <Style Selector="Button.detailAction.ghost">
+        <Setter Property="Background" Value="#22FFFFFF" />
+        <Setter Property="BorderBrush" Value="#33FFFFFF" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Foreground" Value="#F0ECE7DB" />
+    </Style>
+
+    <!-- ============ Back link ============ -->
+    <Style Selector="Button.backLink">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="Foreground" Value="{DynamicResource PbTextFaintBrush}" />
+        <Setter Property="FontSize" Value="12.5" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Cursor" Value="Hand" />
+    </Style>
+
+    <!-- ============ DetailBand metadata groups ============ -->
+    <Style Selector="TextBlock.detailGroupLabel">
+        <Setter Property="FontSize" Value="10.5" />
+        <Setter Property="FontWeight" Value="Bold" />
+        <Setter Property="Foreground" Value="{DynamicResource PbTextFaintBrush}" />
+        <Setter Property="LetterSpacing" Value="0.6" />
+    </Style>
+    <Style Selector="Button.detailGroupMore">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="FontSize" Value="11" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Foreground" Value="{DynamicResource PbAccentTextBrush}" />
+        <Setter Property="Cursor" Value="Hand" />
+    </Style>
+</Styles>

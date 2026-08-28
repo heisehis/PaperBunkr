@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using Avalonia;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -25,7 +26,7 @@ namespace Paperbunkr.App.ViewModels;
 /// <see cref="Issue.Summary"/> is a real distinct field and leaving it static looked wrong next to
 /// everything else that does switch).
 /// </summary>
-public partial class DetailScreenViewModel : ViewModelBase
+public partial class DetailScreenViewModel : ViewModelBase, IDetailHeaderSource
 {
     public DetailScreenViewModel(Action goBack, Action<int> goToReader, Action<int> goToProperties, Action<IReadOnlyList<int>> goToBulkProperties, Action<int>? goDetailForSeries = null, Action<string>? goLibraryWithSearch = null, Action<int>? onQuickRate = null)
     {
@@ -35,9 +36,8 @@ public partial class DetailScreenViewModel : ViewModelBase
         _goToBulkProperties = goToBulkProperties;
         _goDetailForSeries = goDetailForSeries ?? (_ => { });
         CoverBrush = SeriesCardSample.Gradient("#442a1c", "#c9803f");
-        Tabs = new DetailTabsViewModel(goToProperties, goToBulkProperties, RefreshForSelection, onQuickRate);
-        Meta = new DetailMetaViewModel(goLibraryWithSearch);
-        Pills = new DetailPillsViewModel(goLibraryWithSearch, ReweightTag);
+        Tabs = new DetailTabsViewModel(goToProperties, goToBulkProperties, RefreshForSelection, onQuickRate, _goDetailForSeries, goToReader);
+        Band = new DetailBandViewModel(goLibraryWithSearch, () => Tabs.GoDetailsCommand.Execute(null), ReweightTag);
     }
 
     private readonly Action _goBack;
@@ -50,11 +50,31 @@ public partial class DetailScreenViewModel : ViewModelBase
     private int? _seriesId;
     private bool _isLoadingSeries;
     private Bitmap? _seriesCoverImage;
+    private Bitmap? _seriesBackdrop;
     private string _seriesSummary = string.Empty;
+    private string _seriesMetaLine = string.Empty;
 
     public DetailTabsViewModel Tabs { get; }
-    public DetailMetaViewModel Meta { get; }
-    public DetailPillsViewModel Pills { get; }
+    public DetailBandViewModel Band { get; }
+
+    // --- IDetailHeaderSource ---
+
+    [ObservableProperty]
+    private Bitmap? _backdropImage;
+
+    [ObservableProperty]
+    private string _metaLine = string.Empty;
+
+    string IDetailHeaderSource.Title => SeriesTitle;
+    string? IDetailHeaderSource.SecondaryTitle => null;
+    DetailHeroProgress? IDetailHeaderSource.TrackerProgress => null;
+
+    public IReadOnlyList<DetailHeroAction> Actions => new[]
+    {
+        new DetailHeroAction(ContinueLabel, ContinueCommand, IsPrimary: true, IsEnabled: _continueIssueId is not null),
+        new DetailHeroAction(EditButtonLabel, EditCommand, IsEnabled: CanEdit),
+        new DetailHeroAction("Change Cover", ChangeSeriesCoverCommand),
+    };
 
     /// <summary>
     /// docs/superpowers/specs/2026-08-06-migration-ux-design.md §A: a plain manual picker, real
@@ -139,6 +159,8 @@ public partial class DetailScreenViewModel : ViewModelBase
         var seriesCover = card.CoverIssueId is int coverIssueId ? CoverImageCache.Get(coverIssueId) : null;
         CoverImage = seriesCover;
         _seriesCoverImage = seriesCover;
+        _seriesBackdrop = seriesCover is not null ? BackdropBlurRenderer.Render(seriesCover, new PixelSize(1600, 680)) : null;
+        BackdropImage = _seriesBackdrop;
         SeriesTitle = series.Name;
         CoverTitle = series.Name.ToUpperInvariant();
         SelectedContentType = series.ContentType;
@@ -146,6 +168,26 @@ public partial class DetailScreenViewModel : ViewModelBase
         IssueCountLabel = $"{series.Issues.Count} Issues";
         _seriesSummary = string.IsNullOrWhiteSpace(series.Summary) ? "No summary available." : series.Summary;
         Summary = _seriesSummary;
+
+        int unread = series.Issues.Count(i => i.LastPageRead is null or 0);
+        string publisher = string.IsNullOrWhiteSpace(series.Publisher) ? string.Empty : series.Publisher!;
+        _seriesMetaLine = string.Join("  ·  ", new[]
+        {
+            publisher,
+            StatusLabel,
+            $"{series.Issues.Count} issue{(series.Issues.Count == 1 ? "" : "s")}",
+            unread > 0 ? $"{unread} unread" : string.Empty,
+        }.Where(s => s.Length > 0));
+        MetaLine = _seriesMetaLine;
+        Band.StatusText = StatusLabel;
+        Band.PublisherText = publisher;
+        Band.YearText = series.Issues
+            .Select(i => i.ReleasedTime?.Year)
+            .Where(y => y is > 0)
+            .DefaultIfEmpty(null)
+            .Min() is int y0 ? y0.ToString() : string.Empty;
+        Band.Summary = _seriesSummary;
+        Band.IsSynopsisExpanded = false;
 
         // Priority: an issue actually in progress (resume where they left off) beats one never
         // opened at all, which beats falling back to a re-read. Found in review: the old logic
@@ -173,8 +215,7 @@ public partial class DetailScreenViewModel : ViewModelBase
         var enabledVirtualTags = context.VirtualTagDefinitions.Where(t => t.IsEnabled).OrderBy(t => t.SortOrder).ToList();
 
         Tabs.LoadSeries(series);
-        Meta.LoadSeries(series);
-        Pills.LoadSeries(series, enabledVirtualTags);
+        Band.LoadSeries(series, enabledVirtualTags);
 
         _isLoadingSeries = false;
         RaiseEditStateChanged();
@@ -243,10 +284,19 @@ public partial class DetailScreenViewModel : ViewModelBase
                 return;
             }
 
-            CoverImage = CoverImageCache.Get(issue.Id);
+            var issueCover = CoverImageCache.Get(issue.Id);
+            CoverImage = issueCover;
+            BackdropImage = issueCover is not null ? BackdropBlurRenderer.Render(issueCover, new PixelSize(1600, 680)) : _seriesBackdrop;
             Summary = string.IsNullOrWhiteSpace(issue.Summary) ? "No summary available." : issue.Summary;
-            Meta.LoadIssue(issue);
-            Pills.LoadIssue(issue, enabledVirtualTags);
+            MetaLine = string.Join("  ·  ", new[]
+            {
+                issue.EffectiveNumber() is { Length: > 0 } n ? $"Issue #{n}" : string.Empty,
+                string.IsNullOrWhiteSpace(issue.StoryArc) ? string.Empty : issue.StoryArc!,
+                issue.ReleasedTime is { } rt ? rt.ToString("MMM yyyy") : string.Empty,
+            }.Where(s => s.Length > 0));
+            Band.Summary = Summary;
+            Band.IsSynopsisExpanded = false;
+            Band.LoadIssue(issue, enabledVirtualTags);
         }
         else
         {
@@ -257,9 +307,12 @@ public partial class DetailScreenViewModel : ViewModelBase
             }
 
             CoverImage = _seriesCoverImage;
+            BackdropImage = _seriesBackdrop;
             Summary = _seriesSummary;
-            Meta.LoadSeries(series);
-            Pills.LoadSeries(series, enabledVirtualTags);
+            MetaLine = _seriesMetaLine;
+            Band.Summary = _seriesSummary;
+            Band.IsSynopsisExpanded = false;
+            Band.LoadSeries(series, enabledVirtualTags);
         }
 
         RaiseEditStateChanged();
@@ -269,6 +322,7 @@ public partial class DetailScreenViewModel : ViewModelBase
     {
         OnPropertyChanged(nameof(CanEdit));
         OnPropertyChanged(nameof(EditButtonLabel));
+        OnPropertyChanged(nameof(Actions));
     }
 
     public bool CanEdit => Tabs.SelectedIssueIds.Count > 0;

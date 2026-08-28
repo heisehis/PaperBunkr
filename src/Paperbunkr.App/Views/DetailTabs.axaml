@@ -2,42 +2,21 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Paperbunkr.App.ViewModels"
              xmlns:models="using:Paperbunkr.App.Models"
+             xmlns:views="using:Paperbunkr.App.Views"
+             xmlns:entities="using:Paperbunkr.Data.Entities"
              xmlns:conv="using:Avalonia.Data.Converters"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-             mc:Ignorable="d" d:DesignWidth="900" d:DesignHeight="400"
+             mc:Ignorable="d" d:DesignWidth="900" d:DesignHeight="500"
              x:Class="Paperbunkr.App.Views.DetailTabs"
-             x:DataType="vm:DetailTabsViewModel">
+             x:DataType="vm:DetailTabsViewModel"
+             x:Name="Root">
 
     <UserControl.Styles>
-        <Style Selector="Button.tab">
-            <Setter Property="Background" Value="Transparent" />
-            <Setter Property="BorderThickness" Value="0,0,0,2" />
-            <Setter Property="BorderBrush" Value="Transparent" />
-            <Setter Property="CornerRadius" Value="0" />
-            <Setter Property="Padding" Value="0,0,0,12" />
-            <Setter Property="FontSize" Value="13" />
-            <Setter Property="FontWeight" Value="Bold" />
-            <Setter Property="Foreground" Value="{DynamicResource PbTextFaintBrush}" />
-            <Setter Property="Cursor" Value="Hand" />
-        </Style>
-        <Style Selector="Button.tab.active">
-            <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
-            <Setter Property="Foreground" Value="{DynamicResource PbTextBrush}" />
-        </Style>
-        <Style Selector="TextBlock.tabCount">
-            <Setter Property="FontFamily" Value="Consolas,monospace" />
-            <Setter Property="FontSize" Value="10.5" />
-            <Setter Property="Foreground" Value="{DynamicResource PbTextFaintBrush}" />
-            <Setter Property="Background" Value="{DynamicResource PbChromeBrush}" />
-            <Setter Property="Padding" Value="6,1" />
-        </Style>
-
         <Style Selector="Border.issueTile">
-            <Setter Property="CornerRadius" Value="6" />
+            <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusSm}" />
             <Setter Property="BorderThickness" Value="1" />
             <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
-            <Setter Property="Height" Value="168" />
             <Setter Property="ClipToBounds" Value="True" />
             <Setter Property="Cursor" Value="Hand" />
         </Style>
@@ -45,15 +24,100 @@
             <Setter Property="BorderThickness" Value="2" />
             <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
         </Style>
-        <!-- P5 (docs/alpha-roadmap.md) - visible keyboard-focus indicator. Border has no built-in
-             FluentTheme focus adorner the way Button does, so this is explicit. :focus-visible
-             (not :focus) so a plain pointer click doesn't flash the ring too - matches how the
-             rest of the app never shows a focus ring on mouse interaction. -->
         <Style Selector="Border.issueTile:focus-visible">
             <Setter Property="BorderThickness" Value="2" />
             <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
         </Style>
+        <Style Selector="Border.issueTile.current">
+            <Setter Property="BoxShadow" Value="{StaticResource PbGlowRing}" />
+        </Style>
+        <Style Selector="StackPanel.posterItem.read">
+            <Setter Property="Opacity" Value="0.45" />
+        </Style>
+        <Style Selector="Grid.issueRow">
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Background" Value="Transparent" />
+        </Style>
+        <Style Selector="Grid.issueRow:pointerover">
+            <Setter Property="Background" Value="{DynamicResource PbSurface3Brush}" />
+        </Style>
+        <Style Selector="Grid.issueRow.selected">
+            <Setter Property="Background" Value="{DynamicResource PbAccentSoftBrush}" />
+        </Style>
+        <Style Selector="Grid.issueRow.read">
+            <Setter Property="Opacity" Value="0.5" />
+        </Style>
+        <Style Selector="Border.issueCard">
+            <Setter Property="Background" Value="{DynamicResource PbSurface2Brush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
+            <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusSm}" />
+            <Setter Property="Padding" Value="9" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style Selector="Border.issueCard.selected">
+            <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
+        </Style>
+
+        <!-- View-mode segmented control -->
+        <Style Selector="Button.segItem">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="CornerRadius" Value="0" />
+            <Setter Property="Padding" Value="9,3" />
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextFaintBrush}" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style Selector="Button.segItem.active">
+            <Setter Property="Background" Value="{DynamicResource PbAccentBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource PbBadgeTextBrush}" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+        </Style>
+
+        <Style Selector="Button.railAdd">
+            <Setter Property="Background" Value="{DynamicResource PbAccentBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource PbBadgeTextBrush}" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="10,5" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="CornerRadius" Value="5" />
+        </Style>
     </UserControl.Styles>
+
+    <UserControl.Resources>
+        <ContextMenu x:Key="IssueContextMenu" x:DataType="models:IssueCardSample">
+            <MenuItem Header="Edit Properties"
+                      Command="{Binding #Root.((vm:DetailTabsViewModel)DataContext).EditIssuePropertiesCommand}"
+                      CommandParameter="{Binding}">
+                <MenuItem.Icon>
+                    <Border Classes="icon" Width="13" Height="13">
+                        <Border.OpacityMask><ImageBrush Source="/Assets/Icons/Edit_Pencil.png" Stretch="Uniform" /></Border.OpacityMask>
+                    </Border>
+                </MenuItem.Icon>
+            </MenuItem>
+            <MenuItem Header="Show in Explorer"
+                      Command="{Binding #Root.((vm:DetailTabsViewModel)DataContext).RevealIssueCommand}"
+                      CommandParameter="{Binding}" IsEnabled="{Binding HasFile}" />
+            <Separator />
+            <MenuItem Header="Mark as Read"
+                      Command="{Binding #Root.((vm:DetailTabsViewModel)DataContext).MarkIssueReadCommand}"
+                      CommandParameter="{Binding}" />
+            <MenuItem Header="Mark as Unread"
+                      Command="{Binding #Root.((vm:DetailTabsViewModel)DataContext).MarkIssueUnreadCommand}"
+                      CommandParameter="{Binding}" />
+            <MenuItem Header="Quick Rate…"
+                      Command="{Binding #Root.((vm:DetailTabsViewModel)DataContext).QuickRateCommand}"
+                      CommandParameter="{Binding}" />
+            <Separator />
+            <MenuItem Header="Set Cover…"
+                      Command="{Binding #Root.((vm:DetailTabsViewModel)DataContext).ChangeIssueCoverCommand}"
+                      CommandParameter="{Binding}" />
+            <MenuItem Header="Reset Cover"
+                      Command="{Binding #Root.((vm:DetailTabsViewModel)DataContext).ResetIssueCoverCommand}"
+                      CommandParameter="{Binding}" />
+        </ContextMenu>
+    </UserControl.Resources>
 
     <StackPanel>
         <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,0,0,1" Margin="0,24,0,0" IsVisible="{Binding ShowTabStrip}">
@@ -75,83 +139,182 @@
             </StackPanel>
         </Border>
 
-        <!-- Issues tab -->
-        <ItemsControl x:Name="IssuesList" IsVisible="{Binding IsIssuesTab}" ItemsSource="{Binding Issues}" Margin="0,20,0,0">
-            <ItemsControl.ItemsPanel>
-                <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
-            </ItemsControl.ItemsPanel>
-            <ItemsControl.ItemTemplate>
-                <DataTemplate x:DataType="models:IssueCardSample">
-                    <Border Classes="issueTile" Classes.selected="{Binding IsSelected}" Width="120" Margin="0,0,16,16"
-                            Background="{Binding CoverBrush}" Focusable="True"
-                            PointerPressed="OnIssueTilePointerPressed" KeyDown="OnIssueTileKeyDown">
-                        <Border.ContextMenu>
-                            <ContextMenu>
-                                <MenuItem Header="Edit Properties"
-                                          Command="{Binding #IssuesList.((vm:DetailTabsViewModel)DataContext).EditIssuePropertiesCommand}"
-                                          CommandParameter="{Binding}">
-                                    <MenuItem.Icon>
-                                        <Border Classes="icon" Width="13" Height="13">
-                                            <Border.OpacityMask>
-                                                <ImageBrush Source="/Assets/Icons/Edit_Pencil.png" Stretch="Uniform" />
-                                            </Border.OpacityMask>
-                                        </Border>
-                                    </MenuItem.Icon>
-                                </MenuItem>
-                                <MenuItem Header="Show in Explorer"
-                                          Command="{Binding #IssuesList.((vm:DetailTabsViewModel)DataContext).RevealIssueCommand}"
-                                          CommandParameter="{Binding}"
-                                          IsEnabled="{Binding HasFile}" />
-                                <Separator />
-                                <MenuItem Header="Mark as Read"
-                                          Command="{Binding #IssuesList.((vm:DetailTabsViewModel)DataContext).MarkIssueReadCommand}"
-                                          CommandParameter="{Binding}" />
-                                <MenuItem Header="Mark as Unread"
-                                          Command="{Binding #IssuesList.((vm:DetailTabsViewModel)DataContext).MarkIssueUnreadCommand}"
-                                          CommandParameter="{Binding}" />
-                                <MenuItem Header="Quick Rate…"
-                                          Command="{Binding #IssuesList.((vm:DetailTabsViewModel)DataContext).QuickRateCommand}"
-                                          CommandParameter="{Binding}" />
-                                <Separator />
-                                <MenuItem Header="Set Cover…"
-                                          Command="{Binding #IssuesList.((vm:DetailTabsViewModel)DataContext).ChangeIssueCoverCommand}"
-                                          CommandParameter="{Binding}" />
-                                <MenuItem Header="Reset Cover"
-                                          Command="{Binding #IssuesList.((vm:DetailTabsViewModel)DataContext).ResetIssueCoverCommand}"
-                                          CommandParameter="{Binding}" />
-                            </ContextMenu>
-                        </Border.ContextMenu>
-                        <Grid>
-                            <Image Source="{Binding CoverImage}" Stretch="UniformToFill" />
-                            <TextBlock Text="{Binding Title}" FontSize="13" FontWeight="Black" Foreground="#FFFFF8EC"
-                                       VerticalAlignment="Bottom" Margin="9" />
+        <!-- ================= ISSUES TAB ================= -->
+        <StackPanel IsVisible="{Binding IsIssuesTab}" Margin="0,16,0,0">
+            <!-- chrome: view-mode segment -->
+            <DockPanel Margin="0,0,0,14">
+                <Border DockPanel.Dock="Right" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
+                        CornerRadius="6" ClipToBounds="True" Height="24">
+                    <StackPanel Orientation="Horizontal">
+                        <Button Classes="segItem" Classes.active="{Binding IsPosterView}" Content="Poster"
+                                Command="{Binding SetIssueViewModeCommand}" CommandParameter="{x:Static entities:DetailIssueViewMode.Poster}" />
+                        <Border Width="1" Background="{DynamicResource PbBorderBrush}" />
+                        <Button Classes="segItem" Classes.active="{Binding IsListView}" Content="List"
+                                Command="{Binding SetIssueViewModeCommand}" CommandParameter="{x:Static entities:DetailIssueViewMode.List}" />
+                        <Border Width="1" Background="{DynamicResource PbBorderBrush}" />
+                        <Button Classes="segItem" Classes.active="{Binding IsCardView}" Content="Card"
+                                Command="{Binding SetIssueViewModeCommand}" CommandParameter="{x:Static entities:DetailIssueViewMode.Card}" />
+                    </StackPanel>
+                </Border>
+                <TextBlock Text="{Binding Issues.Count, StringFormat='{}{0} issues'}" Classes="pbTextCaption" VerticalAlignment="Center" />
+            </DockPanel>
+
+            <!-- POSTER -->
+            <ItemsControl x:Name="IssuesList" IsVisible="{Binding IsPosterView}" ItemsSource="{Binding Issues}">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="models:IssueCardSample">
+                        <StackPanel Classes="posterItem" Classes.read="{Binding IsRead}" Width="118" Margin="0,0,14,16" Spacing="5">
+                            <Border Classes="issueTile" Classes.selected="{Binding IsSelected}" Height="168"
+                                    Background="{Binding CoverBrush}" Focusable="True"
+                                    ContextMenu="{StaticResource IssueContextMenu}"
+                                    PointerPressed="OnIssueTilePointerPressed" KeyDown="OnIssueTileKeyDown">
+                                <Grid>
+                                    <Image Source="{Binding CoverImage}" Stretch="UniformToFill" />
+                                    <Border Classes="posterScrim" />
+                                    <Border Height="3" VerticalAlignment="Bottom" Background="{DynamicResource PbAccentBrush}"
+                                            IsVisible="{Binding IsInProgress}" HorizontalAlignment="Left" Width="70" />
+                                </Grid>
+                            </Border>
+                            <TextBlock Text="{Binding Title}" FontSize="12" FontWeight="Bold" Foreground="{DynamicResource PbTextBrush}" />
+                            <TextBlock Text="{Binding ArcTitle}" FontSize="10" Foreground="{DynamicResource PbTextFaintBrush}"
+                                       TextTrimming="CharacterEllipsis"
+                                       IsVisible="{Binding ArcTitle, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
+                        </StackPanel>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+            <!-- LIST -->
+            <ItemsControl IsVisible="{Binding IsListView}" ItemsSource="{Binding Issues}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="models:IssueCardSample">
+                        <Grid Classes="issueRow" Classes.selected="{Binding IsSelected}" Classes.read="{Binding IsRead}"
+                              ColumnDefinitions="44,*,150,80,50" Height="30" Focusable="True"
+                              ContextMenu="{StaticResource IssueContextMenu}"
+                              PointerPressed="OnIssueTilePointerPressed" KeyDown="OnIssueTileKeyDown">
+                            <TextBlock Grid.Column="0" Text="{Binding Title}" FontWeight="Bold" VerticalAlignment="Center"
+                                       Foreground="{DynamicResource PbTextBrush}" />
+                            <TextBlock Grid.Column="1" Text="{Binding FullTitle}" VerticalAlignment="Center" Margin="8,0"
+                                       TextTrimming="CharacterEllipsis" Foreground="{DynamicResource PbTextMutedBrush}" FontSize="12" />
+                            <TextBlock Grid.Column="2" Text="{Binding ArcTitle}" VerticalAlignment="Center"
+                                       Foreground="{DynamicResource PbTextFaintBrush}" FontSize="11" TextTrimming="CharacterEllipsis" />
+                            <TextBlock Grid.Column="3" Text="{Binding CoverDateLabel}" VerticalAlignment="Center"
+                                       Foreground="{DynamicResource PbTextFaintBrush}" FontSize="11" />
+                            <TextBlock Grid.Column="4" Text="{Binding RatingLabel}" VerticalAlignment="Center"
+                                       Foreground="{DynamicResource PbBadgeBrush}" FontSize="11" />
                         </Grid>
-                    </Border>
-                </DataTemplate>
-            </ItemsControl.ItemTemplate>
-        </ItemsControl>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
 
-        <!-- Related tab (docs/superpowers/specs/2026-08-17-metadata-model-phase3-media-relations-
-             design.md) - real MediaRelation data, added/removed from this tab directly since no
-             Series Properties editor exists elsewhere in this app. -->
-        <StackPanel IsVisible="{Binding IsRelatedTab}" Spacing="4" Margin="0,20,0,0">
-            <StackPanel Orientation="Horizontal" Spacing="10">
-                <Button Content="+ Add Related Series"
-                        Command="{Binding ToggleAddRelationCommand}" Padding="10,5" FontSize="12" CornerRadius="5"
-                        Background="{DynamicResource PbAccentBrush}" Foreground="{DynamicResource PbBadgeTextBrush}" BorderThickness="0" />
+            <!-- CARD -->
+            <ItemsControl IsVisible="{Binding IsCardView}" ItemsSource="{Binding Issues}">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="models:IssueCardSample">
+                        <Border Classes="issueCard" Classes.selected="{Binding IsSelected}" Width="250" Margin="0,0,12,12"
+                                Focusable="True" ContextMenu="{StaticResource IssueContextMenu}"
+                                PointerPressed="OnIssueTilePointerPressed" KeyDown="OnIssueTileKeyDown">
+                            <Grid ColumnDefinitions="54,*">
+                                <Border Grid.Column="0" Width="54" Height="80" CornerRadius="3" ClipToBounds="True"
+                                        Background="{Binding CoverBrush}" VerticalAlignment="Top">
+                                    <Image Source="{Binding CoverImage}" Stretch="UniformToFill" />
+                                </Border>
+                                <StackPanel Grid.Column="1" Margin="10,0,0,0" Spacing="4">
+                                    <TextBlock Text="{Binding FullTitle}" FontSize="12.5" FontWeight="SemiBold"
+                                               Foreground="{DynamicResource PbTextBrush}" TextWrapping="Wrap" MaxLines="2" TextTrimming="CharacterEllipsis" />
+                                    <TextBlock Text="{Binding CardProgressLabel}" FontSize="9.5" Foreground="{DynamicResource PbTextFaintBrush}" />
+                                    <StackPanel Orientation="Horizontal" Spacing="10">
+                                        <Button Content="{Binding CardActionLabel}" Padding="10,2" FontSize="11" FontWeight="SemiBold"
+                                                CornerRadius="4" Background="{DynamicResource PbAccentBrush}" Foreground="{DynamicResource PbBadgeTextBrush}"
+                                                BorderThickness="0"
+                                                Command="{Binding #Root.((vm:DetailTabsViewModel)DataContext).OpenIssueInReaderCommand}"
+                                                CommandParameter="{Binding}" />
+                                        <Button Classes="creditName"
+                                                Command="{Binding #Root.((vm:DetailTabsViewModel)DataContext).MarkIssueReadCommand}"
+                                                CommandParameter="{Binding}" ToolTip.Tip="Mark read">
+                                            <Path Classes="pbIcon" Data="{StaticResource PbIconCheck}" Width="13" Height="13" />
+                                        </Button>
+                                        <Button Classes="creditName"
+                                                Command="{Binding #Root.((vm:DetailTabsViewModel)DataContext).EditIssuePropertiesCommand}"
+                                                CommandParameter="{Binding}" ToolTip.Tip="Edit">
+                                            <Path Classes="pbIcon" Data="{StaticResource PbIconEdit}" Width="13" Height="13" />
+                                        </Button>
+                                        <Button Classes="creditName"
+                                                Command="{Binding #Root.((vm:DetailTabsViewModel)DataContext).RevealIssueCommand}"
+                                                CommandParameter="{Binding}" IsEnabled="{Binding HasFile}" ToolTip.Tip="Show in Explorer">
+                                            <Path Classes="pbIcon" Data="{StaticResource PbIconFolderOpen}" Width="13" Height="13" />
+                                        </Button>
+                                    </StackPanel>
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </StackPanel>
+
+        <!-- ================= RELATED TAB ================= -->
+        <StackPanel IsVisible="{Binding IsRelatedTab}" Margin="0,20,0,0" Spacing="4">
+
+            <!-- Continuity membership -->
+            <StackPanel Orientation="Horizontal" Spacing="10" Margin="0,0,0,6">
+                <TextBlock Text="Continuities" FontSize="12.5" FontWeight="SemiBold"
+                           Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
+                <Button Classes="railAdd" Content="+ Add to Continuity" Command="{Binding ToggleAddContinuityCommand}" />
             </StackPanel>
+            <Border IsVisible="{Binding IsAddingContinuity}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
+                    CornerRadius="6" Padding="12" Margin="0,0,0,8">
+                <StackPanel Spacing="8">
+                    <TextBox Text="{Binding ContinuitySearchQuery}" Watermark="Search or create a continuity…" FontSize="12" />
+                    <ItemsControl ItemsSource="{Binding ContinuitySearchResults}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="models:ContinuitySearchResult">
+                                <Button HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Padding="8,6" Margin="0,2"
+                                        Background="Transparent" BorderThickness="0" FontSize="12.5"
+                                        Foreground="{DynamicResource PbTextMutedBrush}"
+                                        Command="{Binding #Root.((vm:DetailTabsViewModel)DataContext).AddContinuityCommand}"
+                                        CommandParameter="{Binding}">
+                                    <TextBlock Text="{Binding Name}" />
+                                </Button>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </Border>
+            <ItemsControl ItemsSource="{Binding ContinuityChips}" Margin="0,0,0,12">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="models:ContinuityChip">
+                        <Border Background="{DynamicResource PbSurfaceAltBrush}" CornerRadius="12" Padding="10,4" Margin="0,0,6,6">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <TextBlock Text="{Binding Name}" FontSize="11.5" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
+                                <Button Content="✕" Padding="0" Width="16" Height="16" FontSize="9.5" CornerRadius="8"
+                                        Background="Transparent" BorderThickness="0" Foreground="{DynamicResource PbTextFaintBrush}"
+                                        Command="{Binding #Root.((vm:DetailTabsViewModel)DataContext).RemoveContinuityCommand}"
+                                        CommandParameter="{Binding}" ToolTip.Tip="Remove from this continuity" />
+                            </StackPanel>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
 
+            <!-- Add-related-series expander -->
             <Border IsVisible="{Binding IsAddingRelation}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
-                    CornerRadius="6" Padding="12" Margin="0,10,0,0">
+                    CornerRadius="6" Padding="12" Margin="0,0,0,10">
                 <StackPanel Spacing="8">
                     <StackPanel Orientation="Horizontal" Spacing="8">
                         <TextBlock Text="Relationship:" FontSize="12" VerticalAlignment="Center" Foreground="{DynamicResource PbTextMutedBrush}" />
-                        <ComboBox ItemsSource="{Binding RelationTypeOptions}" SelectedItem="{Binding SelectedRelationTypeOption}"
-                                  MinWidth="160" FontSize="12">
+                        <ComboBox ItemsSource="{Binding RelationTypeOptions}" SelectedItem="{Binding SelectedRelationTypeOption}" MinWidth="160" FontSize="12">
                             <ComboBox.ItemTemplate>
-                                <DataTemplate x:DataType="models:RelationTypeOption">
-                                    <TextBlock Text="{Binding Label}" />
-                                </DataTemplate>
+                                <DataTemplate x:DataType="models:RelationTypeOption"><TextBlock Text="{Binding Label}" /></DataTemplate>
                             </ComboBox.ItemTemplate>
                         </ComboBox>
                     </StackPanel>
@@ -162,7 +325,7 @@
                                 <Button HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Padding="8,6" Margin="0,2"
                                         Background="Transparent" BorderThickness="0" FontSize="12.5"
                                         Foreground="{DynamicResource PbTextMutedBrush}"
-                                        Command="{Binding $parent[ItemsControl].((vm:DetailTabsViewModel)DataContext).AddRelationCommand}"
+                                        Command="{Binding #Root.((vm:DetailTabsViewModel)DataContext).AddRelationCommand}"
                                         CommandParameter="{Binding}">
                                     <TextBlock Text="{Binding Name}" />
                                 </Button>
@@ -172,142 +335,29 @@
                 </StackPanel>
             </Border>
 
-            <TextBlock IsVisible="{Binding !HasRelated}" Text="No related series yet." FontSize="12.5"
-                       Foreground="{DynamicResource PbTextFaintBrush}" Margin="0,10,0,0" />
-            <ScrollViewer HorizontalScrollBarVisibility="Auto" Margin="0,10,0,0">
-                <ItemsControl ItemsSource="{Binding Related}">
-                    <ItemsControl.ItemsPanel>
-                        <ItemsPanelTemplate><StackPanel Orientation="Horizontal" Spacing="16" /></ItemsPanelTemplate>
-                    </ItemsControl.ItemsPanel>
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate x:DataType="models:RelatedSeriesSample">
-                            <StackPanel Width="126">
-                                <Border CornerRadius="6" BorderThickness="1" BorderBrush="{DynamicResource PbBorderBrush}"
-                                        Height="189" Background="{Binding CoverBrush}">
-                                    <Grid>
-                                        <TextBlock Text="{Binding Title}" FontSize="12" FontWeight="Black" Foreground="#FFFFF8EC"
-                                                   VerticalAlignment="Bottom" Margin="8" TextWrapping="Wrap" />
-                                        <Button Content="✕" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="4"
-                                                Width="20" Height="20" Padding="0" FontSize="11" CornerRadius="10"
-                                                Background="#88000000" Foreground="White" BorderThickness="0"
-                                                Command="{Binding $parent[ItemsControl].((vm:DetailTabsViewModel)DataContext).RemoveRelationCommand}"
-                                                CommandParameter="{Binding}"
-                                                ToolTip.Tip="Remove this relation" />
-                                    </Grid>
-                                </Border>
-                                <TextBlock Text="{Binding Name}" FontSize="11.5" FontWeight="SemiBold"
-                                           Foreground="{DynamicResource PbTextMutedBrush}" Margin="0,6,0,0" />
-                                <TextBlock Text="{Binding Note}" FontSize="10.5" Foreground="{DynamicResource PbTextFaintBrush}" />
-                            </StackPanel>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
-            </ScrollViewer>
+            <TextBlock IsVisible="{Binding !HasAnyRelatedRail}" Text="No related series yet." FontSize="12.5"
+                       Foreground="{DynamicResource PbTextFaintBrush}" Margin="0,6,0,10" />
 
-            <!-- Continuity membership (docs/superpowers/specs/2026-08-17-metadata-model-phase4a-
-                 continuity-design.md) - additive section, doesn't touch the carousel above. -->
-            <StackPanel Margin="0,24,0,0" Spacing="8">
-                <StackPanel Orientation="Horizontal" Spacing="10">
-                    <TextBlock Text="Continuities" FontSize="12.5" FontWeight="SemiBold"
-                               Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
-                    <Button Content="+ Add to Continuity"
-                            Command="{Binding ToggleAddContinuityCommand}" Padding="10,5" FontSize="12" CornerRadius="5"
-                            Background="{DynamicResource PbAccentBrush}" Foreground="{DynamicResource PbBadgeTextBrush}" BorderThickness="0" />
-                </StackPanel>
+            <views:PosterRail Title="Related Series" ContextLabel="{Binding Related.Count, StringFormat='{}{0} · manage'}"
+                              ItemsSource="{Binding RelatedRail}" ShowAddCard="True"
+                              AddCommand="{Binding ToggleAddRelationCommand}"
+                              RemoveCommand="{Binding RemoveRelationCommand}"
+                              ClickCommand="{Binding OpenRelatedSeriesCommand}" />
 
-                <Border IsVisible="{Binding IsAddingContinuity}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
-                        CornerRadius="6" Padding="12">
-                    <StackPanel Spacing="8">
-                        <TextBox Text="{Binding ContinuitySearchQuery}" Watermark="Search or create a continuity…" FontSize="12" />
-                        <ItemsControl ItemsSource="{Binding ContinuitySearchResults}">
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate x:DataType="models:ContinuitySearchResult">
-                                    <Button HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Padding="8,6" Margin="0,2"
-                                            Background="Transparent" BorderThickness="0" FontSize="12.5"
-                                            Foreground="{DynamicResource PbTextMutedBrush}"
-                                            Command="{Binding $parent[ItemsControl].((vm:DetailTabsViewModel)DataContext).AddContinuityCommand}"
-                                            CommandParameter="{Binding}">
-                                        <TextBlock Text="{Binding Name}" />
-                                    </Button>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-                    </StackPanel>
-                </Border>
+            <views:PosterRail Title="Same Continuity" ItemsSource="{Binding ContinuityRail}"
+                              IsVisible="{Binding HasSameContinuity}"
+                              ClickCommand="{Binding OpenRelatedSeriesCommand}" />
 
-                <ItemsControl ItemsSource="{Binding ContinuityChips}">
-                    <ItemsControl.ItemsPanel>
-                        <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
-                    </ItemsControl.ItemsPanel>
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate x:DataType="models:ContinuityChip">
-                            <Border Background="{DynamicResource PbSurfaceAltBrush}" CornerRadius="12" Padding="10,4" Margin="0,0,6,6">
-                                <StackPanel Orientation="Horizontal" Spacing="6">
-                                    <TextBlock Text="{Binding Name}" FontSize="11.5" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
-                                    <Button Content="✕" Padding="0" Width="16" Height="16" FontSize="9.5" CornerRadius="8"
-                                            Background="Transparent" BorderThickness="0" Foreground="{DynamicResource PbTextFaintBrush}"
-                                            Command="{Binding $parent[ItemsControl].((vm:DetailTabsViewModel)DataContext).RemoveContinuityCommand}"
-                                            CommandParameter="{Binding}"
-                                            ToolTip.Tip="Remove from this continuity" />
-                                </StackPanel>
-                            </Border>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
+            <views:PosterRail Title="Same Event" ItemsSource="{Binding EventRail}"
+                              IsVisible="{Binding HasSameEvent}"
+                              ClickCommand="{Binding OpenRelatedSeriesCommand}" />
 
-                <TextBlock IsVisible="{Binding HasSameContinuity}" Text="Same Continuity" FontSize="12.5" FontWeight="SemiBold"
-                           Foreground="{DynamicResource PbTextMutedBrush}" Margin="0,10,0,0" />
-                <ScrollViewer IsVisible="{Binding HasSameContinuity}" HorizontalScrollBarVisibility="Auto">
-                    <ItemsControl ItemsSource="{Binding SameContinuity}">
-                        <ItemsControl.ItemsPanel>
-                            <ItemsPanelTemplate><StackPanel Orientation="Horizontal" Spacing="16" /></ItemsPanelTemplate>
-                        </ItemsControl.ItemsPanel>
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate x:DataType="models:RelatedGroupSeriesSample">
-                                <StackPanel Width="126">
-                                    <Border CornerRadius="6" BorderThickness="1" BorderBrush="{DynamicResource PbBorderBrush}"
-                                            Height="189" Background="{Binding CoverBrush}">
-                                        <TextBlock Text="{Binding Title}" FontSize="12" FontWeight="Black" Foreground="#FFFFF8EC"
-                                                   VerticalAlignment="Bottom" Margin="8" TextWrapping="Wrap" />
-                                    </Border>
-                                    <TextBlock Text="{Binding Name}" FontSize="11.5" FontWeight="SemiBold"
-                                               Foreground="{DynamicResource PbTextMutedBrush}" Margin="0,6,0,0" />
-                                    <TextBlock Text="{Binding Note}" FontSize="10.5" Foreground="{DynamicResource PbTextFaintBrush}" />
-                                </StackPanel>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                </ScrollViewer>
-
-                <!-- Same Event (docs/superpowers/specs/2026-08-17-metadata-model-phase4b-story-
-                     events-design.md) - read-only derived section, no creation UI here. -->
-                <TextBlock IsVisible="{Binding HasSameEvent}" Text="Same Event" FontSize="12.5" FontWeight="SemiBold"
-                           Foreground="{DynamicResource PbTextMutedBrush}" Margin="0,10,0,0" />
-                <ScrollViewer IsVisible="{Binding HasSameEvent}" HorizontalScrollBarVisibility="Auto">
-                    <ItemsControl ItemsSource="{Binding SameEvent}">
-                        <ItemsControl.ItemsPanel>
-                            <ItemsPanelTemplate><StackPanel Orientation="Horizontal" Spacing="16" /></ItemsPanelTemplate>
-                        </ItemsControl.ItemsPanel>
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate x:DataType="models:RelatedGroupSeriesSample">
-                                <StackPanel Width="126">
-                                    <Border CornerRadius="6" BorderThickness="1" BorderBrush="{DynamicResource PbBorderBrush}"
-                                            Height="189" Background="{Binding CoverBrush}">
-                                        <TextBlock Text="{Binding Title}" FontSize="12" FontWeight="Black" Foreground="#FFFFF8EC"
-                                                   VerticalAlignment="Bottom" Margin="8" TextWrapping="Wrap" />
-                                    </Border>
-                                    <TextBlock Text="{Binding Name}" FontSize="11.5" FontWeight="SemiBold"
-                                               Foreground="{DynamicResource PbTextMutedBrush}" Margin="0,6,0,0" />
-                                    <TextBlock Text="{Binding Note}" FontSize="10.5" Foreground="{DynamicResource PbTextFaintBrush}" />
-                                </StackPanel>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                </ScrollViewer>
-            </StackPanel>
+            <views:PosterRail Title="More Like This" ContextLabel="from your library"
+                              ItemsSource="{Binding MoreLikeThisRail}" IsVisible="{Binding HasMoreLikeThis}"
+                              ClickCommand="{Binding OpenRelatedSeriesCommand}" />
         </StackPanel>
 
-        <!-- Details tab -->
+        <!-- ================= DETAILS TAB ================= -->
         <Grid IsVisible="{Binding IsDetailsTab}" ColumnDefinitions="*,*" Margin="0,20,0,0">
             <StackPanel Grid.Column="0" Margin="0,0,28,0">
                 <TextBlock Text="PUBLISHER" FontSize="10.5" Foreground="{DynamicResource PbTextFaintBrush}" Margin="0,0,0,4" />
@@ -321,17 +371,11 @@
             </StackPanel>
         </Grid>
 
-        <!-- External metadata (docs/superpowers/specs/2026-08-19-metadata-model-anilist-search-and-
-             link-design.md) - completes the search/match UI Phase 5b's own spec deferred. Same
-             search-flyout idiom as the Related tab's "+ Add Related Series" above, but async
-             (network) rather than a local DB query, hence the loading/error states. -->
         <StackPanel IsVisible="{Binding IsDetailsTab}" Margin="0,24,0,0" Spacing="8">
             <StackPanel Orientation="Horizontal" Spacing="10">
                 <TextBlock Text="External Metadata" FontSize="12.5" FontWeight="SemiBold"
                            Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
-                <Button Content="+ Link External Metadata"
-                        Command="{Binding ToggleSearchMetadataCommand}" Padding="10,5" FontSize="12" CornerRadius="5"
-                        Background="{DynamicResource PbAccentBrush}" Foreground="{DynamicResource PbBadgeTextBrush}" BorderThickness="0" />
+                <Button Classes="railAdd" Content="+ Link External Metadata" Command="{Binding ToggleSearchMetadataCommand}" />
             </StackPanel>
 
             <Border IsVisible="{Binding IsSearchingMetadata}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
@@ -343,8 +387,7 @@
                         <TextBox Text="{Binding MetadataSearchQuery}" Watermark="Search…" FontSize="12" Width="220" />
                         <Button Content="Search" Command="{Binding SearchMetadataCommand}" Padding="10,5" FontSize="12" CornerRadius="5" />
                     </StackPanel>
-                    <TextBlock IsVisible="{Binding IsMetadataSearchInProgress}" Text="Searching…" FontSize="12"
-                               Foreground="{DynamicResource PbTextFaintBrush}" />
+                    <TextBlock IsVisible="{Binding IsMetadataSearchInProgress}" Text="Searching…" FontSize="12" Foreground="{DynamicResource PbTextFaintBrush}" />
                     <TextBlock IsVisible="{Binding MetadataSearchError, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}"
                                Text="{Binding MetadataSearchError}" FontSize="12" Foreground="{DynamicResource PbTextFaintBrush}" />
                     <ItemsControl ItemsSource="{Binding MetadataSearchResults}">
@@ -364,12 +407,11 @@
                                     </Border>
                                     <StackPanel Grid.Column="1" VerticalAlignment="Center">
                                         <TextBlock Text="{Binding Title}" FontSize="12.5" Foreground="{DynamicResource PbTextMutedBrush}" />
-                                        <TextBlock Text="{Binding ConfidencePercent, StringFormat='{}{0}% match'}" FontSize="10.5"
-                                                   Foreground="{DynamicResource PbTextFaintBrush}" />
+                                        <TextBlock Text="{Binding ConfidencePercent, StringFormat='{}{0}% match'}" FontSize="10.5" Foreground="{DynamicResource PbTextFaintBrush}" />
                                     </StackPanel>
                                     <Button Grid.Column="2" Content="Link" Padding="10,4" FontSize="11.5" CornerRadius="5"
                                             Background="{DynamicResource PbAccentBrush}" Foreground="{DynamicResource PbBadgeTextBrush}" BorderThickness="0"
-                                            Command="{Binding $parent[ItemsControl].((vm:DetailTabsViewModel)DataContext).LinkMetadataCommand}"
+                                            Command="{Binding #Root.((vm:DetailTabsViewModel)DataContext).LinkMetadataCommand}"
                                             CommandParameter="{Binding}" />
                                 </Grid>
                             </DataTemplate>
@@ -392,9 +434,8 @@
                                            Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
                                 <Button Content="✕" Padding="0" Width="16" Height="16" FontSize="9.5" CornerRadius="8"
                                         Background="Transparent" BorderThickness="0" Foreground="{DynamicResource PbTextFaintBrush}"
-                                        Command="{Binding $parent[ItemsControl].((vm:DetailTabsViewModel)DataContext).UnlinkMetadataCommand}"
-                                        CommandParameter="{Binding}"
-                                        ToolTip.Tip="Remove this link" />
+                                        Command="{Binding #Root.((vm:DetailTabsViewModel)DataContext).UnlinkMetadataCommand}"
+                                        CommandParameter="{Binding}" ToolTip.Tip="Remove this link" />
                             </StackPanel>
                         </Border>
                     </DataTemplate>
@@ -402,16 +443,11 @@
             </ItemsControl>
         </StackPanel>
 
-        <!-- Trackers (docs/superpowers/specs/2026-08-23-tracker-write-back-sync-design.md) -
-             deliberately separate from External Metadata above: linking here writes to the user's
-             real account on the chosen service, not just this app's own database. -->
         <StackPanel IsVisible="{Binding IsDetailsTab}" Margin="0,24,0,0" Spacing="8">
             <StackPanel Orientation="Horizontal" Spacing="10">
                 <TextBlock Text="Trackers" FontSize="12.5" FontWeight="SemiBold"
                            Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
-                <Button Content="+ Link for Tracking"
-                        Command="{Binding ToggleLinkTrackerCommand}" Padding="10,5" FontSize="12" CornerRadius="5"
-                        Background="{DynamicResource PbAccentBrush}" Foreground="{DynamicResource PbBadgeTextBrush}" BorderThickness="0" />
+                <Button Classes="railAdd" Content="+ Link for Tracking" Command="{Binding ToggleLinkTrackerCommand}" />
                 <Button Content="Sync to Trackers" IsVisible="{Binding HasTrackerLinks}"
                         Command="{Binding SyncToTrackersCommand}" Padding="10,5" FontSize="12" CornerRadius="5"
                         Background="{DynamicResource PbSurfaceAltBrush}" Foreground="{DynamicResource PbTextMutedBrush}" BorderThickness="0" />
@@ -426,8 +462,7 @@
                         <TextBox Text="{Binding TrackerSearchQuery}" Watermark="Search title…" FontSize="12" Width="220" />
                         <Button Content="Search" Command="{Binding SearchTrackerCommand}" Padding="10,5" FontSize="12" CornerRadius="5" />
                     </StackPanel>
-                    <TextBlock IsVisible="{Binding IsTrackerSearchInProgress}" Text="Searching…" FontSize="12"
-                               Foreground="{DynamicResource PbTextFaintBrush}" />
+                    <TextBlock IsVisible="{Binding IsTrackerSearchInProgress}" Text="Searching…" FontSize="12" Foreground="{DynamicResource PbTextFaintBrush}" />
                     <TextBlock IsVisible="{Binding TrackerSearchError, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}"
                                Text="{Binding TrackerSearchError}" FontSize="12" Foreground="{DynamicResource PbTextFaintBrush}" />
                     <ItemsControl ItemsSource="{Binding TrackerSearchResults}">
@@ -447,8 +482,7 @@
                                     </Border>
                                     <StackPanel Grid.Column="1" VerticalAlignment="Center">
                                         <TextBlock Text="{Binding Title}" FontSize="12.5" Foreground="{DynamicResource PbTextMutedBrush}" />
-                                        <TextBlock Text="{Binding ConfidencePercent, StringFormat='{}{0}% match'}" FontSize="10.5"
-                                                   Foreground="{DynamicResource PbTextFaintBrush}" />
+                                        <TextBlock Text="{Binding ConfidencePercent, StringFormat='{}{0}% match'}" FontSize="10.5" Foreground="{DynamicResource PbTextFaintBrush}" />
                                     </StackPanel>
                                     <Button Grid.Column="2" Content="{Binding LinkConfirm.Label}" Padding="10,4" FontSize="11.5" CornerRadius="5"
                                             Background="{DynamicResource PbAccentBrush}" Foreground="{DynamicResource PbBadgeTextBrush}" BorderThickness="0"
@@ -462,7 +496,6 @@
 
             <TextBlock IsVisible="{Binding TrackerSyncStatus, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}"
                        Text="{Binding TrackerSyncStatus}" FontSize="12" Foreground="{DynamicResource PbTextFaintBrush}" />
-
             <TextBlock IsVisible="{Binding !HasTrackerLinks}" Text="Not linked to any tracker yet." FontSize="12.5"
                        Foreground="{DynamicResource PbTextFaintBrush}" />
             <ItemsControl ItemsSource="{Binding TrackerLinks}">
@@ -477,9 +510,8 @@
                                            Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
                                 <Button Content="✕" Padding="0" Width="16" Height="16" FontSize="9.5" CornerRadius="8"
                                         Background="Transparent" BorderThickness="0" Foreground="{DynamicResource PbTextFaintBrush}"
-                                        Command="{Binding $parent[ItemsControl].((vm:DetailTabsViewModel)DataContext).UnlinkTrackerCommand}"
-                                        CommandParameter="{Binding}"
-                                        ToolTip.Tip="Remove this tracker link" />
+                                        Command="{Binding #Root.((vm:DetailTabsViewModel)DataContext).UnlinkTrackerCommand}"
+                                        CommandParameter="{Binding}" ToolTip.Tip="Remove this tracker link" />
                             </StackPanel>
                         </Border>
                     </DataTemplate>
@@ -487,8 +519,7 @@
             </ItemsControl>
         </StackPanel>
 
-        <!-- Activity tab - no activity-log schema/feature exists yet, so this is left as a real
-             empty state rather than faked per-series log entries. -->
+        <!-- ================= ACTIVITY TAB ================= -->
         <StackPanel IsVisible="{Binding IsActivityTab}" Margin="0,20,0,0" Spacing="4">
             <TextBlock Text="No recent activity." FontSize="12.5" Foreground="{DynamicResource PbTextFaintBrush}" />
         </StackPanel>

@@ -29,23 +29,27 @@ public partial class DetailTabsViewModel : ViewModelBase
     private readonly Action<IReadOnlyList<int>> _goToBulkProperties;
     private readonly Action? _onSelectionChanged;
     private readonly Action<int> _onQuickRate;
+    private readonly Action<int> _navigateToSeries;
+    private readonly Action<int> _openInReader;
     private readonly Func<PaperbunkrDbContext> _contextFactory;
     private readonly IMetadataProvider _metadataProvider;
     private int? _seriesId;
     private readonly TileSelectionController<IssueCardSample> _selection = new();
 
-    public DetailTabsViewModel(Action<int> goToProperties, Action<IReadOnlyList<int>> goToBulkProperties, Action? onSelectionChanged = null, Action<int>? onQuickRate = null)
-        : this(goToProperties, goToBulkProperties, onSelectionChanged, PaperbunkrDb.CreateContext, new AniListMetadataProvider(AniListHttpClient.Shared), onQuickRate)
+    public DetailTabsViewModel(Action<int> goToProperties, Action<IReadOnlyList<int>> goToBulkProperties, Action? onSelectionChanged = null, Action<int>? onQuickRate = null, Action<int>? navigateToSeries = null, Action<int>? openInReader = null)
+        : this(goToProperties, goToBulkProperties, onSelectionChanged, PaperbunkrDb.CreateContext, new AniListMetadataProvider(AniListHttpClient.Shared), onQuickRate, navigateToSeries, openInReader)
     {
     }
 
     /// <summary>Test-only seam - production always uses the default ctor (the real per-user database and a real <see cref="AniListMetadataProvider"/>).</summary>
-    internal DetailTabsViewModel(Action<int> goToProperties, Action<IReadOnlyList<int>> goToBulkProperties, Action? onSelectionChanged, Func<PaperbunkrDbContext> contextFactory, IMetadataProvider? metadataProvider = null, Action<int>? onQuickRate = null)
+    internal DetailTabsViewModel(Action<int> goToProperties, Action<IReadOnlyList<int>> goToBulkProperties, Action? onSelectionChanged, Func<PaperbunkrDbContext> contextFactory, IMetadataProvider? metadataProvider = null, Action<int>? onQuickRate = null, Action<int>? navigateToSeries = null, Action<int>? openInReader = null)
     {
         _goToProperties = goToProperties;
         _goToBulkProperties = goToBulkProperties;
         _onSelectionChanged = onSelectionChanged;
         _onQuickRate = onQuickRate ?? (_ => { });
+        _navigateToSeries = navigateToSeries ?? (_ => { });
+        _openInReader = openInReader ?? (_ => { });
         _contextFactory = contextFactory;
         _metadataProvider = metadataProvider ?? new AniListMetadataProvider(AniListHttpClient.Shared);
         Issues = new ObservableCollection<IssueCardSample>();
@@ -55,6 +59,10 @@ public partial class DetailTabsViewModel : ViewModelBase
         SameEvent = new ObservableCollection<RelatedGroupSeriesSample>();
         ExternalLinks = new ObservableCollection<ExternalLinkSample>();
         MetadataSearchResults = new ObservableCollection<AniListMatchSample>();
+        RelatedRail = new ObservableCollection<PosterRailItem>();
+        ContinuityRail = new ObservableCollection<PosterRailItem>();
+        EventRail = new ObservableCollection<PosterRailItem>();
+        MoreLikeThisRail = new ObservableCollection<PosterRailItem>();
     }
 
     /// <summary>
@@ -135,6 +143,9 @@ public partial class DetailTabsViewModel : ViewModelBase
         _selection.Clear();
         foreach (var issue in series.Issues.OrderByNumber())
         {
+            double readFraction = issue.PageCount is int pc and > 0 && issue.LastPageRead is int lpr and > 0
+                ? System.Math.Clamp((double)lpr / pc, 0, 1)
+                : issue.HasBeenRead() ? 1 : 0;
             Issues.Add(new IssueCardSample
             {
                 Id = issue.Id,
@@ -144,6 +155,12 @@ public partial class DetailTabsViewModel : ViewModelBase
                 CoverBrush = coverBrush,
                 CoverImage = CoverImageCache.Get(issue.Id),
                 FilePath = issue.FilePath,
+                FullTitle = issue.EffectiveTitle(),
+                ArcTitle = issue.StoryArc,
+                CoverDate = issue.ReleasedTime,
+                Rating = issue.Rating,
+                IsRead = issue.HasBeenRead(),
+                ReadFraction = readFraction,
             });
         }
 
@@ -157,6 +174,7 @@ public partial class DetailTabsViewModel : ViewModelBase
             RefreshRelated(context, series.Id);
             RefreshContinuity(context, series.Id);
             RefreshSameEvent(context, series.Id);
+            RefreshMoreLikeThis(context, series.Id);
             RefreshExternalLinks(context, series.Id);
             RefreshTrackerLinks(context, series.Id);
         }
@@ -177,9 +195,10 @@ public partial class DetailTabsViewModel : ViewModelBase
     private void RefreshRelated(PaperbunkrDbContext context, int seriesId)
     {
         Related.Clear();
+        RelatedRail.Clear();
         foreach (var (otherSeries, displayType, mediaRelationId) in MediaRelationResolver.GetRelatedSeries(context, seriesId))
         {
-            Related.Add(new RelatedSeriesSample
+            var sample = new RelatedSeriesSample
             {
                 Title = otherSeries.Name,
                 Name = otherSeries.Name,
@@ -187,10 +206,20 @@ public partial class DetailTabsViewModel : ViewModelBase
                 CoverBrush = SeriesCardSample.CoverBrushFor(otherSeries.Name),
                 RelatedSeriesId = otherSeries.Id,
                 MediaRelationId = mediaRelationId,
+            };
+            Related.Add(sample);
+            RelatedRail.Add(new PosterRailItem
+            {
+                Id = otherSeries.Id,
+                Name = otherSeries.Name,
+                SubLabel = sample.Note,
+                CoverBrush = sample.CoverBrush,
+                Payload = sample,
             });
         }
 
         OnPropertyChanged(nameof(HasRelated));
+        OnPropertyChanged(nameof(HasAnyRelatedRail));
     }
 
     // --- Related tab: add/remove a MediaRelation (docs/superpowers/specs/2026-08-17-metadata-
@@ -294,6 +323,7 @@ public partial class DetailTabsViewModel : ViewModelBase
         }
 
         SameContinuity.Clear();
+        ContinuityRail.Clear();
         foreach (var otherSeries in ContinuityResolver.GetOtherSeriesSharingContinuity(context, seriesId))
         {
             SameContinuity.Add(new RelatedGroupSeriesSample
@@ -304,9 +334,17 @@ public partial class DetailTabsViewModel : ViewModelBase
                 CoverBrush = SeriesCardSample.CoverBrushFor(otherSeries.Name),
                 SeriesId = otherSeries.Id,
             });
+            ContinuityRail.Add(new PosterRailItem
+            {
+                Id = otherSeries.Id,
+                Name = otherSeries.Name,
+                CoverBrush = SeriesCardSample.CoverBrushFor(otherSeries.Name),
+                Payload = otherSeries.Id,
+            });
         }
 
         OnPropertyChanged(nameof(HasSameContinuity));
+        OnPropertyChanged(nameof(HasAnyRelatedRail));
     }
 
     [ObservableProperty]
@@ -399,6 +437,7 @@ public partial class DetailTabsViewModel : ViewModelBase
     private void RefreshSameEvent(PaperbunkrDbContext context, int seriesId)
     {
         SameEvent.Clear();
+        EventRail.Clear();
         foreach (var otherSeries in EventMembershipResolver.GetOtherSeriesInSharedEvents(context, seriesId))
         {
             SameEvent.Add(new RelatedGroupSeriesSample
@@ -409,9 +448,17 @@ public partial class DetailTabsViewModel : ViewModelBase
                 CoverBrush = SeriesCardSample.CoverBrushFor(otherSeries.Name),
                 SeriesId = otherSeries.Id,
             });
+            EventRail.Add(new PosterRailItem
+            {
+                Id = otherSeries.Id,
+                Name = otherSeries.Name,
+                CoverBrush = SeriesCardSample.CoverBrushFor(otherSeries.Name),
+                Payload = otherSeries.Id,
+            });
         }
 
         OnPropertyChanged(nameof(HasSameEvent));
+        OnPropertyChanged(nameof(HasAnyRelatedRail));
     }
 
     // --- Details tab: external metadata provider links (docs/superpowers/specs/2026-08-19-
@@ -1004,6 +1051,12 @@ public partial class DetailTabsViewModel : ViewModelBase
                 CoverBrush = old.CoverBrush,
                 CoverImage = old.CoverImage,
                 FilePath = old.FilePath,
+                FullTitle = old.FullTitle,
+                ArcTitle = old.ArcTitle,
+                CoverDate = old.CoverDate,
+                Rating = old.Rating,
+                IsRead = updated.HasBeenRead(),
+                ReadFraction = updated.HasBeenRead() ? 1 : updated.LastPageRead is null or 0 ? 0 : old.ReadFraction,
                 IsSelected = old.IsSelected,
             };
         }
@@ -1067,7 +1120,107 @@ public partial class DetailTabsViewModel : ViewModelBase
             CoverBrush = old.CoverBrush,
             CoverImage = CoverImageCache.Get(issueId),
             FilePath = old.FilePath,
+            FullTitle = old.FullTitle,
+            ArcTitle = old.ArcTitle,
+            CoverDate = old.CoverDate,
+            Rating = old.Rating,
+            IsRead = old.IsRead,
+            ReadFraction = old.ReadFraction,
             IsSelected = old.IsSelected,
         };
+    }
+
+    // ===================================================================================
+    //  Streaming redesign (docs/superpowers/specs/2026-08-28-detail-screens-streaming-
+    //  redesign-design.md): Issues-tab view modes + Related-tab rails.
+    // ===================================================================================
+
+    /// <summary>Issues-tab layout. In-memory only for now - persistence deferred, see the plan doc.</summary>
+    [ObservableProperty]
+    private DetailIssueViewMode _issueViewMode = DetailIssueViewMode.Poster;
+
+    public bool IsPosterView => IssueViewMode == DetailIssueViewMode.Poster;
+    public bool IsListView => IssueViewMode == DetailIssueViewMode.List;
+    public bool IsCardView => IssueViewMode == DetailIssueViewMode.Card;
+
+    partial void OnIssueViewModeChanged(DetailIssueViewMode value)
+    {
+        OnPropertyChanged(nameof(IsPosterView));
+        OnPropertyChanged(nameof(IsListView));
+        OnPropertyChanged(nameof(IsCardView));
+    }
+
+    [RelayCommand]
+    private void SetIssueViewMode(DetailIssueViewMode mode) => IssueViewMode = mode;
+
+    /// <summary>Related Series as rail cards (editable - trailing +Add, per-card ✕). Mirrors <see cref="Related"/>.</summary>
+    public ObservableCollection<PosterRailItem> RelatedRail { get; }
+
+    /// <summary>Same Continuity as rail cards (read-only). Mirrors <see cref="SameContinuity"/>.</summary>
+    public ObservableCollection<PosterRailItem> ContinuityRail { get; }
+
+    /// <summary>Same Event as rail cards (read-only). Mirrors <see cref="SameEvent"/>.</summary>
+    public ObservableCollection<PosterRailItem> EventRail { get; }
+
+    /// <summary>"More Like This" - relationally-anchored recommendations (<see cref="RecommendationResolver"/>).</summary>
+    public ObservableCollection<PosterRailItem> MoreLikeThisRail { get; }
+
+    public bool HasMoreLikeThis => MoreLikeThisRail.Count > 0;
+
+    /// <summary>Any related-media rail has content - drives the Related tab's empty-state.</summary>
+    public bool HasAnyRelatedRail => Related.Count > 0 || SameContinuity.Count > 0 || SameEvent.Count > 0 || MoreLikeThisRail.Count > 0;
+
+    private void RefreshMoreLikeThis(PaperbunkrDbContext context, int seriesId)
+    {
+        MoreLikeThisRail.Clear();
+        foreach (var candidate in RecommendationResolver.GetRecommendations(context, seriesId, limit: 15))
+        {
+            var target = context.Series.Find(candidate.TargetSeriesId);
+            if (target is null)
+            {
+                continue;
+            }
+
+            MoreLikeThisRail.Add(new PosterRailItem
+            {
+                Id = target.Id,
+                Name = target.Name,
+                SubLabel = candidate.Explanation,
+                CoverBrush = SeriesCardSample.CoverBrushFor(target.Name),
+                Payload = target.Id,
+            });
+        }
+
+        OnPropertyChanged(nameof(HasMoreLikeThis));
+        OnPropertyChanged(nameof(HasAnyRelatedRail));
+    }
+
+    /// <summary>Card-view "Read"/"Continue" - opens that issue in the reader.</summary>
+    [RelayCommand]
+    private void OpenIssueInReader(IssueCardSample? issue)
+    {
+        if (issue is not null)
+        {
+            _openInReader(issue.Id);
+        }
+    }
+
+    /// <summary>PosterRail click-through - <paramref name="payload"/> is a series id (int) or a sample carrying one.</summary>
+    [RelayCommand]
+    private void OpenRelatedSeries(object? payload)
+    {
+        int? id = payload switch
+        {
+            int seriesId => seriesId,
+            RelatedSeriesSample s => s.RelatedSeriesId,
+            RelatedGroupSeriesSample g => g.SeriesId,
+            PosterRailItem item => item.Id,
+            _ => null,
+        };
+
+        if (id is int target)
+        {
+            _navigateToSeries(target);
+        }
     }
 }

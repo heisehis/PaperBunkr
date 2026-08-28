@@ -1,24 +1,38 @@
 using System;
 using Avalonia.Media.Imaging;
+using CommunityToolkit.Mvvm.ComponentModel;
 using Paperbunkr.App.Services;
 using Paperbunkr.Data.Entities;
 
 namespace Paperbunkr.App.Models;
 
 /// <summary>
-/// Books grid card (docs/superpowers/specs/2026-08-09-novels-epub-pdf-support-design.md §1 Phase
-/// 1) - deliberately simpler than <see cref="SeriesCardSample"/> (a single density, no
-/// grouping/sort-aggregate fields yet) since Phase 1 is library-only, no reader.
+/// Books grid card (docs/superpowers/specs/2026-08-09-novels-epub-pdf-support-design.md §1) - simpler
+/// than <see cref="SeriesCardSample"/>. An <see cref="ObservableObject"/> / <see cref="ISelectableCard"/>
+/// since B3 (docs/superpowers/specs/2026-08-27-books-bulk-series-editing-design.md) so
+/// <see cref="IsSelected"/> can drive the grid's selection checkboxes via
+/// <see cref="Paperbunkr.App.Services.TileSelectionController{T}"/>; every other field stays init-only.
 /// </summary>
-public sealed class BookCardSample
+public sealed partial class BookCardSample : ObservableObject, ISelectableCard
 {
     public int BookId { get; init; }
+
+    /// <summary><see cref="ISelectableCard"/> - the grid selects by book id.</summary>
+    public int Id => BookId;
+
+    [ObservableProperty]
+    private bool _isSelected;
 
     public string Title { get; init; } = string.Empty;
 
     public string? Author { get; init; }
 
     public string? SeriesName { get; init; }
+
+    /// <summary>The owning <see cref="BookSeries"/> id, or null for a standalone book - lets the
+    /// grouped Books grid route a "Series" section header to that series' Details view
+    /// (docs/superpowers/specs/2026-08-27-book-details-screen-design.md).</summary>
+    public int? BookSeriesId { get; init; }
 
     public bool HasSeries => !string.IsNullOrWhiteSpace(SeriesName);
 
@@ -47,6 +61,7 @@ public sealed class BookCardSample
             Title = book.Title,
             Author = book.Author,
             SeriesName = book.BookSeries?.Name,
+            BookSeriesId = book.BookSeriesId,
             Format = book.Format,
             AddedTime = book.AddedTime,
             LastOpenedTime = book.LastOpenedTime,

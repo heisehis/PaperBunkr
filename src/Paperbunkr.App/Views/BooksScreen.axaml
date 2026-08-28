@@ -82,15 +82,45 @@
             <Setter Property="Foreground" Value="{DynamicResource PbAccentTextBrush}" />
             <Setter Property="FontWeight" Value="Bold" />
         </Style>
+
+        <!-- Selection checkbox - hidden until hover, forced visible once anything's selected
+             (own copy of LibraryScreen's tileSelect, same per-UserControl precedent). -->
+        <Style Selector="CheckBox.tileSelect">
+            <Setter Property="Opacity" Value="0" />
+            <Setter Property="Transitions">
+                <Transitions><DoubleTransition Property="Opacity" Duration="0:0:0.12" /></Transitions>
+            </Setter>
+        </Style>
+        <Style Selector="Button.card:pointerover CheckBox.tileSelect">
+            <Setter Property="Opacity" Value="1" />
+        </Style>
+        <Style Selector="CheckBox.tileSelect.forceVisible">
+            <Setter Property="Opacity" Value="1" />
+        </Style>
+
+        <Style Selector="Button.selectionAction">
+            <Setter Property="Padding" Value="12,7" />
+            <Setter Property="CornerRadius" Value="{DynamicResource PbRadius}" />
+            <Setter Property="FontSize" Value="12.5" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Background" Value="{DynamicResource PbSurface3Brush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextBrush}" />
+        </Style>
     </UserControl.Styles>
 
     <UserControl.Resources>
         <DataTemplate x:Key="BookCardTemplate" x:DataType="models:BookCardSample">
             <Button Classes="card" Width="150" Margin="0,0,20,20"
-                    Command="{Binding $parent[UserControl].((vm:BooksScreenViewModel)DataContext).SelectBookCommand}"
+                    Command="{Binding $parent[UserControl].((vm:BooksScreenViewModel)DataContext).CardClickCommand}"
                     CommandParameter="{Binding}">
                 <Button.ContextMenu>
                     <ContextMenu>
+                        <MenuItem Header="Edit…"
+                                  Command="{Binding $parent[UserControl].((vm:BooksScreenViewModel)DataContext).EditBookCommand}"
+                                  CommandParameter="{Binding BookId}" />
                         <MenuItem Header="Delete Book">
                             <MenuItem Header="Yes, delete this book"
                                       Command="{Binding $parent[UserControl].((vm:BooksScreenViewModel)DataContext).DeleteBookCommand}"
@@ -103,6 +133,11 @@
                         <Grid>
                             <Image Source="{Binding CoverImage}" Stretch="UniformToFill" />
                             <Border Classes="posterScrim" />
+                            <CheckBox Classes="tileSelect" VerticalAlignment="Top" HorizontalAlignment="Left" Margin="6"
+                                      Classes.forceVisible="{Binding $parent[UserControl].((vm:BooksScreenViewModel)DataContext).HasSelection}"
+                                      IsChecked="{Binding IsSelected, Mode=OneWay}"
+                                      Command="{Binding $parent[UserControl].((vm:BooksScreenViewModel)DataContext).ToggleBookSelectionCheckboxCommand}"
+                                      CommandParameter="{Binding}" />
                         </Grid>
                     </Border>
                     <TextBlock Text="{Binding Title}" FontSize="12.5" FontWeight="SemiBold"
@@ -129,7 +164,20 @@
         <!-- ============ Chrome ============ -->
         <Border Grid.Row="1" Padding="28,10" Background="{DynamicResource PbSurface2Brush}"
                 BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,1,0,1">
-            <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="10">
+          <Panel>
+            <!-- Selection action bar - replaces the search/sort/group row while books are selected. -->
+            <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto" ColumnSpacing="10" IsVisible="{Binding HasSelection}">
+                <TextBlock Grid.Column="0" Text="{Binding SelectionCountLabel}" VerticalAlignment="Center"
+                           FontWeight="SemiBold" FontSize="12.5" Foreground="{DynamicResource PbTextBrush}" />
+                <Button Grid.Column="2" Classes="selectionAction" Content="Edit…" Command="{Binding EditSelectionCommand}"
+                        AutomationProperties.AutomationId="BooksSelectionEdit" />
+                <Button Grid.Column="3" Classes="selectionAction" Content="Delete" Foreground="#E06060"
+                        Command="{Binding DeleteSelectionCommand}" AutomationProperties.AutomationId="BooksSelectionDelete" />
+                <Button Grid.Column="4" Classes="selectionAction" Content="Clear" Command="{Binding ClearSelectionCommand}"
+                        AutomationProperties.AutomationId="BooksSelectionClear" />
+            </Grid>
+
+            <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="10" IsVisible="{Binding !HasSelection}">
                 <Border Grid.Column="0" Background="{DynamicResource PbSurface1Brush}" CornerRadius="{DynamicResource PbRadius}"
                         BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1" Padding="10,0" MaxWidth="360" HorizontalAlignment="Left">
                     <DockPanel LastChildFill="True">
@@ -184,11 +232,12 @@
                     </Border>
                 </Popup>
             </Grid>
+          </Panel>
         </Border>
 
         <!-- ============ Content ============ -->
         <ScrollViewer Grid.Row="2">
-            <Grid>
+            <Grid x:Name="ContentGrid">
                 <ItemsControl ItemsSource="{Binding Books}" Margin="24,22,24,40" IsVisible="{Binding !IsGrouped}"
                               ItemTemplate="{StaticResource BookCardTemplate}">
                     <ItemsControl.ItemsPanel>
@@ -200,7 +249,30 @@
                     <ItemsControl.ItemTemplate>
                         <DataTemplate x:DataType="models:BookCardGroup">
                             <StackPanel Margin="0,0,0,18">
-                                <DockPanel Margin="0,0,0,12">
+                                <!-- Series section: a clickable header that opens that series' Book Details view.
+                                     Author groups and the "Standalone" bucket (BookSeriesId == null) render the
+                                     same row as an inert DockPanel instead. -->
+                                <Button Margin="0,0,0,12" Padding="0" Background="Transparent" BorderThickness="0"
+                                        HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch" Cursor="Hand"
+                                        IsVisible="{Binding BookSeriesId, Converter={x:Static conv:ObjectConverters.IsNotNull}}"
+                                        Command="{Binding $parent[UserControl].((vm:BooksScreenViewModel)DataContext).OpenSeriesCommand}"
+                                        CommandParameter="{Binding BookSeriesId}"
+                                        ToolTip.Tip="Open this series">
+                                    <Button.ContextMenu>
+                                        <ContextMenu>
+                                            <MenuItem Header="Edit series…"
+                                                      Command="{Binding $parent[UserControl].((vm:BooksScreenViewModel)DataContext).EditSeriesCommand}"
+                                                      CommandParameter="{Binding BookSeriesId}" />
+                                        </ContextMenu>
+                                    </Button.ContextMenu>
+                                    <DockPanel>
+                                        <TextBlock DockPanel.Dock="Left" Text="{Binding Header}" Classes="pbTextHeading" VerticalAlignment="Center" />
+                                        <TextBlock DockPanel.Dock="Left" Text="{Binding Items.Count}" Classes="pbTextCaption" Margin="8,0,0,0" VerticalAlignment="Center" />
+                                        <Border Height="1" VerticalAlignment="Center" Margin="14,0,0,0" Background="{DynamicResource PbBorderBrush}" />
+                                    </DockPanel>
+                                </Button>
+                                <DockPanel Margin="0,0,0,12"
+                                           IsVisible="{Binding BookSeriesId, Converter={x:Static conv:ObjectConverters.IsNull}}">
                                     <TextBlock DockPanel.Dock="Left" Text="{Binding Header}" Classes="pbTextHeading" VerticalAlignment="Center" />
                                     <TextBlock DockPanel.Dock="Left" Text="{Binding Items.Count}" Classes="pbTextCaption" Margin="8,0,0,0" VerticalAlignment="Center" />
                                     <Border Height="1" VerticalAlignment="Center" Margin="14,0,0,0" Background="{DynamicResource PbBorderBrush}" />

@@ -98,6 +98,49 @@ public class BookCoverThumbnailService
         }
     }
 
+    /// <summary>
+    /// Overrides <paramref name="bookId"/>'s displayed cover with a user-picked local image
+    /// (docs/superpowers/specs/2026-08-27-book-properties-editor-design.md), regardless of format -
+    /// a PDF book has no auto cover at all, so this is the only way it gets one. Mirrors
+    /// <see cref="CoverThumbnailService.TrySetCustomCover"/>: always overwrites (unlike
+    /// <see cref="TryGenerateThumbnail"/>'s presence check), and uses
+    /// <see cref="BookCoverImageCache.InvalidateMemoryOnly"/> - the file-deleting
+    /// <see cref="BookCoverImageCache.Invalidate"/> would wipe the very file just written.
+    /// </summary>
+    public bool TrySetCustomCover(int bookId, string sourceImagePath)
+    {
+        string destPath = BookCoverThumbnailPaths.GetCachePath(bookId);
+        try
+        {
+            using var source = new Bitmap(sourceImagePath);
+            if (!ScaleAndSave(source, destPath))
+            {
+                return false;
+            }
+
+            BookCoverImageCache.InvalidateMemoryOnly(bookId);
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Reverts a custom cover: deletes the cached file (real <see cref="BookCoverImageCache.Invalidate"/>
+    /// this time) and regenerates the auto cover. EPUB gets its embedded cover back immediately;
+    /// PDF has no auto cover, so it simply goes blank - the honest reset for that format.
+    /// </summary>
+    public void ResetCover(int bookId, string? filePath, BookFormat format)
+    {
+        BookCoverImageCache.Invalidate(bookId);
+        if (!string.IsNullOrEmpty(filePath))
+        {
+            TryGenerateThumbnail(bookId, filePath, format);
+        }
+    }
+
     private static bool ScaleAndSave(Bitmap source, string destPath)
     {
         var size = source.PixelSize;

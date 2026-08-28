@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Paperbunkr.App.Models;
 using Paperbunkr.App.Services;
 using Paperbunkr.Data.Entities;
 
@@ -39,9 +40,13 @@ public partial class MainViewModel : ViewModelBase
     {
         Home = new HomeScreenViewModel(GoDetailForSeries, GoReaderForIssue, GoLibraryWithSearch, GoReaderForIssueInReadingList, GoBookReaderForBook);
         Library = new LibraryScreenViewModel(GoDetailForSeries, GoReaderForIssue, GoNewIssuePropertiesForPlaceholder, OpenQuickRateOverlay, GoIssuePropertiesForIssue, GoBulkIssuePropertiesForIssues, ShowToast, GoBulkSeriesPropertiesForSeries, GoLibraryFoldersPreferences);
-        Books = new BooksScreenViewModel(GoBookReaderForBook, GoLibraryFoldersPreferences);
-        BookReader = new BookReaderScreenViewModel(GoBooks);
-        PdfReader = new PdfPageReaderScreenViewModel(GoBooks);
+        Books = new BooksScreenViewModel(GoBookDetailForBook, GoBookSeriesDetailForSeries, GoBookPropertiesForBook, GoBulkBookPropertiesForBooks, GoBookSeriesPropertiesForSeries, GoLibraryFoldersPreferences);
+        BookDetail = new BookDetailScreenViewModel(GoBooks, GoBookReaderForBook, GoBookPropertiesForBook, GoBulkBookPropertiesForBooks, GoBookSeriesPropertiesForSeries);
+        BookProperties = new BookPropertiesScreenViewModel(CloseBookPropertiesOverlay, ShowToast);
+        BulkBookProperties = new BulkBookPropertiesScreenViewModel(CloseBulkBookPropertiesOverlay, ShowToast);
+        BookSeriesProperties = new BookSeriesPropertiesScreenViewModel(CloseBookSeriesPropertiesOverlay, ShowToast);
+        BookReader = new BookReaderScreenViewModel(GoBackFromBookReader);
+        PdfReader = new PdfPageReaderScreenViewModel(GoBackFromBookReader);
         Detail = new DetailScreenViewModel(GoLibrary, GoReaderForIssue, GoIssuePropertiesForIssue, GoBulkIssuePropertiesForIssues, GoDetailForSeries, GoLibraryWithSearch, OpenQuickRateOverlay);
         MangaDetail = new MangaDetailScreenViewModel(GoLibrary, GoReaderForIssue, GoIssuePropertiesForIssue, GoBulkIssuePropertiesForIssues, GoDetailForSeries, GoLibraryWithSearch);
         var keyBindingService = new KeyBindingService();
@@ -141,6 +146,10 @@ public partial class MainViewModel : ViewModelBase
     public HomeScreenViewModel Home { get; }
     public LibraryScreenViewModel Library { get; }
     public BooksScreenViewModel Books { get; }
+    public BookDetailScreenViewModel BookDetail { get; }
+    public BookPropertiesScreenViewModel BookProperties { get; }
+    public BulkBookPropertiesScreenViewModel BulkBookProperties { get; }
+    public BookSeriesPropertiesScreenViewModel BookSeriesProperties { get; }
     public BookReaderScreenViewModel BookReader { get; }
     public PdfPageReaderScreenViewModel PdfReader { get; }
     public DetailScreenViewModel Detail { get; }
@@ -188,6 +197,21 @@ public partial class MainViewModel : ViewModelBase
 
     [ObservableProperty]
     private bool _isReadingListPropertiesOverlayOpen;
+
+    [ObservableProperty]
+    private bool _isBookPropertiesOverlayOpen;
+
+    partial void OnIsBookPropertiesOverlayOpenChanged(bool value) => OnPropertyChanged(nameof(IsBookProperties));
+
+    [ObservableProperty]
+    private bool _isBulkBookPropertiesOverlayOpen;
+
+    partial void OnIsBulkBookPropertiesOverlayOpenChanged(bool value) => OnPropertyChanged(nameof(IsBulkBookProperties));
+
+    [ObservableProperty]
+    private bool _isBookSeriesPropertiesOverlayOpen;
+
+    partial void OnIsBookSeriesPropertiesOverlayOpenChanged(bool value) => OnPropertyChanged(nameof(IsBookSeriesProperties));
 
     [ObservableProperty]
     private bool _isQuickRateOverlayOpen;
@@ -256,6 +280,7 @@ public partial class MainViewModel : ViewModelBase
     public bool IsHome => CurrentScreen == "home";
     public bool IsLibrary => CurrentScreen == "library";
     public bool IsBooks => CurrentScreen == "books";
+    public bool IsBookDetail => CurrentScreen == "bookDetail";
     public bool IsBookReader => CurrentScreen == "bookReader";
     public bool IsPdfReader => CurrentScreen == "pdfReader";
     public bool IsDetail => CurrentScreen == "detail";
@@ -273,6 +298,12 @@ public partial class MainViewModel : ViewModelBase
 
     public bool IsBulkSeriesProperties => IsBulkSeriesPropertiesOverlayOpen;
 
+    public bool IsBookProperties => IsBookPropertiesOverlayOpen;
+
+    public bool IsBulkBookProperties => IsBulkBookPropertiesOverlayOpen;
+
+    public bool IsBookSeriesProperties => IsBookSeriesPropertiesOverlayOpen;
+
     public bool ShowContextualSidebar => IsLibrary || IsSmart || IsReading || IsEvents;
 
     partial void OnCurrentScreenChanged(string value)
@@ -282,6 +313,7 @@ public partial class MainViewModel : ViewModelBase
         OnPropertyChanged(nameof(IsHome));
         OnPropertyChanged(nameof(IsLibrary));
         OnPropertyChanged(nameof(IsBooks));
+        OnPropertyChanged(nameof(IsBookDetail));
         OnPropertyChanged(nameof(IsBookReader));
         OnPropertyChanged(nameof(IsPdfReader));
         OnPropertyChanged(nameof(IsDetail));
@@ -406,6 +438,72 @@ public partial class MainViewModel : ViewModelBase
         Reading.EnsureListLoaded();
     }
 
+    /// <summary>Book Properties editor entry point (docs/superpowers/specs/2026-08-27-book-properties-
+    /// editor-design.md) - the B1 Details "Edit" button, the Books grid card context menu, and the
+    /// Book Details Series-mode card context menu all route here.</summary>
+    private void GoBookPropertiesForBook(int bookId)
+    {
+        BookProperties.Load(bookId);
+        IsBookPropertiesOverlayOpen = true;
+    }
+
+    /// <summary>Save/Cancel's shared <c>goBack</c> callback and the corner "X" command - repaints
+    /// whatever's underneath (Book Details or the Books grid), same "cheap enough to always refresh"
+    /// tolerance as <see cref="CloseReadingListPropertiesOverlay"/>.</summary>
+    [RelayCommand]
+    private void CloseBookPropertiesOverlay()
+    {
+        IsBookPropertiesOverlayOpen = false;
+        ReloadBooksSurfaceUnderneath();
+    }
+
+    /// <summary>Bulk book editor entry point (docs/superpowers/specs/2026-08-27-books-bulk-series-
+    /// editing-design.md) - from the Books grid selection bar or Book Details Series mode.</summary>
+    private void GoBulkBookPropertiesForBooks(IReadOnlyList<int> bookIds)
+    {
+        if (bookIds.Count == 0)
+        {
+            return;
+        }
+
+        BulkBookProperties.Load(bookIds);
+        IsBulkBookPropertiesOverlayOpen = true;
+    }
+
+    [RelayCommand]
+    private void CloseBulkBookPropertiesOverlay()
+    {
+        IsBulkBookPropertiesOverlayOpen = false;
+        ReloadBooksSurfaceUnderneath();
+    }
+
+    /// <summary>BookSeries editor entry point - from Book Details Series mode or the Books grid's
+    /// grouped-by-Series section-header context menu.</summary>
+    private void GoBookSeriesPropertiesForSeries(int bookSeriesId)
+    {
+        BookSeriesProperties.Load(bookSeriesId);
+        IsBookSeriesPropertiesOverlayOpen = true;
+    }
+
+    [RelayCommand]
+    private void CloseBookSeriesPropertiesOverlay()
+    {
+        IsBookSeriesPropertiesOverlayOpen = false;
+        ReloadBooksSurfaceUnderneath();
+    }
+
+    private void ReloadBooksSurfaceUnderneath()
+    {
+        if (IsBookDetail)
+        {
+            BookDetail.ReloadCurrent();
+        }
+        else
+        {
+            Books.LoadFromDatabase();
+        }
+    }
+
     /// <summary>Quick Rating + free-text Review in one popup (docs/ce-feature-inventory.md §A) - entry point wired into <see cref="Library"/>'s right-click "Quick Rate..." menu item.</summary>
     private void OpenQuickRateOverlay(int issueId)
     {
@@ -459,6 +557,14 @@ public partial class MainViewModel : ViewModelBase
         else if (IsLibrary)
         {
             Library.LoadFromDatabase();
+        }
+        else if (IsBookDetail)
+        {
+            BookDetail.ReloadCurrentBook();
+        }
+        else if (IsBooks)
+        {
+            Books.LoadFromDatabase();
         }
     }
 
@@ -523,7 +629,10 @@ public partial class MainViewModel : ViewModelBase
     {
         bool hasUnsavedChanges = (IsIssueProperties && IssueProperties.HasUnsavedChanges())
             || (IsBulkIssueProperties && BulkIssueProperties.HasUnsavedChanges())
-            || (IsBulkSeriesProperties && BulkSeriesProperties.HasUnsavedChanges());
+            || (IsBulkSeriesProperties && BulkSeriesProperties.HasUnsavedChanges())
+            || (IsBookProperties && BookProperties.HasUnsavedChanges())
+            || (IsBulkBookProperties && BulkBookProperties.HasUnsavedChanges())
+            || (IsBookSeriesProperties && BookSeriesProperties.HasUnsavedChanges());
 
         // Rail-nav destinations only ever set CurrentScreen, which no longer has anything to do with
         // whether an editor overlay is open (docs/superpowers/specs/2026-08-23-issue-editor-
@@ -536,6 +645,9 @@ public partial class MainViewModel : ViewModelBase
             IsIssuePropertiesOverlayOpen = false;
             IsBulkIssuePropertiesOverlayOpen = false;
             IsBulkSeriesPropertiesOverlayOpen = false;
+            IsBookPropertiesOverlayOpen = false;
+            IsBulkBookPropertiesOverlayOpen = false;
+            IsBookSeriesPropertiesOverlayOpen = false;
             navigate();
         }
 
@@ -696,17 +808,59 @@ public partial class MainViewModel : ViewModelBase
         CurrentScreen = "reader";
     }
 
-    private void GoBookReaderForBook(int bookId, BookFormat format)
+    /// <summary>Book Details entry point (docs/superpowers/specs/2026-08-27-book-details-screen-
+    /// design.md) - the Books grid card click lands here now, not straight in the reader.</summary>
+    private void GoBookDetailForBook(int bookId)
     {
+        BookDetail.LoadBook(bookId);
+        CurrentScreen = "bookDetail";
+    }
+
+    /// <summary>Grouped-by-Series section header click on the Books grid - opens Series mode of the same screen.</summary>
+    private void GoBookSeriesDetailForSeries(int bookSeriesId)
+    {
+        BookDetail.LoadSeries(bookSeriesId);
+        CurrentScreen = "bookDetail";
+    }
+
+    /// <summary>The screen the book reader was opened from, so its back button returns there
+    /// (Book Details or the Books grid) instead of always the grid - mirrors
+    /// <see cref="_screenBeforeReader"/> / <see cref="GoBackFromReader"/> for the comic Reader.</summary>
+    private string _screenBeforeBookReader = "books";
+
+    private void GoBookReaderForBook(int bookId, BookFormat format) => GoBookReaderForBook(bookId, format, null);
+
+    /// <param name="startAt">A chapter or bookmark jump from the Book Details screen; null resumes
+    /// from the book's saved position.</param>
+    private void GoBookReaderForBook(int bookId, BookFormat format, BookPosition? startAt)
+    {
+        if (CurrentScreen is not ("bookReader" or "pdfReader"))
+        {
+            _screenBeforeBookReader = CurrentScreen;
+        }
+
         if (format == BookFormat.Pdf)
         {
-            PdfReader.LoadBook(bookId);
+            PdfReader.LoadBook(bookId, startAt);
             CurrentScreen = "pdfReader";
         }
         else
         {
-            BookReader.LoadBook(bookId);
+            BookReader.LoadBook(bookId, startAt);
             CurrentScreen = "bookReader";
+        }
+    }
+
+    private void GoBackFromBookReader()
+    {
+        if (_screenBeforeBookReader == "bookDetail")
+        {
+            BookDetail.ReloadCurrentBook();
+            CurrentScreen = "bookDetail";
+        }
+        else
+        {
+            GoBooks();
         }
     }
 
@@ -759,6 +913,18 @@ public partial class MainViewModel : ViewModelBase
         else if (IsReadingListPropertiesOverlayOpen)
         {
             ReadingListProperties.CancelCommand.Execute(null);
+        }
+        else if (IsBookProperties)
+        {
+            BookProperties.CancelCommand.Execute(null);
+        }
+        else if (IsBulkBookProperties)
+        {
+            BulkBookProperties.CancelCommand.Execute(null);
+        }
+        else if (IsBookSeriesProperties)
+        {
+            BookSeriesProperties.CancelCommand.Execute(null);
         }
         else if (IsQuickRateOverlayOpen)
         {

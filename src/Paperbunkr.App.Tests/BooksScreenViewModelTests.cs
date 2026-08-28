@@ -43,8 +43,12 @@ public class BooksScreenViewModelTests : IDisposable
         }
     }
 
-    private static BooksScreenViewModel CreateViewModel(Action<int, BookFormat>? goReader = null, Action? goLibrarySettings = null) =>
-        new(goReader ?? ((_, _) => { }), goLibrarySettings ?? (() => { }));
+    private static BooksScreenViewModel CreateViewModel(Action<int>? goBookDetail = null,
+        Action<int>? goBookSeriesDetail = null, Action<int>? goEditBook = null,
+        Action<IReadOnlyList<int>>? goBulkEdit = null, Action<int>? goEditSeries = null,
+        Action? goLibrarySettings = null) =>
+        new(goBookDetail ?? (_ => { }), goBookSeriesDetail ?? (_ => { }), goEditBook ?? (_ => { }),
+            goBulkEdit ?? (_ => { }), goEditSeries ?? (_ => { }), goLibrarySettings ?? (() => { }));
 
     private static int AddBook(string title, BookFormat format = BookFormat.Epub, string? filePath = null)
     {
@@ -108,16 +112,154 @@ public class BooksScreenViewModelTests : IDisposable
     }
 
     [Fact]
-    public void SelectBook_InvokesReaderCallback_WithIdAndFormat()
+    public void CardClick_WithNoSelection_InvokesBookDetailCallback_WithId()
     {
-        (int Id, BookFormat Format)? captured = null;
+        int? captured = null;
         int id = AddBook("Neuromancer", BookFormat.Pdf);
-        var vm = CreateViewModel(goReader: (bookId, format) => captured = (bookId, format));
+        var vm = CreateViewModel(goBookDetail: bookId => captured = bookId);
         vm.LoadFromDatabase();
 
-        vm.SelectBookCommand.Execute(vm.Books.Single(b => b.BookId == id));
+        vm.CardClickCommand.Execute(vm.Books.Single(b => b.BookId == id));
 
-        Assert.Equal((id, BookFormat.Pdf), captured);
+        Assert.Equal(id, captured);
+    }
+
+    [Fact]
+    public void CardClick_WhileInSelectionMode_TogglesInsteadOfNavigating()
+    {
+        int? navigated = null;
+        int a = AddBook("A");
+        int b = AddBook("B");
+        var vm = CreateViewModel(goBookDetail: id => navigated = id);
+        vm.LoadFromDatabase();
+        var cardA = vm.Books.Single(c => c.BookId == a);
+        var cardB = vm.Books.Single(c => c.BookId == b);
+
+        vm.ToggleBookSelectionCheckboxCommand.Execute(cardA); // enter selection mode
+        vm.CardClickCommand.Execute(cardB);
+
+        Assert.Null(navigated);
+        Assert.Equal(new[] { a, b }, vm.Selection.SelectedIds.OrderBy(x => x));
+        Assert.True(cardB.IsSelected);
+    }
+
+    [Fact]
+    public void Selection_Toggle_Clear_And_SurvivesResort()
+    {
+        int a = AddBook("Alpha");
+        int b = AddBook("Bravo");
+        var vm = CreateViewModel();
+        vm.LoadFromDatabase();
+
+        vm.ToggleBookSelectionCheckboxCommand.Execute(vm.Books.Single(c => c.BookId == a));
+        vm.ToggleBookSelectionCheckboxCommand.Execute(vm.Books.Single(c => c.BookId == b));
+        Assert.True(vm.HasSelection);
+        Assert.Equal(2, vm.SelectionCount);
+
+        vm.SortDirection = SortDirection.Descending; // triggers Rebuild
+        Assert.Equal(2, vm.SelectionCount);
+        Assert.All(vm.Books, c => Assert.True(c.IsSelected));
+
+        vm.ClearSelectionCommand.Execute(null);
+        Assert.False(vm.HasSelection);
+        Assert.All(vm.Books, c => Assert.False(c.IsSelected));
+    }
+
+    [Fact]
+    public void Selection_ClearedByDatabaseReload()
+    {
+        int a = AddBook("A");
+        var vm = CreateViewModel();
+        vm.LoadFromDatabase();
+        vm.ToggleBookSelectionCheckboxCommand.Execute(vm.Books.Single(c => c.BookId == a));
+        Assert.True(vm.HasSelection);
+
+        vm.LoadFromDatabase();
+
+        Assert.False(vm.HasSelection);
+    }
+
+    [Fact]
+    public void EditSelection_InvokesBulkCallback_WithSelectedIds()
+    {
+        IReadOnlyList<int>? captured = null;
+        int a = AddBook("A");
+        int b = AddBook("B");
+        AddBook("C");
+        var vm = CreateViewModel(goBulkEdit: ids => captured = ids);
+        vm.LoadFromDatabase();
+        vm.ToggleBookSelectionCheckboxCommand.Execute(vm.Books.Single(c => c.BookId == a));
+        vm.ToggleBookSelectionCheckboxCommand.Execute(vm.Books.Single(c => c.BookId == b));
+
+        vm.EditSelectionCommand.Execute(null);
+
+        Assert.NotNull(captured);
+        Assert.Equal(new[] { a, b }, captured!.OrderBy(x => x));
+    }
+
+    [Fact]
+    public void DeleteSelection_DeletesBooks_AndPrunesEmptiedSeries()
+    {
+        int a = SeedBook("A", series: "Doomed Series");
+        int b = SeedBook("B", series: "Doomed Series");
+        var vm = CreateViewModel();
+        vm.LoadFromDatabase();
+        vm.ToggleBookSelectionCheckboxCommand.Execute(vm.Books.Single(c => c.BookId == a));
+        vm.ToggleBookSelectionCheckboxCommand.Execute(vm.Books.Single(c => c.BookId == b));
+
+        vm.DeleteSelectionCommand.Execute(null);
+
+        using var context = PaperbunkrDb.CreateContext();
+        Assert.Empty(context.Books);
+        Assert.Empty(context.BookSeries.Where(s => s.Name == "Doomed Series"));
+    }
+
+    [Fact]
+    public void EditSeries_InvokesCallback_ForRealIdOnly()
+    {
+        int? captured = null;
+        var vm = CreateViewModel(goEditSeries: id => captured = id);
+
+        vm.EditSeriesCommand.Execute(null);
+        Assert.Null(captured);
+
+        vm.EditSeriesCommand.Execute(42);
+        Assert.Equal(42, captured);
+    }
+
+    [Fact]
+    public void EditBook_InvokesEditCallback_WithId()
+    {
+        int? captured = null;
+        int id = AddBook("Editable");
+        var vm = CreateViewModel(goEditBook: bookId => captured = bookId);
+        vm.LoadFromDatabase();
+
+        vm.EditBookCommand.Execute(id);
+
+        Assert.Equal(id, captured);
+    }
+
+    [Fact]
+    public void OpenSeries_InvokesSeriesDetailCallback_ForRealSeriesHeaderOnly()
+    {
+        int? captured = null;
+        SeedBook("Dune", series: "Dune Chronicles");
+        SeedBook("Foundation");
+        var vm = CreateViewModel(goBookSeriesDetail: seriesId => captured = seriesId);
+        vm.GroupField = BooksGroupField.Series;
+
+        var seriesGroup = vm.Groups.Single(g => g.Header == "Dune Chronicles");
+        var standaloneGroup = vm.Groups.Single(g => g.Header == "Standalone");
+        Assert.NotNull(seriesGroup.BookSeriesId);
+        Assert.Null(standaloneGroup.BookSeriesId);
+
+        vm.OpenSeriesCommand.Execute(seriesGroup.BookSeriesId);
+        Assert.Equal(seriesGroup.BookSeriesId, captured);
+
+        captured = null;
+        vm.OpenSeriesCommand.Execute(standaloneGroup.BookSeriesId);
+        Assert.Null(captured);
     }
 
     [Fact]

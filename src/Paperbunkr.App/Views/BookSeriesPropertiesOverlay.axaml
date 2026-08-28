@@ -1,0 +1,51 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Paperbunkr.App.ViewModels"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="440" d:DesignHeight="320"
+             x:Class="Paperbunkr.App.Views.BookSeriesPropertiesOverlay"
+             x:DataType="vm:BookSeriesPropertiesScreenViewModel">
+
+    <UserControl.Styles>
+        <Style Selector="TextBlock.fieldLabel">
+            <Setter Property="FontSize" Value="10.5" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextFaintBrush}" />
+            <Setter Property="Margin" Value="0,0,0,4" />
+        </Style>
+    </UserControl.Styles>
+
+    <Border Width="440" Classes="floatingPanel">
+        <DockPanel LastChildFill="True">
+
+            <StackPanel DockPanel.Dock="Top" Margin="20,18,20,0">
+                <TextBlock Text="{Binding HeaderLabel}" FontSize="17" FontWeight="Bold" Foreground="{DynamicResource PbTextBrush}" />
+                <Border Height="1" Background="{DynamicResource PbBorderBrush}" Margin="0,14,0,0" />
+            </StackPanel>
+
+            <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Spacing="8"
+                        HorizontalAlignment="Right" Margin="20,0,20,18">
+                <Button Classes="ghost" FontSize="12.5" Content="Cancel" Command="{Binding CancelCommand}" />
+                <Button Classes="primary" FontSize="12.5" Content="Save" Command="{Binding SaveCommand}"
+                        AutomationProperties.AutomationId="BookSeriesPropertiesSave" />
+            </StackPanel>
+
+            <StackPanel Margin="20,16,20,16" Spacing="12">
+                <StackPanel>
+                    <TextBlock Classes="fieldLabel" Text="NAME" />
+                    <TextBox Text="{Binding Name}" AutomationProperties.AutomationId="BookSeriesPropertiesName" />
+                </StackPanel>
+                <StackPanel>
+                    <TextBlock Classes="fieldLabel" Text="SORT NAME" />
+                    <TextBox Text="{Binding SortName}" Watermark="Optional — for A–Z ordering" />
+                </StackPanel>
+                <StackPanel>
+                    <TextBlock Classes="fieldLabel" Text="AUTHOR" />
+                    <TextBox Text="{Binding Author}" />
+                </StackPanel>
+                <TextBlock Classes="fieldLabel" TextWrapping="Wrap"
+                           Text="Renaming updates the series for every book in it." />
+            </StackPanel>
+        </DockPanel>
+    </Border>
+</UserControl>

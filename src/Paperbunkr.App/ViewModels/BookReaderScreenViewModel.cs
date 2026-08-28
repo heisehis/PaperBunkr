@@ -110,7 +110,11 @@ public partial class BookReaderScreenViewModel : ViewModelBase
 
     partial void OnSearchQueryChanged(string value) => RunSearch(value);
 
-    public void LoadBook(int bookId)
+    /// <param name="startAt">When non-null, the reader opens here (a chapter jump or a bookmark
+    /// from the Book Details screen - docs/superpowers/specs/2026-08-27-book-details-screen-design.md)
+    /// instead of resuming from <see cref="Book.LastChapterIndex"/>/<see cref="Book.LastCharacterOffset"/>.
+    /// Nothing new is persisted until the reader itself navigates.</param>
+    public void LoadBook(int bookId, BookPosition? startAt = null)
     {
         _source?.Dispose();
         _history.Clear();
@@ -143,8 +147,16 @@ public partial class BookReaderScreenViewModel : ViewModelBase
         // Resume position (design spec §6): clamp the stored chapter index in case the book
         // changed on disk since it was last saved - FindParagraphIndex already clamps a stale
         // CharacterOffset safely, so only ChapterIndex needs guarding here.
-        int chapterIndex = Math.Clamp(_book.LastChapterIndex, 0, Math.Max(0, _source.Chapters.Count - 1));
-        _position = new BookPosition(chapterIndex, _book.LastCharacterOffset);
+        if (startAt is { } start)
+        {
+            int clamped = Math.Clamp(start.ChapterIndex, 0, Math.Max(0, _source.Chapters.Count - 1));
+            _position = new BookPosition(clamped, start.CharacterOffset);
+        }
+        else
+        {
+            int chapterIndex = Math.Clamp(_book.LastChapterIndex, 0, Math.Max(0, _source.Chapters.Count - 1));
+            _position = new BookPosition(chapterIndex, _book.LastCharacterOffset);
+        }
 
         _book.LastOpenedTime = DateTime.UtcNow;
         // Lazy-populate ChapterCount (feeds Home's progress bar) + un-finish a re-read
@@ -477,6 +489,7 @@ public partial class BookReaderScreenViewModel : ViewModelBase
         CharacterOffset = bookmark.CharacterOffset,
         ChapterTitle = chapterTitle,
         Excerpt = bookmark.Excerpt,
+        CreatedTime = bookmark.CreatedTime,
     };
 
     /// <summary>

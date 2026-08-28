@@ -12,5 +12,11 @@ public sealed class BookCardGroup
 {
     public required string Header { get; init; }
 
+    /// <summary>The owning <see cref="BookSeries"/> id when grouping by Series and this is a real
+    /// series section (not the "Standalone" bucket); null otherwise. Drives whether the section
+    /// header navigates to that series' Book Details view (docs/superpowers/specs/2026-08-27-book-
+    /// details-screen-design.md).</summary>
+    public int? BookSeriesId { get; init; }
+
     public required ObservableCollection<BookCardSample> Items { get; init; }
 }

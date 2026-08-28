@@ -15,6 +15,12 @@ public sealed class MetadataEditHistoryEntry
 {
     public required string Description { get; init; }
 
+    /// <summary>Which table <see cref="Before"/>/<see cref="After"/> restore against
+    /// (docs/superpowers/specs/2026-08-27-book-properties-editor-design.md). Defaults to
+    /// <see cref="MetadataEditTarget.Issue"/> so the pre-existing issue-editor call sites need no
+    /// change; the Book Properties editor pushes <see cref="MetadataEditTarget.Book"/> entries.</summary>
+    public MetadataEditTarget Target { get; init; } = MetadataEditTarget.Issue;
+
     public required Dictionary<int, Dictionary<string, string?>> Before { get; init; }
 
     public required Dictionary<int, Dictionary<string, string?>> After { get; init; }

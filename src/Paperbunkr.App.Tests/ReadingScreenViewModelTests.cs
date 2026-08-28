@@ -658,6 +658,82 @@ public class ReadingScreenViewModelTests : IDisposable
         Assert.Equal(continueLabel, vm.ContinueLabel);
     }
 
+    // --- Bulk selection (docs/superpowers/specs/2026-08-28-bulk-selection-lists-continuities-events-design.md) ---
+
+    [Fact]
+    public void AddSelectedIssues_AddsEveryTicked_InOrder_AndClears()
+    {
+        int a = SeedOwnedIssue("Sel", "1");
+        int b = SeedOwnedIssue("Sel", "2");
+        int c = SeedOwnedIssue("Sel", "3");
+        var vm = new ReadingScreenViewModel(_filePicker, (_, _) => { });
+        vm.CreateNewCommand.Execute(null);
+        int listId = vm.Lists.Single().Id;
+        vm.LoadReadingList(listId);
+
+        vm.SearchQuery = "Sel";
+        Assert.Equal(3, vm.SearchResults.Count);
+        vm.ToggleSearchSelectionCommand.Execute(vm.SearchResults[0]);
+        vm.ToggleSearchSelectionCommand.Execute(vm.SearchResults[2]);
+        Assert.True(vm.AnySearchSelected);
+
+        vm.AddSelectedIssuesCommand.Execute(null);
+
+        var ids = vm.Groups.SelectMany(g => g.Rows).Select(r => r.Item.IssueId).ToList();
+        Assert.Equal(new[] { a, c }, ids);
+        Assert.False(vm.AnySearchSelected);
+    }
+
+    [Fact]
+    public void AddAllOfSeries_AddsWholeRun_SkipsDuplicates()
+    {
+        SeedOwnedIssue("Run", "1");
+        SeedOwnedIssue("Run", "2");
+        SeedOwnedIssue("Run", "3");
+        var vm = new ReadingScreenViewModel(_filePicker, (_, _) => { });
+        vm.CreateNewCommand.Execute(null);
+        int listId = vm.Lists.Single().Id;
+        vm.LoadReadingList(listId);
+
+        vm.SearchQuery = "Run";
+        vm.AddAllOfSeriesCommand.Execute(vm.SearchResults[0]);
+        Assert.Equal(3, vm.Groups.SelectMany(g => g.Rows).Count());
+
+        vm.AddAllOfSeriesCommand.Execute(vm.SearchResults[0]);
+        Assert.Equal(3, vm.Groups.SelectMany(g => g.Rows).Count());
+    }
+
+    [Fact]
+    public void RemoveSelectedMembers_RemovesTicked()
+    {
+        int listId = SeedListWith(SeedOwnedIssue("R", "1"), SeedOwnedIssue("R", "2"), SeedOwnedIssue("R", "3"));
+        var vm = new ReadingScreenViewModel(_filePicker, (_, _) => { });
+        vm.LoadReadingList(listId);
+
+        var rows = vm.Groups.SelectMany(g => g.Rows).ToList();
+        vm.ToggleMemberSelectionCommand.Execute(rows[0]);
+        vm.ToggleMemberSelectionCommand.Execute(rows[1]);
+
+        vm.RemoveSelectedMembersCommand.Execute(null);
+
+        Assert.Single(vm.Groups.SelectMany(g => g.Rows));
+        Assert.False(vm.AnyMembersSelected);
+    }
+
+    [Fact]
+    public void MemberSelection_ClearsOnListSwitch()
+    {
+        int listId = SeedListWith(SeedOwnedIssue("S", "1"), SeedOwnedIssue("S", "2"));
+        var vm = new ReadingScreenViewModel(_filePicker, (_, _) => { });
+        vm.LoadReadingList(listId);
+        vm.ToggleMemberSelectionCommand.Execute(vm.Groups.SelectMany(g => g.Rows).First());
+        Assert.True(vm.AnyMembersSelected);
+
+        vm.LoadReadingList(listId);
+
+        Assert.False(vm.AnyMembersSelected);
+    }
+
     [Fact]
     public void SidebarSummary_CarriesCoverAndProgress()
     {

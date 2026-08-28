@@ -2,6 +2,8 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Paperbunkr.App.ViewModels"
              xmlns:models="using:Paperbunkr.App.Models"
+             xmlns:views="using:Paperbunkr.App.Views"
+             xmlns:entities="using:Paperbunkr.Data.Entities"
              xmlns:conv="using:Avalonia.Data.Converters"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -10,7 +12,7 @@
              x:DataType="vm:EventsScreenViewModel">
 
     <UserControl.Styles>
-        <!-- statCard / statNumber / statLabel / issueRow / searchBox come from Styles/ScreenChrome.axaml. -->
+        <!-- issueRow / searchBox from Styles/ScreenChrome.axaml. -->
         <Style Selector="Button.headerAction">
             <Setter Property="Padding" Value="10,5" />
             <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusSm}" />
@@ -29,347 +31,288 @@
             <Setter Property="BorderThickness" Value="1" />
             <Setter Property="Foreground" Value="{DynamicResource PbTextBrush}" />
         </Style>
-        <Style Selector="Button.headerAction.secondary.active">
+        <Style Selector="Button.headerAction.primary">
             <Setter Property="Background" Value="{DynamicResource PbAccentBrush}" />
             <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
             <Setter Property="Foreground" Value="{DynamicResource PbBadgeTextBrush}" />
+        </Style>
+
+        <!-- Segmented Primary/Timeline toggle -->
+        <Style Selector="Button.segToggle">
+            <Setter Property="Padding" Value="12,5" />
+            <Setter Property="CornerRadius" Value="4" />
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style Selector="Button.segToggle.on">
+            <Setter Property="Background" Value="{DynamicResource PbAccentBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource PbBadgeTextBrush}" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+        </Style>
+
+        <!-- Member row: calm at rest, ⋮ on hover -->
+        <Style Selector="Border.itemRow">
+            <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusSm}" />
+            <Setter Property="Padding" Value="6,7" />
+            <Setter Property="Margin" Value="0,1" />
+        </Style>
+        <Style Selector="Border.itemRow:pointerover">
+            <Setter Property="Background" Value="{DynamicResource PbSurface2Brush}" />
+        </Style>
+        <Style Selector="Border.itemRow :is(Control).rowManage">
+            <Setter Property="Opacity" Value="0" />
+            <Setter Property="IsHitTestVisible" Value="False" />
+        </Style>
+        <Style Selector="Border.itemRow:pointerover :is(Control).rowManage">
+            <Setter Property="Opacity" Value="1" />
+            <Setter Property="IsHitTestVisible" Value="True" />
+        </Style>
+        <Style Selector="CheckBox.rowPick.pinned">
+            <Setter Property="Opacity" Value="1" />
+            <Setter Property="IsHitTestVisible" Value="True" />
+        </Style>
+        <Style Selector="CheckBox.posterPick">
+            <Setter Property="Opacity" Value="0" />
+            <Setter Property="IsHitTestVisible" Value="False" />
+        </Style>
+        <Style Selector="Panel.posterCell:pointerover CheckBox.posterPick">
+            <Setter Property="Opacity" Value="1" />
+            <Setter Property="IsHitTestVisible" Value="True" />
+        </Style>
+        <Style Selector="CheckBox.posterPick.pinned">
+            <Setter Property="Opacity" Value="1" />
+            <Setter Property="IsHitTestVisible" Value="True" />
+        </Style>
+        <!-- Continuity member card: move / note-edit affordances appear on hover -->
+        <Style Selector="StackPanel.memberCard :is(Control).cardHover">
+            <Setter Property="Opacity" Value="0" />
+            <Setter Property="IsHitTestVisible" Value="False" />
+        </Style>
+        <Style Selector="StackPanel.memberCard:pointerover :is(Control).cardHover">
+            <Setter Property="Opacity" Value="1" />
+            <Setter Property="IsHitTestVisible" Value="True" />
+        </Style>
+
+        <!-- Recessed panel header -->
+        <Style Selector="Button.panelHead">
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="8,9" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style Selector="Button.panelHead:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource PbSurface2Brush}" />
         </Style>
     </UserControl.Styles>
 
-    <ScrollViewer>
-        <StackPanel>
+    <Grid RowDefinitions="Auto,Auto,*">
 
-            <!-- Mode switcher (docs/superpowers/specs/2026-08-27-metadata-model-phase4f-continuity-
-                 browse-design.md + phase4g-age-progression) - Events | Continuities | Timeline -->
-            <StackPanel Orientation="Horizontal" Spacing="4" Margin="28,20,28,16">
-                <Button Classes="headerAction secondary" Classes.active="{Binding IsEventsMode}" Content="Events"
-                        Command="{Binding SetModeCommand}" CommandParameter="{x:Static models:EventsScreenMode.Events}" />
-                <Button Classes="headerAction secondary" Classes.active="{Binding IsContinuitiesMode}" Content="Continuities"
-                        Command="{Binding SetModeCommand}" CommandParameter="{x:Static models:EventsScreenMode.Continuities}" />
-                <Button Classes="headerAction secondary" Classes.active="{Binding IsTimelineMode}" Content="Timeline"
-                        Command="{Binding SetModeCommand}" CommandParameter="{x:Static models:EventsScreenMode.Timeline}" />
+        <!-- ===== Empty state (nothing at all) ===== -->
+        <StackPanel Grid.Row="0" Grid.RowSpan="3" Margin="28,40" Spacing="14" HorizontalAlignment="Center" VerticalAlignment="Center"
+                    IsVisible="{Binding HasNoEvents}">
+            <TextBlock Text="Create an event or a continuity to get started" FontSize="13"
+                       Foreground="{DynamicResource PbTextMutedBrush}" HorizontalAlignment="Center"
+                       IsVisible="{Binding HasNoContinuities}" />
+            <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center" IsVisible="{Binding HasNoContinuities}">
+                <Button Classes="headerAction primary" Content="＋ New event"
+                        Command="{Binding $parent[Window].((vm:MainViewModel)DataContext).OpenNewEventDialogCommand}" CommandParameter="Event" />
+                <Button Classes="headerAction secondary" Content="＋ New continuity"
+                        Command="{Binding $parent[Window].((vm:MainViewModel)DataContext).OpenNewEventDialogCommand}" CommandParameter="Continuity" />
+            </StackPanel>
+        </StackPanel>
+
+        <!-- ===== Top band ===== -->
+        <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="28,20,28,12"
+              IsVisible="{Binding !HasNoEvents}">
+            <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                <!-- Event header -->
+                <StackPanel IsVisible="{Binding IsEventSelected}">
+                    <TextBlock Classes="pbTextHeading" Text="{Binding EventName}" TextWrapping="Wrap" />
+                    <TextBlock Text="{Binding MetaLine}" FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" Margin="0,5,0,0" />
+                    <TextBlock Text="{Binding Description}" FontSize="11.5" Foreground="{DynamicResource PbTextMutedBrush}"
+                               TextWrapping="Wrap" MaxLines="3" TextTrimming="CharacterEllipsis" MaxWidth="620" HorizontalAlignment="Left"
+                               Margin="0,6,0,0" IsVisible="{Binding !HasNoEventDescription}" />
+                </StackPanel>
+                <!-- Continuity header -->
+                <StackPanel IsVisible="{Binding IsContinuitySelected}">
+                    <TextBlock Classes="pbTextHeading" Text="{Binding ContinuityName}" TextWrapping="Wrap" />
+                    <TextBlock FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" Margin="0,5,0,0">
+                        <Run Text="Continuity" /><Run Text=" · " /><Run Text="{Binding ContinuityPublisher}" />
+                    </TextBlock>
+                    <TextBlock Text="{Binding ContinuityDescription}" FontSize="11.5" Foreground="{DynamicResource PbTextMutedBrush}"
+                               TextWrapping="Wrap" MaxLines="3" TextTrimming="CharacterEllipsis" MaxWidth="620" HorizontalAlignment="Left"
+                               Margin="0,6,0,0"
+                               IsVisible="{Binding ContinuityDescription, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
+                </StackPanel>
             </StackPanel>
 
-          <StackPanel IsVisible="{Binding IsEventsMode}">
-            <Grid ColumnDefinitions="*,Auto" Margin="28,0,28,16">
-                <StackPanel Grid.Column="0" VerticalAlignment="Bottom">
-                    <TextBlock Classes="pbTextHeading" Text="{Binding EventName}" />
-                    <TextBlock Text="{Binding Description}" FontSize="12.5" Foreground="{DynamicResource PbTextFaintBrush}" Margin="0,4,0,0" />
-                </StackPanel>
-            </Grid>
-            <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,0,0,1" Margin="0,0,0,24" />
-
-            <TextBlock Text="No story events yet — create one from the sidebar to get started." FontSize="13"
-                       Foreground="{DynamicResource PbTextFaintBrush}" Margin="28,0,28,40" TextWrapping="Wrap"
-                       IsVisible="{Binding HasNoEvents}" />
-
-            <StackPanel MaxWidth="820" HorizontalAlignment="Left" Margin="28,0,28,40" IsVisible="{Binding !HasNoEvents}">
-
-                <StackPanel Orientation="Horizontal" Spacing="10" Margin="0,0,0,22">
-                    <Border Classes="statCard">
-                        <StackPanel><TextBlock Classes="statNumber" Text="{Binding TotalMembers}" Foreground="{DynamicResource PbTextBrush}" />
-                            <TextBlock Classes="statLabel" Text="MEMBERS" /></StackPanel>
-                    </Border>
-                </StackPanel>
-
-                <Grid ColumnDefinitions="*,Auto,Auto" Margin="0,0,0,20">
-                    <TextBox Grid.Column="0" Classes="searchBox" Watermark="Search your library by series or number…"
-                              Text="{Binding SearchQuery}" />
-                    <ComboBox Grid.Column="1" Margin="8,0,0,0" ItemsSource="{Binding RoleOptions}" SelectedItem="{Binding SelectedRoleOption}"
-                              MinWidth="120" FontSize="12">
-                        <ComboBox.ItemTemplate>
-                            <DataTemplate x:DataType="models:EventMembershipRoleOption">
-                                <TextBlock Text="{Binding Label}" />
-                            </DataTemplate>
-                        </ComboBox.ItemTemplate>
-                    </ComboBox>
-                    <Button Grid.Column="2" Classes="headerAction secondary" Margin="8,0,0,0" Command="{Binding SearchCommand}">
-                        <StackPanel Orientation="Horizontal" Spacing="5">
-                            <Path Classes="pbIcon" Width="11" Height="11" Data="{StaticResource PbIconSearch}" />
-                            <TextBlock Text="Search" />
-                        </StackPanel>
+            <Border Grid.Column="1" Background="{DynamicResource PbSurface2Brush}" BorderBrush="{DynamicResource PbBorderBrush}"
+                    BorderThickness="1" CornerRadius="6" Padding="3" VerticalAlignment="Top">
+                <StackPanel Orientation="Horizontal" Spacing="2">
+                    <Button Classes="segToggle" Classes.on="{Binding IsPrimaryView}"
+                            Command="{Binding SetDetailViewCommand}" CommandParameter="{x:Static models:EventsDetailView.Primary}">
+                        <Panel>
+                            <TextBlock Text="Members" IsVisible="{Binding IsEventSelected}" />
+                            <TextBlock Text="Series" IsVisible="{Binding IsContinuitySelected}" />
+                        </Panel>
                     </Button>
-                </Grid>
-                <ItemsControl ItemsSource="{Binding SearchResults}" Margin="0,0,0,20">
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate x:DataType="models:IssueSearchResult">
-                            <Border Classes="issueRow" Background="{DynamicResource PbSurface2Brush}" Margin="0,0,0,4">
-                                <Grid ColumnDefinitions="*,Auto">
-                                    <TextBlock Grid.Column="0" Text="{Binding DisplayLabel}" FontSize="13" Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
-                                    <Button Grid.Column="1" Classes="headerAction secondary"
-                                            Command="{Binding $parent[ItemsControl].((vm:EventsScreenViewModel)DataContext).AddIssueCommand}"
-                                            CommandParameter="{Binding}">
-                                        <StackPanel Orientation="Horizontal" Spacing="5">
-                                            <Path Classes="pbIcon" Width="10" Height="10" Data="{StaticResource PbIconPlus}" />
-                                            <TextBlock Text="Add" />
-                                        </StackPanel>
-                                    </Button>
-                                </Grid>
-                            </Border>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
+                    <Button Classes="segToggle" Classes.on="{Binding IsTimelineView}" Content="Timeline"
+                            Command="{Binding SetDetailViewCommand}" CommandParameter="{x:Static models:EventsDetailView.Timeline}" />
+                </StackPanel>
+            </Border>
+        </Grid>
 
-                <TextBlock Text="No members yet — search above to add issues." FontSize="12.5"
-                           Foreground="{DynamicResource PbTextFaintBrush}" IsVisible="{Binding HasNoMembers}" />
+        <!-- ===== Action row ===== -->
+        <StackPanel Grid.Row="1" Margin="28,0,28,8" Spacing="10" IsVisible="{Binding !HasNoEvents}">
+            <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding IsPrimaryView}">
+                <!-- event -->
+                <Button Classes="headerAction primary" Content="＋ Add issues" Command="{Binding ToggleAddIssuesCommand}"
+                        IsVisible="{Binding IsEventSelected}" />
+                <Button Classes="headerAction secondary" Content="⋯ Manage" IsVisible="{Binding IsEventSelected}">
+                    <Button.Flyout>
+                        <MenuFlyout>
+                            <MenuItem Header="Edit details…"
+                                      Command="{Binding $parent[Window].((vm:MainViewModel)DataContext).OpenEditEventDialogCommand}" />
+                            <MenuItem Header="Delete event" Command="{Binding DeleteActiveEventCommand}" />
+                        </MenuFlyout>
+                    </Button.Flyout>
+                </Button>
+                <!-- continuity -->
+                <Button Classes="headerAction primary" Content="＋ Add series" Command="{Binding ToggleAddContinuitySeriesCommand}"
+                        IsVisible="{Binding IsContinuitySelected}" />
+                <Button Classes="headerAction secondary" Content="⋯ Manage" IsVisible="{Binding IsContinuitySelected}">
+                    <Button.Flyout>
+                        <MenuFlyout>
+                            <MenuItem Header="Edit details…"
+                                      Command="{Binding $parent[Window].((vm:MainViewModel)DataContext).OpenEditContinuityDialogCommand}" />
+                            <MenuItem Header="Compare with another continuity" Command="{Binding ToggleCompareContinuitiesCommand}"
+                                      IsVisible="{Binding !HasNoOverlappingContinuities}" />
+                            <MenuItem Header="Create reading list (publication order)" Command="{Binding CreateReadingListFromContinuityCommand}" />
+                            <Separator />
+                            <MenuItem Header="Delete continuity" Command="{Binding DeleteActiveContinuityCommand}" />
+                        </MenuFlyout>
+                    </Button.Flyout>
+                </Button>
+            </StackPanel>
 
-                <ItemsControl ItemsSource="{Binding Members}">
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate x:DataType="vm:EventMemberRowViewModel">
-                            <Border Classes="issueRow">
-                                <Grid ColumnDefinitions="30,*,140,Auto,Auto,Auto">
-                                    <TextBlock Grid.Column="0" Text="{Binding Number}" FontFamily="Consolas,monospace"
-                                               FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" />
-                                    <TextBlock Grid.Column="1" Text="{Binding Name}" FontSize="13"
-                                               Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" Margin="12,0" />
-                                    <ComboBox Grid.Column="2" ItemsSource="{Binding RoleOptions}" SelectedItem="{Binding SelectedRoleOption}"
-                                              FontSize="12" VerticalAlignment="Center">
-                                        <ComboBox.ItemTemplate>
-                                            <DataTemplate x:DataType="models:EventMembershipRoleOption">
-                                                <TextBlock Text="{Binding Label}" />
-                                            </DataTemplate>
-                                        </ComboBox.ItemTemplate>
-                                    </ComboBox>
-                                    <Button Grid.Column="3" Classes="headerAction ghost" Content="↑" Command="{Binding MoveUpCommand}" />
-                                    <Button Grid.Column="4" Classes="headerAction ghost" Content="↓" Command="{Binding MoveDownCommand}" />
-                                    <Button Grid.Column="5" Classes="headerAction ghost" Command="{Binding RemoveCommand}" ToolTip.Tip="Remove">
-                                        <Path Classes="pbIcon" Width="11" Height="11" Data="{StaticResource PbIconTrash}" />
-                                    </Button>
-                                </Grid>
-                            </Border>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
-
-                <!-- Connected Events (docs/superpowers/specs/2026-08-27-metadata-model-phase4d-event-relations-design.md) -->
-                <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,0,0,1" Margin="0,28,0,16" />
-                <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,12">
-                    <TextBlock Grid.Column="0" Text="Connected Events" FontSize="14" FontWeight="SemiBold"
-                               Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
-                    <Button Grid.Column="1" Classes="headerAction secondary" Command="{Binding ToggleConnectEventCommand}">
-                        <StackPanel Orientation="Horizontal" Spacing="5">
-                            <Path Classes="pbIcon" Width="10" Height="10" Data="{StaticResource PbIconPlus}" />
-                            <TextBlock Text="Connect Event" />
-                        </StackPanel>
-                    </Button>
-                </Grid>
-
-                <StackPanel IsVisible="{Binding IsConnectingEvent}" Margin="0,0,0,14">
-                    <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,8">
-                        <TextBox Grid.Column="0" Classes="searchBox" Watermark="Search story events by name…" Text="{Binding ConnectEventQuery}" />
-                        <ComboBox Grid.Column="1" Margin="8,0,0,0" MinWidth="130" FontSize="12"
-                                  ItemsSource="{Binding EventRelationTypeOptions}" SelectedItem="{Binding SelectedEventRelationTypeOption}">
+            <!-- Add issues (event) -->
+            <Border Classes="issueRow" Background="{DynamicResource PbSurface2Brush}" Padding="12"
+                    IsVisible="{Binding IsAddingIssues}">
+                <StackPanel Spacing="8">
+                    <Grid ColumnDefinitions="*,Auto">
+                        <TextBox Grid.Column="0" Classes="searchBox" Watermark="Search your library by series or number…" Text="{Binding SearchQuery}">
+                            <TextBox.InnerLeftContent>
+                                <Path Classes="pbIcon" Width="13" Height="13" Margin="8,0,2,0" Data="{StaticResource PbIconSearch}" />
+                            </TextBox.InnerLeftContent>
+                            <TextBox.KeyBindings>
+                                <KeyBinding Gesture="Enter" Command="{Binding SearchCommand}" />
+                            </TextBox.KeyBindings>
+                        </TextBox>
+                        <ComboBox Grid.Column="1" Margin="8,0,0,0" MinWidth="120" FontSize="12"
+                                  ItemsSource="{Binding RoleOptions}" SelectedItem="{Binding SelectedRoleOption}">
                             <ComboBox.ItemTemplate>
-                                <DataTemplate x:DataType="models:RelationTypeOption">
-                                    <TextBlock Text="{Binding Label}" />
-                                </DataTemplate>
+                                <DataTemplate x:DataType="models:EventMembershipRoleOption"><TextBlock Text="{Binding Label}" /></DataTemplate>
                             </ComboBox.ItemTemplate>
                         </ComboBox>
                     </Grid>
-                    <ItemsControl ItemsSource="{Binding EventSearchResults}">
+                    <Border Background="{DynamicResource PbSurface3Brush}" CornerRadius="5" Padding="8,6" IsVisible="{Binding AnyEventSearchSelected}">
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <TextBlock Text="{Binding EventSearchSelectionSummary}" FontSize="11.5" Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
+                            <Button Classes="headerAction primary" Padding="10,4" FontSize="11" Content="Add selected" Command="{Binding AddSelectedMembersCommand}" />
+                            <Button Classes="headerAction ghost" Padding="8,4" FontSize="11" Content="Clear" Command="{Binding ClearEventSearchSelectionCommand}" />
+                        </StackPanel>
+                    </Border>
+                    <ScrollViewer MaxHeight="320" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                    <ItemsControl ItemsSource="{Binding SearchResults}">
                         <ItemsControl.ItemTemplate>
-                            <DataTemplate x:DataType="models:StoryEventSearchResult">
-                                <Border Classes="issueRow" Background="{DynamicResource PbSurface2Brush}" Margin="0,0,0,4">
-                                    <Grid ColumnDefinitions="*,Auto">
-                                        <TextBlock Grid.Column="0" Text="{Binding Name}" FontSize="13" Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
-                                        <Button Grid.Column="1" Classes="headerAction secondary"
-                                                Command="{Binding $parent[ItemsControl].((vm:EventsScreenViewModel)DataContext).ConnectEventCommand}"
-                                                CommandParameter="{Binding}" Content="Connect" />
-                                    </Grid>
-                                </Border>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                </StackPanel>
-
-                <TextBlock Text="No connected events yet." FontSize="12.5"
-                           Foreground="{DynamicResource PbTextFaintBrush}" IsVisible="{Binding HasNoConnectedEvents}" />
-
-                <ItemsControl ItemsSource="{Binding ConnectedEvents}">
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate x:DataType="models:ConnectedEventCard">
-                            <Border Classes="issueRow" Background="{DynamicResource PbSurface2Brush}" Margin="0,0,0,4">
-                                <Grid ColumnDefinitions="*,Auto,Auto">
-                                    <Button Grid.Column="0" Classes="headerAction ghost" HorizontalAlignment="Left"
-                                            Command="{Binding $parent[ItemsControl].((vm:EventsScreenViewModel)DataContext).OpenConnectedEventCommand}"
-                                            CommandParameter="{Binding}">
-                                        <TextBlock Text="{Binding Name}" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
-                                    </Button>
-                                    <Border Grid.Column="1" Classes="pbChip" Padding="8,3" VerticalAlignment="Center" Margin="8,0">
-                                        <TextBlock Text="{Binding RelationLabel}" FontSize="10.5" Foreground="{DynamicResource PbTextFaintBrush}" />
-                                    </Border>
-                                    <Button Grid.Column="2" Classes="headerAction ghost" ToolTip.Tip="Unlink"
-                                            Command="{Binding $parent[ItemsControl].((vm:EventsScreenViewModel)DataContext).RemoveConnectedEventCommand}"
-                                            CommandParameter="{Binding}">
-                                        <Path Classes="pbIcon" Width="11" Height="11" Data="{StaticResource PbIconTrash}" />
-                                    </Button>
-                                </Grid>
-                            </Border>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
-
-                <!-- Suggested connections (docs/superpowers/specs/2026-08-27-metadata-model-phase4d-event-relations-design.md) -->
-                <StackPanel IsVisible="{Binding !HasNoConnectionSuggestions}" Margin="0,10,0,0">
-                    <TextBlock Text="Suggested connections" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource PbTextMutedBrush}" Margin="0,0,0,6" />
-                    <ItemsControl ItemsSource="{Binding EventConnectionSuggestions}">
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate x:DataType="models:EventConnectionSuggestionCard">
-                                <Border Classes="issueRow" Background="{DynamicResource PbSurface2Brush}" Margin="0,0,0,4">
-                                    <Grid ColumnDefinitions="*,Auto">
-                                        <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                                            <TextBlock Text="{Binding Name}" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
-                                            <TextBlock Text="{Binding Reason}" FontSize="10.5" Foreground="{DynamicResource PbTextFaintBrush}" Margin="0,2,0,0" TextWrapping="Wrap" />
-                                        </StackPanel>
-                                        <Button Grid.Column="1" Classes="headerAction secondary" Content="Connect" VerticalAlignment="Center"
-                                                Command="{Binding $parent[ItemsControl].((vm:EventsScreenViewModel)DataContext).ConnectSuggestedEventCommand}"
-                                                CommandParameter="{Binding}" />
-                                    </Grid>
-                                </Border>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                </StackPanel>
-
-                <!-- Event chain / transitive graph (docs/superpowers/specs/2026-08-27-metadata-model-phase4d-event-relations-design.md) -->
-                <Button Classes="headerAction ghost" HorizontalAlignment="Left" Margin="0,14,0,0"
-                        Command="{Binding ToggleEventFamilyCommand}" IsVisible="{Binding HasEventChain}">
-                    <StackPanel Orientation="Horizontal" Spacing="6">
-                        <TextBlock Text="Event chain" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}" />
-                        <Path Classes="pbIcon" Width="10" Height="10" Data="{StaticResource PbIconChevronRight}" IsVisible="{Binding !EventFamilyExpanded}" />
-                        <Path Classes="pbIcon" Width="10" Height="10" Data="{StaticResource PbIconArrowDown}" IsVisible="{Binding EventFamilyExpanded}" />
-                    </StackPanel>
-                </Button>
-                <ItemsControl ItemsSource="{Binding EventFamily}" IsVisible="{Binding EventFamilyExpanded}" Margin="0,6,0,0">
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate x:DataType="models:EventFamilyNodeCard">
-                            <Button Classes="headerAction ghost" HorizontalAlignment="Left" Padding="4,3"
-                                    Command="{Binding $parent[ItemsControl].((vm:EventsScreenViewModel)DataContext).OpenFamilyEventCommand}"
-                                    CommandParameter="{Binding}">
-                                <StackPanel Orientation="Horizontal">
-                                    <Border Width="{Binding Indent}" />
-                                    <Path Classes="pbIcon" Width="8" Height="8" Data="{StaticResource PbIconChevronRight}"
-                                          Margin="0,0,5,0" VerticalAlignment="Center" IsVisible="{Binding !IsRoot}" />
-                                    <TextBlock Text="{Binding Name}" FontSize="12.5" Foreground="{DynamicResource PbTextBrush}" />
-                                </StackPanel>
-                            </Button>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
-
-                <!-- Suggested Issues (docs/superpowers/specs/2026-08-27-metadata-model-phase4e-format-signal-suggestions-design.md) -->
-                <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,0,0,1" Margin="0,28,0,16"
-                        IsVisible="{Binding !HasNoSuggestions}" />
-                <Button Classes="headerAction ghost" HorizontalAlignment="Left" Margin="0,0,0,10"
-                        Command="{Binding ToggleSuggestionsCommand}" IsVisible="{Binding !HasNoSuggestions}">
-                    <StackPanel Orientation="Horizontal" Spacing="6">
-                        <TextBlock Text="Suggested for this Event" FontSize="14" FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}" />
-                        <Path Classes="pbIcon" Width="10" Height="10" Data="{StaticResource PbIconChevronRight}"
-                              IsVisible="{Binding !SuggestionsExpanded}" />
-                        <Path Classes="pbIcon" Width="10" Height="10" Data="{StaticResource PbIconArrowDown}"
-                              IsVisible="{Binding SuggestionsExpanded}" />
-                    </StackPanel>
-                </Button>
-
-                <ItemsControl ItemsSource="{Binding SuggestedIssues}" IsVisible="{Binding SuggestionsExpanded}">
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate x:DataType="vm:SuggestedIssueRowViewModel">
-                            <Border Classes="issueRow" Background="{DynamicResource PbSurface2Brush}" Margin="0,0,0,4">
-                                <Grid ColumnDefinitions="*,140,Auto,Auto" RowDefinitions="Auto,Auto">
-                                    <TextBlock Grid.Row="0" Grid.Column="0" Text="{Binding DisplayLabel}" FontSize="13"
-                                               Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
-                                    <TextBlock Grid.Row="1" Grid.Column="0" Text="{Binding Reason}" FontSize="10.5"
-                                               Foreground="{DynamicResource PbTextFaintBrush}" Margin="0,2,0,0" TextWrapping="Wrap" />
-                                    <ComboBox Grid.Row="0" Grid.RowSpan="2" Grid.Column="1" ItemsSource="{Binding RoleOptions}"
-                                              SelectedItem="{Binding SelectedRoleOption}" FontSize="12" VerticalAlignment="Center" Margin="8,0">
-                                        <ComboBox.ItemTemplate>
-                                            <DataTemplate x:DataType="models:EventMembershipRoleOption">
-                                                <TextBlock Text="{Binding Label}" />
-                                            </DataTemplate>
-                                        </ComboBox.ItemTemplate>
-                                    </ComboBox>
-                                    <Button Grid.Row="0" Grid.RowSpan="2" Grid.Column="2" Classes="headerAction secondary" Content="Add"
-                                            Command="{Binding AddCommand}" VerticalAlignment="Center" />
-                                    <Button Grid.Row="0" Grid.RowSpan="2" Grid.Column="3" Classes="headerAction ghost" Content="Dismiss"
-                                            Command="{Binding DismissCommand}" VerticalAlignment="Center" Margin="6,0,0,0" />
-                                </Grid>
-                            </Border>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
-
-                <!-- Dismissed suggestions (docs/superpowers/specs/2026-08-27-metadata-model-phase4e-format-signal-suggestions-design.md) -->
-                <Button Classes="headerAction ghost" HorizontalAlignment="Left" Margin="0,8,0,0"
-                        Command="{Binding ToggleDismissedCommand}" IsVisible="{Binding !HasNoDismissed}">
-                    <StackPanel Orientation="Horizontal" Spacing="6">
-                        <TextBlock Text="Dismissed" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource PbTextMutedBrush}" />
-                        <Border Classes="pbChip" Padding="6,1"><TextBlock Text="{Binding DismissedSuggestions.Count}" FontSize="10" Foreground="{DynamicResource PbTextFaintBrush}" /></Border>
-                        <Path Classes="pbIcon" Width="10" Height="10" Data="{StaticResource PbIconChevronRight}" IsVisible="{Binding !DismissedExpanded}" />
-                        <Path Classes="pbIcon" Width="10" Height="10" Data="{StaticResource PbIconArrowDown}" IsVisible="{Binding DismissedExpanded}" />
-                    </StackPanel>
-                </Button>
-                <ItemsControl ItemsSource="{Binding DismissedSuggestions}" IsVisible="{Binding DismissedExpanded}" Margin="0,6,0,0">
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate x:DataType="models:DismissedSuggestionCard">
-                            <Border Classes="issueRow" Background="{DynamicResource PbSurface2Brush}" Margin="0,0,0,4">
-                                <Grid ColumnDefinitions="*,Auto">
-                                    <TextBlock Grid.Column="0" Text="{Binding Label}" FontSize="12.5" Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" />
-                                    <Button Grid.Column="1" Classes="headerAction ghost" Content="Restore"
-                                            Command="{Binding $parent[ItemsControl].((vm:EventsScreenViewModel)DataContext).RestoreDismissedCommand}"
+                            <DataTemplate x:DataType="models:IssueSearchResult">
+                                <Grid ColumnDefinitions="Auto,*,Auto,Auto" Margin="0,2,6,2" ColumnSpacing="8">
+                                    <CheckBox Grid.Column="0" IsChecked="{Binding IsSelected}" VerticalAlignment="Center" MinWidth="0" Padding="0"
+                                              Command="{Binding $parent[ItemsControl].((vm:EventsScreenViewModel)DataContext).ToggleEventSearchSelectionCommand}"
+                                              CommandParameter="{Binding}" />
+                                    <TextBlock Grid.Column="1" Text="{Binding DisplayLabel}" FontSize="12.5" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
+                                    <Button Grid.Column="2" Classes="headerAction ghost" Padding="6,3" FontSize="10.5" Content="＋ series"
+                                            ToolTip.Tip="Add every issue of this series"
+                                            Command="{Binding $parent[ItemsControl].((vm:EventsScreenViewModel)DataContext).AddAllOfSeriesToEventCommand}"
+                                            CommandParameter="{Binding}" />
+                                    <Button Grid.Column="3" Classes="headerAction ghost" Content="Add"
+                                            Command="{Binding $parent[ItemsControl].((vm:EventsScreenViewModel)DataContext).AddIssueCommand}"
                                             CommandParameter="{Binding}" />
                                 </Grid>
-                            </Border>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    </ScrollViewer>
+                </StackPanel>
+            </Border>
 
-            </StackPanel>
-          </StackPanel>
+            <!-- Add series (continuity) -->
+            <Border Classes="issueRow" Background="{DynamicResource PbSurface2Brush}" Padding="12"
+                    IsVisible="{Binding IsAddingContinuitySeries}">
+                <StackPanel Spacing="8">
+                    <TextBox Classes="searchBox" Watermark="Search series by name…" Text="{Binding ContinuitySeriesSearchQuery}">
+                        <TextBox.InnerLeftContent>
+                            <Path Classes="pbIcon" Width="13" Height="13" Margin="8,0,2,0" Data="{StaticResource PbIconSearch}" />
+                        </TextBox.InnerLeftContent>
+                        <TextBox.KeyBindings>
+                            <KeyBinding Gesture="Enter" Command="{Binding SearchContinuitySeriesCommand}" />
+                        </TextBox.KeyBindings>
+                    </TextBox>
+                    <Border Background="{DynamicResource PbSurface3Brush}" CornerRadius="5" Padding="8,6" IsVisible="{Binding AnyContinuitySeriesSelected}">
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <TextBlock Text="{Binding ContinuitySeriesSelectionSummary}" FontSize="11.5" Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
+                            <Button Classes="headerAction primary" Padding="10,4" FontSize="11" Content="Add selected" Command="{Binding AddSelectedSeriesCommand}" />
+                            <Button Classes="headerAction ghost" Padding="8,4" FontSize="11" Content="Clear" Command="{Binding ClearContinuitySeriesSelectionCommand}" />
+                        </StackPanel>
+                    </Border>
+                    <ScrollViewer MaxHeight="320" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                    <ItemsControl ItemsSource="{Binding ContinuitySeriesSearchResults}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="models:SeriesSearchResult">
+                                <Grid ColumnDefinitions="Auto,*,Auto" Margin="0,2,6,2" ColumnSpacing="8">
+                                    <CheckBox Grid.Column="0" IsChecked="{Binding IsSelected}" VerticalAlignment="Center" MinWidth="0" Padding="0"
+                                              Command="{Binding $parent[ItemsControl].((vm:EventsScreenViewModel)DataContext).ToggleContinuitySeriesSelectionCommand}"
+                                              CommandParameter="{Binding}" />
+                                    <TextBlock Grid.Column="1" Text="{Binding Name}" FontSize="12.5" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
+                                    <Button Grid.Column="2" Classes="headerAction ghost" Content="Add"
+                                            Command="{Binding $parent[ItemsControl].((vm:EventsScreenViewModel)DataContext).AddSeriesToActiveContinuityCommand}"
+                                            CommandParameter="{Binding}" />
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    </ScrollViewer>
+                </StackPanel>
+            </Border>
 
-          <!-- ===== Continuities mode (docs/superpowers/specs/2026-08-27-metadata-model-phase4f-continuity-browse-design.md) ===== -->
-          <StackPanel IsVisible="{Binding IsContinuitiesMode}" Margin="28,0,28,40" MaxWidth="900" HorizontalAlignment="Left">
-            <TextBlock Text="No continuities yet — create one from the sidebar." FontSize="13"
-                       Foreground="{DynamicResource PbTextFaintBrush}" IsVisible="{Binding HasNoContinuities}" TextWrapping="Wrap" />
-
-            <StackPanel IsVisible="{Binding HasActiveContinuity}">
-                <TextBlock Classes="pbTextHeading" Text="{Binding ContinuityName}" />
-                <TextBlock Text="{Binding ContinuityPublisher}" FontSize="12.5" Foreground="{DynamicResource PbTextFaintBrush}" Margin="0,4,0,0"
-                           IsVisible="{Binding ContinuityPublisher, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
-                <TextBlock Text="{Binding ContinuityDescription}" FontSize="12.5" Foreground="{DynamicResource PbTextFaintBrush}" Margin="0,6,0,0"
-                           TextWrapping="Wrap" IsVisible="{Binding ContinuityDescription, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
-                <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,0,0,1" Margin="0,16,0,16" />
-
-                <Grid ColumnDefinitions="*,Auto,Auto,Auto" Margin="0,0,0,12">
-                    <TextBlock Grid.Column="0" Text="Series in this continuity" FontSize="14" FontWeight="SemiBold"
-                               Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
-                    <Button Grid.Column="1" Classes="headerAction ghost" Content="Compare" Margin="0,0,6,0"
-                            Command="{Binding ToggleCompareContinuitiesCommand}" IsVisible="{Binding !HasNoOverlappingContinuities}" />
-                    <Button Grid.Column="2" Classes="headerAction ghost" Content="Reading list" Margin="0,0,6,0"
-                            Command="{Binding CreateReadingListFromContinuityCommand}" ToolTip.Tip="Create a reading list from this continuity in publication order" />
-                    <Button Grid.Column="3" Classes="headerAction secondary" Content="+ Add Series" Command="{Binding ToggleAddContinuitySeriesCommand}" />
-                </Grid>
-
-                <!-- Cross-continuity comparison (docs/superpowers/specs/2026-08-27-metadata-model-phase4f-continuity-browse-design.md) -->
-                <StackPanel IsVisible="{Binding IsComparingContinuities}" Margin="0,0,0,14">
-                    <TextBlock Text="Compare with another continuity:" FontSize="12" Foreground="{DynamicResource PbTextFaintBrush}" Margin="0,0,0,6" />
+            <!-- Compare panel (continuity) -->
+            <Border Classes="issueRow" Background="{DynamicResource PbSurface2Brush}" Padding="12"
+                    IsVisible="{Binding IsComparingContinuities}">
+                <StackPanel Spacing="6">
+                    <TextBlock Text="Compare with another continuity:" FontSize="12" Foreground="{DynamicResource PbTextFaintBrush}" />
                     <ItemsControl ItemsSource="{Binding OverlappingContinuities}">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate x:DataType="models:ContinuityOverlapCard">
-                                <Border Classes="issueRow" Background="{DynamicResource PbSurface2Brush}" Margin="0,0,0,4">
-                                    <Grid ColumnDefinitions="*,Auto,Auto">
-                                        <TextBlock Grid.Column="0" Text="{Binding Name}" FontSize="13" Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
-                                        <TextBlock Grid.Column="1" Text="{Binding SharedSeriesLabel}" FontSize="10.5" Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" Margin="8,0" />
-                                        <Button Grid.Column="2" Classes="headerAction secondary" Content="Show overlap"
-                                                Command="{Binding $parent[ItemsControl].((vm:EventsScreenViewModel)DataContext).CompareWithContinuityCommand}"
-                                                CommandParameter="{Binding}" />
-                                    </Grid>
-                                </Border>
+                                <Grid ColumnDefinitions="*,Auto,Auto,Auto" Margin="0,3">
+                                    <TextBlock Grid.Column="0" Text="{Binding Name}" FontSize="12.5" Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
+                                    <TextBlock Grid.Column="1" Text="{Binding SharedSeriesLabel}" FontSize="10.5" Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" Margin="8,0" />
+                                    <Button Grid.Column="2" Classes="headerAction ghost" Content="Show overlap"
+                                            Command="{Binding $parent[ItemsControl].((vm:EventsScreenViewModel)DataContext).CompareWithContinuityCommand}"
+                                            CommandParameter="{Binding}" />
+                                    <Button Grid.Column="3" Classes="headerAction ghost" Margin="6,0,0,0"
+                                            Content="{Binding MergeConfirm.Label}" Command="{Binding MergeConfirm.TriggerCommand}" />
+                                </Grid>
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
-                    <StackPanel IsVisible="{Binding HasComparison}" Margin="0,8,0,0">
-                        <TextBlock Text="{Binding CompareContinuityName, StringFormat='Series in both this continuity and {0}'}"
-                                   FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}" Margin="0,0,0,6" />
+                    <StackPanel IsVisible="{Binding HasComparison}" Spacing="6" Margin="0,6,0,0">
+                        <TextBlock Text="{Binding CompareContinuityName, StringFormat='Shared with {0}'}" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}" />
                         <ItemsControl ItemsSource="{Binding SharedContinuitySeries}">
                             <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
                             <ItemsControl.ItemTemplate>
@@ -382,180 +325,335 @@
                         </ItemsControl>
                     </StackPanel>
                 </StackPanel>
+            </Border>
+        </StackPanel>
 
-                <StackPanel IsVisible="{Binding IsAddingContinuitySeries}" Margin="0,0,0,14">
-                    <TextBox Classes="searchBox" Watermark="Search series by name…" Text="{Binding ContinuitySeriesSearchQuery}" />
-                    <ItemsControl ItemsSource="{Binding ContinuitySeriesSearchResults}" Margin="0,8,0,0">
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate x:DataType="models:SeriesSearchResult">
-                                <Border Classes="issueRow" Background="{DynamicResource PbSurface2Brush}" Margin="0,0,0,4">
-                                    <Grid ColumnDefinitions="*,Auto">
-                                        <TextBlock Grid.Column="0" Text="{Binding Name}" FontSize="13" Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
-                                        <Button Grid.Column="1" Classes="headerAction secondary" Content="Add"
-                                                Command="{Binding $parent[ItemsControl].((vm:EventsScreenViewModel)DataContext).AddSeriesToActiveContinuityCommand}"
-                                                CommandParameter="{Binding}" />
-                                    </Grid>
-                                </Border>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                </StackPanel>
+        <!-- ===== Content ===== -->
+        <ScrollViewer Grid.Row="2" IsVisible="{Binding !HasNoEvents}">
+            <StackPanel Margin="0,0,0,40">
 
-                <TextBlock Text="No series in this continuity yet." FontSize="12.5"
-                           Foreground="{DynamicResource PbTextFaintBrush}" IsVisible="{Binding HasNoContinuityMembers}" />
+                <!-- Event · Primary (members + panels) -->
+                <StackPanel IsVisible="{Binding IsEventSelected}">
+                    <StackPanel IsVisible="{Binding IsPrimaryView}">
+                        <TextBlock Text="No members yet — Add issues to get started." FontSize="12.5" Margin="28,8,28,0"
+                                   Foreground="{DynamicResource PbTextFaintBrush}" IsVisible="{Binding HasNoMembers}" />
 
-                <ItemsControl ItemsSource="{Binding ContinuityMembers}">
-                    <ItemsControl.ItemsPanel>
-                        <ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate>
-                    </ItemsControl.ItemsPanel>
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate x:DataType="models:SeriesCardSample">
-                            <StackPanel Width="150" Margin="0,0,10,14">
-                                <Button Classes="headerAction ghost" Padding="0"
-                                        Command="{Binding $parent[ItemsControl].((vm:EventsScreenViewModel)DataContext).OpenContinuitySeriesCommand}"
-                                        CommandParameter="{Binding}">
-                                    <Border Height="150" CornerRadius="6" ClipToBounds="True" Background="{Binding CoverBrush}">
-                                        <TextBlock Text="{Binding Name}" FontSize="12" Foreground="White" FontWeight="SemiBold"
-                                                   Margin="8" VerticalAlignment="Bottom" TextWrapping="Wrap" />
-                                    </Border>
-                                </Button>
-                                <Grid ColumnDefinitions="*,Auto" Margin="0,4,0,0">
-                                    <TextBlock Grid.Column="0" Text="{Binding Name}" FontSize="11.5" Foreground="{DynamicResource PbTextBrush}"
-                                               TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
-                                    <Button Grid.Column="1" Classes="headerAction ghost" ToolTip.Tip="Remove from continuity"
-                                            Command="{Binding $parent[ItemsControl].((vm:EventsScreenViewModel)DataContext).RemoveSeriesFromActiveContinuityCommand}"
-                                            CommandParameter="{Binding}">
-                                        <Path Classes="pbIcon" Width="10" Height="10" Data="{StaticResource PbIconTrash}" />
-                                    </Button>
-                                </Grid>
+                        <Border Margin="16,4,16,6" Background="{DynamicResource PbSurface2Brush}" CornerRadius="5" Padding="8,6"
+                                IsVisible="{Binding AnyEventMembersSelected}">
+                            <StackPanel Orientation="Horizontal" Spacing="10">
+                                <TextBlock Text="{Binding EventMemberSelectionSummary}" FontSize="11.5" Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
+                                <Button Classes="headerAction ghost" Padding="8,4" FontSize="11" Content="Remove" Command="{Binding RemoveSelectedMembersCommand}" />
+                                <ComboBox ItemsSource="{Binding RoleOptions}" SelectedItem="{Binding BulkRole}" FontSize="11" MinWidth="110" PlaceholderText="Set role">
+                                    <ComboBox.ItemTemplate>
+                                        <DataTemplate x:DataType="models:EventMembershipRoleOption"><TextBlock Text="{Binding Label}" /></DataTemplate>
+                                    </ComboBox.ItemTemplate>
+                                </ComboBox>
+                                <Button Classes="headerAction ghost" Padding="8,4" FontSize="11" Content="Apply" Command="{Binding SetRoleForSelectedMembersCommand}" />
+                                <Button Classes="headerAction ghost" Padding="8,4" FontSize="11" Content="Clear" Command="{Binding ClearEventMemberSelectionCommand}" />
                             </StackPanel>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
-            </StackPanel>
-          </StackPanel>
+                        </Border>
 
-          <!-- ===== Timeline mode (docs/superpowers/specs/2026-08-27-metadata-model-phase4g-age-progression-design.md) ===== -->
-          <StackPanel IsVisible="{Binding IsTimelineMode}" Margin="28,0,28,40" MaxWidth="1100" HorizontalAlignment="Left">
+                        <ItemsControl ItemsSource="{Binding Members}" Margin="16,6,16,0">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:EventMemberRowViewModel">
+                                    <Border Classes="itemRow">
+                                        <Grid ColumnDefinitions="22,26,46,*,Auto,Auto">
+                                            <CheckBox Grid.Column="0" Classes="rowManage rowPick"
+                                                      Classes.pinned="{Binding $parent[UserControl].((vm:EventsScreenViewModel)DataContext).AnyEventMembersSelected}"
+                                                      IsChecked="{Binding IsSelected}" VerticalAlignment="Center" MinWidth="0" Padding="0"
+                                                      Command="{Binding $parent[UserControl].((vm:EventsScreenViewModel)DataContext).ToggleEventMemberSelectionCommand}"
+                                                      CommandParameter="{Binding}" />
+                                            <TextBlock Grid.Column="1" Classes="pbTextHeading" Text="{Binding Position}" FontSize="15"
+                                                       VerticalAlignment="Center" HorizontalAlignment="Center" Foreground="{DynamicResource PbTextFaintBrush}" />
+                                            <Border Grid.Column="2" Width="42" Height="63" Margin="0,0,12,0" CornerRadius="3" ClipToBounds="True"
+                                                    Background="{DynamicResource PbSurface3Brush}">
+                                                <Image Source="{Binding CoverIssueId, Converter={x:Static views:CoverImageConverter.Instance}}" Stretch="UniformToFill" />
+                                            </Border>
+                                            <StackPanel Grid.Column="3" VerticalAlignment="Center">
+                                                <TextBlock Text="{Binding TitleLine}" FontSize="13.5" Foreground="{DynamicResource PbTextBrush}" TextTrimming="CharacterEllipsis" />
+                                                <TextBlock Text="{Binding SeriesLine}" FontSize="11" Margin="0,1,0,0" Foreground="{DynamicResource PbTextFaintBrush}" TextTrimming="CharacterEllipsis" />
+                                            </StackPanel>
+                                            <Border Grid.Column="4" Classes="pbChip" Padding="8,3" VerticalAlignment="Center" Margin="8,0,0,0">
+                                                <TextBlock Text="{Binding RoleChipLabel}" FontSize="10" Foreground="{DynamicResource PbTextMutedBrush}" />
+                                            </Border>
+                                            <Button Grid.Column="5" Classes="rowManage headerAction ghost" Padding="7,2" Margin="8,0,0,0" VerticalAlignment="Center" ToolTip.Tip="More">
+                                                <Path Classes="pbIcon" Width="13" Height="13" Data="{StaticResource PbIconMoreVertical}" />
+                                                <Button.Flyout>
+                                                    <MenuFlyout>
+                                                        <MenuItem Header="Set role">
+                                                            <MenuItem Header="Prologue" Command="{Binding SetRoleCommand}" CommandParameter="{x:Static entities:EventMembershipRole.Prologue}" />
+                                                            <MenuItem Header="Core" Command="{Binding SetRoleCommand}" CommandParameter="{x:Static entities:EventMembershipRole.Core}" />
+                                                            <MenuItem Header="Tie-in" Command="{Binding SetRoleCommand}" CommandParameter="{x:Static entities:EventMembershipRole.TieIn}" />
+                                                            <MenuItem Header="Epilogue" Command="{Binding SetRoleCommand}" CommandParameter="{x:Static entities:EventMembershipRole.Epilogue}" />
+                                                            <MenuItem Header="Optional" Command="{Binding SetRoleCommand}" CommandParameter="{x:Static entities:EventMembershipRole.Optional}" />
+                                                            <MenuItem Header="Aftermath" Command="{Binding SetRoleCommand}" CommandParameter="{x:Static entities:EventMembershipRole.Aftermath}" />
+                                                        </MenuItem>
+                                                        <Separator />
+                                                        <MenuItem Header="Move up" Command="{Binding MoveUpCommand}" />
+                                                        <MenuItem Header="Move down" Command="{Binding MoveDownCommand}" />
+                                                        <Separator />
+                                                        <MenuItem Header="Remove from event" Command="{Binding RemoveCommand}" />
+                                                    </MenuFlyout>
+                                                </Button.Flyout>
+                                            </Button>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
 
-            <!-- Scope selector -->
-            <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,0,14">
-                <Button Classes="headerAction secondary" Classes.active="{Binding IsSeriesFamilyScope}" Content="Series family"
-                        Command="{Binding SetTimelineScopeCommand}" CommandParameter="{x:Static models:TimelineScope.SeriesFamily}" />
-                <Button Classes="headerAction secondary" Classes.active="{Binding IsContinuityScope}" Content="Continuity"
-                        Command="{Binding SetTimelineScopeCommand}" CommandParameter="{x:Static models:TimelineScope.Continuity}" />
-                <Button Classes="headerAction secondary" Classes.active="{Binding IsLibraryScope}" Content="Whole library"
-                        Command="{Binding SetTimelineScopeCommand}" CommandParameter="{x:Static models:TimelineScope.Library}" />
-            </StackPanel>
-
-            <CheckBox Content="Include series that only share a character" IsChecked="{Binding TimelineCharacterAware}"
-                      FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" Margin="0,0,0,10"
-                      IsVisible="{Binding IsSeriesFamilyScope}" />
-
-            <StackPanel IsVisible="{Binding IsContinuityScope}" Margin="0,0,0,10">
-                <TextBlock Text="Pick a continuity:" FontSize="12" Foreground="{DynamicResource PbTextFaintBrush}" Margin="0,0,0,6" />
-                <ComboBox ItemsSource="{Binding TimelineContinuityChoices}" SelectedItem="{Binding SelectedTimelineContinuity}" MinWidth="220" FontSize="12">
-                    <ComboBox.ItemTemplate>
-                        <DataTemplate x:DataType="models:ContinuitySummary"><TextBlock Text="{Binding Name}" /></DataTemplate>
-                    </ComboBox.ItemTemplate>
-                </ComboBox>
-            </StackPanel>
-
-            <TextBlock Text="Pick a series from the sidebar to lay out its family's issues by comic age." FontSize="13"
-                       Foreground="{DynamicResource PbTextFaintBrush}" IsVisible="{Binding !HasTimelineSeed}" TextWrapping="Wrap" />
-
-            <StackPanel IsVisible="{Binding HasTimelineSeed}">
-                <TextBlock Classes="pbTextHeading" Text="{Binding TimelineTitle}" Margin="0,0,0,4" />
-                <TextBlock Text="No issues in this scope have a resolvable comic age yet." FontSize="12.5"
-                           Foreground="{DynamicResource PbTextFaintBrush}" IsVisible="{Binding HasNoTimelineSections}" />
-
-                <!-- Review inferred ages (docs/superpowers/specs/2026-08-27-metadata-model-phase4g-age-progression-design.md) -->
-                <Button Classes="headerAction ghost" HorizontalAlignment="Left" Margin="0,10,0,0"
-                        Command="{Binding ToggleInferredAgesCommand}" IsVisible="{Binding !HasNoInferredAges}">
-                    <StackPanel Orientation="Horizontal" Spacing="6">
-                        <TextBlock Text="Review inferred ages" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}" />
-                        <Border Classes="pbChip" Padding="6,1"><TextBlock Text="{Binding InferredAges.Count}" FontSize="10" Foreground="{DynamicResource PbTextFaintBrush}" /></Border>
-                        <Path Classes="pbIcon" Width="10" Height="10" Data="{StaticResource PbIconChevronRight}" IsVisible="{Binding !InferredAgesExpanded}" />
-                        <Path Classes="pbIcon" Width="10" Height="10" Data="{StaticResource PbIconArrowDown}" IsVisible="{Binding InferredAgesExpanded}" />
-                    </StackPanel>
-                </Button>
-                <StackPanel IsVisible="{Binding InferredAgesExpanded}" Margin="0,8,0,0">
-                    <Button Classes="headerAction secondary" Content="Accept all" HorizontalAlignment="Left" Margin="0,0,0,8"
-                            Command="{Binding AcceptAllInferredAgesCommand}" />
-                    <ItemsControl ItemsSource="{Binding InferredAges}">
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate x:DataType="vm:InferredAgeRowViewModel">
-                                <Border Classes="issueRow" Background="{DynamicResource PbSurface2Brush}" Margin="0,0,0,4">
-                                    <Grid ColumnDefinitions="*,Auto,Auto">
-                                        <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                                            <TextBlock Text="{Binding DisplayLabel}" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
-                                            <TextBlock FontSize="10.5" Foreground="{DynamicResource PbTextFaintBrush}">
-                                                <Run Text="{Binding YearLabel}" /><Run Text=" → " /><Run Text="{Binding AgeLabel}" />
-                                            </TextBlock>
-                                        </StackPanel>
-                                        <Border Grid.Column="1" Classes="pbChip" Padding="6,2" VerticalAlignment="Center" Margin="8,0"
-                                                IsVisible="{Binding IsReducedConfidence}" ToolTip.Tip="{Binding ConfidenceReason}">
-                                            <TextBlock Text="disputed" FontSize="9.5" Foreground="{DynamicResource PbTextFaintBrush}" />
-                                        </Border>
-                                        <Button Grid.Column="2" Classes="headerAction secondary" Content="Accept" VerticalAlignment="Center"
-                                                Command="{Binding AcceptCommand}" />
-                                    </Grid>
-                                </Border>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                </StackPanel>
-
-                <ItemsControl ItemsSource="{Binding TimelineSections}">
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate x:DataType="vm:TimelineSectionViewModel">
-                            <StackPanel Margin="0,16,0,0">
-                                <StackPanel Orientation="Horizontal" Spacing="8">
-                                    <TextBlock Text="{Binding Label}" FontSize="15" FontWeight="Bold" Foreground="{DynamicResource PbTextBrush}"
-                                               ToolTip.Tip="{Binding CommonlyCitedRange}" />
-                                    <TextBlock Text="{Binding CommonlyCitedRange}" FontSize="10.5" Foreground="{DynamicResource PbTextFaintBrush}"
-                                               VerticalAlignment="Center" IsVisible="{Binding HasCommonlyCitedRange}" />
-                                </StackPanel>
-                                <ItemsControl ItemsSource="{Binding Issues}" Margin="0,8,0,0">
-                                    <ItemsControl.ItemsPanel>
-                                        <ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate>
-                                    </ItemsControl.ItemsPanel>
+                        <!-- Related events panel -->
+                        <StackPanel Margin="24,14,24,0" IsVisible="{Binding !HasNoMembers}">
+                            <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,1,0,0" />
+                            <Button Classes="panelHead" Command="{Binding ToggleRelatedEventsCommand}">
+                                <Grid ColumnDefinitions="*,Auto">
+                                    <TextBlock Grid.Column="0" Text="Related events" FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" />
+                                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
+                                        <TextBlock Text="{Binding RelatedEventsSummary}" FontSize="10.5" Foreground="{DynamicResource PbTextFaintBrush}" />
+                                        <Path Classes="pbIcon" Width="9" Height="9" Data="{StaticResource PbIconChevronRight}" IsVisible="{Binding !RelatedEventsExpanded}" />
+                                        <Path Classes="pbIcon" Width="9" Height="9" Data="{StaticResource PbIconArrowDown}" IsVisible="{Binding RelatedEventsExpanded}" />
+                                    </StackPanel>
+                                </Grid>
+                            </Button>
+                            <StackPanel IsVisible="{Binding RelatedEventsExpanded}" Margin="8,0,0,8" Spacing="4">
+                                <ItemsControl ItemsSource="{Binding ConnectedEvents}">
                                     <ItemsControl.ItemTemplate>
-                                        <DataTemplate x:DataType="models:TimelineIssueCard">
-                                            <Button Classes="headerAction ghost" Padding="0" Margin="0,0,10,12"
-                                                    Command="{Binding $parent[ItemsControl].((vm:EventsScreenViewModel)DataContext).OpenTimelineIssueCommand}"
+                                        <DataTemplate x:DataType="models:ConnectedEventCard">
+                                            <Grid ColumnDefinitions="*,Auto,Auto" Margin="0,2">
+                                                <Button Grid.Column="0" Classes="headerAction ghost" HorizontalAlignment="Left" Padding="4,3"
+                                                        Command="{Binding $parent[ItemsControl].((vm:EventsScreenViewModel)DataContext).OpenConnectedEventCommand}"
+                                                        CommandParameter="{Binding}">
+                                                    <TextBlock Text="{Binding Name}" FontSize="12.5" Foreground="{DynamicResource PbTextBrush}" />
+                                                </Button>
+                                                <Border Grid.Column="1" Classes="pbChip" Padding="7,2" VerticalAlignment="Center" Margin="6,0">
+                                                    <TextBlock Text="{Binding RelationLabel}" FontSize="9.5" Foreground="{DynamicResource PbTextFaintBrush}" />
+                                                </Border>
+                                                <Button Grid.Column="2" Classes="headerAction ghost" Padding="5" ToolTip.Tip="Unlink"
+                                                        Command="{Binding $parent[ItemsControl].((vm:EventsScreenViewModel)DataContext).RemoveConnectedEventCommand}"
+                                                        CommandParameter="{Binding}">
+                                                    <Path Classes="pbIcon" Width="11" Height="11" Data="{StaticResource PbIconTrash}" />
+                                                </Button>
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                                <TextBlock Text="Suggested" FontSize="9" Foreground="{DynamicResource PbTextFaintBrush}"
+                                           Margin="0,6,0,2" IsVisible="{Binding !HasNoConnectionSuggestions}" />
+                                <ItemsControl ItemsSource="{Binding EventConnectionSuggestions}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="models:EventConnectionSuggestionCard">
+                                            <Grid ColumnDefinitions="*,Auto" Margin="0,2">
+                                                <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                                    <TextBlock Text="{Binding Name}" FontSize="12.5" Foreground="{DynamicResource PbTextMutedBrush}" />
+                                                    <TextBlock Text="{Binding Reason}" FontSize="10" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" />
+                                                </StackPanel>
+                                                <Button Grid.Column="1" Classes="headerAction ghost" Content="Connect" VerticalAlignment="Center"
+                                                        Command="{Binding $parent[ItemsControl].((vm:EventsScreenViewModel)DataContext).ConnectSuggestedEventCommand}"
+                                                        CommandParameter="{Binding}" />
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                                <Button Classes="headerAction ghost" HorizontalAlignment="Left" Padding="4,4" Content="＋ Connect an event…"
+                                        Command="{Binding ToggleConnectEventCommand}" />
+                                <StackPanel IsVisible="{Binding IsConnectingEvent}" Spacing="6" Margin="0,4,0,0">
+                                    <Grid ColumnDefinitions="*,Auto">
+                                        <TextBox Grid.Column="0" Classes="searchBox" Watermark="Search story events…" Text="{Binding ConnectEventQuery}" />
+                                        <ComboBox Grid.Column="1" Margin="8,0,0,0" MinWidth="120" FontSize="12"
+                                                  ItemsSource="{Binding EventRelationTypeOptions}" SelectedItem="{Binding SelectedEventRelationTypeOption}">
+                                            <ComboBox.ItemTemplate>
+                                                <DataTemplate x:DataType="models:RelationTypeOption"><TextBlock Text="{Binding Label}" /></DataTemplate>
+                                            </ComboBox.ItemTemplate>
+                                        </ComboBox>
+                                    </Grid>
+                                    <ItemsControl ItemsSource="{Binding EventSearchResults}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate x:DataType="models:StoryEventSearchResult">
+                                                <Grid ColumnDefinitions="*,Auto" Margin="0,2">
+                                                    <TextBlock Grid.Column="0" Text="{Binding Name}" FontSize="12.5" Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
+                                                    <Button Grid.Column="1" Classes="headerAction ghost" Content="Connect"
+                                                            Command="{Binding $parent[ItemsControl].((vm:EventsScreenViewModel)DataContext).ConnectEventCommand}"
+                                                            CommandParameter="{Binding}" />
+                                                </Grid>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </StackPanel>
+                                <Button Classes="headerAction ghost" HorizontalAlignment="Left" Padding="4,4"
+                                        Command="{Binding ToggleEventFamilyCommand}" IsVisible="{Binding HasEventChain}">
+                                    <StackPanel Orientation="Horizontal" Spacing="5">
+                                        <TextBlock Text="Event chain" FontSize="11.5" Foreground="{DynamicResource PbTextMutedBrush}" />
+                                        <Path Classes="pbIcon" Width="8" Height="8" Data="{StaticResource PbIconChevronRight}" IsVisible="{Binding !EventFamilyExpanded}" />
+                                        <Path Classes="pbIcon" Width="8" Height="8" Data="{StaticResource PbIconArrowDown}" IsVisible="{Binding EventFamilyExpanded}" />
+                                    </StackPanel>
+                                </Button>
+                                <ItemsControl ItemsSource="{Binding EventFamily}" IsVisible="{Binding EventFamilyExpanded}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="models:EventFamilyNodeCard">
+                                            <Button Classes="headerAction ghost" HorizontalAlignment="Left" Padding="4,3"
+                                                    Command="{Binding $parent[ItemsControl].((vm:EventsScreenViewModel)DataContext).OpenFamilyEventCommand}"
                                                     CommandParameter="{Binding}">
-                                                <StackPanel Width="104">
-                                                    <Panel>
-                                                        <Border Height="150" CornerRadius="5" ClipToBounds="True" Background="{Binding CoverBrush}">
-                                                            <Image Source="{Binding CoverImage}" Stretch="UniformToFill" />
-                                                        </Border>
-                                                        <Border Width="9" Height="9" CornerRadius="9" Background="{DynamicResource PbAccentBrush}"
-                                                                HorizontalAlignment="Right" VerticalAlignment="Top" Margin="5"
-                                                                IsVisible="{Binding IsUnread}" ToolTip.Tip="Unread" />
-                                                        <Border HorizontalAlignment="Left" VerticalAlignment="Top" Margin="5" Padding="4,1"
-                                                                CornerRadius="3" Background="{DynamicResource PbBadgeBrush}"
-                                                                IsVisible="{Binding IsReducedConfidence}" ToolTip.Tip="{Binding ConfidenceReason}">
-                                                            <TextBlock Text="?" FontSize="9" FontWeight="Bold" Foreground="{DynamicResource PbBadgeTextBrush}" />
-                                                        </Border>
-                                                    </Panel>
-                                                    <TextBlock Text="{Binding SeriesName}" FontSize="10.5" Foreground="{DynamicResource PbTextBrush}"
-                                                               TextTrimming="CharacterEllipsis" Margin="0,4,0,0" />
-                                                    <TextBlock FontSize="9.5" Foreground="{DynamicResource PbTextFaintBrush}">
-                                                        <Run Text="{Binding Title}" /><Run Text="  " /><Run Text="{Binding YearLabel}" />
-                                                    </TextBlock>
+                                                <StackPanel Orientation="Horizontal">
+                                                    <Border Width="{Binding Indent}" />
+                                                    <TextBlock Text="{Binding Name}" FontSize="12" Foreground="{DynamicResource PbTextBrush}" />
                                                 </StackPanel>
                                             </Button>
                                         </DataTemplate>
                                     </ItemsControl.ItemTemplate>
                                 </ItemsControl>
                             </StackPanel>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
-            </StackPanel>
-          </StackPanel>
+                        </StackPanel>
 
-        </StackPanel>
-    </ScrollViewer>
+                        <!-- Issue suggestions panel -->
+                        <StackPanel Margin="24,4,24,0" IsVisible="{Binding !HasNoSuggestions}">
+                            <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,1,0,0" />
+                            <Button Classes="panelHead" Command="{Binding ToggleIssueSuggestionsCommand}">
+                                <Grid ColumnDefinitions="*,Auto">
+                                    <TextBlock Grid.Column="0" Text="Issue suggestions" FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" />
+                                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
+                                        <TextBlock Text="{Binding IssueSuggestionsSummary}" FontSize="10.5" Foreground="{DynamicResource PbTextFaintBrush}" />
+                                        <Path Classes="pbIcon" Width="9" Height="9" Data="{StaticResource PbIconChevronRight}" IsVisible="{Binding !IssueSuggestionsExpanded}" />
+                                        <Path Classes="pbIcon" Width="9" Height="9" Data="{StaticResource PbIconArrowDown}" IsVisible="{Binding IssueSuggestionsExpanded}" />
+                                    </StackPanel>
+                                </Grid>
+                            </Button>
+                            <StackPanel IsVisible="{Binding IssueSuggestionsExpanded}" Margin="8,0,0,8">
+                                <ItemsControl ItemsSource="{Binding SuggestedIssues}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="vm:SuggestedIssueRowViewModel">
+                                            <Grid ColumnDefinitions="*,120,Auto,Auto" Margin="0,3">
+                                                <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                                    <TextBlock Text="{Binding DisplayLabel}" FontSize="12.5" Foreground="{DynamicResource PbTextBrush}" />
+                                                    <TextBlock Text="{Binding Reason}" FontSize="10" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" />
+                                                </StackPanel>
+                                                <ComboBox Grid.Column="1" ItemsSource="{Binding RoleOptions}" SelectedItem="{Binding SelectedRoleOption}"
+                                                          FontSize="11" VerticalAlignment="Center" Margin="8,0">
+                                                    <ComboBox.ItemTemplate>
+                                                        <DataTemplate x:DataType="models:EventMembershipRoleOption"><TextBlock Text="{Binding Label}" /></DataTemplate>
+                                                    </ComboBox.ItemTemplate>
+                                                </ComboBox>
+                                                <Button Grid.Column="2" Classes="headerAction ghost" Content="Add" VerticalAlignment="Center" Command="{Binding AddCommand}" />
+                                                <Button Grid.Column="3" Classes="headerAction ghost" Content="Dismiss" VerticalAlignment="Center" Command="{Binding DismissCommand}" />
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                                <Button Classes="headerAction ghost" HorizontalAlignment="Left" Padding="4,4"
+                                        Command="{Binding ToggleDismissedCommand}" IsVisible="{Binding !HasNoDismissed}">
+                                    <StackPanel Orientation="Horizontal" Spacing="5">
+                                        <TextBlock Text="Dismissed" FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" />
+                                        <Border Classes="pbChip" Padding="5,1"><TextBlock Text="{Binding DismissedSuggestions.Count}" FontSize="9.5" Foreground="{DynamicResource PbTextFaintBrush}" /></Border>
+                                    </StackPanel>
+                                </Button>
+                                <ItemsControl ItemsSource="{Binding DismissedSuggestions}" IsVisible="{Binding DismissedExpanded}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="models:DismissedSuggestionCard">
+                                            <Grid ColumnDefinitions="*,Auto" Margin="0,2">
+                                                <TextBlock Grid.Column="0" Text="{Binding Label}" FontSize="12" Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" />
+                                                <Button Grid.Column="1" Classes="headerAction ghost" Content="Restore"
+                                                        Command="{Binding $parent[ItemsControl].((vm:EventsScreenViewModel)DataContext).RestoreDismissedCommand}"
+                                                        CommandParameter="{Binding}" />
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </StackPanel>
+                    </StackPanel>
+
+                    <!-- Event · Timeline -->
+                    <ContentControl IsVisible="{Binding IsTimelineView}">
+                        <views:EventTimelineView />
+                    </ContentControl>
+                </StackPanel>
+
+                <!-- Continuity · Primary (series grid) -->
+                <StackPanel IsVisible="{Binding IsContinuitySelected}">
+                    <StackPanel IsVisible="{Binding IsPrimaryView}" Margin="24,8,24,0">
+                        <TextBlock Text="No series yet — Add series to get started." FontSize="12.5"
+                                   Foreground="{DynamicResource PbTextFaintBrush}" IsVisible="{Binding HasNoContinuityMembers}" />
+
+                        <Border Margin="0,0,0,8" Background="{DynamicResource PbSurface2Brush}" CornerRadius="5" Padding="8,6"
+                                IsVisible="{Binding AnyContinuityMembersSelected}">
+                            <StackPanel Orientation="Horizontal" Spacing="10">
+                                <TextBlock Text="{Binding ContinuityMemberSelectionSummary}" FontSize="11.5" Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
+                                <Button Classes="headerAction ghost" Padding="8,4" FontSize="11" Content="Remove from continuity" Command="{Binding RemoveSelectedSeriesCommand}" />
+                                <Button Classes="headerAction ghost" Padding="8,4" FontSize="11" Content="Clear" Command="{Binding ClearContinuityMemberSelectionCommand}" />
+                            </StackPanel>
+                        </Border>
+
+                        <ItemsControl ItemsSource="{Binding ContinuityMembers}">
+                            <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="models:SeriesCardSample">
+                                    <StackPanel Classes="memberCard" Width="96" Margin="0,0,12,14">
+                                        <Panel Classes="posterCell">
+                                            <Button Classes="headerAction ghost" Padding="0"
+                                                    Command="{Binding $parent[ItemsControl].((vm:EventsScreenViewModel)DataContext).OpenContinuitySeriesCommand}"
+                                                    CommandParameter="{Binding}">
+                                                <Border Height="144" CornerRadius="5" ClipToBounds="True" Background="{Binding CoverBrush}">
+                                                    <Image Source="{Binding CoverIssueId, Converter={x:Static views:CoverImageConverter.Instance}}" Stretch="UniformToFill" />
+                                                </Border>
+                                            </Button>
+                                            <CheckBox Classes="posterPick"
+                                                      Classes.pinned="{Binding $parent[UserControl].((vm:EventsScreenViewModel)DataContext).AnyContinuityMembersSelected}"
+                                                      IsChecked="{Binding IsSelected}" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="4"
+                                                      MinWidth="0" Padding="0"
+                                                      Command="{Binding $parent[ItemsControl].((vm:EventsScreenViewModel)DataContext).ToggleContinuityMemberSelectionCommand}"
+                                                      CommandParameter="{Binding}" />
+                                            <Button Classes="headerAction ghost" Padding="4" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="4"
+                                                    Background="#B0000000" ToolTip.Tip="Remove from continuity"
+                                                    Command="{Binding $parent[ItemsControl].((vm:EventsScreenViewModel)DataContext).RemoveSeriesFromActiveContinuityCommand}"
+                                                    CommandParameter="{Binding}">
+                                                <Path Classes="pbIcon" Width="10" Height="10" Data="{StaticResource PbIconClose}" />
+                                            </Button>
+                                            <Button Classes="headerAction ghost cardHover" Padding="4" HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="4"
+                                                    Background="#B0000000" ToolTip.Tip="Move earlier"
+                                                    Command="{Binding $parent[ItemsControl].((vm:EventsScreenViewModel)DataContext).MoveContinuitySeriesEarlierCommand}"
+                                                    CommandParameter="{Binding}">
+                                                <Path Classes="pbIcon" Width="10" Height="10" Data="{StaticResource PbIconChevronLeft}" />
+                                            </Button>
+                                            <Button Classes="headerAction ghost cardHover" Padding="4" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="4"
+                                                    Background="#B0000000" ToolTip.Tip="Move later"
+                                                    Command="{Binding $parent[ItemsControl].((vm:EventsScreenViewModel)DataContext).MoveContinuitySeriesLaterCommand}"
+                                                    CommandParameter="{Binding}">
+                                                <Path Classes="pbIcon" Width="10" Height="10" Data="{StaticResource PbIconChevronRight}" />
+                                            </Button>
+                                        </Panel>
+                                        <Grid ColumnDefinitions="*,Auto" Margin="0,4,0,0">
+                                            <TextBlock Grid.Column="0" Text="{Binding Name}" FontSize="10.5" Foreground="{DynamicResource PbTextBrush}"
+                                                       TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                            <Button Grid.Column="1" Classes="headerAction ghost cardHover" Padding="2" ToolTip.Tip="Edit note"
+                                                    Command="{Binding $parent[ItemsControl].((vm:EventsScreenViewModel)DataContext).BeginEditContinuitySeriesNoteCommand}"
+                                                    CommandParameter="{Binding}">
+                                                <Path Classes="pbIcon" Width="9" Height="9" Data="{StaticResource PbIconEdit}" />
+                                            </Button>
+                                        </Grid>
+                                        <TextBlock Text="{Binding MembershipNote}" FontSize="9.5" Foreground="{DynamicResource PbTextFaintBrush}"
+                                                   TextWrapping="Wrap" MaxLines="2" TextTrimming="CharacterEllipsis" Margin="0,1,0,0"
+                                                   IsVisible="{Binding HasMembershipNote}" />
+                                        <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,3,0,0" IsVisible="{Binding IsEditingNote}">
+                                            <TextBox Text="{Binding MembershipNote}" FontSize="10" Width="66" MinHeight="0" Padding="4,2"
+                                                     Watermark="note" />
+                                            <Button Classes="headerAction ghost" Padding="4" ToolTip.Tip="Save note"
+                                                    Command="{Binding $parent[ItemsControl].((vm:EventsScreenViewModel)DataContext).SetContinuitySeriesNoteCommand}"
+                                                    CommandParameter="{Binding}">
+                                                <Path Classes="pbIcon" Width="9" Height="9" Data="{StaticResource PbIconCheck}" />
+                                            </Button>
+                                        </StackPanel>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+
+                    <!-- Continuity · Timeline -->
+                    <ContentControl IsVisible="{Binding IsTimelineView}">
+                        <views:EventTimelineView />
+                    </ContentControl>
+                </StackPanel>
+
+            </StackPanel>
+        </ScrollViewer>
+    </Grid>
 </UserControl>

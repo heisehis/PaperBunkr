@@ -225,10 +225,10 @@
                         </StackPanel>
                     </Button>
                     <Button Classes="rail" Classes.active="{Binding IsEvents}"
-                            Command="{Binding GoEventsCommand}" ToolTip.Tip="Story Events">
+                            Command="{Binding GoEventsCommand}" ToolTip.Tip="Continuity">
                         <StackPanel Orientation="Horizontal">
                             <Path Classes="pbIcon" Data="{StaticResource PbIconStar}" />
-                            <TextBlock Classes="railLabel" Text="Story Events" IsVisible="{Binding IsNavRailExpanded}" />
+                            <TextBlock Classes="railLabel" Text="Continuity" IsVisible="{Binding IsNavRailExpanded}" />
                         </StackPanel>
                     </Button>
                 </StackPanel>
@@ -512,110 +512,93 @@
                         </ItemsControl>
                     </StackPanel>
 
-                    <!-- Story Events sidebar (docs/superpowers/specs/2026-08-17-metadata-model-
-                         phase4b-story-events-design.md), wired to real StoryEvent data -->
+                    <!-- Events & Continuity sidebar (docs/superpowers/specs/2026-08-28-events-continuity-screen-redesign-design.md) -->
                     <StackPanel IsVisible="{Binding IsEvents}" Spacing="1">
+                        <StackPanel.Styles>
+                            <Style Selector="Border.ecRow"><Setter Property="BorderBrush" Value="Transparent" /></Style>
+                            <Style Selector="Border.ecRow.active">
+                                <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
+                                <Setter Property="Background" Value="{DynamicResource PbSurface2Brush}" />
+                            </Style>
+                            <Style Selector="Border.ecRow Button.ecDelete"><Setter Property="Opacity" Value="0" /><Setter Property="IsHitTestVisible" Value="False" /></Style>
+                            <Style Selector="Border.ecRow:pointerover Button.ecDelete"><Setter Property="Opacity" Value="1" /><Setter Property="IsHitTestVisible" Value="True" /></Style>
+                        </StackPanel.Styles>
 
-                      <!-- Continuities mode sidebar (docs/superpowers/specs/2026-08-27-metadata-model-phase4f-continuity-browse-design.md) -->
-                      <StackPanel IsVisible="{Binding Events.IsContinuitiesMode}" Spacing="1">
-                          <TextBlock Text="Continuities" FontSize="16" FontWeight="Bold"
-                                     Foreground="{DynamicResource PbTextBrush}" Margin="8,0,8,14" />
-                          <ItemsControl x:Name="ContinuityList" ItemsSource="{Binding Events.Continuities}">
-                              <ItemsControl.ItemTemplate>
-                                  <DataTemplate x:DataType="models:ContinuitySummary">
-                                      <Button Classes="sideItemButton" Classes.active="{Binding IsActive}"
-                                              Command="{Binding #ContinuityList.((vm:MainViewModel)DataContext).Events.SelectContinuityCommand}"
-                                              CommandParameter="{Binding}">
-                                          <Grid ColumnDefinitions="*,Auto">
-                                              <TextBlock Grid.Column="0" Classes="sideItemLabel" Text="{Binding Name}" FontSize="13"
-                                                         Foreground="{DynamicResource PbTextMutedBrush}" TextTrimming="CharacterEllipsis" />
-                                              <Border Grid.Column="1" Classes="countBadge"><TextBlock Classes="count" Text="{Binding SeriesCount}" Foreground="{DynamicResource PbTextFaintBrush}" /></Border>
-                                          </Grid>
-                                      </Button>
-                                  </DataTemplate>
-                              </ItemsControl.ItemTemplate>
-                          </ItemsControl>
-                          <Border BorderThickness="1" BorderBrush="#383D47" CornerRadius="5" Margin="0,12,0,0" Padding="8">
-                              <StackPanel Spacing="6">
-                                  <TextBox Watermark="New continuity name" FontSize="12" Text="{Binding Events.NewContinuityName}" />
-                                  <Button Classes="sideItemButton" HorizontalContentAlignment="Center"
-                                          Command="{Binding Events.CreateNewContinuityCommand}" Foreground="{DynamicResource PbTextFaintBrush}">
-                                      <TextBlock Text="+ New Continuity" FontSize="12" />
-                                  </Button>
-                              </StackPanel>
-                          </Border>
-                      </StackPanel>
+                        <Grid ColumnDefinitions="*,Auto" Margin="8,0,6,12">
+                            <TextBlock Grid.Column="0" Text="Events &amp; Continuity" FontSize="15" FontWeight="Bold" Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
+                            <Button Grid.Column="1" Width="24" Height="24" Padding="0" CornerRadius="6"
+                                    Background="{DynamicResource PbSurface2Brush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1" ToolTip.Tip="New...">
+                                <Path Classes="pbIcon" Width="11" Height="11" Data="{StaticResource PbIconPlus}" />
+                                <Button.Flyout>
+                                    <MenuFlyout>
+                                        <MenuItem Header="New event" Command="{Binding OpenNewEventDialogCommand}" CommandParameter="Event" />
+                                        <MenuItem Header="New continuity" Command="{Binding OpenNewEventDialogCommand}" CommandParameter="Continuity" />
+                                    </MenuFlyout>
+                                </Button.Flyout>
+                            </Button>
+                        </Grid>
 
-                      <!-- Timeline mode sidebar (docs/superpowers/specs/2026-08-27-metadata-model-phase4g-age-progression-design.md) -->
-                      <StackPanel IsVisible="{Binding Events.IsTimelineMode}" Spacing="1">
-                          <TextBlock Text="Timeline" FontSize="16" FontWeight="Bold"
-                                     Foreground="{DynamicResource PbTextBrush}" Margin="8,0,8,14" />
-                          <TextBox Watermark="Search a series to seed…" FontSize="12" Text="{Binding Events.TimelineSeriesSearchQuery}" />
-                          <ItemsControl x:Name="TimelineSeriesList" ItemsSource="{Binding Events.TimelineSeriesSearchResults}" Margin="0,6,0,0">
-                              <ItemsControl.ItemTemplate>
-                                  <DataTemplate x:DataType="models:SeriesSearchResult">
-                                      <Button Classes="sideItemButton"
-                                              Command="{Binding #TimelineSeriesList.((vm:MainViewModel)DataContext).Events.SelectTimelineSeriesCommand}"
-                                              CommandParameter="{Binding}">
-                                          <TextBlock Classes="sideItemLabel" Text="{Binding Name}" FontSize="13"
-                                                     Foreground="{DynamicResource PbTextMutedBrush}" TextTrimming="CharacterEllipsis" />
-                                      </Button>
-                                  </DataTemplate>
-                              </ItemsControl.ItemTemplate>
-                          </ItemsControl>
-                      </StackPanel>
-
-                      <StackPanel IsVisible="{Binding Events.IsEventsMode}" Spacing="1">
-                        <TextBlock Text="Story Events" FontSize="16" FontWeight="Bold"
-                                   Foreground="{DynamicResource PbTextBrush}" Margin="8,0,8,14" />
-
+                        <TextBlock Text="Events" FontSize="9" Foreground="{DynamicResource PbTextFaintBrush}" Margin="8,4" />
                         <ItemsControl x:Name="StoryEvents" ItemsSource="{Binding Events.Events}">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate x:DataType="models:StoryEventSummary">
-                                    <Grid ColumnDefinitions="*,Auto">
-                                        <Button Grid.Column="0" Classes="sideItemButton" Classes.active="{Binding IsActive}"
-                                                Command="{Binding #StoryEvents.((vm:MainViewModel)DataContext).Events.SelectEventCommand}"
-                                                CommandParameter="{Binding}">
-                                            <Grid ColumnDefinitions="*,Auto">
-                                                <TextBlock Grid.Column="0" Classes="sideItemLabel" Text="{Binding Name}" FontSize="13"
-                                                           Foreground="{DynamicResource PbTextMutedBrush}" TextTrimming="CharacterEllipsis" />
-                                                <Border Grid.Column="1" Classes="countBadge"><TextBlock Classes="count" Text="{Binding MemberCount}" Foreground="{DynamicResource PbTextFaintBrush}" /></Border>
-                                            </Grid>
-                                        </Button>
-                                        <Button Grid.Column="1" Classes="headerAction ghost" Padding="6" Margin="2,0,0,0"
-                                                Command="{Binding DeleteConfirm.TriggerCommand}" ToolTip.Tip="{Binding DeleteConfirm.Label}">
-                                            <Panel>
-                                                <Border Classes="icon" Width="11" Height="11" Background="{DynamicResource PbTextFaintBrush}"
-                                                        IsVisible="{Binding !DeleteConfirm.IsArmed}">
-                                                    <Border.OpacityMask><ImageBrush Source="/Assets/Icons/Trash_Empty.png" Stretch="Uniform" /></Border.OpacityMask>
-                                                </Border>
-                                                <Border Classes="icon" Width="11" Height="11" Background="{DynamicResource PbBadgeBrush}"
-                                                        IsVisible="{Binding DeleteConfirm.IsArmed}">
-                                                    <Border.OpacityMask><ImageBrush Source="/Assets/Icons/Trash_Empty.png" Stretch="Uniform" /></Border.OpacityMask>
-                                                </Border>
-                                            </Panel>
-                                        </Button>
-                                    </Grid>
+                                    <Border Classes="ecRow" Classes.active="{Binding IsActive}" CornerRadius="6" BorderThickness="3,0,0,0" Margin="0,1">
+                                        <Grid ColumnDefinitions="*,Auto">
+                                            <Button Grid.Column="0" Classes="sideItemButton" Padding="11,7"
+                                                    Command="{Binding #StoryEvents.((vm:MainViewModel)DataContext).Events.SelectEventCommand}"
+                                                    CommandParameter="{Binding}">
+                                                <TextBlock Text="{Binding Name}" FontSize="12.5" Foreground="{DynamicResource PbTextMutedBrush}"
+                                                           TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Name}" />
+                                            </Button>
+                                            <Button Grid.Column="1" Classes="headerAction ghost ecDelete" Padding="6" Margin="2,0,4,0" VerticalAlignment="Center"
+                                                    Command="{Binding DeleteConfirm.TriggerCommand}" ToolTip.Tip="{Binding DeleteConfirm.Label}">
+                                                <Panel>
+                                                    <Border Classes="icon" Width="11" Height="11" Background="{DynamicResource PbTextFaintBrush}" IsVisible="{Binding !DeleteConfirm.IsArmed}">
+                                                        <Border.OpacityMask><ImageBrush Source="/Assets/Icons/Trash_Empty.png" Stretch="Uniform" /></Border.OpacityMask>
+                                                    </Border>
+                                                    <Border Classes="icon" Width="11" Height="11" Background="{DynamicResource PbBadgeBrush}" IsVisible="{Binding DeleteConfirm.IsArmed}">
+                                                        <Border.OpacityMask><ImageBrush Source="/Assets/Icons/Trash_Empty.png" Stretch="Uniform" /></Border.OpacityMask>
+                                                    </Border>
+                                                </Panel>
+                                            </Button>
+                                        </Grid>
+                                    </Border>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
+                        <TextBlock Text="No events yet" FontSize="10.5" Foreground="{DynamicResource PbTextFaintBrush}" Margin="11,4"
+                                   IsVisible="{Binding Events.HasNoEvents}" />
 
-                        <Border BorderThickness="1" BorderBrush="#383D47" CornerRadius="5" Margin="0,12,0,0" Padding="8">
-                            <Button Classes="sideItemButton" HorizontalContentAlignment="Center"
-                                    Command="{Binding Events.CreateNewCommand}"
-                                    Foreground="{DynamicResource PbTextFaintBrush}">
-                                <StackPanel Orientation="Horizontal" Spacing="6" HorizontalAlignment="Center">
-                                    <Border Classes="icon" Width="11" Height="11" Background="{DynamicResource PbTextFaintBrush}">
-                                        <Border.OpacityMask>
-                                            <ImageBrush Source="/Assets/Icons/Add_Plus.png" Stretch="Uniform" />
-                                        </Border.OpacityMask>
+                        <TextBlock Text="Continuities" FontSize="9" Foreground="{DynamicResource PbTextFaintBrush}" Margin="8,12,8,4" />
+                        <ItemsControl x:Name="ContinuityList" ItemsSource="{Binding Events.Continuities}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="models:ContinuitySummary">
+                                    <Border Classes="ecRow" Classes.active="{Binding IsActive}" CornerRadius="6" BorderThickness="3,0,0,0" Margin="0,1">
+                                        <Grid ColumnDefinitions="*,Auto">
+                                            <Button Grid.Column="0" Classes="sideItemButton" Padding="11,7"
+                                                    Command="{Binding #ContinuityList.((vm:MainViewModel)DataContext).Events.SelectContinuityCommand}"
+                                                    CommandParameter="{Binding}">
+                                                <TextBlock Text="{Binding Name}" FontSize="12.5" Foreground="{DynamicResource PbTextMutedBrush}"
+                                                           TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Name}" />
+                                            </Button>
+                                            <Button Grid.Column="1" Classes="headerAction ghost ecDelete" Padding="6" Margin="2,0,4,0" VerticalAlignment="Center"
+                                                    Command="{Binding DeleteConfirm.TriggerCommand}" ToolTip.Tip="{Binding DeleteConfirm.Label}">
+                                                <Panel>
+                                                    <Border Classes="icon" Width="11" Height="11" Background="{DynamicResource PbTextFaintBrush}" IsVisible="{Binding !DeleteConfirm.IsArmed}">
+                                                        <Border.OpacityMask><ImageBrush Source="/Assets/Icons/Trash_Empty.png" Stretch="Uniform" /></Border.OpacityMask>
+                                                    </Border>
+                                                    <Border Classes="icon" Width="11" Height="11" Background="{DynamicResource PbBadgeBrush}" IsVisible="{Binding DeleteConfirm.IsArmed}">
+                                                        <Border.OpacityMask><ImageBrush Source="/Assets/Icons/Trash_Empty.png" Stretch="Uniform" /></Border.OpacityMask>
+                                                    </Border>
+                                                </Panel>
+                                            </Button>
+                                        </Grid>
                                     </Border>
-                                    <TextBlock Text="New Story Event" FontSize="12" />
-                                </StackPanel>
-                            </Button>
-                        </Border>
-                      </StackPanel>
-
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <TextBlock Text="No continuities yet" FontSize="10.5" Foreground="{DynamicResource PbTextFaintBrush}" Margin="11,4"
+                                   IsVisible="{Binding Events.HasNoContinuities}" />
                     </StackPanel>
 
                 </StackPanel>
@@ -754,6 +737,24 @@
                     Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
                     Command="{Binding CloseNewReadingListDialogCommand}" ToolTip.Tip="Close"
                     AutomationProperties.AutomationId="NewReadingListOverlayCloseButton">
+                <Border Classes="icon" Width="13" Height="13">
+                    <Border.OpacityMask>
+                        <ImageBrush Source="/Assets/Icons/Close_Circle.png" Stretch="Uniform" />
+                    </Border.OpacityMask>
+                </Border>
+            </Button>
+        </Grid>
+    </Border>
+
+    <!-- ============ New Event / New Continuity dialog (docs/superpowers/specs/2026-08-28-events-
+         continuity-screen-redesign-design.md) ============ -->
+    <Border IsVisible="{Binding IsNewEventDialogOpen}" Background="#B0000000">
+        <Grid HorizontalAlignment="Center" VerticalAlignment="Center">
+            <views:NewEventOrContinuityOverlay DataContext="{Binding NewEventOrContinuity}" />
+            <Button Classes="rail" Width="28" Height="28"
+                    HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-14,-14,0"
+                    Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
+                    Command="{Binding CloseNewEventDialogCommand}" ToolTip.Tip="Close">
                 <Border Classes="icon" Width="13" Height="13">
                     <Border.OpacityMask>
                         <ImageBrush Source="/Assets/Icons/Close_Circle.png" Stretch="Uniform" />

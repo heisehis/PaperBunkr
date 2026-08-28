@@ -19,9 +19,9 @@ public static class ContinuityReadingListBuilder
         var continuity = context.Continuities.FirstOrDefault(c => c.Id == continuityId)
             ?? throw new InvalidOperationException($"Continuity {continuityId} not found.");
 
-        var memberSeriesIds = context.Series
-            .Where(s => s.Continuities.Any(c => c.Id == continuityId))
-            .Select(s => s.Id)
+        var memberSeriesIds = context.ContinuityMemberships
+            .Where(m => m.ContinuityId == continuityId)
+            .Select(m => m.SeriesId)
             .ToList();
         var series = context.Series
             .Include(s => s.Issues)

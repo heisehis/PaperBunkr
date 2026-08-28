@@ -61,6 +61,7 @@ public partial class MainViewModel : ViewModelBase
         Migration = new MigrationOverlayViewModel(new FilePickerService(), OpenSeriesDetailFromReview);
         ReadingListProperties = new ReadingListPropertiesScreenViewModel(CloseReadingListPropertiesOverlay);
         NewReadingList = new NewReadingListViewModel(new FilePickerService(), OnNewReadingListCreated, CloseNewReadingListDialog);
+        NewEventOrContinuity = new NewEventOrContinuityViewModel(OnEventOrContinuityCreated, CloseNewEventDialog);
         QuickRate = new QuickRateScreenViewModel(CloseQuickRateOverlay);
         DesignShowcase = new DesignShowcaseScreenViewModel();
 
@@ -168,6 +169,7 @@ public partial class MainViewModel : ViewModelBase
     public MigrationOverlayViewModel Migration { get; }
     public ReadingListPropertiesScreenViewModel ReadingListProperties { get; }
     public NewReadingListViewModel NewReadingList { get; }
+    public NewEventOrContinuityViewModel NewEventOrContinuity { get; }
     public QuickRateScreenViewModel QuickRate { get; }
 
     public DesignShowcaseScreenViewModel DesignShowcase { get; }
@@ -202,6 +204,9 @@ public partial class MainViewModel : ViewModelBase
 
     [ObservableProperty]
     private bool _isNewReadingListDialogOpen;
+
+    [ObservableProperty]
+    private bool _isNewEventDialogOpen;
 
     [ObservableProperty]
     private bool _isBookPropertiesOverlayOpen;
@@ -466,6 +471,60 @@ public partial class MainViewModel : ViewModelBase
         IsNewReadingListDialogOpen = false;
         Reading.LoadReadingList(listId);
         CurrentScreen = "reading";
+    }
+
+    /// <summary>Sidebar "＋" on the Events &amp; Continuity screen (docs/superpowers/specs/2026-08-28-events-continuity-screen-redesign-design.md).</summary>
+    [RelayCommand]
+    private void OpenNewEventDialog(string kind)
+    {
+        NewEventOrContinuity.Reset(kind == "Continuity"
+            ? NewEventOrContinuityViewModel.Kind.Continuity
+            : NewEventOrContinuityViewModel.Kind.Event);
+        IsNewEventDialogOpen = true;
+    }
+
+    /// <summary>"Edit details" from the Events &amp; Continuity screen's ⋯ Manage menu
+    /// (docs/superpowers/specs/2026-08-28-continuity-editing-design.md).</summary>
+    [RelayCommand]
+    private void OpenEditEventDialog()
+    {
+        if (Events.ActiveEventId is not int id)
+        {
+            return;
+        }
+
+        NewEventOrContinuity.LoadForEdit(NewEventOrContinuityViewModel.Kind.Event, id);
+        IsNewEventDialogOpen = true;
+    }
+
+    [RelayCommand]
+    private void OpenEditContinuityDialog()
+    {
+        if (Events.ActiveContinuityId is not int id)
+        {
+            return;
+        }
+
+        NewEventOrContinuity.LoadForEdit(NewEventOrContinuityViewModel.Kind.Continuity, id);
+        IsNewEventDialogOpen = true;
+    }
+
+    [RelayCommand]
+    private void CloseNewEventDialog() => IsNewEventDialogOpen = false;
+
+    private void OnEventOrContinuityCreated(NewEventOrContinuityViewModel.Kind kind, int id)
+    {
+        IsNewEventDialogOpen = false;
+        if (kind == NewEventOrContinuityViewModel.Kind.Continuity)
+        {
+            Events.LoadContinuity(id);
+        }
+        else
+        {
+            Events.LoadEvent(id);
+        }
+
+        CurrentScreen = "events";
     }
 
     /// <summary>Book Properties editor entry point (docs/superpowers/specs/2026-08-27-book-properties-
@@ -943,6 +1002,10 @@ public partial class MainViewModel : ViewModelBase
         else if (IsNewReadingListDialogOpen)
         {
             CloseNewReadingListDialog();
+        }
+        else if (IsNewEventDialogOpen)
+        {
+            CloseNewEventDialog();
         }
         else if (IsReadingListPropertiesOverlayOpen)
         {

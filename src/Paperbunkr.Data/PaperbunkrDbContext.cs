@@ -48,6 +48,8 @@ public class PaperbunkrDbContext : DbContext
 
     public DbSet<Continuity> Continuities => Set<Continuity>();
 
+    public DbSet<ContinuityMembership> ContinuityMemberships => Set<ContinuityMembership>();
+
     public DbSet<StoryEvent> StoryEvents => Set<StoryEvent>();
 
     public DbSet<EventMembership> EventMemberships => Set<EventMembership>();
@@ -174,8 +176,6 @@ public class PaperbunkrDbContext : DbContext
             builder.HasMany(s => s.Categories)
                 .WithMany(c => c.Series);
 
-            builder.HasMany(s => s.Continuities)
-                .WithMany(c => c.Series);
 
             builder.HasMany(s => s.MetadataProposals)
                 .WithOne(mp => mp.Series)
@@ -440,14 +440,34 @@ public class PaperbunkrDbContext : DbContext
             builder.Property(e => e.Provider).HasConversion<string>().HasMaxLength(32);
         });
 
-        // Brand-new table (like MediaRelation above) - no existing rows to backfill. The M:M with
-        // Series is configured on the Series side above (implicit skip-navigation join table, same
-        // pattern as Category - no explicit join entity needed since it carries no extra columns).
+        // Brand-new table (like MediaRelation above) - no existing rows to backfill.
         modelBuilder.Entity<Continuity>(builder =>
         {
             builder.HasKey(c => c.Id);
             builder.Property(c => c.Name).IsRequired();
             builder.HasIndex(c => c.Name);
+        });
+
+        // Explicit Continuity <-> Series join (docs/superpowers/specs/2026-08-28-continuity-editing-
+        // design.md, Part C) - replaced the implicit skip-navigation join so a membership can carry
+        // its own Note and SortOrder. Cascade from both endpoints, same reasoning as EventMembership:
+        // the join row is meaningless once either side is gone. Unique (ContinuityId, SeriesId) keeps
+        // AddSeriesToContinuity idempotent at the database level too.
+        modelBuilder.Entity<ContinuityMembership>(builder =>
+        {
+            builder.HasKey(m => m.Id);
+            builder.HasIndex(m => new { m.ContinuityId, m.SeriesId }).IsUnique();
+            builder.HasIndex(m => m.SeriesId);
+
+            builder.HasOne(m => m.Continuity)
+                .WithMany(c => c.Memberships)
+                .HasForeignKey(m => m.ContinuityId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            builder.HasOne(m => m.Series)
+                .WithMany(s => s.ContinuityMemberships)
+                .HasForeignKey(m => m.SeriesId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         // Brand-new tables (like Continuity above) - no existing rows to backfill.

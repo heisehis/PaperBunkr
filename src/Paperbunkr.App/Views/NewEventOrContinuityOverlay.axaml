@@ -1,0 +1,40 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Paperbunkr.App.ViewModels"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="400" d:DesignHeight="300"
+             x:Class="Paperbunkr.App.Views.NewEventOrContinuityOverlay"
+             x:DataType="vm:NewEventOrContinuityViewModel">
+
+    <Border Classes="floatingPanel" Width="400">
+        <StackPanel>
+            <Border Padding="18,15" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,0,0,1">
+                <TextBlock Classes="pbTextHeading" Text="{Binding Title}" />
+            </Border>
+
+            <StackPanel Margin="18,16" Spacing="12">
+                <StackPanel Spacing="6">
+                    <TextBlock Text="NAME" FontSize="10" Foreground="{DynamicResource PbTextMutedBrush}" />
+                    <TextBox Text="{Binding Name}" />
+                </StackPanel>
+                <StackPanel Spacing="6" IsVisible="{Binding IsContinuity}">
+                    <TextBlock Text="PUBLISHER" FontSize="10" Foreground="{DynamicResource PbTextMutedBrush}" />
+                    <TextBox Text="{Binding Publisher}" Watermark="optional" />
+                </StackPanel>
+                <StackPanel Spacing="6">
+                    <TextBlock Text="DESCRIPTION" FontSize="10" Foreground="{DynamicResource PbTextMutedBrush}" />
+                    <TextBox Text="{Binding Description}" Watermark="optional" AcceptsReturn="True" TextWrapping="Wrap"
+                             MinHeight="64" MaxHeight="140" />
+                </StackPanel>
+            </StackPanel>
+
+            <Border Padding="18,13" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,1,0,0">
+                <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+                    <Button Classes="ghost" Content="Cancel" Command="{Binding CancelCommand}" />
+                    <Button Classes="primary" Content="{Binding SaveButtonLabel}" Command="{Binding CreateCommand}" IsEnabled="{Binding CanCreate}" />
+                </StackPanel>
+            </Border>
+        </StackPanel>
+    </Border>
+</UserControl>

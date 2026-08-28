@@ -139,7 +139,7 @@ public static class SmartListCatalog
             [SmartListField.ReadingMode] = i => i.Series?.ReadingMode.ToString() ?? string.Empty,
             [SmartListField.ReadingStatus] = i => i.Series?.ReadingStatus.ToString() ?? string.Empty,
             // Joined so Contains/ContainsAny operators work when a series is in several continuities.
-            [SmartListField.Continuity] = i => i.Series is null ? string.Empty : string.Join("; ", i.Series.Continuities.Select(c => c.Name)),
+            [SmartListField.Continuity] = i => i.Series is null ? string.Empty : string.Join("; ", i.Series.ContinuityMemberships.Select(m => m.Continuity.Name)),
 
             [SmartListField.Title] = i => i.Title ?? string.Empty,
             [SmartListField.Number] = i => i.EffectiveNumber() ?? string.Empty,

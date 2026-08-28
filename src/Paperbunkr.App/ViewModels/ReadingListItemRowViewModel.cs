@@ -9,8 +9,14 @@ using Paperbunkr.Data.Metadata;
 namespace Paperbunkr.App.ViewModels;
 
 /// <summary>One row in a Reading List's item grid, wrapping a real <see cref="ReadingListItem"/>.</summary>
-public partial class ReadingListItemRowViewModel : ViewModelBase
+public partial class ReadingListItemRowViewModel : ViewModelBase, Models.ISelectableCard
 {
+    /// <summary>Selection identity for <see cref="Paperbunkr.App.Services.TileSelectionController{TCard}"/> - the <see cref="ReadingListItem"/> row id.</summary>
+    public int Id => Item.Id;
+
+    [ObservableProperty]
+    private bool _isSelected;
+
     private readonly Action<ReadingListItemRowViewModel> _onMoveUp;
     private readonly Action<ReadingListItemRowViewModel> _onMoveDown;
     private readonly Action<ReadingListItemRowViewModel> _onRemove;

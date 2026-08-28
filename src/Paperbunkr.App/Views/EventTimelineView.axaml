@@ -1,0 +1,92 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Paperbunkr.App.ViewModels"
+             xmlns:models="using:Paperbunkr.App.Models"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="700" d:DesignHeight="500"
+             x:Class="Paperbunkr.App.Views.EventTimelineView"
+             x:DataType="vm:EventsScreenViewModel">
+
+    <StackPanel Margin="28,10,28,0">
+        <TextBlock Text="{Binding TimelineTitle}" Classes="pbTextBody" FontWeight="SemiBold"
+                   Foreground="{DynamicResource PbTextMutedBrush}" Margin="0,0,0,8" />
+
+        <TextBlock Text="No issues in this scope have a resolvable comic age yet." FontSize="12.5"
+                   Foreground="{DynamicResource PbTextFaintBrush}" IsVisible="{Binding HasNoTimelineSections}" />
+
+        <!-- Review inferred ages (moved here from an always-on panel) -->
+        <StackPanel IsVisible="{Binding !HasNoInferredAges}" Margin="0,0,0,10">
+            <Button Classes="headerAction ghost" HorizontalAlignment="Left" Padding="4,4" Command="{Binding ToggleInferredAgesCommand}">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                    <TextBlock Text="Review inferred ages" FontSize="12.5" FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}" />
+                    <Border Classes="pbChip" Padding="6,1"><TextBlock Text="{Binding InferredAges.Count}" FontSize="10" Foreground="{DynamicResource PbTextFaintBrush}" /></Border>
+                </StackPanel>
+            </Button>
+            <StackPanel IsVisible="{Binding InferredAgesExpanded}" Margin="0,6,0,0">
+                <Button Classes="headerAction secondary" Content="Accept all" HorizontalAlignment="Left" Margin="0,0,0,8"
+                        Command="{Binding AcceptAllInferredAgesCommand}" />
+                <ItemsControl ItemsSource="{Binding InferredAges}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:InferredAgeRowViewModel">
+                            <Grid ColumnDefinitions="*,Auto" Margin="0,3">
+                                <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                    <TextBlock Text="{Binding DisplayLabel}" FontSize="12.5" Foreground="{DynamicResource PbTextBrush}" />
+                                    <TextBlock FontSize="10" Foreground="{DynamicResource PbTextFaintBrush}">
+                                        <Run Text="{Binding YearLabel}" /><Run Text=" → " /><Run Text="{Binding AgeLabel}" />
+                                    </TextBlock>
+                                </StackPanel>
+                                <Button Grid.Column="1" Classes="headerAction secondary" Content="Accept" VerticalAlignment="Center" Command="{Binding AcceptCommand}" />
+                            </Grid>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
+        </StackPanel>
+
+        <ItemsControl ItemsSource="{Binding TimelineSections}">
+            <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:TimelineSectionViewModel">
+                    <StackPanel Margin="0,14,0,0">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <TextBlock Text="{Binding Label}" FontSize="14" FontWeight="Bold" Foreground="{DynamicResource PbTextBrush}" />
+                            <TextBlock Text="{Binding CommonlyCitedRange}" FontSize="10" Foreground="{DynamicResource PbTextFaintBrush}"
+                                       VerticalAlignment="Center" IsVisible="{Binding HasCommonlyCitedRange}" />
+                        </StackPanel>
+                        <ItemsControl ItemsSource="{Binding Issues}" Margin="0,8,0,0">
+                            <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="models:TimelineIssueCard">
+                                    <Button Background="Transparent" BorderThickness="0" Padding="0" Margin="0,0,10,12" Cursor="Hand"
+                                            Command="{Binding $parent[ItemsControl].((vm:EventsScreenViewModel)DataContext).OpenTimelineIssueCommand}"
+                                            CommandParameter="{Binding}">
+                                        <StackPanel Width="100">
+                                            <Panel>
+                                                <Border Height="144" CornerRadius="5" ClipToBounds="True" Background="{Binding CoverBrush}">
+                                                    <Image Source="{Binding CoverImage}" Stretch="UniformToFill" />
+                                                </Border>
+                                                <Border Width="9" Height="9" CornerRadius="9" Background="{DynamicResource PbAccentBrush}"
+                                                        HorizontalAlignment="Right" VerticalAlignment="Top" Margin="5"
+                                                        IsVisible="{Binding IsUnread}" ToolTip.Tip="Unread" />
+                                                <Border HorizontalAlignment="Left" VerticalAlignment="Top" Margin="5" Padding="4,1" CornerRadius="3"
+                                                        Background="{DynamicResource PbBadgeBrush}" IsVisible="{Binding IsReducedConfidence}"
+                                                        ToolTip.Tip="{Binding ConfidenceReason}">
+                                                    <TextBlock Text="?" FontSize="9" FontWeight="Bold" Foreground="{DynamicResource PbBadgeTextBrush}" />
+                                                </Border>
+                                            </Panel>
+                                            <TextBlock Text="{Binding SeriesName}" FontSize="10" Foreground="{DynamicResource PbTextBrush}"
+                                                       TextTrimming="CharacterEllipsis" Margin="0,4,0,0" />
+                                            <TextBlock FontSize="9" Foreground="{DynamicResource PbTextFaintBrush}">
+                                                <Run Text="{Binding Title}" /><Run Text="  " /><Run Text="{Binding YearLabel}" />
+                                            </TextBlock>
+                                        </StackPanel>
+                                    </Button>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+    </StackPanel>
+</UserControl>

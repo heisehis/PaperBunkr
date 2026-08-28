@@ -384,9 +384,8 @@ public class EventsScreenViewModelTests : IDisposable
         SeedSeriesInContinuity("X-Men", "Earth-616");
         var vm = new EventsScreenViewModel();
 
-        vm.SetModeCommand.Execute(EventsScreenMode.Continuities);
 
-        Assert.True(vm.IsContinuitiesMode);
+        Assert.NotEmpty(vm.Continuities);
         var summary = Assert.Single(vm.Continuities);
         Assert.Equal("Earth-616", summary.Name);
         Assert.Equal(2, summary.SeriesCount);
@@ -398,7 +397,6 @@ public class EventsScreenViewModelTests : IDisposable
         var (_, continuityId) = SeedSeriesInContinuity("Avengers", "Earth-616");
         SeedSeriesInContinuity("X-Men", "Earth-616");
         var vm = new EventsScreenViewModel();
-        vm.SetModeCommand.Execute(EventsScreenMode.Continuities);
 
         vm.SelectContinuityCommand.Execute(new ContinuitySummary(continuityId, "Earth-616", null, 2));
 
@@ -415,7 +413,6 @@ public class EventsScreenViewModelTests : IDisposable
             c.SaveChanges();
         }
         var vm = new EventsScreenViewModel();
-        vm.SetModeCommand.Execute(EventsScreenMode.Continuities);
         vm.SelectContinuityCommand.Execute(new ContinuitySummary(continuityId, "Earth-616", null, 1));
 
         int xmenId;
@@ -446,7 +443,6 @@ public class EventsScreenViewModelTests : IDisposable
     public void CreateNewContinuityFromSidebar_DedupesCaseInsensitively()
     {
         var vm = new EventsScreenViewModel();
-        vm.SetModeCommand.Execute(EventsScreenMode.Continuities);
 
         vm.NewContinuityName = "Earth-616";
         vm.CreateNewContinuityCommand.Execute(null);
@@ -462,7 +458,6 @@ public class EventsScreenViewModelTests : IDisposable
         var (seriesId, continuityId) = SeedSeriesInContinuity("Avengers", "Earth-616");
         int? navigatedTo = null;
         var vm = new EventsScreenViewModel(goToSeriesDetail: id => navigatedTo = id, goToReader: null);
-        vm.SetModeCommand.Execute(EventsScreenMode.Continuities);
         vm.SelectContinuityCommand.Execute(new ContinuitySummary(continuityId, "Earth-616", null, 1));
 
         vm.OpenContinuitySeriesCommand.Execute(vm.ContinuityMembers.Single());
@@ -491,7 +486,6 @@ public class EventsScreenViewModelTests : IDisposable
     {
         int seriesId = SeedTimelineSeries("The Flash", ("1", 1965), ("2", 1962), ("350", 1990));
         var vm = new EventsScreenViewModel();
-        vm.SetModeCommand.Execute(EventsScreenMode.Timeline);
 
         vm.SelectTimelineSeriesCommand.Execute(new SeriesSearchResult { SeriesId = seriesId, Name = "The Flash" });
 
@@ -509,7 +503,6 @@ public class EventsScreenViewModelTests : IDisposable
     {
         int seriesId = SeedTimelineSeries("Crisis Era", ("1", 1982));
         var vm = new EventsScreenViewModel();
-        vm.SetModeCommand.Execute(EventsScreenMode.Timeline);
 
         vm.SelectTimelineSeriesCommand.Execute(new SeriesSearchResult { SeriesId = seriesId, Name = "Crisis Era" });
 
@@ -524,7 +517,6 @@ public class EventsScreenViewModelTests : IDisposable
         int seriesId = SeedTimelineSeries("The Flash", ("1", 1990));
         int? openedIssueId = null;
         var vm = new EventsScreenViewModel(goToSeriesDetail: null, goToReader: id => openedIssueId = id);
-        vm.SetModeCommand.Execute(EventsScreenMode.Timeline);
         vm.SelectTimelineSeriesCommand.Execute(new SeriesSearchResult { SeriesId = seriesId, Name = "The Flash" });
         var card = vm.TimelineSections.Single().Issues.Single();
 
@@ -539,7 +531,6 @@ public class EventsScreenViewModelTests : IDisposable
         SeedTimelineSeries("Series A", ("1", 1965));
         SeedTimelineSeries("Series B", ("1", 1990));
         var vm = new EventsScreenViewModel();
-        vm.SetModeCommand.Execute(EventsScreenMode.Timeline);
 
         vm.SetTimelineScopeCommand.Execute(TimelineScope.Library);
 
@@ -558,7 +549,6 @@ public class EventsScreenViewModelTests : IDisposable
             c.SaveChanges();
         }
         var vm = new EventsScreenViewModel();
-        vm.SetModeCommand.Execute(EventsScreenMode.Timeline);
 
         vm.LoadContinuityTimeline(continuityId);
 
@@ -579,7 +569,6 @@ public class EventsScreenViewModelTests : IDisposable
             Paperbunkr.Data.Metadata.CharacterResolver.RebuildAll(c);
         }
         var vm = new EventsScreenViewModel();
-        vm.SetModeCommand.Execute(EventsScreenMode.Timeline);
         vm.SelectTimelineSeriesCommand.Execute(new SeriesSearchResult { SeriesId = flashId, Name = "The Flash" });
         Assert.Single(vm.TimelineSections); // just Silver (Flash 1965)
 
@@ -593,7 +582,6 @@ public class EventsScreenViewModelTests : IDisposable
     {
         int seriesId = SeedTimelineSeries("The Flash", ("1", 1965));
         var vm = new EventsScreenViewModel();
-        vm.SetModeCommand.Execute(EventsScreenMode.Timeline);
         vm.SelectTimelineSeriesCommand.Execute(new SeriesSearchResult { SeriesId = seriesId, Name = "The Flash" });
 
         var row = Assert.Single(vm.InferredAges);
@@ -663,7 +651,6 @@ public class EventsScreenViewModelTests : IDisposable
             Paperbunkr.Data.Metadata.ContinuityResolver.AddSeriesToContinuity(c, sharedSeriesId, ult.Id);
         }
         var vm = new EventsScreenViewModel();
-        vm.SetModeCommand.Execute(EventsScreenMode.Continuities);
         vm.SelectContinuityCommand.Execute(new ContinuitySummary(e616Id, "Earth-616", null, 1));
 
         var overlap = Assert.Single(vm.OverlappingContinuities);
@@ -686,7 +673,6 @@ public class EventsScreenViewModelTests : IDisposable
         }
         int? navigatedToList = null;
         var vm = new EventsScreenViewModel(goToReadingList: id => navigatedToList = id);
-        vm.SetModeCommand.Execute(EventsScreenMode.Continuities);
         vm.SelectContinuityCommand.Execute(new ContinuitySummary(continuityId, "Earth-616", null, 1));
 
         vm.CreateReadingListFromContinuityCommand.Execute(null);
@@ -696,5 +682,289 @@ public class EventsScreenViewModelTests : IDisposable
         var list = context.ReadingLists.Single();
         Assert.Equal("Earth-616 (continuity)", list.Name);
         Assert.Equal(navigatedToList, list.Id);
+    }
+
+    // --- Redesign nav model (docs/superpowers/specs/2026-08-28-events-continuity-screen-redesign-design.md) ---
+
+    private static int SeedContinuity(string name)
+    {
+        using var context = PaperbunkrDb.CreateContext();
+        var c = new Continuity { Name = name, CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow };
+        context.Continuities.Add(c);
+        context.SaveChanges();
+        return c.Id;
+    }
+
+    private static int SeedSeries(string name)
+    {
+        using var context = PaperbunkrDb.CreateContext();
+        var series = new Series { Name = name };
+        context.Series.Add(series);
+        context.SaveChanges();
+        return series.Id;
+    }
+
+    [Fact]
+    public void SetContinuitySeriesNote_PersistsAndSurvivesReload()
+    {
+        int continuityId = SeedContinuity("Marvel Prime");
+        int seriesId = SeedSeries("Daredevil");
+        using (var context = PaperbunkrDb.CreateContext())
+        {
+            Paperbunkr.Data.Metadata.ContinuityResolver.AddSeriesToContinuity(context, seriesId, continuityId);
+        }
+        var vm = new EventsScreenViewModel();
+        vm.SelectContinuityCommand.Execute(new ContinuitySummary(continuityId, "Marvel Prime", null, 1));
+
+        var card = Assert.Single(vm.ContinuityMembers);
+        card.MembershipNote = "flagship title";
+        vm.SetContinuitySeriesNoteCommand.Execute(card);
+        Assert.False(card.IsEditingNote);
+
+        var vm2 = new EventsScreenViewModel();
+        vm2.SelectContinuityCommand.Execute(new ContinuitySummary(continuityId, "Marvel Prime", null, 1));
+        Assert.Equal("flagship title", Assert.Single(vm2.ContinuityMembers).MembershipNote);
+    }
+
+    [Fact]
+    public void MoveContinuitySeriesLater_ReordersAndPersists()
+    {
+        int continuityId = SeedContinuity("Ordered");
+        int a = SeedSeries("Aaa");
+        int b = SeedSeries("Bbb");
+        int c = SeedSeries("Ccc");
+        using (var context = PaperbunkrDb.CreateContext())
+        {
+            Paperbunkr.Data.Metadata.ContinuityResolver.AddSeriesToContinuity(context, a, continuityId);
+            Paperbunkr.Data.Metadata.ContinuityResolver.AddSeriesToContinuity(context, b, continuityId);
+            Paperbunkr.Data.Metadata.ContinuityResolver.AddSeriesToContinuity(context, c, continuityId);
+        }
+        var vm = new EventsScreenViewModel();
+        vm.SelectContinuityCommand.Execute(new ContinuitySummary(continuityId, "Ordered", null, 3));
+        Assert.Equal(new[] { a, b, c }, vm.ContinuityMembers.Select(m => m.SeriesId));
+
+        vm.MoveContinuitySeriesLaterCommand.Execute(vm.ContinuityMembers[0]);
+        Assert.Equal(new[] { b, a, c }, vm.ContinuityMembers.Select(m => m.SeriesId));
+
+        var vm2 = new EventsScreenViewModel();
+        vm2.SelectContinuityCommand.Execute(new ContinuitySummary(continuityId, "Ordered", null, 3));
+        Assert.Equal(new[] { b, a, c }, vm2.ContinuityMembers.Select(m => m.SeriesId));
+    }
+
+    [Fact]
+    public void DeleteActiveContinuity_RemovesIt_FallsBackToNext()
+    {
+        int keepId = SeedContinuity("Alpha");
+        int dropId = SeedContinuity("Zeta");
+        var vm = new EventsScreenViewModel();
+        vm.SelectContinuityCommand.Execute(new ContinuitySummary(dropId, "Zeta", null, 0));
+        Assert.True(vm.IsContinuitySelected);
+
+        vm.DeleteActiveContinuityCommand.Execute(null);
+
+        using var context = PaperbunkrDb.CreateContext();
+        Assert.Null(context.Continuities.Find(dropId));
+        Assert.NotNull(context.Continuities.Find(keepId));
+        Assert.Equal("Alpha", vm.ContinuityName); // fell back to the remaining one
+    }
+
+    [Fact]
+    public void ContinuitySidebarRow_HasDeleteConfirm()
+    {
+        SeedContinuity("Earth-616");
+        var vm = new EventsScreenViewModel();
+        vm.RefreshContinuitiesSidebar();
+
+        Assert.All(vm.Continuities, c => Assert.NotNull(c.DeleteConfirm));
+    }
+
+    [Fact]
+    public void DeleteActiveEvent_RemovesIt()
+    {
+        int eventId = SeedEvent("Inferno");
+        var vm = new EventsScreenViewModel();
+        vm.SelectEventCommand.Execute(new StoryEventSummary { Id = eventId, Name = "Inferno", DeleteConfirm = new TwoStepConfirm(() => { }) });
+
+        vm.DeleteActiveEventCommand.Execute(null);
+
+        using var context = PaperbunkrDb.CreateContext();
+        Assert.Null(context.StoryEvents.Find(eventId));
+    }
+
+    [Fact]
+    public void AddSelectedSeries_AddsEveryTickedResultToContinuity()
+    {
+        int continuityId = SeedContinuity("Ultimate");
+        int s1 = SeedSeries("Ultimate Spider-Man");
+        int s2 = SeedSeries("Ultimate X-Men");
+        var vm = new EventsScreenViewModel();
+        vm.SelectContinuityCommand.Execute(new ContinuitySummary(continuityId, "Ultimate", null, 0));
+
+        vm.ContinuitySeriesSearchQuery = "Ultimate";
+        Assert.Equal(2, vm.ContinuitySeriesSearchResults.Count);
+        vm.ToggleContinuitySeriesSelectionCommand.Execute(vm.ContinuitySeriesSearchResults[0]);
+        vm.ToggleContinuitySeriesSelectionCommand.Execute(vm.ContinuitySeriesSearchResults[1]);
+
+        vm.AddSelectedSeriesCommand.Execute(null);
+
+        Assert.Equal(2, vm.ContinuityMembers.Count);
+        Assert.False(vm.AnyContinuitySeriesSelected);
+    }
+
+    [Fact]
+    public void RemoveSelectedSeries_RemovesTickedMembers()
+    {
+        int continuityId = SeedContinuity("Prime");
+        int s1 = SeedSeries("Series One");
+        int s2 = SeedSeries("Series Two");
+        using (var context = PaperbunkrDb.CreateContext())
+        {
+            Paperbunkr.Data.Metadata.ContinuityResolver.AddSeriesToContinuity(context, s1, continuityId);
+            Paperbunkr.Data.Metadata.ContinuityResolver.AddSeriesToContinuity(context, s2, continuityId);
+        }
+        var vm = new EventsScreenViewModel();
+        vm.SelectContinuityCommand.Execute(new ContinuitySummary(continuityId, "Prime", null, 2));
+        Assert.Equal(2, vm.ContinuityMembers.Count);
+
+        vm.ToggleContinuityMemberSelectionCommand.Execute(vm.ContinuityMembers[0]);
+        vm.RemoveSelectedSeriesCommand.Execute(null);
+
+        Assert.Single(vm.ContinuityMembers);
+        Assert.False(vm.AnyContinuityMembersSelected);
+    }
+
+    [Fact]
+    public void SelectEvent_ThenSelectContinuity_SwapsSelectionKind()
+    {
+        int eventId = SeedEvent("Civil War");
+        int continuityId = SeedContinuity("Earth-616");
+        var vm = new EventsScreenViewModel();
+
+        vm.SelectEventCommand.Execute(new StoryEventSummary { Id = eventId, Name = "Civil War", DeleteConfirm = new TwoStepConfirm(() => { }) });
+        Assert.True(vm.IsEventSelected);
+        Assert.False(vm.IsContinuitySelected);
+
+        vm.SelectContinuityCommand.Execute(new ContinuitySummary(continuityId, "Earth-616", null, 0));
+        Assert.True(vm.IsContinuitySelected);
+        Assert.False(vm.IsEventSelected);
+    }
+
+    [Fact]
+    public void SetDetailView_Timeline_ForEvent_PopulatesSections_ThenResetsOnReselect()
+    {
+        int eventId = SeedEvent("Age of Apocalypse");
+        int issueId = SeedSignalIssue("X-Men", "1", "Regular", 1995);
+        using (var c = PaperbunkrDb.CreateContext())
+        {
+            c.EventMemberships.Add(new EventMembership { StoryEventId = eventId, IssueId = issueId, Position = 0, Role = EventMembershipRole.Core });
+            c.SaveChanges();
+        }
+        var vm = new EventsScreenViewModel();
+        vm.SelectEventCommand.Execute(new StoryEventSummary { Id = eventId, Name = "Age of Apocalypse", DeleteConfirm = new TwoStepConfirm(() => { }) });
+
+        vm.SetDetailViewCommand.Execute(EventsDetailView.Timeline);
+        Assert.True(vm.IsTimelineView);
+        Assert.NotEmpty(vm.TimelineSections);
+
+        vm.SelectEventCommand.Execute(new StoryEventSummary { Id = eventId, Name = "Age of Apocalypse", DeleteConfirm = new TwoStepConfirm(() => { }) });
+        Assert.True(vm.IsPrimaryView);
+    }
+
+    [Fact]
+    public void SearchQuery_LiveSearches_WithoutClickingAnything()
+    {
+        int eventId = SeedEvent("Inferno");
+        SeedSignalIssue("X-Factor", "1", "Regular", 1988);
+        var vm = new EventsScreenViewModel();
+        vm.SelectEventCommand.Execute(new StoryEventSummary { Id = eventId, Name = "Inferno", DeleteConfirm = new TwoStepConfirm(() => { }) });
+
+        vm.SearchQuery = "X-Factor";
+
+        Assert.Single(vm.SearchResults);
+    }
+
+    [Fact]
+    public void ToggleAddIssues_OpensAndClosesPanel_ClearingSearchOnClose()
+    {
+        int eventId = SeedEvent("Onslaught");
+        SeedSignalIssue("X-Men", "1", "Regular", 1996);
+        var vm = new EventsScreenViewModel();
+        vm.SelectEventCommand.Execute(new StoryEventSummary { Id = eventId, Name = "Onslaught", DeleteConfirm = new TwoStepConfirm(() => { }) });
+        Assert.False(vm.IsAddingIssues);
+
+        vm.ToggleAddIssuesCommand.Execute(null);
+        Assert.True(vm.IsAddingIssues);
+        vm.SearchQuery = "X-Men";
+        Assert.Single(vm.SearchResults);
+
+        vm.ToggleAddIssuesCommand.Execute(null);
+        Assert.False(vm.IsAddingIssues);
+        Assert.Empty(vm.SearchResults);
+        Assert.Equal(string.Empty, vm.SearchQuery);
+    }
+
+    [Fact]
+    public void AddSelectedMembers_AddsEveryTicked_WithBulkRole()
+    {
+        int eventId = SeedEvent("Onslaught");
+        int i1 = SeedSignalIssue("X-Men", "1", "Regular", 1996);
+        int i2 = SeedSignalIssue("X-Men", "2", "Regular", 1996);
+        var vm = new EventsScreenViewModel();
+        vm.SelectEventCommand.Execute(new StoryEventSummary { Id = eventId, Name = "Onslaught", DeleteConfirm = new TwoStepConfirm(() => { }) });
+
+        vm.SearchQuery = "X-Men";
+        vm.SearchCommand.Execute(null);
+        Assert.Equal(2, vm.SearchResults.Count);
+        vm.BulkRole = EventMembershipRoleOption.All.First(o => o.Role == EventMembershipRole.TieIn);
+        vm.ToggleEventSearchSelectionCommand.Execute(vm.SearchResults[0]);
+        vm.ToggleEventSearchSelectionCommand.Execute(vm.SearchResults[1]);
+
+        vm.AddSelectedMembersCommand.Execute(null);
+
+        Assert.Equal(2, vm.Members.Count);
+        using var context = PaperbunkrDb.CreateContext();
+        Assert.All(context.EventMemberships.Where(m => m.StoryEventId == eventId), m => Assert.Equal(EventMembershipRole.TieIn, m.Role));
+        Assert.False(vm.AnyEventSearchSelected);
+    }
+
+    [Fact]
+    public void RemoveSelectedMembers_RemovesTicked()
+    {
+        int eventId = SeedEvent("Fear Itself");
+        int i1 = SeedSignalIssue("Thor", "1", "Regular", 2011);
+        int i2 = SeedSignalIssue("Thor", "2", "Regular", 2011);
+        using (var c = PaperbunkrDb.CreateContext())
+        {
+            c.EventMemberships.Add(new EventMembership { StoryEventId = eventId, IssueId = i1, Position = 0, Role = EventMembershipRole.Core });
+            c.EventMemberships.Add(new EventMembership { StoryEventId = eventId, IssueId = i2, Position = 1, Role = EventMembershipRole.Core });
+            c.SaveChanges();
+        }
+        var vm = new EventsScreenViewModel();
+        vm.SelectEventCommand.Execute(new StoryEventSummary { Id = eventId, Name = "Fear Itself", DeleteConfirm = new TwoStepConfirm(() => { }) });
+
+        vm.ToggleEventMemberSelectionCommand.Execute(vm.Members[0]);
+        vm.RemoveSelectedMembersCommand.Execute(null);
+
+        Assert.Single(vm.Members);
+        Assert.False(vm.AnyEventMembersSelected);
+    }
+
+    [Fact]
+    public void MemberRow_Position_Is1Based()
+    {
+        int eventId = SeedEvent("Blackest Night");
+        int i1 = SeedSignalIssue("Green Lantern", "1", "Regular", 2009);
+        int i2 = SeedSignalIssue("Green Lantern", "2", "Regular", 2009);
+        using (var c = PaperbunkrDb.CreateContext())
+        {
+            c.EventMemberships.Add(new EventMembership { StoryEventId = eventId, IssueId = i1, Position = 0, Role = EventMembershipRole.Core });
+            c.EventMemberships.Add(new EventMembership { StoryEventId = eventId, IssueId = i2, Position = 1, Role = EventMembershipRole.Core });
+            c.SaveChanges();
+        }
+        var vm = new EventsScreenViewModel();
+        vm.SelectEventCommand.Execute(new StoryEventSummary { Id = eventId, Name = "Blackest Night", DeleteConfirm = new TwoStepConfirm(() => { }) });
+
+        Assert.Equal(new[] { 1, 2 }, vm.Members.Select(m => m.Position));
+        Assert.Equal("Event · 2 members", vm.MetaLine);
     }
 }

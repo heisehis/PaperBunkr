@@ -192,6 +192,25 @@ public partial class DetailTabsViewModel : ViewModelBase
         _onSelectionChanged?.Invoke();
     }
 
+    /// <summary>
+    /// The cached cover thumbnail for a series shown on a <c>PosterRail</c> (Related / Same
+    /// Continuity / Same Event / More Like This). Without this the rail cards only ever showed the
+    /// gradient <c>CoverBrush</c> placeholder - the real cover was never wired in, unlike the main
+    /// Issues grid. Returns null (brush shows through) when no thumbnail has been generated yet.
+    /// </summary>
+    private static Avalonia.Media.Imaging.Bitmap? RailCoverFor(PaperbunkrDbContext context, int seriesId)
+    {
+        var series = context.Series.Include(s => s.Issues).FirstOrDefault(s => s.Id == seriesId);
+        if (series is null)
+        {
+            return null;
+        }
+
+        var cover = series.Issues.FirstOrDefault(i => i.Id == series.CoverIssueId)
+            ?? series.Issues.OrderByNumber().FirstOrDefault();
+        return cover is null ? null : CoverImageCache.Get(cover.Id);
+    }
+
     private void RefreshRelated(PaperbunkrDbContext context, int seriesId)
     {
         Related.Clear();
@@ -214,6 +233,7 @@ public partial class DetailTabsViewModel : ViewModelBase
                 Name = otherSeries.Name,
                 SubLabel = sample.Note,
                 CoverBrush = sample.CoverBrush,
+                CoverImage = RailCoverFor(context, otherSeries.Id),
                 Payload = sample,
             });
         }
@@ -339,6 +359,7 @@ public partial class DetailTabsViewModel : ViewModelBase
                 Id = otherSeries.Id,
                 Name = otherSeries.Name,
                 CoverBrush = SeriesCardSample.CoverBrushFor(otherSeries.Name),
+                CoverImage = RailCoverFor(context, otherSeries.Id),
                 Payload = otherSeries.Id,
             });
         }
@@ -453,6 +474,7 @@ public partial class DetailTabsViewModel : ViewModelBase
                 Id = otherSeries.Id,
                 Name = otherSeries.Name,
                 CoverBrush = SeriesCardSample.CoverBrushFor(otherSeries.Name),
+                CoverImage = RailCoverFor(context, otherSeries.Id),
                 Payload = otherSeries.Id,
             });
         }
@@ -1187,6 +1209,7 @@ public partial class DetailTabsViewModel : ViewModelBase
                 Name = target.Name,
                 SubLabel = candidate.Explanation,
                 CoverBrush = SeriesCardSample.CoverBrushFor(target.Name),
+                CoverImage = RailCoverFor(context, target.Id),
                 Payload = target.Id,
             });
         }

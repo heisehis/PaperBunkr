@@ -26,12 +26,12 @@ public static class SmartListQueryBuilder
             .Include(i => i.Tags)
             .ToList();
 
-        // Continuity condition reads i.Series.Continuities (docs/superpowers/specs/2026-08-27-
+        // Continuity condition reads i.Series.ContinuityMemberships (docs/superpowers/specs/2026-08-27-
         // metadata-model-phase4f-continuity-browse-design.md) - loaded separately so the common
         // no-continuity-condition case doesn't pay for the join.
         if (list.Conditions.Any(c => c.Field == SmartListField.Continuity))
         {
-            ctx.Series.Include(s => s.Continuities).Load();
+            ctx.Series.Include(s => s.ContinuityMemberships).ThenInclude(m => m.Continuity).Load();
         }
 
         HashSet<int>? duplicateIds = list.Conditions.Any(c => c.Field == SmartListField.Duplicate)

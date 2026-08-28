@@ -8,9 +8,15 @@ using Paperbunkr.Data.Metadata;
 
 namespace Paperbunkr.App.ViewModels;
 
-/// <summary>One row in a Story Event's ordered member list, wrapping a real <see cref="EventMembership"/>. Mirrors <see cref="ReadingListItemRowViewModel"/>, plus a <see cref="Role"/> picker.</summary>
-public partial class EventMemberRowViewModel : ViewModelBase
+/// <summary>One row in a Story Event's ordered member list, wrapping a real <see cref="EventMembership"/>. Mirrors <see cref="ReadingListItemRowViewModel"/>, plus a <see cref="SelectedRole"/> picker.</summary>
+public partial class EventMemberRowViewModel : ViewModelBase, Models.ISelectableCard
 {
+    /// <summary>Selection identity for <see cref="Paperbunkr.App.Services.TileSelectionController{TCard}"/> - the <see cref="EventMembership"/> row id.</summary>
+    public int Id => Member.Id;
+
+    [ObservableProperty]
+    private bool _isSelected;
+
     private readonly Action<EventMemberRowViewModel> _onMoveUp;
     private readonly Action<EventMemberRowViewModel> _onMoveDown;
     private readonly Action<EventMemberRowViewModel> _onRemove;
@@ -34,11 +40,52 @@ public partial class EventMemberRowViewModel : ViewModelBase
 
     public EventMembership Member { get; }
 
+    /// <summary>1-based reading-order position across the event, set by the parent.</summary>
+    [ObservableProperty]
+    private int _position;
+
     public string Number => Member.Issue?.EffectiveNumber() ?? "?";
 
-    public string Name => Member.Issue?.Series?.Name ?? Member.Issue?.Title ?? "Unknown";
+    public string Name => Member.Issue?.Series?.Name ?? Member.Issue?.EffectiveTitle() ?? "Unknown";
+
+    /// <summary>Title line: "{issue title or series} #{Number}".</summary>
+    public string TitleLine
+    {
+        get
+        {
+            string head = Member.Issue?.EffectiveTitle() ?? Member.Issue?.Series?.Name ?? "Unknown";
+            return Number == "?" ? head : $"{head} #{Number}";
+        }
+    }
+
+    /// <summary>Secondary line: "{Series} · {Year}".</summary>
+    public string SeriesLine
+    {
+        get
+        {
+            string? series = Member.Issue?.Series?.Name;
+            int? year = Member.Issue?.EffectiveYear();
+            return (series, year) switch
+            {
+                ({ } s, { } y) when y > 0 => $"{s} · {y}",
+                ({ } s, _) => s,
+                _ => string.Empty,
+            };
+        }
+    }
+
+    public int? CoverIssueId => Member.Issue?.Id;
+
+    public bool HasRole => true; // role is always set on an EventMembership (no "unset" state)
+
+    public string RoleChipLabel => SelectedRoleOption?.Label ?? string.Empty;
 
     public static EventMembershipRoleOption[] RoleOptions => EventMembershipRoleOption.All;
+
+    /// <summary>Role picks from the row's ⋮ menu.</summary>
+    [RelayCommand]
+    private void SetRole(EventMembershipRole role) =>
+        SelectedRoleOption = RoleOptions.First(o => o.Role == role);
 
     [ObservableProperty]
     private EventMembershipRole _selectedRole;
@@ -53,7 +100,11 @@ public partial class EventMemberRowViewModel : ViewModelBase
     [ObservableProperty]
     private EventMembershipRoleOption _selectedRoleOption = null!;
 
-    partial void OnSelectedRoleOptionChanged(EventMembershipRoleOption value) => SelectedRole = value.Role;
+    partial void OnSelectedRoleOptionChanged(EventMembershipRoleOption value)
+    {
+        SelectedRole = value.Role;
+        OnPropertyChanged(nameof(RoleChipLabel));
+    }
 
     partial void OnSelectedRoleChanged(EventMembershipRole value)
     {

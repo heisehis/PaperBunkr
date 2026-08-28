@@ -26,6 +26,22 @@ public sealed partial class SeriesCardSample : ObservableObject, ISelectableCard
     [ObservableProperty]
     private bool _isSelected;
 
+    /// <summary>
+    /// Only set when this card represents a <see cref="Paperbunkr.Data.Entities.ContinuityMembership"/>
+    /// on the Events &amp; Continuity screen (docs/superpowers/specs/2026-08-28-continuity-editing-
+    /// design.md, Part D) - the membership's free-text note. Null/blank everywhere else.
+    /// </summary>
+    [ObservableProperty]
+    private string? _membershipNote;
+
+    /// <summary>True while the inline note editor for this continuity member is open.</summary>
+    [ObservableProperty]
+    private bool _isEditingNote;
+
+    partial void OnMembershipNoteChanged(string? value) => OnPropertyChanged(nameof(HasMembershipNote));
+
+    public bool HasMembershipNote => !string.IsNullOrWhiteSpace(MembershipNote);
+
     public const double PanoramaHeight = 146;
     public const double PanoramaMinWidth = 110;
     public const double PanoramaMaxWidth = 320;

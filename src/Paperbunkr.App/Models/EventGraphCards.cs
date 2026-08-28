@@ -34,4 +34,7 @@ public sealed class ContinuityOverlapCard
     public required string Name { get; init; }
     public required int SharedSeriesCount { get; init; }
     public string SharedSeriesLabel => SharedSeriesCount == 1 ? "1 shared series" : $"{SharedSeriesCount} shared series";
+
+    /// <summary>Two-click "Merge into this" affordance (docs/superpowers/specs/2026-08-28-continuity-editing-design.md).</summary>
+    public Paperbunkr.App.ViewModels.TwoStepConfirm? MergeConfirm { get; init; }
 }

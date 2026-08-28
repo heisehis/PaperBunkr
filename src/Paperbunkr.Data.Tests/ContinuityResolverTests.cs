@@ -1,3 +1,4 @@
+using System.Linq;
 using Microsoft.EntityFrameworkCore;
 using Paperbunkr.Data.Entities;
 using Paperbunkr.Data.Metadata;
@@ -170,6 +171,85 @@ public class ContinuityResolverTests : IDisposable
 
         Assert.Empty(context.Continuities);
         Assert.NotNull(context.Series.Find(seriesId));
+    }
+
+    [Fact]
+    public void Merge_MovesUniqueSeries_DedupesOverlap_DeletesSource()
+    {
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        int a = SeedSeries(context, "Series A");
+        int b = SeedSeries(context, "Series B");
+        int shared = SeedSeries(context, "Series Shared");
+
+        var source = ContinuityResolver.GetOrCreate(context, "Source");
+        var target = ContinuityResolver.GetOrCreate(context, "Target");
+        ContinuityResolver.AddSeriesToContinuity(context, a, source.Id);
+        ContinuityResolver.AddSeriesToContinuity(context, shared, source.Id);
+        ContinuityResolver.AddSeriesToContinuity(context, b, target.Id);
+        ContinuityResolver.AddSeriesToContinuity(context, shared, target.Id);
+
+        int carried = ContinuityResolver.Merge(context, source.Id, target.Id);
+
+        Assert.Equal(1, carried); // only Series A is new to the target
+        Assert.Null(context.Continuities.Find(source.Id));
+        var targetSeries = ContinuityResolver.GetSeriesInContinuity(context, target.Id).Select(s => s.Id).ToHashSet();
+        Assert.Equal(new[] { a, b, shared }.ToHashSet(), targetSeries);
+        Assert.NotNull(context.Series.Find(a)); // series themselves untouched
+    }
+
+    [Fact]
+    public void SetMembershipNote_RoundTrips_BlankClears()
+    {
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        int seriesId = SeedSeries(context, "Series A");
+        var continuity = ContinuityResolver.GetOrCreate(context, "Earth-616");
+        ContinuityResolver.AddSeriesToContinuity(context, seriesId, continuity.Id);
+
+        ContinuityResolver.SetMembershipNote(context, continuity.Id, seriesId, "  flagship  ");
+        Assert.Equal("flagship", context.ContinuityMemberships.Single().Note);
+
+        ContinuityResolver.SetMembershipNote(context, continuity.Id, seriesId, "   ");
+        Assert.Null(context.ContinuityMemberships.Single().Note);
+    }
+
+    [Fact]
+    public void SetMembershipOrder_RewritesSortOrder_GetSeriesReflectsIt()
+    {
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        int a = SeedSeries(context, "Aaa");
+        int b = SeedSeries(context, "Bbb");
+        int c = SeedSeries(context, "Ccc");
+        var continuity = ContinuityResolver.GetOrCreate(context, "Earth-616");
+        ContinuityResolver.AddSeriesToContinuity(context, a, continuity.Id);
+        ContinuityResolver.AddSeriesToContinuity(context, b, continuity.Id);
+        ContinuityResolver.AddSeriesToContinuity(context, c, continuity.Id);
+
+        ContinuityResolver.SetMembershipOrder(context, continuity.Id, new[] { c, a, b });
+
+        Assert.Equal(new[] { c, a, b }, ContinuityResolver.GetSeriesInContinuity(context, continuity.Id).Select(s => s.Id));
+    }
+
+    [Fact]
+    public void AddSeriesToContinuity_AppendsAtEndOfSortOrder()
+    {
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        int a = SeedSeries(context, "Zeta");   // name order would put this last
+        int b = SeedSeries(context, "Alpha");
+        var continuity = ContinuityResolver.GetOrCreate(context, "Earth-616");
+        ContinuityResolver.AddSeriesToContinuity(context, a, continuity.Id);
+        ContinuityResolver.AddSeriesToContinuity(context, b, continuity.Id);
+
+        // Insertion order wins over name order once memberships are explicit.
+        Assert.Equal(new[] { a, b }, ContinuityResolver.GetSeriesInContinuity(context, continuity.Id).Select(s => s.Id));
+    }
+
+    [Fact]
+    public void Merge_SameId_IsNoOp()
+    {
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        var c = ContinuityResolver.GetOrCreate(context, "Only");
+        Assert.Equal(0, ContinuityResolver.Merge(context, c.Id, c.Id));
+        Assert.NotNull(context.Continuities.Find(c.Id));
     }
 
     [Fact]

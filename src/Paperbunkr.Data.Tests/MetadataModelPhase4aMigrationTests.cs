@@ -69,16 +69,16 @@ public class MetadataModelPhase4aMigrationTests : IDisposable
             Assert.Empty(context.Continuities);
 
             var continuity = new Continuity { Name = "Earth-616", CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow };
-            continuity.Series.Add(seriesA);
-            continuity.Series.Add(seriesB);
+            continuity.Memberships.Add(new ContinuityMembership { Series = seriesA, SortOrder = 0 });
+            continuity.Memberships.Add(new ContinuityMembership { Series = seriesB, SortOrder = 1 });
             context.Continuities.Add(continuity);
             context.SaveChanges();
         }
 
         using (var context = CreateContext())
         {
-            var continuity = Assert.Single(context.Continuities.Include(c => c.Series));
-            Assert.Equal(2, continuity.Series.Count);
+            var continuity = Assert.Single(context.Continuities.Include(c => c.Memberships).ThenInclude(m => m.Series));
+            Assert.Equal(2, continuity.Memberships.Count);
 
             // Cascade delete (Series side): removing a member series clears its join row without
             // deleting the Continuity row or the other member.
@@ -88,9 +88,9 @@ public class MetadataModelPhase4aMigrationTests : IDisposable
 
         using (var context = CreateContext())
         {
-            var continuity = Assert.Single(context.Continuities.Include(c => c.Series));
-            var remaining = Assert.Single(continuity.Series);
-            Assert.Equal(seriesBId, remaining.Id);
+            var continuity = Assert.Single(context.Continuities.Include(c => c.Memberships).ThenInclude(m => m.Series));
+            var remaining = Assert.Single(continuity.Memberships);
+            Assert.Equal(seriesBId, remaining.SeriesId);
 
             // Cascade delete (Continuity side): removing the continuity clears its join rows
             // without deleting the remaining series.

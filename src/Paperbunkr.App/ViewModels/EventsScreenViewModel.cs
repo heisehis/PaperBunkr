@@ -55,38 +55,69 @@ public partial class EventsScreenViewModel : ViewModelBase
         EventConnectionSuggestions = new ObservableCollection<EventConnectionSuggestionCard>();
         DismissedSuggestions = new ObservableCollection<DismissedSuggestionCard>();
         RefreshSidebar();
+        RefreshContinuitiesSidebar();
     }
 
-    // --- Mode switcher (docs/superpowers/specs/2026-08-27-metadata-model-phase4f-continuity-browse-
-    // design.md introduces Events|Continuities; phase4g adds Timeline). Sidebar + detail contents
-    // swap per mode; both share the same screen chrome. Non-active modes are lazy-loaded on switch. ---
+    // --- Navigation model (docs/superpowers/specs/2026-08-28-events-continuity-screen-redesign-
+    // design.md). The sidebar always shows both Events and Continuities; which one is *selected*
+    // is derived from the active id. Timeline is a per-item view toggle, not a top-level mode.
+    // (The pre-redesign ScreenMode/TimelineScope machinery in the partials is left in place but no
+    // longer rendered - a follow-up can prune it.) ---
 
+    /// <summary>True when the last sidebar pick was a story event (not a continuity).</summary>
+    public bool IsEventSelected => _activeEventId is not null && _activeContinuityId is null;
+
+    public bool IsContinuitySelected => _activeContinuityId is not null;
+
+    /// <summary>The open story event's id, or null. Read by the "Edit details" dialog entry point.</summary>
+    public int? ActiveEventId => IsEventSelected ? _activeEventId : null;
+
+    /// <summary>The open continuity's id, or null. Read by the "Edit details" dialog entry point.</summary>
+    public int? ActiveContinuityId => _activeContinuityId;
+
+    /// <summary>Primary = member list (event) / series grid (continuity); Timeline = the era-bucketed view.</summary>
     [ObservableProperty]
-    private EventsScreenMode _screenMode = EventsScreenMode.Events;
+    private EventsDetailView _detailView = EventsDetailView.Primary;
 
-    public bool IsEventsMode => ScreenMode == EventsScreenMode.Events;
-    public bool IsContinuitiesMode => ScreenMode == EventsScreenMode.Continuities;
-    public bool IsTimelineMode => ScreenMode == EventsScreenMode.Timeline;
+    public bool IsPrimaryView => DetailView == EventsDetailView.Primary;
+    public bool IsTimelineView => DetailView == EventsDetailView.Timeline;
 
-    partial void OnScreenModeChanged(EventsScreenMode value)
+    partial void OnDetailViewChanged(EventsDetailView value)
     {
-        OnPropertyChanged(nameof(IsEventsMode));
-        OnPropertyChanged(nameof(IsContinuitiesMode));
-        OnPropertyChanged(nameof(IsTimelineMode));
+        OnPropertyChanged(nameof(IsPrimaryView));
+        OnPropertyChanged(nameof(IsTimelineView));
 
-        switch (value)
+        if (value == EventsDetailView.Timeline)
         {
-            case EventsScreenMode.Continuities:
-                RefreshContinuitiesSidebar();
-                break;
-            case EventsScreenMode.Timeline:
-                RefreshTimelineSeriesSidebar();
-                break;
+            LoadTimelineForCurrent();
         }
     }
 
     [RelayCommand]
-    private void SetMode(EventsScreenMode mode) => ScreenMode = mode;
+    private void SetDetailView(EventsDetailView view) => DetailView = view;
+
+    private void LoadTimelineForCurrent()
+    {
+        if (_activeContinuityId is int continuityId)
+        {
+            LoadContinuityTimeline(continuityId);
+        }
+        else if (_activeEventId is int eventId)
+        {
+            LoadEventTimeline(eventId);
+        }
+    }
+
+    /// <summary>Header meta line for the event top band.</summary>
+    public string MetaLine => $"Event · {TotalMembers} member{(TotalMembers == "1" ? "" : "s")}";
+
+    partial void OnTotalMembersChanged(string value) => OnPropertyChanged(nameof(MetaLine));
+
+    private void NotifySelectionChanged()
+    {
+        OnPropertyChanged(nameof(IsEventSelected));
+        OnPropertyChanged(nameof(IsContinuitySelected));
+    }
 
     public ObservableCollection<StoryEventSummary> Events { get; }
     public ObservableCollection<EventMemberRowViewModel> Members { get; }
@@ -126,6 +157,12 @@ public partial class EventsScreenViewModel : ViewModelBase
 
     [ObservableProperty]
     private string _searchQuery = string.Empty;
+
+    /// <summary>Whether the "Add issues" search panel is open. Toggled by the "＋ Add issues" button,
+    /// mirroring the continuity side's <see cref="IsAddingContinuitySeries"/> - the panel is hidden
+    /// (not just empty) until the user asks for it, so a long result list never buries the screen.</summary>
+    [ObservableProperty]
+    private bool _isAddingIssues;
 
     [ObservableProperty]
     private EventMembershipRole _selectedRole = EventMembershipRole.Core;
@@ -170,9 +207,182 @@ public partial class EventsScreenViewModel : ViewModelBase
 
     public bool HasNoSuggestions => SuggestedIssues.Count == 0;
 
+    // --- Redesign: the two recessed event-detail panels (docs/superpowers/specs/
+    //     2026-08-28-events-continuity-screen-redesign-design.md) ---
+
+    [ObservableProperty]
+    private bool _relatedEventsExpanded;
+
+    [ObservableProperty]
+    private bool _issueSuggestionsExpanded;
+
+    [RelayCommand]
+    private void ToggleRelatedEvents() => RelatedEventsExpanded = !RelatedEventsExpanded;
+
+    [RelayCommand]
+    private void ToggleIssueSuggestions() => IssueSuggestionsExpanded = !IssueSuggestionsExpanded;
+
+    public string RelatedEventsSummary => $"{ConnectedEvents.Count} connected · {EventConnectionSuggestions.Count} suggested";
+
+    public string IssueSuggestionsSummary => SuggestedIssues.Count == 1 ? "1 to review" : $"{SuggestedIssues.Count} to review";
+
+    public bool HasNoEventDescription => string.IsNullOrWhiteSpace(Description);
+
+    partial void OnDescriptionChanged(string value) => OnPropertyChanged(nameof(HasNoEventDescription));
+
+    private void RaiseEventPanelSummaries()
+    {
+        OnPropertyChanged(nameof(RelatedEventsSummary));
+        OnPropertyChanged(nameof(IssueSuggestionsSummary));
+    }
+
+    // --- Bulk selection: event surfaces (docs/superpowers/specs/2026-08-28-bulk-selection-lists-continuities-events-design.md) ---
+
+    public TileSelectionController<IssueSearchResult> EventSearchSelection { get; } = new();
+    public TileSelectionController<EventMemberRowViewModel> EventMemberSelection { get; } = new();
+
+    public bool AnyEventSearchSelected => EventSearchSelection.Count > 0;
+    public bool AnyEventMembersSelected => EventMemberSelection.Count > 0;
+    public string EventSearchSelectionSummary => $"{EventSearchSelection.Count} selected";
+    public string EventMemberSelectionSummary => $"{EventMemberSelection.Count} selected";
+
+    /// <summary>Role applied by the member selection bar's "Set role".</summary>
+    [ObservableProperty]
+    private EventMembershipRoleOption? _bulkRole;
+
+    private void RaiseEventSelectionState()
+    {
+        OnPropertyChanged(nameof(AnyEventSearchSelected));
+        OnPropertyChanged(nameof(AnyEventMembersSelected));
+        OnPropertyChanged(nameof(EventSearchSelectionSummary));
+        OnPropertyChanged(nameof(EventMemberSelectionSummary));
+    }
+
+    [RelayCommand]
+    private void ToggleEventSearchSelection(IssueSearchResult? r)
+    {
+        if (r is null) return;
+        EventSearchSelection.Toggle(SearchResults, r, isShiftHeld: false);
+        RaiseEventSelectionState();
+    }
+
+    [RelayCommand]
+    private void ToggleEventMemberSelection(EventMemberRowViewModel? row)
+    {
+        if (row is null) return;
+        EventMemberSelection.Toggle(Members, row, isShiftHeld: false);
+        RaiseEventSelectionState();
+    }
+
+    [RelayCommand]
+    private void ClearEventSearchSelection()
+    {
+        EventSearchSelection.Clear(SearchResults);
+        RaiseEventSelectionState();
+    }
+
+    [RelayCommand]
+    private void ClearEventMemberSelection()
+    {
+        EventMemberSelection.Clear(Members);
+        RaiseEventSelectionState();
+    }
+
+    [RelayCommand]
+    private void AddSelectedMembers()
+    {
+        if (_activeEventId is not int eventId || EventSearchSelection.Count == 0)
+        {
+            return;
+        }
+
+        var role = BulkRole?.Role ?? SelectedRole;
+        using (var context = PaperbunkrDb.CreateContext())
+        {
+            foreach (var r in SearchResults.Where(x => EventSearchSelection.SelectedIds.Contains(x.Id)))
+            {
+                EventMembershipResolver.AddMember(context, eventId, r.IssueId, role);
+            }
+        }
+
+        EventSearchSelection.Clear();
+        SearchQuery = string.Empty;
+        RaiseEventSelectionState();
+        LoadEvent(eventId);
+    }
+
+    [RelayCommand]
+    private void AddAllOfSeriesToEvent(IssueSearchResult? r)
+    {
+        if (r is null || _activeEventId is not int eventId)
+        {
+            return;
+        }
+
+        var role = BulkRole?.Role ?? SelectedRole;
+        using (var context = PaperbunkrDb.CreateContext())
+        {
+            var issues = context.Issues.Where(i => i.SeriesId == r.SeriesId && !i.IsPlaceholder).AsEnumerable().OrderByNumber();
+            foreach (var issue in issues)
+            {
+                EventMembershipResolver.AddMember(context, eventId, issue.Id, role);
+            }
+        }
+
+        LoadEvent(eventId);
+    }
+
+    [RelayCommand]
+    private void RemoveSelectedMembers()
+    {
+        if (_activeEventId is not int eventId || EventMemberSelection.Count == 0)
+        {
+            return;
+        }
+
+        var ids = EventMemberSelection.SelectedIds.ToList();
+        using (var context = PaperbunkrDb.CreateContext())
+        {
+            foreach (int membershipId in ids)
+            {
+                EventMembershipResolver.RemoveMember(context, membershipId);
+            }
+        }
+
+        EventMemberSelection.Clear();
+        RaiseEventSelectionState();
+        LoadEvent(eventId);
+    }
+
+    [RelayCommand]
+    private void SetRoleForSelectedMembers()
+    {
+        if (_activeEventId is not int eventId || EventMemberSelection.Count == 0 || BulkRole is null)
+        {
+            return;
+        }
+
+        var ids = EventMemberSelection.SelectedIds.ToList();
+        using (var context = PaperbunkrDb.CreateContext())
+        {
+            foreach (var m in context.EventMemberships.Where(x => ids.Contains(x.Id)))
+            {
+                m.Role = BulkRole.Role;
+            }
+
+            context.SaveChanges();
+        }
+
+        EventMemberSelection.Clear();
+        RaiseEventSelectionState();
+        LoadEvent(eventId);
+    }
+
     public void LoadEvent(int storyEventId)
     {
         _activeEventId = storyEventId;
+        _activeContinuityId = null;
+        NotifySelectionChanged();
 
         using var context = PaperbunkrDb.CreateContext();
         var storyEvent = context.StoryEvents.FirstOrDefault(e => e.Id == storyEventId);
@@ -188,10 +398,19 @@ public partial class EventsScreenViewModel : ViewModelBase
         TotalMembers = members.Count.ToString();
 
         Members.Clear();
+        int position = 1;
         foreach (var member in members)
         {
-            Members.Add(new EventMemberRowViewModel(member, MoveMemberUp, MoveMemberDown, RemoveMember, PersistRoleChange));
+            Members.Add(new EventMemberRowViewModel(member, MoveMemberUp, MoveMemberDown, RemoveMember, PersistRoleChange) { Position = position++ });
         }
+
+        EventMemberSelection.Clear();
+        EventSearchSelection.Clear();
+        RaiseEventSelectionState();
+
+        IsAddingIssues = false;
+        SearchQuery = string.Empty;
+        SearchResults.Clear();
 
         ConnectedEvents.Clear();
         foreach (var (otherEvent, displayType, relationId) in EventRelationResolver.GetRelatedEvents(context, storyEventId))
@@ -222,6 +441,7 @@ public partial class EventsScreenViewModel : ViewModelBase
         OnPropertyChanged(nameof(HasNoMembers));
         OnPropertyChanged(nameof(HasNoConnectedEvents));
         OnPropertyChanged(nameof(HasNoSuggestions));
+        RaiseEventPanelSummaries();
         RefreshSidebar();
     }
 
@@ -306,6 +526,16 @@ public partial class EventsScreenViewModel : ViewModelBase
         RefreshSidebar();
     }
 
+    /// <summary>"Delete event" from the ⋯ Manage menu (docs/superpowers/specs/2026-08-28-continuity-editing-design.md).</summary>
+    [RelayCommand]
+    private void DeleteActiveEvent()
+    {
+        if (_activeEventId is int id)
+        {
+            DeleteEvent(id);
+        }
+    }
+
     private void MoveMemberUp(EventMemberRowViewModel row) => Reorder(row, offset: -1);
 
     private void MoveMemberDown(EventMemberRowViewModel row) => Reorder(row, offset: 1);
@@ -345,9 +575,31 @@ public partial class EventsScreenViewModel : ViewModelBase
         }
     }
 
+    /// <summary>Live search - typing alone fills the result list, same as the continuity side and
+    /// the Reading Lists screen. The <see cref="SearchCommand"/> stays wired to Enter as a manual
+    /// re-trigger.</summary>
+    partial void OnSearchQueryChanged(string value)
+    {
+        EventSearchSelection.Clear(SearchResults);
+        Search();
+        RaiseEventSelectionState();
+    }
+
+    /// <summary>Opens/closes the "Add issues" search panel; clears the box and results on close.</summary>
+    [RelayCommand]
+    private void ToggleAddIssues()
+    {
+        IsAddingIssues = !IsAddingIssues;
+        SearchQuery = string.Empty;
+        SearchResults.Clear();
+        EventSearchSelection.Clear();
+        RaiseEventSelectionState();
+    }
+
     [RelayCommand]
     private void Search()
     {
+        EventSearchSelection.Clear();
         SearchResults.Clear();
         if (string.IsNullOrWhiteSpace(SearchQuery))
         {
@@ -367,6 +619,7 @@ public partial class EventsScreenViewModel : ViewModelBase
             SearchResults.Add(new IssueSearchResult
             {
                 IssueId = issue.Id,
+                SeriesId = issue.SeriesId,
                 DisplayLabel = $"{issue.Series?.Name ?? "Unknown"} #{issue.EffectiveNumber()}",
             });
         }
@@ -403,6 +656,7 @@ public partial class EventsScreenViewModel : ViewModelBase
     {
         if (summary is not null)
         {
+            DetailView = EventsDetailView.Primary;
             LoadEvent(summary.Id);
         }
     }

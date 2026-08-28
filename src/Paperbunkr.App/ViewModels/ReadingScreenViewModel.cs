@@ -186,7 +186,215 @@ public partial class ReadingScreenViewModel : ViewModelBase
         if (!IsAddIssuesOpen)
         {
             SearchQuery = string.Empty;
+            SearchSelection.Clear(SearchResults);
+            RaiseSelectionState();
         }
+    }
+
+    // --- Bulk selection (docs/superpowers/specs/2026-08-28-bulk-selection-lists-continuities-events-design.md) ---
+
+    public TileSelectionController<IssueSearchResult> SearchSelection { get; } = new();
+
+    public TileSelectionController<ReadingListItemRowViewModel> MemberSelection { get; } = new();
+
+    public bool AnySearchSelected => SearchSelection.Count > 0;
+    public bool AnyMembersSelected => MemberSelection.Count > 0;
+    public string SearchSelectionSummary => $"{SearchSelection.Count} selected";
+    public string MemberSelectionSummary => $"{MemberSelection.Count} selected";
+
+    /// <summary>Role applied by "Set role" in the member selection bar.</summary>
+    [ObservableProperty]
+    private EventMembershipRoleOption? _bulkRole;
+
+    private void RaiseSelectionState()
+    {
+        OnPropertyChanged(nameof(AnySearchSelected));
+        OnPropertyChanged(nameof(AnyMembersSelected));
+        OnPropertyChanged(nameof(SearchSelectionSummary));
+        OnPropertyChanged(nameof(MemberSelectionSummary));
+    }
+
+    [RelayCommand]
+    private void ToggleSearchSelection(IssueSearchResult? result)
+    {
+        if (result is null)
+        {
+            return;
+        }
+
+        SearchSelection.Toggle(SearchResults, result, isShiftHeld: false);
+        RaiseSelectionState();
+    }
+
+    [RelayCommand]
+    private void ToggleMemberSelection(ReadingListItemRowViewModel? row)
+    {
+        if (row is null)
+        {
+            return;
+        }
+
+        var flat = Groups.SelectMany(g => g.Rows).ToList();
+        MemberSelection.Toggle(flat, row, isShiftHeld: false);
+        RaiseSelectionState();
+    }
+
+    [RelayCommand]
+    private void ClearSearchSelection()
+    {
+        SearchSelection.Clear(SearchResults);
+        RaiseSelectionState();
+    }
+
+    [RelayCommand]
+    private void ClearMemberSelection()
+    {
+        MemberSelection.Clear(Groups.SelectMany(g => g.Rows));
+        RaiseSelectionState();
+    }
+
+    [RelayCommand]
+    private void AddSelectedIssues()
+    {
+        if (_activeReadingListId is not int listId || SearchSelection.Count == 0 || IsLinking)
+        {
+            return;
+        }
+
+        using (var context = PaperbunkrDb.CreateContext())
+        {
+            var existing = context.ReadingListItems.Where(i => i.ReadingListId == listId).Select(i => i.IssueId).ToHashSet();
+            int nextOrder = context.ReadingListItems.Where(i => i.ReadingListId == listId).Select(i => (int?)i.SortOrder).Max() is int max ? max + 1 : 0;
+            foreach (var result in SearchResults.Where(r => SearchSelection.SelectedIds.Contains(r.Id)))
+            {
+                if (existing.Add(result.IssueId))
+                {
+                    context.ReadingListItems.Add(new ReadingListItem { ReadingListId = listId, IssueId = result.IssueId, SortOrder = nextOrder++ });
+                }
+            }
+
+            BumpUpdatedAt(context, listId);
+            context.SaveChanges();
+        }
+
+        SearchSelection.Clear();
+        SearchQuery = string.Empty;
+        RaiseSelectionState();
+        LoadReadingList(listId);
+    }
+
+    [RelayCommand]
+    private void AddAllOfSeries(IssueSearchResult? result)
+    {
+        if (result is null || _activeReadingListId is not int listId)
+        {
+            return;
+        }
+
+        using (var context = PaperbunkrDb.CreateContext())
+        {
+            var existing = context.ReadingListItems.Where(i => i.ReadingListId == listId).Select(i => i.IssueId).ToHashSet();
+            int nextOrder = context.ReadingListItems.Where(i => i.ReadingListId == listId).Select(i => (int?)i.SortOrder).Max() is int max ? max + 1 : 0;
+            var seriesIssues = context.Issues.Where(i => i.SeriesId == result.SeriesId && !i.IsPlaceholder).AsEnumerable().OrderByNumber();
+            foreach (var issue in seriesIssues)
+            {
+                if (existing.Add(issue.Id))
+                {
+                    context.ReadingListItems.Add(new ReadingListItem { ReadingListId = listId, IssueId = issue.Id, SortOrder = nextOrder++ });
+                }
+            }
+
+            BumpUpdatedAt(context, listId);
+            context.SaveChanges();
+        }
+
+        LoadReadingList(listId);
+    }
+
+    [RelayCommand]
+    private void RemoveSelectedMembers()
+    {
+        if (_activeReadingListId is not int listId || MemberSelection.Count == 0)
+        {
+            return;
+        }
+
+        var ids = MemberSelection.SelectedIds.ToList();
+        using (var context = PaperbunkrDb.CreateContext())
+        {
+            context.ReadingListItems.RemoveRange(context.ReadingListItems.Where(i => ids.Contains(i.Id)));
+            BumpUpdatedAt(context, listId);
+            context.SaveChanges();
+        }
+
+        MemberSelection.Clear();
+        RaiseSelectionState();
+        LoadReadingList(listId);
+    }
+
+    [RelayCommand]
+    private void SetRoleForSelectedMembers()
+    {
+        if (_activeReadingListId is not int listId || MemberSelection.Count == 0 || BulkRole is null)
+        {
+            return;
+        }
+
+        var ids = MemberSelection.SelectedIds.ToList();
+        using (var context = PaperbunkrDb.CreateContext())
+        {
+            foreach (var item in context.ReadingListItems.Where(i => ids.Contains(i.Id)))
+            {
+                item.Role = BulkRole.Role;
+            }
+
+            BumpUpdatedAt(context, listId);
+            context.SaveChanges();
+        }
+
+        MemberSelection.Clear();
+        RaiseSelectionState();
+        LoadReadingList(listId);
+    }
+
+    [RelayCommand]
+    private void MarkSelectedRead() => BulkMarkRead(read: true);
+
+    [RelayCommand]
+    private void MarkSelectedUnread() => BulkMarkRead(read: false);
+
+    private void BulkMarkRead(bool read)
+    {
+        if (_activeReadingListId is not int listId || MemberSelection.Count == 0)
+        {
+            return;
+        }
+
+        var issueIds = Groups.SelectMany(g => g.Rows)
+            .Where(r => MemberSelection.SelectedIds.Contains(r.Id) && r.Item.Issue is not null)
+            .Select(r => r.Item.Issue!.Id)
+            .ToList();
+
+        using (var context = PaperbunkrDb.CreateContext())
+        {
+            foreach (var issue in context.Issues.Where(i => issueIds.Contains(i.Id)))
+            {
+                if (read)
+                {
+                    IssueReadStateResolver.MarkAsRead(issue);
+                }
+                else
+                {
+                    IssueReadStateResolver.MarkAsUnread(issue);
+                }
+            }
+
+            context.SaveChanges();
+        }
+
+        MemberSelection.Clear();
+        RaiseSelectionState();
+        LoadReadingList(listId);
     }
 
     /// <summary>Whether the active list has a real description to show as a synopsis block.</summary>
@@ -218,7 +426,12 @@ public partial class ReadingScreenViewModel : ViewModelBase
     /// enough to see matches, which matters most for <see cref="LinkingRow"/> (relink is otherwise
     /// a dead text box with no visible way to pick a comic until a separate click).
     /// </summary>
-    partial void OnSearchQueryChanged(string value) => Search();
+    partial void OnSearchQueryChanged(string value)
+    {
+        SearchSelection.Clear(SearchResults);
+        Search();
+        RaiseSelectionState();
+    }
 
     /// <summary>Whether the active list is linked to an external arc source (docs/superpowers/specs/2026-08-22-cbl-manager-arc-lookup-design.md §5) - governs the Refresh button's visibility.</summary>
     [ObservableProperty]
@@ -286,6 +499,9 @@ public partial class ReadingScreenViewModel : ViewModelBase
         {
             allRows[i].Position = i + 1;
         }
+
+        MemberSelection.Clear();
+        RaiseSelectionState();
 
         TotalCount = allRows.Count;
         OwnedCount = allRows.Count(r => r.IsOwned);
@@ -708,6 +924,7 @@ public partial class ReadingScreenViewModel : ViewModelBase
             SearchResults.Add(new IssueSearchResult
             {
                 IssueId = issue.Id,
+                SeriesId = issue.SeriesId,
                 DisplayLabel = $"{issue.Series?.Name ?? "Unknown"} #{issue.EffectiveNumber()}",
             });
         }

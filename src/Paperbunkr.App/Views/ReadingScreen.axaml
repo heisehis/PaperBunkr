@@ -89,6 +89,10 @@
             <Setter Property="Opacity" Value="1" />
             <Setter Property="IsHitTestVisible" Value="True" />
         </Style>
+        <Style Selector="CheckBox.rowPick.pinned">
+            <Setter Property="Opacity" Value="1" />
+            <Setter Property="IsHitTestVisible" Value="True" />
+        </Style>
 
         <Style Selector="Button.rowOpenTarget">
             <Setter Property="Background" Value="Transparent" />
@@ -215,14 +219,39 @@
             <!-- Add-issues inline search -->
             <Border Classes="issueRow" Background="{DynamicResource PbSurface2Brush}" IsVisible="{Binding IsAddIssuesOpen}" Padding="12">
                 <StackPanel Spacing="8">
-                    <TextBox Classes="searchBox" Watermark="Search your library by series or number…" Text="{Binding SearchQuery}" />
+                    <TextBox Classes="searchBox" Watermark="Search your library by series or number…" Text="{Binding SearchQuery}">
+                        <TextBox.InnerLeftContent>
+                            <Path Classes="pbIcon" Width="13" Height="13" Margin="8,0,2,0" Data="{StaticResource PbIconSearch}" />
+                        </TextBox.InnerLeftContent>
+                        <TextBox.KeyBindings>
+                            <KeyBinding Gesture="Enter" Command="{Binding SearchCommand}" />
+                        </TextBox.KeyBindings>
+                    </TextBox>
+
+                    <Border Background="{DynamicResource PbSurface3Brush}" CornerRadius="5" Padding="8,6" IsVisible="{Binding AnySearchSelected}">
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <TextBlock Text="{Binding SearchSelectionSummary}" FontSize="11.5" Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
+                            <Button Classes="headerAction primary" Padding="10,4" FontSize="11" Content="Add selected"
+                                    Command="{Binding AddSelectedIssuesCommand}" IsEnabled="{Binding !IsLinking}" />
+                            <Button Classes="headerAction ghost" Padding="8,4" FontSize="11" Content="Clear" Command="{Binding ClearSearchSelectionCommand}" />
+                        </StackPanel>
+                    </Border>
+
+                    <ScrollViewer MaxHeight="320" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                     <ItemsControl ItemsSource="{Binding SearchResults}">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate x:DataType="models:IssueSearchResult">
-                                <Grid ColumnDefinitions="*,Auto" Margin="0,2">
-                                    <TextBlock Grid.Column="0" Text="{Binding DisplayLabel}" FontSize="12.5"
+                                <Grid ColumnDefinitions="Auto,*,Auto,Auto" Margin="0,2,6,2" ColumnSpacing="8">
+                                    <CheckBox Grid.Column="0" IsChecked="{Binding IsSelected}" VerticalAlignment="Center"
+                                              Command="{Binding $parent[ItemsControl].((vm:ReadingScreenViewModel)DataContext).ToggleSearchSelectionCommand}"
+                                              CommandParameter="{Binding}" />
+                                    <TextBlock Grid.Column="1" Text="{Binding DisplayLabel}" FontSize="12.5"
                                                Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
-                                    <Button Grid.Column="1" Classes="headerAction ghost"
+                                    <Button Grid.Column="2" Classes="headerAction ghost" Padding="6,3" FontSize="10.5" Content="＋ series"
+                                            ToolTip.Tip="Add every issue of this series"
+                                            Command="{Binding $parent[ItemsControl].((vm:ReadingScreenViewModel)DataContext).AddAllOfSeriesCommand}"
+                                            CommandParameter="{Binding}" />
+                                    <Button Grid.Column="3" Classes="headerAction ghost"
                                             Command="{Binding $parent[ItemsControl].((vm:ReadingScreenViewModel)DataContext).AddIssueCommand}"
                                             CommandParameter="{Binding}">
                                         <StackPanel Orientation="Horizontal" Spacing="5">
@@ -234,6 +263,7 @@
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
+                    </ScrollViewer>
                 </StackPanel>
             </Border>
 
@@ -247,7 +277,15 @@
             <!-- Link story event panel -->
             <Border Classes="issueRow" Background="{DynamicResource PbSurface2Brush}" IsVisible="{Binding IsLinkingStoryEvent}" Padding="12">
                 <StackPanel Spacing="8">
-                    <TextBox Classes="searchBox" Watermark="Search for a story event…" Text="{Binding StoryEventSearchQuery}" />
+                    <TextBox Classes="searchBox" Watermark="Search for a story event…" Text="{Binding StoryEventSearchQuery}">
+                        <TextBox.InnerLeftContent>
+                            <Path Classes="pbIcon" Width="13" Height="13" Margin="8,0,2,0" Data="{StaticResource PbIconSearch}" />
+                        </TextBox.InnerLeftContent>
+                        <TextBox.KeyBindings>
+                            <KeyBinding Gesture="Enter" Command="{Binding SearchStoryEventsCommand}" />
+                        </TextBox.KeyBindings>
+                    </TextBox>
+                    <ScrollViewer MaxHeight="280" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                     <ItemsControl ItemsSource="{Binding StoryEventSearchResults}">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate x:DataType="models:StoryEventSearchResult">
@@ -260,6 +298,7 @@
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
+                    </ScrollViewer>
                 </StackPanel>
             </Border>
 
@@ -272,15 +311,23 @@
                                 <DataTemplate x:DataType="models:ArcSourceOption"><TextBlock Text="{Binding DisplayName}" /></DataTemplate>
                             </ComboBox.ItemTemplate>
                         </ComboBox>
-                        <TextBox Grid.Column="1" Text="{Binding ArcSearchQuery}" Watermark="Story arc or event name…" Classes="searchBox" />
+                        <TextBox Grid.Column="1" Text="{Binding ArcSearchQuery}" Watermark="Story arc or event name…" Classes="searchBox">
+                            <TextBox.InnerLeftContent>
+                                <Path Classes="pbIcon" Width="13" Height="13" Margin="8,0,2,0" Data="{StaticResource PbIconSearch}" />
+                            </TextBox.InnerLeftContent>
+                            <TextBox.KeyBindings>
+                                <KeyBinding Gesture="Enter" Command="{Binding SearchArcCommand}" />
+                            </TextBox.KeyBindings>
+                        </TextBox>
                         <Button Grid.Column="2" Classes="headerAction primary" Content="Search" Margin="10,0,0,0" Command="{Binding SearchArcCommand}" />
                     </Grid>
                     <TextBlock Text="{Binding ArcSearchStatus}" FontSize="12" Foreground="{DynamicResource PbTextFaintBrush}"
                                IsVisible="{Binding ArcSearchStatus, Converter={x:Static conv:ObjectConverters.IsNotNull}}" />
+                    <ScrollViewer MaxHeight="340" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                     <ItemsControl ItemsSource="{Binding ArcSearchResults}">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate x:DataType="models:ArcSearchResultRow">
-                                <Border Classes="issueRow" Background="{DynamicResource PbSurface3Brush}" Margin="0,0,0,6">
+                                <Border Classes="issueRow" Background="{DynamicResource PbSurface3Brush}" Margin="0,0,6,6">
                                     <Grid ColumnDefinitions="*,Auto">
                                         <StackPanel Grid.Column="0">
                                             <TextBlock Text="{Binding Name}" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
@@ -294,6 +341,7 @@
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
+                    </ScrollViewer>
                 </StackPanel>
             </Border>
 
@@ -326,11 +374,19 @@
                         </StackPanel>
                         <Border Classes="issueRow" Background="{DynamicResource PbSurface2Brush}" IsVisible="{Binding IsAddIssuesOpen}" Padding="12" Width="420">
                             <StackPanel Spacing="8">
-                                <TextBox Classes="searchBox" Watermark="Search your library…" Text="{Binding SearchQuery}" />
+                                <TextBox Classes="searchBox" Watermark="Search your library…" Text="{Binding SearchQuery}">
+                                    <TextBox.InnerLeftContent>
+                                        <Path Classes="pbIcon" Width="13" Height="13" Margin="8,0,2,0" Data="{StaticResource PbIconSearch}" />
+                                    </TextBox.InnerLeftContent>
+                                    <TextBox.KeyBindings>
+                                        <KeyBinding Gesture="Enter" Command="{Binding SearchCommand}" />
+                                    </TextBox.KeyBindings>
+                                </TextBox>
+                                <ScrollViewer MaxHeight="300" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                                 <ItemsControl ItemsSource="{Binding SearchResults}">
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate x:DataType="models:IssueSearchResult">
-                                            <Grid ColumnDefinitions="*,Auto" Margin="0,2">
+                                            <Grid ColumnDefinitions="*,Auto" Margin="0,2,6,2">
                                                 <TextBlock Grid.Column="0" Text="{Binding DisplayLabel}" FontSize="12.5"
                                                            Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
                                                 <Button Grid.Column="1" Classes="headerAction ghost" Content="Add"
@@ -340,6 +396,7 @@
                                         </DataTemplate>
                                     </ItemsControl.ItemTemplate>
                                 </ItemsControl>
+                                </ScrollViewer>
                             </StackPanel>
                         </Border>
                         <Border Background="{DynamicResource PbSurface2Brush}" CornerRadius="6" Padding="12" IsVisible="{Binding IsArcSearchOpen}" Width="480">
@@ -350,13 +407,21 @@
                                             <DataTemplate x:DataType="models:ArcSourceOption"><TextBlock Text="{Binding DisplayName}" /></DataTemplate>
                                         </ComboBox.ItemTemplate>
                                     </ComboBox>
-                                    <TextBox Grid.Column="1" Text="{Binding ArcSearchQuery}" Watermark="Arc or event name…" Classes="searchBox" />
+                                    <TextBox Grid.Column="1" Text="{Binding ArcSearchQuery}" Watermark="Arc or event name…" Classes="searchBox">
+                                        <TextBox.InnerLeftContent>
+                                            <Path Classes="pbIcon" Width="13" Height="13" Margin="8,0,2,0" Data="{StaticResource PbIconSearch}" />
+                                        </TextBox.InnerLeftContent>
+                                        <TextBox.KeyBindings>
+                                            <KeyBinding Gesture="Enter" Command="{Binding SearchArcCommand}" />
+                                        </TextBox.KeyBindings>
+                                    </TextBox>
                                     <Button Grid.Column="2" Classes="headerAction primary" Content="Search" Margin="8,0,0,0" Command="{Binding SearchArcCommand}" />
                                 </Grid>
+                                <ScrollViewer MaxHeight="300" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                                 <ItemsControl ItemsSource="{Binding ArcSearchResults}">
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate x:DataType="models:ArcSearchResultRow">
-                                            <Grid ColumnDefinitions="*,Auto" Margin="0,3">
+                                            <Grid ColumnDefinitions="*,Auto" Margin="0,3,6,3">
                                                 <TextBlock Grid.Column="0" Text="{Binding Name}" FontSize="12.5" Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
                                                 <Button Grid.Column="1" Classes="headerAction primary" Content="Use"
                                                         Command="{Binding $parent[ItemsControl].((vm:ReadingScreenViewModel)DataContext).UseArcCommand}"
@@ -365,6 +430,7 @@
                                         </DataTemplate>
                                     </ItemsControl.ItemTemplate>
                                 </ItemsControl>
+                                </ScrollViewer>
                             </StackPanel>
                         </Border>
                     </StackPanel>
@@ -374,6 +440,25 @@
                 <TextBlock Text="No reading lists yet — create one from the sidebar to get started." FontSize="13"
                            Foreground="{DynamicResource PbTextFaintBrush}" Margin="28,20,28,40" TextWrapping="Wrap"
                            IsVisible="{Binding HasNoReadingLists}" />
+
+                <!-- member-selection action bar -->
+                <Border Margin="20,4,20,6" Background="{DynamicResource PbSurface2Brush}" CornerRadius="5" Padding="8,6"
+                        IsVisible="{Binding AnyMembersSelected}">
+                    <StackPanel Orientation="Horizontal" Spacing="10">
+                        <TextBlock Text="{Binding MemberSelectionSummary}" FontSize="11.5" Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
+                        <Button Classes="headerAction ghost" Padding="8,4" FontSize="11" Content="Remove" Command="{Binding RemoveSelectedMembersCommand}" />
+                        <ComboBox ItemsSource="{x:Static vm:ReadingListItemRowViewModel.RoleOptions}" SelectedItem="{Binding BulkRole}"
+                                  FontSize="11" MinWidth="110" PlaceholderText="Set role">
+                            <ComboBox.ItemTemplate>
+                                <DataTemplate x:DataType="models:EventMembershipRoleOption"><TextBlock Text="{Binding Label}" /></DataTemplate>
+                            </ComboBox.ItemTemplate>
+                        </ComboBox>
+                        <Button Classes="headerAction ghost" Padding="8,4" FontSize="11" Content="Apply" Command="{Binding SetRoleForSelectedMembersCommand}" />
+                        <Button Classes="headerAction ghost" Padding="8,4" FontSize="11" Content="Mark read" Command="{Binding MarkSelectedReadCommand}" />
+                        <Button Classes="headerAction ghost" Padding="8,4" FontSize="11" Content="Mark unread" Command="{Binding MarkSelectedUnreadCommand}" />
+                        <Button Classes="headerAction ghost" Padding="8,4" FontSize="11" Content="Clear" Command="{Binding ClearMemberSelectionCommand}" />
+                    </StackPanel>
+                </Border>
 
                 <ItemsControl ItemsSource="{Binding Groups}" Margin="16,4,16,40" IsVisible="{Binding !IsEmptyList}">
                     <ItemsControl.ItemTemplate>
@@ -386,14 +471,19 @@
                                         <DataTemplate x:DataType="vm:ReadingListItemRowViewModel">
                                             <Border Classes="itemRow" Classes.next="{Binding IsNextUp}" Classes.read="{Binding IsRead}">
                                                 <StackPanel Spacing="3">
-                                                    <Grid ColumnDefinitions="18,26,46,*,Auto,Auto,Auto" ColumnSpacing="0">
-                                                        <TextBlock Grid.Column="0" Classes="rowManage" Text="⠿" FontSize="12" VerticalAlignment="Center"
+                                                    <Grid ColumnDefinitions="22,18,26,46,*,Auto,Auto,Auto" ColumnSpacing="0">
+                                                        <CheckBox Grid.Column="0" Classes="rowManage rowPick"
+                                                                  Classes.pinned="{Binding $parent[UserControl].((vm:ReadingScreenViewModel)DataContext).AnyMembersSelected}"
+                                                                  IsChecked="{Binding IsSelected}" VerticalAlignment="Center" MinWidth="0" Padding="0"
+                                                                  Command="{Binding $parent[UserControl].((vm:ReadingScreenViewModel)DataContext).ToggleMemberSelectionCommand}"
+                                                                  CommandParameter="{Binding}" />
+                                                        <TextBlock Grid.Column="1" Classes="rowManage" Text="⠿" FontSize="12" VerticalAlignment="Center"
                                                                    HorizontalAlignment="Center" Foreground="{DynamicResource PbTextFaintBrush}" ToolTip.Tip="Drag to reorder" />
 
-                                                        <TextBlock Grid.Column="1" Classes="pbTextHeading posNum" Text="{Binding Position}"
+                                                        <TextBlock Grid.Column="2" Classes="pbTextHeading posNum" Text="{Binding Position}"
                                                                    FontSize="15" VerticalAlignment="Center" HorizontalAlignment="Center" />
 
-                                                        <Panel Grid.Column="2" Width="42" Height="63" Margin="0,0,12,0">
+                                                        <Panel Grid.Column="3" Width="42" Height="63" Margin="0,0,12,0">
                                                             <Border CornerRadius="3" ClipToBounds="True" Background="{DynamicResource PbSurface3Brush}"
                                                                     IsVisible="{Binding !IsMissing}">
                                                                 <Image Source="{Binding CoverIssueId, Converter={x:Static views:CoverImageConverter.Instance}}" Stretch="UniformToFill" />
@@ -402,7 +492,7 @@
                                                                     Background="{DynamicResource PbSurface2Brush}" IsVisible="{Binding IsMissing}" />
                                                         </Panel>
 
-                                                        <Button Grid.Column="3" Classes="rowOpenTarget" Command="{Binding OpenCommand}"
+                                                        <Button Grid.Column="4" Classes="rowOpenTarget" Command="{Binding OpenCommand}"
                                                                 IsEnabled="{Binding IsOwned}" ToolTip.Tip="Read">
                                                             <StackPanel VerticalAlignment="Center">
                                                                 <TextBlock Text="{Binding TitleLine}" FontSize="13.5" Foreground="{DynamicResource PbTextBrush}" TextTrimming="CharacterEllipsis" />
@@ -412,7 +502,7 @@
                                                         </Button>
 
                                                         <!-- role: chip at rest (when set), compact picker on hover -->
-                                                        <Panel Grid.Column="4" VerticalAlignment="Center" Margin="8,0,0,0" MinWidth="40">
+                                                        <Panel Grid.Column="5" VerticalAlignment="Center" Margin="8,0,0,0" MinWidth="40">
                                                             <Border Classes="pbChip" Padding="8,3" HorizontalAlignment="Left"
                                                                     IsVisible="{Binding HasRole}">
                                                                 <TextBlock Text="{Binding RoleChipLabel}" FontSize="10" Foreground="{DynamicResource PbTextMutedBrush}" />
@@ -427,7 +517,7 @@
                                                         </Panel>
 
                                                         <!-- state indicator -->
-                                                        <Panel Grid.Column="5" VerticalAlignment="Center" Margin="10,0,0,0">
+                                                        <Panel Grid.Column="6" VerticalAlignment="Center" Margin="10,0,0,0">
                                                             <Path Classes="pbIcon" Width="14" Height="14" Data="{StaticResource PbIconCheck}"
                                                                   Stroke="{DynamicResource PbSuccessBrush}" IsVisible="{Binding IsRead}" />
                                                             <Button Classes="headerAction primary" Padding="10,5" FontSize="10.5"
@@ -442,7 +532,7 @@
                                                         </Panel>
 
                                                         <!-- hover: one ⋯ menu -->
-                                                        <Button Grid.Column="6" Classes="rowManage headerAction ghost" Padding="7,2" Margin="8,0,0,0"
+                                                        <Button Grid.Column="7" Classes="rowManage headerAction ghost" Padding="7,2" Margin="8,0,0,0"
                                                                 VerticalAlignment="Center" ToolTip.Tip="More">
                                                             <Path Classes="pbIcon" Width="13" Height="13" Data="{StaticResource PbIconMoreVertical}" />
                                                             <Button.Flyout>

@@ -81,9 +81,9 @@ public partial class EventsScreenViewModel
 
         using var context = PaperbunkrDb.CreateContext();
         TimelineContinuityChoices.Clear();
-        foreach (var c in context.Continuities.Include(c => c.Series).OrderBy(c => c.Name).ToList())
+        foreach (var c in context.Continuities.Include(c => c.Memberships).OrderBy(c => c.Name).ToList())
         {
-            TimelineContinuityChoices.Add(new ContinuitySummary(c.Id, c.Name, c.Publisher, c.Series.Count));
+            TimelineContinuityChoices.Add(new ContinuitySummary(c.Id, c.Name, c.Publisher, c.Memberships.Count));
         }
     }
 
@@ -186,6 +186,91 @@ public partial class EventsScreenViewModel
         using var context = PaperbunkrDb.CreateContext();
         var all = context.Series.Include(s => s.Issues).ToList();
         BuildTimeline(context, all, "Timeline · whole library");
+    }
+
+    /// <summary>Redesign (docs/superpowers/specs/2026-08-28-events-continuity-screen-redesign-design.md):
+    /// Timeline scoped to a single story event's member issues, reached via the detail-pane toggle.</summary>
+    public void LoadEventTimeline(int storyEventId)
+    {
+        _timelineSeedSeriesId = null;
+        _timelineContinuityId = null;
+
+        using var context = PaperbunkrDb.CreateContext();
+        var storyEvent = context.StoryEvents.FirstOrDefault(e => e.Id == storyEventId);
+        var issues = EventMembershipResolver.GetOrderedMembers(context, storyEventId)
+            .Where(m => m.Issue is not null)
+            .Select(m => m.Issue!)
+            .ToList();
+
+        TimelineTitle = $"Timeline · {storyEvent?.Name ?? "event"}";
+        _timelineSeriesIds = issues.Select(i => i.SeriesId).Distinct().ToList();
+
+        PopulateTimelineSections(issues.Select(i => (i, i.Series?.Name ?? "Unknown")));
+
+        InferredAges.Clear();
+        foreach (var row in BookAgeReviewResolver.GetInferred(context, _timelineSeriesIds))
+        {
+            InferredAges.Add(new InferredAgeRowViewModel(row, AcceptInferredAge));
+        }
+
+        OnPropertyChanged(nameof(HasTimelineSeed));
+        OnPropertyChanged(nameof(HasNoTimelineSections));
+        OnPropertyChanged(nameof(HasNoInferredAges));
+    }
+
+    /// <summary>Shared bucketing: (issue, series-name) pairs → age-bucketed <see cref="TimelineSections"/>.</summary>
+    private void PopulateTimelineSections(IEnumerable<(Issue Issue, string SeriesName)> entries)
+    {
+        var buckets = new Dictionary<ComicAge, List<(Issue Issue, string SeriesName, decimal Confidence, string? Reason)>>();
+        foreach (var (issue, seriesName) in entries)
+        {
+            var (age, confidence, reason) = BookAgeResolver.Resolve(issue);
+            if (age is not ComicAge resolvedAge)
+            {
+                continue;
+            }
+
+            if (!buckets.TryGetValue(resolvedAge, out var list))
+            {
+                buckets[resolvedAge] = list = new();
+            }
+
+            list.Add((issue, seriesName, confidence, reason));
+        }
+
+        TimelineSections.Clear();
+        foreach (ComicAge age in Enum.GetValues<ComicAge>())
+        {
+            if (!buckets.TryGetValue(age, out var list))
+            {
+                continue;
+            }
+
+            var info = ComicAgeCatalog.All[age];
+            var section = new TimelineSectionViewModel { Label = info.DisplayName, CommonlyCitedRange = info.CommonlyCitedRange };
+
+            foreach (var entry in list
+                .OrderBy(e => e.Issue.Year ?? int.MaxValue)
+                .ThenBy(e => e.Issue.Month ?? 0)
+                .ThenBy(e => e.Issue.Day ?? 0)
+                .ThenBy(e => e.SeriesName))
+            {
+                section.Issues.Add(new TimelineIssueCard
+                {
+                    IssueId = entry.Issue.Id,
+                    Title = string.IsNullOrWhiteSpace(entry.Issue.EffectiveNumber()) ? "#?" : $"#{entry.Issue.EffectiveNumber()}",
+                    SeriesName = entry.SeriesName,
+                    IsUnread = entry.Issue.OpenCount == 0,
+                    IsReducedConfidence = entry.Confidence is > 0m and < 1.0m,
+                    ConfidenceReason = entry.Reason,
+                    CoverBrush = SeriesCardSample.CoverBrushFor(entry.SeriesName),
+                    CoverImage = CoverImageCache.Get(entry.Issue.Id),
+                    YearLabel = entry.Issue.Year?.ToString(),
+                });
+            }
+
+            TimelineSections.Add(section);
+        }
     }
 
     private void BuildTimeline(PaperbunkrDbContext context, IReadOnlyList<Series> series, string title)

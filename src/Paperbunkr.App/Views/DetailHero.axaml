@@ -1,0 +1,81 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Paperbunkr.App.ViewModels"
+             xmlns:models="using:Paperbunkr.App.Models"
+             xmlns:conv="using:Avalonia.Data.Converters"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="1000" d:DesignHeight="340"
+             x:Class="Paperbunkr.App.Views.DetailHero"
+             x:DataType="vm:IDetailHeaderSource">
+
+    <!--
+        Full-bleed cinematic hero shared by all three detail screens (docs/superpowers/specs/
+        2026-08-28-detail-screens-streaming-redesign-design.md). Blurred cover backdrop (pre-
+        rendered by BackdropBlurRenderer, supplied as IDetailHeaderSource.BackdropImage) + a
+        top->bottom vignette so the title stays legible over any art. Foreground content is pinned
+        bottom-left; a tracker progress badge floats bottom-right for a linked manga series.
+    -->
+    <Border Height="340" ClipToBounds="True" Background="{Binding CoverBrush}">
+        <Grid>
+            <Image Source="{Binding BackdropImage}" Stretch="UniformToFill"
+                   IsVisible="{Binding BackdropImage, Converter={x:Static conv:ObjectConverters.IsNotNull}}" />
+
+            <Border>
+                <Border.Background>
+                    <LinearGradientBrush StartPoint="0%,0%" EndPoint="0%,100%">
+                        <GradientStop Offset="0.0" Color="{DynamicResource PbHeroGradientStartColor}" />
+                        <GradientStop Offset="0.45" Color="#33000000" />
+                        <GradientStop Offset="1.0" Color="{DynamicResource PbHeroGradientEndColor}" />
+                    </LinearGradientBrush>
+                </Border.Background>
+            </Border>
+
+            <!-- Foreground -->
+            <Grid Margin="28,0,28,20" VerticalAlignment="Bottom" ColumnDefinitions="Auto,*,Auto">
+                <Border Grid.Column="0" Width="94" Height="136" CornerRadius="{DynamicResource PbRadiusSm}"
+                        ClipToBounds="True" VerticalAlignment="Bottom"
+                        BorderThickness="1" BorderBrush="#40FFFFFF" Background="{Binding CoverBrush}">
+                    <Grid>
+                        <Image Source="{Binding CoverImage}" Stretch="UniformToFill" />
+                        <Border Classes="posterScrim" />
+                    </Grid>
+                </Border>
+
+                <StackPanel Grid.Column="1" Margin="18,0,18,2" VerticalAlignment="Bottom" Spacing="3">
+                    <TextBlock Text="{Binding SecondaryTitle}" FontSize="11" Foreground="#CFE6E6E6"
+                               IsVisible="{Binding SecondaryTitle, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
+                    <TextBlock Text="{Binding Title}" Classes="pbTextHero" FontSize="32" LineHeight="32"
+                               Foreground="#FFFFFFFF" TextWrapping="Wrap" MaxLines="2" TextTrimming="CharacterEllipsis" />
+                    <TextBlock Text="{Binding MetaLine}" FontSize="12" Foreground="#E0CBA36A" Margin="0,3,0,0" />
+                    <ItemsControl ItemsSource="{Binding Actions}" Margin="0,8,0,0">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate><StackPanel Orientation="Horizontal" Spacing="7" /></ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="models:DetailHeroAction">
+                                <Button Classes="detailAction" Classes.primary="{Binding IsPrimary}" Classes.ghost="{Binding !IsPrimary}"
+                                        Content="{Binding Label}" Command="{Binding Command}" IsEnabled="{Binding IsEnabled}" />
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+
+                <!-- Tracker progress badge (manga, when linked) -->
+                <Border Grid.Column="2" VerticalAlignment="Bottom" Margin="0,0,0,2"
+                        IsVisible="{Binding TrackerProgress, Converter={x:Static conv:ObjectConverters.IsNotNull}}"
+                        CornerRadius="999" BorderThickness="2" BorderBrush="{DynamicResource PbAccentBrush}"
+                        Background="#99000000" Padding="14,10" MinWidth="58">
+                    <StackPanel HorizontalAlignment="Center">
+                        <TextBlock Text="{Binding TrackerProgress.Current}" FontSize="16" FontWeight="Bold"
+                                   Foreground="#FFFFFFFF" HorizontalAlignment="Center" />
+                        <TextBlock Text="{Binding TrackerProgress.Total, StringFormat='/ {0}'}" FontSize="9"
+                                   Foreground="#B8FFFFFF" HorizontalAlignment="Center" />
+                        <TextBlock Text="{Binding TrackerProgress.Label}" FontSize="8" Foreground="#99FFFFFF"
+                                   HorizontalAlignment="Center" Margin="0,2,0,0" />
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </Grid>
+    </Border>
+</UserControl>

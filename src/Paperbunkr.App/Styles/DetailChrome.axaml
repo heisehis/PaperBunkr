@@ -80,4 +80,15 @@
         <Setter Property="Foreground" Value="{DynamicResource PbAccentTextBrush}" />
         <Setter Property="Cursor" Value="Hand" />
     </Style>
+
+    <!-- Flat clickable credit-name (Writer/Artist in the band, all roles in the Details tab). -->
+    <Style Selector="Button.creditName">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Padding" Value="0,0,6,0" />
+        <Setter Property="Cursor" Value="Hand" />
+    </Style>
+    <Style Selector="Button.creditName:pointerover TextBlock">
+        <Setter Property="TextDecorations" Value="Underline" />
+    </Style>
 </Styles>

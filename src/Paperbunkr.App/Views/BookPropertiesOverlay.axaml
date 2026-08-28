@@ -1,0 +1,123 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Paperbunkr.App.ViewModels"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="560" d:DesignHeight="700"
+             x:Class="Paperbunkr.App.Views.BookPropertiesOverlay"
+             x:DataType="vm:BookPropertiesScreenViewModel">
+
+    <UserControl.Styles>
+        <Style Selector="Border.groupBox">
+            <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="7" />
+            <Setter Property="ClipToBounds" Value="True" />
+        </Style>
+        <Style Selector="Border.groupHeader">
+            <Setter Property="Background" Value="{DynamicResource PbChromeBrush}" />
+            <Setter Property="Padding" Value="14,11" />
+        </Style>
+        <Style Selector="TextBlock.fieldLabel">
+            <Setter Property="FontSize" Value="10.5" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextFaintBrush}" />
+            <Setter Property="Margin" Value="0,0,0,4" />
+        </Style>
+        <Style Selector="StackPanel.field">
+            <Setter Property="Width" Value="248" />
+            <Setter Property="Margin" Value="0,0,16,16" />
+        </Style>
+    </UserControl.Styles>
+
+    <Border Width="560" MaxHeight="680" Classes="floatingPanel">
+        <DockPanel LastChildFill="True">
+
+            <StackPanel DockPanel.Dock="Top" Margin="20,18,20,0">
+                <TextBlock Text="{Binding HeaderLabel}" FontSize="17" FontWeight="Bold" Foreground="{DynamicResource PbTextBrush}" />
+                <Border Height="1" Background="{DynamicResource PbBorderBrush}" Margin="0,14,0,0" />
+            </StackPanel>
+
+            <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Spacing="8"
+                        HorizontalAlignment="Right" Margin="20,0,20,18">
+                <Button Classes="ghost" FontSize="12.5" Content="Cancel" Command="{Binding CancelCommand}" />
+                <Button Classes="primary" FontSize="12.5" Content="Save" Command="{Binding SaveCommand}"
+                        AutomationProperties.AutomationId="BookPropertiesSave" />
+            </StackPanel>
+
+            <ScrollViewer Padding="20,16,20,16">
+                <StackPanel>
+
+                    <WrapPanel>
+                        <StackPanel Classes="field">
+                            <TextBlock Classes="fieldLabel" Text="TITLE" />
+                            <TextBox Text="{Binding Title}" AutomationProperties.AutomationId="BookPropertiesTitle" />
+                        </StackPanel>
+                        <StackPanel Classes="field">
+                            <TextBlock Classes="fieldLabel" Text="AUTHOR" />
+                            <TextBox Text="{Binding Author}" />
+                        </StackPanel>
+                        <StackPanel Classes="field">
+                            <TextBlock Classes="fieldLabel" Text="PUBLISHED" />
+                            <DatePicker SelectedDate="{Binding PublishedDate}" HorizontalAlignment="Stretch" />
+                        </StackPanel>
+                    </WrapPanel>
+
+                    <Border Classes="groupBox" Margin="0,0,0,16">
+                        <StackPanel>
+                            <Border Classes="groupHeader">
+                                <TextBlock Text="Summary" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
+                            </Border>
+                            <StackPanel Margin="14">
+                                <TextBox Text="{Binding Summary}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="90" />
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Classes="groupBox" Margin="0,0,0,16">
+                        <StackPanel>
+                            <Border Classes="groupHeader">
+                                <TextBlock Text="Series" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
+                            </Border>
+                            <StackPanel Margin="14">
+                                <TextBlock Classes="fieldLabel" Text="SERIES NAME" />
+                                <TextBox Text="{Binding SeriesName}" Watermark="Leave blank for a standalone book"
+                                         Margin="0,0,0,12" AutomationProperties.AutomationId="BookPropertiesSeriesName" />
+                                <WrapPanel>
+                                    <StackPanel Classes="field">
+                                        <TextBlock Classes="fieldLabel" Text="SERIES AUTHOR" />
+                                        <TextBox Text="{Binding SeriesAuthor}" IsEnabled="{Binding HasSeriesName}" />
+                                    </StackPanel>
+                                    <StackPanel Classes="field">
+                                        <TextBlock Classes="fieldLabel" Text="SERIES SORT NAME" />
+                                        <TextBox Text="{Binding SeriesSortName}" IsEnabled="{Binding HasSeriesName}" />
+                                    </StackPanel>
+                                </WrapPanel>
+                                <TextBlock Classes="fieldLabel" TextWrapping="Wrap" Margin="0,2,0,0"
+                                           Text="Series author and sort name apply to every book in this series." />
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Classes="groupBox">
+                        <StackPanel>
+                            <Border Classes="groupHeader">
+                                <TextBlock Text="Cover" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
+                            </Border>
+                            <Grid ColumnDefinitions="90,*" Margin="14">
+                                <Border Grid.Column="0" Width="70" Height="100" CornerRadius="5" ClipToBounds="True"
+                                        Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1">
+                                    <Image Source="{Binding CoverPreview}" Stretch="UniformToFill" />
+                                </Border>
+                                <StackPanel Grid.Column="1" Margin="14,0,0,0" VerticalAlignment="Top" Orientation="Horizontal" Spacing="8">
+                                    <Button Classes="ghost" FontSize="12.5" Content="Change Cover…" Command="{Binding ChangeCoverCommand}" />
+                                    <Button Classes="ghost" FontSize="12.5" Content="Reset" Command="{Binding ResetCoverCommand}" />
+                                </StackPanel>
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+
+                </StackPanel>
+            </ScrollViewer>
+        </DockPanel>
+    </Border>
+</UserControl>

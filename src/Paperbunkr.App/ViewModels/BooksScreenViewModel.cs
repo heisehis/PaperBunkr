@@ -14,29 +14,112 @@ namespace Paperbunkr.App.ViewModels;
 
 /// <summary>
 /// Books grid + chrome (docs/superpowers/specs/2026-08-27-books-screen-chrome-and-home-strip-
-/// design.md) - search, a sort menu, and a group-by menu, deliberately lighter than
-/// <see cref="LibraryScreenViewModel"/> (no view modes, chips, or selection). Folder management +
-/// scanning live in Preferences → Libraries. Sort/group persist via <see cref="AppSettings"/>;
-/// search does not.
+/// design.md) - search, a sort menu, and a group-by menu, lighter than
+/// <see cref="LibraryScreenViewModel"/> (no view modes or filter chips). Multi-select + a bulk
+/// editor + a series editor were added in B3 (docs/superpowers/specs/2026-08-27-books-bulk-series-
+/// editing-design.md). Folder management + scanning live in Preferences → Libraries. Sort/group
+/// persist via <see cref="AppSettings"/>; search and selection do not.
 /// </summary>
 public partial class BooksScreenViewModel : ViewModelBase
 {
-    private readonly Action<int, BookFormat> _goReaderForBook;
+    private readonly Action<int> _goBookDetail;
+    private readonly Action<int> _goBookSeriesDetail;
+    private readonly Action<int> _goEditBook;
+    private readonly Action<IReadOnlyList<int>> _goBulkEdit;
+    private readonly Action<int> _goEditSeries;
     private readonly Action _goLibrarySettings;
 
     /// <summary>Every book, unfiltered/ungrouped - <see cref="Rebuild"/> derives <see cref="Books"/>
     /// / <see cref="Groups"/> from this on every search/sort/group change without re-querying.</summary>
     private readonly List<BookCardSample> _allCards = new();
 
-    public BooksScreenViewModel(Action<int, BookFormat> goReaderForBook, Action goLibrarySettings)
+    /// <summary>Set from code-behind's PointerPressed just before a card <see cref="CardClickCommand"/>
+    /// fires, so <see cref="TileSelectionController{T}.Toggle"/> can range-extend; reset after each click.</summary>
+    private bool _shiftHeld;
+
+    public BooksScreenViewModel(Action<int> goBookDetail, Action<int> goBookSeriesDetail, Action<int> goEditBook,
+        Action<IReadOnlyList<int>> goBulkEdit, Action<int> goEditSeries, Action goLibrarySettings)
     {
-        _goReaderForBook = goReaderForBook;
+        _goBookDetail = goBookDetail;
+        _goBookSeriesDetail = goBookSeriesDetail;
+        _goEditBook = goEditBook;
+        _goBulkEdit = goBulkEdit;
+        _goEditSeries = goEditSeries;
         _goLibrarySettings = goLibrarySettings;
         Books = new ObservableCollection<BookCardSample>();
         Groups = new ObservableCollection<BookCardGroup>();
 
         LoadBooksSettings();
         LoadFromDatabase();
+    }
+
+    // --- multi-select (B3, mirrors LibraryScreenViewModel.Selection) ---
+
+    public TileSelectionController<BookCardSample> Selection { get; } = new();
+
+    public bool HasSelection => Selection.Count > 0;
+    public int SelectionCount => Selection.Count;
+    public string SelectionCountLabel => $"{Selection.Count} selected";
+
+    /// <summary>The currently displayed flat card order (groups flattened) - the ordering
+    /// <see cref="TileSelectionController{T}.Toggle"/>'s shift-range logic walks.</summary>
+    private IList<BookCardSample> OrderedCards =>
+        IsGrouped ? Groups.SelectMany(g => g.Items).ToList() : Books;
+
+    /// <summary>Called by code-behind before a card click so shift-range works.</summary>
+    public void SetShiftHeld(bool held) => _shiftHeld = held;
+
+    public void ToggleBookSelection(BookCardSample card, bool isShiftHeld)
+    {
+        Selection.Toggle(OrderedCards, card, isShiftHeld);
+        RaiseSelectionChanged();
+    }
+
+    [RelayCommand]
+    private void ToggleBookSelectionCheckbox(BookCardSample? card)
+    {
+        if (card is not null)
+        {
+            ToggleBookSelection(card, isShiftHeld: false);
+        }
+    }
+
+    private void RaiseSelectionChanged()
+    {
+        OnPropertyChanged(nameof(HasSelection));
+        OnPropertyChanged(nameof(SelectionCount));
+        OnPropertyChanged(nameof(SelectionCountLabel));
+    }
+
+    [RelayCommand]
+    private void ClearSelection()
+    {
+        Selection.Clear(_allCards);
+        RaiseSelectionChanged();
+    }
+
+    [RelayCommand]
+    private void EditSelection()
+    {
+        var ids = Selection.SelectedIds.ToList();
+        if (ids.Count > 0)
+        {
+            _goBulkEdit(ids);
+        }
+    }
+
+    [RelayCommand]
+    private void DeleteSelection()
+    {
+        var ids = Selection.SelectedIds.ToList();
+        if (ids.Count == 0)
+        {
+            return;
+        }
+
+        Selection.Clear();
+        RaiseSelectionChanged();
+        DeleteBooks(ids);
     }
 
     public ObservableCollection<BookCardSample> Books { get; }
@@ -139,6 +222,9 @@ public partial class BooksScreenViewModel : ViewModelBase
         _allCards.Clear();
         _allCards.AddRange(books.Select(BookCardSample.FromBook));
 
+        Selection.Clear();
+        RaiseSelectionChanged();
+
         Rebuild();
     }
 
@@ -170,6 +256,14 @@ public partial class BooksScreenViewModel : ViewModelBase
             {
                 Books.Add(card);
             }
+        }
+
+        // Re-apply selection to the freshly rebuilt cards so it survives a re-sort / re-group
+        // (docs/superpowers/specs/2026-08-27-books-bulk-series-editing-design.md). LoadFromDatabase
+        // is the one that actually clears it.
+        foreach (var card in _allCards)
+        {
+            card.IsSelected = Selection.IsSelected(card.BookId);
         }
 
         OnPropertyChanged(nameof(HasBooks));
@@ -228,6 +322,11 @@ public partial class BooksScreenViewModel : ViewModelBase
             yield return new BookCardGroup
             {
                 Header = g.Key,
+                // Only a real Series section carries an id the header can navigate to - the
+                // "Standalone" bucket and every Author group stay inert.
+                BookSeriesId = GroupField == BooksGroupField.Series && !IsFallback(g.Key)
+                    ? g.Select(c => c.BookSeriesId).FirstOrDefault(id => id is not null)
+                    : null,
                 Items = new ObservableCollection<BookCardSample>(g),
             };
         }
@@ -261,12 +360,55 @@ public partial class BooksScreenViewModel : ViewModelBase
 
     // --- navigation / actions ---
 
+    /// <summary>Card click - navigates to Book Details normally, but toggles selection instead once
+    /// the grid is in selection mode (docs/superpowers/specs/2026-08-27-books-bulk-series-editing-
+    /// design.md). Shift-state comes from code-behind via <see cref="SetShiftHeld"/>.</summary>
     [RelayCommand]
-    private void SelectBook(BookCardSample? book)
+    private void CardClick(BookCardSample? book)
     {
-        if (book is not null)
+        if (book is null)
         {
-            _goReaderForBook(book.BookId, book.Format);
+            return;
+        }
+
+        if (HasSelection)
+        {
+            ToggleBookSelection(book, _shiftHeld);
+        }
+        else
+        {
+            _goBookDetail(book.BookId);
+        }
+
+        _shiftHeld = false;
+    }
+
+    /// <summary>Grouped-by-Series section header click - opens that series' Book Details view.
+    /// No-op for the "Standalone" bucket and Author groups (their <see cref="BookCardGroup.BookSeriesId"/>
+    /// is null and the header is disabled in XAML anyway).</summary>
+    [RelayCommand]
+    private void OpenSeries(int? bookSeriesId)
+    {
+        if (bookSeriesId is int id)
+        {
+            _goBookSeriesDetail(id);
+        }
+    }
+
+    /// <summary>Grid card context menu's "Edit…" - opens the Book Properties overlay
+    /// (docs/superpowers/specs/2026-08-27-book-properties-editor-design.md).</summary>
+    [RelayCommand]
+    private void EditBook(int bookId) => _goEditBook(bookId);
+
+    /// <summary>Grouped-by-Series section header context menu's "Edit series…" - opens the
+    /// BookSeries properties overlay (docs/superpowers/specs/2026-08-27-books-bulk-series-editing-
+    /// design.md). No-op for null (non-series headers).</summary>
+    [RelayCommand]
+    private void EditSeries(int? bookSeriesId)
+    {
+        if (bookSeriesId is int id)
+        {
+            _goEditSeries(id);
         }
     }
 
@@ -281,19 +423,42 @@ public partial class BooksScreenViewModel : ViewModelBase
     /// reading-list/event cross-references (<see cref="Entities.BookBookmark"/>'s FK is Cascade).
     /// </summary>
     [RelayCommand]
-    private void DeleteBook(int bookId)
+    private void DeleteBook(int bookId) => DeleteBooks(new[] { bookId });
+
+    /// <summary>Deletes each book (Recycle Bin + row), invalidates its cover, then prunes any
+    /// <see cref="Entities.BookSeries"/> left with no books
+    /// (docs/superpowers/specs/2026-08-27-books-bulk-series-editing-design.md, component d). One
+    /// context, one final <see cref="LoadFromDatabase"/>.</summary>
+    private void DeleteBooks(IEnumerable<int> bookIds)
     {
+        var ids = bookIds.ToList();
         using var context = PaperbunkrDb.CreateContext();
-        var book = context.Books.Find(bookId);
-        if (book is null)
+        var books = context.Books.Where(b => ids.Contains(b.Id)).ToList();
+        if (books.Count == 0)
         {
             return;
         }
 
-        RecycleBinHelper.SendToRecycleBin(book.FilePath);
-        context.Books.Remove(book);
+        var affectedSeriesIds = books.Select(b => b.BookSeriesId).Where(id => id is not null).Distinct().ToList();
+
+        foreach (var book in books)
+        {
+            RecycleBinHelper.SendToRecycleBin(book.FilePath);
+            context.Books.Remove(book);
+        }
+
         context.SaveChanges();
-        BookCoverImageCache.Invalidate(bookId);
+
+        foreach (var book in books)
+        {
+            BookCoverImageCache.Invalidate(book.Id);
+        }
+
+        foreach (var seriesId in affectedSeriesIds)
+        {
+            BookSeriesMaintenance.PruneIfEmpty(context, seriesId);
+        }
+
         LoadFromDatabase();
     }
 }

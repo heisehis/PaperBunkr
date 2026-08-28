@@ -615,6 +615,13 @@
                     </DataTemplate>
                 </ContentControl.ContentTemplate>
             </ContentControl>
+            <ContentControl IsVisible="{Binding IsBookDetail}" Content="{Binding BookDetail}">
+                <ContentControl.ContentTemplate>
+                    <DataTemplate x:DataType="vm:BookDetailScreenViewModel">
+                        <views:BookDetailScreen />
+                    </DataTemplate>
+                </ContentControl.ContentTemplate>
+            </ContentControl>
             <ContentControl IsVisible="{Binding IsMangaDetail}" Content="{Binding MangaDetail}">
                 <ContentControl.ContentTemplate>
                     <DataTemplate x:DataType="vm:MangaDetailScreenViewModel">
@@ -662,6 +669,63 @@
                     Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
                     Command="{Binding CloseReadingListPropertiesOverlayCommand}" ToolTip.Tip="Close"
                     AutomationProperties.AutomationId="ReadingListPropertiesOverlayCloseButton">
+                <Border Classes="icon" Width="13" Height="13">
+                    <Border.OpacityMask>
+                        <ImageBrush Source="/Assets/Icons/Close_Circle.png" Stretch="Uniform" />
+                    </Border.OpacityMask>
+                </Border>
+            </Button>
+        </Grid>
+    </Border>
+
+    <!-- ============ Book Properties editor overlay (docs/superpowers/specs/2026-08-27-book-
+         properties-editor-design.md) - same backdrop-popup pattern as Reading List Properties above ============ -->
+    <Border IsVisible="{Binding IsBookPropertiesOverlayOpen}" Background="#B0000000">
+        <Grid HorizontalAlignment="Center" VerticalAlignment="Center">
+            <views:BookPropertiesOverlay DataContext="{Binding BookProperties}" />
+            <Button Classes="rail" Width="28" Height="28"
+                    HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-14,-14,0"
+                    Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
+                    Command="{Binding CloseBookPropertiesOverlayCommand}" ToolTip.Tip="Close"
+                    AutomationProperties.AutomationId="BookPropertiesOverlayCloseButton">
+                <Border Classes="icon" Width="13" Height="13">
+                    <Border.OpacityMask>
+                        <ImageBrush Source="/Assets/Icons/Close_Circle.png" Stretch="Uniform" />
+                    </Border.OpacityMask>
+                </Border>
+            </Button>
+        </Grid>
+    </Border>
+
+    <!-- ============ Bulk book properties overlay (docs/superpowers/specs/2026-08-27-books-bulk-
+         series-editing-design.md, component b) ============ -->
+    <Border IsVisible="{Binding IsBulkBookPropertiesOverlayOpen}" Background="#B0000000">
+        <Grid HorizontalAlignment="Center" VerticalAlignment="Center">
+            <views:BulkBookPropertiesOverlay DataContext="{Binding BulkBookProperties}" />
+            <Button Classes="rail" Width="28" Height="28"
+                    HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-14,-14,0"
+                    Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
+                    Command="{Binding CloseBulkBookPropertiesOverlayCommand}" ToolTip.Tip="Close"
+                    AutomationProperties.AutomationId="BulkBookPropertiesOverlayCloseButton">
+                <Border Classes="icon" Width="13" Height="13">
+                    <Border.OpacityMask>
+                        <ImageBrush Source="/Assets/Icons/Close_Circle.png" Stretch="Uniform" />
+                    </Border.OpacityMask>
+                </Border>
+            </Button>
+        </Grid>
+    </Border>
+
+    <!-- ============ BookSeries properties overlay (docs/superpowers/specs/2026-08-27-books-bulk-
+         series-editing-design.md, component c) ============ -->
+    <Border IsVisible="{Binding IsBookSeriesPropertiesOverlayOpen}" Background="#B0000000">
+        <Grid HorizontalAlignment="Center" VerticalAlignment="Center">
+            <views:BookSeriesPropertiesOverlay DataContext="{Binding BookSeriesProperties}" />
+            <Button Classes="rail" Width="28" Height="28"
+                    HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-14,-14,0"
+                    Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
+                    Command="{Binding CloseBookSeriesPropertiesOverlayCommand}" ToolTip.Tip="Close"
+                    AutomationProperties.AutomationId="BookSeriesPropertiesOverlayCloseButton">
                 <Border Classes="icon" Width="13" Height="13">
                     <Border.OpacityMask>
                         <ImageBrush Source="/Assets/Icons/Close_Circle.png" Stretch="Uniform" />

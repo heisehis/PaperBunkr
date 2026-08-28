@@ -48,9 +48,22 @@ public static class RevealInExplorerHelper
         return folder is not null && FileExplorer.OpenFolder(folder);
     }
 
+    /// <summary>Selects the book's file in Explorer (docs/superpowers/specs/2026-08-27-book-details-
+    /// screen-design.md) - a <see cref="Book"/> is a single file like an <see cref="Issue"/>, so this
+    /// mirrors <see cref="RevealIssue"/> exactly.</summary>
+    public static bool RevealBook(Book book)
+    {
+        string? path = ResolveBookFilePath(book);
+        return path is not null && FileExplorer.OpenFolderAndSelect(path);
+    }
+
     /// <summary>Pure - returns null if the issue has no file, otherwise its own <see cref="Issue.FilePath"/> unchanged (no folder extraction; OpenFolderAndSelect wants the file itself).</summary>
     internal static string? ResolveIssueFilePath(Issue issue) =>
         string.IsNullOrEmpty(issue.FilePath) ? null : issue.FilePath;
+
+    /// <summary>Pure - the book's own <see cref="Book.FilePath"/>, or null when it's empty. Same shape as <see cref="ResolveIssueFilePath"/>.</summary>
+    internal static string? ResolveBookFilePath(Book book) =>
+        string.IsNullOrEmpty(book.FilePath) ? null : book.FilePath;
 
     /// <summary>Pure - unique, non-empty containing folders across every issue with a file, in encounter order.</summary>
     internal static IReadOnlyList<string> ResolveUniqueFolders(IEnumerable<Issue> issues) =>

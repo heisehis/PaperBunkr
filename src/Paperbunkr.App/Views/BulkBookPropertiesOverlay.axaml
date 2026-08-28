@@ -1,0 +1,95 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Paperbunkr.App.ViewModels"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="560" d:DesignHeight="620"
+             x:Class="Paperbunkr.App.Views.BulkBookPropertiesOverlay"
+             x:DataType="vm:BulkBookPropertiesScreenViewModel">
+
+    <UserControl.Styles>
+        <Style Selector="Border.groupBox">
+            <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="7" />
+            <Setter Property="ClipToBounds" Value="True" />
+        </Style>
+        <Style Selector="Border.groupHeader">
+            <Setter Property="Background" Value="{DynamicResource PbChromeBrush}" />
+            <Setter Property="Padding" Value="14,11" />
+        </Style>
+        <Style Selector="TextBlock.fieldLabel">
+            <Setter Property="FontSize" Value="10.5" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextFaintBrush}" />
+            <Setter Property="Margin" Value="0,0,0,4" />
+        </Style>
+        <Style Selector="TextBlock.applyHint">
+            <Setter Property="FontSize" Value="10.5" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextFaintBrush}" />
+        </Style>
+    </UserControl.Styles>
+
+    <Border Width="560" MaxHeight="640" Classes="floatingPanel">
+        <DockPanel LastChildFill="True">
+
+            <StackPanel DockPanel.Dock="Top" Margin="20,18,20,0">
+                <TextBlock Text="{Binding HeaderLabel}" FontSize="17" FontWeight="Bold" Foreground="{DynamicResource PbTextBrush}" />
+                <TextBlock Classes="applyHint" Margin="0,4,0,0" Text="Only the fields you tick are written to every selected book." />
+                <Border Height="1" Background="{DynamicResource PbBorderBrush}" Margin="0,14,0,0" />
+            </StackPanel>
+
+            <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Spacing="8"
+                        HorizontalAlignment="Right" Margin="20,0,20,18">
+                <Button Classes="ghost" FontSize="12.5" Content="Cancel" Command="{Binding CancelCommand}" />
+                <Button Classes="primary" FontSize="12.5" Content="Save" Command="{Binding SaveCommand}"
+                        AutomationProperties.AutomationId="BulkBookPropertiesSave" />
+            </StackPanel>
+
+            <ScrollViewer Padding="20,16,20,16">
+                <StackPanel Spacing="14">
+
+                    <StackPanel>
+                        <CheckBox Content="Author" IsChecked="{Binding ApplyAuthor}" FontWeight="SemiBold" />
+                        <TextBox Text="{Binding Author}" Watermark="{Binding AuthorWatermark}" Margin="0,4,0,0" />
+                    </StackPanel>
+
+                    <StackPanel>
+                        <CheckBox Content="Summary" IsChecked="{Binding ApplySummary}" FontWeight="SemiBold" />
+                        <TextBox Text="{Binding Summary}" Watermark="{Binding SummaryWatermark}"
+                                 AcceptsReturn="True" TextWrapping="Wrap" MinHeight="70" Margin="0,4,0,0" />
+                    </StackPanel>
+
+                    <StackPanel>
+                        <CheckBox Content="Published date" IsChecked="{Binding ApplyPublishedDate}" FontWeight="SemiBold" />
+                        <DatePicker SelectedDate="{Binding PublishedDate}" HorizontalAlignment="Left" Margin="0,4,0,0" />
+                    </StackPanel>
+
+                    <Border Classes="groupBox">
+                        <StackPanel>
+                            <Border Classes="groupHeader">
+                                <CheckBox Content="Series" IsChecked="{Binding ApplySeries}" FontWeight="Bold" FontSize="13" />
+                            </Border>
+                            <StackPanel Margin="14">
+                                <TextBlock Classes="fieldLabel" Text="SERIES NAME" />
+                                <TextBox Text="{Binding SeriesName}" Watermark="{Binding SeriesNameWatermark}" Margin="0,0,0,12" />
+                                <WrapPanel>
+                                    <StackPanel Width="230" Margin="0,0,16,0">
+                                        <TextBlock Classes="fieldLabel" Text="SERIES AUTHOR" />
+                                        <TextBox Text="{Binding SeriesAuthor}" IsEnabled="{Binding HasSeriesName}" />
+                                    </StackPanel>
+                                    <StackPanel Width="230">
+                                        <TextBlock Classes="fieldLabel" Text="SERIES SORT NAME" />
+                                        <TextBox Text="{Binding SeriesSortName}" IsEnabled="{Binding HasSeriesName}" />
+                                    </StackPanel>
+                                </WrapPanel>
+                                <TextBlock Classes="applyHint" TextWrapping="Wrap" Margin="0,8,0,0"
+                                           Text="A blank series name detaches every selected book to standalone. Series author and sort name apply to the whole series." />
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+
+                </StackPanel>
+            </ScrollViewer>
+        </DockPanel>
+    </Border>
+</UserControl>

@@ -50,6 +50,27 @@ public sealed class MetadataEditHistoryService
         _redoStack.Clear();
     }
 
+    /// <summary>The <see cref="Book"/>-row equivalent of <see cref="Record"/> (docs/superpowers/specs/
+    /// 2026-08-27-book-properties-editor-design.md) - one entry per Book Properties overlay Save.
+    /// <paramref name="before"/>/<paramref name="after"/> are <see cref="BookMetadataSnapshot"/> dicts.</summary>
+    public void RecordBookEdit(string description, int bookId, Dictionary<string, string?> before, Dictionary<string, string?> after) =>
+        RecordBookEdits(description, new() { [bookId] = before }, new() { [bookId] = after });
+
+    /// <summary>Multi-book variant (docs/superpowers/specs/2026-08-27-books-bulk-series-editing-
+    /// design.md) - one entry spanning every book a bulk Save touched. <c>Apply</c>'s
+    /// <see cref="MetadataEditTarget.Book"/> branch already restores every key.</summary>
+    public void RecordBookEdits(string description, Dictionary<int, Dictionary<string, string?>> before, Dictionary<int, Dictionary<string, string?>> after)
+    {
+        _undoStack.Push(new MetadataEditHistoryEntry
+        {
+            Description = description,
+            Target = MetadataEditTarget.Book,
+            Before = before,
+            After = after,
+        });
+        _redoStack.Clear();
+    }
+
     /// <summary>Returns the undone entry's description for a toast, or null if there was nothing to undo.</summary>
     public string? Undo(System.Func<PaperbunkrDbContext> contextFactory)
     {
@@ -59,7 +80,7 @@ public sealed class MetadataEditHistoryService
         }
 
         var entry = _undoStack.Pop();
-        Apply(contextFactory, entry.Before);
+        Apply(contextFactory, entry.Target, entry.Before);
         _redoStack.Push(entry);
         return entry.Description;
     }
@@ -72,14 +93,27 @@ public sealed class MetadataEditHistoryService
         }
 
         var entry = _redoStack.Pop();
-        Apply(contextFactory, entry.After);
+        Apply(contextFactory, entry.Target, entry.After);
         _undoStack.Push(entry);
         return entry.Description;
     }
 
-    private static void Apply(System.Func<PaperbunkrDbContext> contextFactory, Dictionary<int, Dictionary<string, string?>> snapshots)
+    private static void Apply(System.Func<PaperbunkrDbContext> contextFactory, MetadataEditTarget target, Dictionary<int, Dictionary<string, string?>> snapshots)
     {
         using var context = contextFactory();
+
+        if (target == MetadataEditTarget.Book)
+        {
+            var books = context.Books.Where(b => snapshots.Keys.Contains(b.Id)).ToList();
+            foreach (var book in books)
+            {
+                BookMetadataSnapshot.Apply(book, snapshots[book.Id]);
+            }
+
+            context.SaveChanges();
+            return;
+        }
+
         var issues = context.Issues.Include(i => i.Series).Include(i => i.Tags)
             .Where(i => snapshots.Keys.Contains(i.Id)).ToList();
         foreach (var issue in issues)

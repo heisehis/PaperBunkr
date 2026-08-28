@@ -89,6 +89,54 @@ public class BookReaderScreenViewModelTests : IDisposable
     }
 
     [Fact]
+    public void LoadBook_WithStartPosition_OpensThereInsteadOfResuming()
+    {
+        int bookId = AddBook(firstChapterEmpty: false);
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            var book = context.Books.Single(b => b.Id == bookId);
+            book.LastChapterIndex = 0;
+            context.SaveChanges();
+        }
+
+        PaperbunkrDbContext.DatabasePathOverride = _dbPath;
+        var vm = new BookReaderScreenViewModel(() => { });
+        vm.LoadBook(bookId, new Paperbunkr.App.Models.BookPosition(1, 0));
+        vm.UpdateViewportSize(new Size(700, 800));
+
+        Assert.Equal("The End", vm.ChapterTitle);
+    }
+
+    [Fact]
+    public void LoadBook_WithOutOfRangeStartChapter_ClampsWithoutThrowing()
+    {
+        int bookId = AddBook(firstChapterEmpty: false);
+
+        PaperbunkrDbContext.DatabasePathOverride = _dbPath;
+        var vm = new BookReaderScreenViewModel(() => { });
+        vm.LoadBook(bookId, new Paperbunkr.App.Models.BookPosition(99, 0));
+        vm.UpdateViewportSize(new Size(700, 800));
+
+        Assert.Equal("The End", vm.ChapterTitle); // clamped to the last chapter (index 1)
+    }
+
+    [Fact]
+    public void LoadBook_NoStartPosition_StillResumesFromSavedChapter()
+    {
+        int bookId = AddBook(firstChapterEmpty: false);
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            var book = context.Books.Single(b => b.Id == bookId);
+            book.LastChapterIndex = 1;
+            context.SaveChanges();
+        }
+
+        var vm = CreateViewModel(bookId);
+
+        Assert.Equal("The End", vm.ChapterTitle);
+    }
+
+    [Fact]
     public void GoToChapter_TableOfContents_MarksSelectedChapterActive()
     {
         int bookId = AddBook(firstChapterEmpty: false);

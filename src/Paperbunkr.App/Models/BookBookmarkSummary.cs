@@ -1,3 +1,5 @@
+using System;
+
 namespace Paperbunkr.App.Models;
 
 /// <summary>One row in the Novels reader's Bookmarks drawer (docs/superpowers/specs/2026-08-09-novels-epub-pdf-support-design.md §6).</summary>
@@ -12,4 +14,9 @@ public sealed class BookBookmarkSummary
     public string ChapterTitle { get; init; } = string.Empty;
 
     public string Excerpt { get; init; } = string.Empty;
+
+    /// <summary>When the bookmark was created - shown as a date caption on the Book Details screen's
+    /// bookmarks list (docs/superpowers/specs/2026-08-27-book-details-screen-design.md); unused by
+    /// the reader's own drawer.</summary>
+    public DateTime CreatedTime { get; init; }
 }

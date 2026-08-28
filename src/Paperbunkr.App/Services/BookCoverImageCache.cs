@@ -54,4 +54,10 @@ public static class BookCoverImageCache
         _cache.Remove(bookId);
         BookCoverThumbnailPaths.DeleteCachedThumbnail(bookId);
     }
+
+    /// <summary>Drops only bookId's in-memory entry, leaving the on-disk file - mirrors
+    /// <see cref="CoverImageCache.InvalidateMemoryOnly"/>. Used right after
+    /// <see cref="BookCoverThumbnailService.TrySetCustomCover"/> has just written a new file, so
+    /// the next <see cref="Get"/> re-reads it without <see cref="Invalidate"/> deleting it first.</summary>
+    public static void InvalidateMemoryOnly(int bookId) => _cache.Remove(bookId);
 }

@@ -3,6 +3,7 @@ using System.Linq;
 using Avalonia.Media.Imaging;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Paperbunkr.App.Models;
 using Paperbunkr.App.Services;
 using Paperbunkr.Data.Entities;
 
@@ -85,8 +86,14 @@ public partial class PdfPageReaderScreenViewModel : ViewModelBase
     [ObservableProperty]
     private double _panOffsetY;
 
-    public void LoadBook(int bookId)
+    /// <param name="startAt">Accepted for call-site parity with
+    /// <see cref="BookReaderScreenViewModel.LoadBook(int, BookPosition?)"/> and ignored - the
+    /// fixed-layout page reader has no chapter/offset position model (it always opens at page 0,
+    /// and persists nothing). A chapter/bookmark jump from the Book Details screen only reaches
+    /// this reader for a PDF book, which has neither chapters nor bookmarks.</param>
+    public void LoadBook(int bookId, BookPosition? startAt = null)
     {
+        _ = startAt;
         _decoder?.Dispose();
         _decoder = null;
 

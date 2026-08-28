@@ -65,9 +65,11 @@ public partial class DetailScreenViewModel : ViewModelBase, IDetailHeaderSource
     [ObservableProperty]
     private string _metaLine = string.Empty;
 
-    string IDetailHeaderSource.Title => SeriesTitle;
+    public string HeaderTitle => SeriesTitle;
     string? IDetailHeaderSource.SecondaryTitle => null;
     DetailHeroProgress? IDetailHeaderSource.TrackerProgress => null;
+
+    partial void OnSeriesTitleChanged(string value) => OnPropertyChanged(nameof(HeaderTitle));
 
     public IReadOnlyList<DetailHeroAction> Actions => new[]
     {

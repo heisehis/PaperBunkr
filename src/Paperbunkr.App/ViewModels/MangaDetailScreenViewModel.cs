@@ -74,7 +74,9 @@ public partial class MangaDetailScreenViewModel : ViewModelBase, IDetailHeaderSo
     [ObservableProperty]
     private IBrush _coverBrush;
 
-    string IDetailHeaderSource.Title => SeriesTitle;
+    public string HeaderTitle => SeriesTitle;
+
+    partial void OnSeriesTitleChanged(string value) => OnPropertyChanged(nameof(HeaderTitle));
 
     [ObservableProperty]
     private string? _secondaryTitle;

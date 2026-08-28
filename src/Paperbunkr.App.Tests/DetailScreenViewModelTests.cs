@@ -175,6 +175,30 @@ public class DetailScreenViewModelTests : IDisposable
     }
 
     [Fact]
+    public void HeaderTitle_TracksLoadedSeries_AndRaisesPropertyChanged()
+    {
+        int otherSeriesId;
+        using (var context = PaperbunkrDb.CreateContext())
+        {
+            var other = new Series { Name = "A Completely Different Series" };
+            context.Series.Add(other);
+            context.SaveChanges();
+            otherSeriesId = other.Id;
+        }
+
+        var vm = new DetailScreenViewModel(goBack: () => { }, goToReader: _ => { }, goToProperties: _ => { }, goToBulkProperties: _ => { });
+        vm.LoadSeries(_seriesId);
+        Assert.Equal("Test Series", ((IDetailHeaderSource)vm).HeaderTitle);
+
+        var raised = new System.Collections.Generic.List<string?>();
+        vm.PropertyChanged += (_, e) => raised.Add(e.PropertyName);
+        vm.LoadSeries(otherSeriesId);
+
+        Assert.Equal("A Completely Different Series", ((IDetailHeaderSource)vm).HeaderTitle);
+        Assert.Contains(nameof(IDetailHeaderSource.HeaderTitle), raised);
+    }
+
+    [Fact]
     public void Edit_NoSelection_IsDisabled()
     {
         var vm = new DetailScreenViewModel(goBack: () => { }, goToReader: _ => { }, goToProperties: _ => { }, goToBulkProperties: _ => { });

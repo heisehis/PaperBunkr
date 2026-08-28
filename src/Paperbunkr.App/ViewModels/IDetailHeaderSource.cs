@@ -24,8 +24,11 @@ public interface IDetailHeaderSource : INotifyPropertyChanged
     /// <summary>Pre-blurred edge-to-edge backdrop (via <c>BackdropBlurRenderer</c>); null falls back to <see cref="CoverBrush"/>.</summary>
     Bitmap? BackdropImage { get; }
 
-    /// <summary>Display title, rendered in Bebas.</summary>
-    string Title { get; }
+    /// <summary>Display title, rendered in Bebas. Named <c>HeaderTitle</c> (not <c>Title</c>) so a
+    /// concrete VM can also carry an unrelated <c>Title</c> property (e.g. the book title) - and so
+    /// every implementer backs it with a real change-notifying member rather than an explicit
+    /// interface impl that never raises PropertyChanged (the "all series stuck on one title" bug).</summary>
+    string HeaderTitle { get; }
 
     /// <summary>Second line under the title - manga native + romaji; null on comic/book (line hidden).</summary>
     string? SecondaryTitle { get; }

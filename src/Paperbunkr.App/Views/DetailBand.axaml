@@ -18,11 +18,14 @@
         nothing but the inline row + synopsis when Groups is empty (book "lite" mode).
     -->
     <UserControl.Styles>
+        <!-- Squircle chips (PbRadius, matching the Library toolbar's own squircled chips - commit
+             07a93af), with a smooth amber-glow reaction on hover: the app's established
+             "reactive" idiom (design-language-foundation-design.md - glow ring, no scale-lift). -->
         <Style Selector="Border.bandChip">
             <Setter Property="Background" Value="{DynamicResource PbChromeBrush}" />
             <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
             <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="CornerRadius" Value="999" />
+            <Setter Property="CornerRadius" Value="{DynamicResource PbRadius}" />
             <Setter Property="Padding" Value="10,3" />
             <Setter Property="Margin" Value="0,0,6,6" />
         </Style>
@@ -30,15 +33,38 @@
             <Setter Property="Background" Value="{DynamicResource PbChromeBrush}" />
             <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
             <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="CornerRadius" Value="999" />
+            <Setter Property="CornerRadius" Value="{DynamicResource PbRadius}" />
             <Setter Property="Padding" Value="10,3" />
             <Setter Property="Margin" Value="0,0,6,6" />
             <Setter Property="Cursor" Value="Hand" />
             <Setter Property="FontSize" Value="11.5" />
             <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
+            <Setter Property="Transitions">
+                <Transitions>
+                    <BrushTransition Property="Background" Duration="{DynamicResource PbMotionFast}" Easing="{StaticResource PbMotionEase}" />
+                    <BrushTransition Property="BorderBrush" Duration="{DynamicResource PbMotionFast}" Easing="{StaticResource PbMotionEase}" />
+                    <BrushTransition Property="Foreground" Duration="{DynamicResource PbMotionFast}" Easing="{StaticResource PbMotionEase}" />
+                </Transitions>
+            </Setter>
         </Style>
         <Style Selector="Button.bandChip:pointerover">
-            <Setter Property="BorderBrush" Value="{DynamicResource PbBadgeBrush}" />
+            <Setter Property="Background" Value="{DynamicResource PbAccentSoftBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource PbAccentTextBrush}" />
+        </Style>
+        <Style Selector="Button.bandChip:focus-visible">
+            <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
+        </Style>
+        <!-- Non-interactive Border chips (Virtual Tags) still get the glow-ring on hover. -->
+        <Style Selector="Border.bandChip">
+            <Setter Property="Transitions">
+                <Transitions>
+                    <BoxShadowsTransition Property="BoxShadow" Duration="{DynamicResource PbMotionFast}" Easing="{StaticResource PbMotionEase}" />
+                </Transitions>
+            </Setter>
+        </Style>
+        <Style Selector="Border.bandChip:pointerover">
+            <Setter Property="BoxShadow" Value="{StaticResource PbGlowRing}" />
         </Style>
     </UserControl.Styles>
 

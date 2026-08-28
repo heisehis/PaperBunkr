@@ -71,9 +71,12 @@ public partial class BookDetailScreenViewModel : ViewModelBase, IDetailHeaderSou
     [ObservableProperty]
     private string _metaLine = string.Empty;
 
-    string IDetailHeaderSource.Title => IsSeriesMode ? SeriesName : Title;
+    public string HeaderTitle => IsSeriesMode ? SeriesName : Title;
     string? IDetailHeaderSource.SecondaryTitle => null;
     DetailHeroProgress? IDetailHeaderSource.TrackerProgress => null;
+
+    partial void OnTitleChanged(string value) => OnPropertyChanged(nameof(HeaderTitle));
+    partial void OnSeriesNameChanged(string value) => OnPropertyChanged(nameof(HeaderTitle));
 
     public IReadOnlyList<DetailHeroAction> Actions => IsSeriesMode
         ? new[]
@@ -91,7 +94,8 @@ public partial class BookDetailScreenViewModel : ViewModelBase, IDetailHeaderSou
     private void RaiseHeaderChanged()
     {
         OnPropertyChanged(nameof(Actions));
-        OnPropertyChanged(nameof(IDetailHeaderSource.Title));
+        OnPropertyChanged(nameof(HeaderTitle));
+        OnPropertyChanged(nameof(MetaLine));
     }
 
     public ObservableCollection<BookChapterSummary> Chapters { get; } = new();

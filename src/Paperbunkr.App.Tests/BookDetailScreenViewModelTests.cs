@@ -460,7 +460,7 @@ public class BookDetailScreenViewModelTests : IDisposable
         vm.LoadBook(AddBook("A Novel", author: "N. Novelist", format: BookFormat.Pdf, finished: true));
 
         var hero = (IDetailHeaderSource)vm;
-        Assert.Equal("A Novel", hero.Title);
+        Assert.Equal("A Novel", hero.HeaderTitle);
         Assert.Contains("N. Novelist", hero.MetaLine);
         Assert.Contains("PDF", hero.MetaLine);
         Assert.Contains("FINISHED", hero.MetaLine);
@@ -484,7 +484,7 @@ public class BookDetailScreenViewModelTests : IDisposable
         vm.LoadSeries(seriesId);
 
         var hero = (IDetailHeaderSource)vm;
-        Assert.Equal("The Trilogy", hero.Title);
+        Assert.Equal("The Trilogy", hero.HeaderTitle);
         Assert.Contains("2 books", hero.MetaLine);
         Assert.DoesNotContain(hero.Actions, a => a.IsPrimary);
         Assert.Contains(hero.Actions, a => a.Label == "Edit all books");

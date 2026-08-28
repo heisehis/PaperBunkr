@@ -55,6 +55,34 @@
         <Style Selector="Button.bandChip:focus-visible">
             <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
         </Style>
+
+        <!-- Weight-class visuals (docs/superpowers/specs/2026-08-23-weighted-categorized-tags-
+             design.md) - Core/Defining read as "this defines the series", Recurrent full-strength,
+             Incidental de-emphasised. Unset keeps the plain look. -->
+        <Style Selector="Button.bandChip.core">
+            <Setter Property="Background" Value="{DynamicResource PbAccentBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource PbBadgeTextBrush}" />
+        </Style>
+        <Style Selector="Button.bandChip.core:pointerover">
+            <Setter Property="Background" Value="{DynamicResource PbAccentTextBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource PbBadgeTextBrush}" />
+        </Style>
+        <Style Selector="Button.bandChip.core Ellipse">
+            <Setter Property="Fill" Value="{DynamicResource PbBadgeTextBrush}" />
+        </Style>
+        <Style Selector="Button.bandChip.defining">
+            <Setter Property="Background" Value="{DynamicResource PbAccentSoftBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource PbAccentTextBrush}" />
+        </Style>
+        <Style Selector="Button.bandChip.recurrent">
+            <Setter Property="Foreground" Value="{DynamicResource PbTextBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource PbTextFaintBrush}" />
+        </Style>
+        <Style Selector="Button.bandChip.incidental">
+            <Setter Property="Opacity" Value="0.55" />
+        </Style>
         <!-- Non-interactive Border chips (Virtual Tags) still get the glow-ring on hover. -->
         <Style Selector="Border.bandChip">
             <Setter Property="Transitions">
@@ -144,7 +172,11 @@
                                 <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate x:DataType="vm:TagPillViewModel">
-                                        <Button Classes="bandChip" Command="{Binding SearchCommand}" ToolTip.Tip="{Binding Category}">
+                                        <Button Classes="bandChip" Command="{Binding SearchCommand}" ToolTip.Tip="{Binding Category}"
+                                                Classes.core="{Binding WeightClass, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter=core}"
+                                                Classes.defining="{Binding WeightClass, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter=defining}"
+                                                Classes.recurrent="{Binding WeightClass, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter=recurrent}"
+                                                Classes.incidental="{Binding WeightClass, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter=incidental}">
                                             <Button.ContextMenu>
                                                 <ContextMenu IsVisible="{Binding CanReweight}">
                                                     <MenuItem Header="Incidental" Command="{Binding SetWeightCommand}" CommandParameter="{x:Static entities:IssueTagWeight.Incidental}" />
@@ -153,7 +185,11 @@
                                                     <MenuItem Header="Core" Command="{Binding SetWeightCommand}" CommandParameter="{x:Static entities:IssueTagWeight.Core}" />
                                                 </ContextMenu>
                                             </Button.ContextMenu>
-                                            <TextBlock Text="{Binding Value}" FontWeight="{Binding TextWeight}" Opacity="{Binding WeightOpacity}" />
+                                            <StackPanel Orientation="Horizontal" Spacing="5">
+                                                <Ellipse Width="5" Height="5" VerticalAlignment="Center" IsVisible="{Binding IsWeighted}"
+                                                         Fill="{DynamicResource PbAccentBrush}" />
+                                                <TextBlock Text="{Binding Value}" FontWeight="{Binding TextWeight}" />
+                                            </StackPanel>
                                         </Button>
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>

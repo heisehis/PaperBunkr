@@ -124,6 +124,27 @@ public class DetailBandViewModelTests
     }
 
     [Fact]
+    public void LoadIssue_GenreChip_ExposesWeightClassAndDot()
+    {
+        var issue = new Issue();
+        issue.MergeFrom(IssueTagField.Genre, new[] { "superhero", "cosmic" });
+        issue.Tags.Single(t => t.Value == "superhero").Weight = IssueTagWeight.Core;
+        // "cosmic" left Unset
+
+        var vm = new DetailBandViewModel();
+        vm.LoadIssue(issue);
+
+        var genres = vm.Groups.Single(g => g.Label == "Genres & Concepts");
+        var core = genres.Chips.Single(c => c.Value == "superhero");
+        var unset = genres.Chips.Single(c => c.Value == "cosmic");
+
+        Assert.Equal("core", core.WeightClass);
+        Assert.True(core.IsWeighted);
+        Assert.Equal("unset", unset.WeightClass);
+        Assert.False(unset.IsWeighted);
+    }
+
+    [Fact]
     public void InlineMeta_FlagsTrackWhetherEachSegmentIsPresent()
     {
         var vm = new DetailBandViewModel();

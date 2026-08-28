@@ -16,7 +16,7 @@
         top->bottom vignette so the title stays legible over any art. Foreground content is pinned
         bottom-left; a tracker progress badge floats bottom-right for a linked manga series.
     -->
-    <Border Height="340" ClipToBounds="True" Background="{Binding CoverBrush}">
+    <Border Height="360" ClipToBounds="True" Background="{Binding CoverBrush}">
         <Grid>
             <Image Source="{Binding BackdropImage}" Stretch="UniformToFill"
                    IsVisible="{Binding BackdropImage, Converter={x:Static conv:ObjectConverters.IsNotNull}}" />
@@ -33,7 +33,7 @@
 
             <!-- Foreground -->
             <Grid Margin="28,0,28,20" VerticalAlignment="Bottom" ColumnDefinitions="Auto,*,Auto">
-                <Border Grid.Column="0" Width="94" Height="136" CornerRadius="{DynamicResource PbRadiusSm}"
+                <Border Grid.Column="0" Width="142" Height="206" CornerRadius="{DynamicResource PbRadiusSm}"
                         ClipToBounds="True" VerticalAlignment="Bottom"
                         BorderThickness="1" BorderBrush="#40FFFFFF" Background="{Binding CoverBrush}">
                     <Grid>

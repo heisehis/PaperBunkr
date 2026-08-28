@@ -486,4 +486,192 @@ public class ReadingScreenViewModelTests : IDisposable
 
         Assert.False(invoked);
     }
+
+    // --- Redesign: progress + Continue + mark-read (docs/superpowers/specs/
+    //     2026-08-28-reading-lists-screen-redesign-design.md) ---
+
+    /// <summary>An owned issue with a page count, optionally already read to the end.</summary>
+    private static int SeedOwnedIssue(string seriesName, string number, bool read = false)
+    {
+        using var context = PaperbunkrDb.CreateContext();
+        var series = context.Series.FirstOrDefault(s => s.Name == seriesName) ?? new Series { Name = seriesName };
+        if (series.Id == 0)
+        {
+            context.Series.Add(series);
+            context.SaveChanges();
+        }
+
+        var issue = new Issue
+        {
+            SeriesId = series.Id,
+            Number = number,
+            FilePath = $@"C:\lib\{seriesName}-{number}.cbz",
+            FileIsMissing = false,
+            PageCount = 20,
+            LastPageRead = read ? 19 : 0,
+        };
+        context.Issues.Add(issue);
+        context.SaveChanges();
+        return issue.Id;
+    }
+
+    private int SeedListWith(params int[] issueIds)
+    {
+        var vm = new ReadingScreenViewModel(_filePicker, (_, _) => { });
+        vm.CreateNewCommand.Execute(null);
+        int listId = vm.Lists.Single().Id;
+        using var context = PaperbunkrDb.CreateContext();
+        for (int i = 0; i < issueIds.Length; i++)
+        {
+            context.ReadingListItems.Add(new ReadingListItem { ReadingListId = listId, IssueId = issueIds[i], SortOrder = i });
+        }
+        context.SaveChanges();
+        return listId;
+    }
+
+    [Fact]
+    public void Progress_CountsReadOwnedAndMissing()
+    {
+        int listId = SeedListWith(
+            SeedOwnedIssue("A", "1", read: true),
+            SeedOwnedIssue("A", "2", read: false),
+            SeedPlaceholderIssue("A", "3"));
+
+        var vm = new ReadingScreenViewModel(_filePicker, (_, _) => { });
+        vm.LoadReadingList(listId);
+
+        Assert.Equal(3, vm.TotalCount);
+        Assert.Equal(1, vm.ReadCount);
+        Assert.Equal(2, vm.OwnedCount);
+        Assert.Equal(1, vm.MissingCount);
+        Assert.Equal(1.0 / 3.0, vm.ProgressFraction, 3);
+    }
+
+    [Fact]
+    public void ContinueTarget_IsFirstOwnedUnread_SkippingReadAndMissing()
+    {
+        int readId = SeedOwnedIssue("B", "1", read: true);
+        int missingId = SeedPlaceholderIssue("B", "2");
+        int nextId = SeedOwnedIssue("B", "3", read: false);
+        int listId = SeedListWith(readId, missingId, nextId);
+
+        var vm = new ReadingScreenViewModel(_filePicker, (_, _) => { });
+        vm.LoadReadingList(listId);
+
+        Assert.True(vm.HasContinueTarget);
+        Assert.Equal("Continue — 3", vm.ContinueLabel);
+        var rows = vm.Groups.SelectMany(g => g.Rows).ToList();
+        Assert.True(rows.Single(r => r.Item.IssueId == nextId).IsNextUp);
+        Assert.All(rows.Where(r => r.Item.IssueId != nextId), r => Assert.False(r.IsNextUp));
+    }
+
+    [Fact]
+    public void ContinueTarget_AllRead_BecomesReReadFromStart()
+    {
+        int listId = SeedListWith(
+            SeedOwnedIssue("C", "1", read: true),
+            SeedOwnedIssue("C", "2", read: true));
+
+        var vm = new ReadingScreenViewModel(_filePicker, (_, _) => { });
+        vm.LoadReadingList(listId);
+
+        Assert.True(vm.HasContinueTarget);
+        Assert.Equal("Re-read from start", vm.ContinueLabel);
+    }
+
+    [Fact]
+    public void ContinueTarget_NoOwnedIssues_HasNoTarget()
+    {
+        int listId = SeedListWith(SeedPlaceholderIssue("D", "1"), SeedPlaceholderIssue("D", "2"));
+
+        var vm = new ReadingScreenViewModel(_filePicker, (_, _) => { });
+        vm.LoadReadingList(listId);
+
+        Assert.False(vm.HasContinueTarget);
+    }
+
+    [Fact]
+    public void IsEmptyList_TrueForListWithNoItems()
+    {
+        var vm = new ReadingScreenViewModel(_filePicker, (_, _) => { });
+        vm.CreateNewCommand.Execute(null);
+
+        Assert.True(vm.IsEmptyList);
+        Assert.Equal(0, vm.TotalCount);
+    }
+
+    [Fact]
+    public void ToggleRead_MarksUnreadIssueRead_AndAdvancesContinueTarget()
+    {
+        int firstId = SeedOwnedIssue("E", "1", read: false);
+        int secondId = SeedOwnedIssue("E", "2", read: false);
+        int listId = SeedListWith(firstId, secondId);
+
+        var vm = new ReadingScreenViewModel(_filePicker, (_, _) => { });
+        vm.LoadReadingList(listId);
+        Assert.Equal("Start reading", vm.ContinueLabel);
+
+        vm.Groups.SelectMany(g => g.Rows).Single(r => r.Item.IssueId == firstId).ToggleReadCommand.Execute(null);
+
+        Assert.Equal(1, vm.ReadCount);
+        Assert.Equal("Continue — 2", vm.ContinueLabel);
+        using var verify = PaperbunkrDb.CreateContext();
+        Assert.Equal(19, verify.Issues.Single(i => i.Id == firstId).LastPageRead);
+    }
+
+    [Fact]
+    public void RowPosition_Is1BasedAndContinuousAcrossGroups()
+    {
+        int a = SeedOwnedIssue("G", "1");
+        int b = SeedOwnedIssue("G", "2");
+        int c = SeedOwnedIssue("G", "3");
+        var vm = new ReadingScreenViewModel(_filePicker, (_, _) => { });
+        vm.CreateNewCommand.Execute(null);
+        int listId = vm.Lists.Single().Id;
+        using (var context = PaperbunkrDb.CreateContext())
+        {
+            context.ReadingListItems.Add(new ReadingListItem { ReadingListId = listId, IssueId = a, SortOrder = 0, GroupLabel = "Prologue" });
+            context.ReadingListItems.Add(new ReadingListItem { ReadingListId = listId, IssueId = b, SortOrder = 1, GroupLabel = "Main" });
+            context.ReadingListItems.Add(new ReadingListItem { ReadingListId = listId, IssueId = c, SortOrder = 2, GroupLabel = "Main" });
+            context.SaveChanges();
+        }
+
+        vm.LoadReadingList(listId);
+
+        var positions = vm.Groups.SelectMany(g => g.Rows).Select(r => r.Position).ToList();
+        Assert.Equal(new[] { 1, 2, 3 }, positions);
+    }
+
+    [Theory]
+    [InlineData(0, 2, "Not started · 2 issues", "Start reading")]
+    [InlineData(1, 2, "1 of 2 read", "Continue — 2")]
+    [InlineData(2, 2, "Finished", "Re-read from start")]
+    public void ProgressLabelAndContinueLabel_MatchState(int readCount, int total, string progressLabel, string continueLabel)
+    {
+        var ids = Enumerable.Range(1, total).Select(n => SeedOwnedIssue("H", n.ToString(), read: n <= readCount)).ToArray();
+        int listId = SeedListWith(ids);
+
+        var vm = new ReadingScreenViewModel(_filePicker, (_, _) => { });
+        vm.LoadReadingList(listId);
+
+        Assert.Equal(progressLabel, vm.ProgressLabel);
+        Assert.Equal(continueLabel, vm.ContinueLabel);
+    }
+
+    [Fact]
+    public void SidebarSummary_CarriesCoverAndProgress()
+    {
+        int listId = SeedListWith(
+            SeedOwnedIssue("F", "1", read: true),
+            SeedOwnedIssue("F", "2", read: false));
+
+        var vm = new ReadingScreenViewModel(_filePicker, (_, _) => { });
+        vm.LoadReadingList(listId);
+
+        var summary = vm.Lists.Single(l => l.Id == listId);
+        Assert.NotNull(summary.CoverIssueId);
+        Assert.Equal(1, summary.ReadCount);
+        Assert.Equal(2, summary.TotalCount);
+        Assert.Equal(0.5, summary.ProgressFraction, 3);
+    }
 }

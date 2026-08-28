@@ -52,6 +52,16 @@ public class PaperbunkrDbContext : DbContext
 
     public DbSet<EventMembership> EventMemberships => Set<EventMembership>();
 
+    public DbSet<EventRelation> EventRelations => Set<EventRelation>();
+
+    public DbSet<EventRelationEvidence> EventRelationEvidence => Set<EventRelationEvidence>();
+
+    public DbSet<EventSuggestionDismissal> EventSuggestionDismissals => Set<EventSuggestionDismissal>();
+
+    public DbSet<Character> Characters => Set<Character>();
+
+    public DbSet<CharacterAppearance> CharacterAppearances => Set<CharacterAppearance>();
+
     public DbSet<ExternalMediaId> ExternalMediaIds => Set<ExternalMediaId>();
 
     public DbSet<ExternalMetadataSnapshot> ExternalMetadataSnapshots => Set<ExternalMetadataSnapshot>();
@@ -466,6 +476,83 @@ public class PaperbunkrDbContext : DbContext
                 .WithMany()
                 .HasForeignKey(m => m.IssueId)
                 .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // Brand-new tables (docs/superpowers/specs/2026-08-27-metadata-model-phase4d-event-relations-
+        // design.md) - no existing rows to backfill. Both endpoint FKs use Cascade: an EventRelation
+        // pointing at a deleted StoryEvent is in exactly the same situation EventMembership is
+        // already in (which cascades on event deletion), so Cascade just removes a relation that's
+        // lost one of its two endpoints - consistent with every other row hanging off a StoryEvent.
+        modelBuilder.Entity<EventRelation>(builder =>
+        {
+            builder.HasKey(r => r.Id);
+            builder.Property(r => r.RelationType).HasConversion<string>().HasMaxLength(32);
+            builder.HasIndex(r => r.SourceEventId);
+            builder.HasIndex(r => r.TargetEventId);
+
+            builder.HasOne(r => r.SourceEvent)
+                .WithMany()
+                .HasForeignKey(r => r.SourceEventId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            builder.HasOne(r => r.TargetEvent)
+                .WithMany()
+                .HasForeignKey(r => r.TargetEventId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            builder.HasMany(r => r.Evidence)
+                .WithOne(e => e.EventRelation)
+                .HasForeignKey(e => e.EventRelationId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<EventRelationEvidence>(builder =>
+        {
+            builder.HasKey(e => e.Id);
+            builder.Property(e => e.Provider).HasConversion<string>().HasMaxLength(32);
+        });
+
+        // Brand-new tables (docs/superpowers/specs/2026-08-27-metadata-model-phase4d-4g deferred
+        // items). All cascade on their FKs - these are nag-suppression flags / a rebuildable
+        // character index, not content, so they should never block an Issue/Event/Character delete.
+        modelBuilder.Entity<EventSuggestionDismissal>(builder =>
+        {
+            builder.HasKey(d => d.Id);
+            builder.HasIndex(d => new { d.StoryEventId, d.IssueId }).IsUnique();
+
+            builder.HasOne(d => d.StoryEvent)
+                .WithMany()
+                .HasForeignKey(d => d.StoryEventId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            builder.HasOne(d => d.Issue)
+                .WithMany()
+                .HasForeignKey(d => d.IssueId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<Character>(builder =>
+        {
+            builder.HasKey(c => c.Id);
+            builder.Property(c => c.Name).IsRequired();
+            builder.HasIndex(c => c.Name);
+        });
+
+        modelBuilder.Entity<CharacterAppearance>(builder =>
+        {
+            builder.HasKey(a => a.Id);
+            builder.HasIndex(a => new { a.CharacterId, a.IssueId }).IsUnique();
+            builder.HasIndex(a => a.IssueId);
+
+            builder.HasOne(a => a.Character)
+                .WithMany(c => c.Appearances)
+                .HasForeignKey(a => a.CharacterId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            builder.HasOne(a => a.Issue)
+                .WithMany()
+                .HasForeignKey(a => a.IssueId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         // Brand-new tables (like StoryEvent above) - no existing rows to backfill. Cascade on the

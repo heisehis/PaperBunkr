@@ -121,14 +121,46 @@ that haven't been through their own phase yet):
 | Double-page spread | `PbIconBookOpen` | `Book_Open.png` |
 | Auto-scroll | `PbIconPlay` | `Play.png` |
 
+## Converted to vector - Phase 7 (Preferences rework)
+
+Per docs/superpowers/specs/2026-08-28-preferences-rework-design.md - the Preferences screen was the
+last surface still on the raster/OpacityMask pattern. Its groups were re-homed into 8 section
+UserControls and every icon in them converted. `Loading` (Sync Metadata) folds into the existing
+`PbIconRefresh` - a two-arrow circular glyph reads as "sync". Audited: `Folder_Add`, `Folder_Search`,
+`Cloud_Upload`, `Archive` were each single-consumer (Preferences only) before this phase.
+
+| Action | Vector resource | Raster source |
+|---|---|---|
+| Add a watched/book folder | `PbIconFolderAdd` | `Folder_Add.png` |
+| Scan a folder now | `PbIconFolderSearch` | `Folder_Search.png` |
+| Migrate from ComicRack CE | `PbIconCloudUpload` | `Cloud_Upload.png` |
+| Back up the database now | `PbIconArchive` | `Archive.png` |
+| Sync embedded metadata | `PbIconRefresh` | `Loading.png` (shared with Home refresh) |
+
+## Converted to vector - Reading Lists + Story Events screen restyle
+
+Per docs/superpowers/specs/2026-08-28-preferences-rework-plan.md Steps 14-15. `ReadingScreen.axaml`
+and `EventsScreen.axaml` moved onto the design language alongside the Preferences rework. Icons
+already vector (`PbIconEdit`, `PbIconCopy`, `PbIconRefresh`, `PbIconSearch`, `PbIconPlus`,
+`PbIconCheck`, `PbIconTrash`, `PbIconClose`, `PbIconPlay`, `PbIconChevronRight`, `PbIconArrowDown`)
+were reused. New geometries:
+
+| Action | Vector resource | Raster source |
+|---|---|---|
+| Import a list (.CBL / .CSV) | `PbIconFileUp` | `File_Upload.png` |
+| Export a list (.CBL / text) | `PbIconFileDown` | `File_Download.png` |
+| Info / status banner | `PbIconInfo` | `Info.png` |
+
+`Triangle_Warning` (reading-list "Missing" row) now uses `PbIconCircleWarning`; the "Read" affordance's
+ad-hoc `<Path>` triangle is now `PbIconPlay`.
+
 ## Still raster (`Assets/Icons/*.png` + `Border.icon` OpacityMask pattern)
 
 Unconverted for now, per the design doc's incremental-rollout principle - conversion happens as
 each icon's consuming screen is touched in its own phase, not all at once. Listed here only as an
 inventory checkpoint, not yet assigned canonical single-action mappings:
 
-`Add_Plus`, `Archive`, `Bell_Notification`, `Cloud_Upload`,
-`File_Download`, `File_Upload`, `Folder_Add`, `Folder_Search`, `Globe`, `Info`, `Loading`,
+`Add_Plus`, `Bell_Notification`, `Globe`,
 `Puzzle`, `Remove_Minus_Circle`,
 `Sort_Ascending`, `Triangle_Warning`, `Window`.
 

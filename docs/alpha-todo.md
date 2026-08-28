@@ -22,6 +22,27 @@ this file itself already did once (see the note below).
 
 ## What's left (as of 2026-08-12, HEAD `85fb681`)
 
+> **Manual session note (2026-08-27, Metadata Model Phases 4d-4g):** net-new metadata-platform work
+> landed this session — Event Relations (4d, one new EF migration
+> `20260827193943_MetadataModelPhase4dEventRelations`), Format-Signal Event Suggestions (4e),
+> Continuity Browse view (4f), and Age Progression / Timeline (4g). All four extend the Story
+> Events screen (`EventsScreenViewModel`) — 4f adds an Events|Continuities|Timeline mode switcher,
+> 4g adds Timeline as the third mode. **P0-P7 status is unchanged (still all done)** — this is Beta
+> backlog, so the full detail lives in [`alpha-roadmap.md`](alpha-roadmap.md)'s "Metadata Model
+> platform" section, not here.
+>
+> **Follow-up (2026-08-28):** every deferred 4d-4g item then got built too — persisted suggestion
+> dismissals, a transitive event graph + event-relation auto-suggestions, Timeline scopes (series
+> family / continuity / whole library) + a character-aware toggle backed by a new first-class
+> `Character` index over `Issue.Characters`, a bulk "review inferred ages" surface, cross-continuity
+> comparison, "create reading list from continuity", a `BookAge` autocomplete editor, and a
+> `SmartListField.Continuity`. One new migration
+> `20260828104324_MetadataModelPhase4DeferredItems` (`EventSuggestionDismissal` / `Character` /
+> `CharacterAppearance`). Verified green: `Paperbunkr.Data.Tests` 533/533, `Paperbunkr.App.Tests`
+> 1098/1098, `Paperbunkr.Plugins.Tests` 11/11 (UiTests not run — flaky in this env); app
+> smoke-launched OK. Still uncommitted on branch `books/browse-chrome`; on-screen GUI pass on the
+> new surfaces still outstanding.
+
 > This section drifted before: it was last hand-written at `7e2d3d3` and had already fallen behind
 > five real commits by the time anyone reopened it. That's the whole reason for the live tracker —
 > see [Live tracker](#live-tracker) below. It drifted a second, smaller way too: `d86cac7` (same

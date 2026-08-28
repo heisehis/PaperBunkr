@@ -1,0 +1,111 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Paperbunkr.App.ViewModels"
+             xmlns:models="using:Paperbunkr.App.Models"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="640" d:DesignHeight="720"
+             x:Class="Paperbunkr.App.Views.Preferences.AppearanceSection"
+             x:DataType="vm:PreferencesScreenViewModel">
+
+    <ScrollViewer>
+        <StackPanel Margin="28,20,28,40" Spacing="20">
+            <TextBlock Classes="pbTextHeading" Text="Appearance" />
+
+            <!-- Skins -->
+            <Border Classes="groupBox" Tag="appearance.skin">
+                <StackPanel>
+                    <Border Classes="groupHeader">
+                        <TextBlock Text="Skins" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
+                    </Border>
+                    <ItemsControl x:Name="SkinsList" ItemsSource="{Binding Skins}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="models:SkinSummary">
+                                <Border Classes="skinRow">
+                                    <Button Classes="sideItemButton"
+                                            Command="{Binding #SkinsList.((vm:PreferencesScreenViewModel)DataContext).SelectSkinCommand}"
+                                            CommandParameter="{Binding}">
+                                        <Grid ColumnDefinitions="*,Auto">
+                                            <TextBlock Grid.Column="0" Text="{Binding Name}" FontSize="13"
+                                                       Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
+                                            <TextBlock Grid.Column="1" Text="Active" IsVisible="{Binding IsActive}"
+                                                       FontSize="11" FontWeight="Bold" Foreground="{DynamicResource PbAccentTextBrush}"
+                                                       VerticalAlignment="Center" />
+                                        </Grid>
+                                    </Button>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </Border>
+
+            <!-- Install Skin -->
+            <Border Classes="groupBox" Tag="appearance.installSkin">
+                <StackPanel>
+                    <Border Classes="groupHeader">
+                        <TextBlock Text="Install Skin" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
+                    </Border>
+                    <StackPanel Margin="14" Spacing="10">
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <Button Classes="headerAction primary" Command="{Binding BrowseForSkinCommand}">
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <Path Classes="pbIcon" Data="{StaticResource PbIconFolderOpen}" Stroke="{DynamicResource PbBadgeTextBrush}" />
+                                    <TextBlock Text="Browse…" />
+                                </StackPanel>
+                            </Button>
+                            <Button Classes="headerAction ghost" Command="{Binding OpenSkinsFolderCommand}">
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <Path Classes="pbIcon" Data="{StaticResource PbIconFolderOpen}" />
+                                    <TextBlock Text="Open Skins Folder" />
+                                </StackPanel>
+                            </Button>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Spacing="5" IsVisible="{Binding HasInstallSkinError}">
+                            <Path Classes="pbIcon" Width="12" Height="12" Data="{StaticResource PbIconCircleWarning}" Stroke="#D96C6C" />
+                            <TextBlock Text="{Binding InstallSkinError}" Foreground="#D96C6C" FontSize="12" TextWrapping="Wrap" />
+                        </StackPanel>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
+            <!-- Font -->
+            <Border Classes="groupBox" Tag="appearance.font">
+                <StackPanel>
+                    <Border Classes="groupHeader">
+                        <TextBlock Text="Font" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
+                    </Border>
+                    <StackPanel Margin="14">
+                        <ComboBox ItemsSource="{Binding FontFamilies}" SelectedItem="{Binding SelectedFontFamily}" Width="280" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
+            <!-- Motion -->
+            <Border Classes="groupBox" Tag="appearance.motion">
+                <StackPanel>
+                    <Border Classes="groupHeader">
+                        <TextBlock Text="Motion" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
+                    </Border>
+                    <StackPanel Margin="14">
+                        <CheckBox Content="Reduce motion" IsChecked="{Binding ReducedMotion}" />
+                        <TextBlock Text="Shortens UI transitions to effectively instant." FontSize="11.5"
+                                   Foreground="{DynamicResource PbTextFaintBrush}" Margin="0,4,0,0" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
+            <!-- Developer - debug-only, hidden entirely in Release builds. -->
+            <Border Classes="groupBox" Tag="appearance.developer" IsVisible="{Binding IsDebugBuild}">
+                <StackPanel>
+                    <Border Classes="groupHeader">
+                        <TextBlock Text="Developer" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
+                    </Border>
+                    <StackPanel Margin="14">
+                        <Button Content="Open Design Showcase" Command="{Binding OpenDesignShowcaseCommand}" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

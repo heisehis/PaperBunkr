@@ -1,0 +1,138 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Paperbunkr.App.ViewModels"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="640" d:DesignHeight="900"
+             x:Class="Paperbunkr.App.Views.Preferences.ConnectionsSection"
+             x:DataType="vm:PreferencesScreenViewModel">
+
+    <ScrollViewer>
+        <StackPanel Margin="28,20,28,40" Spacing="20">
+            <TextBlock Classes="pbTextHeading" Text="Connections" />
+
+            <!-- Reading List Sources -->
+            <Border Classes="groupBox" Tag="connections.metadataSources">
+                <StackPanel>
+                    <Border Classes="groupHeader">
+                        <TextBlock Text="Reading List Sources" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
+                    </Border>
+                    <StackPanel Margin="14" Spacing="14">
+                        <StackPanel Spacing="10">
+                            <TextBlock Text="ComicVine API Key" FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" />
+                            <TextBlock Text="Get one free at comicvine.gamespot.com/api" FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" />
+                            <StackPanel Orientation="Horizontal" Spacing="10">
+                                <TextBox Text="{Binding ComicVineApiKey}" Width="320" PasswordChar="•" />
+                                <Button Classes="headerAction primary" Content="Save" Command="{Binding SaveComicVineCredentialsCommand}" />
+                            </StackPanel>
+                        </StackPanel>
+
+                        <StackPanel Spacing="10" Margin="0,10,0,0">
+                            <TextBlock Text="Metron (metron.cloud) Account" FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" />
+                            <TextBlock Text="Username" FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" />
+                            <TextBox Text="{Binding MetronUsername}" Width="320" HorizontalAlignment="Left" />
+                            <TextBlock Text="Password" FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" />
+                            <TextBox Text="{Binding MetronPassword}" Width="320" HorizontalAlignment="Left" PasswordChar="•" />
+                            <Button Classes="headerAction primary" Content="Save" Command="{Binding SaveMetronCredentialsCommand}"
+                                    HorizontalAlignment="Left" Margin="0,4,0,0" />
+                        </StackPanel>
+
+                        <TextBlock Text="{Binding SourcesStatus}" FontSize="12" Foreground="{DynamicResource PbTextFaintBrush}" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
+            <!-- Trackers -->
+            <Border Classes="groupBox" Tag="connections.trackers">
+                <StackPanel>
+                    <Border Classes="groupHeader">
+                        <TextBlock Text="Trackers" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
+                    </Border>
+                    <StackPanel Margin="14" Spacing="16">
+
+                        <StackPanel Spacing="10">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <TextBlock Text="AniList" FontSize="11.5" FontWeight="SemiBold" Foreground="{DynamicResource PbTextFaintBrush}" />
+                                <TextBlock Text="Connected" FontSize="11" Foreground="#4CAF50" IsVisible="{Binding IsAniListConnected}" />
+                                <TextBlock Text="Not connected" FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" IsVisible="{Binding !IsAniListConnected}" />
+                            </StackPanel>
+                            <TextBlock Text="Register your own app at anilist.co/settings/developer, then paste its Client ID." FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" />
+                            <StackPanel Orientation="Horizontal" Spacing="10">
+                                <TextBox Text="{Binding AniListClientId}" Width="220" Watermark="Client ID" />
+                                <Button Classes="headerAction primary" Content="Connect" Command="{Binding ConnectAniListCommand}" />
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Spacing="10">
+                                <TextBox Text="{Binding AniListPastedToken}" Width="320" Watermark="Paste token here" />
+                                <Button Classes="headerAction" Content="Save" Command="{Binding CompleteAniListConnectCommand}" />
+                            </StackPanel>
+                        </StackPanel>
+
+                        <StackPanel Spacing="10" Margin="0,10,0,0">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <TextBlock Text="MyAnimeList" FontSize="11.5" FontWeight="SemiBold" Foreground="{DynamicResource PbTextFaintBrush}" />
+                                <TextBlock Text="Connected" FontSize="11" Foreground="#4CAF50" IsVisible="{Binding IsMyAnimeListConnected}" />
+                                <TextBlock Text="Not connected" FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" IsVisible="{Binding !IsMyAnimeListConnected}" />
+                            </StackPanel>
+                            <TextBlock Text="Register your own app at myanimelist.net/apiconfig/create (needs manual approval), then paste its Client ID." FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" />
+                            <StackPanel Orientation="Horizontal" Spacing="10">
+                                <TextBox Text="{Binding MyAnimeListClientId}" Width="220" Watermark="Client ID" />
+                                <Button Classes="headerAction primary" Content="Connect" Command="{Binding ConnectMyAnimeListCommand}" />
+                            </StackPanel>
+                            <TextBlock Text="The page after sign-in will fail to load - that's expected. Copy the &quot;code&quot; value from its address bar." FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" />
+                            <StackPanel Orientation="Horizontal" Spacing="10">
+                                <TextBox Text="{Binding MyAnimeListPastedCode}" Width="320" Watermark="Paste code here" />
+                                <Button Classes="headerAction" Content="Save" Command="{Binding CompleteMyAnimeListConnectCommand}" />
+                            </StackPanel>
+                        </StackPanel>
+
+                        <StackPanel Spacing="10" Margin="0,10,0,0">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <TextBlock Text="Shikimori" FontSize="11.5" FontWeight="SemiBold" Foreground="{DynamicResource PbTextFaintBrush}" />
+                                <TextBlock Text="Connected" FontSize="11" Foreground="#4CAF50" IsVisible="{Binding IsShikimoriConnected}" />
+                                <TextBlock Text="Not connected" FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" IsVisible="{Binding !IsShikimoriConnected}" />
+                            </StackPanel>
+                            <TextBlock Text="Register your own app at shikimori.one/oauth/applications, then paste its Client ID and Secret." FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" />
+                            <StackPanel Orientation="Horizontal" Spacing="10">
+                                <TextBox Text="{Binding ShikimoriClientId}" Width="220" Watermark="Client ID" />
+                                <TextBox Text="{Binding ShikimoriClientSecret}" Width="220" Watermark="Client Secret" PasswordChar="•" />
+                                <Button Classes="headerAction primary" Content="Connect" Command="{Binding ConnectShikimoriCommand}" />
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Spacing="10">
+                                <TextBox Text="{Binding ShikimoriPastedCode}" Width="320" Watermark="Paste code here" />
+                                <Button Classes="headerAction" Content="Save" Command="{Binding CompleteShikimoriConnectCommand}" />
+                            </StackPanel>
+                        </StackPanel>
+
+                        <StackPanel Spacing="10" Margin="0,10,0,0">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <TextBlock Text="Bangumi" FontSize="11.5" FontWeight="SemiBold" Foreground="{DynamicResource PbTextFaintBrush}" />
+                                <TextBlock Text="Connected" FontSize="11" Foreground="#4CAF50" IsVisible="{Binding IsBangumiConnected}" />
+                                <TextBlock Text="Not connected" FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" IsVisible="{Binding !IsBangumiConnected}" />
+                            </StackPanel>
+                            <TextBlock Text="Generate a Personal Access Token at bgm.tv/dev/app, then paste it here - no browser sign-in needed." FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" />
+                            <StackPanel Orientation="Horizontal" Spacing="10">
+                                <TextBox Text="{Binding BangumiPersonalAccessToken}" Width="320" Watermark="Personal Access Token" PasswordChar="•" />
+                                <Button Classes="headerAction primary" Content="Save" Command="{Binding SaveBangumiTokenCommand}" />
+                            </StackPanel>
+                        </StackPanel>
+
+                        <StackPanel Spacing="10" Margin="0,10,0,0">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <TextBlock Text="MangaBaka" FontSize="11.5" FontWeight="SemiBold" Foreground="{DynamicResource PbTextFaintBrush}" />
+                                <TextBlock Text="Connected" FontSize="11" Foreground="#4CAF50" IsVisible="{Binding IsMangaBakaConnected}" />
+                                <TextBlock Text="Not connected" FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" IsVisible="{Binding !IsMangaBakaConnected}" />
+                            </StackPanel>
+                            <TextBlock Text="Generate a Personal Access Token at mangabaka.org → My profile → Settings → API and Apps, then paste it here. The token has full access to your MangaBaka account - keep it private." FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" />
+                            <StackPanel Orientation="Horizontal" Spacing="10">
+                                <TextBox Text="{Binding MangaBakaPersonalAccessToken}" Width="320" Watermark="Personal Access Token" PasswordChar="•" />
+                                <Button Classes="headerAction primary" Content="Save" Command="{Binding SaveMangaBakaTokenCommand}" />
+                            </StackPanel>
+                        </StackPanel>
+
+                        <TextBlock Text="{Binding TrackersStatus}" FontSize="12" Foreground="{DynamicResource PbTextFaintBrush}" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

@@ -69,7 +69,11 @@
                 <TextBlock Grid.Column="1" Text="{Binding Label}" FontSize="12.5" Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
 
                 <Grid Grid.Column="2" ColumnDefinitions="*,Auto" IsVisible="{Binding IsTextKind}">
-                    <TextBox Grid.Column="0" Text="{Binding Value}" />
+                    <TextBox Grid.Column="0" Text="{Binding Value}" IsVisible="{Binding IsPlainTextKind}" />
+                    <!-- Free-text-with-autocomplete field, e.g. Format (docs/superpowers/specs/2026-08-27-
+                         metadata-model-phase4e-format-signal-suggestions-design.md). -->
+                    <AutoCompleteBox Grid.Column="0" Text="{Binding Value}" ItemsSource="{Binding AutocompleteOptions}"
+                                     IsVisible="{Binding HasAutocomplete}" />
                     <!-- Templated/token text field editor (docs/ce-feature-inventory.md §A) - inserts the
                          literal placeholder; BulkIssuePropertiesScreenViewModel.Save expands it per issue. -->
                     <Button x:Name="TokenButton" Grid.Column="1" Classes="toolbarPill" Content="{}{ }" Margin="6,0,0,0" ToolTip.Tip="Insert a token">

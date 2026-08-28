@@ -29,6 +29,23 @@ public static class PaperbunkrDb
         using var context = CreateContext();
         context.Database.Migrate();
         SeedSystemSmartLists(context);
+        BackfillCharacterIndex(context);
+    }
+
+    /// <summary>
+    /// One-time backfill of the derived <c>Character</c> index over existing <c>Issue.Characters</c>
+    /// text (docs/superpowers/specs/2026-08-27-metadata-model-phase4g-age-progression-design.md).
+    /// Guarded on "no Character rows yet" so a normal launch does no work; a library that genuinely
+    /// has no character metadata just re-checks a cheap <c>Any()</c> each time.
+    /// </summary>
+    private static void BackfillCharacterIndex(PaperbunkrDbContext context)
+    {
+        if (context.Characters.Any())
+        {
+            return;
+        }
+
+        Paperbunkr.Data.Metadata.CharacterResolver.RebuildAll(context);
     }
 
     /// <summary>

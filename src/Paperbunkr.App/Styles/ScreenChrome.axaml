@@ -1,0 +1,43 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!--
+        Shared list-screen chrome (docs/superpowers/specs/2026-08-28-preferences-rework-plan.md
+        Steps 13-15). These style classes were duplicated verbatim in ReadingScreen.axaml and
+        EventsScreen.axaml (and the old PreferencesScreen.axaml) with ad-hoc #383D47 / PbChromeBrush
+        literals; promoted here and rebuilt on design tokens so the Reading Lists and Story Events
+        screens read as part of the same system as the rest of the reworked app.
+    -->
+
+    <Style Selector="Border.statCard">
+        <Setter Property="Background" Value="{DynamicResource PbSurface2Brush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="{DynamicResource PbRadius}" />
+        <Setter Property="Padding" Value="16,12" />
+        <Setter Property="MinWidth" Value="120" />
+    </Style>
+    <Style Selector="TextBlock.statNumber">
+        <Setter Property="FontFamily" Value="{StaticResource PbDisplayFontFamily}" />
+        <Setter Property="FontSize" Value="24" />
+        <Setter Property="Foreground" Value="{DynamicResource PbTextBrush}" />
+    </Style>
+    <Style Selector="TextBlock.statLabel">
+        <Setter Property="FontSize" Value="10.5" />
+        <Setter Property="Foreground" Value="{DynamicResource PbTextFaintBrush}" />
+        <Setter Property="Margin" Value="0,2,0,0" />
+    </Style>
+
+    <Style Selector="Border.issueRow">
+        <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusSm}" />
+        <Setter Property="Padding" Value="12,9" />
+    </Style>
+
+    <Style Selector="TextBox.searchBox">
+        <Setter Property="Background" Value="{DynamicResource PbSurface2Brush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusSm}" />
+        <Setter Property="FontSize" Value="12.5" />
+        <Setter Property="Padding" Value="10,6" />
+    </Style>
+</Styles>

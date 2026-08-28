@@ -35,6 +35,7 @@ public static class SmartListCatalog
             new(SmartListField.ReadingMode, "Reading Mode", SmartListDataType.Text),
             new(SmartListField.SeriesComplete, "Series Complete", SmartListDataType.Toggle),
             new(SmartListField.ReadingStatus, "Reading Status", SmartListDataType.Text),
+            new(SmartListField.Continuity, "Continuity", SmartListDataType.Text),
 
             // ComicInfo text fields
             new(SmartListField.Title, "Title", SmartListDataType.Text),
@@ -137,6 +138,8 @@ public static class SmartListCatalog
             [SmartListField.ContentType] = i => i.Series?.ContentType.ToString() ?? string.Empty,
             [SmartListField.ReadingMode] = i => i.Series?.ReadingMode.ToString() ?? string.Empty,
             [SmartListField.ReadingStatus] = i => i.Series?.ReadingStatus.ToString() ?? string.Empty,
+            // Joined so Contains/ContainsAny operators work when a series is in several continuities.
+            [SmartListField.Continuity] = i => i.Series is null ? string.Empty : string.Join("; ", i.Series.Continuities.Select(c => c.Name)),
 
             [SmartListField.Title] = i => i.Title ?? string.Empty,
             [SmartListField.Number] = i => i.EffectiveNumber() ?? string.Empty,

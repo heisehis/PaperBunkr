@@ -45,6 +45,43 @@ public static class ContinuityResolver
             .ToList();
     }
 
+    /// <summary>
+    /// Series that belong to <em>both</em> continuities (docs/superpowers/specs/2026-08-27-metadata-
+    /// model-phase4f-continuity-browse-design.md's deferred cross-continuity comparison). Ordered by
+    /// name.
+    /// </summary>
+    public static IReadOnlyList<Series> GetSeriesInBothContinuities(PaperbunkrDbContext context, int continuityAId, int continuityBId)
+    {
+        var inA = context.Series.Where(s => s.Continuities.Any(c => c.Id == continuityAId)).Select(s => s.Id).ToHashSet();
+
+        return context.Series
+            .Include(s => s.Issues)
+            .Where(s => s.Continuities.Any(c => c.Id == continuityBId))
+            .AsEnumerable()
+            .Where(s => inA.Contains(s.Id))
+            .OrderBy(s => s.Name)
+            .ToList();
+    }
+
+    /// <summary>Other continuities that share at least one series with <paramref name="continuityId"/>, each with the shared-series count - the candidate list for a "compare with…" picker.</summary>
+    public static IReadOnlyList<(Continuity Continuity, int SharedSeriesCount)> GetOverlappingContinuities(PaperbunkrDbContext context, int continuityId)
+    {
+        var mySeriesIds = context.Series.Where(s => s.Continuities.Any(c => c.Id == continuityId)).Select(s => s.Id).ToHashSet();
+        if (mySeriesIds.Count == 0)
+        {
+            return new List<(Continuity, int)>();
+        }
+
+        var others = context.Continuities.Include(c => c.Series).Where(c => c.Id != continuityId).ToList();
+
+        return others
+            .Select(c => (Continuity: c, Shared: c.Series.Count(s => mySeriesIds.Contains(s.Id))))
+            .Where(t => t.Shared > 0)
+            .OrderByDescending(t => t.Shared)
+            .ThenBy(t => t.Continuity.Name)
+            .ToList();
+    }
+
     /// <summary>Case-insensitive name match before inserting, so careless retyping ("Earth-616" vs "earth-616") doesn't create near-duplicate continuities.</summary>
     public static Continuity GetOrCreate(PaperbunkrDbContext context, string name)
     {

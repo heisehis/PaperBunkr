@@ -111,6 +111,34 @@ public class IssuePropertiesScreenViewModelTests : IDisposable
     }
 
     [Fact]
+    public void Save_RoundTripsBookAge_AndReDerivesCharacterIndex()
+    {
+        var vm = new IssuePropertiesScreenViewModel(() => { }, () => new PaperbunkrDbContext(_dbOptions));
+        vm.Load(_issueId);
+
+        vm.BookAge = "Silver (1956-69)";
+        vm.Characters = "Batman, Robin";
+
+        vm.SaveCommand.Execute(null);
+
+        var issue = GetIssue();
+        Assert.Equal("Silver (1956-69)", issue.BookAge);
+
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        Assert.Equal(2, context.CharacterAppearances.Count(a => a.IssueId == _issueId));
+
+        // Editing the text down re-syncs (removes the stale appearance).
+        var vm2 = new IssuePropertiesScreenViewModel(() => { }, () => new PaperbunkrDbContext(_dbOptions));
+        vm2.Load(_issueId);
+        Assert.Equal("Silver (1956-69)", vm2.BookAge);
+        vm2.Characters = "Batman";
+        vm2.SaveCommand.Execute(null);
+
+        using var context2 = new PaperbunkrDbContext(_dbOptions);
+        Assert.Single(context2.CharacterAppearances.Where(a => a.IssueId == _issueId));
+    }
+
+    [Fact]
     public void Cancel_NeverTouchesDatabase_RowUnchanged()
     {
         bool wentBack = false;

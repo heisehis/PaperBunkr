@@ -56,10 +56,11 @@ public partial class MainViewModel : ViewModelBase
         BulkSeriesProperties = new BulkSeriesPropertiesScreenViewModel(CloseBulkSeriesPropertiesOverlayAndReload);
         Smart = new SmartScreenViewModel(GoDetailForSeries);
         Reading = new ReadingScreenViewModel(new FilePickerService(), GoReaderForIssueInReadingList, OpenReadingListPropertiesOverlay);
-        Events = new EventsScreenViewModel();
+        Events = new EventsScreenViewModel(GoDetailForSeries, GoReaderForIssue, GoReadingWithList, ShowToast);
         Plugin = new PluginScreenViewModel();
         Migration = new MigrationOverlayViewModel(new FilePickerService(), OpenSeriesDetailFromReview);
         ReadingListProperties = new ReadingListPropertiesScreenViewModel(CloseReadingListPropertiesOverlay);
+        NewReadingList = new NewReadingListViewModel(new FilePickerService(), OnNewReadingListCreated, CloseNewReadingListDialog);
         QuickRate = new QuickRateScreenViewModel(CloseQuickRateOverlay);
         DesignShowcase = new DesignShowcaseScreenViewModel();
 
@@ -166,6 +167,7 @@ public partial class MainViewModel : ViewModelBase
     public PreferencesScreenViewModel Preferences { get; }
     public MigrationOverlayViewModel Migration { get; }
     public ReadingListPropertiesScreenViewModel ReadingListProperties { get; }
+    public NewReadingListViewModel NewReadingList { get; }
     public QuickRateScreenViewModel QuickRate { get; }
 
     public DesignShowcaseScreenViewModel DesignShowcase { get; }
@@ -197,6 +199,9 @@ public partial class MainViewModel : ViewModelBase
 
     [ObservableProperty]
     private bool _isReadingListPropertiesOverlayOpen;
+
+    [ObservableProperty]
+    private bool _isNewReadingListDialogOpen;
 
     [ObservableProperty]
     private bool _isBookPropertiesOverlayOpen;
@@ -379,6 +384,13 @@ public partial class MainViewModel : ViewModelBase
         CurrentScreen = "reading";
     });
 
+    /// <summary>Opens the Reading screen on a specific list - used by the Story Events "create reading list from continuity" action (docs/superpowers/specs/2026-08-27-metadata-model-phase4f-continuity-browse-design.md).</summary>
+    private void GoReadingWithList(int readingListId)
+    {
+        Reading.LoadReadingList(readingListId);
+        CurrentScreen = "reading";
+    }
+
     [RelayCommand]
     private void GoEvents() => TryLeaveCurrentEditor(() =>
     {
@@ -395,11 +407,11 @@ public partial class MainViewModel : ViewModelBase
 
     /// <summary>Library's empty-state "Scan folders" action (docs/superpowers/specs/2026-08-27-
     /// library-browsing-4b-toolbar-rework-design.md §9) - opens Preferences straight to the
-    /// Libraries tab where folders are added/scanned.</summary>
+    /// Library section where folders are added/scanned.</summary>
     private void GoLibraryFoldersPreferences() => TryLeaveCurrentEditor(() =>
     {
         Preferences.EnsureLoaded();
-        Preferences.ActiveTab = "libraries";
+        Preferences.ActiveSection = Models.PreferencesSection.Library;
         CurrentScreen = "preferences";
     });
 
@@ -436,6 +448,24 @@ public partial class MainViewModel : ViewModelBase
     {
         IsReadingListPropertiesOverlayOpen = false;
         Reading.EnsureListLoaded();
+    }
+
+    /// <summary>The sidebar's "＋" opens this (docs/superpowers/specs/2026-08-28-reading-lists-screen-redesign-design.md → v2).</summary>
+    [RelayCommand]
+    private void OpenNewReadingListDialog()
+    {
+        NewReadingList.Reset();
+        IsNewReadingListDialogOpen = true;
+    }
+
+    [RelayCommand]
+    private void CloseNewReadingListDialog() => IsNewReadingListDialogOpen = false;
+
+    private void OnNewReadingListCreated(int listId)
+    {
+        IsNewReadingListDialogOpen = false;
+        Reading.LoadReadingList(listId);
+        CurrentScreen = "reading";
     }
 
     /// <summary>Book Properties editor entry point (docs/superpowers/specs/2026-08-27-book-properties-
@@ -909,6 +939,10 @@ public partial class MainViewModel : ViewModelBase
         if (IsMigrationOverlayOpen)
         {
             CloseMigrationOverlay();
+        }
+        else if (IsNewReadingListDialogOpen)
+        {
+            CloseNewReadingListDialog();
         }
         else if (IsReadingListPropertiesOverlayOpen)
         {

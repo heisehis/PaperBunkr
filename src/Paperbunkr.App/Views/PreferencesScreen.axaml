@@ -1,20 +1,70 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Paperbunkr.App.ViewModels"
-             xmlns:views="using:Paperbunkr.App.Views"
-             xmlns:models="using:Paperbunkr.App.Models"
-             xmlns:entities="using:Paperbunkr.Data.Entities"
-             xmlns:conv="using:Avalonia.Data.Converters"
+             xmlns:pref="using:Paperbunkr.App.Views.Preferences"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-             mc:Ignorable="d" d:DesignWidth="900" d:DesignHeight="760"
+             mc:Ignorable="d" d:DesignWidth="960" d:DesignHeight="760"
              x:Class="Paperbunkr.App.Views.PreferencesScreen"
+             x:Name="Root"
              x:DataType="vm:PreferencesScreenViewModel">
 
     <UserControl.Styles>
+        <!-- Sidebar section nav -->
+        <Style Selector="Button.prefNavItem">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="3,0,0,0" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+            <Setter Property="CornerRadius" Value="0" />
+            <Setter Property="Padding" Value="15,10" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="HorizontalContentAlignment" Value="Left" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style Selector="Button.prefNavItem:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource PbAccentSoftBrush}" />
+        </Style>
+        <Style Selector="Button.prefNavItem.active">
+            <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextBrush}" />
+            <Setter Property="FontWeight" Value="Bold" />
+            <Setter Property="Background" Value="{DynamicResource PbSurface2Brush}" />
+        </Style>
+
+        <!-- Search box -->
+        <Style Selector="Border.prefSearchBox">
+            <Setter Property="Background" Value="{DynamicResource PbSurface2Brush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusSm}" />
+            <Setter Property="Padding" Value="10,6" />
+        </Style>
+        <Style Selector="Border.prefSearchBox TextBox">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="MinHeight" Value="0" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+        </Style>
+
+        <!-- Settings group card (design-language restyle of the old groupBox/groupHeader) -->
+        <Style Selector="Border.groupBox">
+            <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="{DynamicResource PbRadius}" />
+            <Setter Property="ClipToBounds" Value="True" />
+        </Style>
+        <Style Selector="Border.groupHeader">
+            <Setter Property="Background" Value="{DynamicResource PbSurface2Brush}" />
+            <Setter Property="Padding" Value="14,11" />
+        </Style>
+
+        <!-- Header-row action buttons (kept: already token-based) -->
         <Style Selector="Button.headerAction">
             <Setter Property="Padding" Value="14,8" />
-            <Setter Property="CornerRadius" Value="5" />
+            <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusSm}" />
             <Setter Property="FontSize" Value="12.5" />
             <Setter Property="FontWeight" Value="SemiBold" />
             <Setter Property="Cursor" Value="Hand" />
@@ -30,33 +80,6 @@
             <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
             <Setter Property="BorderThickness" Value="1" />
             <Setter Property="Foreground" Value="{DynamicResource PbBadgeTextBrush}" />
-        </Style>
-
-        <Style Selector="Button.prefTab">
-            <Setter Property="Padding" Value="14,9" />
-            <Setter Property="Background" Value="Transparent" />
-            <Setter Property="BorderThickness" Value="0,0,0,2" />
-            <Setter Property="BorderBrush" Value="Transparent" />
-            <Setter Property="CornerRadius" Value="0" />
-            <Setter Property="FontSize" Value="13" />
-            <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
-            <Setter Property="Cursor" Value="Hand" />
-        </Style>
-        <Style Selector="Button.prefTab.active">
-            <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
-            <Setter Property="Foreground" Value="{DynamicResource PbTextBrush}" />
-            <Setter Property="FontWeight" Value="Bold" />
-        </Style>
-
-        <Style Selector="Border.groupBox">
-            <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
-            <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="CornerRadius" Value="7" />
-            <Setter Property="ClipToBounds" Value="True" />
-        </Style>
-        <Style Selector="Border.groupHeader">
-            <Setter Property="Background" Value="{DynamicResource PbChromeBrush}" />
-            <Setter Property="Padding" Value="14,11" />
         </Style>
 
         <Style Selector="Button.sideItemButton">
@@ -75,927 +98,103 @@
             <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
             <Setter Property="BorderThickness" Value="0,1,0,0" />
         </Style>
+
+        <!-- Search-result "pulse" target - the shell code-behind toggles the .searchPulse class. -->
+        <Style Selector="Border.groupBox">
+            <Setter Property="Transitions">
+                <Transitions>
+                    <BoxShadowsTransition Property="BoxShadow" Duration="0:0:0.45" />
+                </Transitions>
+            </Setter>
+        </Style>
+        <Style Selector="Border.groupBox.searchPulse">
+            <Setter Property="BoxShadow" Value="{StaticResource PbGlowRing}" />
+        </Style>
     </UserControl.Styles>
 
-    <ScrollViewer>
-        <StackPanel>
-
-            <Grid Margin="28,20,28,16">
-                <StackPanel VerticalAlignment="Bottom">
-                    <TextBlock Text="Preferences" FontSize="22" FontWeight="Bold" Foreground="{DynamicResource PbTextBrush}" />
-                    <TextBlock Text="App settings and appearance" FontSize="12.5" Foreground="{DynamicResource PbTextFaintBrush}" Margin="0,4,0,0" />
-                </StackPanel>
-            </Grid>
-            <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,0,0,1" />
-
-            <!-- Tab strip - Appearance, Behavior, Libraries, Reader, and Advanced are real today; Scripts confirmed a dead end, no tab -->
-            <StackPanel Orientation="Horizontal" Margin="28,0,28,0">
-                <Button Classes="prefTab" Classes.active="{Binding IsAppearanceTab}"
-                        Command="{Binding GoAppearanceCommand}" Content="Appearance" />
-                <Button Classes="prefTab" Classes.active="{Binding IsBehaviorTab}"
-                        Command="{Binding GoBehaviorCommand}" Content="Behavior" />
-                <Button Classes="prefTab" Classes.active="{Binding IsLibrariesTab}"
-                        Command="{Binding GoLibrariesCommand}" Content="Libraries"
-                        AutomationProperties.AutomationId="PreferencesLibrariesTabButton" />
-                <Button Classes="prefTab" Classes.active="{Binding IsReaderTab}"
-                        Command="{Binding GoReaderCommand}" Content="Reader" />
-                <Button Classes="prefTab" Classes.active="{Binding IsAdvancedTab}"
-                        Command="{Binding GoAdvancedCommand}" Content="Advanced" />
-                <Button Classes="prefTab" Classes.active="{Binding IsPluginsTab}"
-                        Command="{Binding GoPluginsCommand}" Content="Plugins" />
-            </StackPanel>
-            <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,0,0,1" Margin="0,0,0,24" />
-
-            <StackPanel IsVisible="{Binding IsAppearanceTab}" Margin="28,0,28,40" Spacing="20">
-
-                <!-- Skins -->
-                <Border Classes="groupBox">
-                    <StackPanel>
-                        <Border Classes="groupHeader">
-                            <TextBlock Text="Skins" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
-                        </Border>
-                        <ItemsControl x:Name="SkinsList" ItemsSource="{Binding Skins}">
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate x:DataType="models:SkinSummary">
-                                    <Border Classes="skinRow">
-                                        <Button Classes="sideItemButton"
-                                                Command="{Binding #SkinsList.((vm:PreferencesScreenViewModel)DataContext).SelectSkinCommand}"
-                                                CommandParameter="{Binding}">
-                                            <Grid ColumnDefinitions="*,Auto">
-                                                <TextBlock Grid.Column="0" Text="{Binding Name}" FontSize="13"
-                                                           Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
-                                                <TextBlock Grid.Column="1" Text="Active" IsVisible="{Binding IsActive}"
-                                                           FontSize="11" FontWeight="Bold" Foreground="{DynamicResource PbAccentTextBrush}"
-                                                           VerticalAlignment="Center" />
-                                            </Grid>
-                                        </Button>
-                                    </Border>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-                    </StackPanel>
-                </Border>
-
-                <!-- Install Skin -->
-                <Border Classes="groupBox">
-                    <StackPanel>
-                        <Border Classes="groupHeader">
-                            <TextBlock Text="Install Skin" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
-                        </Border>
-                        <StackPanel Margin="14" Spacing="10">
-                            <StackPanel Orientation="Horizontal" Spacing="10">
-                                <Button Classes="headerAction primary" Command="{Binding BrowseForSkinCommand}">
-                                    <StackPanel Orientation="Horizontal" Spacing="6">
-                                        <Border Classes="icon" Background="{DynamicResource PbBadgeTextBrush}">
-                                            <Border.OpacityMask><ImageBrush Source="/Assets/Icons/Folder_Open.png" Stretch="Uniform" /></Border.OpacityMask>
-                                        </Border>
-                                        <TextBlock Text="Browse…" />
-                                    </StackPanel>
-                                </Button>
-                                <Button Classes="headerAction ghost" Command="{Binding OpenSkinsFolderCommand}">
-                                    <StackPanel Orientation="Horizontal" Spacing="6">
-                                        <Border Classes="icon">
-                                            <Border.OpacityMask><ImageBrush Source="/Assets/Icons/Folder_Open.png" Stretch="Uniform" /></Border.OpacityMask>
-                                        </Border>
-                                        <TextBlock Text="Open Skins Folder" />
-                                    </StackPanel>
-                                </Button>
-                            </StackPanel>
-                            <StackPanel Orientation="Horizontal" Spacing="5" IsVisible="{Binding HasInstallSkinError}">
-                                <Border Classes="icon" Width="12" Height="12" Background="#D96C6C">
-                                    <Border.OpacityMask><ImageBrush Source="/Assets/Icons/Circle_Warning.png" Stretch="Uniform" /></Border.OpacityMask>
-                                </Border>
-                                <TextBlock Text="{Binding InstallSkinError}" Foreground="#D96C6C" FontSize="12" TextWrapping="Wrap" />
-                            </StackPanel>
-                        </StackPanel>
-                    </StackPanel>
-                </Border>
-
-                <!-- Font -->
-                <Border Classes="groupBox">
-                    <StackPanel>
-                        <Border Classes="groupHeader">
-                            <TextBlock Text="Font" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
-                        </Border>
-                        <StackPanel Margin="14">
-                            <ComboBox ItemsSource="{Binding FontFamilies}" SelectedItem="{Binding SelectedFontFamily}" Width="280" />
-                        </StackPanel>
-                    </StackPanel>
-                </Border>
-
-                <!-- Motion (docs/superpowers/specs/2026-08-24-design-language-foundation-design.md) -->
-                <Border Classes="groupBox">
-                    <StackPanel>
-                        <Border Classes="groupHeader">
-                            <TextBlock Text="Motion" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
-                        </Border>
-                        <StackPanel Margin="14">
-                            <CheckBox Content="Reduce motion" IsChecked="{Binding ReducedMotion}" />
-                            <TextBlock Text="Shortens UI transitions to effectively instant." FontSize="11.5"
-                                       Foreground="{DynamicResource PbTextFaintBrush}" Margin="0,4,0,0" />
-                        </StackPanel>
-                    </StackPanel>
-                </Border>
-
-                <!-- Developer - debug-only, hidden entirely in Release builds (PreferencesScreenViewModel.IsDebugBuild). -->
-                <Border Classes="groupBox" IsVisible="{Binding IsDebugBuild}">
-                    <StackPanel>
-                        <Border Classes="groupHeader">
-                            <TextBlock Text="Developer" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
-                        </Border>
-                        <StackPanel Margin="14">
-                            <Button Content="Open Design Showcase" Command="{Binding OpenDesignShowcaseCommand}" />
-                        </StackPanel>
-                    </StackPanel>
-                </Border>
-
-                <!-- Future - visibly-disabled placeholder, room to grow -->
-                <Border Classes="groupBox" Opacity="0.5">
-                    <StackPanel>
-                        <Border Classes="groupHeader">
-                            <TextBlock Text="Future" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
-                        </Border>
-                        <StackPanel Margin="14">
-                            <TextBlock Text="Cover Shape — coming soon" FontSize="12.5" Foreground="{DynamicResource PbTextFaintBrush}" />
-                        </StackPanel>
-                    </StackPanel>
-                </Border>
-
-            </StackPanel>
-
-            <StackPanel IsVisible="{Binding IsBehaviorTab}" Margin="28,0,28,40" Spacing="20">
-
-                <Border Classes="groupBox">
-                    <StackPanel>
-                        <Border Classes="groupHeader">
-                            <TextBlock Text="Reading" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
-                        </Border>
-                        <StackPanel Margin="14" Spacing="12">
-                            <CheckBox IsChecked="{Binding OpenLastPage}" Foreground="{DynamicResource PbTextBrush}" FontSize="13"
-                                      Content="Resume issues where you left off" />
-                            <CheckBox IsChecked="{Binding AutoNavigateComics}" Foreground="{DynamicResource PbTextBrush}" FontSize="13"
-                                      Content="Reading past the last page opens the next issue" />
-                        </StackPanel>
-                    </StackPanel>
-                </Border>
-
-            </StackPanel>
-
-            <StackPanel IsVisible="{Binding IsReaderTab}" Margin="28,0,28,40" Spacing="20">
-
-                <Border Classes="groupBox">
-                    <StackPanel>
-                        <Border Classes="groupHeader">
-                            <TextBlock Text="Right to Left" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
-                        </Border>
-                        <StackPanel Margin="14" Spacing="12">
-                            <CheckBox IsChecked="{Binding ReverseRtlNavigation}" Foreground="{DynamicResource PbTextBrush}" FontSize="13"
-                                      Content="Reverse left/right page-turn direction for right-to-left books" />
-                        </StackPanel>
-                    </StackPanel>
-                </Border>
-
-                <Border Classes="groupBox">
-                    <StackPanel>
-                        <Border Classes="groupHeader">
-                            <TextBlock Text="Display" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
-                        </Border>
-                        <StackPanel Margin="14" Spacing="12">
-                            <CheckBox IsChecked="{Binding HighQualityPageDisplay}" Foreground="{DynamicResource PbTextBrush}" FontSize="13"
-                                      Content="High quality page display (smoother scaling, more CPU)" />
-
-                            <Grid ColumnDefinitions="Auto,Auto" ColumnSpacing="10">
-                                <TextBlock Grid.Column="0" Text="Default fit mode" FontSize="13" VerticalAlignment="Center"
-                                           Foreground="{DynamicResource PbTextBrush}" />
-                                <ComboBox Grid.Column="1" ItemsSource="{x:Static vm:PreferencesScreenViewModel.FitModeOptions}"
-                                          SelectedItem="{Binding DefaultPageFitMode}" Width="150" />
-                            </Grid>
-                            <TextBlock Text="Used for any book that hasn't been set to a different fit mode from the reader itself."
-                                       FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" Margin="0,-6,0,0" />
-
-                            <CheckBox IsChecked="{Binding DefaultAutoRotate}" Foreground="{DynamicResource PbTextBrush}" FontSize="13"
-                                      Content="Auto-rotate landscape pages by default" />
-
-                            <Grid ColumnDefinitions="Auto,Auto" ColumnSpacing="10">
-                                <TextBlock Grid.Column="0" Text="Double-page spread" FontSize="13" VerticalAlignment="Center"
-                                           Foreground="{DynamicResource PbTextBrush}" />
-                                <ComboBox Grid.Column="1" ItemsSource="{x:Static vm:PreferencesScreenViewModel.PageLayoutModeOptions}"
-                                          SelectedItem="{Binding DefaultPageLayoutMode}" Width="150" />
-                            </Grid>
-                            <TextBlock Text="Used for any series that hasn't been set to a different double-page mode from the reader toolbar itself."
-                                       FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" Margin="0,-6,0,0" />
-
-                            <Grid ColumnDefinitions="Auto,Auto" ColumnSpacing="10">
-                                <TextBlock Grid.Column="0" Text="Page transition" FontSize="13" VerticalAlignment="Center"
-                                           Foreground="{DynamicResource PbTextBrush}" />
-                                <ComboBox Grid.Column="1" ItemsSource="{x:Static vm:PreferencesScreenViewModel.PageTransitionStyleOptions}"
-                                          SelectedItem="{Binding PageTransitionStyle}" Width="150" />
-                            </Grid>
-                            <TextBlock Text="Animates turning the page (arrow keys, click-zones, flick, scrubber) - jumping to a page (e.g. a thumbnail click) is always instant."
-                                       FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" Margin="0,-6,0,0" />
-
-                            <StackPanel Spacing="4">
-                                <TextBlock Text="{Binding PageTransitionDurationMs, StringFormat='Page transition speed: {0}ms'}" FontSize="13"
-                                           Foreground="{DynamicResource PbTextBrush}" />
-                                <Slider Minimum="100" Maximum="600" TickFrequency="50" IsSnapToTickEnabled="True"
-                                        Value="{Binding PageTransitionDurationMs}" Width="220" HorizontalAlignment="Left" />
-                            </StackPanel>
-                        </StackPanel>
-                    </StackPanel>
-                </Border>
-
-                <Border Classes="groupBox">
-                    <StackPanel>
-                        <Border Classes="groupHeader">
-                            <TextBlock Text="Zoom &amp; Navigation" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
-                        </Border>
-                        <StackPanel Margin="14" Spacing="12">
-                            <CheckBox IsChecked="{Binding ResetZoomOnPageChange}" Foreground="{DynamicResource PbTextBrush}" FontSize="13"
-                                      Content="Reset zoom when turning the page" />
-
-                            <StackPanel Spacing="4">
-                                <TextBlock Text="{Binding MouseWheelSpeed, StringFormat='Mouse wheel scroll speed: {0:F1}'}" FontSize="13"
-                                           Foreground="{DynamicResource PbTextBrush}" />
-                                <Slider Minimum="0.5" Maximum="5" Value="{Binding MouseWheelSpeed}" Width="220" HorizontalAlignment="Left" />
-                            </StackPanel>
-                        </StackPanel>
-                    </StackPanel>
-                </Border>
-
-                <!-- Live image adjustment defaults (docs/superpowers/specs/2026-08-10-reader-polish-continuous-scroll-chrome-overlays-design.md §9) - additive with each book's own per-issue override, set from the reader toolbar's Adjust panel. -->
-                <Border Classes="groupBox">
-                    <StackPanel>
-                        <Border Classes="groupHeader">
-                            <TextBlock Text="Image Adjustment" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
-                        </Border>
-                        <StackPanel Margin="14" Spacing="12">
-                            <TextBlock Text="Default brightness/contrast/saturation/gamma for every book - a book's own reader toolbar can adjust further from here."
-                                       FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" />
-
-                            <StackPanel Spacing="4">
-                                <TextBlock Text="{Binding DefaultBrightness, StringFormat='Brightness: {0:F0}'}" FontSize="13"
-                                           Foreground="{DynamicResource PbTextBrush}" />
-                                <Slider Minimum="-100" Maximum="100" Value="{Binding DefaultBrightness}" Width="220" HorizontalAlignment="Left" />
-                            </StackPanel>
-                            <StackPanel Spacing="4">
-                                <TextBlock Text="{Binding DefaultContrast, StringFormat='Contrast: {0:F0}'}" FontSize="13"
-                                           Foreground="{DynamicResource PbTextBrush}" />
-                                <Slider Minimum="-100" Maximum="100" Value="{Binding DefaultContrast}" Width="220" HorizontalAlignment="Left" />
-                            </StackPanel>
-                            <StackPanel Spacing="4">
-                                <TextBlock Text="{Binding DefaultSaturation, StringFormat='Saturation: {0:F0}'}" FontSize="13"
-                                           Foreground="{DynamicResource PbTextBrush}" />
-                                <Slider Minimum="-100" Maximum="100" Value="{Binding DefaultSaturation}" Width="220" HorizontalAlignment="Left" />
-                            </StackPanel>
-                            <StackPanel Spacing="4">
-                                <TextBlock Text="{Binding DefaultGamma, StringFormat='Gamma: {0:F0}'}" FontSize="13"
-                                           Foreground="{DynamicResource PbTextBrush}" />
-                                <Slider Minimum="-100" Maximum="100" Value="{Binding DefaultGamma}" Width="220" HorizontalAlignment="Left" />
-                            </StackPanel>
-                        </StackPanel>
-                    </StackPanel>
-                </Border>
-
-                <!-- Background &amp; margin (docs/superpowers/specs/2026-08-10-reader-polish-continuous-scroll-chrome-overlays-design.md §10) - global-only, no per-book override. -->
-                <Border Classes="groupBox">
-                    <StackPanel>
-                        <Border Classes="groupHeader">
-                            <TextBlock Text="Background &amp; Margin" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
-                        </Border>
-                        <StackPanel Margin="14" Spacing="12">
-                            <Grid ColumnDefinitions="Auto,Auto" ColumnSpacing="10">
-                                <TextBlock Grid.Column="0" Text="Canvas background" FontSize="13" VerticalAlignment="Center"
-                                           Foreground="{DynamicResource PbTextBrush}" />
-                                <ComboBox Grid.Column="1" ItemsSource="{x:Static vm:PreferencesScreenViewModel.BackgroundModeOptions}"
-                                          SelectedItem="{Binding ImageBackgroundMode}" Width="150" />
-                            </Grid>
-                            <TextBlock Text="Auto keeps the app's own background; Color fills the canvas with the color below."
-                                       FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" Margin="0,-6,0,0" />
-
-                            <Grid ColumnDefinitions="Auto,Auto,Auto" ColumnSpacing="10" IsVisible="{Binding ImageBackgroundMode, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:ImageBackgroundMode.Color}}">
-                                <TextBlock Grid.Column="0" Text="Background color" FontSize="13" VerticalAlignment="Center"
-                                           Foreground="{DynamicResource PbTextBrush}" />
-                                <!-- Preset dropdown (user direction - a dropdown, not swatch buttons); the text field alongside still takes any named or hex color, including ones not in this preset list. -->
-                                <ComboBox Grid.Column="1" ItemsSource="{x:Static vm:PreferencesScreenViewModel.BackgroundColorPresets}"
-                                          SelectedItem="{Binding BackgroundColor}" Width="130" PlaceholderText="Presets" />
-                                <TextBox Grid.Column="2" Text="{Binding BackgroundColor}" Width="130" ToolTip.Tip="A named color (e.g. WhiteSmoke) or hex value (e.g. #F5F5F5)" />
-                            </Grid>
-
-                            <CheckBox IsChecked="{Binding PageMarginEnabled}" Foreground="{DynamicResource PbTextBrush}" FontSize="13"
-                                      Content="Add a margin around the page" />
-
-                            <StackPanel Spacing="4" IsVisible="{Binding PageMarginEnabled}">
-                                <TextBlock Text="{Binding PageMarginPercentWidth, StringFormat='Margin width: {0:P0}'}" FontSize="13"
-                                           Foreground="{DynamicResource PbTextBrush}" />
-                                <Slider Minimum="0" Maximum="0.3" Value="{Binding PageMarginPercentWidth}" Width="220" HorizontalAlignment="Left" />
-                            </StackPanel>
-                        </StackPanel>
-                    </StackPanel>
-                </Border>
-
-                <!-- Keyboard Shortcuts (docs/alpha-roadmap.md P5 follow-up, extended by
-                     docs/superpowers/specs/2026-08-16-remappable-reader-shortcuts-design.md) -
-                     data-driven off KeyboardCommandRegistry, so a future remappable command just
-                     needs a new registry entry, not a XAML change. Split into three sections by
-                     KeyboardCommandDescriptor.Group (Navigation/Zoom & Fit/Display) since a flat
-                     24-row list stopped being scannable once this grew past the original 2
-                     commands; the conflict-error banner stays a single shared element above all
-                     three, since a conflict is a conflict regardless of which section it's in. -->
-                <WrapPanel Margin="0,0,0,10">
-                    <Button Classes="headerAction ghost" Margin="0,0,8,0" Content="Import Layout…"
-                            Command="{Binding ImportKeyBindingsCommand}"
-                            AutomationProperties.AutomationId="ImportKeyBindingsButton" />
-                    <Button Classes="headerAction ghost" Content="Export Layout…"
-                            Command="{Binding ExportKeyBindingsCommand}"
-                            AutomationProperties.AutomationId="ExportKeyBindingsButton" />
-                </WrapPanel>
-
-                <StackPanel Orientation="Horizontal" Spacing="5" IsVisible="{Binding HasKeyBindingConflictError}">
-                    <Border Classes="icon" Width="12" Height="12" Background="#D96C6C">
-                        <Border.OpacityMask><ImageBrush Source="/Assets/Icons/Circle_Warning.png" Stretch="Uniform" /></Border.OpacityMask>
-                    </Border>
-                    <TextBlock Text="{Binding KeyBindingConflictError}" Foreground="#D96C6C" FontSize="12" TextWrapping="Wrap" />
-                </StackPanel>
-
-                <Border Classes="groupBox">
-                    <StackPanel>
-                        <Border Classes="groupHeader">
-                            <TextBlock Text="Navigation" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
-                        </Border>
-                        <StackPanel Margin="14">
-                            <ItemsControl ItemsSource="{Binding NavigationKeyBindings}">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate x:DataType="vm:KeyBindingRowViewModel">
-                                        <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,4">
-                                            <TextBlock Grid.Column="0" Text="{Binding Label}" FontSize="13" VerticalAlignment="Center"
-                                                       Foreground="{DynamicResource PbTextBrush}" />
-                                            <ComboBox Grid.Column="1" ItemsSource="{Binding Options}"
-                                                      SelectedItem="{Binding SelectedKey}" Width="150" />
-                                        </Grid>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-                        </StackPanel>
-                    </StackPanel>
-                </Border>
-
-                <Border Classes="groupBox">
-                    <StackPanel>
-                        <Border Classes="groupHeader">
-                            <TextBlock Text="Zoom &amp; Fit" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
-                        </Border>
-                        <StackPanel Margin="14">
-                            <ItemsControl ItemsSource="{Binding ZoomFitKeyBindings}">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate x:DataType="vm:KeyBindingRowViewModel">
-                                        <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,4">
-                                            <TextBlock Grid.Column="0" Text="{Binding Label}" FontSize="13" VerticalAlignment="Center"
-                                                       Foreground="{DynamicResource PbTextBrush}" />
-                                            <ComboBox Grid.Column="1" ItemsSource="{Binding Options}"
-                                                      SelectedItem="{Binding SelectedKey}" Width="150" />
-                                        </Grid>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-                        </StackPanel>
-                    </StackPanel>
-                </Border>
-
-                <Border Classes="groupBox">
-                    <StackPanel>
-                        <Border Classes="groupHeader">
-                            <TextBlock Text="Display" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
-                        </Border>
-                        <StackPanel Margin="14" Spacing="10">
-                            <ItemsControl ItemsSource="{Binding DisplayKeyBindings}">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate x:DataType="vm:KeyBindingRowViewModel">
-                                        <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,4">
-                                            <TextBlock Grid.Column="0" Text="{Binding Label}" FontSize="13" VerticalAlignment="Center"
-                                                       Foreground="{DynamicResource PbTextBrush}" />
-                                            <ComboBox Grid.Column="1" ItemsSource="{Binding Options}"
-                                                      SelectedItem="{Binding SelectedKey}" Width="150" />
-                                        </Grid>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-
-                            <TextBlock Text="Also everywhere: Tab / Shift+Tab moves focus, Enter or Space activates the focused control, Esc cancels or closes the current editor."
-                                       FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" Margin="0,6,0,0" />
-                        </StackPanel>
-                    </StackPanel>
-                </Border>
-
-            </StackPanel>
-
-            <StackPanel IsVisible="{Binding IsLibrariesTab}" Margin="28,0,28,40" Spacing="20">
-
-                <!-- Comic Library Folders (was mislabeled "Book Folders" - it manages WatchedFolders) -->
-                <Border Classes="groupBox">
-                    <StackPanel>
-                        <Border Classes="groupHeader">
-                            <TextBlock Text="Comic Library Folders" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
-                        </Border>
-                        <ItemsControl x:Name="WatchedFoldersList" ItemsSource="{Binding WatchedFolders}">
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate x:DataType="models:WatchedFolderSummary">
-                                    <Border Classes="skinRow">
-                                        <Grid ColumnDefinitions="*,Auto,Auto,Auto" Margin="14,10">
-                                            <TextBlock Grid.Column="0" Text="{Binding Path}" FontSize="13" TextTrimming="CharacterEllipsis"
-                                                       Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
-                                            <CheckBox Grid.Column="1" Margin="0,0,10,0" FontSize="12.5" Content="Watch for changes"
-                                                      Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center"
-                                                      IsChecked="{Binding Watch}"
-                                                      Command="{Binding #WatchedFoldersList.((vm:PreferencesScreenViewModel)DataContext).ToggleWatchCommand}"
-                                                      CommandParameter="{Binding}"
-                                                      AutomationProperties.AutomationId="WatchedFolderWatchCheckBox" />
-                                            <Button Grid.Column="2" Classes="headerAction ghost" Margin="0,0,6,0"
-                                                    Command="{Binding #WatchedFoldersList.((vm:PreferencesScreenViewModel)DataContext).OpenFolderCommand}"
-                                                    CommandParameter="{Binding}">
-                                                <StackPanel Orientation="Horizontal" Spacing="5">
-                                                    <Border Classes="icon" Width="11" Height="11">
-                                                        <Border.OpacityMask><ImageBrush Source="/Assets/Icons/Folder_Open.png" Stretch="Uniform" /></Border.OpacityMask>
-                                                    </Border>
-                                                    <TextBlock Text="Open" />
-                                                </StackPanel>
-                                            </Button>
-                                            <Button Grid.Column="3" Classes="headerAction ghost"
-                                                    Command="{Binding #WatchedFoldersList.((vm:PreferencesScreenViewModel)DataContext).RemoveFolderCommand}"
-                                                    CommandParameter="{Binding}">
-                                                <StackPanel Orientation="Horizontal" Spacing="5">
-                                                    <Border Classes="icon" Width="11" Height="11">
-                                                        <Border.OpacityMask><ImageBrush Source="/Assets/Icons/Trash_Empty.png" Stretch="Uniform" /></Border.OpacityMask>
-                                                    </Border>
-                                                    <TextBlock Text="Remove" />
-                                                </StackPanel>
-                                            </Button>
-                                        </Grid>
-                                    </Border>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-                        <StackPanel Margin="14" Spacing="10">
-                            <StackPanel Orientation="Horizontal" Spacing="10">
-                                <Button Classes="headerAction primary" Command="{Binding AddFolderCommand}">
-                                    <StackPanel Orientation="Horizontal" Spacing="6">
-                                        <Border Classes="icon" Background="{DynamicResource PbBadgeTextBrush}">
-                                            <Border.OpacityMask><ImageBrush Source="/Assets/Icons/Folder_Add.png" Stretch="Uniform" /></Border.OpacityMask>
-                                        </Border>
-                                        <TextBlock Text="Add Folder…" />
-                                    </StackPanel>
-                                </Button>
-                                <Button Classes="headerAction ghost" Command="{Binding ScanNowCommand}"
-                                        IsEnabled="{Binding !IsScanning}">
-                                    <StackPanel Orientation="Horizontal" Spacing="6">
-                                        <Border Classes="icon">
-                                            <Border.OpacityMask><ImageBrush Source="/Assets/Icons/Folder_Search.png" Stretch="Uniform" /></Border.OpacityMask>
-                                        </Border>
-                                        <TextBlock Text="Scan Now" />
-                                    </StackPanel>
-                                </Button>
-                                <Button Classes="headerAction ghost" Command="{Binding GenerateCoversCommand}"
-                                        IsEnabled="{Binding !IsGeneratingCovers}">
-                                    <StackPanel Orientation="Horizontal" Spacing="6">
-                                        <Border Classes="icon">
-                                            <Border.OpacityMask><ImageBrush Source="/Assets/Icons/Book.png" Stretch="Uniform" /></Border.OpacityMask>
-                                        </Border>
-                                        <TextBlock Text="Generate Covers" />
-                                    </StackPanel>
-                                </Button>
-                                <Button Classes="headerAction ghost" Command="{Binding SyncMetadataCommand}"
-                                        IsEnabled="{Binding !IsSyncingMetadata}"
-                                        ToolTip.Tip="Re-reads embedded ComicInfo.xml for issues already in the library and fills in any blank fields">
-                                    <StackPanel Orientation="Horizontal" Spacing="6">
-                                        <Border Classes="icon">
-                                            <Border.OpacityMask><ImageBrush Source="/Assets/Icons/Loading.png" Stretch="Uniform" /></Border.OpacityMask>
-                                        </Border>
-                                        <TextBlock Text="Sync Metadata" />
-                                    </StackPanel>
-                                </Button>
-                            </StackPanel>
-                            <TextBlock Text="{Binding ScanStatus}" FontSize="12" Foreground="{DynamicResource PbTextFaintBrush}" />
-                        </StackPanel>
-                    </StackPanel>
-                </Border>
-
-                <!-- Book Folders (novels: EPUB/PDF) - moved here from the Books screen
-                     (docs/superpowers/specs/2026-08-27-books-section-restyle-and-folders-to-preferences-plan.md) -->
-                <Border Classes="groupBox">
-                    <StackPanel>
-                        <Border Classes="groupHeader">
-                            <StackPanel>
-                                <TextBlock Text="Book Folders" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
-                                <TextBlock Text="EPUB and PDF novels" FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" Margin="0,2,0,0" />
-                            </StackPanel>
-                        </Border>
-                        <ItemsControl x:Name="BookFoldersList" ItemsSource="{Binding BookFolders}">
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate x:DataType="models:BookFolderSummary">
-                                    <Border Classes="skinRow">
-                                        <Grid ColumnDefinitions="*,Auto,Auto" Margin="14,10">
-                                            <TextBlock Grid.Column="0" Text="{Binding Path}" FontSize="13" TextTrimming="CharacterEllipsis"
-                                                       Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
-                                            <Button Grid.Column="1" Classes="headerAction ghost" Margin="0,0,6,0"
-                                                    Command="{Binding #BookFoldersList.((vm:PreferencesScreenViewModel)DataContext).OpenBookFolderCommand}"
-                                                    CommandParameter="{Binding}"
-                                                    AutomationProperties.AutomationId="PreferencesBookFolderOpen">
-                                                <StackPanel Orientation="Horizontal" Spacing="5">
-                                                    <Border Classes="icon" Width="11" Height="11">
-                                                        <Border.OpacityMask><ImageBrush Source="/Assets/Icons/Folder_Open.png" Stretch="Uniform" /></Border.OpacityMask>
-                                                    </Border>
-                                                    <TextBlock Text="Open" />
-                                                </StackPanel>
-                                            </Button>
-                                            <Button Grid.Column="2" Classes="headerAction ghost"
-                                                    Command="{Binding #BookFoldersList.((vm:PreferencesScreenViewModel)DataContext).RemoveBookFolderCommand}"
-                                                    CommandParameter="{Binding}"
-                                                    AutomationProperties.AutomationId="PreferencesBookFolderRemove">
-                                                <StackPanel Orientation="Horizontal" Spacing="5">
-                                                    <Border Classes="icon" Width="11" Height="11">
-                                                        <Border.OpacityMask><ImageBrush Source="/Assets/Icons/Trash_Empty.png" Stretch="Uniform" /></Border.OpacityMask>
-                                                    </Border>
-                                                    <TextBlock Text="Remove" />
-                                                </StackPanel>
-                                            </Button>
-                                        </Grid>
-                                    </Border>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-                        <StackPanel Margin="14" Spacing="10">
-                            <StackPanel Orientation="Horizontal" Spacing="10">
-                                <Button Classes="headerAction primary" Command="{Binding AddBookFolderCommand}"
-                                        AutomationProperties.AutomationId="PreferencesAddBookFolder">
-                                    <StackPanel Orientation="Horizontal" Spacing="6">
-                                        <Border Classes="icon" Background="{DynamicResource PbBadgeTextBrush}">
-                                            <Border.OpacityMask><ImageBrush Source="/Assets/Icons/Folder_Add.png" Stretch="Uniform" /></Border.OpacityMask>
-                                        </Border>
-                                        <TextBlock Text="Add Folder…" />
-                                    </StackPanel>
-                                </Button>
-                                <Button Classes="headerAction ghost" Command="{Binding ScanBooksNowCommand}"
-                                        IsEnabled="{Binding !IsScanningBooks}"
-                                        AutomationProperties.AutomationId="PreferencesScanBooksNow">
-                                    <StackPanel Orientation="Horizontal" Spacing="6">
-                                        <Border Classes="icon">
-                                            <Border.OpacityMask><ImageBrush Source="/Assets/Icons/Folder_Search.png" Stretch="Uniform" /></Border.OpacityMask>
-                                        </Border>
-                                        <TextBlock Text="Scan Now" />
-                                    </StackPanel>
-                                </Button>
-                            </StackPanel>
-                            <TextBlock Text="{Binding BookScanStatus}" FontSize="12" Foreground="{DynamicResource PbTextFaintBrush}" />
-                        </StackPanel>
-                    </StackPanel>
-                </Border>
-
-                <!-- Migration (docs/superpowers/specs/2026-08-09-embedded-metadata-and-migration-relocation-design.md §2) -->
-                <Border Classes="groupBox">
-                    <StackPanel>
-                        <Border Classes="groupHeader">
-                            <TextBlock Text="Migrate from ComicRack CE" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
-                        </Border>
-                        <StackPanel Margin="14" Spacing="10">
-                            <TextBlock Text="Import your existing ComicRack Community Edition library - series, issues, and metadata."
-                                       FontSize="12" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" />
-                            <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                                <Button Classes="headerAction primary" Command="{Binding OpenMigrationCommand}">
-                                    <StackPanel Orientation="Horizontal" Spacing="6">
-                                        <Border Classes="icon" Background="{DynamicResource PbBadgeTextBrush}">
-                                            <Border.OpacityMask><ImageBrush Source="/Assets/Icons/Cloud_Upload.png" Stretch="Uniform" /></Border.OpacityMask>
-                                        </Border>
-                                        <TextBlock Text="Migrate…" />
-                                    </StackPanel>
-                                </Button>
-                                <Border Width="10" Height="10" CornerRadius="5" Background="{DynamicResource PbAccentBrush}"
-                                        IsVisible="{Binding Migration.NeedsReview.HasPendingItems}"
-                                        ToolTip.Tip="You have pending series conflicts to review" />
-                            </StackPanel>
-                        </StackPanel>
-                    </StackPanel>
-                </Border>
-
-                <!-- Virtual Tags -->
-                <Border Classes="groupBox">
-                    <StackPanel>
-                        <Border Classes="groupHeader">
-                            <TextBlock Text="Virtual Tags" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
-                        </Border>
-                        <ItemsControl x:Name="VirtualTagsList" ItemsSource="{Binding VirtualTags}">
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate x:DataType="models:VirtualTagSummary">
-                                    <Border Classes="skinRow">
-                                        <Button Classes="sideItemButton"
-                                                Command="{Binding #VirtualTagsList.((vm:PreferencesScreenViewModel)DataContext).SelectVirtualTagCommand}"
-                                                CommandParameter="{Binding}">
-                                            <Grid ColumnDefinitions="*,Auto">
-                                                <TextBlock Grid.Column="0" Text="{Binding Name}" FontSize="13"
-                                                           Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
-                                                <TextBlock Grid.Column="1" Text="Off" IsVisible="{Binding !IsEnabled}"
-                                                           FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" />
-                                            </Grid>
-                                        </Button>
-                                    </Border>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-
-                        <StackPanel Margin="14" Spacing="10">
-                            <Button Classes="headerAction ghost" Command="{Binding AddVirtualTagCommand}"
-                                    HorizontalAlignment="Left">
-                                <StackPanel Orientation="Horizontal" Spacing="6">
-                                    <Border Classes="icon" Width="11" Height="11">
-                                        <Border.OpacityMask><ImageBrush Source="/Assets/Icons/Add_Plus.png" Stretch="Uniform" /></Border.OpacityMask>
-                                    </Border>
-                                    <TextBlock Text="Add Virtual Tag" />
-                                </StackPanel>
-                            </Button>
-
-                            <StackPanel IsVisible="{Binding HasSelectedVirtualTag}" Spacing="10" Margin="0,10,0,0">
-                                <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,1,0,0" Margin="0,0,0,4" />
-                                <TextBlock Text="Name" FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" />
-                                <TextBox Text="{Binding VirtualTagName}" Width="320" HorizontalAlignment="Left" />
-
-                                <TextBlock Text="Caption Format (e.g. {Series} #{Number})" FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" />
-                                <TextBox Text="{Binding VirtualTagCaptionFormat}" Width="320" HorizontalAlignment="Left" />
-
-                                <CheckBox IsChecked="{Binding VirtualTagIsEnabled}" Foreground="{DynamicResource PbTextBrush}" FontSize="13" Content="Enabled" />
-
-                                <TextBlock Text="Preview" FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" />
-                                <TextBlock Text="{Binding VirtualTagPreview}" FontFamily="Consolas,monospace" FontSize="13"
-                                           Foreground="{DynamicResource PbAccentTextBrush}" />
-
-                                <Button Classes="headerAction ghost" Command="{Binding DeleteVirtualTagCommand}"
-                                        HorizontalAlignment="Left" Margin="0,6,0,0">
-                                    <StackPanel Orientation="Horizontal" Spacing="6">
-                                        <Border Classes="icon" Width="11" Height="11">
-                                            <Border.OpacityMask><ImageBrush Source="/Assets/Icons/Trash_Empty.png" Stretch="Uniform" /></Border.OpacityMask>
-                                        </Border>
-                                        <TextBlock Text="Delete Tag" />
-                                    </StackPanel>
-                                </Button>
-                            </StackPanel>
-                        </StackPanel>
-                    </StackPanel>
-                </Border>
-
-            </StackPanel>
-
-            <StackPanel IsVisible="{Binding IsAdvancedTab}" Margin="28,0,28,40" Spacing="20">
-
-                <!-- App Behavior -->
-                <Border Classes="groupBox">
-                    <StackPanel>
-                        <Border Classes="groupHeader">
-                            <TextBlock Text="App Behavior" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
-                        </Border>
-                        <StackPanel Margin="14" Spacing="12">
-                            <CheckBox IsChecked="{Binding MinimizeToTray}" Foreground="{DynamicResource PbTextBrush}" FontSize="13"
-                                      Content="Minimize to tray (closing the window also minimizes to tray while this is on)" />
-                        </StackPanel>
-                    </StackPanel>
-                </Border>
-
-                <!-- Rendering (docs/superpowers/specs/2026-08-27-hardware-accelerated-rendering-design.md) -->
-                <Border Classes="groupBox">
-                    <StackPanel>
-                        <Border Classes="groupHeader">
-                            <TextBlock Text="Rendering" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
-                        </Border>
-                        <StackPanel Margin="14" Spacing="12">
-                            <Grid ColumnDefinitions="Auto,Auto" ColumnSpacing="10">
-                                <TextBlock Grid.Column="0" Text="Graphics backend" FontSize="13" VerticalAlignment="Center"
-                                           Foreground="{DynamicResource PbTextBrush}" />
-                                <ComboBox Grid.Column="1" ItemsSource="{x:Static vm:PreferencesScreenViewModel.RenderBackendOptions}"
-                                          SelectedItem="{Binding RenderingBackend}" Width="150" />
-                            </Grid>
-                            <TextBlock Text="Auto uses the GPU with a software fallback (recommended). Gpu forces the GPU with no fallback — the app may fail to start on a broken driver. Software forces the CPU renderer, for broken GPUs, remote desktop, or VMs."
-                                       FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" Margin="0,-6,0,0" />
-
-                            <CheckBox IsChecked="{Binding PreferNativeOpenGl}" Foreground="{DynamicResource PbTextBrush}" FontSize="13"
-                                      Content="Prefer native OpenGL over ANGLE" />
-                            <TextBlock Text="Only try this if the GPU renderer misbehaves — ANGLE (Direct3D) is the better default on Windows."
-                                       FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" Margin="0,-6,0,0" />
-
-                            <TextBlock Text="Changes take effect after restarting Paperbunkr." FontSize="11.5"
-                                       Foreground="{DynamicResource PbTextFaintBrush}" FontStyle="Italic" />
-                        </StackPanel>
-                    </StackPanel>
-                </Border>
-
-                <!-- File Association -->
-                <Border Classes="groupBox">
-                    <StackPanel>
-                        <Border Classes="groupHeader">
-                            <TextBlock Text="File Association" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
-                        </Border>
-                        <ItemsControl x:Name="FileAssociationsList" ItemsSource="{Binding FileAssociations}">
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate x:DataType="models:FileAssociationSummary">
-                                    <CheckBox IsChecked="{Binding IsAssociated, Mode=OneWay}"
-                                              Command="{Binding #FileAssociationsList.((vm:PreferencesScreenViewModel)DataContext).ToggleFileAssociationCommand}"
-                                              CommandParameter="{Binding}"
-                                              Padding="14,7" Margin="0">
-                                        <StackPanel Orientation="Horizontal" Spacing="6">
-                                            <TextBlock Text="{Binding Name}" FontSize="12.5" Foreground="{DynamicResource PbTextBrush}" />
-                                            <TextBlock Text="{Binding ExtensionList}" FontSize="11" FontFamily="Consolas,monospace"
-                                                       Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" />
-                                        </StackPanel>
-                                    </CheckBox>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-                    </StackPanel>
-                </Border>
-
-                <!-- Backup Manager -->
-                <Border Classes="groupBox">
-                    <StackPanel>
-                        <Border Classes="groupHeader">
-                            <TextBlock Text="Backup Manager" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
-                        </Border>
-                        <StackPanel Margin="14" Spacing="10">
-                            <TextBlock Text="Backup Location" FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" />
-                            <StackPanel Orientation="Horizontal" Spacing="10">
-                                <TextBox Text="{Binding BackupLocation}" Width="320" IsReadOnly="True" />
-                                <Button Classes="headerAction ghost" Command="{Binding BrowseBackupLocationCommand}">
-                                    <StackPanel Orientation="Horizontal" Spacing="6">
-                                        <Border Classes="icon" Width="11" Height="11">
-                                            <Border.OpacityMask><ImageBrush Source="/Assets/Icons/Folder_Open.png" Stretch="Uniform" /></Border.OpacityMask>
-                                        </Border>
-                                        <TextBlock Text="Browse…" />
-                                    </StackPanel>
-                                </Button>
-                            </StackPanel>
-
-                            <TextBlock Text="Backups to Keep" FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" Margin="0,6,0,0" />
-                            <NumericUpDown Value="{Binding BackupsToKeep}" Minimum="0" Maximum="99" Width="120" HorizontalAlignment="Left" />
-
-                            <Button Classes="headerAction primary" Command="{Binding BackupNowCommand}"
-                                    HorizontalAlignment="Left" Margin="0,6,0,0">
-                                <StackPanel Orientation="Horizontal" Spacing="6">
-                                    <Border Classes="icon" Background="{DynamicResource PbBadgeTextBrush}">
-                                        <Border.OpacityMask><ImageBrush Source="/Assets/Icons/Archive.png" Stretch="Uniform" /></Border.OpacityMask>
-                                    </Border>
-                                    <TextBlock Text="Backup Now" />
-                                </StackPanel>
-                            </Button>
-                            <TextBlock Text="{Binding BackupStatus}" FontSize="12" Foreground="{DynamicResource PbTextFaintBrush}" />
-                        </StackPanel>
-
-                        <ItemsControl ItemsSource="{Binding Backups}">
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate x:DataType="vm:BackupRowViewModel">
-                                    <Border Classes="skinRow">
-                                        <Grid ColumnDefinitions="*,Auto" Margin="14,10">
-                                            <TextBlock Grid.Column="0" Text="{Binding FileName}" FontSize="13" FontFamily="Consolas,monospace"
-                                                       Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
-                                            <Button Grid.Column="1" Classes="headerAction ghost" Command="{Binding RestoreCommand}">
-                                                <StackPanel Orientation="Horizontal" Spacing="6">
-                                                    <Border Classes="icon" Width="11" Height="11">
-                                                        <Border.OpacityMask><ImageBrush Source="/Assets/Icons/Undo.png" Stretch="Uniform" /></Border.OpacityMask>
-                                                    </Border>
-                                                    <TextBlock Text="{Binding RestoreLabel}" />
-                                                </StackPanel>
-                                            </Button>
-                                        </Grid>
-                                    </Border>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-                    </StackPanel>
-                </Border>
-
-                <!-- Reading List Sources -->
-                <Border Classes="groupBox">
-                    <StackPanel>
-                        <Border Classes="groupHeader">
-                            <TextBlock Text="Reading List Sources" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
-                        </Border>
-                        <StackPanel Margin="14" Spacing="14">
-                            <StackPanel Spacing="10">
-                                <TextBlock Text="ComicVine API Key" FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" />
-                                <TextBlock Text="Get one free at comicvine.gamespot.com/api" FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" />
-                                <StackPanel Orientation="Horizontal" Spacing="10">
-                                    <TextBox Text="{Binding ComicVineApiKey}" Width="320" PasswordChar="•" />
-                                    <Button Classes="headerAction primary" Content="Save" Command="{Binding SaveComicVineCredentialsCommand}" />
-                                </StackPanel>
-                            </StackPanel>
-
-                            <StackPanel Spacing="10" Margin="0,10,0,0">
-                                <TextBlock Text="Metron (metron.cloud) Account" FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" />
-                                <TextBlock Text="Username" FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" />
-                                <TextBox Text="{Binding MetronUsername}" Width="320" HorizontalAlignment="Left" />
-                                <TextBlock Text="Password" FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" />
-                                <TextBox Text="{Binding MetronPassword}" Width="320" HorizontalAlignment="Left" PasswordChar="•" />
-                                <Button Classes="headerAction primary" Content="Save" Command="{Binding SaveMetronCredentialsCommand}"
-                                        HorizontalAlignment="Left" Margin="0,4,0,0" />
-                            </StackPanel>
-
-                            <TextBlock Text="{Binding SourcesStatus}" FontSize="12" Foreground="{DynamicResource PbTextFaintBrush}" />
-                        </StackPanel>
-                    </StackPanel>
-                </Border>
-
-                <!-- Trackers (docs/superpowers/specs/2026-08-23-tracker-write-back-sync-design.md) -->
-                <Border Classes="groupBox">
-                    <StackPanel>
-                        <Border Classes="groupHeader">
-                            <TextBlock Text="Trackers" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
-                        </Border>
-                        <StackPanel Margin="14" Spacing="16">
-
-                            <StackPanel Spacing="10">
-                                <StackPanel Orientation="Horizontal" Spacing="8">
-                                    <TextBlock Text="AniList" FontSize="11.5" FontWeight="SemiBold" Foreground="{DynamicResource PbTextFaintBrush}" />
-                                    <TextBlock Text="Connected" FontSize="11" Foreground="#4CAF50" IsVisible="{Binding IsAniListConnected}" />
-                                    <TextBlock Text="Not connected" FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" IsVisible="{Binding !IsAniListConnected}" />
-                                </StackPanel>
-                                <TextBlock Text="Register your own app at anilist.co/settings/developer, then paste its Client ID." FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" />
-                                <StackPanel Orientation="Horizontal" Spacing="10">
-                                    <TextBox Text="{Binding AniListClientId}" Width="220" Watermark="Client ID" />
-                                    <Button Classes="headerAction primary" Content="Connect" Command="{Binding ConnectAniListCommand}" />
-                                </StackPanel>
-                                <StackPanel Orientation="Horizontal" Spacing="10">
-                                    <TextBox Text="{Binding AniListPastedToken}" Width="320" Watermark="Paste token here" />
-                                    <Button Classes="headerAction" Content="Save" Command="{Binding CompleteAniListConnectCommand}" />
-                                </StackPanel>
-                            </StackPanel>
-
-                            <StackPanel Spacing="10" Margin="0,10,0,0">
-                                <StackPanel Orientation="Horizontal" Spacing="8">
-                                    <TextBlock Text="MyAnimeList" FontSize="11.5" FontWeight="SemiBold" Foreground="{DynamicResource PbTextFaintBrush}" />
-                                    <TextBlock Text="Connected" FontSize="11" Foreground="#4CAF50" IsVisible="{Binding IsMyAnimeListConnected}" />
-                                    <TextBlock Text="Not connected" FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" IsVisible="{Binding !IsMyAnimeListConnected}" />
-                                </StackPanel>
-                                <TextBlock Text="Register your own app at myanimelist.net/apiconfig/create (needs manual approval), then paste its Client ID." FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" />
-                                <StackPanel Orientation="Horizontal" Spacing="10">
-                                    <TextBox Text="{Binding MyAnimeListClientId}" Width="220" Watermark="Client ID" />
-                                    <Button Classes="headerAction primary" Content="Connect" Command="{Binding ConnectMyAnimeListCommand}" />
-                                </StackPanel>
-                                <TextBlock Text="The page after sign-in will fail to load - that's expected. Copy the &quot;code&quot; value from its address bar." FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" />
-                                <StackPanel Orientation="Horizontal" Spacing="10">
-                                    <TextBox Text="{Binding MyAnimeListPastedCode}" Width="320" Watermark="Paste code here" />
-                                    <Button Classes="headerAction" Content="Save" Command="{Binding CompleteMyAnimeListConnectCommand}" />
-                                </StackPanel>
-                            </StackPanel>
-
-                            <StackPanel Spacing="10" Margin="0,10,0,0">
-                                <StackPanel Orientation="Horizontal" Spacing="8">
-                                    <TextBlock Text="Shikimori" FontSize="11.5" FontWeight="SemiBold" Foreground="{DynamicResource PbTextFaintBrush}" />
-                                    <TextBlock Text="Connected" FontSize="11" Foreground="#4CAF50" IsVisible="{Binding IsShikimoriConnected}" />
-                                    <TextBlock Text="Not connected" FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" IsVisible="{Binding !IsShikimoriConnected}" />
-                                </StackPanel>
-                                <TextBlock Text="Register your own app at shikimori.one/oauth/applications, then paste its Client ID and Secret." FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" />
-                                <StackPanel Orientation="Horizontal" Spacing="10">
-                                    <TextBox Text="{Binding ShikimoriClientId}" Width="220" Watermark="Client ID" />
-                                    <TextBox Text="{Binding ShikimoriClientSecret}" Width="220" Watermark="Client Secret" PasswordChar="•" />
-                                    <Button Classes="headerAction primary" Content="Connect" Command="{Binding ConnectShikimoriCommand}" />
-                                </StackPanel>
-                                <StackPanel Orientation="Horizontal" Spacing="10">
-                                    <TextBox Text="{Binding ShikimoriPastedCode}" Width="320" Watermark="Paste code here" />
-                                    <Button Classes="headerAction" Content="Save" Command="{Binding CompleteShikimoriConnectCommand}" />
-                                </StackPanel>
-                            </StackPanel>
-
-                            <StackPanel Spacing="10" Margin="0,10,0,0">
-                                <StackPanel Orientation="Horizontal" Spacing="8">
-                                    <TextBlock Text="Bangumi" FontSize="11.5" FontWeight="SemiBold" Foreground="{DynamicResource PbTextFaintBrush}" />
-                                    <TextBlock Text="Connected" FontSize="11" Foreground="#4CAF50" IsVisible="{Binding IsBangumiConnected}" />
-                                    <TextBlock Text="Not connected" FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" IsVisible="{Binding !IsBangumiConnected}" />
-                                </StackPanel>
-                                <TextBlock Text="Generate a Personal Access Token at bgm.tv/dev/app, then paste it here - no browser sign-in needed." FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" />
-                                <StackPanel Orientation="Horizontal" Spacing="10">
-                                    <TextBox Text="{Binding BangumiPersonalAccessToken}" Width="320" Watermark="Personal Access Token" PasswordChar="•" />
-                                    <Button Classes="headerAction primary" Content="Save" Command="{Binding SaveBangumiTokenCommand}" />
-                                </StackPanel>
-                            </StackPanel>
-
-                            <StackPanel Spacing="10" Margin="0,10,0,0">
-                                <StackPanel Orientation="Horizontal" Spacing="8">
-                                    <TextBlock Text="MangaBaka" FontSize="11.5" FontWeight="SemiBold" Foreground="{DynamicResource PbTextFaintBrush}" />
-                                    <TextBlock Text="Connected" FontSize="11" Foreground="#4CAF50" IsVisible="{Binding IsMangaBakaConnected}" />
-                                    <TextBlock Text="Not connected" FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" IsVisible="{Binding !IsMangaBakaConnected}" />
-                                </StackPanel>
-                                <TextBlock Text="Generate a Personal Access Token at mangabaka.org → My profile → Settings → API and Apps, then paste it here. The token has full access to your MangaBaka account - keep it private." FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" />
-                                <StackPanel Orientation="Horizontal" Spacing="10">
-                                    <TextBox Text="{Binding MangaBakaPersonalAccessToken}" Width="320" Watermark="Personal Access Token" PasswordChar="•" />
-                                    <Button Classes="headerAction primary" Content="Save" Command="{Binding SaveMangaBakaTokenCommand}" />
-                                </StackPanel>
-                            </StackPanel>
-
-                            <TextBlock Text="{Binding TrackersStatus}" FontSize="12" Foreground="{DynamicResource PbTextFaintBrush}" />
-                        </StackPanel>
-                    </StackPanel>
-                </Border>
-
-            </StackPanel>
-
-            <!-- Plugins (docs/superpowers/specs/2026-08-24-navigation-shell-motion-system-design.md) -
-                 moved here from a standalone rail screen; PluginScreen itself is unchanged. -->
-            <StackPanel IsVisible="{Binding IsPluginsTab}" Margin="28,0,28,40">
-                <views:PluginScreen DataContext="{Binding Plugin}" />
-            </StackPanel>
+    <Grid RowDefinitions="Auto,*">
+
+        <!-- Header -->
+        <StackPanel Grid.Row="0" Margin="28,20,28,14" Spacing="12">
+            <TextBlock Classes="pbTextHeading" Text="PREFERENCES" />
+            <Border Classes="prefSearchBox" MaxWidth="360" HorizontalAlignment="Left">
+                <Grid ColumnDefinitions="Auto,*,Auto">
+                    <Path Grid.Column="0" Classes="pbIcon" Data="{StaticResource PbIconSearch}" Margin="0,0,8,0" />
+                    <TextBox Grid.Column="1" Text="{Binding SearchQuery}" Watermark="Search settings…"
+                             AutomationProperties.AutomationId="PreferencesSearchBox">
+                        <TextBox.KeyBindings>
+                            <KeyBinding Gesture="Escape" Command="{Binding ClearSearchCommand}" />
+                        </TextBox.KeyBindings>
+                    </TextBox>
+                    <Button Grid.Column="2" Classes="headerAction ghost" Padding="7,3" FontSize="11"
+                            IsVisible="{Binding IsSearching}" Content="Clear" Command="{Binding ClearSearchCommand}" />
+                </Grid>
+            </Border>
         </StackPanel>
-    </ScrollViewer>
+        <Border Grid.Row="0" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,0,0,1" VerticalAlignment="Bottom" />
+
+        <Grid Grid.Row="1" ColumnDefinitions="220,*">
+
+            <!-- Sidebar -->
+            <Border Grid.Column="0" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,0,1,0">
+                <Panel>
+                    <ScrollViewer IsVisible="{Binding !IsSearching}">
+                        <StackPanel Margin="0,10">
+                            <Button Classes="prefNavItem" Classes.active="{Binding IsGeneralSection}"
+                                    Command="{Binding GoGeneralCommand}" Content="General" />
+                            <Button Classes="prefNavItem" Classes.active="{Binding IsAppearanceSection}"
+                                    Command="{Binding GoAppearanceCommand}" Content="Appearance" />
+                            <Button Classes="prefNavItem" Classes.active="{Binding IsLibrarySection}"
+                                    Command="{Binding GoLibraryCommand}" Content="Library"
+                                    AutomationProperties.AutomationId="PreferencesLibraryNavButton" />
+                            <Button Classes="prefNavItem" Classes.active="{Binding IsReaderSection}"
+                                    Command="{Binding GoReaderCommand}" Content="Reader" />
+                            <Button Classes="prefNavItem" Classes.active="{Binding IsKeyboardShortcutsSection}"
+                                    Command="{Binding GoKeyboardShortcutsCommand}" Content="Keyboard Shortcuts" />
+                            <Button Classes="prefNavItem" Classes.active="{Binding IsConnectionsSection}"
+                                    Command="{Binding GoConnectionsCommand}" Content="Connections" />
+                            <Button Classes="prefNavItem" Classes.active="{Binding IsPluginsSection}"
+                                    Command="{Binding GoPluginsCommand}" Content="Plugins" />
+                            <Button Classes="prefNavItem" Classes.active="{Binding IsAdvancedSection}"
+                                    Command="{Binding GoAdvancedCommand}" Content="Advanced" />
+                        </StackPanel>
+                    </ScrollViewer>
+
+                    <ScrollViewer IsVisible="{Binding IsSearching}">
+                        <StackPanel Margin="0,10">
+                            <TextBlock Text="No matching settings" Margin="15,10" FontSize="12"
+                                       Foreground="{DynamicResource PbTextFaintBrush}"
+                                       IsVisible="{Binding NoSearchResults}" />
+                            <ItemsControl x:Name="SearchResultsList" ItemsSource="{Binding SearchResults}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:PreferenceSearchResultViewModel">
+                                        <Button Classes="prefNavItem"
+                                                Command="{Binding #SearchResultsList.((vm:PreferencesScreenViewModel)DataContext).OpenSearchResultCommand}"
+                                                CommandParameter="{Binding}">
+                                            <StackPanel Spacing="1">
+                                                <TextBlock Text="{Binding Title}" FontSize="12.5" Foreground="{DynamicResource PbTextBrush}" />
+                                                <TextBlock Text="{Binding SectionLabel}" FontSize="10.5" Foreground="{DynamicResource PbTextFaintBrush}" />
+                                            </StackPanel>
+                                        </Button>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </ScrollViewer>
+                </Panel>
+            </Border>
+
+            <!-- Content pane - one section visible at a time (hard switch) -->
+            <Panel Grid.Column="1" x:Name="ContentHost">
+                <pref:GeneralSection IsVisible="{Binding IsGeneralSection}" />
+                <pref:AppearanceSection IsVisible="{Binding IsAppearanceSection}" />
+                <pref:LibrarySection IsVisible="{Binding IsLibrarySection}" />
+                <pref:ReaderSection IsVisible="{Binding IsReaderSection}" />
+                <pref:KeyboardShortcutsSection IsVisible="{Binding IsKeyboardShortcutsSection}" />
+                <pref:ConnectionsSection IsVisible="{Binding IsConnectionsSection}" />
+                <pref:PluginsSection IsVisible="{Binding IsPluginsSection}" />
+                <pref:AdvancedSection IsVisible="{Binding IsAdvancedSection}" />
+            </Panel>
+        </Grid>
+    </Grid>
 </UserControl>

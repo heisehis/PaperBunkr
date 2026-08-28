@@ -1,0 +1,100 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Paperbunkr.App.ViewModels"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="640" d:DesignHeight="900"
+             x:Class="Paperbunkr.App.Views.Preferences.KeyboardShortcutsSection"
+             x:DataType="vm:PreferencesScreenViewModel">
+
+    <ScrollViewer>
+        <StackPanel Margin="28,20,28,40" Spacing="20">
+            <TextBlock Classes="pbTextHeading" Text="Keyboard Shortcuts" />
+
+            <StackPanel Tag="shortcuts.io" Spacing="10">
+                <WrapPanel>
+                    <Button Classes="headerAction ghost" Margin="0,0,8,0" Content="Import Layout…"
+                            Command="{Binding ImportKeyBindingsCommand}"
+                            AutomationProperties.AutomationId="ImportKeyBindingsButton" />
+                    <Button Classes="headerAction ghost" Content="Export Layout…"
+                            Command="{Binding ExportKeyBindingsCommand}"
+                            AutomationProperties.AutomationId="ExportKeyBindingsButton" />
+                </WrapPanel>
+
+                <StackPanel Orientation="Horizontal" Spacing="5" IsVisible="{Binding HasKeyBindingConflictError}">
+                    <Path Classes="pbIcon" Width="12" Height="12" Data="{StaticResource PbIconCircleWarning}" Stroke="#D96C6C" />
+                    <TextBlock Text="{Binding KeyBindingConflictError}" Foreground="#D96C6C" FontSize="12" TextWrapping="Wrap" />
+                </StackPanel>
+            </StackPanel>
+
+            <Border Classes="groupBox" Tag="shortcuts.navigation">
+                <StackPanel>
+                    <Border Classes="groupHeader">
+                        <TextBlock Text="Navigation" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
+                    </Border>
+                    <StackPanel Margin="14">
+                        <ItemsControl ItemsSource="{Binding NavigationKeyBindings}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:KeyBindingRowViewModel">
+                                    <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,4">
+                                        <TextBlock Grid.Column="0" Text="{Binding Label}" FontSize="13" VerticalAlignment="Center"
+                                                   Foreground="{DynamicResource PbTextBrush}" />
+                                        <ComboBox Grid.Column="1" ItemsSource="{Binding Options}"
+                                                  SelectedItem="{Binding SelectedKey}" Width="150" />
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
+            <Border Classes="groupBox" Tag="shortcuts.zoomFit">
+                <StackPanel>
+                    <Border Classes="groupHeader">
+                        <TextBlock Text="Zoom &amp; Fit" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
+                    </Border>
+                    <StackPanel Margin="14">
+                        <ItemsControl ItemsSource="{Binding ZoomFitKeyBindings}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:KeyBindingRowViewModel">
+                                    <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,4">
+                                        <TextBlock Grid.Column="0" Text="{Binding Label}" FontSize="13" VerticalAlignment="Center"
+                                                   Foreground="{DynamicResource PbTextBrush}" />
+                                        <ComboBox Grid.Column="1" ItemsSource="{Binding Options}"
+                                                  SelectedItem="{Binding SelectedKey}" Width="150" />
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
+            <Border Classes="groupBox" Tag="shortcuts.display">
+                <StackPanel>
+                    <Border Classes="groupHeader">
+                        <TextBlock Text="Display" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
+                    </Border>
+                    <StackPanel Margin="14" Spacing="10">
+                        <ItemsControl ItemsSource="{Binding DisplayKeyBindings}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:KeyBindingRowViewModel">
+                                    <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,4">
+                                        <TextBlock Grid.Column="0" Text="{Binding Label}" FontSize="13" VerticalAlignment="Center"
+                                                   Foreground="{DynamicResource PbTextBrush}" />
+                                        <ComboBox Grid.Column="1" ItemsSource="{Binding Options}"
+                                                  SelectedItem="{Binding SelectedKey}" Width="150" />
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                        <TextBlock Text="Also everywhere: Tab / Shift+Tab moves focus, Enter or Space activates the focused control, Esc cancels or closes the current editor."
+                                   FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" Margin="0,6,0,0" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

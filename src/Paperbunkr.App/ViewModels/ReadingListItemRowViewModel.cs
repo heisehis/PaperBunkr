@@ -17,6 +17,7 @@ public partial class ReadingListItemRowViewModel : ViewModelBase
     private readonly Action<ReadingListItemRowViewModel> _onFieldChanged;
     private readonly Action<ReadingListItemRowViewModel> _onLink;
     private readonly Action<ReadingListItemRowViewModel> _onOpen;
+    private readonly Action<ReadingListItemRowViewModel> _onToggleRead;
 
     public ReadingListItemRowViewModel(
         ReadingListItem item,
@@ -25,7 +26,8 @@ public partial class ReadingListItemRowViewModel : ViewModelBase
         Action<ReadingListItemRowViewModel> onRemove,
         Action<ReadingListItemRowViewModel> onFieldChanged,
         Action<ReadingListItemRowViewModel> onLink,
-        Action<ReadingListItemRowViewModel> onOpen)
+        Action<ReadingListItemRowViewModel> onOpen,
+        Action<ReadingListItemRowViewModel> onToggleRead)
     {
         Item = item;
         _onMoveUp = onMoveUp;
@@ -34,6 +36,7 @@ public partial class ReadingListItemRowViewModel : ViewModelBase
         _onFieldChanged = onFieldChanged;
         _onLink = onLink;
         _onOpen = onOpen;
+        _onToggleRead = onToggleRead;
         _selectedRole = item.Role;
         _selectedRoleOption = item.Role is EventMembershipRole role ? RoleOptions.FirstOrDefault(o => o.Role == role) : null;
         _notes = item.Notes ?? string.Empty;
@@ -41,9 +44,47 @@ public partial class ReadingListItemRowViewModel : ViewModelBase
 
     public ReadingListItem Item { get; }
 
+    /// <summary>1-based reading-order position across the whole list (set by the parent) - the rail number.</summary>
+    [ObservableProperty]
+    private int _position;
+
     public string Number => Item.Issue?.EffectiveNumber() ?? "?";
 
-    public string Name => Item.Issue?.Title ?? Item.Issue?.Series?.Name ?? "Unknown";
+    /// <summary>Title line: "Name #Number", or just "Name" when the issue has no number.</summary>
+    public string TitleLine => Number == "?" ? Name : $"{Name} #{Number}";
+
+    public string Name => Item.Issue?.EffectiveTitle() ?? Item.Issue?.Series?.Name ?? "Unknown";
+
+    /// <summary>Secondary line under the title: "Series · Year", or the missing-file note.</summary>
+    public string SeriesLine
+    {
+        get
+        {
+            if (IsMissing)
+            {
+                return "missing — not in your library";
+            }
+
+            string? series = Item.Issue?.Series?.Name;
+            int? year = Item.Issue?.EffectiveYear();
+            return (series, year) switch
+            {
+                ({ } s, { } y) when y > 0 => $"{s} · {y}",
+                ({ } s, _) => s,
+                _ => string.Empty,
+            };
+        }
+    }
+
+    /// <summary>App-wide read signal (<see cref="IssueMetadataExtensions.HasBeenRead"/>) - false for
+    /// a missing/unscanned issue (no <see cref="Issue.PageCount"/>), same as every other list in the app.</summary>
+    public bool IsRead => Item.Issue?.HasBeenRead() == true;
+
+    public bool IsInProgress => Item.Issue?.IsInProgress() == true;
+
+    /// <summary>Set by the parent after it picks the "Continue" target - drives the highlighted row + Read button.</summary>
+    [ObservableProperty]
+    private bool _isNextUp;
 
     /// <summary>
     /// Resolved to a cover <c>Bitmap</c> lazily via <c>CoverImageConverter</c> (docs/superpowers/
@@ -75,13 +116,34 @@ public partial class ReadingListItemRowViewModel : ViewModelBase
     [ObservableProperty]
     private EventMembershipRoleOption? _selectedRoleOption;
 
-    partial void OnSelectedRoleOptionChanged(EventMembershipRoleOption? value) => SelectedRole = value?.Role;
+    partial void OnSelectedRoleOptionChanged(EventMembershipRoleOption? value)
+    {
+        SelectedRole = value?.Role;
+        OnPropertyChanged(nameof(HasRole));
+        OnPropertyChanged(nameof(RoleChipLabel));
+    }
 
     partial void OnSelectedRoleChanged(EventMembershipRole? value)
     {
         Item.Role = value;
         _onFieldChanged(this);
     }
+
+    /// <summary>A role is set - drives the small read-only chip shown on the row.</summary>
+    public bool HasRole => SelectedRole is not null;
+
+    public string RoleChipLabel => SelectedRoleOption?.Label ?? string.Empty;
+
+    /// <summary>Toggled from the row's ⋯ menu "Add a note" - reveals the inline note editor.</summary>
+    [ObservableProperty]
+    private bool _noteEditing;
+
+    [RelayCommand]
+    private void BeginNote() => NoteEditing = true;
+
+    /// <summary>Role picks from the ⋯ submenu.</summary>
+    [RelayCommand]
+    private void SetRole(EventMembershipRoleOption? option) => SelectedRoleOption = option;
 
     [ObservableProperty]
     private string _notes;
@@ -106,4 +168,9 @@ public partial class ReadingListItemRowViewModel : ViewModelBase
 
     [RelayCommand]
     private void Open() => _onOpen(this);
+
+    /// <summary>Manual mark-read / mark-unread (docs/superpowers/specs/2026-08-23-mark-as-read-design.md);
+    /// the parent flips <see cref="Issue.LastPageRead"/> via <c>IssueReadStateResolver</c> and reloads.</summary>
+    [RelayCommand]
+    private void ToggleRead() => _onToggleRead(this);
 }

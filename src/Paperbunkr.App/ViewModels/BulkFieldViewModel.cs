@@ -22,6 +22,14 @@ public partial class BulkFieldViewModel : ObservableObject
 
     public string Label => Descriptor.Label;
     public bool IsTextKind => Descriptor.Kind == FieldKind.Text;
+
+    /// <summary>Free-text field with a fixed autocomplete vocabulary (docs/superpowers/specs/2026-08-27-metadata-model-phase4e-format-signal-suggestions-design.md) - e.g. Format. Renders an AutoCompleteBox instead of a plain TextBox.</summary>
+    public bool HasAutocomplete => Descriptor.Autocomplete is { Count: > 0 };
+
+    /// <summary>A plain TextBox row - a text field with no autocomplete vocabulary.</summary>
+    public bool IsPlainTextKind => IsTextKind && !HasAutocomplete;
+
+    public IReadOnlyList<string> AutocompleteOptions => Descriptor.Autocomplete ?? [];
     public bool IsBooleanKind => Descriptor.Kind == FieldKind.Boolean;
     public bool IsRatingKind => Descriptor.Kind == FieldKind.Rating;
     public bool IsEnumKind => Descriptor.Kind == FieldKind.Enum;

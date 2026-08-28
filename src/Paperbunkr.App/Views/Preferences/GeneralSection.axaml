@@ -1,0 +1,41 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Paperbunkr.App.ViewModels"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="640" d:DesignHeight="480"
+             x:Class="Paperbunkr.App.Views.Preferences.GeneralSection"
+             x:DataType="vm:PreferencesScreenViewModel">
+
+    <ScrollViewer>
+        <StackPanel Margin="28,20,28,40" Spacing="20">
+            <TextBlock Classes="pbTextHeading" Text="General" />
+
+            <Border Classes="groupBox" Tag="general.reading">
+                <StackPanel>
+                    <Border Classes="groupHeader">
+                        <TextBlock Text="Reading" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
+                    </Border>
+                    <StackPanel Margin="14" Spacing="12">
+                        <CheckBox IsChecked="{Binding OpenLastPage}" Foreground="{DynamicResource PbTextBrush}" FontSize="13"
+                                  Content="Resume issues where you left off" />
+                        <CheckBox IsChecked="{Binding AutoNavigateComics}" Foreground="{DynamicResource PbTextBrush}" FontSize="13"
+                                  Content="Reading past the last page opens the next issue" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
+            <Border Classes="groupBox" Tag="general.window">
+                <StackPanel>
+                    <Border Classes="groupHeader">
+                        <TextBlock Text="Window" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
+                    </Border>
+                    <StackPanel Margin="14" Spacing="12">
+                        <CheckBox IsChecked="{Binding MinimizeToTray}" Foreground="{DynamicResource PbTextBrush}" FontSize="13"
+                                  Content="Minimize to tray (closing the window also minimizes to tray while this is on)" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

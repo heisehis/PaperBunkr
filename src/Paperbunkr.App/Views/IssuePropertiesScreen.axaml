@@ -316,7 +316,7 @@
                                     </StackPanel>
                                     <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="PUBLISHER" /><TextBox Text="{Binding Publisher}" /></StackPanel>
                                     <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="IMPRINT" /><TextBox Text="{Binding Imprint}" /></StackPanel>
-                                    <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="FORMAT" /><TextBox Text="{Binding Format}" /></StackPanel>
+                                    <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="FORMAT" /><AutoCompleteBox Text="{Binding Format}" ItemsSource="{Binding FormatOptions}" /></StackPanel>
                                     <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="YEAR" /><TextBox Text="{Binding YearText}" /></StackPanel>
                                     <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="MONTH" /><TextBox Text="{Binding MonthText}" /></StackPanel>
                                     <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="DAY" /><TextBox Text="{Binding DayText}" /></StackPanel>

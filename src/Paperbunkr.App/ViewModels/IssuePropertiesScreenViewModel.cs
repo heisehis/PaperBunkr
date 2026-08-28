@@ -209,6 +209,15 @@ public partial class IssuePropertiesScreenViewModel : ViewModelBase
     [ObservableProperty] private string _publisher = string.Empty;
     [ObservableProperty] private string _imprint = string.Empty;
     [ObservableProperty] private string _format = string.Empty;
+
+    /// <summary>ComicRack CE's shipped <c>[Book Formats]</c> default list (docs/superpowers/specs/2026-08-27-metadata-model-phase4e-format-signal-suggestions-design.md) - autocomplete for the free-text Format field.</summary>
+    public static IReadOnlyList<string> FormatOptions => FormatSignalCatalog.CeDefaultFormats;
+
+    /// <summary>Book Age - free text, ported from CE's own autocomplete combo (docs/superpowers/specs/2026-08-27-metadata-model-phase4g-age-progression-design.md). Autocomplete seeded with CE's five <c>[Book Ages]</c> defaults; the Timeline mode's <c>BookAgeResolver</c> reads this as the authoritative age when set.</summary>
+    [ObservableProperty] private string _bookAge = string.Empty;
+
+    public static IReadOnlyList<string> BookAgeOptions { get; } =
+        Enum.GetValues<ComicAge>().Select(a => ComicAgeCatalog.All[a].CeListLabel).ToArray();
     [ObservableProperty] private string _yearText = string.Empty;
     [ObservableProperty] private string _monthText = string.Empty;
     [ObservableProperty] private string _dayText = string.Empty;
@@ -284,7 +293,7 @@ public partial class IssuePropertiesScreenViewModel : ViewModelBase
         int? MyRating, int? CommunityRating,
         string Number, string VolumeText, string CountText, string Title, string AlternateSeries,
         string AlternateNumber, string StoryArc, string StoryArcNumber, string SeriesGroup,
-        string Publisher, string Imprint, string Format, string YearText, string MonthText,
+        string Publisher, string Imprint, string Format, string BookAge, string YearText, string MonthText,
         string DayText, string Genre, string Tags, string Writer, string Penciller, string Inker,
         string Colorist, string Letterer, string CoverArtist, string Editor, string Translator,
         string AgeRating, string LanguageIso, string ColorModeText, bool IsFinalIssue,
@@ -306,7 +315,7 @@ public partial class IssuePropertiesScreenViewModel : ViewModelBase
     {
         _clipboard = new FieldClipboard(
             MyRating, CommunityRating, Number, VolumeText, CountText, Title, AlternateSeries,
-            AlternateNumber, StoryArc, StoryArcNumber, SeriesGroup, Publisher, Imprint, Format,
+            AlternateNumber, StoryArc, StoryArcNumber, SeriesGroup, Publisher, Imprint, Format, BookAge,
             YearText, MonthText, DayText, Genre, Tags, Writer, Penciller, Inker, Colorist, Letterer,
             CoverArtist, Editor, Translator, AgeRating, LanguageIso, ColorModeText, IsFinalIssue,
             Characters, Teams, MainCharacterOrTeam, Locations, Web, ScanInformation, Summary, Notes,
@@ -339,6 +348,7 @@ public partial class IssuePropertiesScreenViewModel : ViewModelBase
         Publisher = c.Publisher;
         Imprint = c.Imprint;
         Format = c.Format;
+        BookAge = c.BookAge;
         YearText = c.YearText;
         MonthText = c.MonthText;
         DayText = c.DayText;
@@ -438,6 +448,7 @@ public partial class IssuePropertiesScreenViewModel : ViewModelBase
         Publisher = issue.Publisher ?? string.Empty;
         Imprint = issue.Imprint ?? string.Empty;
         Format = issue.Format ?? string.Empty;
+        BookAge = issue.BookAge ?? string.Empty;
         YearText = issue.EffectiveYear()?.ToString() ?? string.Empty;
         MonthText = issue.Month?.ToString() ?? string.Empty;
         DayText = issue.Day?.ToString() ?? string.Empty;
@@ -545,6 +556,7 @@ public partial class IssuePropertiesScreenViewModel : ViewModelBase
         issue.Publisher = NullIfEmpty(Publisher);
         issue.Imprint = NullIfEmpty(Imprint);
         issue.Format = NullIfEmpty(Format);
+        issue.BookAge = NullIfEmpty(BookAge);
         issue.Year = ParseInt(YearText);
         issue.Month = ParseInt(MonthText);
         issue.Day = ParseInt(DayText);
@@ -588,6 +600,10 @@ public partial class IssuePropertiesScreenViewModel : ViewModelBase
 
         context.SaveChanges();
         _isDirty = false;
+
+        // Re-derive this issue's Character index from its (possibly edited) Characters text
+        // (docs/superpowers/specs/2026-08-27-metadata-model-phase4g-age-progression-design.md).
+        CharacterResolver.SyncFromIssue(context, issueId);
 
         // Undo/Redo (docs/ce-feature-inventory.md §A) - records this Save as one undoable entry.
         // Captured after SaveChanges so the "After" snapshot reflects what's actually now persisted,

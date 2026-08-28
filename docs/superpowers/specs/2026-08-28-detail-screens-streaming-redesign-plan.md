@@ -104,15 +104,16 @@ places its own `ComboBox` beside it), synopsis clamp + toggle, then an `ItemsCon
 `src/Paperbunkr.App/Views/DetailTabs.axaml.cs` (edit),
 `src/Paperbunkr.App/ViewModels/DetailTabsViewModel.cs` (edit),
 `src/Paperbunkr.Data/Entities/DetailIssueViewMode.cs` (new enum),
-`src/Paperbunkr.Data/Entities/AppSettings.cs` (edit — add `DetailIssueViewMode` property),
-`src/Paperbunkr.Data/PaperbunkrDbContext.cs` (edit — `HasConversion<string>().HasMaxLength(32)
-.HasDefaultValue(Poster).HasSentinel(Poster)` next to `LibraryViewMode` at line ~632),
-new migration `AddDetailIssueViewMode`,
-`src/Paperbunkr.Data/Migrations/PaperbunkrDbContextModelSnapshot.cs` (regenerated),
 `src/Paperbunkr.App.Tests/DetailTabsViewModelTests.cs` (edit)
 **What:**
-- **Issues tab:** add `DetailIssueViewMode ViewMode` (persisted via a ctor Action that
-  reads/writes `AppSettings`, mirror `BooksScreenViewModel` load/save). Three `DataTemplate`s in
+- **View-mode persistence deferred.** An `AppSettings.DetailIssueViewMode` column + migration
+  would chain onto the concurrent uncommitted `20260827193943_MetadataModelPhase4dEventRelations`
+  migration and its shared `ModelSnapshot.cs` edits — the merge hazard the design's Risks section
+  flags. Ship the view mode as an **in-memory** `DetailTabsViewModel` property (resets to Poster
+  on restart); the enum still lives in `Paperbunkr.Data.Entities` so adding the column + a
+  `HasConversion<string>().HasDefaultValue(Poster).HasSentinel(Poster)` line later is a 3-line
+  follow-up once the 4d chain lands.
+- **Issues tab:** add an in-memory `DetailIssueViewMode ViewMode` observable. Three `DataTemplate`s in
   the tab — Poster (cover + number + arc/title below on `posterTile`/`posterScrim`/`PbGlowRing`,
   read dimmed, in-progress bar, `_continueIssueId` amber ring), List (`Grid` rows), Card (~4/row
   WrapPanel, cover + title + `ISSUE #n` + Read button + inline icon row). A view-mode segmented

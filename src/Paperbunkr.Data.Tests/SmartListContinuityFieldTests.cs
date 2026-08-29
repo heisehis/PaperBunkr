@@ -54,7 +54,10 @@ public class SmartListContinuityFieldTests : IDisposable
         var list = new SmartList
         {
             Name = "616 issues",
-            Conditions = { new SmartListCondition { Field = SmartListField.Continuity, Operator = SmartListOperator.Contains, Value = "Earth-616" } },
+            RootGroup = new SmartListConditionGroup
+            {
+                Conditions = { new SmartListCondition { Field = SmartListField.Continuity, Operator = SmartListOperator.Contains, Value = "Earth-616" } },
+            },
         };
         context.SmartLists.Add(list);
         context.SaveChanges();

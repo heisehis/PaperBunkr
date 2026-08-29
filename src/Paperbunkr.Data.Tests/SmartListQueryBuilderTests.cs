@@ -117,7 +117,7 @@ public class SmartListQueryBuilderTests : IDisposable
     }
 
     private static SmartList ListOf(params SmartListCondition[] conditions) =>
-        new() { Name = "test", Conditions = conditions.ToList() };
+        new() { Name = "test", RootGroup = new SmartListConditionGroup { Mode = SmartListGroupMode.And, Conditions = conditions.ToList() } };
 
     private static SmartListCondition Cond(SmartListField field, SmartListOperator op, string value, string? value2 = null) =>
         new() { Field = field, Operator = op, Value = value, Value2 = value2 };

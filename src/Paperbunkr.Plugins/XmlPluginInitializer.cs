@@ -36,6 +36,7 @@ public static class XmlPluginInitializer
                 Description = entry.Description,
                 Image = entry.Image,
                 Enabled = entry.Enabled,
+                ConfirmWrites = entry.ConfirmWrites,
                 ScriptPath = Path.Combine(pluginDir, entry.Script),
             }).ToList();
         }

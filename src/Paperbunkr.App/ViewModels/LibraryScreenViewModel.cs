@@ -849,43 +849,27 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
     /// </summary>
     private bool MatchesSearch(Series s, string query) => SearchMode switch
     {
-        // Contains(s.Titles, query) has no CE equivalent (CE never modeled alternate titles at all) -
-        // a deliberate new-Paperbunkr addition to both Series and All modes, same "deliberate new
-        // feature, not parity" footing as ReadingStatus (docs/superpowers/specs/2026-08-19-metadata-
-        // model-multi-value-titles-design.md), not a silent departure from the otherwise-strict CE
-        // field-for-field parity this method documents above.
-        SearchMode.Series => Contains(s.Name, query) || ContainsAnyTitle(s, query) || s.Issues.Any(i =>
-            Contains(i.AlternateSeries, query) || Contains(i.Format, query) ||
-            Contains(i.SeriesGroup, query) || Contains(i.StoryArc, query)),
-        SearchMode.Writer => s.Issues.Any(i => Contains(i.Writer, query)),
-        SearchMode.Artists => s.Issues.Any(i =>
-            Contains(i.Writer, query) || Contains(i.Penciller, query) || Contains(i.Inker, query) ||
-            Contains(i.Colorist, query) || Contains(i.Editor, query) || Contains(i.Translator, query) ||
-            Contains(i.Letterer, query) || Contains(i.CoverArtist, query)),
-        SearchMode.Descriptive => s.Issues.Any(i =>
-            Contains(i.Notes, query) || Contains(i.Summary, query) || Contains(i.Review, query) ||
-            Contains(i.JoinedTags(), query) || Contains(i.MainCharacterOrTeam, query) || Contains(i.Teams, query) ||
-            Contains(i.Locations, query) || Contains(i.ScanInformation, query)),
-        SearchMode.File => s.Issues.Any(i => Contains(i.FilePath, query)),
-        SearchMode.Catalog => s.Issues.Any(i =>
-            Contains(i.BookAge, query) || Contains(i.BookCollectionStatus, query) || Contains(i.BookNotes, query) ||
-            Contains(i.BookOwner, query) || Contains(i.BookStore, query) || Contains(i.BookLocation, query) ||
-            Contains(i.ISBN, query)),
-        _ => Contains(s.Name, query) || ContainsAnyTitle(s, query) || Contains(s.Publisher, query) || Contains(s.Genre, query) || s.Issues.Any(i =>
-            Contains(i.AlternateSeries, query) || Contains(i.EffectiveTitle(), query) ||
-            Contains(i.SeriesGroup, query) || Contains(i.StoryArc, query) ||
-            Contains(i.Writer, query) || Contains(i.Penciller, query) || Contains(i.Inker, query) ||
-            Contains(i.Colorist, query) || Contains(i.Letterer, query) || Contains(i.Editor, query) ||
-            Contains(i.Translator, query) || Contains(i.CoverArtist, query) ||
-            Contains(i.Summary, query) || Contains(i.Notes, query) || Contains(i.Review, query) ||
-            Contains(i.FilePath, query) || Contains(i.JoinedGenre(), query) || Contains(i.Publisher, query) ||
-            Contains(i.Imprint, query) || Contains(i.Volume, query) || Contains(i.Number, query) ||
-            Contains(i.AlternateNumber, query) || Contains(i.Format, query) || Contains(i.AgeRating, query) ||
-            Contains(i.JoinedTags(), query) || Contains(i.MainCharacterOrTeam, query) || Contains(i.Teams, query) ||
-            Contains(i.Locations, query) || Contains(i.BookAge, query) || Contains(i.BookCollectionStatus, query) ||
-            Contains(i.BookNotes, query) || Contains(i.BookOwner, query) || Contains(i.BookStore, query) ||
-            Contains(i.BookLocation, query) || Contains(i.ISBN, query) || Contains(i.ScanInformation, query)),
+        // Series-level checks (s.Name/Titles/Publisher/Genre) stay hand-written - they have no
+        // per-Issue equivalent. Contains(s.Titles, query) has no CE equivalent (CE never modeled
+        // alternate titles at all) - a deliberate new-Paperbunkr addition to both Series and All
+        // modes, same "deliberate new feature, not parity" footing as ReadingStatus.
+        //
+        // Every per-Issue field list is delegated to SearchFieldBundleCatalog (docs/superpowers/
+        // specs/2026-08-28-smartlist-engine-v2-design.md §4), the single shared definition the Smart
+        // Lists AllProperties field also uses. Behaviour-identical to the pre-extraction inline
+        // switch - guarded by SearchFieldBundleCatalogParityTests.
+        SearchMode.Series => Contains(s.Name, query) || ContainsAnyTitle(s, query) || IssuesMatch(s, SearchMode.Series, query),
+        SearchMode.Writer => IssuesMatch(s, SearchMode.Writer, query),
+        SearchMode.Artists => IssuesMatch(s, SearchMode.Artists, query),
+        SearchMode.Descriptive => IssuesMatch(s, SearchMode.Descriptive, query),
+        SearchMode.File => IssuesMatch(s, SearchMode.File, query),
+        SearchMode.Catalog => IssuesMatch(s, SearchMode.Catalog, query),
+        _ => Contains(s.Name, query) || ContainsAnyTitle(s, query) || Contains(s.Publisher, query)
+            || Contains(s.Genre, query) || IssuesMatch(s, SearchMode.All, query),
     };
+
+    private static bool IssuesMatch(Series s, SearchMode mode, string query) =>
+        s.Issues.Any(i => SearchFieldBundleCatalog.IssueFieldSelectors[mode](i).Any(v => Contains(v, query)));
 
     private static bool Contains(string? value, string query) =>
         !string.IsNullOrEmpty(value) && value.Contains(query, StringComparison.OrdinalIgnoreCase);

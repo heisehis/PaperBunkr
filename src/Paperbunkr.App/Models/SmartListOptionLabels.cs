@@ -21,6 +21,27 @@ public readonly record struct VirtualTagOption(int Id, string Name)
     public override string ToString() => Name;
 }
 
+/// <summary>
+/// Secondary "search in" option for <see cref="SmartListField.AllProperties"/> conditions
+/// (docs/superpowers/specs/2026-08-28-smartlist-engine-v2-design.md §4) — matches CE's two-dropdown
+/// <c>ComicBookAllPropertiesMatcher</c> editor shape.
+/// </summary>
+public readonly record struct SearchModeOption(SearchMode Mode, string Label)
+{
+    public override string ToString() => Label;
+
+    public static readonly IReadOnlyList<SearchModeOption> All =
+    [
+        new(SearchMode.All, "All properties"),
+        new(SearchMode.Series, "Series"),
+        new(SearchMode.Writer, "Writer"),
+        new(SearchMode.Artists, "Artists"),
+        new(SearchMode.Descriptive, "Descriptive"),
+        new(SearchMode.File, "File"),
+        new(SearchMode.Catalog, "Catalog"),
+    ];
+}
+
 /// <summary>Human-readable operator labels, grouped by the data types that offer them (spec §3).</summary>
 public static class SmartListOperatorLabels
 {
@@ -40,12 +61,15 @@ public static class SmartListOperatorLabels
         [SmartListOperator.IsBefore] = "is before",
         [SmartListOperator.WithinLastDays] = "within last (days)",
         [SmartListOperator.DateInRange] = "is in range",
+        [SmartListOperator.ListContains] = "list contains",
+        [SmartListOperator.RegularExpression] = "matches regex",
     };
 
     private static readonly IReadOnlyList<SmartListOperator> TextOperators =
     [
         SmartListOperator.Is, SmartListOperator.IsNot, SmartListOperator.Contains, SmartListOperator.ContainsAny,
         SmartListOperator.ContainsAll, SmartListOperator.StartsWith, SmartListOperator.EndsWith,
+        SmartListOperator.ListContains, SmartListOperator.RegularExpression,
     ];
 
     private static readonly IReadOnlyList<SmartListOperator> NumberOperators =

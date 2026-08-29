@@ -42,6 +42,14 @@ public sealed class CommandManifestEntry
     [XmlAttribute("enabled")]
     public bool Enabled { get; set; } = true;
 
+    /// <summary>
+    /// docs/superpowers/specs/2026-08-28-plugin-api-v3-data-manager-design.md §5 - when true, this
+    /// command's <c>IMetadataWriter</c> calls are structurally required to obtain an affirmative
+    /// <c>IApplication.AskQuestion</c> answer before any DB write. Default false.
+    /// </summary>
+    [XmlAttribute("confirmWrites")]
+    public bool ConfirmWrites { get; set; }
+
     /// <summary>Relative path (from the manifest's own folder) to the .csx script implementing this command.</summary>
     [XmlAttribute("script")]
     public string Script { get; set; } = string.Empty;

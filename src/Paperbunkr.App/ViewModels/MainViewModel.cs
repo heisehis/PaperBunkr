@@ -38,7 +38,7 @@ public partial class MainViewModel : ViewModelBase
 
     public MainViewModel()
     {
-        Home = new HomeScreenViewModel(GoDetailForSeries, GoReaderForIssue, GoLibraryWithSearch, GoReaderForIssueInReadingList, GoBookReaderForBook);
+        Home = new HomeScreenViewModel(GoDetailForSeries, GoReaderForIssue, GoLibraryWithSearch, GoReaderForIssueInReadingList, GoBookReaderForBook, GoLibraryWithCollection);
         Library = new LibraryScreenViewModel(GoDetailForSeries, GoReaderForIssue, GoNewIssuePropertiesForPlaceholder, OpenQuickRateOverlay, GoIssuePropertiesForIssue, GoBulkIssuePropertiesForIssues, ShowToast, GoBulkSeriesPropertiesForSeries, GoLibraryFoldersPreferences, OpenCollectionPropertiesOverlay, GoBookDetailForBook);
         Books = new BooksScreenViewModel(GoBookDetailForBook, GoBookSeriesDetailForSeries, GoBookPropertiesForBook, GoBulkBookPropertiesForBooks, GoBookSeriesPropertiesForSeries, GoLibraryFoldersPreferences, ShowToast);
         BookDetail = new BookDetailScreenViewModel(GoBooks, GoBookReaderForBook, GoBookPropertiesForBook, GoBulkBookPropertiesForBooks, GoBookSeriesPropertiesForSeries);
@@ -358,6 +358,16 @@ public partial class MainViewModel : ViewModelBase
     {
         Library.SearchQuery = query;
         Library.LoadFromDatabase();
+        CurrentScreen = "library";
+    });
+
+    /// <summary>Home's Collections shelf click-through (docs/superpowers/specs/2026-08-27-
+    /// collections-design.md's own deferred "Home-feed shelf" follow-on) - same shape as
+    /// <see cref="GoLibraryWithSearch"/>.</summary>
+    private void GoLibraryWithCollection(int collectionId) => TryLeaveCurrentEditor(() =>
+    {
+        Library.LoadFromDatabase();
+        Library.SelectCollectionById(collectionId);
         CurrentScreen = "library";
     });
 

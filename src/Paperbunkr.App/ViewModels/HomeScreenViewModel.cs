@@ -10,6 +10,7 @@ using CommunityToolkit.Mvvm.Input;
 using Microsoft.EntityFrameworkCore;
 using Paperbunkr.App.Models;
 using Paperbunkr.App.Services;
+using Paperbunkr.Data.Collections;
 using Paperbunkr.Data.Entities;
 using Paperbunkr.Data.Metadata;
 
@@ -34,21 +35,24 @@ public partial class HomeScreenViewModel : ViewModelBase
     private readonly Action<string> _goLibraryWithSearch;
     private readonly Action<int, int> _goReaderForIssueInReadingList;
     private readonly Action<int, BookFormat> _goReaderForBook;
+    private readonly Action<int> _goLibraryWithCollection;
     private readonly Random _random = new();
     private readonly DispatcherTimer _spotlightTimer;
 
-    public HomeScreenViewModel(Action<int> goDetailForSeries, Action<int> goReaderForIssue, Action<string> goLibraryWithSearch, Action<int, int> goReaderForIssueInReadingList, Action<int, BookFormat> goReaderForBook)
+    public HomeScreenViewModel(Action<int> goDetailForSeries, Action<int> goReaderForIssue, Action<string> goLibraryWithSearch, Action<int, int> goReaderForIssueInReadingList, Action<int, BookFormat> goReaderForBook, Action<int>? goLibraryWithCollection = null)
     {
         _goDetailForSeries = goDetailForSeries;
         _goReaderForIssue = goReaderForIssue;
         _goLibraryWithSearch = goLibraryWithSearch;
         _goReaderForIssueInReadingList = goReaderForIssueInReadingList;
         _goReaderForBook = goReaderForBook;
+        _goLibraryWithCollection = goLibraryWithCollection ?? (_ => { });
         ContinueReading = new ObservableCollection<HomeContinueReadingCard>();
         ContinueReadingBooks = new ObservableCollection<HomeBookCard>();
         RecentlyAdded = new ObservableCollection<SeriesCardSample>();
         BecauseYouRead = new ObservableCollection<BecauseYouReadRow>();
         SpotlightItems = new ObservableCollection<SpotlightIssueSample>();
+        Collections = new ObservableCollection<HomeCollectionCard>();
 
         // No IDisposable on this ViewModel (same as ReaderScreenViewModel's own timers) - Home is a
         // singleton created once in MainViewModel's constructor and lives for the app's lifetime, so
@@ -88,6 +92,22 @@ public partial class HomeScreenViewModel : ViewModelBase
     /// currently shows; a <see cref="DispatcherTimer"/> advances it automatically, dots let a click
     /// jump straight to one.</summary>
     public ObservableCollection<SpotlightIssueSample> SpotlightItems { get; }
+
+    /// <summary>"Collections" shelf (docs/superpowers/specs/2026-08-27-collections-design.md's own
+    /// deferred "Home-feed shelf" follow-on) - non-empty collections, capped, in the user's own
+    /// sidebar order.</summary>
+    public ObservableCollection<HomeCollectionCard> Collections { get; }
+
+    public bool HasCollections => Collections.Count > 0;
+
+    [RelayCommand]
+    private void OpenCollection(HomeCollectionCard? card)
+    {
+        if (card is not null)
+        {
+            _goLibraryWithCollection(card.Id);
+        }
+    }
 
     [ObservableProperty]
     private int _spotlightIndex;
@@ -198,6 +218,13 @@ public partial class HomeScreenViewModel : ViewModelBase
             RecentlyAdded.Add(SeriesCardSample.FromSeries(series));
         }
 
+        Collections.Clear();
+        foreach (var collection in HomeFeedResolver.GetHomeCollections(context))
+        {
+            var hint = CollectionResolver.GetCoverHint(context, collection.Id);
+            Collections.Add(HomeCollectionCard.FromCollection(collection, hint));
+        }
+
         BecauseYouRead.Clear();
         foreach (int seedSeriesId in HomeFeedResolver.GetRecentlyOpenedSeriesIds(context))
         {
@@ -246,6 +273,7 @@ public partial class HomeScreenViewModel : ViewModelBase
         OnPropertyChanged(nameof(HasRecentlyAdded));
         OnPropertyChanged(nameof(HasBecauseYouRead));
         OnPropertyChanged(nameof(HasSpotlight));
+        OnPropertyChanged(nameof(HasCollections));
     }
 
     partial void OnReadingListSpotlightChanged(ReadingListSpotlightSample? value) => OnPropertyChanged(nameof(HasReadingListSpotlight));

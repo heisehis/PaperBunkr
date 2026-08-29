@@ -295,6 +295,34 @@
                     <TextBlock Text="Nothing added yet" Classes="emptyState" IsVisible="{Binding !HasRecentlyAdded}" />
                 </StackPanel>
 
+                <!-- ============ Collections (docs/superpowers/specs/2026-08-27-collections-design.md's
+                     own deferred "Home-feed shelf" follow-on) ============ -->
+                <StackPanel Spacing="12" IsVisible="{Binding HasCollections}">
+                    <Grid ColumnDefinitions="*,Auto">
+                        <controls:SplitText Grid.Column="0" Classes="heading" Text="Collections" AutomationProperties.AutomationId="HomeCollectionsHeader" />
+                        <Button Grid.Column="1" Classes="viewAllLink" Content="View Library →"
+                                Command="{Binding GoToLibraryCommand}"
+                                AutomationProperties.AutomationId="HomeViewLibraryFromCollectionsLink" />
+                    </Grid>
+                    <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+                        <ItemsControl ItemsSource="{Binding Collections}" Margin="0,0,0,12" AutomationProperties.AutomationId="HomeCollectionsList">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate><StackPanel Orientation="Horizontal" Spacing="16" /></ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="models:HomeCollectionCard">
+                                    <views:PosterTile
+                                        CoverSource="{Binding CoverImage}"
+                                        TitleText="{Binding Name}"
+                                        BadgeText="{Binding Count, StringFormat='{}{0}'}"
+                                        Command="{Binding $parent[UserControl].((vm:HomeScreenViewModel)DataContext).OpenCollectionCommand}"
+                                        CommandParameter="{Binding}" />
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                </StackPanel>
+
                 <!-- ============ Because You Read ============ -->
                 <ItemsControl ItemsSource="{Binding BecauseYouRead}" IsVisible="{Binding HasBecauseYouRead}"
                               AutomationProperties.AutomationId="HomeBecauseYouReadSection">

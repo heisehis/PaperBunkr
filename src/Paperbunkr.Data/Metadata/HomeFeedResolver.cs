@@ -187,4 +187,18 @@ public static class HomeFeedResolver
             .Take(limit)
             .ToList();
     }
+
+    /// <summary>Non-empty collections in the user's own sidebar order (<see cref="Collection.SortOrder"/>),
+    /// capped - feeds Home's "Collections" shelf (docs/superpowers/specs/2026-08-27-collections-
+    /// design.md's own deferred "Home-feed shelf" follow-on). Empty collections are skipped - a
+    /// collection with nothing in it yet has nothing to show off.</summary>
+    public static IReadOnlyList<Collection> GetHomeCollections(PaperbunkrDbContext context, int limit = 10)
+    {
+        return context.Collections
+            .Include(c => c.Items)
+            .Where(c => c.Items.Count > 0)
+            .OrderBy(c => c.SortOrder)
+            .Take(limit)
+            .ToList();
+    }
 }

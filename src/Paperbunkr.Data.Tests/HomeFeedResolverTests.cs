@@ -146,6 +146,24 @@ public class HomeFeedResolverTests : IDisposable
         Assert.Empty(results);
     }
 
+    // --- GetHomeCollections (docs/superpowers/specs/2026-08-27-collections-design.md's own
+    // deferred "Home-feed shelf" follow-on) ---
+
+    [Fact]
+    public void GetHomeCollections_ExcludesEmptyCollections_RespectsSortOrder()
+    {
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        int seriesId = SeedSeries(context, "Some Series");
+        var populated = Collections.CollectionService.Create(context, "Favorites");
+        Collections.CollectionService.AddItems(context, populated.Id, seriesIds: new[] { seriesId });
+        Collections.CollectionService.Create(context, "Empty One");
+
+        var results = HomeFeedResolver.GetHomeCollections(context);
+
+        var result = Assert.Single(results);
+        Assert.Equal("Favorites", result.Name);
+    }
+
     // --- GetRecentlyOpenedSeriesIds ---
 
     [Fact]

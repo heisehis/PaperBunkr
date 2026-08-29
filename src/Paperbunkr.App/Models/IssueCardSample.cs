@@ -29,6 +29,15 @@ public sealed partial class IssueCardSample : ObservableObject, ISelectableCard
     /// <summary>Real decoded cover art, null until "Generate Covers" has processed this issue.</summary>
     public Bitmap? CoverImage { get; init; }
 
+    /// <summary>
+    /// Cover issue id for the lazy <c>views:AsyncCoverImage.SourceId</c> binding path - set instead
+    /// of <see cref="CoverImage"/> where the grid can be large and virtualized (Smart Lists results:
+    /// a list matching hundreds of issues would otherwise decode every JPEG synchronously on the UI
+    /// thread while building these). Detail's own Issues tab keeps using <see cref="CoverImage"/> -
+    /// it's always scoped to one series' worth of issues.
+    /// </summary>
+    public int? CoverIssueId { get; init; }
+
     /// <summary>Null/empty for a fileless placeholder entry (docs/superpowers/specs/2026-08-16-reveal-in-explorer-and-fileless-entries-design.md).</summary>
     public string? FilePath { get; init; }
 

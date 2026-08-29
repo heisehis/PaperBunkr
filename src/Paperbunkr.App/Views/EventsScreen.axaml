@@ -367,7 +367,7 @@
                                                        VerticalAlignment="Center" HorizontalAlignment="Center" Foreground="{DynamicResource PbTextFaintBrush}" />
                                             <Border Grid.Column="2" Width="42" Height="63" Margin="0,0,12,0" CornerRadius="3" ClipToBounds="True"
                                                     Background="{DynamicResource PbSurface3Brush}">
-                                                <Image Source="{Binding CoverIssueId, Converter={x:Static views:CoverImageConverter.Instance}}" Stretch="UniformToFill" />
+                                                <Image views:AsyncCoverImage.SourceId="{Binding CoverIssueId}" Stretch="UniformToFill" />
                                             </Border>
                                             <StackPanel Grid.Column="3" VerticalAlignment="Center">
                                                 <TextBlock Text="{Binding TitleLine}" FontSize="13.5" Foreground="{DynamicResource PbTextBrush}" TextTrimming="CharacterEllipsis" />
@@ -592,7 +592,7 @@
                                                     Command="{Binding $parent[ItemsControl].((vm:EventsScreenViewModel)DataContext).OpenContinuitySeriesCommand}"
                                                     CommandParameter="{Binding}">
                                                 <Border Height="144" CornerRadius="5" ClipToBounds="True" Background="{Binding CoverBrush}">
-                                                    <Image Source="{Binding CoverIssueId, Converter={x:Static views:CoverImageConverter.Instance}}" Stretch="UniformToFill" />
+                                                    <Image views:AsyncCoverImage.SourceId="{Binding CoverIssueId}" Stretch="UniformToFill" />
                                                 </Border>
                                             </Button>
                                             <CheckBox Classes="posterPick"

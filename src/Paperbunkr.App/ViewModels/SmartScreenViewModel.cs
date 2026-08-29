@@ -118,8 +118,13 @@ public partial class SmartScreenViewModel : ViewModelBase
             Conditions.Add(new SmartListConditionViewModel(condition, RemoveCondition, RecomputeMatchCount, _virtualTagOptions));
         }
 
-        RecomputeMatchCount();
-        RefreshSidebar();
+        // One library load feeds both the active list's Results and every list's sidebar count -
+        // opening the screen used to load the whole library twice (once here, once in RefreshSidebar).
+        var all = context.SmartLists.Include(s => s.Conditions).OrderBy(s => s.SortOrder).ToList();
+        var snapshot = SmartListQueryBuilder.LoadSnapshot(context, all.SelectMany(l => l.Conditions).ToList());
+
+        RecomputeMatchCount(snapshot);
+        RefreshSidebarCore(all, all.ToDictionary(l => l.Id, l => SmartListQueryBuilder.Evaluate(snapshot, l).Count));
     }
 
     /// <summary>
@@ -154,6 +159,13 @@ public partial class SmartScreenViewModel : ViewModelBase
         using var context = PaperbunkrDb.CreateContext();
         var all = context.SmartLists.Include(s => s.Conditions).OrderBy(s => s.SortOrder).ToList();
 
+        // One library load for every list's count, not one DB round-trip per list (each carrying
+        // four collection includes) - the Smart screen open path was ~N full-library materializations.
+        RefreshSidebarCore(all, SmartListQueryBuilder.MatchCounts(context, all));
+    }
+
+    private void RefreshSidebarCore(List<SmartList> all, Dictionary<int, int> matchCounts)
+    {
         BuiltInLists.Clear();
         MaintenanceLists.Clear();
         CustomLists.Clear();
@@ -165,7 +177,7 @@ public partial class SmartScreenViewModel : ViewModelBase
             {
                 Id = list.Id,
                 Name = list.Name,
-                MatchCount = SmartListQueryBuilder.MatchCount(context, list),
+                MatchCount = matchCounts[list.Id],
                 IsActive = list.Id == _activeSmartListId,
                 DeleteConfirm = list.IsSystem
                     ? null
@@ -229,12 +241,24 @@ public partial class SmartScreenViewModel : ViewModelBase
         }
 
         using var context = PaperbunkrDb.CreateContext();
-        // Evaluates the in-memory (possibly unsaved) working conditions against the live library,
-        // so the results/count update as the user edits, before Save persists anything. One
-        // Build() call backs both Results and MatchCountLabel - MatchCount(ctx, list) is just
-        // Build(ctx, list).Count, so calling it separately would evaluate the query twice.
+        RecomputeMatchCount(SmartListQueryBuilder.LoadSnapshot(context, _workingList.Conditions));
+    }
+
+    /// <summary>
+    /// Evaluates the in-memory (possibly unsaved) working conditions against <paramref name="snapshot"/>,
+    /// so results/count update as the user edits before Save persists anything. Takes a prebuilt
+    /// snapshot so <see cref="LoadSmartList"/> can share one library load between this and the
+    /// sidebar counts instead of loading the library twice on every screen open.
+    /// </summary>
+    private void RecomputeMatchCount(SmartListQueryBuilder.LibrarySnapshot snapshot)
+    {
+        if (_workingList is null)
+        {
+            return;
+        }
+
         var transient = new SmartList { Conditions = _workingList.Conditions };
-        var matched = SmartListQueryBuilder.Build(context, transient);
+        var matched = SmartListQueryBuilder.Evaluate(snapshot, transient);
 
         Results.Clear();
         foreach (var issue in matched)
@@ -246,7 +270,7 @@ public partial class SmartScreenViewModel : ViewModelBase
                 Title = string.IsNullOrWhiteSpace(issue.EffectiveNumber()) ? "#?" : $"#{issue.EffectiveNumber()}",
                 IsUnread = issue.LastPageRead is null or 0,
                 CoverBrush = SeriesCardSample.CoverBrushFor(issue.Series!.Name),
-                CoverImage = CoverImageCache.Get(issue.Id),
+                CoverIssueId = issue.Id, // lazy async decode via AsyncCoverImage - see IssueCardSample.CoverIssueId
             });
         }
 

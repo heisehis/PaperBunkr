@@ -163,7 +163,7 @@
                         <Grid>
                             <!-- Uniform (not UniformToFill) - the box is already sized to this cover's own
                                  aspect ratio, so nothing gets cropped; only extreme clamped outliers letterbox. -->
-                            <Image Source="{Binding Id, Converter={x:Static views:CoverImageConverter.Instance}}" Stretch="Uniform" />
+                            <Image views:AsyncCoverImage.SourceId="{Binding Id}" Stretch="Uniform" />
                             <Border Classes="posterScrim" />
                             <Border IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowUnreadBadge}">
                                 <Border IsVisible="{Binding !IsRead}" Background="#B814161B"
@@ -217,7 +217,7 @@
                         <Panel Grid.Column="0">
                             <Border CornerRadius="{DynamicResource PbRadiusSm}" Width="44" Height="63"
                                     Background="{Binding CoverBrush}" ClipToBounds="True">
-                                <Image Source="{Binding Id, Converter={x:Static views:CoverImageConverter.Instance}}" Stretch="UniformToFill" />
+                                <Image views:AsyncCoverImage.SourceId="{Binding Id}" Stretch="UniformToFill" />
                             </Border>
                             <CheckBox IsChecked="{Binding IsSelected, Mode=OneWay}"
                                       Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ToggleIssueSelectionCheckboxCommand}"
@@ -248,7 +248,7 @@
                 <Grid ColumnDefinitions="52,*" Margin="0,6">
                     <Panel Grid.Column="0">
                         <Border Width="36" Height="50" CornerRadius="{DynamicResource PbRadiusSm}" Background="{Binding CoverBrush}" ClipToBounds="True">
-                            <Image Source="{Binding Id, Converter={x:Static views:CoverImageConverter.Instance}}" Stretch="UniformToFill" />
+                            <Image views:AsyncCoverImage.SourceId="{Binding Id}" Stretch="UniformToFill" />
                         </Border>
                         <CheckBox IsChecked="{Binding IsSelected, Mode=OneWay}"
                                   Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ToggleIssueSelectionCheckboxCommand}"
@@ -292,7 +292,7 @@
                                     Width="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).TilesThumbWidth}"
                                     Height="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).TilesThumbHeight}"
                                     Background="{Binding CoverBrush}" ClipToBounds="True">
-                                <Image Source="{Binding Id, Converter={x:Static views:CoverImageConverter.Instance}}" Stretch="UniformToFill" />
+                                <Image views:AsyncCoverImage.SourceId="{Binding Id}" Stretch="UniformToFill" />
                             </Border>
                             <CheckBox IsChecked="{Binding IsSelected, Mode=OneWay}"
                                       Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ToggleIssueSelectionCheckboxCommand}"
@@ -324,7 +324,7 @@
                         <Grid>
                             <!-- Uniform (not UniformToFill) - the box is already sized to this cover's own
                                  aspect ratio, so nothing gets cropped; only extreme clamped outliers letterbox. -->
-                            <Image Source="{Binding CoverIssueId, Converter={x:Static views:CoverImageConverter.Instance}}" Stretch="Uniform" />
+                            <Image views:AsyncCoverImage.SourceId="{Binding CoverIssueId}" Stretch="Uniform" />
                             <Border Classes="posterScrim" />
                             <Border IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowUnreadBadge}">
                                 <Border IsVisible="{Binding HasUnread}" Background="#B814161B"
@@ -388,7 +388,7 @@
                         <Border Grid.Column="0" CornerRadius="4" Width="44" Height="63"
                                 Background="{Binding CoverBrush}" ClipToBounds="True">
                             <Grid>
-                                <Image Source="{Binding CoverIssueId, Converter={x:Static views:CoverImageConverter.Instance}}" Stretch="UniformToFill" />
+                                <Image views:AsyncCoverImage.SourceId="{Binding CoverIssueId}" Stretch="UniformToFill" />
                                 <!-- Always visible (not hover-gated like the grid-card templates above) -
                                      this thumbnail is too small to have a Border.cover-class hover parent
                                      to key off, and a permanently tiny checkbox is unobtrusive at this scale. -->
@@ -422,7 +422,7 @@
                 <Grid ColumnDefinitions="52,*,110,70,70,140" Margin="0,6">
                     <Border Grid.Column="0" Width="36" Height="50" CornerRadius="3" Background="{Binding CoverBrush}" ClipToBounds="True">
                         <Grid>
-                            <Image Source="{Binding CoverIssueId, Converter={x:Static views:CoverImageConverter.Instance}}" Stretch="UniformToFill" />
+                            <Image views:AsyncCoverImage.SourceId="{Binding CoverIssueId}" Stretch="UniformToFill" />
                             <CheckBox Classes="tileSelect forceVisible"
                                       IsChecked="{Binding IsSelected, Mode=OneWay}"
                                       Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ToggleSeriesSelectionCheckboxCommand}"
@@ -455,7 +455,7 @@
                                 Height="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).TilesThumbHeight}"
                                 Background="{Binding CoverBrush}" ClipToBounds="True">
                             <Grid>
-                                <Image Source="{Binding CoverIssueId, Converter={x:Static views:CoverImageConverter.Instance}}" Stretch="UniformToFill" />
+                                <Image views:AsyncCoverImage.SourceId="{Binding CoverIssueId}" Stretch="UniformToFill" />
                                 <CheckBox Classes="tileSelect forceVisible"
                                           IsChecked="{Binding IsSelected, Mode=OneWay}"
                                           Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ToggleSeriesSelectionCheckboxCommand}"
@@ -489,7 +489,7 @@
                     <Border Grid.Row="0" Classes="cover posterCover" Background="{Binding CoverBrush}"
                             Height="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PosterCoverHeight}">
                         <Grid>
-                            <Image Source="{Binding Id, Converter={x:Static views:CoverImageConverter.Instance}}" Stretch="UniformToFill" />
+                            <Image views:AsyncCoverImage.SourceId="{Binding Id}" Stretch="UniformToFill" />
                             <Border Classes="posterScrim" />
                             <Border Classes="pbChip" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="6">
                                 <Border.IsVisible>
@@ -536,7 +536,7 @@
                     <Border Grid.Row="0" Classes="cover posterCover" Background="{Binding CoverBrush}"
                             Height="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PosterCoverHeight}">
                         <Grid>
-                            <Image Source="{Binding CoverIssueId, Converter={x:Static views:CoverImageConverter.Instance}}" Stretch="UniformToFill" />
+                            <Image views:AsyncCoverImage.SourceId="{Binding CoverIssueId}" Stretch="UniformToFill" />
                             <Border Classes="posterScrim" />
                             <Border Classes="pbChip" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="6">
                                 <Border.IsVisible>

@@ -83,6 +83,15 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
     private static readonly TimeSpan SearchHistoryDebounce = TimeSpan.FromMilliseconds(800);
     private DispatcherTimer? _searchHistoryDebounceTimer;
 
+    /// <summary>
+    /// In-memory library snapshot, refreshed only by <see cref="LoadFromDatabase"/> (nav into
+    /// Library, a mutation command, a folder scan). Search / sort / group / filter changes rebuild
+    /// the view from these via <see cref="RebuildView"/> without a database round-trip - at 2000+
+    /// series, re-materializing the whole library on every search keystroke froze the UI.
+    /// </summary>
+    private List<Series> _allSeries = new();
+    private List<Category> _allCategories = new();
+
     public LibraryScreenViewModel(
         Action<int> goDetail,
         Action<int> goReaderForIssue,
@@ -207,7 +216,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
             _activeCategoryId = state.ActiveCategoryId;
             SearchQuery = state.SearchQuery; // Goes through the normal setter - same reload/save path as any other search-query change.
             SaveLibrarySettings();
-            LoadFromDatabase();
+            RebuildView();
         }
         finally
         {
@@ -534,7 +543,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         OnPropertyChanged(nameof(ActiveSortLabel));
         RaiseChipAndEmptyState();
         SaveLibrarySettings();
-        LoadFromDatabase();
+        RebuildView();
     }
 
     [ObservableProperty]
@@ -546,7 +555,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         OnPropertyChanged(nameof(ActiveSortLabel));
         RaiseChipAndEmptyState();
         SaveLibrarySettings();
-        LoadFromDatabase();
+        RebuildView();
     }
 
     [RelayCommand]
@@ -574,7 +583,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         OnPropertyChanged(nameof(ShowAlphabetIndex));
         RaiseChipAndEmptyState();
         SaveLibrarySettings();
-        LoadFromDatabase();
+        RebuildView();
     }
 
     [RelayCommand]
@@ -617,14 +626,12 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
     public string ActiveGroupLabel => IsSeriesGranularity ? GroupLabel : IssueList.GroupFieldLabel;
 
     /// <summary>
-    /// Reloads everything from the database: the sidebar's <see cref="ContentTypes"/>/
-    /// <see cref="Collections"/> summaries (always full, unfiltered counts), <see cref="IssueList"/>'s
-    /// rows, AND <see cref="Covers"/>/<see cref="Groups"/> - both granularities are always computed
-    /// regardless of which is currently displayed, see the constructor's doc comment for why.
-    /// Filtered by whichever of <see cref="_activeContentType"/>/<see cref="_activeCategoryId"/> is
-    /// set, mutually exclusive - both null means "All Series"). Re-queries on every sidebar click
-    /// rather than caching the last series list, matching this codebase's existing convention of
-    /// hitting the DB fresh per user action.
+    /// Re-reads the library into the <see cref="_allSeries"/>/<see cref="_allCategories"/> snapshot
+    /// (plus <see cref="ReadingLists"/>), then hands off to <see cref="RebuildView"/> for all the
+    /// derived collections. Call this only when the underlying data can have changed - nav into
+    /// Library, a mutation command, a folder scan. A view-only change (search / sort / group /
+    /// filter / sidebar selection) calls <see cref="RebuildView"/> directly instead, off the cached
+    /// snapshot, so it never round-trips the database.
     /// </summary>
     public void LoadFromDatabase()
     {
@@ -633,13 +640,47 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         // (docs/superpowers/specs/2026-08-23-weighted-categorized-tags-design.md); without it every
         // issue would look like it has no Genre/Tags at all, breaking Library search and the Comic
         // List's Genre/Tags columns for everyone.
-        var series = context.Series
+        // AsNoTracking + AsSplitQuery: this is a pure read (the context is disposed at method end,
+        // nothing here mutates a loaded entity), and at 2000+ series a single query carrying four
+        // collection includes multiplies out to millions of rows for EF to de-duplicate and track
+        // on the UI thread. Split query = one linear query per include level; no-tracking drops the
+        // identity map and change-snapshot cost.
+        _allSeries = context.Series
             .Include(s => s.Issues).ThenInclude(i => i.Tags)
             .Include(s => s.Categories)
             .Include(s => s.TrackingLinks)
             .Include(s => s.Titles)
+            .AsNoTracking()
+            .AsSplitQuery()
             .OrderBy(s => s.SortName ?? s.Name)
             .ToList();
+
+        _allCategories = context.Categories.Include(c => c.Series).AsNoTracking().AsSplitQuery().OrderBy(c => c.SortOrder).ToList();
+
+        // "Add to Reading List" flyout (docs/superpowers/specs/2026-08-24-library-multiselect-
+        // slice2-design.md §2) - same ordering ReadingScreenViewModel's own sidebar uses. Its own
+        // table, so it only refreshes with a real reload, not on every RebuildView.
+        ReadingLists.Clear();
+        foreach (var list in context.ReadingLists.OrderBy(l => l.SortOrder))
+        {
+            ReadingLists.Add(new ReadingListOption { Id = list.Id, Name = list.Name });
+        }
+
+        RebuildView();
+    }
+
+    /// <summary>
+    /// Rebuilds every derived collection - sidebar <see cref="ContentTypes"/>/<see cref="Collections"/>
+    /// summaries, the filtered/sorted/grouped <see cref="Covers"/>/<see cref="Groups"/>, and
+    /// <see cref="IssueList"/>'s rows - from the in-memory <see cref="_allSeries"/>/
+    /// <see cref="_allCategories"/> snapshot, with no database round-trip. Search / sort / group /
+    /// filter / sidebar-selection changes call this; only an actual data change (nav into Library, a
+    /// mutation command, a folder scan) re-runs <see cref="LoadFromDatabase"/>. Both granularities
+    /// are still always computed regardless of which is displayed (see the constructor's doc comment).
+    /// </summary>
+    private void RebuildView()
+    {
+        var series = _allSeries;
 
         AllSeriesCount = series.Count;
 
@@ -647,14 +688,6 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         foreach (string name in series.Select(s => s.Name).Distinct().OrderBy(n => n))
         {
             ExistingSeriesNames.Add(name);
-        }
-
-        // "Add to Reading List" flyout (docs/superpowers/specs/2026-08-24-library-multiselect-
-        // slice2-design.md §2) - same ordering ReadingScreenViewModel's own sidebar uses.
-        ReadingLists.Clear();
-        foreach (var list in context.ReadingLists.OrderBy(l => l.SortOrder))
-        {
-            ReadingLists.Add(new ReadingListOption { Id = list.Id, Name = list.Name });
         }
 
         ContentTypes.Clear();
@@ -669,9 +702,8 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
             });
         }
 
-        var categories = context.Categories.Include(c => c.Series).OrderBy(c => c.SortOrder).ToList();
         Collections.Clear();
-        foreach (var category in categories)
+        foreach (var category in _allCategories)
         {
             Collections.Add(new CategorySummary
             {
@@ -867,7 +899,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         _activeContentType = null;
         _activeCategoryId = null;
         SaveLibrarySettings();
-        LoadFromDatabase();
+        RebuildView();
         PushBrowseHistory();
     }
 
@@ -882,7 +914,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         _activeContentType = summary.ContentType;
         _activeCategoryId = null;
         SaveLibrarySettings();
-        LoadFromDatabase();
+        RebuildView();
         PushBrowseHistory();
     }
 
@@ -897,17 +929,17 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         _activeCategoryId = summary.Id;
         _activeContentType = null;
         SaveLibrarySettings();
-        LoadFromDatabase();
+        RebuildView();
         PushBrowseHistory();
     }
 
     /// <summary>
     /// Free-text search, scoped to <see cref="SearchMode"/>'s field set (docs/superpowers/specs/
     /// 2026-08-09-library-toolbar-design.md Phase B, extended per CE's real QuickSearch mode
-    /// dropdown - see <see cref="SearchMode"/>'s doc comment). No debounce: requerying on every
-    /// keystroke matches how every other filter in this ViewModel already behaves (sidebar clicks,
-    /// the 3 checkboxes below), and library sizes here are small enough that a plain SQLite query
-    /// is fast regardless.
+    /// dropdown - see <see cref="SearchMode"/>'s doc comment). No debounce: every keystroke rebuilds
+    /// the view via <see cref="RebuildView"/>, which filters the already-in-memory
+    /// <see cref="_allSeries"/> snapshot - no database round-trip, so it stays cheap even on a
+    /// 2000+ series library (it used to re-query and re-materialize the whole library per keystroke).
     /// </summary>
     [ObservableProperty]
     private string _searchQuery = string.Empty;
@@ -916,7 +948,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
     {
         RaiseChipAndEmptyState();
         SaveLibrarySettings();
-        LoadFromDatabase();
+        RebuildView();
 
         // History-push is debounced (~800ms pause in typing) - the reload above is not, and stays
         // exactly as instant as it always was. Guarded against ApplyBrowseState's own SearchQuery
@@ -953,7 +985,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         OnPropertyChanged(nameof(SearchModeLabel));
         RaiseChipAndEmptyState();
         SaveLibrarySettings();
-        LoadFromDatabase();
+        RebuildView();
     }
 
     [RelayCommand]
@@ -966,7 +998,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
     {
         RaiseChipAndEmptyState();
         SaveLibrarySettings();
-        LoadFromDatabase();
+        RebuildView();
     }
 
     [ObservableProperty]
@@ -976,7 +1008,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
     {
         RaiseChipAndEmptyState();
         SaveLibrarySettings();
-        LoadFromDatabase();
+        RebuildView();
     }
 
     [ObservableProperty]
@@ -986,7 +1018,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
     {
         RaiseChipAndEmptyState();
         SaveLibrarySettings();
-        LoadFromDatabase();
+        RebuildView();
     }
 
     /// <summary>A-Z indexer only means something against an alphabetically-ordered, ungrouped flat

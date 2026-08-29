@@ -1,6 +1,8 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Paperbunkr.App.ViewModels"
+             xmlns:views="using:Paperbunkr.App.Views"
+             xmlns:controls="using:Paperbunkr.App.Controls"
              xmlns:models="using:Paperbunkr.App.Models"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -220,16 +222,18 @@
                 <ItemsControl x:Name="ResultsList" ItemsSource="{Binding Results}" Margin="0,32,0,0"
                               IsVisible="{Binding HasResults}">
                     <ItemsControl.ItemsPanel>
-                        <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
+                        <ItemsPanelTemplate>
+                            <controls:VirtualizingWrapPanel ItemWidth="120" ItemHeight="168" ItemSpacing="16" LineSpacing="16" />
+                        </ItemsPanelTemplate>
                     </ItemsControl.ItemsPanel>
                     <ItemsControl.ItemTemplate>
                         <DataTemplate x:DataType="models:IssueCardSample">
-                            <Button Classes="resultCard" Width="120" Margin="0,0,16,16"
+                            <Button Classes="resultCard" Width="120"
                                     Command="{Binding #ResultsList.((vm:SmartScreenViewModel)DataContext).SelectResultCommand}"
                                     CommandParameter="{Binding}">
                                 <Border Classes="resultTile" Background="{Binding CoverBrush}">
                                     <Grid>
-                                        <Image Source="{Binding CoverImage}" Stretch="UniformToFill" />
+                                        <Image views:AsyncCoverImage.SourceId="{Binding CoverIssueId}" Stretch="UniformToFill" />
                                         <TextBlock Text="{Binding Title}" FontSize="13" FontWeight="Black" Foreground="#FFFFF8EC"
                                                    VerticalAlignment="Bottom" Margin="9" />
                                     </Grid>

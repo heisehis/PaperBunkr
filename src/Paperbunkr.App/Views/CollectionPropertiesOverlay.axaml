@@ -68,7 +68,7 @@
                             <TextBlock Classes="fieldLabel" Text="NAME" />
                             <TextBox Text="{Binding Name}" />
                         </StackPanel>
-                        <StackPanel Classes="field" Width="516">
+                        <StackPanel Classes="field" Width="480">
                             <TextBlock Classes="fieldLabel" Text="DESCRIPTION" />
                             <TextBox Text="{Binding Description}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="60" />
                         </StackPanel>

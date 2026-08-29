@@ -64,7 +64,12 @@ public class SmartScreenViewModelTests : IDisposable
     private static int CreateSmartList(string name, params SmartListCondition[] conditions)
     {
         using var context = PaperbunkrDb.CreateContext();
-        var list = new SmartList { Name = name, IsSystem = false, Conditions = conditions.ToList() };
+        var list = new SmartList
+        {
+            Name = name,
+            IsSystem = false,
+            RootGroup = new SmartListConditionGroup { Mode = SmartListGroupMode.And, Conditions = conditions.ToList() },
+        };
         context.SmartLists.Add(list);
         context.SaveChanges();
         return list.Id;
@@ -99,7 +104,7 @@ public class SmartScreenViewModelTests : IDisposable
         Assert.False(vm.HasResults);
         Assert.Equal("0", vm.MatchCountLabel);
 
-        vm.Conditions[0].Value = "Match Me";
+        vm.RootGroup!.Conditions[0].Value = "Match Me";
 
         Assert.True(vm.HasResults);
         var result = Assert.Single(vm.Results);
@@ -163,6 +168,99 @@ public class SmartScreenViewModelTests : IDisposable
     }
 
     private static Color FirstStopColor(IBrush brush) => Assert.IsType<LinearGradientBrush>(brush).GradientStops[0].Color;
+
+    // --- SmartList Engine v2 (docs/superpowers/specs/2026-08-28-smartlist-engine-v2-design.md) ---
+
+    [Fact]
+    public void RootGroup_AddConditionAndAddGroup_MutateTheTree_AndAGroupCanBeRemoved()
+    {
+        SeedSystemList("All Series");
+        var vm = new SmartScreenViewModel(goToSeries: _ => { });
+        vm.CreateNewCommand.Execute(null);
+
+        var root = vm.RootGroup!;
+        Assert.Empty(root.Conditions);
+        Assert.Empty(root.ChildGroups);
+
+        root.AddConditionCommand.Execute(null);
+        root.AddGroupCommand.Execute(null);
+        Assert.Single(root.Conditions);
+        Assert.Single(root.ChildGroups);
+
+        var child = root.ChildGroups[0];
+        Assert.False(child.IsRoot);
+        Assert.True(child.CanRemove);
+        child.RemoveCommand.Execute(null);
+        Assert.Empty(root.ChildGroups);
+    }
+
+    [Fact]
+    public void RootGroup_CannotBeRemoved()
+    {
+        SeedSystemList("All Series");
+        var vm = new SmartScreenViewModel(goToSeries: _ => { });
+        vm.CreateNewCommand.Execute(null);
+
+        Assert.True(vm.RootGroup!.IsRoot);
+        Assert.False(vm.RootGroup.CanRemove);
+    }
+
+    [Fact]
+    public void SelectingAllPropertiesField_RevealsTheSecondarySearchInDropdown_DefaultingToAll()
+    {
+        SeedSystemList("All Series");
+        var vm = new SmartScreenViewModel(goToSeries: _ => { });
+        vm.CreateNewCommand.Execute(null);
+        vm.RootGroup!.AddConditionCommand.Execute(null);
+
+        var row = vm.RootGroup.Conditions[0];
+        Assert.False(row.IsAllPropertiesField); // starts on SeriesName
+
+        row.SelectedField = row.FieldOptions.Single(f => f.Field == Paperbunkr.Data.Entities.SmartListField.AllProperties);
+
+        Assert.True(row.IsAllPropertiesField);
+        Assert.Equal(Paperbunkr.Data.Entities.SearchMode.All, row.SelectedSearchMode.Mode);
+        Assert.True(row.ShowCaseToggle);
+    }
+
+    [Fact]
+    public void NestedOrGroup_PersistsThroughSaveAndReload_AndEvaluatesRecursively()
+    {
+        int zenithA = CreateSeriesWithIssues("Zenith A", "1");
+        int zenithB = CreateSeriesWithIssues("Zenith B", "1");
+        CreateSeriesWithIssues("Other", "1");
+        SeedSystemList("All Series");
+
+        var vm = new SmartScreenViewModel(goToSeries: _ => { });
+        vm.CreateNewCommand.Execute(null);
+
+        // Root AND: SeriesName contains "Zenith"  AND  child OR( SeriesName is "Zenith A" , SeriesName is "Zenith B" )
+        var root = vm.RootGroup!;
+        root.AddConditionCommand.Execute(null);
+        root.Conditions[0].SelectedField = root.Conditions[0].FieldOptions.Single(f => f.Field == Paperbunkr.Data.Entities.SmartListField.SeriesName);
+        root.Conditions[0].SelectedOperator = root.Conditions[0].OperatorOptions.Single(o => o.Operator == Paperbunkr.Data.Entities.SmartListOperator.Contains);
+        root.Conditions[0].Value = "Zenith";
+
+        root.AddGroupCommand.Execute(null);
+        var child = root.ChildGroups[0];
+        Assert.True(child.IsOr); // "Add group" seeds an OR group
+        child.AddConditionCommand.Execute(null);
+        child.AddConditionCommand.Execute(null);
+        child.Conditions[0].Value = "Zenith A";
+        child.Conditions[1].Value = "Zenith B";
+
+        vm.SaveCommand.Execute(null);
+
+        // Reload fresh and confirm the tree + evaluation survived.
+        var reloaded = new SmartScreenViewModel(goToSeries: _ => { });
+        reloaded.LoadSmartList(vm.CustomLists.Single().Id);
+        Assert.Single(reloaded.RootGroup!.ChildGroups);
+        Assert.True(reloaded.RootGroup.ChildGroups[0].IsOr);
+        Assert.Equal(2, reloaded.RootGroup.ChildGroups[0].Conditions.Count);
+
+        var matchedSeries = reloaded.Results.Select(r => r.SeriesId).Distinct().OrderBy(x => x).ToList();
+        Assert.Equal(new[] { zenithA, zenithB }.OrderBy(x => x), matchedSeries);
+    }
 
     // --- Delete a custom list (docs/superpowers/specs/2026-08-22-delete-functionality-design.md) ---
 

@@ -32,6 +32,8 @@ public class PaperbunkrDbContext : DbContext
 
     public DbSet<SmartListCondition> SmartListConditions => Set<SmartListCondition>();
 
+    public DbSet<SmartListConditionGroup> SmartListConditionGroups => Set<SmartListConditionGroup>();
+
     public DbSet<ReadingList> ReadingLists => Set<ReadingList>();
 
     public DbSet<ReadingListItem> ReadingListItems => Set<ReadingListItem>();
@@ -278,9 +280,32 @@ public class PaperbunkrDbContext : DbContext
             builder.HasKey(s => s.Id);
             builder.Property(s => s.Name).IsRequired();
 
-            builder.HasMany(s => s.Conditions)
-                .WithOne(c => c.SmartList)
-                .HasForeignKey(c => c.SmartListId)
+            // Nested AND/OR groups (docs/superpowers/specs/2026-08-28-smartlist-engine-v2-design.md
+            // §2) - one root group per list, cascade so deleting the list takes the whole tree with
+            // it. FK lives on the group (SmartListConditionGroup.SmartListId, null for nested groups).
+            builder.HasOne(s => s.RootGroup)
+                .WithOne(g => g.SmartList)
+                .HasForeignKey<SmartListConditionGroup>(g => g.SmartListId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<SmartListConditionGroup>(builder =>
+        {
+            builder.HasKey(g => g.Id);
+            builder.Property(g => g.Mode).HasConversion<string>().HasMaxLength(16);
+            builder.HasIndex(g => g.SmartListId);
+            builder.HasIndex(g => g.ParentGroupId);
+
+            // Self-reference for nesting. Cascade so deleting a group removes its subtree; SQLite
+            // honours ON DELETE CASCADE on a self-FK.
+            builder.HasMany(g => g.ChildGroups)
+                .WithOne(g => g.ParentGroup)
+                .HasForeignKey(g => g.ParentGroupId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            builder.HasMany(g => g.Conditions)
+                .WithOne(c => c.Group)
+                .HasForeignKey(c => c.GroupId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
@@ -289,7 +314,10 @@ public class PaperbunkrDbContext : DbContext
             builder.HasKey(c => c.Id);
             builder.Property(c => c.Field).HasConversion<string>().HasMaxLength(32);
             builder.Property(c => c.Operator).HasConversion<string>().HasMaxLength(32);
-            builder.HasIndex(c => c.SmartListId);
+            // SearchMode is only set for AllProperties conditions; nullable, no backfill ambiguity,
+            // so (like Issue.PageFitModeOverride etc.) just the conversion, no HasDefaultValue.
+            builder.Property(c => c.SearchMode).HasConversion<string>().HasMaxLength(16);
+            builder.HasIndex(c => c.GroupId);
         });
 
         modelBuilder.Entity<ReadingList>(builder =>

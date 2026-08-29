@@ -19,6 +19,10 @@ namespace Paperbunkr.App.ViewModels;
 /// and evaluates it live via <see cref="SmartListQueryBuilder"/> instead of the wireframe's
 /// hardcoded "Unread Salvage Noir" sample content — see
 /// docs/superpowers/specs/2026-08-06-smart-lists-design.md.
+///
+/// The rule builder is a nested AND/OR group tree (docs/superpowers/specs/2026-08-28-smartlist-
+/// engine-v2-design.md §2) rooted at <see cref="RootGroup"/>; a single-group list renders the same
+/// as the pre-v2 flat pill list.
 /// </summary>
 public partial class SmartScreenViewModel : ViewModelBase
 {
@@ -30,7 +34,6 @@ public partial class SmartScreenViewModel : ViewModelBase
         BuiltInLists = new ObservableCollection<SmartListSummary>();
         MaintenanceLists = new ObservableCollection<SmartListSummary>();
         CustomLists = new ObservableCollection<SmartListSummary>();
-        Conditions = new ObservableCollection<SmartListConditionViewModel>();
         Results = new ObservableCollection<IssueCardSample>();
         RefreshSidebar();
     }
@@ -46,7 +49,10 @@ public partial class SmartScreenViewModel : ViewModelBase
     public ObservableCollection<SmartListSummary> BuiltInLists { get; }
     public ObservableCollection<SmartListSummary> MaintenanceLists { get; }
     public ObservableCollection<SmartListSummary> CustomLists { get; }
-    public ObservableCollection<SmartListConditionViewModel> Conditions { get; }
+
+    /// <summary>The root AND/OR group of the currently-open list (spec §2). Null until a list is loaded.</summary>
+    [ObservableProperty]
+    private SmartListGroupViewModel? _rootGroup;
 
     /// <summary>
     /// The list's actual matched issues (docs/superpowers/specs/
@@ -93,7 +99,7 @@ public partial class SmartScreenViewModel : ViewModelBase
         _activeSmartListId = smartListId;
 
         using var context = PaperbunkrDb.CreateContext();
-        var list = context.SmartLists.Include(s => s.Conditions).FirstOrDefault(s => s.Id == smartListId);
+        var list = SmartListTreeLoader.LoadWithTree(context, smartListId);
         if (list is null)
         {
             return;
@@ -112,11 +118,12 @@ public partial class SmartScreenViewModel : ViewModelBase
             .Select(t => new VirtualTagOption(t.Id, t.Name))
             .ToList();
 
-        Conditions.Clear();
-        foreach (var condition in list.Conditions.OrderBy(c => c.SortOrder))
-        {
-            Conditions.Add(new SmartListConditionViewModel(condition, RemoveCondition, RecomputeMatchCount, _virtualTagOptions));
-        }
+        RootGroup = new SmartListGroupViewModel(
+            list.RootGroup,
+            onChanged: RecomputeMatchCount,
+            isReadOnly: () => IsReadOnly,
+            _virtualTagOptions,
+            onRemove: null);
 
         RecomputeMatchCount();
         RefreshSidebar();
@@ -152,7 +159,7 @@ public partial class SmartScreenViewModel : ViewModelBase
     public void RefreshSidebar()
     {
         using var context = PaperbunkrDb.CreateContext();
-        var all = context.SmartLists.Include(s => s.Conditions).OrderBy(s => s.SortOrder).ToList();
+        var all = context.SmartLists.OrderBy(s => s.SortOrder).ToList();
 
         BuiltInLists.Clear();
         MaintenanceLists.Clear();
@@ -161,11 +168,12 @@ public partial class SmartScreenViewModel : ViewModelBase
         foreach (var list in all)
         {
             int listId = list.Id;
+            var withTree = SmartListTreeLoader.LoadWithTree(context, listId);
             var summary = new SmartListSummary
             {
                 Id = list.Id,
                 Name = list.Name,
-                MatchCount = SmartListQueryBuilder.MatchCount(context, list),
+                MatchCount = withTree is null ? 0 : SmartListQueryBuilder.MatchCount(context, withTree),
                 IsActive = list.Id == _activeSmartListId,
                 DeleteConfirm = list.IsSystem
                     ? null
@@ -190,15 +198,11 @@ public partial class SmartScreenViewModel : ViewModelBase
     /// <summary>
     /// Deletes a custom smart list (docs/superpowers/specs/2026-08-22-delete-functionality-design.md) -
     /// never offered for a built-in/maintenance list (<see cref="SmartListSummary.DeleteConfirm"/> is
-    /// null for those). <see cref="SmartListCondition"/>'s FK is <c>DeleteBehavior.Cascade</c>
-    /// (confirmed in <c>PaperbunkrDbContext.OnModelCreating</c>), so its conditions go with it - no
-    /// explicit removal loop needed. In real usage there's always at least the seeded built-in/
-    /// maintenance lists to fall back to - unlike Reading Lists, this screen can never end up with
-    /// nothing left to show. Always calls <see cref="RefreshSidebar"/> itself, even along the
-    /// "fell back to another list" branch: <see cref="EnsureListLoaded"/> only refreshes the
-    /// sidebar as a side effect of successfully loading *something* (via <see cref="LoadSmartList"/>) -
-    /// a real bug caught by its own test, where deleting the only list left the just-deleted entry
-    /// stuck showing in <see cref="CustomLists"/> because nothing was left to load.
+    /// null for those). The list's <see cref="SmartList.RootGroup"/> and its whole condition tree
+    /// cascade with it (confirmed in <c>PaperbunkrDbContext.OnModelCreating</c>). Always calls
+    /// <see cref="RefreshSidebar"/> itself, even along the "fell back to another list" branch:
+    /// <see cref="EnsureListLoaded"/> only refreshes the sidebar as a side effect of successfully
+    /// loading *something*.
     /// </summary>
     private void DeleteSmartList(int smartListId)
     {
@@ -229,11 +233,10 @@ public partial class SmartScreenViewModel : ViewModelBase
         }
 
         using var context = PaperbunkrDb.CreateContext();
-        // Evaluates the in-memory (possibly unsaved) working conditions against the live library,
-        // so the results/count update as the user edits, before Save persists anything. One
-        // Build() call backs both Results and MatchCountLabel - MatchCount(ctx, list) is just
-        // Build(ctx, list).Count, so calling it separately would evaluate the query twice.
-        var transient = new SmartList { Conditions = _workingList.Conditions };
+        // Evaluates the in-memory (possibly unsaved) working tree against the live library, so the
+        // results/count update as the user edits, before Save persists anything. One Build() call
+        // backs both Results and MatchCountLabel.
+        var transient = new SmartList { RootGroup = _workingList.RootGroup };
         var matched = SmartListQueryBuilder.Build(context, transient);
 
         Results.Clear();
@@ -263,36 +266,16 @@ public partial class SmartScreenViewModel : ViewModelBase
         }
     }
 
+    /// <summary>Top-level "+ Add condition" — appends to the root group, matching the pre-v2 flat-list affordance.</summary>
     [RelayCommand]
     private void AddCondition()
     {
-        if (_workingList is null || IsReadOnly)
+        if (IsReadOnly || RootGroup is null)
         {
             return;
         }
 
-        var condition = new SmartListCondition
-        {
-            Field = SmartListField.SeriesName,
-            Operator = SmartListOperator.Is,
-            Value = string.Empty,
-            SortOrder = _workingList.Conditions.Count,
-        };
-        _workingList.Conditions.Add(condition);
-        Conditions.Add(new SmartListConditionViewModel(condition, RemoveCondition, RecomputeMatchCount, _virtualTagOptions));
-        RecomputeMatchCount();
-    }
-
-    private void RemoveCondition(SmartListConditionViewModel conditionViewModel)
-    {
-        if (_workingList is null || IsReadOnly)
-        {
-            return;
-        }
-
-        _workingList.Conditions.Remove(conditionViewModel.Condition);
-        Conditions.Remove(conditionViewModel);
-        RecomputeMatchCount();
+        RootGroup.AddConditionCommand.Execute(null);
     }
 
     [RelayCommand]
@@ -304,26 +287,28 @@ public partial class SmartScreenViewModel : ViewModelBase
         }
 
         using var context = PaperbunkrDb.CreateContext();
-        var existing = context.SmartLists.Include(s => s.Conditions).First(s => s.Id == _workingList.Id);
-        existing.Name = ListName;
-        existing.Conditions.Clear();
-
-        int sortOrder = 0;
-        foreach (var condition in _workingList.Conditions)
+        var existing = SmartListTreeLoader.LoadWithTree(context, _workingList.Id);
+        if (existing is null)
         {
-            existing.Conditions.Add(new SmartListCondition
-            {
-                Field = condition.Field,
-                Operator = condition.Operator,
-                Value = condition.Value,
-                Value2 = condition.Value2,
-                CustomValueName = condition.CustomValueName,
-                VirtualTagId = condition.VirtualTagId,
-                SortOrder = sortOrder++,
-            });
+            return;
         }
 
+        existing.Name = ListName;
+
+        // Rebuild the persisted tree from the working copy without disturbing the root group row
+        // itself (severing a required 1:1 nav mid-save throws). Removing each direct child - a
+        // condition or a nested group - takes its whole subtree with it via the configured cascade.
+        var root = existing.RootGroup;
+        root.Mode = _workingList.RootGroup.Mode;
+        context.SmartListConditions.RemoveRange(root.Conditions.ToList());
+        context.SmartListConditionGroups.RemoveRange(root.ChildGroups.ToList());
         context.SaveChanges();
+
+        var rebuilt = CloneGroup(_workingList.RootGroup);
+        root.Conditions.AddRange(rebuilt.Conditions);
+        root.ChildGroups.AddRange(rebuilt.ChildGroups);
+        context.SaveChanges();
+
         LoadSmartList(existing.Id);
     }
 
@@ -350,16 +335,7 @@ public partial class SmartScreenViewModel : ViewModelBase
             Name = $"{ListName} Copy",
             IsSystem = false,
             SortOrder = context.SmartLists.Count(),
-            Conditions = _workingList.Conditions.Select((c, i) => new SmartListCondition
-            {
-                Field = c.Field,
-                Operator = c.Operator,
-                Value = c.Value,
-                Value2 = c.Value2,
-                CustomValueName = c.CustomValueName,
-                VirtualTagId = c.VirtualTagId,
-                SortOrder = i,
-            }).ToList(),
+            RootGroup = CloneGroup(_workingList.RootGroup),
         };
 
         context.SmartLists.Add(clone);
@@ -371,7 +347,13 @@ public partial class SmartScreenViewModel : ViewModelBase
     private void CreateNew()
     {
         using var context = PaperbunkrDb.CreateContext();
-        var list = new SmartList { Name = "New Smart List", IsSystem = false, SortOrder = context.SmartLists.Count() };
+        var list = new SmartList
+        {
+            Name = "New Smart List",
+            IsSystem = false,
+            SortOrder = context.SmartLists.Count(),
+            RootGroup = new SmartListConditionGroup { Mode = SmartListGroupMode.And },
+        };
         context.SmartLists.Add(list);
         context.SaveChanges();
         LoadSmartList(list.Id);
@@ -384,5 +366,39 @@ public partial class SmartScreenViewModel : ViewModelBase
         {
             LoadSmartList(summary.Id);
         }
+    }
+
+    /// <summary>Deep copy of a group tree with all Ids stripped, for Save/Duplicate (fresh rows every time).</summary>
+    private static SmartListConditionGroup CloneGroup(SmartListConditionGroup source)
+    {
+        var copy = new SmartListConditionGroup { Mode = source.Mode, SortOrder = source.SortOrder };
+
+        int order = 0;
+        foreach (var condition in source.Conditions.OrderBy(c => c.SortOrder))
+        {
+            copy.Conditions.Add(new SmartListCondition
+            {
+                Field = condition.Field,
+                Operator = condition.Operator,
+                Not = condition.Not,
+                IgnoreCase = condition.IgnoreCase,
+                Value = condition.Value,
+                Value2 = condition.Value2,
+                CustomValueName = condition.CustomValueName,
+                VirtualTagId = condition.VirtualTagId,
+                SearchMode = condition.SearchMode,
+                SortOrder = order++,
+            });
+        }
+
+        order = 0;
+        foreach (var child in source.ChildGroups.OrderBy(g => g.SortOrder))
+        {
+            var childCopy = CloneGroup(child);
+            childCopy.SortOrder = order++;
+            copy.ChildGroups.Add(childCopy);
+        }
+
+        return copy;
     }
 }

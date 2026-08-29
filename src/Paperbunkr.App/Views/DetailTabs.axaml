@@ -306,6 +306,51 @@
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
 
+            <!-- Collection membership (docs/superpowers/specs/2026-08-27-collections-design.md,
+                 step 10) - byte-for-byte the Continuity block above. -->
+            <StackPanel Orientation="Horizontal" Spacing="10" Margin="0,0,0,6">
+                <TextBlock Text="Collections" FontSize="12.5" FontWeight="SemiBold"
+                           Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
+                <Button Classes="railAdd" Content="+ Add to Collection" Command="{Binding ToggleAddCollectionCommand}" />
+            </StackPanel>
+            <Border IsVisible="{Binding IsAddingCollection}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
+                    CornerRadius="6" Padding="12" Margin="0,0,0,8">
+                <StackPanel Spacing="8">
+                    <TextBox Text="{Binding CollectionSearchQuery}" Watermark="Search or create a collection…" FontSize="12" />
+                    <ItemsControl ItemsSource="{Binding CollectionSearchResults}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="models:CollectionSearchResult">
+                                <Button HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Padding="8,6" Margin="0,2"
+                                        Background="Transparent" BorderThickness="0" FontSize="12.5"
+                                        Foreground="{DynamicResource PbTextMutedBrush}"
+                                        Command="{Binding #Root.((vm:DetailTabsViewModel)DataContext).AddCollectionCommand}"
+                                        CommandParameter="{Binding}">
+                                    <TextBlock Text="{Binding Name}" />
+                                </Button>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </Border>
+            <ItemsControl ItemsSource="{Binding CollectionChips}" Margin="0,0,0,12">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="models:CollectionChip">
+                        <Border Background="{DynamicResource PbSurfaceAltBrush}" CornerRadius="{DynamicResource PbRadius}" Padding="10,4" Margin="0,0,6,6">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <TextBlock Text="{Binding Name}" FontSize="11.5" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
+                                <Button Content="✕" Padding="0" Width="16" Height="16" FontSize="9.5" CornerRadius="8"
+                                        Background="Transparent" BorderThickness="0" Foreground="{DynamicResource PbTextFaintBrush}"
+                                        Command="{Binding #Root.((vm:DetailTabsViewModel)DataContext).RemoveCollectionCommand}"
+                                        CommandParameter="{Binding}" ToolTip.Tip="Remove from this collection" />
+                            </StackPanel>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
             <!-- Add-related-series expander -->
             <Border IsVisible="{Binding IsAddingRelation}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
                     CornerRadius="6" Padding="12" Margin="0,0,0,10">
@@ -346,6 +391,10 @@
 
             <views:PosterRail Title="Same Continuity" ItemsSource="{Binding ContinuityRail}"
                               IsVisible="{Binding HasSameContinuity}"
+                              ClickCommand="{Binding OpenRelatedSeriesCommand}" />
+
+            <views:PosterRail Title="Same Collection" ItemsSource="{Binding CollectionRail}"
+                              IsVisible="{Binding HasSameCollection}"
                               ClickCommand="{Binding OpenRelatedSeriesCommand}" />
 
             <views:PosterRail Title="Same Event" ItemsSource="{Binding EventRail}"

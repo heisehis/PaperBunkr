@@ -181,6 +181,9 @@ public partial class IssueListScreenViewModel : ViewModelBase
         ScanInformation = issue.ScanInformation,
         BookmarkCount = issue.Bookmarks.Count,
         ContentTypeLabel = issue.Series!.ContentType.ToString(),
+        SeriesStatusLabel = issue.Series!.Status.ToString(),
+        ReadingStatusLabel = issue.Series!.ReadingStatus.ToString(),
+        ReadingDirectionLabel = issue.Series!.ReadingMode.ToString(),
         PanoramaWidth = SeriesCardSample.ComputePanoramaWidth(SeriesCardSample.DefaultCoverAspectRatio),
         IsSelected = _isSelected(issue.Id),
         };

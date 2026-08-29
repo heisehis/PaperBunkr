@@ -95,6 +95,12 @@ public sealed partial class IssueListRow : ObservableObject, ISelectableCard
 
     public string? ContentTypeLabel { get; init; }
 
+    /// <summary>Series-level current values, for the tile context menu's radio ✓ marks (mirrors
+    /// <see cref="ContentTypeLabel"/>). Raw enum names, e.g. "Ongoing" / "Reading" / "RightToLeft".</summary>
+    public string? SeriesStatusLabel { get; init; }
+    public string? ReadingStatusLabel { get; init; }
+    public string? ReadingDirectionLabel { get; init; }
+
     /// <summary>Gates the tile context menu's Reading Direction submenu, same rationale as the old
     /// <c>SeriesCardSample.IsMangaFamily</c> - only meaningful once the issue's series is classified
     /// as manga-family.</summary>

@@ -70,6 +70,18 @@ public sealed class TileSelectionController<TCard> where TCard : class, ISelecta
         _lastToggledIndex = index;
     }
 
+    /// <summary>Selects every item in <paramref name="items"/> (the currently displayed set) - backs
+    /// the context menu's "Select All". Idempotent; also sets each item's visible
+    /// <see cref="ISelectableCard.IsSelected"/> flag.</summary>
+    public void SelectAll(IEnumerable<TCard> items)
+    {
+        foreach (var item in items)
+        {
+            item.IsSelected = true;
+            _selectedIds.Add(item.Id);
+        }
+    }
+
     /// <summary>
     /// Clears the selection. <paramref name="visibleItems"/> (optional) lets the caller also reset
     /// the visible <see cref="ISelectableCard.IsSelected"/> flags of currently-displayed items still

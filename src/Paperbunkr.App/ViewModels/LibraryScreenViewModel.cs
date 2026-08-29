@@ -8,6 +8,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using cYo.Common.Collections;
 using Microsoft.EntityFrameworkCore;
+using Paperbunkr.App.ContextMenus;
 using Paperbunkr.App.Models;
 using Paperbunkr.App.Plugins;
 using Paperbunkr.App.Services;
@@ -28,8 +29,14 @@ public enum ViewSortTab { View, Sort, Group }
 /// Loads real Series records from <see cref="PaperbunkrDb"/> (docs/onboarding.md §5-6) rather
 /// than the hardcoded sample data this originally shipped with.
 /// </summary>
-public partial class LibraryScreenViewModel : ViewModelBase
+public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvider
 {
+    /// <summary>Right-click menus for the Library grids (docs/superpowers/specs/2026-08-29-context-
+    /// menu-rebuild-design.md). Delegated to keep the menu tree out of this already-large file;
+    /// consumed by <see cref="Controls.ContextMenuHost"/> attached to the screen root.</summary>
+    IReadOnlyList<ContextMenuEntry>? IContextMenuProvider.BuildContextMenu(object? target) =>
+        new LibraryContextMenuBuilder(this).Build(target);
+
     private readonly Action<int> _goDetail;
     private readonly Action<int> _goReaderForIssue;
     private readonly Action<int, int, bool> _goToNewIssueProperties;
@@ -1301,6 +1308,46 @@ public partial class LibraryScreenViewModel : ViewModelBase
         ActiveDropdown = null;
     }
 
+    /// <summary>Context-menu "Add to Reading List ▸ &lt;list&gt;". Acts on the right-click union
+    /// (current selection ∩ the right-clicked issue), unlike the selection-only action-bar
+    /// <see cref="AddSelectionToReadingListCommand"/>. Parameter is <c>(issueId, readingListId)</c>.</summary>
+    [RelayCommand]
+    private void AddIssueToReadingList((int IssueId, int ReadingListId) target)
+    {
+        using var context = PaperbunkrDb.CreateContext();
+        var list = context.ReadingLists.Find(target.ReadingListId);
+        if (list is null)
+        {
+            return;
+        }
+
+        AddIssuesToReadingList(context, list, Selection.UnionForAction(target.IssueId));
+        context.SaveChanges();
+    }
+
+    /// <summary>Context-menu "Add to Reading List ▸ New List…" - creates a list, then adds the
+    /// right-click union to it. Union counterpart of <see cref="CreateReadingListAndAddSelectionCommand"/>.</summary>
+    [RelayCommand]
+    private void CreateReadingListAndAddIssue(int issueId)
+    {
+        using var context = PaperbunkrDb.CreateContext();
+        var now = DateTime.UtcNow;
+        var list = new ReadingList
+        {
+            Name = "New Reading List",
+            SortOrder = context.ReadingLists.Count(),
+            Type = ReadingListType.User,
+            CreatedAt = now,
+            UpdatedAt = now,
+        };
+        context.ReadingLists.Add(list);
+        context.SaveChanges();
+
+        AddIssuesToReadingList(context, list, Selection.UnionForAction(issueId));
+        context.SaveChanges();
+        LoadFromDatabase();
+    }
+
     /// <summary>"New Reading List…" flyout entry - creates a list the same way
     /// <c>ReadingScreenViewModel.CreateNew</c> does, then immediately adds the current selection to it.</summary>
     [RelayCommand]
@@ -1476,6 +1523,14 @@ public partial class LibraryScreenViewModel : ViewModelBase
         SelectionCount = 0;
     }
 
+    /// <summary>Context menu's "Select All" (issue granularity) - selects every currently displayed row.</summary>
+    [RelayCommand]
+    private void SelectAllVisibleIssues()
+    {
+        Selection.SelectAll(GetOrderedVisibleIssueRows());
+        SelectionCount = Selection.Count;
+    }
+
     /// <summary>The currently displayed order for shift-range selection - the flattened group order
     /// when grouped (matches what the user actually sees top-to-bottom), the flat row order
     /// otherwise. <see cref="IssueListScreenViewModel.Rows"/>/<see cref="IssueListScreenViewModel.Groups"/>
@@ -1522,6 +1577,14 @@ public partial class LibraryScreenViewModel : ViewModelBase
     {
         SeriesSelection.Clear(GetOrderedVisibleSeriesCards());
         SeriesSelectionCount = 0;
+    }
+
+    /// <summary>Context menu's "Select All" (series granularity) - selects every currently displayed card.</summary>
+    [RelayCommand]
+    private void SelectAllVisibleSeries()
+    {
+        SeriesSelection.SelectAll(GetOrderedVisibleSeriesCards());
+        SeriesSelectionCount = SeriesSelection.Count;
     }
 
     /// <summary>The currently displayed order for shift-range selection - the flattened group order

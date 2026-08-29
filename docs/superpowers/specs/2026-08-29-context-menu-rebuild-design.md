@@ -20,9 +20,9 @@ that failure can also abort the menu build entirely, which is why nothing opens.
 
 Secondary problems:
 
-- The same ~60-line `<ContextMenu>` is copy-pasted **8 times** across the display-mode templates
-  (Panorama / Poster / Tiles / List / Details, issue and series variants) — ~500 lines of
-  duplicated markup that drift apart on every edit.
+- The same ~40-60-line `<ContextMenu>` is copy-pasted **10 times** across the display-mode
+  templates (Panorama / Poster / Tiles / List / Details, issue and series variants) — ~500 lines
+  of duplicated markup that drift apart on every edit.
 - The menu is unstyled (stock Fluent), not the app's dark/amber identity.
 - The item set predates multi-select and the metadata model; it has four sibling `Set …` submenus
   cluttering the top level and no CE-parity pass.
@@ -95,31 +95,37 @@ Attached behavior. One property:
 <UserControl ctl:ContextMenuHost.Provider="{Binding}">
 ```
 
-- On the property changing to a non-null value, adds a **bubbling** handler for
-  `Control.ContextRequestedEvent` on the host control.
-- Handler: from `e.Source as Visual`, walk up the visual tree collecting distinct non-null
-  `DataContext` values. Hand each (nearest first) to `Provider.BuildContextMenu(dc)`; also try
-  `null` last. Use the first non-null result.
-- Build a `ContextMenu` from the entry tree recursively:
+- On the property changing to a non-null value, adds a **bubbling** `PointerReleased` handler
+  (`handledEventsToo`, since a tile `Button` may mark the right-release handled) on the host.
+- Handler (right button only): from `e.Source as Visual`, walk up the visual tree collecting
+  distinct non-null `DataContext` values. Hand each (nearest first) to `Provider.BuildContextMenu(dc)`;
+  also try `null` last. Use the first non-empty result.
+- Build `MenuItem` / `Separator` controls from the entry tree recursively:
   - `IsSeparator` ⇒ `Separator`
   - otherwise `MenuItem` with `Header`, `Command`, `CommandParameter`, `IsEnabled`;
-    `Icon` ⇒ a `SymbolIcon`; `IsChecked` ⇒ a check glyph in the icon slot (overrides `Icon`);
-    `InputGesture` ⇒ `MenuItem.InputGesture` display only (no real hotkey registered here);
+    `Icon` ⇒ a `SymbolIcon`; `IsChecked` ⇒ `ToggleType = CheckBox` + `IsChecked` (overrides `Icon`);
+    `InputGesture` ⇒ `MenuItem.InputGesture` (display only - Avalonia does not accelerate it).
+    The one gesture that needs to actually fire, **Ctrl+I → Edit Properties**, is a real
+    `KeyBinding` on the `LibraryScreen` root → `BulkEditSelectionCommand` (acts on the selection;
+    no-ops when empty). CE parity (`miProperties.ShortcutKeys`);
     `IsDanger` ⇒ `Classes="danger"`; `Children` ⇒ recurse into `MenuItem.Items`.
-  - Root `ContextMenu` gets `Classes="pb-menu"`.
-- Reuse one `ContextMenu` instance per host: clear + repopulate `Items` on each open, set
-  `PlacementTarget` / placement to pointer, `Open()`. Mark `e.Handled`.
-- Cleanly detaches its handler and nulls the menu when `Provider` goes back to null or the control
-  unloads.
+- Show the items in a fresh **`MenuFlyout`** via `flyout.ShowAt(host, showAtPointer: true)`; mark
+  `e.Handled`.
 
-Because `ContextRequested` bubbles, a single `Provider` on the screen root covers every tile in
-every display mode with no per-template markup.
+**Why `MenuFlyout`, not `ContextMenu`:** verified on-device that a plain `ContextMenu` popup does
+not render at all in this Avalonia 12 + FluentAvalonia build — its `Opening` event fires and items
+populate, but nothing appears. That is the *same* failure the old in-template `Button.ContextMenu`
+menus hit (so "menu never opened" was two bugs: dead ancestor bindings *and* an invisible popup).
+`MenuFlyout` renders correctly.
+
+A single `Provider` on the screen root covers every tile in every display mode with no per-template
+markup, because `PointerReleased` bubbles.
 
 ### 4. `Styles/Menu.axaml`
 
-`StyleInclude`d in `App.axaml` after the other `Styles/*.axaml`. Every selector is scoped under
-`ContextMenu.pb-menu` so no other menu surface (a future menu bar, third-party `MenuFlyout`s) is
-touched.
+`StyleInclude`d in `App.axaml` after the other `Styles/*.axaml`. Selectors target
+`MenuFlyoutPresenter` and its `MenuItem`s (plus the matching `MenuFlyout*` Fluent resource keys).
+The app has no menu bar; other `MenuFlyout` surfaces are rare and inherit the same skin.
 
 | Element | Token |
 |---|---|
@@ -228,7 +234,7 @@ blocking.
 
 ### XAML / code-behind
 
-- `LibraryScreen.axaml`: delete all 8 `<Button.ContextMenu>…</Button.ContextMenu>` blocks. Add
+- `LibraryScreen.axaml`: delete all 10 `<Button.ContextMenu>…</Button.ContextMenu>` blocks. Add
   `xmlns:ctl="using:Paperbunkr.App.Controls"` and `ctl:ContextMenuHost.Provider="{Binding}"` on
   the root `UserControl`.
 - `LibraryScreen.axaml.cs`: no change — right-click does not mutate selection; the existing
@@ -250,9 +256,9 @@ blocking.
   - `Quick Rate…` is a single leaf (no children)
   - selection-aware headers: with a 3-item selection that includes the target, "Delete 3 comics"
     etc.; with the target outside the selection, singular labels
-- **`ContextMenuHost`** — one Avalonia headless test that raising `ContextRequested` on a nested
-  control opens a populated `ContextMenu`. Included only if it runs cleanly here (headless UI
-  tests are historically flaky in this environment); not a merge blocker.
+- **`ContextMenuHost`** — behavioural verification is on-device (headless UI tests are flaky here
+  and `MenuFlyout` needs a real top level). Confirmed live: right-click on Library covers opens the
+  series / issue menu at the pointer.
 
 ## Follow-up specs (not this one)
 

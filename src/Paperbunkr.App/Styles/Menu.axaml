@@ -1,0 +1,70 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!--
+        Context-menu skin (docs/superpowers/specs/2026-08-29-context-menu-rebuild-design.md).
+        Controls/ContextMenuHost shows its menus as a MenuFlyout (a plain ContextMenu popup does
+        not render at all in this Avalonia 12 + FluentAvalonia build - the same reason the old
+        Button.ContextMenu menus were dead). So this targets MenuFlyoutPresenter, not ContextMenu.
+        The app has no menu bar; other MenuFlyout surfaces are rare and inherit this happily.
+    -->
+
+    <Styles.Resources>
+        <SolidColorBrush x:Key="MenuFlyoutPresenterBackground" Color="{DynamicResource PbSurface3Color}" />
+        <SolidColorBrush x:Key="MenuFlyoutPresenterBorderBrush" Color="{DynamicResource PbBorderColor}" />
+        <SolidColorBrush x:Key="MenuFlyoutItemForeground" Color="{DynamicResource PbTextColor}" />
+        <SolidColorBrush x:Key="MenuFlyoutItemForegroundPointerOver" Color="{DynamicResource PbTextColor}" />
+        <SolidColorBrush x:Key="MenuFlyoutItemForegroundPressed" Color="{DynamicResource PbTextColor}" />
+        <SolidColorBrush x:Key="MenuFlyoutItemForegroundDisabled" Color="{DynamicResource PbTextFaintColor}" />
+        <SolidColorBrush x:Key="MenuFlyoutItemBackgroundPointerOver" Color="{DynamicResource PbAccentSoftColor}" />
+        <SolidColorBrush x:Key="MenuFlyoutItemBackgroundPressed" Color="{DynamicResource PbAccentSoftColor}" />
+        <SolidColorBrush x:Key="MenuFlyoutItemKeyboardAcceleratorTextForeground" Color="{DynamicResource PbTextFaintColor}" />
+        <SolidColorBrush x:Key="MenuFlyoutItemKeyboardAcceleratorTextForegroundPointerOver" Color="{DynamicResource PbTextFaintColor}" />
+        <SolidColorBrush x:Key="MenuFlyoutSeparatorBackground" Color="{DynamicResource PbBorderColor}" />
+        <SolidColorBrush x:Key="MenuFlyoutSubItemForeground" Color="{DynamicResource PbTextColor}" />
+        <SolidColorBrush x:Key="MenuFlyoutSubItemForegroundPointerOver" Color="{DynamicResource PbTextColor}" />
+        <SolidColorBrush x:Key="MenuFlyoutSubItemForegroundSubMenuOpened" Color="{DynamicResource PbTextColor}" />
+        <SolidColorBrush x:Key="MenuFlyoutSubItemBackgroundPointerOver" Color="{DynamicResource PbAccentSoftColor}" />
+        <SolidColorBrush x:Key="MenuFlyoutSubItemBackgroundSubMenuOpened" Color="{DynamicResource PbAccentSoftColor}" />
+    </Styles.Resources>
+
+    <Style Selector="MenuFlyoutPresenter">
+        <Setter Property="Background" Value="{DynamicResource PbSurface3Brush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="{DynamicResource PbRadius}" />
+        <Setter Property="Padding" Value="4" />
+    </Style>
+
+    <Style Selector="MenuFlyoutPresenter MenuItem, FlyoutPresenter MenuItem">
+        <Setter Property="Foreground" Value="{DynamicResource PbTextBrush}" />
+        <Setter Property="FontSize" Value="13" />
+        <Setter Property="Padding" Value="10,7" />
+        <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusSm}" />
+    </Style>
+
+    <Style Selector="MenuFlyoutPresenter MenuItem:selected /template/ Border#PART_LayoutRoot">
+        <Setter Property="Background" Value="{DynamicResource PbAccentSoftBrush}" />
+    </Style>
+    <Style Selector="MenuFlyoutPresenter MenuItem:pointerover /template/ Border#PART_LayoutRoot">
+        <Setter Property="Background" Value="{DynamicResource PbAccentSoftBrush}" />
+    </Style>
+    <Style Selector="MenuFlyoutPresenter MenuItem:open /template/ Border#PART_LayoutRoot">
+        <Setter Property="Background" Value="{DynamicResource PbAccentSoftBrush}" />
+    </Style>
+
+    <Style Selector="MenuFlyoutPresenter MenuItem.danger">
+        <Setter Property="Foreground" Value="#E06B57" />
+    </Style>
+    <Style Selector="MenuFlyoutPresenter MenuItem.danger:selected /template/ Border#PART_LayoutRoot">
+        <Setter Property="Background" Value="#3A1D17" />
+    </Style>
+    <Style Selector="MenuFlyoutPresenter MenuItem.danger:pointerover /template/ Border#PART_LayoutRoot">
+        <Setter Property="Background" Value="#3A1D17" />
+    </Style>
+
+    <Style Selector="MenuFlyoutPresenter Separator">
+        <Setter Property="Background" Value="{DynamicResource PbBorderBrush}" />
+        <Setter Property="Height" Value="1" />
+        <Setter Property="Margin" Value="8,5" />
+    </Style>
+</Styles>

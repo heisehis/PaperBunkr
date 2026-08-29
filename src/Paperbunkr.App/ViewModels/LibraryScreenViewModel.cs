@@ -68,7 +68,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
     private PluginHostService? _pluginHost;
 
     private ContentType? _activeContentType;
-    private int? _activeCategoryId;
+    private int? _activeCollectionId;
 
     /// <summary>Back/forward history (docs/superpowers/specs/2026-08-19-library-browse-history-
     /// design.md) - reuses CE's own already-ported <see cref="CursorList{T}"/> as-is, no changes
@@ -90,7 +90,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
     /// series, re-materializing the whole library on every search keystroke froze the UI.
     /// </summary>
     private List<Series> _allSeries = new();
-    private List<Category> _allCategories = new();
+    private List<Collection> _allCollections = new();
 
     public LibraryScreenViewModel(
         Action<int> goDetail,
@@ -115,7 +115,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         Covers = new ObservableCollection<SeriesCardSample>();
         Groups = new ObservableCollection<SeriesCardGroup>();
         ContentTypes = new ObservableCollection<ContentTypeSummary>();
-        Collections = new ObservableCollection<CategorySummary>();
+        Collections = new ObservableCollection<CollectionSummary>();
         ExistingSeriesNames = new ObservableCollection<string>();
         ReadingLists = new ObservableCollection<ReadingListOption>();
         DetailsColumns = new ObservableCollection<DetailsColumn>();
@@ -181,7 +181,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         LoadFromDatabase();
     }
 
-    private LibraryBrowseState CurrentBrowseState() => new(_activeContentType, _activeCategoryId, SearchQuery);
+    private LibraryBrowseState CurrentBrowseState() => new(_activeContentType, _activeCollectionId, SearchQuery);
 
     public bool CanBrowsePrevious => _browseHistory.CanMoveCursorPrevious;
     public bool CanBrowseNext => _browseHistory.CanMoveCursorNext;
@@ -213,7 +213,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         try
         {
             _activeContentType = state.ActiveContentType;
-            _activeCategoryId = state.ActiveCategoryId;
+            _activeCollectionId = state.ActiveCollectionId;
             SearchQuery = state.SearchQuery; // Goes through the normal setter - same reload/save path as any other search-query change.
             SaveLibrarySettings();
             RebuildView();
@@ -300,12 +300,12 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         _detailsColumnsSetting = settings.LibraryDetailsColumns;
 #pragma warning restore MVVMTK0034
 
-        // Stale-reference fallback: a category deleted since last session falls back to "All
+        // Stale-reference fallback: a collection deleted since last session falls back to "All
         // Series" rather than silently rendering an empty grid with no visible reason why.
-        if (settings.LibraryActiveCategoryId is int categoryId &&
-            context.Categories.Any(c => c.Id == categoryId))
+        if (settings.LibraryActiveCollectionId is int collectionId &&
+            context.Collections.Any(c => c.Id == collectionId))
         {
-            _activeCategoryId = categoryId;
+            _activeCollectionId = collectionId;
         }
         else
         {
@@ -347,7 +347,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         settings.LibrarySearchQuery = string.IsNullOrEmpty(SearchQuery) ? null : SearchQuery;
         settings.LibrarySearchMode = SearchMode;
         settings.LibraryActiveContentType = _activeContentType;
-        settings.LibraryActiveCategoryId = _activeCategoryId;
+        settings.LibraryActiveCollectionId = _activeCollectionId;
         settings.LibraryFilterUnreadOnly = FilterUnreadOnly;
         settings.LibraryFilterMissingIssues = FilterMissingIssues;
         settings.LibraryFilterTrackedOnly = FilterTrackedOnly;
@@ -513,13 +513,16 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
     /// <summary>Every <see cref="ContentType"/> with at least one series, real counts, sidebar filter (docs/superpowers/specs/2026-08-09-library-sidebar-categorization-design.md).</summary>
     public ObservableCollection<ContentTypeSummary> ContentTypes { get; }
 
-    /// <summary>Real <c>Category</c> rows ("Collections") - empty today since nothing creates them yet; that's Beta-scoped. See spec above.</summary>
-    public ObservableCollection<CategorySummary> Collections { get; }
+    /// <summary>Real <c>Collection</c> rows (docs/superpowers/specs/2026-08-27-collections-design.md).
+    /// The schema/query layer supports mixed Series/Issue/Book membership; the sidebar create/rename/
+    /// reorder/delete UI and the mixed-membership grid view aren't reimplemented against current code
+    /// yet, so this only surfaces whatever collections already exist as a series-only filter.</summary>
+    public ObservableCollection<CollectionSummary> Collections { get; }
 
     [ObservableProperty]
     private int _allSeriesCount;
 
-    public bool IsAllSeriesActive => _activeContentType is null && _activeCategoryId is null;
+    public bool IsAllSeriesActive => _activeContentType is null && _activeCollectionId is null;
 
     public bool HasCollections => Collections.Count > 0;
 
@@ -626,7 +629,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
     public string ActiveGroupLabel => IsSeriesGranularity ? GroupLabel : IssueList.GroupFieldLabel;
 
     /// <summary>
-    /// Re-reads the library into the <see cref="_allSeries"/>/<see cref="_allCategories"/> snapshot
+    /// Re-reads the library into the <see cref="_allSeries"/>/<see cref="_allCollections"/> snapshot
     /// (plus <see cref="ReadingLists"/>), then hands off to <see cref="RebuildView"/> for all the
     /// derived collections. Call this only when the underlying data can have changed - nav into
     /// Library, a mutation command, a folder scan. A view-only change (search / sort / group /
@@ -647,7 +650,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         // identity map and change-snapshot cost.
         _allSeries = context.Series
             .Include(s => s.Issues).ThenInclude(i => i.Tags)
-            .Include(s => s.Categories)
+            .Include(s => s.CollectionItems)
             .Include(s => s.TrackingLinks)
             .Include(s => s.Titles)
             .AsNoTracking()
@@ -655,7 +658,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
             .OrderBy(s => s.SortName ?? s.Name)
             .ToList();
 
-        _allCategories = context.Categories.Include(c => c.Series).AsNoTracking().AsSplitQuery().OrderBy(c => c.SortOrder).ToList();
+        _allCollections = context.Collections.Include(c => c.Items).AsNoTracking().AsSplitQuery().OrderBy(c => c.SortOrder).ToList();
 
         // "Add to Reading List" flyout (docs/superpowers/specs/2026-08-24-library-multiselect-
         // slice2-design.md §2) - same ordering ReadingScreenViewModel's own sidebar uses. Its own
@@ -673,7 +676,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
     /// Rebuilds every derived collection - sidebar <see cref="ContentTypes"/>/<see cref="Collections"/>
     /// summaries, the filtered/sorted/grouped <see cref="Covers"/>/<see cref="Groups"/>, and
     /// <see cref="IssueList"/>'s rows - from the in-memory <see cref="_allSeries"/>/
-    /// <see cref="_allCategories"/> snapshot, with no database round-trip. Search / sort / group /
+    /// <see cref="_allCollections"/> snapshot, with no database round-trip. Search / sort / group /
     /// filter / sidebar-selection changes call this; only an actual data change (nav into Library, a
     /// mutation command, a folder scan) re-runs <see cref="LoadFromDatabase"/>. Both granularities
     /// are still always computed regardless of which is displayed (see the constructor's doc comment).
@@ -703,14 +706,15 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         }
 
         Collections.Clear();
-        foreach (var category in _allCategories)
+        foreach (var collection in _allCollections)
         {
-            Collections.Add(new CategorySummary
+            Collections.Add(new CollectionSummary
             {
-                Id = category.Id,
-                Name = category.Name,
-                Count = category.Series.Count,
-                IsActive = _activeCategoryId == category.Id,
+                Id = collection.Id,
+                Name = collection.Name,
+                Count = collection.Items.Count,
+                AccentColor = collection.AccentColor,
+                IsActive = _activeCollectionId == collection.Id,
             });
         }
 
@@ -719,9 +723,12 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         {
             filtered = filtered.Where(s => s.ContentType == contentType);
         }
-        else if (_activeCategoryId is int categoryId)
+        else if (_activeCollectionId is int collectionId)
         {
-            filtered = filtered.Where(s => s.Categories.Any(c => c.Id == categoryId));
+            // Series-only membership check - a mixed collection (Issue/Book members too) doesn't
+            // change what shows in the series grid here; that's the dedicated mixed view (Step 9,
+            // not yet reimplemented against current code).
+            filtered = filtered.Where(s => s.CollectionItems.Any(ci => ci.CollectionId == collectionId));
         }
 
         if (!string.IsNullOrWhiteSpace(SearchQuery))
@@ -881,7 +888,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
     private void SelectAllSeries()
     {
         _activeContentType = null;
-        _activeCategoryId = null;
+        _activeCollectionId = null;
         SaveLibrarySettings();
         RebuildView();
         PushBrowseHistory();
@@ -896,21 +903,21 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         }
 
         _activeContentType = summary.ContentType;
-        _activeCategoryId = null;
+        _activeCollectionId = null;
         SaveLibrarySettings();
         RebuildView();
         PushBrowseHistory();
     }
 
     [RelayCommand]
-    private void SelectCollection(CategorySummary? summary)
+    private void SelectCollection(CollectionSummary? summary)
     {
         if (summary is null)
         {
             return;
         }
 
-        _activeCategoryId = summary.Id;
+        _activeCollectionId = summary.Id;
         _activeContentType = null;
         SaveLibrarySettings();
         RebuildView();

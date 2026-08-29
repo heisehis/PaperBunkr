@@ -294,7 +294,7 @@
                                    Margin="8,0,8,4" IsVisible="{Binding !Library.HasCollections}" />
                         <ItemsControl x:Name="LibraryCollections" ItemsSource="{Binding Library.Collections}">
                             <ItemsControl.ItemTemplate>
-                                <DataTemplate x:DataType="models:CategorySummary">
+                                <DataTemplate x:DataType="models:CollectionSummary">
                                     <Button Classes="sideItemButton" Classes.active="{Binding IsActive}"
                                             Command="{Binding #LibraryCollections.((vm:MainViewModel)DataContext).Library.SelectCollectionCommand}"
                                             CommandParameter="{Binding}">

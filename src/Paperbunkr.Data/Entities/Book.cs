@@ -50,4 +50,7 @@ public class Book
     public int ChapterCount { get; set; }
 
     public List<BookBookmark> Bookmarks { get; set; } = new();
+
+    /// <summary>Collections this book belongs to, via the polymorphic <see cref="CollectionItem"/> join (docs/superpowers/specs/2026-08-27-collections-design.md). First FK crossing from the library-org layer into the Book schema — see <see cref="CollectionItem"/>.</summary>
+    public List<CollectionItem> CollectionItems { get; set; } = new();
 }

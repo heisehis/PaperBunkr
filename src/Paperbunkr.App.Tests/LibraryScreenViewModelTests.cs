@@ -104,18 +104,19 @@ public class LibraryScreenViewModelTests : IDisposable
         context.SaveChanges();
     }
 
-    private static int CreateCategoryWithSeries(string name, params int[] seriesIds)
+    private static int CreateCollectionWithSeries(string name, params int[] seriesIds)
     {
         using var context = PaperbunkrDb.CreateContext();
-        var category = new Category { Name = name };
+        var collection = new Collection { Name = name };
+        int order = 0;
         foreach (var seriesId in seriesIds)
         {
-            category.Series.Add(context.Series.First(s => s.Id == seriesId));
+            collection.Items.Add(new CollectionItem { SeriesId = seriesId, SortOrder = order++ });
         }
 
-        context.Categories.Add(category);
+        context.Collections.Add(collection);
         context.SaveChanges();
-        return category.Id;
+        return collection.Id;
     }
 
     [Fact]
@@ -133,10 +134,10 @@ public class LibraryScreenViewModelTests : IDisposable
     }
 
     [Fact]
-    public void LoadFromDatabase_Collections_ReflectsRealCategoryRows()
+    public void LoadFromDatabase_Collections_ReflectsRealCollectionRows()
     {
         int seriesId = CreateSeries("Series A", ContentType.Comic);
-        CreateCategoryWithSeries("Favorites", seriesId);
+        CreateCollectionWithSeries("Favorites", seriesId);
 
         var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { }, goToNewIssueProperties: (_, _, _) => { });
 
@@ -179,7 +180,7 @@ public class LibraryScreenViewModelTests : IDisposable
     {
         int seriesAId = CreateSeriesWithIssue("Series A");
         CreateSeriesWithIssue("Series B");
-        CreateCategoryWithSeries("Favorites", seriesAId);
+        CreateCollectionWithSeries("Favorites", seriesAId);
         var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { }, goToNewIssueProperties: (_, _, _) => { });
         var favorites = vm.Collections.Single();
 
@@ -271,7 +272,7 @@ public class LibraryScreenViewModelTests : IDisposable
         int seriesAId = CreateSeriesWithIssue("Series A");
         CreateSeriesWithIssue("Series B");
         CreateSeriesWithIssue("Manga One", contentType: ContentType.Manga);
-        CreateCategoryWithSeries("Favorites", seriesAId);
+        CreateCollectionWithSeries("Favorites", seriesAId);
         var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { }, goToNewIssueProperties: (_, _, _) => { });
         vm.SelectContentTypeCommand.Execute(vm.ContentTypes.Single(c => c.ContentType == ContentType.Manga));
         vm.BrowsePreviousCommand.Execute(null);
@@ -1082,7 +1083,7 @@ public class LibraryScreenViewModelTests : IDisposable
     [Fact]
     public void Construct_ReflectsNonDefaultAppSettingsImmediately()
     {
-        int categoryId = CreateCategoryWithSeries("Owned", CreateSeries("Owned Series", ContentType.Comic));
+        int collectionId = CreateCollectionWithSeries("Owned", CreateSeries("Owned Series", ContentType.Comic));
         SeedAppSettings(settings =>
         {
             settings.LibraryViewMode = LibraryViewMode.List;
@@ -1092,7 +1093,7 @@ public class LibraryScreenViewModelTests : IDisposable
             settings.LibraryShowLanguageBadge = true;
             settings.LibraryUseLanguageIcon = true;
             settings.LibrarySearchQuery = "kilo";
-            settings.LibraryActiveCategoryId = categoryId;
+            settings.LibraryActiveCollectionId = collectionId;
             settings.LibraryFilterUnreadOnly = true;
             settings.LibraryFilterMissingIssues = true;
             settings.LibraryFilterTrackedOnly = true;
@@ -1111,7 +1112,7 @@ public class LibraryScreenViewModelTests : IDisposable
         Assert.True(vm.FilterMissingIssues);
         Assert.True(vm.FilterTrackedOnly);
         Assert.False(vm.IsAllSeriesActive);
-        Assert.Contains(vm.Collections, c => c.Id == categoryId && c.IsActive);
+        Assert.Contains(vm.Collections, c => c.Id == collectionId && c.IsActive);
     }
 
     [Fact]
@@ -1303,10 +1304,10 @@ public class LibraryScreenViewModelTests : IDisposable
     }
 
     [Fact]
-    public void SelectContentType_PersistsActiveContentType_ClearsActiveCategory()
+    public void SelectContentType_PersistsActiveContentType_ClearsActiveCollection()
     {
         int seriesId = CreateSeries("A Manga Series", ContentType.Manga);
-        CreateCategoryWithSeries("Owned", seriesId);
+        CreateCollectionWithSeries("Owned", seriesId);
         var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { }, goToNewIssueProperties: (_, _, _) => { });
         vm.SelectCollectionCommand.Execute(vm.Collections.Single());
 
@@ -1314,21 +1315,21 @@ public class LibraryScreenViewModelTests : IDisposable
 
         var settings = ReadAppSettings();
         Assert.Equal(ContentType.Manga, settings.LibraryActiveContentType);
-        Assert.Null(settings.LibraryActiveCategoryId);
+        Assert.Null(settings.LibraryActiveCollectionId);
     }
 
     [Fact]
-    public void SelectCollection_PersistsActiveCategory_ClearsActiveContentType()
+    public void SelectCollection_PersistsActiveCollection_ClearsActiveContentType()
     {
         int seriesId = CreateSeries("A Manga Series", ContentType.Manga);
-        int categoryId = CreateCategoryWithSeries("Owned", seriesId);
+        int collectionId = CreateCollectionWithSeries("Owned", seriesId);
         var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { }, goToNewIssueProperties: (_, _, _) => { });
         vm.SelectContentTypeCommand.Execute(vm.ContentTypes.Single());
 
-        vm.SelectCollectionCommand.Execute(vm.Collections.Single(c => c.Id == categoryId));
+        vm.SelectCollectionCommand.Execute(vm.Collections.Single(c => c.Id == collectionId));
 
         var settings = ReadAppSettings();
-        Assert.Equal(categoryId, settings.LibraryActiveCategoryId);
+        Assert.Equal(collectionId, settings.LibraryActiveCollectionId);
         Assert.Null(settings.LibraryActiveContentType);
     }
 
@@ -1336,7 +1337,7 @@ public class LibraryScreenViewModelTests : IDisposable
     public void SelectAllSeries_ClearsBothActiveFilters_PersistsToAppSettings()
     {
         int seriesId = CreateSeries("A Manga Series", ContentType.Manga);
-        CreateCategoryWithSeries("Owned", seriesId);
+        CreateCollectionWithSeries("Owned", seriesId);
         var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { }, goToNewIssueProperties: (_, _, _) => { });
         vm.SelectCollectionCommand.Execute(vm.Collections.Single());
 
@@ -1344,14 +1345,14 @@ public class LibraryScreenViewModelTests : IDisposable
 
         var settings = ReadAppSettings();
         Assert.Null(settings.LibraryActiveContentType);
-        Assert.Null(settings.LibraryActiveCategoryId);
+        Assert.Null(settings.LibraryActiveCollectionId);
     }
 
     [Fact]
-    public void Construct_StaleActiveCategoryId_FallsBackToAllSeries()
+    public void Construct_StaleActiveCollectionId_FallsBackToAllSeries()
     {
-        int realCategoryId = CreateCategoryWithSeries("Owned", CreateSeries("A Series", ContentType.Comic));
-        SeedAppSettings(settings => settings.LibraryActiveCategoryId = realCategoryId + 999999);
+        int realCollectionId = CreateCollectionWithSeries("Owned", CreateSeries("A Series", ContentType.Comic));
+        SeedAppSettings(settings => settings.LibraryActiveCollectionId = realCollectionId + 999999);
 
         var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { }, goToNewIssueProperties: (_, _, _) => { });
 

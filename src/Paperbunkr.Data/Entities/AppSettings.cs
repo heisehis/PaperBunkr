@@ -234,17 +234,17 @@ public class AppSettings
     public SearchMode LibrarySearchMode { get; set; } = SearchMode.All;
 
     /// <summary>
-    /// See <see cref="LibrarySortField"/>. Mutually exclusive with <see cref="LibraryActiveCategoryId"/>
+    /// See <see cref="LibrarySortField"/>. Mutually exclusive with <see cref="LibraryActiveCollectionId"/>
     /// - null means "All Series" (both null) or this content type is the active sidebar filter.
     /// </summary>
     public ContentType? LibraryActiveContentType { get; set; }
 
     /// <summary>
-    /// See <see cref="LibraryActiveContentType"/>. If the referenced <c>Category</c> no longer
+    /// See <see cref="LibraryActiveContentType"/>. If the referenced <c>Collection</c> no longer
     /// exists at load time (deleted since last session), <c>LibraryScreenViewModel</c> falls back to
     /// "All Series" rather than rendering a silently empty grid.
     /// </summary>
-    public int? LibraryActiveCategoryId { get; set; }
+    public int? LibraryActiveCollectionId { get; set; }
 
     /// <summary>See <see cref="LibrarySortField"/>.</summary>
     public bool LibraryFilterUnreadOnly { get; set; }

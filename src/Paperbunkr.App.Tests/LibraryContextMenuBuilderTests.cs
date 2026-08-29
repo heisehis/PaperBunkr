@@ -99,7 +99,7 @@ public class LibraryContextMenuBuilderTests : IDisposable
 
         Assert.Equal(new[]
         {
-            "Open", "Edit Properties…", "Quick Rate…", "Mark as", "Add to Reading List",
+            "Open", "Edit Properties…", "Quick Rate…", "Mark as", "Add to Reading List", "Add to Collection",
             "Go to Series", "Series", "Show in Explorer", "Select All", "Clear Selection", "Delete…",
         }, headers);
     }
@@ -192,6 +192,44 @@ public class LibraryContextMenuBuilderTests : IDisposable
         Assert.Contains("Mark 2 as", headers);
         Assert.Contains("Delete 2 comics…", headers);
         Assert.Contains("Add 2 to Reading List", headers);
+        Assert.Contains("Add 2 to Collection", headers);
+    }
+
+    [Fact]
+    public void AddToCollection_IssueMenu_ListsExistingCollections_PlusNewCollection()
+    {
+        Seed("Alpha");
+        var vm = NewVm();
+        using (var context = PaperbunkrDb.CreateContext())
+        {
+            Paperbunkr.Data.Collections.CollectionService.Create(context, "Favorites");
+        }
+        vm.LoadFromDatabase();
+        var row = Assert.Single(vm.IssueList.Rows);
+
+        var addToCollection = Find(Menu(vm, row), "Add to Collection");
+        var childHeaders = addToCollection.Children!.Select(c => c.Header).ToList();
+
+        Assert.Equal(new[] { "Favorites", null, "New collection…" }, childHeaders);
+        Assert.All(addToCollection.Children!.Where(c => !c.IsSeparator), c => Assert.NotNull(c.Command));
+    }
+
+    [Fact]
+    public void AddToCollection_SeriesCardMenu_ListsExistingCollections_PlusNewCollection()
+    {
+        Seed("Alpha");
+        var vm = NewVm();
+        using (var context = PaperbunkrDb.CreateContext())
+        {
+            Paperbunkr.Data.Collections.CollectionService.Create(context, "Favorites");
+        }
+        vm.LoadFromDatabase();
+        var card = Assert.Single(vm.Covers);
+
+        var addToCollection = Find(Menu(vm, card), "Add to Collection");
+        var childHeaders = addToCollection.Children!.Select(c => c.Header).ToList();
+
+        Assert.Equal(new[] { "Favorites", null, "New collection…" }, childHeaders);
     }
 
     [Fact]
@@ -222,7 +260,7 @@ public class LibraryContextMenuBuilderTests : IDisposable
 
         Assert.Equal(new[]
         {
-            "Open Series", "Content Type", "Publication Status", "Reading Status",
+            "Open Series", "Add to Collection", "Content Type", "Publication Status", "Reading Status",
             "Show in Explorer", "Delete Series…",
         }, headers);
     }

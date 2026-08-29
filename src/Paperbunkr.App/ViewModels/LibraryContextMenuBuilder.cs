@@ -55,6 +55,10 @@ public sealed class LibraryContextMenuBuilder
                 multi ? $"Add {n} to Reading List" : "Add to Reading List",
                 ReadingListChildren(row.Id),
                 Symbol.TextBulletListAdd),
+            ContextMenuEntry.SubMenu(
+                multi ? $"Add {n} to Collection" : "Add to Collection",
+                CollectionChildren(row.Id, _vm.AddIssueToCollectionCommand, _vm.CreateCollectionAndAddIssueCommand),
+                Symbol.CollectionsAdd),
             ContextMenuEntry.Separator,
             ContextMenuEntry.Item("Go to Series", _vm.GoToSeriesCommand, row.SeriesId, Symbol.ArrowForward),
             ContextMenuEntry.SubMenu(
@@ -100,6 +104,10 @@ public sealed class LibraryContextMenuBuilder
         var entries = new List<ContextMenuEntry?>
         {
             ContextMenuEntry.Item("Open Series", _vm.SelectCardCommand, card, Symbol.Open),
+            ContextMenuEntry.SubMenu(
+                multi ? $"Add {n} to Collection" : "Add to Collection",
+                CollectionChildren(card.SeriesId, _vm.AddSeriesToCollectionCommand, _vm.CreateCollectionAndAddSeriesCommand),
+                Symbol.CollectionsAdd),
             ContextMenuEntry.Separator,
             ContextMenuEntry.SubMenu("Content Type", ContentTypeChildren(card.SeriesId, card.ContentTypeLabel)),
             ContextMenuEntry.SubMenu(
@@ -145,6 +153,24 @@ public sealed class LibraryContextMenuBuilder
         }
 
         yield return ContextMenuEntry.Item("New List…", _vm.CreateReadingListAndAddIssueCommand, issueId);
+    }
+
+    /// <summary>Shared "Add to Collection ▸" child list for an issue or series target - one item per
+    /// existing collection (command/parameter shape differs per target type, so the caller passes
+    /// its own commands) plus a trailing "New collection…".</summary>
+    private IEnumerable<ContextMenuEntry?> CollectionChildren(int targetId, System.Windows.Input.ICommand addCommand, System.Windows.Input.ICommand createCommand)
+    {
+        foreach (var collection in _vm.Collections)
+        {
+            yield return ContextMenuEntry.Item(collection.Name, addCommand, (targetId, collection.Id));
+        }
+
+        if (_vm.Collections.Count > 0)
+        {
+            yield return ContextMenuEntry.Separator;
+        }
+
+        yield return ContextMenuEntry.Item("New collection…", createCommand, targetId);
     }
 
     private IEnumerable<ContextMenuEntry?> ContentTypeChildren(int seriesId, string? current) => new[]

@@ -1,0 +1,163 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:fi="using:FluentIcons.Avalonia"
+             xmlns:vm="using:Paperbunkr.App.ViewModels"
+             xmlns:views="using:Paperbunkr.App.Views"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="560" d:DesignHeight="640"
+             x:Class="Paperbunkr.App.Views.CollectionPropertiesOverlay"
+             x:DataType="vm:CollectionPropertiesScreenViewModel">
+
+    <!-- Same "floatingPanel" + Button.ghost/primary primitives as ReadingListPropertiesOverlay
+         (Styles/Primitives.axaml) - docs/superpowers/specs/2026-08-27-collections-design.md step 8. -->
+    <UserControl.Styles>
+        <Style Selector="Border.groupBox">
+            <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="{DynamicResource PbRadius}" />
+            <Setter Property="ClipToBounds" Value="True" />
+        </Style>
+        <Style Selector="Border.groupHeader">
+            <Setter Property="Background" Value="{DynamicResource PbChromeBrush}" />
+            <Setter Property="Padding" Value="14,11" />
+        </Style>
+        <Style Selector="TextBlock.fieldLabel">
+            <Setter Property="FontSize" Value="10.5" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextFaintBrush}" />
+            <Setter Property="Margin" Value="0,0,0,4" />
+        </Style>
+        <Style Selector="StackPanel.field">
+            <Setter Property="Width" Value="250" />
+            <Setter Property="Margin" Value="0,0,16,16" />
+        </Style>
+        <Style Selector="Button.swatch">
+            <Setter Property="Width" Value="22" />
+            <Setter Property="Height" Value="22" />
+            <Setter Property="CornerRadius" Value="11" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style Selector="Border.memberRow">
+            <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
+            <Setter Property="BorderThickness" Value="0,0,0,1" />
+            <Setter Property="Padding" Value="0,8" />
+        </Style>
+    </UserControl.Styles>
+
+    <Border Width="560" MaxHeight="700" Classes="floatingPanel">
+        <DockPanel LastChildFill="True">
+
+            <StackPanel DockPanel.Dock="Top" Margin="20,18,20,0">
+                <TextBlock Text="{Binding HeaderLabel}" FontSize="17" FontWeight="Bold" Foreground="{DynamicResource PbTextBrush}" />
+                <Border Height="1" Background="{DynamicResource PbBorderBrush}" Margin="0,14,0,0" />
+            </StackPanel>
+
+            <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Spacing="8"
+                        HorizontalAlignment="Right" Margin="20,0,20,18">
+                <Button Classes="ghost" FontSize="12.5" Content="Cancel" Command="{Binding CancelCommand}" />
+                <Button Classes="primary" FontSize="12.5" Content="Save" Command="{Binding SaveCommand}" />
+            </StackPanel>
+
+            <ScrollViewer Padding="20,16,20,16">
+                <StackPanel>
+
+                    <WrapPanel>
+                        <StackPanel Classes="field">
+                            <TextBlock Classes="fieldLabel" Text="NAME" />
+                            <TextBox Text="{Binding Name}" />
+                        </StackPanel>
+                        <StackPanel Classes="field" Width="516">
+                            <TextBlock Classes="fieldLabel" Text="DESCRIPTION" />
+                            <TextBox Text="{Binding Description}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="60" />
+                        </StackPanel>
+                    </WrapPanel>
+
+                    <Border Classes="groupBox" Margin="0,0,0,16">
+                        <StackPanel>
+                            <Border Classes="groupHeader">
+                                <TextBlock Text="Appearance" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
+                            </Border>
+                            <StackPanel Margin="14">
+                                <TextBlock Classes="fieldLabel" Text="ACCENT COLOR" />
+                                <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,0,0,16">
+                                    <Ellipse Width="22" Height="22" Fill="{Binding AccentColor, Converter={x:Static views:AccentColorToBrushConverter.Instance}}" />
+                                    <ItemsControl ItemsSource="{Binding AccentSwatches}">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate><StackPanel Orientation="Horizontal" Spacing="6" /></ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate x:DataType="x:String">
+                                                <Button Classes="swatch"
+                                                        Command="{Binding $parent[UserControl].((vm:CollectionPropertiesScreenViewModel)DataContext).SetAccentColorCommand}"
+                                                        CommandParameter="{Binding}">
+                                                    <Button.Background>
+                                                        <SolidColorBrush Color="{Binding}" />
+                                                    </Button.Background>
+                                                </Button>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                    <Button Classes="ghost" FontSize="11.5" Content="None" Command="{Binding ClearAccentColorCommand}" />
+                                </StackPanel>
+
+                                <TextBlock Classes="fieldLabel" Text="COVER" />
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <Button Classes="ghost" FontSize="12.5" Content="Auto (first member)" Command="{Binding UseAutoCoverCommand}"
+                                            IsEnabled="{Binding !IsAutoCover}" />
+                                    <Button Classes="ghost" FontSize="12.5" Content="Choose file…" Command="{Binding ChangeCoverCommand}" />
+                                    <TextBlock Text="{Binding CoverImagePath}" FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}"
+                                               VerticalAlignment="Center" IsVisible="{Binding !IsAutoCover}" TextTrimming="CharacterEllipsis" MaxWidth="180" />
+                                </StackPanel>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Classes="groupBox">
+                        <StackPanel>
+                            <Grid ColumnDefinitions="*,Auto" Classes="groupHeader">
+                                <TextBlock Grid.Column="0" Text="Members" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
+                                <TextBlock Grid.Column="1" Text="{Binding Members.Count}" FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" />
+                            </Grid>
+                            <StackPanel Margin="14">
+                                <TextBlock Text="No members yet - add some from a Library or Books tile's right-click menu." FontSize="11.5"
+                                           Foreground="{DynamicResource PbTextFaintBrush}" IsVisible="{Binding !Members.Count}" />
+                                <ItemsControl ItemsSource="{Binding Members}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="vm:CollectionMemberRowViewModel">
+                                            <Border Classes="memberRow">
+                                                <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto">
+                                                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                                        <TextBlock Text="{Binding DisplayTitle}" FontSize="12.5" Foreground="{DynamicResource PbTextBrush}"
+                                                                   TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding DisplayTitle}" />
+                                                        <TextBlock Text="{Binding KindLabel}" FontSize="10" Foreground="{DynamicResource PbTextFaintBrush}" />
+                                                    </StackPanel>
+                                                    <Button Grid.Column="1" Classes="ghost" Padding="6"
+                                                            Command="{Binding $parent[UserControl].((vm:CollectionPropertiesScreenViewModel)DataContext).MoveMemberUpCommand}"
+                                                            CommandParameter="{Binding}" ToolTip.Tip="Move up">
+                                                        <fi:SymbolIcon Symbol="ChevronUp" FontSize="11" />
+                                                    </Button>
+                                                    <Button Grid.Column="2" Classes="ghost" Padding="6"
+                                                            Command="{Binding $parent[UserControl].((vm:CollectionPropertiesScreenViewModel)DataContext).MoveMemberDownCommand}"
+                                                            CommandParameter="{Binding}" ToolTip.Tip="Move down">
+                                                        <fi:SymbolIcon Symbol="ChevronDown" FontSize="11" />
+                                                    </Button>
+                                                    <Button Grid.Column="4" Classes="ghost" Padding="6"
+                                                            Command="{Binding RemoveCommand}" ToolTip.Tip="Remove from collection">
+                                                        <fi:SymbolIcon Symbol="SubtractCircle" FontSize="12" />
+                                                    </Button>
+                                                </Grid>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+
+                </StackPanel>
+            </ScrollViewer>
+        </DockPanel>
+    </Border>
+</UserControl>

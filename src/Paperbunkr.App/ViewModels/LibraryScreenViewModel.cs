@@ -13,6 +13,7 @@ using Paperbunkr.App.Models;
 using Paperbunkr.App.Plugins;
 using Paperbunkr.App.Services;
 using Paperbunkr.Data;
+using Paperbunkr.Data.Collections;
 using Paperbunkr.Data.Entities;
 using Paperbunkr.Data.Metadata;
 using Paperbunkr.Data.ReadingLists;
@@ -46,6 +47,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
     private readonly Action<IReadOnlyList<int>> _goBulkSeriesProperties;
     private readonly Action<string, string> _showToast;
     private readonly Action _goLibraryFolders;
+    private readonly Action<int> _openCollectionProperties;
 
     /// <summary>
     /// Multi-selection (docs/superpowers/specs/2026-08-24-library-multiselect-slice1-design.md) for
@@ -101,7 +103,8 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         Action<IReadOnlyList<int>>? goBulkIssueProperties = null,
         Action<string, string>? showToast = null,
         Action<IReadOnlyList<int>>? goBulkSeriesProperties = null,
-        Action? goLibraryFolders = null)
+        Action? goLibraryFolders = null,
+        Action<int>? openCollectionProperties = null)
     {
         _goDetail = goDetail;
         _goReaderForIssue = goReaderForIssue;
@@ -112,6 +115,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         _showToast = showToast ?? ((_, _) => { });
         _goBulkSeriesProperties = goBulkSeriesProperties ?? (_ => { });
         _goLibraryFolders = goLibraryFolders ?? (() => { });
+        _openCollectionProperties = openCollectionProperties ?? (_ => { });
         Covers = new ObservableCollection<SeriesCardSample>();
         Groups = new ObservableCollection<SeriesCardGroup>();
         ContentTypes = new ObservableCollection<ContentTypeSummary>();
@@ -708,6 +712,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         Collections.Clear();
         foreach (var collection in _allCollections)
         {
+            int cid = collection.Id;
             Collections.Add(new CollectionSummary
             {
                 Id = collection.Id,
@@ -715,6 +720,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
                 Count = collection.Items.Count,
                 AccentColor = collection.AccentColor,
                 IsActive = _activeCollectionId == collection.Id,
+                DeleteConfirm = new TwoStepConfirm(() => DeleteCollection(cid), idleLabel: "Delete", armedLabel: "Confirm delete?"),
             });
         }
 
@@ -922,6 +928,92 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         SaveLibrarySettings();
         RebuildView();
         PushBrowseHistory();
+    }
+
+    /// <summary>Sidebar "+" toggle - shows the inline name field in place of the button.</summary>
+    [ObservableProperty]
+    private bool _isCreatingCollection;
+
+    [ObservableProperty]
+    private string _newCollectionName = string.Empty;
+
+    [RelayCommand]
+    private void BeginCreateCollection()
+    {
+        NewCollectionName = string.Empty;
+        IsCreatingCollection = true;
+    }
+
+    [RelayCommand]
+    private void CancelCreateCollection() => IsCreatingCollection = false;
+
+    /// <summary>Enter in the inline name field - creates the collection, reloads the sidebar, and selects it. A blank name cancels instead of creating "".</summary>
+    [RelayCommand]
+    private void CommitCreateCollection()
+    {
+        IsCreatingCollection = false;
+        if (string.IsNullOrWhiteSpace(NewCollectionName))
+        {
+            return;
+        }
+
+        using var context = PaperbunkrDb.CreateContext();
+        var collection = CollectionService.Create(context, NewCollectionName);
+        LoadFromDatabase();
+        SelectCollection(Collections.FirstOrDefault(c => c.Id == collection.Id));
+    }
+
+    [RelayCommand]
+    private void MoveCollectionUp(CollectionSummary? summary) => ReorderCollection(summary, offset: -1);
+
+    [RelayCommand]
+    private void MoveCollectionDown(CollectionSummary? summary) => ReorderCollection(summary, offset: 1);
+
+    private void ReorderCollection(CollectionSummary? summary, int offset)
+    {
+        if (summary is null)
+        {
+            return;
+        }
+
+        var ids = Collections.Select(c => c.Id).ToList();
+        int index = ids.IndexOf(summary.Id);
+        int newIndex = index + offset;
+        if (index < 0 || newIndex < 0 || newIndex >= ids.Count)
+        {
+            return;
+        }
+
+        (ids[index], ids[newIndex]) = (ids[newIndex], ids[index]);
+
+        using var context = PaperbunkrDb.CreateContext();
+        CollectionService.Reorder(context, ids);
+        LoadFromDatabase();
+    }
+
+    /// <summary>"Edit…" in a collection row's menu - wired to <see cref="MainViewModel"/>'s
+    /// properties-overlay opener via the same optional-callback shape as <see cref="_goLibraryFolders"/>.</summary>
+    [RelayCommand]
+    private void OpenCollectionProperties(CollectionSummary? summary)
+    {
+        if (summary is not null)
+        {
+            _openCollectionProperties(summary.Id);
+        }
+    }
+
+    private void DeleteCollection(int collectionId)
+    {
+        using var context = PaperbunkrDb.CreateContext();
+        CollectionService.Delete(context, collectionId);
+
+        if (_activeCollectionId == collectionId)
+        {
+            _activeCollectionId = null;
+            SaveLibrarySettings();
+        }
+
+        LoadFromDatabase();
     }
 
     /// <summary>
@@ -1369,6 +1461,78 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         AddIssuesToReadingList(context, list, Selection.UnionForAction(issueId));
         context.SaveChanges();
         LoadFromDatabase();
+    }
+
+    /// <summary>Context-menu "Add to Collection ▸ {name}" for an issue tile - respects the current
+    /// multi-select union like the Reading List equivalent. Parameter is <c>(issueId, collectionId)</c>.</summary>
+    [RelayCommand]
+    private void AddIssueToCollection((int IssueId, int CollectionId) target)
+    {
+        using var context = PaperbunkrDb.CreateContext();
+        var collection = context.Collections.Find(target.CollectionId);
+        if (collection is null)
+        {
+            return;
+        }
+
+        AddTargetsToCollection(context, collection, issueIds: Selection.UnionForAction(target.IssueId));
+    }
+
+    /// <summary>"Add to Collection ▸ New collection…" for an issue tile.</summary>
+    [RelayCommand]
+    private void CreateCollectionAndAddIssue(int issueId)
+    {
+        using var context = PaperbunkrDb.CreateContext();
+        var collection = CollectionService.Create(context, "New Collection");
+        AddTargetsToCollection(context, collection, issueIds: Selection.UnionForAction(issueId));
+        LoadFromDatabase();
+    }
+
+    /// <summary>Context-menu "Add to Collection ▸ {name}" for a series card - respects the current
+    /// series multi-select union. Parameter is <c>(seriesId, collectionId)</c>.</summary>
+    [RelayCommand]
+    private void AddSeriesToCollection((int SeriesId, int CollectionId) target)
+    {
+        using var context = PaperbunkrDb.CreateContext();
+        var collection = context.Collections.Find(target.CollectionId);
+        if (collection is null)
+        {
+            return;
+        }
+
+        AddTargetsToCollection(context, collection, seriesIds: SeriesSelection.UnionForAction(target.SeriesId));
+    }
+
+    /// <summary>"Add to Collection ▸ New collection…" for a series card.</summary>
+    [RelayCommand]
+    private void CreateCollectionAndAddSeries(int seriesId)
+    {
+        using var context = PaperbunkrDb.CreateContext();
+        var collection = CollectionService.Create(context, "New Collection");
+        AddTargetsToCollection(context, collection, seriesIds: SeriesSelection.UnionForAction(seriesId));
+        LoadFromDatabase();
+    }
+
+    /// <summary>
+    /// Shared add+toast for the two commands above - <see cref="CollectionService.AddItems"/>
+    /// already does its own <see cref="PaperbunkrDbContext.SaveChanges"/> and skips ids already
+    /// present, so the before/after row count is the cheapest way to recover how many were actually
+    /// added without duplicating its existence checks here.
+    /// </summary>
+    private void AddTargetsToCollection(PaperbunkrDbContext context, Collection collection, IReadOnlyList<int>? seriesIds = null, IReadOnlyList<int>? issueIds = null)
+    {
+        int requested = (seriesIds?.Count ?? 0) + (issueIds?.Count ?? 0);
+        int before = context.CollectionItems.Count(ci => ci.CollectionId == collection.Id);
+        CollectionService.AddItems(context, collection.Id, seriesIds: seriesIds, issueIds: issueIds);
+        int added = context.CollectionItems.Count(ci => ci.CollectionId == collection.Id) - before;
+        int skipped = requested - added;
+        string message = (added, skipped) switch
+        {
+            (0, > 0) => $"All {skipped} already in \"{collection.Name}\".",
+            (_, 0) => $"Added {added} to \"{collection.Name}\".",
+            _ => $"Added {added} to \"{collection.Name}\" ({skipped} already in collection).",
+        };
+        _showToast("Added to collection", message);
     }
 
     /// <summary>"New Reading List…" flyout entry - creates a list the same way

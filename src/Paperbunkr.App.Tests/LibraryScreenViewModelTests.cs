@@ -193,6 +193,107 @@ public class LibraryScreenViewModelTests : IDisposable
     }
 
     [Fact]
+    public void CommitCreateCollection_CreatesAndSelectsIt()
+    {
+        var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { }, goToNewIssueProperties: (_, _, _) => { });
+        vm.BeginCreateCollectionCommand.Execute(null);
+        Assert.True(vm.IsCreatingCollection);
+
+        vm.NewCollectionName = "Favorites";
+        vm.CommitCreateCollectionCommand.Execute(null);
+
+        Assert.False(vm.IsCreatingCollection);
+        var created = Assert.Single(vm.Collections);
+        Assert.Equal("Favorites", created.Name);
+        Assert.True(created.IsActive);
+    }
+
+    [Fact]
+    public void CommitCreateCollection_BlankName_DoesNotCreate()
+    {
+        var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { }, goToNewIssueProperties: (_, _, _) => { });
+        vm.BeginCreateCollectionCommand.Execute(null);
+        vm.NewCollectionName = "   ";
+
+        vm.CommitCreateCollectionCommand.Execute(null);
+
+        Assert.False(vm.IsCreatingCollection);
+        Assert.Empty(vm.Collections);
+    }
+
+    [Fact]
+    public void CancelCreateCollection_HidesFieldWithoutCreating()
+    {
+        var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { }, goToNewIssueProperties: (_, _, _) => { });
+        vm.BeginCreateCollectionCommand.Execute(null);
+        vm.NewCollectionName = "Never mind";
+
+        vm.CancelCreateCollectionCommand.Execute(null);
+
+        Assert.False(vm.IsCreatingCollection);
+        Assert.Empty(vm.Collections);
+    }
+
+    [Fact]
+    public void MoveCollectionUpAndDown_ReorderSidebar()
+    {
+        CreateCollectionWithSeries("Alpha");
+        CreateCollectionWithSeries("Bravo");
+        CreateCollectionWithSeries("Charlie");
+        var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { }, goToNewIssueProperties: (_, _, _) => { });
+        Assert.Equal(new[] { "Alpha", "Bravo", "Charlie" }, vm.Collections.Select(c => c.Name));
+
+        vm.MoveCollectionDownCommand.Execute(vm.Collections.Single(c => c.Name == "Alpha"));
+        Assert.Equal(new[] { "Bravo", "Alpha", "Charlie" }, vm.Collections.Select(c => c.Name));
+
+        vm.MoveCollectionUpCommand.Execute(vm.Collections.Single(c => c.Name == "Charlie"));
+        Assert.Equal(new[] { "Bravo", "Charlie", "Alpha" }, vm.Collections.Select(c => c.Name));
+    }
+
+    [Fact]
+    public void MoveCollectionUp_AtTop_IsNoOp()
+    {
+        CreateCollectionWithSeries("Alpha");
+        CreateCollectionWithSeries("Bravo");
+        var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { }, goToNewIssueProperties: (_, _, _) => { });
+
+        vm.MoveCollectionUpCommand.Execute(vm.Collections.Single(c => c.Name == "Alpha"));
+
+        Assert.Equal(new[] { "Alpha", "Bravo" }, vm.Collections.Select(c => c.Name));
+    }
+
+    [Fact]
+    public void DeleteConfirm_Armed_RemovesCollection_AndFallsBackWhenActive()
+    {
+        int seriesId = CreateSeriesWithIssue("Series A");
+        int collectionId = CreateCollectionWithSeries("Favorites", seriesId);
+        var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { }, goToNewIssueProperties: (_, _, _) => { });
+        vm.SelectCollectionCommand.Execute(vm.Collections.Single());
+
+        var row = vm.Collections.Single(c => c.Id == collectionId);
+        row.DeleteConfirm!.TriggerCommand.Execute(null);
+        Assert.True(row.DeleteConfirm.IsArmed);
+        row.DeleteConfirm.TriggerCommand.Execute(null);
+
+        Assert.Empty(vm.Collections);
+        Assert.True(vm.IsAllSeriesActive);
+    }
+
+    [Fact]
+    public void OpenCollectionProperties_InvokesCallback_WithCollectionId()
+    {
+        int collectionId = CreateCollectionWithSeries("Favorites");
+        int? openedId = null;
+        var vm = new LibraryScreenViewModel(
+            goDetail: _ => { }, goReaderForIssue: _ => { }, goToNewIssueProperties: (_, _, _) => { },
+            openCollectionProperties: id => openedId = id);
+
+        vm.OpenCollectionPropertiesCommand.Execute(vm.Collections.Single());
+
+        Assert.Equal(collectionId, openedId);
+    }
+
+    [Fact]
     public void SelectAllSeries_ClearsFilter_RestoresFullRows()
     {
         CreateSeriesWithIssue("Comic One", contentType: ContentType.Comic);

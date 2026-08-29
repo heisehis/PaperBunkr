@@ -1,3 +1,5 @@
+using Paperbunkr.App.ViewModels;
+
 namespace Paperbunkr.App.Models;
 
 /// <summary>
@@ -16,4 +18,7 @@ public class CollectionSummary
     public string? AccentColor { get; init; }
 
     public bool IsActive { get; init; }
+
+    /// <summary>Null for a summary row that isn't wired for deletion yet (e.g. a design-time stub).</summary>
+    public TwoStepConfirm? DeleteConfirm { get; init; }
 }

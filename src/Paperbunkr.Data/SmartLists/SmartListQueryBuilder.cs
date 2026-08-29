@@ -21,6 +21,15 @@ namespace Paperbunkr.Data.SmartLists;
 /// Callers must load the full tree first (<see cref="SmartListTreeLoader"/>); an in-memory list
 /// with its <see cref="SmartList.RootGroup"/> populated works directly.
 ///
+/// The library load is a <see cref="LibrarySnapshot"/> — issues plus whatever derived data
+/// (duplicate ids, virtual-tag definitions, continuity memberships) the tree's conditions actually
+/// reference. <see cref="LoadSnapshot"/> is split out so a caller with several lists to evaluate
+/// (the Smart screen sidebar's live match counts) loads the library <b>once</b> and runs a cheap
+/// in-memory <see cref="Evaluate"/> pass per list, instead of a full DB round-trip per list. Every
+/// DB query here uses <see cref="RelationalQueryableExtensions.AsSplitQuery{TEntity}"/> — with
+/// 2000+ issues, a single query carrying several collection <c>Include</c>s multiplies out to
+/// millions of rows for EF to de-duplicate on the UI thread.
+///
 /// <b>Visibility:</b> <see langword="internal"/> (docs/superpowers/specs/2026-08-28-plugin-api-v3-
 /// data-manager-design.md §7) — the app's <c>IRulesEngine</c> adapter reaches it via
 /// <c>InternalsVisibleTo("Paperbunkr.App")</c>, but a plugin <c>.csx</c> script referencing
@@ -29,46 +38,95 @@ namespace Paperbunkr.Data.SmartLists;
 /// </summary>
 internal static class SmartListQueryBuilder
 {
-    public static List<Issue> Build(PaperbunkrDbContext ctx, SmartList list)
+    /// <summary>One library load, reusable across many <see cref="Evaluate"/> passes.</summary>
+    public sealed class LibrarySnapshot
     {
-        var root = list.RootGroup;
-        var allConditions = Flatten(root).ToList();
+        public required IReadOnlyList<Issue> Issues { get; init; }
+        public HashSet<int>? DuplicateIds { get; init; }
+        public Dictionary<int, VirtualTagDefinition>? VirtualTags { get; init; }
+    }
 
+    /// <summary>
+    /// Loads the issue set plus the derived data any of <paramref name="conditions"/> reference.
+    /// Pass the flattened union of every list's condition tree (<see cref="Flatten"/>) when
+    /// preparing a snapshot to be shared across lists.
+    /// </summary>
+    public static LibrarySnapshot LoadSnapshot(PaperbunkrDbContext ctx, IReadOnlyCollection<SmartListCondition> conditions)
+    {
         // Include(Tags) - SmartListCatalog's Genre/Tags TextSelectors read Issue.Tags (docs/
         // superpowers/specs/2026-08-23-weighted-categorized-tags-design.md); without it every issue
         // would look like it has no Genre/Tags at all, silently breaking every Smart List condition
         // on either field.
-        var issues = ctx.Issues
+        // MetadataProposals feeds Effective* (Number/Year/Volume + duplicate keys); Tags feeds the
+        // Genre/Tags selectors - both broadly enough reached to always load. CustomValues is only
+        // ever touched by the CustomValue / HasCustomValues fields, so it's the one include worth
+        // gating (a library's worth of custom values is pure dead weight for the common list).
+        bool needsCustomValues = conditions.Any(c => c.Field is SmartListField.CustomValue or SmartListField.HasCustomValues);
+
+        var query = ctx.Issues
             .Include(i => i.Series)
-            .Include(i => i.CustomValues)
             .Include(i => i.MetadataProposals)
             .Include(i => i.Tags)
-            .ToList();
+            .AsSplitQuery();
+
+        if (needsCustomValues)
+        {
+            query = query.Include(i => i.CustomValues).AsSplitQuery();
+        }
+
+        var issues = query.ToList();
 
         // Continuity condition reads i.Series.ContinuityMemberships (docs/superpowers/specs/2026-08-27-
         // metadata-model-phase4f-continuity-browse-design.md) - loaded separately so the common
-        // no-continuity-condition case doesn't pay for the join.
-        if (allConditions.Any(c => c.Field == SmartListField.Continuity))
+        // no-continuity-condition case doesn't pay for the join. EF's change tracker fixes these up
+        // onto the Series instances already referenced by issues[].Series (queries here are tracked).
+        if (conditions.Any(c => c.Field == SmartListField.Continuity))
         {
-            ctx.Series.Include(s => s.ContinuityMemberships).ThenInclude(m => m.Continuity).Load();
+            ctx.Series.Include(s => s.ContinuityMemberships).ThenInclude(m => m.Continuity).AsSplitQuery().Load();
         }
 
-        HashSet<int>? duplicateIds = allConditions.Any(c => c.Field == SmartListField.Duplicate)
+        HashSet<int>? duplicateIds = conditions.Any(c => c.Field == SmartListField.Duplicate)
             ? DuplicateIssueIds(issues)
             : null;
 
         // Disabled tags are excluded, not just unpicklable in the rule-builder UI - a condition
         // saved against a tag that's since been disabled in Preferences stops matching too,
         // consistent with the Detail-screen pills surface also only showing enabled tags.
-        Dictionary<int, VirtualTagDefinition>? virtualTags = allConditions.Any(c => c.Field == SmartListField.VirtualTag)
+        Dictionary<int, VirtualTagDefinition>? virtualTags = conditions.Any(c => c.Field == SmartListField.VirtualTag)
             ? ctx.VirtualTagDefinitions.Where(v => v.IsEnabled).ToDictionary(v => v.Id)
             : null;
 
-        var evalContext = new EvalContext(duplicateIds, virtualTags);
-        return issues.Where(i => EvaluateGroup(i, root, evalContext)).ToList();
+        return new LibrarySnapshot { Issues = issues, DuplicateIds = duplicateIds, VirtualTags = virtualTags };
     }
 
+    /// <summary>
+    /// Pure in-memory pass: the issues in <paramref name="snapshot"/> that satisfy
+    /// <paramref name="list"/>'s condition tree (<see cref="EvaluateGroup"/> over
+    /// <see cref="SmartList.RootGroup"/>).
+    /// </summary>
+    public static List<Issue> Evaluate(LibrarySnapshot snapshot, SmartList list)
+    {
+        var evalContext = new EvalContext(snapshot.DuplicateIds, snapshot.VirtualTags);
+        return snapshot.Issues.Where(i => EvaluateGroup(i, list.RootGroup, evalContext)).ToList();
+    }
+
+    public static List<Issue> Build(PaperbunkrDbContext ctx, SmartList list) =>
+        Evaluate(LoadSnapshot(ctx, Flatten(list.RootGroup).ToList()), list);
+
     public static int MatchCount(PaperbunkrDbContext ctx, SmartList list) => Build(ctx, list).Count;
+
+    /// <summary>
+    /// Match counts for many lists off a single library load - one <see cref="LoadSnapshot"/> over
+    /// the union of every list's condition tree, then an in-memory <see cref="Evaluate"/> per list.
+    /// Backs the Smart screen sidebar, which previously issued a full <see cref="Build"/> (its own
+    /// DB round-trip, several collection includes) per list on every screen open.
+    /// </summary>
+    public static Dictionary<int, int> MatchCounts(PaperbunkrDbContext ctx, IReadOnlyCollection<SmartList> lists)
+    {
+        var union = lists.SelectMany(l => Flatten(l.RootGroup)).ToList();
+        var snapshot = LoadSnapshot(ctx, union);
+        return lists.ToDictionary(l => l.Id, l => Evaluate(snapshot, l).Count);
+    }
 
     /// <summary>Every condition anywhere in the tree — used for Include-gating and quick "does this list touch field X" checks.</summary>
     public static IEnumerable<SmartListCondition> Flatten(SmartListConditionGroup group)

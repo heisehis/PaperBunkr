@@ -1,5 +1,6 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:fi="using:FluentIcons.Avalonia"
              xmlns:vm="using:Paperbunkr.App.ViewModels"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -114,21 +115,13 @@
                 <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10" VerticalAlignment="Bottom">
                     <Button Classes="headerAction ghost" Command="{Binding CancelCommand}">
                         <StackPanel Orientation="Horizontal" Spacing="6">
-                            <Border Classes="icon" Background="{DynamicResource PbTextMutedBrush}">
-                                <Border.OpacityMask>
-                                    <ImageBrush Source="/Assets/Icons/Close_Circle.png" Stretch="Uniform" />
-                                </Border.OpacityMask>
-                            </Border>
+                            <fi:SymbolIcon Symbol="DismissCircle" />
                             <TextBlock Text="Cancel" />
                         </StackPanel>
                     </Button>
                     <Button Classes="headerAction primary" Command="{Binding SaveCommand}">
                         <StackPanel Orientation="Horizontal" Spacing="6">
-                            <Border Classes="icon" Background="{DynamicResource PbBadgeTextBrush}">
-                                <Border.OpacityMask>
-                                    <ImageBrush Source="/Assets/Icons/Save.png" Stretch="Uniform" />
-                                </Border.OpacityMask>
-                            </Border>
+                            <fi:SymbolIcon Symbol="Save" Foreground="{DynamicResource PbBadgeTextBrush}" />
                             <TextBlock Text="Apply" />
                         </StackPanel>
                     </Button>

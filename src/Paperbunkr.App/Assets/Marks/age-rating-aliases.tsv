@@ -1,0 +1,31 @@
+# Age-rating alias map  (docs/superpowers/specs/2026-08-28-brand-metadata-iconography-design.md §4)
+# Columns, tab-separated:
+#   canonical   the value MarkResolver reports / the primary spelling
+#   aliases     pipe-separated extra spellings; canonical is matched too. Matching is
+#               case-insensitive, trims whitespace, and treats "+"/" "/"-" as interchangeable
+#               (so "Mature 17+", "mature17", "MA-17" all hit the same row).
+#   asset       filename stem under Assets/Marks/AgeRatings/ (<stem>.svg). Non-blank -> the mark
+#               is that SVG (monochrome ESRB glyph, tinted by BrandMark). Blank -> letter chip.
+#   chiptext    short text for the letter chip when there is no asset (blank -> use canonical)
+#   bg          chip background hex (blank -> the neutral PbSurface3 / PbTextMuted chip)
+#
+# --- Icon tier: CE's 8 bundled AgeRatings/*.png labels, now ESRB "2013" vector (PD, Wikimedia) ---
+# canonical	aliases	asset	chiptext	bg
+Early Childhood	ec|early child|earlychildhood	early-childhood		
+Everyone	e|all|all ages|all-ages|a	everyone		
+Everyone 10+	e10|e10+|10+|everyone 10	everyone-10		
+Kids to Adults	ka|k-a|kids-to-adults	kids-to-adults		
+Teen	t|teen+|teens	teen		
+Mature 17+	m17|ma17|mature|mature 17|17+	mature-17		
+Adults Only 18+	ao|adults only|adult|adults|explicit|18+	adults-only-18		
+Rating Pending	rp|pending|not yet rated|nyr|unrated|tbd	rating-pending		
+#
+# --- Chip tier: ComicInfo v2.1 AgeRating values with no ESRB equivalent ---
+# (colour bands: green = family, amber = teen/older-teen, red = adult. Reviewable.)
+G	general audiences		G	#3B8C3F
+PG	parental guidance|parental guidance recommended		PG	#3B8C3F
+M			M	#C77800
+MA15+	ma15|ma 15+|ma15plus		MA15+	#C77800
+R18+	r 18+|r18plus		R18+	#C0392B
+X18+	x 18+|x18plus		X18+	#C0392B
+# Unknown / blank -> MarkSpec.None (nothing renders); handled in code, not here.

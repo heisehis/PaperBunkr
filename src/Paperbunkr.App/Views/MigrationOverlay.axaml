@@ -2,6 +2,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Paperbunkr.App.ViewModels"
              xmlns:models="using:Paperbunkr.App.Models"
+             xmlns:fi="using:FluentIcons.Avalonia"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d" d:DesignWidth="600" d:DesignHeight="600"
@@ -159,20 +160,20 @@
                         <StackPanel IsVisible="{Binding Migration.IsLocate}" Spacing="12">
                             <TextBlock Text="Locate your ComicRack CE library" FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}" />
                             <StackPanel Orientation="Horizontal" Spacing="5" IsVisible="{Binding Migration.DefaultPathFound}">
-                                <Path Classes="pbIcon" Data="{StaticResource PbIconCircleCheck}" Width="13" Height="13" Stroke="{DynamicResource PbAccentTextBrush}" />
+                                <fi:SymbolIcon Symbol="CheckmarkCircle" FontSize="14" Foreground="{DynamicResource PbAccentTextBrush}" />
                                 <TextBlock Text="Found the default CE install" Foreground="{DynamicResource PbAccentTextBrush}" FontSize="12.5" />
                             </StackPanel>
                             <Grid ColumnDefinitions="*,Auto">
                                 <TextBox Grid.Column="0" Text="{Binding Migration.SelectedPath}" PlaceholderText="Path to ComicDb.xml" />
                                 <Button Grid.Column="1" Margin="8,0,0,0" Command="{Binding Migration.BrowseCommand}">
                                     <StackPanel Orientation="Horizontal" Spacing="5">
-                                        <Path Classes="pbIcon" Data="{StaticResource PbIconFolderOpen}" Width="13" Height="13" />
+                                        <fi:SymbolIcon Symbol="FolderOpen" FontSize="14" />
                                         <TextBlock Text="Browse…" />
                                     </StackPanel>
                                 </Button>
                             </Grid>
                             <StackPanel Orientation="Horizontal" Spacing="5" IsVisible="{Binding Migration.HasErrorMessage}">
-                                <Path Classes="pbIcon" Data="{StaticResource PbIconCircleWarning}" Width="13" Height="13" Stroke="#E06060" />
+                                <fi:SymbolIcon Symbol="Warning" FontSize="14" Foreground="#E06060" />
                                 <TextBlock Text="{Binding Migration.ErrorMessage}" Foreground="#E06060" FontSize="12.5" />
                             </StackPanel>
                             <Button Classes="primaryWide" Content="Scan" Command="{Binding Migration.ScanCommand}" HorizontalAlignment="Left" />

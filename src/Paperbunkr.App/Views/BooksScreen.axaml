@@ -1,5 +1,6 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:fi="using:FluentIcons.Avalonia"
              xmlns:vm="using:Paperbunkr.App.ViewModels"
              xmlns:models="using:Paperbunkr.App.Models"
              xmlns:entities="using:Paperbunkr.Data.Entities"
@@ -181,7 +182,7 @@
                 <Border Grid.Column="0" Background="{DynamicResource PbSurface1Brush}" CornerRadius="{DynamicResource PbRadius}"
                         BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1" Padding="10,0" MaxWidth="360" HorizontalAlignment="Left">
                     <DockPanel LastChildFill="True">
-                        <Path DockPanel.Dock="Left" Classes="pbIcon" Data="{StaticResource PbIconSearch}" VerticalAlignment="Center" Margin="0,0,8,0" />
+                        <fi:SymbolIcon DockPanel.Dock="Left" Symbol="Search" VerticalAlignment="Center" Margin="0,0,8,0" />
                         <TextBox Text="{Binding SearchQuery}" PlaceholderText="Search books…" FontSize="12.5"
                                  Background="Transparent" BorderThickness="0" VerticalAlignment="Center"
                                  AutomationProperties.AutomationId="BooksSearchBox" />
@@ -289,8 +290,8 @@
 
                 <StackPanel IsVisible="{Binding ShowEmptyLibrary}" Spacing="12" MaxWidth="340"
                             HorizontalAlignment="Center" VerticalAlignment="Center">
-                    <Path Classes="pbIcon" Width="34" Height="34" HorizontalAlignment="Center"
-                          Data="{StaticResource PbIconBook}" Stroke="{DynamicResource PbTextFaintBrush}" />
+                    <fi:SymbolIcon FontSize="34" HorizontalAlignment="Center"
+                          Symbol="Book" Foreground="{DynamicResource PbTextFaintBrush}" />
                     <TextBlock Classes="pbTextBody" Text="No books yet." TextAlignment="Center"
                                Foreground="{DynamicResource PbTextMutedBrush}" />
                     <TextBlock Classes="pbTextCaption" TextWrapping="Wrap" TextAlignment="Center"
@@ -302,8 +303,8 @@
 
                 <StackPanel IsVisible="{Binding ShowNoMatches}" Spacing="12" MaxWidth="340"
                             HorizontalAlignment="Center" VerticalAlignment="Center">
-                    <Path Classes="pbIcon" Width="30" Height="30" HorizontalAlignment="Center"
-                          Data="{StaticResource PbIconSearch}" Stroke="{DynamicResource PbTextFaintBrush}" />
+                    <fi:SymbolIcon FontSize="30" HorizontalAlignment="Center"
+                          Symbol="Search" Foreground="{DynamicResource PbTextFaintBrush}" />
                     <TextBlock Classes="pbTextBody" TextAlignment="Center" Foreground="{DynamicResource PbTextMutedBrush}"
                                Text="{Binding SearchQuery, StringFormat='No books match “{0}”.'}" />
                     <Button Classes="secondary" HorizontalAlignment="Center" Content="Clear search"

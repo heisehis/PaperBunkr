@@ -320,6 +320,11 @@ public partial class MangaDetailScreenViewModel : ViewModelBase, IDetailHeaderSo
         Band.Summary = Summary;
         Band.IsSynopsisExpanded = false;
 
+        var markIssue = series.Issues.FirstOrDefault(i => i.Id == _coverIssueId) ?? series.Issues.FirstOrDefault();
+        Band.FormatText = markIssue?.Format ?? string.Empty;
+        Band.AgeRatingText = markIssue?.AgeRating ?? string.Empty;
+        Band.SetSpecialMarks(markIssue);
+
         MetaLine = string.Join("  ·  ", new[]
         {
             StatusLabel,

@@ -1,0 +1,52 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="using:Paperbunkr.App.Controls"
+        xmlns:fi="using:FluentIcons.Avalonia">
+    <!--
+        BrandMark (docs/superpowers/specs/2026-08-28-brand-metadata-iconography-design.md §1) - the
+        one control every brand / metadata mark surface uses. Code-only TemplatedControl
+        (Controls/BrandMark.cs); this implicit ControlTheme is its template, same pattern as SplitText
+        in Styles/Typography.axaml. The control resolves everything and exposes ready-to-bind outputs
+        (ImageSource / Glyph / Label / ChipBackground + Is* flags) - the template just switches on them.
+    -->
+    <Styles.Resources>
+        <ControlTheme x:Key="{x:Type controls:BrandMark}" TargetType="controls:BrandMark">
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <StackPanel Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
+
+                        <!-- Bitmap is already aspect-correct (SvgMarkRenderer fits longest side to
+                             2*MarkSize); Height drives display, wide wordmarks stay wide. -->
+                        <Image Source="{TemplateBinding ImageSource}"
+                               Height="{TemplateBinding MarkSize}" Stretch="Uniform"
+                               VerticalAlignment="Center"
+                               IsVisible="{TemplateBinding IsImage}" />
+
+                        <fi:SymbolIcon Symbol="{TemplateBinding Glyph}"
+                                       FontSize="{TemplateBinding MarkSize}"
+                                       Foreground="{TemplateBinding Foreground}"
+                                       VerticalAlignment="Center"
+                                       IsVisible="{TemplateBinding IsGlyph}" />
+
+                        <Border IsVisible="{TemplateBinding IsChip}" VerticalAlignment="Center"
+                                CornerRadius="3" Padding="5,1"
+                                Background="{Binding ChipBackground, RelativeSource={RelativeSource TemplatedParent}, TargetNullValue={DynamicResource PbSurface3Brush}}"
+                                BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1">
+                            <TextBlock Text="{TemplateBinding Label}" FontSize="9.5" FontWeight="Bold"
+                                       Foreground="{DynamicResource PbTextBrush}" />
+                        </Border>
+
+                        <TextBlock Text="{TemplateBinding Label}" VerticalAlignment="Center"
+                                   FontSize="11.5" Foreground="{DynamicResource PbTextMutedBrush}"
+                                   IsVisible="{TemplateBinding ShowLabel}" />
+
+                        <TextBlock Text="{TemplateBinding Label}" VerticalAlignment="Center"
+                                   Foreground="{TemplateBinding Foreground}"
+                                   IsVisible="{TemplateBinding IsPlainText}" />
+                    </StackPanel>
+                </ControlTemplate>
+            </Setter>
+        </ControlTheme>
+    </Styles.Resources>
+</Styles>

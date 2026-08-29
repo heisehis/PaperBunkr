@@ -1,5 +1,6 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:fi="using:FluentIcons.Avalonia"
              xmlns:vm="using:Paperbunkr.App.ViewModels"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -22,7 +23,7 @@
                 </WrapPanel>
 
                 <StackPanel Orientation="Horizontal" Spacing="5" IsVisible="{Binding HasKeyBindingConflictError}">
-                    <Path Classes="pbIcon" Width="12" Height="12" Data="{StaticResource PbIconCircleWarning}" Stroke="#D96C6C" />
+                    <fi:SymbolIcon Symbol="Warning" FontSize="12" Foreground="#D96C6C" />
                     <TextBlock Text="{Binding KeyBindingConflictError}" Foreground="#D96C6C" FontSize="12" TextWrapping="Wrap" />
                 </StackPanel>
             </StackPanel>

@@ -1,5 +1,6 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:fi="using:FluentIcons.Avalonia"
              xmlns:vm="using:Paperbunkr.App.ViewModels"
              xmlns:models="using:Paperbunkr.App.Models"
              xmlns:entities="using:Paperbunkr.Data.Entities"
@@ -186,7 +187,7 @@
             <StackPanel Orientation="Horizontal" Spacing="8">
                 <Button Classes="headerAction primary" Command="{Binding ToggleAddIssuesCommand}">
                     <StackPanel Orientation="Horizontal" Spacing="5">
-                        <Path Classes="pbIcon" Width="11" Height="11" Data="{StaticResource PbIconPlus}" Stroke="{DynamicResource PbBadgeTextBrush}" />
+                        <fi:SymbolIcon Symbol="Add" FontSize="11" Foreground="{DynamicResource PbBadgeTextBrush}" />
                         <TextBlock Text="Add issues" />
                     </StackPanel>
                 </Button>
@@ -210,7 +211,7 @@
                 </Button>
                 <Button Classes="headerAction ghost" Command="{Binding CopyAsTextCommand}">
                     <StackPanel Orientation="Horizontal" Spacing="5">
-                        <Path Classes="pbIcon" Width="11" Height="11" Data="{StaticResource PbIconCopy}" />
+                        <fi:SymbolIcon Symbol="Copy" FontSize="11" />
                         <TextBlock Text="Copy" />
                     </StackPanel>
                 </Button>
@@ -221,7 +222,7 @@
                 <StackPanel Spacing="8">
                     <TextBox Classes="searchBox" Watermark="Search your library by series or number…" Text="{Binding SearchQuery}">
                         <TextBox.InnerLeftContent>
-                            <Path Classes="pbIcon" Width="13" Height="13" Margin="8,0,2,0" Data="{StaticResource PbIconSearch}" />
+                            <fi:SymbolIcon Symbol="Search" FontSize="13" Margin="8,0,2,0" />
                         </TextBox.InnerLeftContent>
                         <TextBox.KeyBindings>
                             <KeyBinding Gesture="Enter" Command="{Binding SearchCommand}" />
@@ -255,7 +256,7 @@
                                             Command="{Binding $parent[ItemsControl].((vm:ReadingScreenViewModel)DataContext).AddIssueCommand}"
                                             CommandParameter="{Binding}">
                                         <StackPanel Orientation="Horizontal" Spacing="5">
-                                            <Path Classes="pbIcon" Width="10" Height="10" Data="{StaticResource PbIconPlus}" />
+                                            <fi:SymbolIcon Symbol="Add" FontSize="10" />
                                             <TextBlock Text="{Binding $parent[ItemsControl].((vm:ReadingScreenViewModel)DataContext).AddResultButtonLabel}" />
                                         </StackPanel>
                                     </Button>
@@ -279,7 +280,7 @@
                 <StackPanel Spacing="8">
                     <TextBox Classes="searchBox" Watermark="Search for a story event…" Text="{Binding StoryEventSearchQuery}">
                         <TextBox.InnerLeftContent>
-                            <Path Classes="pbIcon" Width="13" Height="13" Margin="8,0,2,0" Data="{StaticResource PbIconSearch}" />
+                            <fi:SymbolIcon Symbol="Search" FontSize="13" Margin="8,0,2,0" />
                         </TextBox.InnerLeftContent>
                         <TextBox.KeyBindings>
                             <KeyBinding Gesture="Enter" Command="{Binding SearchStoryEventsCommand}" />
@@ -313,7 +314,7 @@
                         </ComboBox>
                         <TextBox Grid.Column="1" Text="{Binding ArcSearchQuery}" Watermark="Story arc or event name…" Classes="searchBox">
                             <TextBox.InnerLeftContent>
-                                <Path Classes="pbIcon" Width="13" Height="13" Margin="8,0,2,0" Data="{StaticResource PbIconSearch}" />
+                                <fi:SymbolIcon Symbol="Search" FontSize="13" Margin="8,0,2,0" />
                             </TextBox.InnerLeftContent>
                             <TextBox.KeyBindings>
                                 <KeyBinding Gesture="Enter" Command="{Binding SearchArcCommand}" />
@@ -347,7 +348,7 @@
 
             <Border Background="{DynamicResource PbAccentSoftBrush}" CornerRadius="5" Padding="10,7" IsVisible="{Binding HasStatusMessage}">
                 <StackPanel Orientation="Horizontal" Spacing="6">
-                    <Path Classes="pbIcon" Width="13" Height="13" Data="{StaticResource PbIconInfo}" Stroke="{DynamicResource PbTextBrush}" />
+                    <fi:SymbolIcon Symbol="Info" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
                     <TextBlock Text="{Binding StatusMessage}" FontSize="12" Foreground="{DynamicResource PbTextBrush}" />
                 </StackPanel>
             </Border>
@@ -376,7 +377,7 @@
                             <StackPanel Spacing="8">
                                 <TextBox Classes="searchBox" Watermark="Search your library…" Text="{Binding SearchQuery}">
                                     <TextBox.InnerLeftContent>
-                                        <Path Classes="pbIcon" Width="13" Height="13" Margin="8,0,2,0" Data="{StaticResource PbIconSearch}" />
+                                        <fi:SymbolIcon Symbol="Search" FontSize="13" Margin="8,0,2,0" />
                                     </TextBox.InnerLeftContent>
                                     <TextBox.KeyBindings>
                                         <KeyBinding Gesture="Enter" Command="{Binding SearchCommand}" />
@@ -409,7 +410,7 @@
                                     </ComboBox>
                                     <TextBox Grid.Column="1" Text="{Binding ArcSearchQuery}" Watermark="Arc or event name…" Classes="searchBox">
                                         <TextBox.InnerLeftContent>
-                                            <Path Classes="pbIcon" Width="13" Height="13" Margin="8,0,2,0" Data="{StaticResource PbIconSearch}" />
+                                            <fi:SymbolIcon Symbol="Search" FontSize="13" Margin="8,0,2,0" />
                                         </TextBox.InnerLeftContent>
                                         <TextBox.KeyBindings>
                                             <KeyBinding Gesture="Enter" Command="{Binding SearchArcCommand}" />
@@ -486,7 +487,7 @@
                                                         <Panel Grid.Column="3" Width="42" Height="63" Margin="0,0,12,0">
                                                             <Border CornerRadius="3" ClipToBounds="True" Background="{DynamicResource PbSurface3Brush}"
                                                                     IsVisible="{Binding !IsMissing}">
-                                                                <Image Source="{Binding CoverIssueId, Converter={x:Static views:CoverImageConverter.Instance}}" Stretch="UniformToFill" />
+                                                                <Image views:AsyncCoverImage.SourceId="{Binding CoverIssueId}" Stretch="UniformToFill" />
                                                             </Border>
                                                             <Border CornerRadius="3" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
                                                                     Background="{DynamicResource PbSurface2Brush}" IsVisible="{Binding IsMissing}" />
@@ -518,12 +519,11 @@
 
                                                         <!-- state indicator -->
                                                         <Panel Grid.Column="6" VerticalAlignment="Center" Margin="10,0,0,0">
-                                                            <Path Classes="pbIcon" Width="14" Height="14" Data="{StaticResource PbIconCheck}"
-                                                                  Stroke="{DynamicResource PbSuccessBrush}" IsVisible="{Binding IsRead}" />
+                                                            <fi:SymbolIcon Symbol="Checkmark" FontSize="14" Foreground="{DynamicResource PbSuccessBrush}" IsVisible="{Binding IsRead}" />
                                                             <Button Classes="headerAction primary" Padding="10,5" FontSize="10.5"
                                                                     Command="{Binding OpenCommand}" IsVisible="{Binding IsNextUp}">
                                                                 <StackPanel Orientation="Horizontal" Spacing="4">
-                                                                    <Path Classes="pbIcon" Width="9" Height="9" Data="{StaticResource PbIconPlay}" Stroke="{DynamicResource PbBadgeTextBrush}" />
+                                                                    <fi:SymbolIcon Symbol="Play" FontSize="9" Foreground="{DynamicResource PbBadgeTextBrush}" />
                                                                     <TextBlock Text="Read" />
                                                                 </StackPanel>
                                                             </Button>
@@ -534,7 +534,7 @@
                                                         <!-- hover: one ⋯ menu -->
                                                         <Button Grid.Column="7" Classes="rowManage headerAction ghost" Padding="7,2" Margin="8,0,0,0"
                                                                 VerticalAlignment="Center" ToolTip.Tip="More">
-                                                            <Path Classes="pbIcon" Width="13" Height="13" Data="{StaticResource PbIconMoreVertical}" />
+                                                            <fi:SymbolIcon Symbol="MoreVertical" FontSize="13" />
                                                             <Button.Flyout>
                                                                 <MenuFlyout>
                                                                     <MenuItem Header="Mark as read" Command="{Binding ToggleReadCommand}" IsVisible="{Binding !IsRead}" />

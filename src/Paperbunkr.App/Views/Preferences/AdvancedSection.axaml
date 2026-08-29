@@ -1,5 +1,6 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:fi="using:FluentIcons.Avalonia"
              xmlns:vm="using:Paperbunkr.App.ViewModels"
              xmlns:models="using:Paperbunkr.App.Models"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
@@ -76,7 +77,7 @@
                             <TextBox Text="{Binding BackupLocation}" Width="320" IsReadOnly="True" />
                             <Button Classes="headerAction ghost" Command="{Binding BrowseBackupLocationCommand}">
                                 <StackPanel Orientation="Horizontal" Spacing="6">
-                                    <Path Classes="pbIcon" Width="11" Height="11" Data="{StaticResource PbIconFolderOpen}" />
+                                    <fi:SymbolIcon Symbol="FolderOpen" FontSize="11" />
                                     <TextBlock Text="Browse…" />
                                 </StackPanel>
                             </Button>
@@ -88,7 +89,7 @@
                         <Button Classes="headerAction primary" Command="{Binding BackupNowCommand}"
                                 HorizontalAlignment="Left" Margin="0,6,0,0">
                             <StackPanel Orientation="Horizontal" Spacing="6">
-                                <Path Classes="pbIcon" Data="{StaticResource PbIconArchive}" Stroke="{DynamicResource PbBadgeTextBrush}" />
+                                <fi:SymbolIcon Symbol="Archive" Foreground="{DynamicResource PbBadgeTextBrush}" />
                                 <TextBlock Text="Backup Now" />
                             </StackPanel>
                         </Button>
@@ -104,7 +105,7 @@
                                                    Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
                                         <Button Grid.Column="1" Classes="headerAction ghost" Command="{Binding RestoreCommand}">
                                             <StackPanel Orientation="Horizontal" Spacing="6">
-                                                <Path Classes="pbIcon" Width="11" Height="11" Data="{StaticResource PbIconUndo}" />
+                                                <fi:SymbolIcon Symbol="ArrowUndo" FontSize="11" />
                                                 <TextBlock Text="{Binding RestoreLabel}" />
                                             </StackPanel>
                                         </Button>

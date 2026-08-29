@@ -59,6 +59,54 @@ public class CoverImageCacheTests : IDisposable
         Assert.Null(result);
     }
 
+    // --- Thread-split API backing AsyncCoverImage: decode must be doable off-thread without
+    // touching the (UI-thread-only) LruCache, and storing must be race-safe. ---
+
+    [Fact]
+    public void TryGetCached_Misses_WithoutDecodingFromDisk()
+    {
+        CbzFixture.Create(_cbzPath, pageCount: 1);
+        new CoverThumbnailService().TryGenerateThumbnail(issueId: 401, _cbzPath);
+        // File exists on disk, but nothing has pulled it into memory yet.
+        Assert.False(CoverImageCache.TryGetCached(401, out var bitmap));
+        Assert.Null(bitmap);
+    }
+
+    [Fact]
+    public void DecodeFromDisk_ReturnsBitmap_WithoutPopulatingTheCache()
+    {
+        CbzFixture.Create(_cbzPath, pageCount: 1);
+        new CoverThumbnailService().TryGenerateThumbnail(issueId: 402, _cbzPath);
+
+        var decoded = CoverImageCache.DecodeFromDisk(402);
+
+        Assert.NotNull(decoded);
+        Assert.False(CoverImageCache.TryGetCached(402, out _));
+    }
+
+    [Fact]
+    public void DecodeFromDisk_ReturnsNull_ForMissingFile()
+    {
+        Assert.Null(CoverImageCache.DecodeFromDisk(issueId: 777777));
+    }
+
+    [Fact]
+    public void StoreIfAbsent_KeepsTheFirstInstance_WhenTwoDecodesRace()
+    {
+        CbzFixture.Create(_cbzPath, pageCount: 1);
+        new CoverThumbnailService().TryGenerateThumbnail(issueId: 403, _cbzPath);
+
+        var first = CoverImageCache.DecodeFromDisk(403)!;
+        var second = CoverImageCache.DecodeFromDisk(403)!;
+
+        var winner = CoverImageCache.StoreIfAbsent(403, first);
+        var loser = CoverImageCache.StoreIfAbsent(403, second);
+
+        Assert.Same(first, winner);
+        Assert.Same(first, loser);
+        Assert.Same(first, CoverImageCache.Get(403));
+    }
+
     // --- Invalidate (real bug found 2026-08-19: a stale on-disk thumbnail from a since-deleted
     // Issue can get "adopted" by a different Issue that lands on the same numeric Id after a
     // library reset/re-migration, and this cache's own file-exists check then serves it forever) ---

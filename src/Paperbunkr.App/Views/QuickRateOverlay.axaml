@@ -1,5 +1,6 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:fi="using:FluentIcons.Avalonia"
              xmlns:vm="using:Paperbunkr.App.ViewModels"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -22,13 +23,13 @@
             <Setter Property="Padding" Value="2" />
             <Setter Property="Cursor" Value="Hand" />
         </Style>
-        <Style Selector="Button.star Path.pbIcon">
-            <Setter Property="Width" Value="20" />
-            <Setter Property="Height" Value="20" />
-            <Setter Property="Stroke" Value="{DynamicResource PbTextFaintBrush}" />
+        <Style Selector="Button.star fi|SymbolIcon">
+            <Setter Property="FontSize" Value="20" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextFaintBrush}" />
         </Style>
-        <Style Selector="Button.star.filled Path.pbIcon">
-            <Setter Property="Stroke" Value="{DynamicResource PbAccentBrush}" />
+        <Style Selector="Button.star.filled fi|SymbolIcon">
+            <Setter Property="Foreground" Value="{DynamicResource PbAccentBrush}" />
+            <Setter Property="IconVariant" Value="Filled" />
         </Style>
     </UserControl.Styles>
 
@@ -43,11 +44,11 @@
             <StackPanel>
                 <TextBlock Classes="fieldLabel" Text="RATING" />
                 <StackPanel Orientation="Horizontal" Spacing="3">
-                    <Button Classes="star" Classes.filled="{Binding Star1}" Command="{Binding SetStar1Command}"><Path Classes="pbIcon" Data="{StaticResource PbIconStar}" /></Button>
-                    <Button Classes="star" Classes.filled="{Binding Star2}" Command="{Binding SetStar2Command}"><Path Classes="pbIcon" Data="{StaticResource PbIconStar}" /></Button>
-                    <Button Classes="star" Classes.filled="{Binding Star3}" Command="{Binding SetStar3Command}"><Path Classes="pbIcon" Data="{StaticResource PbIconStar}" /></Button>
-                    <Button Classes="star" Classes.filled="{Binding Star4}" Command="{Binding SetStar4Command}"><Path Classes="pbIcon" Data="{StaticResource PbIconStar}" /></Button>
-                    <Button Classes="star" Classes.filled="{Binding Star5}" Command="{Binding SetStar5Command}"><Path Classes="pbIcon" Data="{StaticResource PbIconStar}" /></Button>
+                    <Button Classes="star" Classes.filled="{Binding Star1}" Command="{Binding SetStar1Command}"><fi:SymbolIcon Symbol="Star" /></Button>
+                    <Button Classes="star" Classes.filled="{Binding Star2}" Command="{Binding SetStar2Command}"><fi:SymbolIcon Symbol="Star" /></Button>
+                    <Button Classes="star" Classes.filled="{Binding Star3}" Command="{Binding SetStar3Command}"><fi:SymbolIcon Symbol="Star" /></Button>
+                    <Button Classes="star" Classes.filled="{Binding Star4}" Command="{Binding SetStar4Command}"><fi:SymbolIcon Symbol="Star" /></Button>
+                    <Button Classes="star" Classes.filled="{Binding Star5}" Command="{Binding SetStar5Command}"><fi:SymbolIcon Symbol="Star" /></Button>
                 </StackPanel>
             </StackPanel>
 

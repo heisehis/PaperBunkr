@@ -1,5 +1,6 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:fi="using:FluentIcons.Avalonia"
              xmlns:vm="using:Paperbunkr.App.ViewModels"
              xmlns:models="using:Paperbunkr.App.Models"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
@@ -35,7 +36,7 @@
                                                 Command="{Binding #WatchedFoldersList.((vm:PreferencesScreenViewModel)DataContext).OpenFolderCommand}"
                                                 CommandParameter="{Binding}">
                                             <StackPanel Orientation="Horizontal" Spacing="5">
-                                                <Path Classes="pbIcon" Width="11" Height="11" Data="{StaticResource PbIconFolderOpen}" />
+                                                <fi:SymbolIcon Symbol="FolderOpen" FontSize="11" />
                                                 <TextBlock Text="Open" />
                                             </StackPanel>
                                         </Button>
@@ -43,7 +44,7 @@
                                                 Command="{Binding #WatchedFoldersList.((vm:PreferencesScreenViewModel)DataContext).RemoveFolderCommand}"
                                                 CommandParameter="{Binding}">
                                             <StackPanel Orientation="Horizontal" Spacing="5">
-                                                <Path Classes="pbIcon" Width="11" Height="11" Data="{StaticResource PbIconTrash}" />
+                                                <fi:SymbolIcon Symbol="Delete" FontSize="11" />
                                                 <TextBlock Text="Remove" />
                                             </StackPanel>
                                         </Button>
@@ -56,21 +57,21 @@
                         <StackPanel Orientation="Horizontal" Spacing="10">
                             <Button Classes="headerAction primary" Command="{Binding AddFolderCommand}">
                                 <StackPanel Orientation="Horizontal" Spacing="6">
-                                    <Path Classes="pbIcon" Data="{StaticResource PbIconFolderAdd}" Stroke="{DynamicResource PbBadgeTextBrush}" />
+                                    <fi:SymbolIcon Symbol="FolderAdd" Foreground="{DynamicResource PbBadgeTextBrush}" />
                                     <TextBlock Text="Add Folder…" />
                                 </StackPanel>
                             </Button>
                             <Button Classes="headerAction ghost" Command="{Binding ScanNowCommand}"
                                     IsEnabled="{Binding !IsScanning}">
                                 <StackPanel Orientation="Horizontal" Spacing="6">
-                                    <Path Classes="pbIcon" Data="{StaticResource PbIconFolderSearch}" />
+                                    <fi:SymbolIcon Symbol="FolderSearch" />
                                     <TextBlock Text="Scan Now" />
                                 </StackPanel>
                             </Button>
                             <Button Classes="headerAction ghost" Command="{Binding GenerateCoversCommand}"
                                     IsEnabled="{Binding !IsGeneratingCovers}">
                                 <StackPanel Orientation="Horizontal" Spacing="6">
-                                    <Path Classes="pbIcon" Data="{StaticResource PbIconBook}" />
+                                    <fi:SymbolIcon Symbol="Book" />
                                     <TextBlock Text="Generate Covers" />
                                 </StackPanel>
                             </Button>
@@ -78,7 +79,7 @@
                                     IsEnabled="{Binding !IsSyncingMetadata}"
                                     ToolTip.Tip="Re-reads embedded ComicInfo.xml for issues already in the library and fills in any blank fields">
                                 <StackPanel Orientation="Horizontal" Spacing="6">
-                                    <Path Classes="pbIcon" Data="{StaticResource PbIconRefresh}" />
+                                    <fi:SymbolIcon Symbol="ArrowClockwise" />
                                     <TextBlock Text="Sync Metadata" />
                                 </StackPanel>
                             </Button>
@@ -109,7 +110,7 @@
                                                 CommandParameter="{Binding}"
                                                 AutomationProperties.AutomationId="PreferencesBookFolderOpen">
                                             <StackPanel Orientation="Horizontal" Spacing="5">
-                                                <Path Classes="pbIcon" Width="11" Height="11" Data="{StaticResource PbIconFolderOpen}" />
+                                                <fi:SymbolIcon Symbol="FolderOpen" FontSize="11" />
                                                 <TextBlock Text="Open" />
                                             </StackPanel>
                                         </Button>
@@ -118,7 +119,7 @@
                                                 CommandParameter="{Binding}"
                                                 AutomationProperties.AutomationId="PreferencesBookFolderRemove">
                                             <StackPanel Orientation="Horizontal" Spacing="5">
-                                                <Path Classes="pbIcon" Width="11" Height="11" Data="{StaticResource PbIconTrash}" />
+                                                <fi:SymbolIcon Symbol="Delete" FontSize="11" />
                                                 <TextBlock Text="Remove" />
                                             </StackPanel>
                                         </Button>
@@ -132,7 +133,7 @@
                             <Button Classes="headerAction primary" Command="{Binding AddBookFolderCommand}"
                                     AutomationProperties.AutomationId="PreferencesAddBookFolder">
                                 <StackPanel Orientation="Horizontal" Spacing="6">
-                                    <Path Classes="pbIcon" Data="{StaticResource PbIconFolderAdd}" Stroke="{DynamicResource PbBadgeTextBrush}" />
+                                    <fi:SymbolIcon Symbol="FolderAdd" Foreground="{DynamicResource PbBadgeTextBrush}" />
                                     <TextBlock Text="Add Folder…" />
                                 </StackPanel>
                             </Button>
@@ -140,7 +141,7 @@
                                     IsEnabled="{Binding !IsScanningBooks}"
                                     AutomationProperties.AutomationId="PreferencesScanBooksNow">
                                 <StackPanel Orientation="Horizontal" Spacing="6">
-                                    <Path Classes="pbIcon" Data="{StaticResource PbIconFolderSearch}" />
+                                    <fi:SymbolIcon Symbol="FolderSearch" />
                                     <TextBlock Text="Scan Now" />
                                 </StackPanel>
                             </Button>
@@ -162,7 +163,7 @@
                         <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
                             <Button Classes="headerAction primary" Command="{Binding OpenMigrationCommand}">
                                 <StackPanel Orientation="Horizontal" Spacing="6">
-                                    <Path Classes="pbIcon" Data="{StaticResource PbIconCloudUpload}" Stroke="{DynamicResource PbBadgeTextBrush}" />
+                                    <fi:SymbolIcon Symbol="CloudArrowUp" Foreground="{DynamicResource PbBadgeTextBrush}" />
                                     <TextBlock Text="Migrate…" />
                                 </StackPanel>
                             </Button>
@@ -202,7 +203,7 @@
                     <StackPanel Margin="14" Spacing="10">
                         <Button Classes="headerAction ghost" Command="{Binding AddVirtualTagCommand}" HorizontalAlignment="Left">
                             <StackPanel Orientation="Horizontal" Spacing="6">
-                                <Path Classes="pbIcon" Width="11" Height="11" Data="{StaticResource PbIconPlus}" />
+                                <fi:SymbolIcon Symbol="Add" FontSize="11" />
                                 <TextBlock Text="Add Virtual Tag" />
                             </StackPanel>
                         </Button>
@@ -224,7 +225,7 @@
                             <Button Classes="headerAction ghost" Command="{Binding DeleteVirtualTagCommand}"
                                     HorizontalAlignment="Left" Margin="0,6,0,0">
                                 <StackPanel Orientation="Horizontal" Spacing="6">
-                                    <Path Classes="pbIcon" Width="11" Height="11" Data="{StaticResource PbIconTrash}" />
+                                    <fi:SymbolIcon Symbol="Delete" FontSize="11" />
                                     <TextBlock Text="Delete Tag" />
                                 </StackPanel>
                             </Button>

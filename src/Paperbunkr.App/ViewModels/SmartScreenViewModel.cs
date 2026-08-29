@@ -7,6 +7,7 @@ using CommunityToolkit.Mvvm.Input;
 using Microsoft.EntityFrameworkCore;
 using Paperbunkr.App.Models;
 using Paperbunkr.App.Services;
+using Paperbunkr.Data;
 using Paperbunkr.Data.Entities;
 using Paperbunkr.Data.Metadata;
 using Paperbunkr.Data.SmartLists;
@@ -125,9 +126,21 @@ public partial class SmartScreenViewModel : ViewModelBase
             _virtualTagOptions,
             onRemove: null);
 
-        RecomputeMatchCount();
-        RefreshSidebar();
+        // One library load feeds both the active list's Results and every list's sidebar count -
+        // opening the screen used to materialize the whole library twice (once here, once in
+        // RefreshSidebar) plus once more per sidebar list.
+        var all = context.SmartLists.OrderBy(s => s.SortOrder).ToList();
+        var trees = LoadTrees(context, all);
+        var snapshot = SmartListQueryBuilder.LoadSnapshot(
+            context, trees.SelectMany(t => SmartListQueryBuilder.Flatten(t.RootGroup)).ToList());
+
+        RecomputeMatchCount(snapshot);
+        RefreshSidebarCore(all, trees.ToDictionary(t => t.Id, t => SmartListQueryBuilder.Evaluate(snapshot, t).Count));
     }
+
+    /// <summary>Loads each list's full nested condition tree (<see cref="SmartListTreeLoader"/>), dropping any that vanished.</summary>
+    private static List<SmartList> LoadTrees(PaperbunkrDbContext context, IEnumerable<SmartList> lists) =>
+        lists.Select(s => SmartListTreeLoader.LoadWithTree(context, s.Id)).OfType<SmartList>().ToList();
 
     /// <summary>
     /// Called on every navigation to the Smart screen. Re-loads the already-active list (so match
@@ -160,7 +173,15 @@ public partial class SmartScreenViewModel : ViewModelBase
     {
         using var context = PaperbunkrDb.CreateContext();
         var all = context.SmartLists.OrderBy(s => s.SortOrder).ToList();
+        var trees = LoadTrees(context, all);
 
+        // One library load for every list's count, not one full-library materialization per list -
+        // the Smart screen open path was ~N of them.
+        RefreshSidebarCore(all, SmartListQueryBuilder.MatchCounts(context, trees));
+    }
+
+    private void RefreshSidebarCore(List<SmartList> all, Dictionary<int, int> matchCounts)
+    {
         BuiltInLists.Clear();
         MaintenanceLists.Clear();
         CustomLists.Clear();
@@ -168,12 +189,11 @@ public partial class SmartScreenViewModel : ViewModelBase
         foreach (var list in all)
         {
             int listId = list.Id;
-            var withTree = SmartListTreeLoader.LoadWithTree(context, listId);
             var summary = new SmartListSummary
             {
                 Id = list.Id,
                 Name = list.Name,
-                MatchCount = withTree is null ? 0 : SmartListQueryBuilder.MatchCount(context, withTree),
+                MatchCount = matchCounts.TryGetValue(list.Id, out var mc) ? mc : 0,
                 IsActive = list.Id == _activeSmartListId,
                 DeleteConfirm = list.IsSystem
                     ? null
@@ -233,11 +253,25 @@ public partial class SmartScreenViewModel : ViewModelBase
         }
 
         using var context = PaperbunkrDb.CreateContext();
-        // Evaluates the in-memory (possibly unsaved) working tree against the live library, so the
-        // results/count update as the user edits, before Save persists anything. One Build() call
-        // backs both Results and MatchCountLabel.
+        RecomputeMatchCount(SmartListQueryBuilder.LoadSnapshot(
+            context, SmartListQueryBuilder.Flatten(_workingList.RootGroup).ToList()));
+    }
+
+    /// <summary>
+    /// Evaluates the in-memory (possibly unsaved) working tree against <paramref name="snapshot"/>,
+    /// so results/count update as the user edits before Save persists anything. Takes a prebuilt
+    /// snapshot so <see cref="LoadSmartList"/> can share one library load between this and the
+    /// sidebar counts instead of materializing the library twice on every screen open.
+    /// </summary>
+    private void RecomputeMatchCount(SmartListQueryBuilder.LibrarySnapshot snapshot)
+    {
+        if (_workingList is null)
+        {
+            return;
+        }
+
         var transient = new SmartList { RootGroup = _workingList.RootGroup };
-        var matched = SmartListQueryBuilder.Build(context, transient);
+        var matched = SmartListQueryBuilder.Evaluate(snapshot, transient);
 
         Results.Clear();
         foreach (var issue in matched)
@@ -249,7 +283,7 @@ public partial class SmartScreenViewModel : ViewModelBase
                 Title = string.IsNullOrWhiteSpace(issue.EffectiveNumber()) ? "#?" : $"#{issue.EffectiveNumber()}",
                 IsUnread = issue.LastPageRead is null or 0,
                 CoverBrush = SeriesCardSample.CoverBrushFor(issue.Series!.Name),
-                CoverImage = CoverImageCache.Get(issue.Id),
+                CoverIssueId = issue.Id, // lazy async decode via AsyncCoverImage - see IssueCardSample.CoverIssueId
             });
         }
 

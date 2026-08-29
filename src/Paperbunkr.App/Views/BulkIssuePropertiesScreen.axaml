@@ -1,5 +1,6 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:fi="using:FluentIcons.Avalonia"
              xmlns:vm="using:Paperbunkr.App.ViewModels"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -28,13 +29,13 @@
             <Setter Property="Padding" Value="2" />
             <Setter Property="Cursor" Value="Hand" />
         </Style>
-        <Style Selector="Button.star Path.pbIcon">
-            <Setter Property="Width" Value="15" />
-            <Setter Property="Height" Value="15" />
-            <Setter Property="Stroke" Value="{DynamicResource PbTextFaintBrush}" />
+        <Style Selector="Button.star fi|SymbolIcon">
+            <Setter Property="FontSize" Value="15" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextFaintBrush}" />
         </Style>
-        <Style Selector="Button.star.filled Path.pbIcon">
-            <Setter Property="Stroke" Value="{DynamicResource PbAccentBrush}" />
+        <Style Selector="Button.star.filled fi|SymbolIcon">
+            <Setter Property="Foreground" Value="{DynamicResource PbAccentBrush}" />
+            <Setter Property="IconVariant" Value="Filled" />
         </Style>
 
         <!-- Enum-field picker (docs/superpowers/specs/2026-08-16-manga-content-type-classification-
@@ -99,11 +100,11 @@
                           Content="Yes" Foreground="{DynamicResource PbTextBrush}" FontSize="13" />
 
                 <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="2" IsVisible="{Binding IsRatingKind}">
-                    <Button Classes="star" Classes.filled="{Binding Star1}" Command="{Binding SetStar1Command}"><Path Classes="pbIcon" Data="{StaticResource PbIconStar}" /></Button>
-                    <Button Classes="star" Classes.filled="{Binding Star2}" Command="{Binding SetStar2Command}"><Path Classes="pbIcon" Data="{StaticResource PbIconStar}" /></Button>
-                    <Button Classes="star" Classes.filled="{Binding Star3}" Command="{Binding SetStar3Command}"><Path Classes="pbIcon" Data="{StaticResource PbIconStar}" /></Button>
-                    <Button Classes="star" Classes.filled="{Binding Star4}" Command="{Binding SetStar4Command}"><Path Classes="pbIcon" Data="{StaticResource PbIconStar}" /></Button>
-                    <Button Classes="star" Classes.filled="{Binding Star5}" Command="{Binding SetStar5Command}"><Path Classes="pbIcon" Data="{StaticResource PbIconStar}" /></Button>
+                    <Button Classes="star" Classes.filled="{Binding Star1}" Command="{Binding SetStar1Command}"><fi:SymbolIcon Symbol="Star" /></Button>
+                    <Button Classes="star" Classes.filled="{Binding Star2}" Command="{Binding SetStar2Command}"><fi:SymbolIcon Symbol="Star" /></Button>
+                    <Button Classes="star" Classes.filled="{Binding Star3}" Command="{Binding SetStar3Command}"><fi:SymbolIcon Symbol="Star" /></Button>
+                    <Button Classes="star" Classes.filled="{Binding Star4}" Command="{Binding SetStar4Command}"><fi:SymbolIcon Symbol="Star" /></Button>
+                    <Button Classes="star" Classes.filled="{Binding Star5}" Command="{Binding SetStar5Command}"><fi:SymbolIcon Symbol="Star" /></Button>
                 </StackPanel>
 
                 <!-- Fixed-choice picker (docs/superpowers/specs/2026-08-16-manga-content-type-classification-design.md §1) -
@@ -146,13 +147,13 @@
                 <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10" VerticalAlignment="Bottom">
                     <Button Classes="ghost" FontSize="12.5" Command="{Binding CancelCommand}">
                         <StackPanel Orientation="Horizontal" Spacing="6">
-                            <Path Classes="pbIcon" Data="{StaticResource PbIconCloseCircle}" Stroke="{DynamicResource PbTextMutedBrush}" />
+                            <fi:SymbolIcon Symbol="DismissCircle" />
                             <TextBlock Text="Cancel" />
                         </StackPanel>
                     </Button>
                     <Button Classes="primary" FontSize="12.5" Command="{Binding SaveCommand}">
                         <StackPanel Orientation="Horizontal" Spacing="6">
-                            <Path Classes="pbIcon" Data="{StaticResource PbIconSave}" Stroke="{DynamicResource PbBadgeTextBrush}" />
+                            <fi:SymbolIcon Symbol="Save" Foreground="{DynamicResource PbBadgeTextBrush}" />
                             <TextBlock Text="Apply" />
                         </StackPanel>
                     </Button>

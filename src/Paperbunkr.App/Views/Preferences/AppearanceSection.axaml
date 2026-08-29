@@ -1,5 +1,6 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:fi="using:FluentIcons.Avalonia"
              xmlns:vm="using:Paperbunkr.App.ViewModels"
              xmlns:models="using:Paperbunkr.App.Models"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
@@ -50,19 +51,19 @@
                         <StackPanel Orientation="Horizontal" Spacing="10">
                             <Button Classes="headerAction primary" Command="{Binding BrowseForSkinCommand}">
                                 <StackPanel Orientation="Horizontal" Spacing="6">
-                                    <Path Classes="pbIcon" Data="{StaticResource PbIconFolderOpen}" Stroke="{DynamicResource PbBadgeTextBrush}" />
+                                    <fi:SymbolIcon Symbol="FolderOpen" Foreground="{DynamicResource PbBadgeTextBrush}" />
                                     <TextBlock Text="Browse…" />
                                 </StackPanel>
                             </Button>
                             <Button Classes="headerAction ghost" Command="{Binding OpenSkinsFolderCommand}">
                                 <StackPanel Orientation="Horizontal" Spacing="6">
-                                    <Path Classes="pbIcon" Data="{StaticResource PbIconFolderOpen}" />
+                                    <fi:SymbolIcon Symbol="FolderOpen" />
                                     <TextBlock Text="Open Skins Folder" />
                                 </StackPanel>
                             </Button>
                         </StackPanel>
                         <StackPanel Orientation="Horizontal" Spacing="5" IsVisible="{Binding HasInstallSkinError}">
-                            <Path Classes="pbIcon" Width="12" Height="12" Data="{StaticResource PbIconCircleWarning}" Stroke="#D96C6C" />
+                            <fi:SymbolIcon Symbol="Warning" FontSize="12" Foreground="#D96C6C" />
                             <TextBlock Text="{Binding InstallSkinError}" Foreground="#D96C6C" FontSize="12" TextWrapping="Wrap" />
                         </StackPanel>
                     </StackPanel>

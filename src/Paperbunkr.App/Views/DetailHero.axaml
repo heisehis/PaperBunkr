@@ -2,24 +2,32 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Paperbunkr.App.ViewModels"
              xmlns:models="using:Paperbunkr.App.Models"
+             xmlns:controls="using:Paperbunkr.App.Controls"
              xmlns:conv="using:Avalonia.Data.Converters"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d" d:DesignWidth="1000" d:DesignHeight="340"
              x:Class="Paperbunkr.App.Views.DetailHero"
+             x:Name="Hero"
              x:DataType="vm:IDetailHeaderSource">
 
     <!--
-        Full-bleed cinematic hero shared by all three detail screens (docs/superpowers/specs/
-        2026-08-28-detail-screens-streaming-redesign-design.md). Blurred cover backdrop (pre-
-        rendered by BackdropBlurRenderer, supplied as IDetailHeaderSource.BackdropImage) + a
-        top->bottom vignette so the title stays legible over any art. Foreground content is pinned
-        bottom-left; a tracker progress badge floats bottom-right for a linked manga series.
+        Full-bleed cinematic hero shared by all three detail screens and the Home spotlight
+        (docs/superpowers/specs/2026-08-28-detail-screens-streaming-redesign-design.md +
+        2026-08-28-home-screen-redesign-design.md §3). Blurred cover backdrop (pre-rendered by
+        BackdropBlurRenderer, supplied as IDetailHeaderSource.BackdropImage) + a top->bottom
+        vignette so the title stays legible over any art. Foreground content is pinned bottom-left;
+        a tracker progress badge floats bottom-right for a linked manga series.
+
+        Opt-in extras: Synopsis (a body line, DataContext-bound, null hides it) and MutedBackdrop
+        (an extra scrim for Home's calmer look).
     -->
-    <Border Height="360" ClipToBounds="True" Background="{Binding CoverBrush}">
+    <Border Height="{Binding #Hero.HeroHeight}" ClipToBounds="True" Background="{Binding CoverBrush}">
         <Grid>
             <Image Source="{Binding BackdropImage}" Stretch="UniformToFill"
                    IsVisible="{Binding BackdropImage, Converter={x:Static conv:ObjectConverters.IsNotNull}}" />
+
+            <Border Background="#59000000" IsVisible="{Binding #Hero.MutedBackdrop}" />
 
             <Border>
                 <Border.Background>
@@ -45,9 +53,12 @@
                 <StackPanel Grid.Column="1" Margin="18,0,18,2" VerticalAlignment="Bottom" Spacing="3">
                     <TextBlock Text="{Binding SecondaryTitle}" FontSize="11" Foreground="#CFE6E6E6"
                                IsVisible="{Binding SecondaryTitle, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
-                    <TextBlock Text="{Binding HeaderTitle}" Classes="pbTextHero" FontSize="32" LineHeight="32"
-                               Foreground="#FFFFFFFF" TextWrapping="Wrap" MaxLines="2" TextTrimming="CharacterEllipsis" />
+                    <controls:SplitText Text="{Binding HeaderTitle}" FontSize="32" Foreground="#FFFFFFFF" />
                     <TextBlock Text="{Binding MetaLine}" FontSize="12" Foreground="#E0CBA36A" Margin="0,3,0,0" />
+                    <TextBlock Text="{Binding Synopsis}" FontSize="12" Foreground="#C8E6E6E6" Margin="0,4,0,0"
+                               TextWrapping="Wrap" MaxLines="3" TextTrimming="CharacterEllipsis" MaxWidth="520"
+                               HorizontalAlignment="Left"
+                               IsVisible="{Binding Synopsis, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
                     <ItemsControl ItemsSource="{Binding Actions}" Margin="0,8,0,0">
                         <ItemsControl.ItemsPanel>
                             <ItemsPanelTemplate><StackPanel Orientation="Horizontal" Spacing="7" /></ItemsPanelTemplate>

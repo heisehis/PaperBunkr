@@ -1,5 +1,6 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:fi="using:FluentIcons.Avalonia"
              xmlns:vm="using:Paperbunkr.App.ViewModels"
              xmlns:views="using:Paperbunkr.App.Views"
              xmlns:models="using:Paperbunkr.App.Models"
@@ -149,7 +150,7 @@
                     <Button Classes="detailAction ghost" HorizontalAlignment="Left" Margin="0,20,0,0" Foreground="#E06060">
                         <Button.Content>
                             <StackPanel Orientation="Horizontal" Spacing="7">
-                                <Path Classes="pbIcon" Data="{StaticResource PbIconTrash}" Width="15" Height="15" Stroke="#E06060" />
+                                <fi:SymbolIcon Symbol="Delete" FontSize="15" Foreground="#E06060" />
                                 <TextBlock Text="Delete Book" VerticalAlignment="Center" />
                             </StackPanel>
                         </Button.Content>

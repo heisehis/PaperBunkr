@@ -1,5 +1,6 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:fi="using:FluentIcons.Avalonia"
              xmlns:vm="using:Paperbunkr.App.ViewModels"
              xmlns:views="using:Paperbunkr.App.Views"
              xmlns:controls="using:Paperbunkr.App.Controls"
@@ -163,7 +164,7 @@
                         <Grid>
                             <!-- Uniform (not UniformToFill) - the box is already sized to this cover's own
                                  aspect ratio, so nothing gets cropped; only extreme clamped outliers letterbox. -->
-                            <Image Source="{Binding Id, Converter={x:Static views:CoverImageConverter.Instance}}" Stretch="Uniform" />
+                            <Image views:AsyncCoverImage.SourceId="{Binding Id}" Stretch="Uniform" />
                             <Border Classes="posterScrim" />
                             <Border IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowUnreadBadge}">
                                 <Border IsVisible="{Binding !IsRead}" Background="#B814161B"
@@ -174,22 +175,21 @@
                                 </Border>
                             </Border>
                             <Border IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowPublisherBadge}">
-                                <Border IsVisible="{Binding HasPublisher}" Background="#B814161B" CornerRadius="999" Padding="6,2"
+                                <Border IsVisible="{Binding HasPublisher}" Background="#B814161B" CornerRadius="999" Padding="5,2"
                                         HorizontalAlignment="Left" VerticalAlignment="Top" Margin="7">
-                                    <TextBlock Text="{Binding Publisher}" FontSize="9" FontWeight="Bold" Foreground="White"
-                                               MaxWidth="70" TextTrimming="CharacterEllipsis" />
+                                    <controls:BrandMark Family="Publisher" Value="{Binding Publisher}" ShowText="False"
+                                                        MarkSize="12" Foreground="White" />
                                 </Border>
                             </Border>
                             <Border IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowLanguageBadge}">
-                                <Border IsVisible="{Binding HasLanguage}" Background="#B814161B" CornerRadius="999" Padding="6,2"
+                                <Border IsVisible="{Binding HasLanguage}" Background="#B814161B" CornerRadius="999" Padding="5,2"
                                         HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="7">
                                     <Panel>
                                         <TextBlock Text="{Binding LanguageIso}" FontSize="9" FontWeight="Bold" Foreground="White"
                                                    IsVisible="{Binding !$parent[UserControl].((vm:LibraryScreenViewModel)DataContext).UseLanguageIcon}" />
-                                        <Border Classes="icon" Width="9" Height="9" Background="White"
-                                                IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).UseLanguageIcon}">
-                                            <Border.OpacityMask><ImageBrush Source="/Assets/Icons/Globe.png" Stretch="Uniform" /></Border.OpacityMask>
-                                        </Border>
+                                        <controls:BrandMark Family="Language" Value="{Binding LanguageIso}" ShowText="False" MarkSize="11"
+                                                            Foreground="White"
+                                                            IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).UseLanguageIcon}" />
                                     </Panel>
                                 </Border>
                             </Border>
@@ -217,7 +217,7 @@
                         <Panel Grid.Column="0">
                             <Border CornerRadius="{DynamicResource PbRadiusSm}" Width="44" Height="63"
                                     Background="{Binding CoverBrush}" ClipToBounds="True">
-                                <Image Source="{Binding Id, Converter={x:Static views:CoverImageConverter.Instance}}" Stretch="UniformToFill" />
+                                <Image views:AsyncCoverImage.SourceId="{Binding Id}" Stretch="UniformToFill" />
                             </Border>
                             <CheckBox IsChecked="{Binding IsSelected, Mode=OneWay}"
                                       Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ToggleIssueSelectionCheckboxCommand}"
@@ -248,7 +248,7 @@
                 <Grid ColumnDefinitions="52,*" Margin="0,6">
                     <Panel Grid.Column="0">
                         <Border Width="36" Height="50" CornerRadius="{DynamicResource PbRadiusSm}" Background="{Binding CoverBrush}" ClipToBounds="True">
-                            <Image Source="{Binding Id, Converter={x:Static views:CoverImageConverter.Instance}}" Stretch="UniformToFill" />
+                            <Image views:AsyncCoverImage.SourceId="{Binding Id}" Stretch="UniformToFill" />
                         </Border>
                         <CheckBox IsChecked="{Binding IsSelected, Mode=OneWay}"
                                   Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ToggleIssueSelectionCheckboxCommand}"
@@ -292,7 +292,7 @@
                                     Width="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).TilesThumbWidth}"
                                     Height="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).TilesThumbHeight}"
                                     Background="{Binding CoverBrush}" ClipToBounds="True">
-                                <Image Source="{Binding Id, Converter={x:Static views:CoverImageConverter.Instance}}" Stretch="UniformToFill" />
+                                <Image views:AsyncCoverImage.SourceId="{Binding Id}" Stretch="UniformToFill" />
                             </Border>
                             <CheckBox IsChecked="{Binding IsSelected, Mode=OneWay}"
                                       Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ToggleIssueSelectionCheckboxCommand}"
@@ -324,7 +324,7 @@
                         <Grid>
                             <!-- Uniform (not UniformToFill) - the box is already sized to this cover's own
                                  aspect ratio, so nothing gets cropped; only extreme clamped outliers letterbox. -->
-                            <Image Source="{Binding CoverIssueId, Converter={x:Static views:CoverImageConverter.Instance}}" Stretch="Uniform" />
+                            <Image views:AsyncCoverImage.SourceId="{Binding CoverIssueId}" Stretch="Uniform" />
                             <Border Classes="posterScrim" />
                             <Border IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowUnreadBadge}">
                                 <Border IsVisible="{Binding HasUnread}" Background="#B814161B"
@@ -335,22 +335,21 @@
                                 </Border>
                             </Border>
                             <Border IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowPublisherBadge}">
-                                <Border IsVisible="{Binding HasPublisher}" Background="#B814161B" CornerRadius="999" Padding="6,2"
+                                <Border IsVisible="{Binding HasPublisher}" Background="#B814161B" CornerRadius="999" Padding="5,2"
                                         HorizontalAlignment="Left" VerticalAlignment="Top" Margin="7">
-                                    <TextBlock Text="{Binding Publisher}" FontSize="9" FontWeight="Bold" Foreground="White"
-                                               MaxWidth="70" TextTrimming="CharacterEllipsis" />
+                                    <controls:BrandMark Family="Publisher" Value="{Binding Publisher}" ShowText="False"
+                                                        MarkSize="12" Foreground="White" />
                                 </Border>
                             </Border>
                             <Border IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowLanguageBadge}">
-                                <Border IsVisible="{Binding HasLanguage}" Background="#B814161B" CornerRadius="999" Padding="6,2"
+                                <Border IsVisible="{Binding HasLanguage}" Background="#B814161B" CornerRadius="999" Padding="5,2"
                                         HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="7">
                                     <Panel>
                                         <TextBlock Text="{Binding LanguageIso}" FontSize="9" FontWeight="Bold" Foreground="White"
                                                    IsVisible="{Binding !$parent[UserControl].((vm:LibraryScreenViewModel)DataContext).UseLanguageIcon}" />
-                                        <Border Classes="icon" Width="9" Height="9" Background="White"
-                                                IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).UseLanguageIcon}">
-                                            <Border.OpacityMask><ImageBrush Source="/Assets/Icons/Globe.png" Stretch="Uniform" /></Border.OpacityMask>
-                                        </Border>
+                                        <controls:BrandMark Family="Language" Value="{Binding LanguageIso}" ShowText="False" MarkSize="11"
+                                                            Foreground="White"
+                                                            IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).UseLanguageIcon}" />
                                     </Panel>
                                 </Border>
                             </Border>
@@ -359,9 +358,7 @@
                                         Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ContinueReadingCommand}"
                                         CommandParameter="{Binding}"
                                         HorizontalAlignment="Center" VerticalAlignment="Center">
-                                    <Border Classes="icon">
-                                        <Border.OpacityMask><ImageBrush Source="/Assets/Icons/Play.png" Stretch="Uniform" /></Border.OpacityMask>
-                                    </Border>
+                                    <fi:SymbolIcon Symbol="Play" />
                                 </Button>
                             </Border>
                             <CheckBox Classes="tileSelect" Classes.forceVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).HasSeriesSelection}"
@@ -388,7 +385,7 @@
                         <Border Grid.Column="0" CornerRadius="4" Width="44" Height="63"
                                 Background="{Binding CoverBrush}" ClipToBounds="True">
                             <Grid>
-                                <Image Source="{Binding CoverIssueId, Converter={x:Static views:CoverImageConverter.Instance}}" Stretch="UniformToFill" />
+                                <Image views:AsyncCoverImage.SourceId="{Binding CoverIssueId}" Stretch="UniformToFill" />
                                 <!-- Always visible (not hover-gated like the grid-card templates above) -
                                      this thumbnail is too small to have a Border.cover-class hover parent
                                      to key off, and a permanently tiny checkbox is unobtrusive at this scale. -->
@@ -422,7 +419,7 @@
                 <Grid ColumnDefinitions="52,*,110,70,70,140" Margin="0,6">
                     <Border Grid.Column="0" Width="36" Height="50" CornerRadius="3" Background="{Binding CoverBrush}" ClipToBounds="True">
                         <Grid>
-                            <Image Source="{Binding CoverIssueId, Converter={x:Static views:CoverImageConverter.Instance}}" Stretch="UniformToFill" />
+                            <Image views:AsyncCoverImage.SourceId="{Binding CoverIssueId}" Stretch="UniformToFill" />
                             <CheckBox Classes="tileSelect forceVisible"
                                       IsChecked="{Binding IsSelected, Mode=OneWay}"
                                       Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ToggleSeriesSelectionCheckboxCommand}"
@@ -437,8 +434,8 @@
                                Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
                     <TextBlock Grid.Column="4" Text="{Binding UnreadCount}" FontFamily="Consolas,monospace" FontSize="12"
                                Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
-                    <TextBlock Grid.Column="5" Text="{Binding Publisher}" FontSize="12" Foreground="{DynamicResource PbTextFaintBrush}"
-                               VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                    <controls:BrandMark Grid.Column="5" Family="Publisher" Value="{Binding Publisher}" ShowText="True"
+                                        MarkSize="13" Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" />
                 </Grid>
             </Button>
         </DataTemplate>
@@ -455,7 +452,7 @@
                                 Height="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).TilesThumbHeight}"
                                 Background="{Binding CoverBrush}" ClipToBounds="True">
                             <Grid>
-                                <Image Source="{Binding CoverIssueId, Converter={x:Static views:CoverImageConverter.Instance}}" Stretch="UniformToFill" />
+                                <Image views:AsyncCoverImage.SourceId="{Binding CoverIssueId}" Stretch="UniformToFill" />
                                 <CheckBox Classes="tileSelect forceVisible"
                                           IsChecked="{Binding IsSelected, Mode=OneWay}"
                                           Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ToggleSeriesSelectionCheckboxCommand}"
@@ -489,7 +486,7 @@
                     <Border Grid.Row="0" Classes="cover posterCover" Background="{Binding CoverBrush}"
                             Height="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PosterCoverHeight}">
                         <Grid>
-                            <Image Source="{Binding Id, Converter={x:Static views:CoverImageConverter.Instance}}" Stretch="UniformToFill" />
+                            <Image views:AsyncCoverImage.SourceId="{Binding Id}" Stretch="UniformToFill" />
                             <Border Classes="posterScrim" />
                             <Border Classes="pbChip" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="6">
                                 <Border.IsVisible>
@@ -498,8 +495,8 @@
                                         <Binding Path="$parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowPublisherBadge" />
                                     </MultiBinding>
                                 </Border.IsVisible>
-                                <TextBlock Text="{Binding Publisher}" Classes="pbTextCaption" FontWeight="SemiBold"
-                                           Foreground="{DynamicResource PbBadgeBrush}" MaxWidth="72" TextTrimming="CharacterEllipsis" />
+                                <controls:BrandMark Family="Publisher" Value="{Binding Publisher}" ShowText="True"
+                                                    MarkSize="12" Foreground="{DynamicResource PbBadgeBrush}" />
                             </Border>
                             <Ellipse Width="9" Height="9" Fill="{DynamicResource PbAccentTextBrush}" Stroke="Black" StrokeThickness="1.5"
                                      HorizontalAlignment="Right" VerticalAlignment="Top" Margin="7">
@@ -536,7 +533,7 @@
                     <Border Grid.Row="0" Classes="cover posterCover" Background="{Binding CoverBrush}"
                             Height="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PosterCoverHeight}">
                         <Grid>
-                            <Image Source="{Binding CoverIssueId, Converter={x:Static views:CoverImageConverter.Instance}}" Stretch="UniformToFill" />
+                            <Image views:AsyncCoverImage.SourceId="{Binding CoverIssueId}" Stretch="UniformToFill" />
                             <Border Classes="posterScrim" />
                             <Border Classes="pbChip" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="6">
                                 <Border.IsVisible>
@@ -545,8 +542,8 @@
                                         <Binding Path="$parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowPublisherBadge" />
                                     </MultiBinding>
                                 </Border.IsVisible>
-                                <TextBlock Text="{Binding Publisher}" Classes="pbTextCaption" FontWeight="SemiBold"
-                                           Foreground="{DynamicResource PbBadgeBrush}" MaxWidth="72" TextTrimming="CharacterEllipsis" />
+                                <controls:BrandMark Family="Publisher" Value="{Binding Publisher}" ShowText="True"
+                                                    MarkSize="12" Foreground="{DynamicResource PbBadgeBrush}" />
                             </Border>
                             <Border Background="{DynamicResource PbAccentBrush}" CornerRadius="999" Padding="5,1"
                                     HorizontalAlignment="Right" VerticalAlignment="Top" Margin="6">
@@ -568,9 +565,7 @@
                                         <Binding Path="$parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowContinueReadingButton" />
                                     </MultiBinding>
                                 </Button.IsVisible>
-                                <Border Classes="icon">
-                                    <Border.OpacityMask><ImageBrush Source="/Assets/Icons/Play.png" Stretch="Uniform" /></Border.OpacityMask>
-                                </Border>
+                                <fi:SymbolIcon Symbol="Play" />
                             </Button>
                             <CheckBox Classes="tileSelect" Classes.forceVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).HasSeriesSelection}"
                                       IsChecked="{Binding IsSelected, Mode=OneWay}"
@@ -910,8 +905,7 @@
              search, a filter with no matches, or an entirely empty library. -->
         <StackPanel Grid.Row="1" Spacing="12" IsVisible="{Binding ShowEmptyState}"
                     HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="320">
-            <Path Classes="pbIcon" Width="34" Height="34" HorizontalAlignment="Center"
-                  Data="{StaticResource PbIconLayers}" Stroke="{DynamicResource PbTextFaintBrush}" />
+            <fi:SymbolIcon Symbol="Layer" FontSize="34" HorizontalAlignment="Center" Foreground="{DynamicResource PbTextFaintBrush}" />
             <TextBlock Classes="pbTextBody" Text="{Binding EmptyStateMessage}" TextWrapping="Wrap"
                        TextAlignment="Center" Foreground="{DynamicResource PbTextMutedBrush}" />
             <Button Classes="secondary" HorizontalAlignment="Center"

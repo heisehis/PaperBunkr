@@ -1,5 +1,6 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:fi="using:FluentIcons.Avalonia"
              xmlns:vm="using:Paperbunkr.App.ViewModels"
              xmlns:pref="using:Paperbunkr.App.Views.Preferences"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
@@ -119,7 +120,7 @@
             <TextBlock Classes="pbTextHeading" Text="PREFERENCES" />
             <Border Classes="prefSearchBox" MaxWidth="360" HorizontalAlignment="Left">
                 <Grid ColumnDefinitions="Auto,*,Auto">
-                    <Path Grid.Column="0" Classes="pbIcon" Data="{StaticResource PbIconSearch}" Margin="0,0,8,0" />
+                    <fi:SymbolIcon Grid.Column="0" Symbol="Search" Margin="0,0,8,0" />
                     <TextBox Grid.Column="1" Text="{Binding SearchQuery}" Watermark="Search settings…"
                              AutomationProperties.AutomationId="PreferencesSearchBox">
                         <TextBox.KeyBindings>

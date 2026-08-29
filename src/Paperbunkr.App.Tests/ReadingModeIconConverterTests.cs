@@ -1,68 +1,63 @@
 using System;
 using System.Globalization;
+using FluentIcons.Common;
 using Paperbunkr.App.Views;
 using Paperbunkr.Data.Entities;
 
 namespace Paperbunkr.App.Tests;
 
 /// <summary>
-/// Exercises <see cref="ReadingModeIconConverter.KeyFor"/> - the pure six-modes-to-three-glyphs
+/// Exercises <see cref="ReadingModeIconConverter.SymbolFor"/> - the pure six-modes-to-three-arrows
 /// mapping behind the reader's reading-direction pill icon
-/// (docs/superpowers/specs/2026-08-27-reader-chrome-icon-pass-design.md §3). Tests the key
-/// selection directly rather than the resolved <c>Geometry</c>: the test assembly bootstraps a bare
-/// <c>Application</c> (see <c>TestAppBuilder</c>) with no App.axaml styles, so the geometry
-/// resources aren't resolvable here - same pure-logic-extraction reasoning as
-/// <c>VirtualizingWrapGridMathTests</c>.
+/// (docs/superpowers/specs/2026-08-28-fluenticons-migration-design.md §5).
 /// </summary>
 public class ReadingModeIconConverterTests
 {
     [Theory]
-    [InlineData(ReadingMode.LeftToRight, "PbIconArrowRight")]
-    [InlineData(ReadingMode.HorizontalContinuous, "PbIconArrowRight")]
-    [InlineData(ReadingMode.RightToLeft, "PbIconArrowLeft")]
-    [InlineData(ReadingMode.HorizontalContinuousRightToLeft, "PbIconArrowLeft")]
-    [InlineData(ReadingMode.TopToBottom, "PbIconArrowDown")]
-    [InlineData(ReadingMode.VerticalContinuous, "PbIconArrowDown")]
-    [InlineData(ReadingMode.Webtoon, "PbIconArrowDown")]
-    public void KeyFor_MapsEachModeToItsDirectionGlyph(ReadingMode mode, string expectedKey)
+    [InlineData(ReadingMode.LeftToRight, Symbol.ArrowRight)]
+    [InlineData(ReadingMode.HorizontalContinuous, Symbol.ArrowRight)]
+    [InlineData(ReadingMode.RightToLeft, Symbol.ArrowLeft)]
+    [InlineData(ReadingMode.HorizontalContinuousRightToLeft, Symbol.ArrowLeft)]
+    [InlineData(ReadingMode.TopToBottom, Symbol.ArrowDown)]
+    [InlineData(ReadingMode.VerticalContinuous, Symbol.ArrowDown)]
+    [InlineData(ReadingMode.Webtoon, Symbol.ArrowDown)]
+    public void SymbolFor_MapsEachModeToItsDirectionArrow(ReadingMode mode, Symbol expected)
     {
-        Assert.Equal(expectedKey, ReadingModeIconConverter.KeyFor(mode));
+        Assert.Equal(expected, ReadingModeIconConverter.SymbolFor(mode));
     }
 
     [Fact]
-    public void KeyFor_CoversEveryReadingModeValue()
+    public void SymbolFor_CoversEveryReadingModeValue()
     {
-        // If a new ReadingMode is added, it silently falls through to the LTR glyph - this test is
-        // the reminder to make a deliberate choice for it in KeyFor's switch.
+        // If a new ReadingMode is added, it silently falls through to the LTR arrow - this test is
+        // the reminder to make a deliberate choice for it in SymbolFor's switch.
         foreach (ReadingMode mode in Enum.GetValues<ReadingMode>())
         {
-            var key = ReadingModeIconConverter.KeyFor(mode);
-            Assert.Contains(key, new[] { "PbIconArrowRight", "PbIconArrowLeft", "PbIconArrowDown" });
+            var symbol = ReadingModeIconConverter.SymbolFor(mode);
+            Assert.Contains(symbol, new[] { Symbol.ArrowRight, Symbol.ArrowLeft, Symbol.ArrowDown });
         }
     }
 
     [Fact]
-    public void KeyFor_UnrecognisedValue_FallsBackToLtrGlyph()
+    public void SymbolFor_UnrecognisedValue_FallsBackToLtrArrow()
     {
-        Assert.Equal("PbIconArrowRight", ReadingModeIconConverter.KeyFor((ReadingMode)999));
+        Assert.Equal(Symbol.ArrowRight, ReadingModeIconConverter.SymbolFor((ReadingMode)999));
     }
 
     [Fact]
-    public void Convert_WithNoRunningApp_ReturnsNullWithoutThrowing()
+    public void Convert_ReturnsTheArrowSymbol()
     {
-        // No Application.Current in this plain xUnit context (no AvaloniaTestCollection) - the
-        // converter must degrade to an empty Path, never crash the pill.
         var result = ReadingModeIconConverter.Instance.Convert(
             ReadingMode.RightToLeft, typeof(object), null, CultureInfo.InvariantCulture);
-        Assert.Null(result);
+        Assert.Equal(Symbol.ArrowLeft, result);
     }
 
     [Fact]
-    public void Convert_NonReadingModeInput_DoesNotThrow()
+    public void Convert_NonReadingModeInput_FallsBackToLtrArrow()
     {
         var result = ReadingModeIconConverter.Instance.Convert(
             "not a mode", typeof(object), null, CultureInfo.InvariantCulture);
-        Assert.Null(result);
+        Assert.Equal(Symbol.ArrowRight, result);
     }
 
     [Fact]

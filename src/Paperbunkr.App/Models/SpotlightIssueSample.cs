@@ -26,6 +26,11 @@ public sealed class SpotlightIssueSample
     /// rather than shown as "0 pages" or similar.</summary>
     public required string Meta { get; init; }
 
+    /// <summary>Written blurb shown under the meta line on the Home spotlight hero (docs/superpowers/
+    /// specs/2026-08-28-home-screen-redesign-design.md §3) - the issue's own <c>Summary</c>, or a
+    /// short generated line when it has none.</summary>
+    public required string Synopsis { get; init; }
+
     /// <summary>Pre-rendered blurred backdrop for the hero card (docs/superpowers/specs/
     /// 2026-08-24-home-screen-design.md) - same <see cref="BackdropBlurRenderer"/> technique
     /// MangaDetailScreenViewModel already uses for its own header, not a live Avalonia Effect
@@ -41,6 +46,9 @@ public sealed class SpotlightIssueSample
         var coverImage = CoverImageCache.Get(issue.Id);
 
         string numberSegment = string.IsNullOrWhiteSpace(issue.EffectiveNumber()) ? "#?" : $"#{issue.EffectiveNumber()}";
+        string synopsis = !string.IsNullOrWhiteSpace(issue.Summary)
+            ? issue.Summary!.Trim()
+            : $"{(string.IsNullOrWhiteSpace(seriesName) ? "This issue" : seriesName)} {numberSegment} — pulled from your unread shelf. Start reading.";
         var metaSegments = new List<string> { numberSegment };
         if (issue.PageCount is > 0)
         {
@@ -59,8 +67,9 @@ public sealed class SpotlightIssueSample
             Title = issue.EffectiveTitle() ?? numberSegment,
             CoverBrush = SeriesCardSample.CoverBrushFor(seriesName),
             CoverImage = coverImage,
-            BackdropImage = coverImage is not null ? BackdropBlurRenderer.Render(coverImage, new PixelSize(1600, 300)) : null,
+            BackdropImage = coverImage is not null ? BackdropBlurRenderer.Render(coverImage, new PixelSize(1600, 360)) : null,
             Meta = string.Join(" · ", metaSegments),
+            Synopsis = synopsis,
         };
     }
 }

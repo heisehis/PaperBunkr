@@ -71,9 +71,9 @@ public static class BackdropBlurRenderer
     }
 
     /// <summary>Same raw-pixel-copy technique as <c>Paperbunkr.App.Views.SkiaBitmapConverter.ToSkImage</c>,
-    /// inlined here rather than shared, to avoid a Services-depends-on-Views layering wrinkle for
-    /// 15 lines of logic.</summary>
-    private static SKImage ToSkImage(Bitmap source, PixelSize pixelSize)
+    /// inlined here rather than shared with Views, to avoid a Services-depends-on-Views layering
+    /// wrinkle. <c>internal</c> so <see cref="CoverWallRenderer"/> (same layer) can reuse it.</summary>
+    internal static SKImage ToSkImage(Bitmap source, PixelSize pixelSize)
     {
         int width = pixelSize.Width;
         int height = pixelSize.Height;

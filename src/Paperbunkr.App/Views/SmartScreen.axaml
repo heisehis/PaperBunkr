@@ -14,7 +14,7 @@
     <UserControl.Styles>
         <Style Selector="Button.headerAction">
             <Setter Property="Padding" Value="10,5" />
-            <Setter Property="CornerRadius" Value="5" />
+            <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusSm}" />
             <Setter Property="FontSize" Value="11.5" />
             <Setter Property="FontWeight" Value="SemiBold" />
             <Setter Property="Cursor" Value="Hand" />
@@ -33,18 +33,18 @@
 
         <Style Selector="ComboBox.conditionPicker">
             <Setter Property="Background" Value="{DynamicResource PbChromeBrush}" />
-            <Setter Property="BorderBrush" Value="#383D47" />
+            <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
             <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="CornerRadius" Value="5" />
+            <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusSm}" />
             <Setter Property="FontSize" Value="12.5" />
             <Setter Property="Padding" Value="10,5" />
             <Setter Property="MinWidth" Value="120" />
         </Style>
         <Style Selector="TextBox.conditionValue">
             <Setter Property="Background" Value="{DynamicResource PbChromeBrush}" />
-            <Setter Property="BorderBrush" Value="#383D47" />
+            <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
             <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="CornerRadius" Value="5" />
+            <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusSm}" />
             <Setter Property="FontSize" Value="12.5" />
             <Setter Property="Padding" Value="10,5" />
             <Setter Property="MinWidth" Value="120" />
@@ -53,9 +53,9 @@
         <!-- NOT / Aa toggles on a condition row -->
         <Style Selector="ToggleButton.conditionFlag">
             <Setter Property="Background" Value="{DynamicResource PbChromeBrush}" />
-            <Setter Property="BorderBrush" Value="#383D47" />
+            <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
             <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="CornerRadius" Value="5" />
+            <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusSm}" />
             <Setter Property="FontSize" Value="11" />
             <Setter Property="FontWeight" Value="Bold" />
             <Setter Property="Padding" Value="7,5" />
@@ -74,7 +74,7 @@
             <Setter Property="Background" Value="{DynamicResource PbAccentBrush}" />
             <Setter Property="Foreground" Value="{DynamicResource PbBadgeTextBrush}" />
             <Setter Property="BorderThickness" Value="0" />
-            <Setter Property="CornerRadius" Value="5" />
+            <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusSm}" />
             <Setter Property="FontSize" Value="11" />
             <Setter Property="FontWeight" Value="Bold" />
             <Setter Property="Padding" Value="9,4" />
@@ -85,7 +85,7 @@
             <Setter Property="Background" Value="{DynamicResource PbChromeBrush}" />
             <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
             <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="CornerRadius" Value="7" />
+            <Setter Property="CornerRadius" Value="{DynamicResource PbRadius}" />
             <Setter Property="Padding" Value="16" />
         </Style>
 
@@ -101,7 +101,7 @@
              2026-08-09-smart-lists-results-view-design.md) - same visual, no selection state since
              results here are read-only/click-to-navigate. -->
         <Style Selector="Border.resultTile">
-            <Setter Property="CornerRadius" Value="6" />
+            <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusSm}" />
             <Setter Property="BorderThickness" Value="1" />
             <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
             <Setter Property="Height" Value="168" />
@@ -214,9 +214,10 @@
         </DataTemplate>
     </UserControl.Resources>
 
-    <ScrollViewer>
-        <StackPanel>
+    <Grid RowDefinitions="Auto,Auto,*">
 
+        <!-- Row 0: pinned top band - title/subtitle + Duplicate/Save. -->
+        <StackPanel Grid.Row="0">
             <Grid ColumnDefinitions="*,Auto" Margin="28,20,28,16">
                 <StackPanel Grid.Column="0" VerticalAlignment="Bottom">
                     <TextBlock Text="{Binding ListName}" FontSize="22" FontWeight="Bold" Foreground="{DynamicResource PbTextBrush}" />
@@ -237,21 +238,28 @@
                     </Button>
                 </StackPanel>
             </Grid>
-            <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,0,0,1" Margin="0,0,0,24" />
+            <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,0,0,1" />
+        </StackPanel>
 
-            <StackPanel MaxWidth="820" HorizontalAlignment="Left" Margin="28,0,28,40">
+        <!-- Row 1: pinned stat row - stays visible while row 2 scrolls. -->
+        <StackPanel Grid.Row="1">
+            <Border Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}"
+                    BorderThickness="1" CornerRadius="999" Padding="12,6" HorizontalAlignment="Left" Margin="28,16,28,16">
+                <StackPanel Orientation="Horizontal" Spacing="7">
+                    <Ellipse Width="7" Height="7" Fill="{DynamicResource PbSuccessBrush}" VerticalAlignment="Center" />
+                    <TextBlock FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}">
+                        <Run Text="Currently matches " />
+                        <Run Text="{Binding MatchCountLabel}" FontFamily="Consolas,monospace" FontWeight="Bold" Foreground="{DynamicResource PbTextBrush}" />
+                        <Run Text=" issues" />
+                    </TextBlock>
+                </StackPanel>
+            </Border>
+            <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,0,0,1" />
+        </StackPanel>
 
-                <Border Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}"
-                        BorderThickness="1" CornerRadius="999" Padding="12,6" HorizontalAlignment="Left" Margin="0,0,0,20">
-                    <StackPanel Orientation="Horizontal" Spacing="7">
-                        <Ellipse Width="7" Height="7" Fill="{DynamicResource PbSuccessBrush}" VerticalAlignment="Center" />
-                        <TextBlock FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}">
-                            <Run Text="Currently matches " />
-                            <Run Text="{Binding MatchCountLabel}" FontFamily="Consolas,monospace" FontWeight="Bold" Foreground="{DynamicResource PbTextBrush}" />
-                            <Run Text=" issues" />
-                        </TextBlock>
-                    </StackPanel>
-                </Border>
+        <!-- Row 2: scrolling content - condition builder, Cancel/Apply, results. -->
+        <ScrollViewer Grid.Row="2">
+        <StackPanel MaxWidth="820" HorizontalAlignment="Left" Margin="28,24,28,40">
 
                 <ContentControl Content="{Binding RootGroup}" ContentTemplate="{StaticResource GroupCardTemplate}" />
 
@@ -300,7 +308,7 @@
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
 
-            </StackPanel>
         </StackPanel>
-    </ScrollViewer>
+        </ScrollViewer>
+    </Grid>
 </UserControl>

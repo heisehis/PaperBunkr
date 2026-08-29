@@ -18,4 +18,20 @@
     <ProjectReference Include="..\Paperbunkr.Engine\Paperbunkr.Engine.csproj" />
   </ItemGroup>
 
+  <!--
+    Plugin API v3 §7 (docs/superpowers/specs/2026-08-28-plugin-api-v3-data-manager-design.md): the
+    query builder and metadata resolvers are internal so a plugin .csx script referencing this
+    assembly can't reach the app's rule/graph engine outside the curated IPluginEnvironment surface.
+    Granted to the app (its IMetadataGraph/IRulesEngine adapters) and the first-party test
+    assemblies - never to Paperbunkr.Plugins.
+    (Deviation from the spec's literal "App + Data.Tests only": Paperbunkr.App.Tests also calls
+    ContinuityResolver directly - EventsScreenViewModelTests / DetailTabsViewModelTests - so it
+    needs the same test-assembly access as Data.Tests.)
+  -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="Paperbunkr.App" />
+    <InternalsVisibleTo Include="Paperbunkr.Data.Tests" />
+    <InternalsVisibleTo Include="Paperbunkr.App.Tests" />
+  </ItemGroup>
+
 </Project>

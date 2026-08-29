@@ -10,7 +10,8 @@ namespace Paperbunkr.Data.Metadata;
 /// metadata-model-phase4b-story-events-design.md) - the single tested home for reorder/duplicate
 /// rules, same shape as <see cref="MediaRelationResolver"/>/<see cref="ContinuityResolver"/>.
 /// </summary>
-public static class EventMembershipResolver
+// internal - see MediaRelationResolver (Plugin API v3 §7). Plugins read through IMetadataGraph.
+internal static class EventMembershipResolver
 {
     public static IReadOnlyList<EventMembership> GetOrderedMembers(PaperbunkrDbContext context, int storyEventId) =>
         context.EventMemberships

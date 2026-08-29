@@ -18,7 +18,8 @@ namespace Paperbunkr.Data.Metadata;
 /// the same character features in both. That's the known, accepted gap the deferred first-class
 /// <c>Character</c> entity leaves open.
 /// </summary>
-public static class SeriesFamilyResolver
+// internal - see MediaRelationResolver (Plugin API v3 §7). Plugins read through IMetadataGraph.
+internal static class SeriesFamilyResolver
 {
     /// <param name="characterAware">
     /// When <see langword="true"/>, the connected component is expanded once more by

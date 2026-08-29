@@ -17,7 +17,8 @@ namespace Paperbunkr.Data.Metadata;
 /// from the earlier event and "Sequel" from the later one, and a symmetric type (Crossover) reads
 /// the same from either side.
 /// </summary>
-public static class EventRelationResolver
+// internal - see MediaRelationResolver (Plugin API v3 §7). Plugins read through IMetadataGraph.
+internal static class EventRelationResolver
 {
     /// <summary>One related event, the <see cref="RelationType"/> to display for it (already
     /// resolved for whichever side <paramref name="storyEventId"/> is on), and the underlying

@@ -11,7 +11,7 @@ namespace Paperbunkr.Data.SmartLists;
 /// <see cref="SmartListConditionGroup.ChildGroups"/>), recursing into each child. For the common
 /// single-group list that's exactly two queries.
 /// </summary>
-public static class SmartListTreeLoader
+internal static class SmartListTreeLoader
 {
     /// <summary>Loads the list by id with its <see cref="SmartList.RootGroup"/> and the whole tree beneath it, or null if no such list.</summary>
     public static SmartList? LoadWithTree(PaperbunkrDbContext ctx, int smartListId)

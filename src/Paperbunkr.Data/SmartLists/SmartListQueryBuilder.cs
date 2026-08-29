@@ -20,8 +20,14 @@ namespace Paperbunkr.Data.SmartLists;
 ///
 /// Callers must load the full tree first (<see cref="SmartListTreeLoader"/>); an in-memory list
 /// with its <see cref="SmartList.RootGroup"/> populated works directly.
+///
+/// <b>Visibility:</b> <see langword="internal"/> (docs/superpowers/specs/2026-08-28-plugin-api-v3-
+/// data-manager-design.md §7) — the app's <c>IRulesEngine</c> adapter reaches it via
+/// <c>InternalsVisibleTo("Paperbunkr.App")</c>, but a plugin <c>.csx</c> script referencing
+/// <c>Paperbunkr.Data.dll</c> can no longer resolve it. A plugin evaluates rules through
+/// <c>IRulesEngine</c>, never this type directly.
 /// </summary>
-public static class SmartListQueryBuilder
+internal static class SmartListQueryBuilder
 {
     public static List<Issue> Build(PaperbunkrDbContext ctx, SmartList list)
     {

@@ -92,6 +92,8 @@ public class PaperbunkrDbContext : DbContext
 
     public DbSet<PluginCommandState> PluginCommandStates => Set<PluginCommandState>();
 
+    public DbSet<PluginSettingState> PluginSettingStates => Set<PluginSettingState>();
+
     public PaperbunkrDbContext(DbContextOptions<PaperbunkrDbContext> options)
         : base(options)
     {

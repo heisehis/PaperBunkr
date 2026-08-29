@@ -174,11 +174,7 @@
 
                                         <Button Classes="headerAction ghost" Command="{Binding RemoveCommand}" ToolTip.Tip="Remove condition"
                                                 IsVisible="{Binding !$parent[UserControl].((vm:SmartScreenViewModel)DataContext).IsReadOnly}">
-                                            <Border Classes="icon" Width="13" Height="13">
-                                                <Border.OpacityMask>
-                                                    <ImageBrush Source="/Assets/Icons/Remove_Minus_Circle.png" Stretch="Uniform" />
-                                                </Border.OpacityMask>
-                                            </Border>
+                                            <fi:SymbolIcon Symbol="SubtractCircle" FontSize="13" />
                                         </Button>
                                     </StackPanel>
                                 </Border>

@@ -10,7 +10,15 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d" d:DesignWidth="900" d:DesignHeight="700"
              x:Class="Paperbunkr.App.Views.LibraryScreen"
-             x:DataType="vm:LibraryScreenViewModel">
+             x:DataType="vm:LibraryScreenViewModel"
+             controls:ContextMenuHost.Provider="{Binding}">
+
+    <!-- Real accelerator for the context menu's "Edit Properties… (Ctrl+I)" hint (CE parity -
+         miProperties.ShortcutKeys). Acts on the current selection; no-ops when nothing is selected
+         (BulkEditSelection -> OpenIssueEditor returns early on an empty list). -->
+    <UserControl.KeyBindings>
+        <KeyBinding Gesture="Ctrl+I" Command="{Binding BulkEditSelectionCommand}" />
+    </UserControl.KeyBindings>
 
     <UserControl.Styles>
         <!-- Toolbar-only styles (Button.toolbarPill / Border.dropdown / TextBlock.dropdownRow /
@@ -149,69 +157,6 @@
             <Button Classes="card" Margin="0,0,20,20" Width="{Binding PanoramaWidth}"
                     Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).IssueList.OpenIssueCommand}"
                     CommandParameter="{Binding}" KeyDown="OnCardKeyDown" PointerPressed="OnTilePointerPressed">
-                <Button.ContextMenu>
-                    <ContextMenu>
-                        <MenuItem Header="Go to Series"
-                                  Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).GoToSeriesCommand}"
-                                  CommandParameter="{Binding SeriesId}" />
-                        <MenuItem Header="Show in Explorer"
-                                  Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).RevealIssueCommand}"
-                                  CommandParameter="{Binding Id}" IsEnabled="{Binding HasFile}" />
-                        <!-- docs/superpowers/specs/2026-08-16-manga-content-type-classification-design.md §2 -->
-                        <MenuItem Header="Set Content Type">
-                            <MenuItem Header="Comic" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesContentTypeComicCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Manga" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesContentTypeMangaCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Manhua" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesContentTypeManhuaCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Manhwa" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesContentTypeManhwaCommand}" CommandParameter="{Binding SeriesId}" />
-                        </MenuItem>
-                        <MenuItem Header="Set Reading Direction" IsVisible="{Binding IsMangaFamily}">
-                            <MenuItem Header="Left to Right" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingModeLeftToRightCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Right to Left" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingModeRightToLeftCommand}" CommandParameter="{Binding SeriesId}" />
-                        </MenuItem>
-                        <!-- docs/superpowers/specs/2026-08-18-metadata-model-ui-gaps-status-and-bookmarks-design.md -->
-                        <MenuItem Header="Set Status">
-                            <MenuItem Header="Unknown" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesStatusUnknownCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Ongoing" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesStatusOngoingCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Completed" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesStatusCompletedCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Cancelled" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesStatusCancelledCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Hiatus" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesStatusHiatusCommand}" CommandParameter="{Binding SeriesId}" />
-                        </MenuItem>
-                        <!-- docs/superpowers/specs/2026-08-19-metadata-model-reading-status-design.md -->
-                        <MenuItem Header="Set Reading Status">
-                            <MenuItem Header="Unknown" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusUnknownCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Planned" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusPlannedCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Reading" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusReadingCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Completed" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusCompletedCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Paused" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusPausedCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Dropped" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusDroppedCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Re-reading" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusReReadingCommand}" CommandParameter="{Binding SeriesId}" />
-                        </MenuItem>
-                        <MenuItem Header="Mark as Read"
-                                  Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).MarkIssueReadCommand}"
-                                  CommandParameter="{Binding Id}" />
-                        <MenuItem Header="Mark as Unread"
-                                  Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).MarkIssueUnreadCommand}"
-                                  CommandParameter="{Binding Id}" />
-                        <MenuItem Header="Quick Rate…"
-                                  Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).OpenQuickRateCommand}"
-                                  CommandParameter="{Binding Id}" />
-                        <!-- Plugin API v2 Library hook (docs/superpowers/specs/2026-08-24-plugin-api-v2-design.md
-                             §5) - runs every enabled Library-hook plugin command against this one
-                             issue. Only shown once a plugin host exists. -->
-                        <MenuItem Header="Find Duplicates"
-                                  Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).RunLibraryPluginsCommand}"
-                                  CommandParameter="{Binding Id}"
-                                  IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).HasPluginHost}" />
-                        <MenuItem Header="Edit Properties…"
-                                  Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).EditIssuePropertiesCommand}"
-                                  CommandParameter="{Binding Id}" />
-                        <MenuItem Header="Delete Issue">
-                            <MenuItem Header="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).DeleteConfirmLabel}"
-                                      Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).DeleteIssueCommand}"
-                                      CommandParameter="{Binding Id}" />
-                        </MenuItem>
-                    </ContextMenu>
-                </Button.ContextMenu>
                 <StackPanel>
                     <Border Classes="cover" Background="{Binding CoverBrush}"
                             Height="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PanoramaCardHeight}">
@@ -267,69 +212,6 @@
             <Button Classes="card" HorizontalAlignment="Stretch" Margin="0,0,0,8"
                     Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).IssueList.OpenIssueCommand}"
                     CommandParameter="{Binding}" PointerPressed="OnTilePointerPressed">
-                <Button.ContextMenu>
-                    <ContextMenu>
-                        <MenuItem Header="Go to Series"
-                                  Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).GoToSeriesCommand}"
-                                  CommandParameter="{Binding SeriesId}" />
-                        <MenuItem Header="Show in Explorer"
-                                  Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).RevealIssueCommand}"
-                                  CommandParameter="{Binding Id}" IsEnabled="{Binding HasFile}" />
-                        <!-- docs/superpowers/specs/2026-08-16-manga-content-type-classification-design.md §2 -->
-                        <MenuItem Header="Set Content Type">
-                            <MenuItem Header="Comic" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesContentTypeComicCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Manga" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesContentTypeMangaCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Manhua" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesContentTypeManhuaCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Manhwa" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesContentTypeManhwaCommand}" CommandParameter="{Binding SeriesId}" />
-                        </MenuItem>
-                        <MenuItem Header="Set Reading Direction" IsVisible="{Binding IsMangaFamily}">
-                            <MenuItem Header="Left to Right" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingModeLeftToRightCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Right to Left" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingModeRightToLeftCommand}" CommandParameter="{Binding SeriesId}" />
-                        </MenuItem>
-                        <!-- docs/superpowers/specs/2026-08-18-metadata-model-ui-gaps-status-and-bookmarks-design.md -->
-                        <MenuItem Header="Set Status">
-                            <MenuItem Header="Unknown" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesStatusUnknownCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Ongoing" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesStatusOngoingCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Completed" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesStatusCompletedCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Cancelled" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesStatusCancelledCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Hiatus" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesStatusHiatusCommand}" CommandParameter="{Binding SeriesId}" />
-                        </MenuItem>
-                        <!-- docs/superpowers/specs/2026-08-19-metadata-model-reading-status-design.md -->
-                        <MenuItem Header="Set Reading Status">
-                            <MenuItem Header="Unknown" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusUnknownCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Planned" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusPlannedCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Reading" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusReadingCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Completed" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusCompletedCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Paused" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusPausedCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Dropped" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusDroppedCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Re-reading" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusReReadingCommand}" CommandParameter="{Binding SeriesId}" />
-                        </MenuItem>
-                        <MenuItem Header="Mark as Read"
-                                  Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).MarkIssueReadCommand}"
-                                  CommandParameter="{Binding Id}" />
-                        <MenuItem Header="Mark as Unread"
-                                  Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).MarkIssueUnreadCommand}"
-                                  CommandParameter="{Binding Id}" />
-                        <MenuItem Header="Quick Rate…"
-                                  Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).OpenQuickRateCommand}"
-                                  CommandParameter="{Binding Id}" />
-                        <!-- Plugin API v2 Library hook (docs/superpowers/specs/2026-08-24-plugin-api-v2-design.md
-                             §5) - runs every enabled Library-hook plugin command against this one
-                             issue. Only shown once a plugin host exists. -->
-                        <MenuItem Header="Find Duplicates"
-                                  Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).RunLibraryPluginsCommand}"
-                                  CommandParameter="{Binding Id}"
-                                  IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).HasPluginHost}" />
-                        <MenuItem Header="Edit Properties…"
-                                  Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).EditIssuePropertiesCommand}"
-                                  CommandParameter="{Binding Id}" />
-                        <MenuItem Header="Delete Issue">
-                            <MenuItem Header="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).DeleteConfirmLabel}"
-                                      Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).DeleteIssueCommand}"
-                                      CommandParameter="{Binding Id}" />
-                        </MenuItem>
-                    </ContextMenu>
-                </Button.ContextMenu>
                 <Border Classes="libRow" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1" CornerRadius="{DynamicResource PbRadius}" Padding="10">
                     <Grid ColumnDefinitions="44,*,Auto">
                         <Panel Grid.Column="0">
@@ -363,69 +245,6 @@
             <Button Classes="card" HorizontalAlignment="Stretch" Margin="0,0,0,4"
                     Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).IssueList.OpenIssueCommand}"
                     CommandParameter="{Binding}" PointerPressed="OnTilePointerPressed">
-                <Button.ContextMenu>
-                    <ContextMenu>
-                        <MenuItem Header="Go to Series"
-                                  Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).GoToSeriesCommand}"
-                                  CommandParameter="{Binding SeriesId}" />
-                        <MenuItem Header="Show in Explorer"
-                                  Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).RevealIssueCommand}"
-                                  CommandParameter="{Binding Id}" IsEnabled="{Binding HasFile}" />
-                        <!-- docs/superpowers/specs/2026-08-16-manga-content-type-classification-design.md §2 -->
-                        <MenuItem Header="Set Content Type">
-                            <MenuItem Header="Comic" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesContentTypeComicCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Manga" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesContentTypeMangaCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Manhua" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesContentTypeManhuaCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Manhwa" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesContentTypeManhwaCommand}" CommandParameter="{Binding SeriesId}" />
-                        </MenuItem>
-                        <MenuItem Header="Set Reading Direction" IsVisible="{Binding IsMangaFamily}">
-                            <MenuItem Header="Left to Right" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingModeLeftToRightCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Right to Left" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingModeRightToLeftCommand}" CommandParameter="{Binding SeriesId}" />
-                        </MenuItem>
-                        <!-- docs/superpowers/specs/2026-08-18-metadata-model-ui-gaps-status-and-bookmarks-design.md -->
-                        <MenuItem Header="Set Status">
-                            <MenuItem Header="Unknown" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesStatusUnknownCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Ongoing" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesStatusOngoingCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Completed" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesStatusCompletedCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Cancelled" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesStatusCancelledCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Hiatus" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesStatusHiatusCommand}" CommandParameter="{Binding SeriesId}" />
-                        </MenuItem>
-                        <!-- docs/superpowers/specs/2026-08-19-metadata-model-reading-status-design.md -->
-                        <MenuItem Header="Set Reading Status">
-                            <MenuItem Header="Unknown" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusUnknownCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Planned" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusPlannedCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Reading" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusReadingCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Completed" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusCompletedCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Paused" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusPausedCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Dropped" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusDroppedCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Re-reading" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusReReadingCommand}" CommandParameter="{Binding SeriesId}" />
-                        </MenuItem>
-                        <MenuItem Header="Mark as Read"
-                                  Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).MarkIssueReadCommand}"
-                                  CommandParameter="{Binding Id}" />
-                        <MenuItem Header="Mark as Unread"
-                                  Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).MarkIssueUnreadCommand}"
-                                  CommandParameter="{Binding Id}" />
-                        <MenuItem Header="Quick Rate…"
-                                  Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).OpenQuickRateCommand}"
-                                  CommandParameter="{Binding Id}" />
-                        <!-- Plugin API v2 Library hook (docs/superpowers/specs/2026-08-24-plugin-api-v2-design.md
-                             §5) - runs every enabled Library-hook plugin command against this one
-                             issue. Only shown once a plugin host exists. -->
-                        <MenuItem Header="Find Duplicates"
-                                  Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).RunLibraryPluginsCommand}"
-                                  CommandParameter="{Binding Id}"
-                                  IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).HasPluginHost}" />
-                        <MenuItem Header="Edit Properties…"
-                                  Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).EditIssuePropertiesCommand}"
-                                  CommandParameter="{Binding Id}" />
-                        <MenuItem Header="Delete Issue">
-                            <MenuItem Header="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).DeleteConfirmLabel}"
-                                      Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).DeleteIssueCommand}"
-                                      CommandParameter="{Binding Id}" />
-                        </MenuItem>
-                    </ContextMenu>
-                </Button.ContextMenu>
                 <Grid ColumnDefinitions="52,*" Margin="0,6">
                     <Panel Grid.Column="0">
                         <Border Width="36" Height="50" CornerRadius="{DynamicResource PbRadiusSm}" Background="{Binding CoverBrush}" ClipToBounds="True">
@@ -466,69 +285,6 @@
                     Width="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).TilesCardWidth}"
                     Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).IssueList.OpenIssueCommand}"
                     CommandParameter="{Binding}" PointerPressed="OnTilePointerPressed">
-                <Button.ContextMenu>
-                    <ContextMenu>
-                        <MenuItem Header="Go to Series"
-                                  Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).GoToSeriesCommand}"
-                                  CommandParameter="{Binding SeriesId}" />
-                        <MenuItem Header="Show in Explorer"
-                                  Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).RevealIssueCommand}"
-                                  CommandParameter="{Binding Id}" IsEnabled="{Binding HasFile}" />
-                        <!-- docs/superpowers/specs/2026-08-16-manga-content-type-classification-design.md §2 -->
-                        <MenuItem Header="Set Content Type">
-                            <MenuItem Header="Comic" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesContentTypeComicCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Manga" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesContentTypeMangaCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Manhua" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesContentTypeManhuaCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Manhwa" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesContentTypeManhwaCommand}" CommandParameter="{Binding SeriesId}" />
-                        </MenuItem>
-                        <MenuItem Header="Set Reading Direction" IsVisible="{Binding IsMangaFamily}">
-                            <MenuItem Header="Left to Right" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingModeLeftToRightCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Right to Left" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingModeRightToLeftCommand}" CommandParameter="{Binding SeriesId}" />
-                        </MenuItem>
-                        <!-- docs/superpowers/specs/2026-08-18-metadata-model-ui-gaps-status-and-bookmarks-design.md -->
-                        <MenuItem Header="Set Status">
-                            <MenuItem Header="Unknown" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesStatusUnknownCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Ongoing" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesStatusOngoingCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Completed" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesStatusCompletedCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Cancelled" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesStatusCancelledCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Hiatus" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesStatusHiatusCommand}" CommandParameter="{Binding SeriesId}" />
-                        </MenuItem>
-                        <!-- docs/superpowers/specs/2026-08-19-metadata-model-reading-status-design.md -->
-                        <MenuItem Header="Set Reading Status">
-                            <MenuItem Header="Unknown" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusUnknownCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Planned" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusPlannedCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Reading" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusReadingCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Completed" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusCompletedCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Paused" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusPausedCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Dropped" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusDroppedCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Re-reading" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusReReadingCommand}" CommandParameter="{Binding SeriesId}" />
-                        </MenuItem>
-                        <MenuItem Header="Mark as Read"
-                                  Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).MarkIssueReadCommand}"
-                                  CommandParameter="{Binding Id}" />
-                        <MenuItem Header="Mark as Unread"
-                                  Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).MarkIssueUnreadCommand}"
-                                  CommandParameter="{Binding Id}" />
-                        <MenuItem Header="Quick Rate…"
-                                  Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).OpenQuickRateCommand}"
-                                  CommandParameter="{Binding Id}" />
-                        <!-- Plugin API v2 Library hook (docs/superpowers/specs/2026-08-24-plugin-api-v2-design.md
-                             §5) - runs every enabled Library-hook plugin command against this one
-                             issue. Only shown once a plugin host exists. -->
-                        <MenuItem Header="Find Duplicates"
-                                  Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).RunLibraryPluginsCommand}"
-                                  CommandParameter="{Binding Id}"
-                                  IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).HasPluginHost}" />
-                        <MenuItem Header="Edit Properties…"
-                                  Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).EditIssuePropertiesCommand}"
-                                  CommandParameter="{Binding Id}" />
-                        <MenuItem Header="Delete Issue">
-                            <MenuItem Header="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).DeleteConfirmLabel}"
-                                      Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).DeleteIssueCommand}"
-                                      CommandParameter="{Binding Id}" />
-                        </MenuItem>
-                    </ContextMenu>
-                </Button.ContextMenu>
                 <Border Classes="libRow" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1" CornerRadius="{DynamicResource PbRadius}" Padding="8">
                     <Grid ColumnDefinitions="Auto,*">
                         <Panel Grid.Column="0">
@@ -562,45 +318,6 @@
             <Button Classes="card" Margin="0,0,20,20" Width="{Binding PanoramaWidth}"
                     Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SelectCardCommand}"
                     CommandParameter="{Binding}" KeyDown="OnCardKeyDown" PointerPressed="OnSeriesTilePointerPressed">
-                <Button.ContextMenu>
-                    <ContextMenu>
-                        <MenuItem Header="Show in Explorer"
-                                  Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).RevealSeriesCommand}"
-                                  CommandParameter="{Binding}" IsEnabled="{Binding HasFile}" />
-                        <MenuItem Header="Set Content Type">
-                            <MenuItem Header="Comic" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesContentTypeComicCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Manga" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesContentTypeMangaCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Manhua" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesContentTypeManhuaCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Manhwa" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesContentTypeManhwaCommand}" CommandParameter="{Binding SeriesId}" />
-                        </MenuItem>
-                        <MenuItem Header="Set Reading Direction" IsVisible="{Binding IsMangaFamily}">
-                            <MenuItem Header="Left to Right" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingModeLeftToRightCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Right to Left" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingModeRightToLeftCommand}" CommandParameter="{Binding SeriesId}" />
-                        </MenuItem>
-                        <MenuItem Header="Set Status">
-                            <MenuItem Header="Unknown" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesStatusUnknownCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Ongoing" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesStatusOngoingCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Completed" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesStatusCompletedCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Cancelled" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesStatusCancelledCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Hiatus" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesStatusHiatusCommand}" CommandParameter="{Binding SeriesId}" />
-                        </MenuItem>
-                        <!-- docs/superpowers/specs/2026-08-19-metadata-model-reading-status-design.md -->
-                        <MenuItem Header="Set Reading Status">
-                            <MenuItem Header="Unknown" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusUnknownCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Planned" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusPlannedCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Reading" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusReadingCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Completed" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusCompletedCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Paused" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusPausedCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Dropped" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusDroppedCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Re-reading" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusReReadingCommand}" CommandParameter="{Binding SeriesId}" />
-                        </MenuItem>
-                        <MenuItem Header="Delete Series">
-                            <MenuItem Header="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).DeleteSeriesConfirmLabel}"
-                                      Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).DeleteSeriesCommand}"
-                                      CommandParameter="{Binding SeriesId}" />
-                        </MenuItem>
-                    </ContextMenu>
-                </Button.ContextMenu>
                 <StackPanel>
                     <Border Classes="cover" Background="{Binding CoverBrush}"
                             Height="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PanoramaCardHeight}">
@@ -666,45 +383,6 @@
             <Button Classes="card" HorizontalAlignment="Stretch" Margin="0,0,0,8"
                     Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SelectCardCommand}"
                     CommandParameter="{Binding}" PointerPressed="OnSeriesTilePointerPressed">
-                <Button.ContextMenu>
-                    <ContextMenu>
-                        <MenuItem Header="Show in Explorer"
-                                  Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).RevealSeriesCommand}"
-                                  CommandParameter="{Binding}" IsEnabled="{Binding HasFile}" />
-                        <MenuItem Header="Set Content Type">
-                            <MenuItem Header="Comic" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesContentTypeComicCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Manga" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesContentTypeMangaCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Manhua" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesContentTypeManhuaCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Manhwa" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesContentTypeManhwaCommand}" CommandParameter="{Binding SeriesId}" />
-                        </MenuItem>
-                        <MenuItem Header="Set Reading Direction" IsVisible="{Binding IsMangaFamily}">
-                            <MenuItem Header="Left to Right" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingModeLeftToRightCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Right to Left" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingModeRightToLeftCommand}" CommandParameter="{Binding SeriesId}" />
-                        </MenuItem>
-                        <MenuItem Header="Set Status">
-                            <MenuItem Header="Unknown" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesStatusUnknownCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Ongoing" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesStatusOngoingCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Completed" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesStatusCompletedCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Cancelled" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesStatusCancelledCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Hiatus" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesStatusHiatusCommand}" CommandParameter="{Binding SeriesId}" />
-                        </MenuItem>
-                        <!-- docs/superpowers/specs/2026-08-19-metadata-model-reading-status-design.md -->
-                        <MenuItem Header="Set Reading Status">
-                            <MenuItem Header="Unknown" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusUnknownCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Planned" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusPlannedCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Reading" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusReadingCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Completed" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusCompletedCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Paused" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusPausedCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Dropped" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusDroppedCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Re-reading" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusReReadingCommand}" CommandParameter="{Binding SeriesId}" />
-                        </MenuItem>
-                        <MenuItem Header="Delete Series">
-                            <MenuItem Header="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).DeleteSeriesConfirmLabel}"
-                                      Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).DeleteSeriesCommand}"
-                                      CommandParameter="{Binding SeriesId}" />
-                        </MenuItem>
-                    </ContextMenu>
-                </Button.ContextMenu>
                 <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1" CornerRadius="6" Padding="10">
                     <Grid ColumnDefinitions="44,*,Auto">
                         <Border Grid.Column="0" CornerRadius="4" Width="44" Height="63"
@@ -741,45 +419,6 @@
             <Button Classes="card" HorizontalAlignment="Stretch" Margin="0,0,0,4"
                     Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SelectCardCommand}"
                     CommandParameter="{Binding}" PointerPressed="OnSeriesTilePointerPressed">
-                <Button.ContextMenu>
-                    <ContextMenu>
-                        <MenuItem Header="Show in Explorer"
-                                  Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).RevealSeriesCommand}"
-                                  CommandParameter="{Binding}" IsEnabled="{Binding HasFile}" />
-                        <MenuItem Header="Set Content Type">
-                            <MenuItem Header="Comic" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesContentTypeComicCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Manga" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesContentTypeMangaCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Manhua" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesContentTypeManhuaCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Manhwa" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesContentTypeManhwaCommand}" CommandParameter="{Binding SeriesId}" />
-                        </MenuItem>
-                        <MenuItem Header="Set Reading Direction" IsVisible="{Binding IsMangaFamily}">
-                            <MenuItem Header="Left to Right" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingModeLeftToRightCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Right to Left" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingModeRightToLeftCommand}" CommandParameter="{Binding SeriesId}" />
-                        </MenuItem>
-                        <MenuItem Header="Set Status">
-                            <MenuItem Header="Unknown" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesStatusUnknownCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Ongoing" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesStatusOngoingCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Completed" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesStatusCompletedCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Cancelled" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesStatusCancelledCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Hiatus" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesStatusHiatusCommand}" CommandParameter="{Binding SeriesId}" />
-                        </MenuItem>
-                        <!-- docs/superpowers/specs/2026-08-19-metadata-model-reading-status-design.md -->
-                        <MenuItem Header="Set Reading Status">
-                            <MenuItem Header="Unknown" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusUnknownCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Planned" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusPlannedCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Reading" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusReadingCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Completed" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusCompletedCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Paused" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusPausedCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Dropped" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusDroppedCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Re-reading" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusReReadingCommand}" CommandParameter="{Binding SeriesId}" />
-                        </MenuItem>
-                        <MenuItem Header="Delete Series">
-                            <MenuItem Header="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).DeleteSeriesConfirmLabel}"
-                                      Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).DeleteSeriesCommand}"
-                                      CommandParameter="{Binding SeriesId}" />
-                        </MenuItem>
-                    </ContextMenu>
-                </Button.ContextMenu>
                 <Grid ColumnDefinitions="52,*,110,70,70,140" Margin="0,6">
                     <Border Grid.Column="0" Width="36" Height="50" CornerRadius="3" Background="{Binding CoverBrush}" ClipToBounds="True">
                         <Grid>
@@ -809,45 +448,6 @@
                     Width="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).TilesCardWidth}"
                     Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SelectCardCommand}"
                     CommandParameter="{Binding}" PointerPressed="OnSeriesTilePointerPressed">
-                <Button.ContextMenu>
-                    <ContextMenu>
-                        <MenuItem Header="Show in Explorer"
-                                  Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).RevealSeriesCommand}"
-                                  CommandParameter="{Binding}" IsEnabled="{Binding HasFile}" />
-                        <MenuItem Header="Set Content Type">
-                            <MenuItem Header="Comic" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesContentTypeComicCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Manga" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesContentTypeMangaCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Manhua" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesContentTypeManhuaCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Manhwa" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesContentTypeManhwaCommand}" CommandParameter="{Binding SeriesId}" />
-                        </MenuItem>
-                        <MenuItem Header="Set Reading Direction" IsVisible="{Binding IsMangaFamily}">
-                            <MenuItem Header="Left to Right" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingModeLeftToRightCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Right to Left" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingModeRightToLeftCommand}" CommandParameter="{Binding SeriesId}" />
-                        </MenuItem>
-                        <MenuItem Header="Set Status">
-                            <MenuItem Header="Unknown" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesStatusUnknownCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Ongoing" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesStatusOngoingCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Completed" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesStatusCompletedCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Cancelled" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesStatusCancelledCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Hiatus" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesStatusHiatusCommand}" CommandParameter="{Binding SeriesId}" />
-                        </MenuItem>
-                        <!-- docs/superpowers/specs/2026-08-19-metadata-model-reading-status-design.md -->
-                        <MenuItem Header="Set Reading Status">
-                            <MenuItem Header="Unknown" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusUnknownCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Planned" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusPlannedCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Reading" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusReadingCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Completed" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusCompletedCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Paused" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusPausedCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Dropped" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusDroppedCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Re-reading" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusReReadingCommand}" CommandParameter="{Binding SeriesId}" />
-                        </MenuItem>
-                        <MenuItem Header="Delete Series">
-                            <MenuItem Header="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).DeleteSeriesConfirmLabel}"
-                                      Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).DeleteSeriesCommand}"
-                                      CommandParameter="{Binding SeriesId}" />
-                        </MenuItem>
-                    </ContextMenu>
-                </Button.ContextMenu>
                 <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1" CornerRadius="6" Padding="8">
                     <Grid ColumnDefinitions="Auto,*">
                         <Border Grid.Column="0" CornerRadius="4"
@@ -885,63 +485,6 @@
                     Width="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PosterCardWidth}"
                     Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).IssueList.OpenIssueCommand}"
                     CommandParameter="{Binding}" KeyDown="OnCardKeyDown" PointerPressed="OnTilePointerPressed">
-                <Button.ContextMenu>
-                    <ContextMenu>
-                        <MenuItem Header="Go to Series"
-                                  Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).GoToSeriesCommand}"
-                                  CommandParameter="{Binding SeriesId}" />
-                        <MenuItem Header="Show in Explorer"
-                                  Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).RevealIssueCommand}"
-                                  CommandParameter="{Binding Id}" IsEnabled="{Binding HasFile}" />
-                        <MenuItem Header="Set Content Type">
-                            <MenuItem Header="Comic" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesContentTypeComicCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Manga" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesContentTypeMangaCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Manhua" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesContentTypeManhuaCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Manhwa" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesContentTypeManhwaCommand}" CommandParameter="{Binding SeriesId}" />
-                        </MenuItem>
-                        <MenuItem Header="Set Reading Direction" IsVisible="{Binding IsMangaFamily}">
-                            <MenuItem Header="Left to Right" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingModeLeftToRightCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Right to Left" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingModeRightToLeftCommand}" CommandParameter="{Binding SeriesId}" />
-                        </MenuItem>
-                        <MenuItem Header="Set Status">
-                            <MenuItem Header="Unknown" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesStatusUnknownCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Ongoing" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesStatusOngoingCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Completed" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesStatusCompletedCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Cancelled" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesStatusCancelledCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Hiatus" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesStatusHiatusCommand}" CommandParameter="{Binding SeriesId}" />
-                        </MenuItem>
-                        <MenuItem Header="Set Reading Status">
-                            <MenuItem Header="Unknown" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusUnknownCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Planned" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusPlannedCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Reading" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusReadingCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Completed" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusCompletedCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Paused" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusPausedCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Dropped" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusDroppedCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Re-reading" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusReReadingCommand}" CommandParameter="{Binding SeriesId}" />
-                        </MenuItem>
-                        <MenuItem Header="Mark as Read"
-                                  Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).MarkIssueReadCommand}"
-                                  CommandParameter="{Binding Id}" />
-                        <MenuItem Header="Mark as Unread"
-                                  Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).MarkIssueUnreadCommand}"
-                                  CommandParameter="{Binding Id}" />
-                        <MenuItem Header="Quick Rate…"
-                                  Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).OpenQuickRateCommand}"
-                                  CommandParameter="{Binding Id}" />
-                        <MenuItem Header="Find Duplicates"
-                                  Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).RunLibraryPluginsCommand}"
-                                  CommandParameter="{Binding Id}"
-                                  IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).HasPluginHost}" />
-                        <MenuItem Header="Edit Properties…"
-                                  Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).EditIssuePropertiesCommand}"
-                                  CommandParameter="{Binding Id}" />
-                        <MenuItem Header="Delete Issue">
-                            <MenuItem Header="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).DeleteConfirmLabel}"
-                                      Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).DeleteIssueCommand}"
-                                      CommandParameter="{Binding Id}" />
-                        </MenuItem>
-                    </ContextMenu>
-                </Button.ContextMenu>
                 <Grid RowDefinitions="*,Auto">
                     <Border Grid.Row="0" Classes="cover posterCover" Background="{Binding CoverBrush}"
                             Height="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PosterCoverHeight}">
@@ -989,44 +532,6 @@
                     Width="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PosterCardWidth}"
                     Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SelectCardCommand}"
                     CommandParameter="{Binding}" KeyDown="OnCardKeyDown" PointerPressed="OnSeriesTilePointerPressed">
-                <Button.ContextMenu>
-                    <ContextMenu>
-                        <MenuItem Header="Show in Explorer"
-                                  Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).RevealSeriesCommand}"
-                                  CommandParameter="{Binding}" IsEnabled="{Binding HasFile}" />
-                        <MenuItem Header="Set Content Type">
-                            <MenuItem Header="Comic" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesContentTypeComicCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Manga" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesContentTypeMangaCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Manhua" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesContentTypeManhuaCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Manhwa" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesContentTypeManhwaCommand}" CommandParameter="{Binding SeriesId}" />
-                        </MenuItem>
-                        <MenuItem Header="Set Reading Direction" IsVisible="{Binding IsMangaFamily}">
-                            <MenuItem Header="Left to Right" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingModeLeftToRightCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Right to Left" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingModeRightToLeftCommand}" CommandParameter="{Binding SeriesId}" />
-                        </MenuItem>
-                        <MenuItem Header="Set Status">
-                            <MenuItem Header="Unknown" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesStatusUnknownCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Ongoing" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesStatusOngoingCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Completed" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesStatusCompletedCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Cancelled" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesStatusCancelledCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Hiatus" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesStatusHiatusCommand}" CommandParameter="{Binding SeriesId}" />
-                        </MenuItem>
-                        <MenuItem Header="Set Reading Status">
-                            <MenuItem Header="Unknown" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusUnknownCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Planned" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusPlannedCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Reading" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusReadingCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Completed" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusCompletedCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Paused" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusPausedCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Dropped" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusDroppedCommand}" CommandParameter="{Binding SeriesId}" />
-                            <MenuItem Header="Re-reading" Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SetSeriesReadingStatusReReadingCommand}" CommandParameter="{Binding SeriesId}" />
-                        </MenuItem>
-                        <MenuItem Header="Delete Series">
-                            <MenuItem Header="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).DeleteSeriesConfirmLabel}"
-                                      Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).DeleteSeriesCommand}"
-                                      CommandParameter="{Binding SeriesId}" />
-                        </MenuItem>
-                    </ContextMenu>
-                </Button.ContextMenu>
                 <Grid RowDefinitions="*,Auto">
                     <Border Grid.Row="0" Classes="cover posterCover" Background="{Binding CoverBrush}"
                             Height="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PosterCoverHeight}">

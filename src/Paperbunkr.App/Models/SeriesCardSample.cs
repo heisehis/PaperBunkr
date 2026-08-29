@@ -54,6 +54,12 @@ public sealed partial class SeriesCardSample : ObservableObject, ISelectableCard
     public string? Publisher { get; init; }
     public required string ContentTypeLabel { get; init; }
 
+    /// <summary>Series-level current values, for the series-card context menu's radio ✓ marks
+    /// (mirrors <see cref="ContentTypeLabel"/>). Raw enum names, e.g. "Ongoing" / "RightToLeft".</summary>
+    public string? SeriesStatusLabel { get; init; }
+    public string? ReadingStatusLabel { get; init; }
+    public string? ReadingDirectionLabel { get; init; }
+
     /// <summary>Gates the series-card context menu's Reading Direction submenu (docs/superpowers/specs/2026-08-16-manga-content-type-classification-design.md §2) - only meaningful once a series is classified as manga-family.</summary>
     public bool IsMangaFamily => ContentTypeLabel is "Manga" or "Manhua" or "Manhwa";
     public int IssueCount { get; init; }
@@ -193,6 +199,9 @@ public sealed partial class SeriesCardSample : ObservableObject, ISelectableCard
             Sub = $"{series.ContentType} · {series.Issues.Count} issues",
             Publisher = series.Publisher,
             ContentTypeLabel = series.ContentType.ToString(),
+            SeriesStatusLabel = series.Status.ToString(),
+            ReadingStatusLabel = series.ReadingStatus.ToString(),
+            ReadingDirectionLabel = series.ReadingMode.ToString(),
             IssueCount = series.Issues.Count,
             UnreadCount = unreadCount,
             Missing = series.Issues.Any(i => i.FileIsMissing),

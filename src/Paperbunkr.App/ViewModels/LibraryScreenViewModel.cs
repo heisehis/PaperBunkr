@@ -48,6 +48,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
     private readonly Action<string, string> _showToast;
     private readonly Action _goLibraryFolders;
     private readonly Action<int> _openCollectionProperties;
+    private readonly Action<int> _goBookDetailForBook;
 
     /// <summary>
     /// Multi-selection (docs/superpowers/specs/2026-08-24-library-multiselect-slice1-design.md) for
@@ -94,6 +95,11 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
     private List<Series> _allSeries = new();
     private List<Collection> _allCollections = new();
 
+    /// <summary>Resolved members of the active collection, refreshed alongside <see cref="_allCollections"/> in <see cref="LoadFromDatabase"/> - only populated when a collection with non-series members is active (see <see cref="IsCollectionView"/>).</summary>
+    private List<CollectionMember> _activeCollectionMembers = new();
+
+    private bool _activeCollectionHasNonSeriesMembers;
+
     public LibraryScreenViewModel(
         Action<int> goDetail,
         Action<int> goReaderForIssue,
@@ -104,7 +110,8 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         Action<string, string>? showToast = null,
         Action<IReadOnlyList<int>>? goBulkSeriesProperties = null,
         Action? goLibraryFolders = null,
-        Action<int>? openCollectionProperties = null)
+        Action<int>? openCollectionProperties = null,
+        Action<int>? goBookDetailForBook = null)
     {
         _goDetail = goDetail;
         _goReaderForIssue = goReaderForIssue;
@@ -116,10 +123,12 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         _goBulkSeriesProperties = goBulkSeriesProperties ?? (_ => { });
         _goLibraryFolders = goLibraryFolders ?? (() => { });
         _openCollectionProperties = openCollectionProperties ?? (_ => { });
+        _goBookDetailForBook = goBookDetailForBook ?? (_ => { });
         Covers = new ObservableCollection<SeriesCardSample>();
         Groups = new ObservableCollection<SeriesCardGroup>();
         ContentTypes = new ObservableCollection<ContentTypeSummary>();
         Collections = new ObservableCollection<CollectionSummary>();
+        CollectionTiles = new ObservableCollection<LibraryTile>();
         ExistingSeriesNames = new ObservableCollection<string>();
         ReadingLists = new ObservableCollection<ReadingListOption>();
         DetailsColumns = new ObservableCollection<DetailsColumn>();
@@ -218,6 +227,13 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         {
             _activeContentType = state.ActiveContentType;
             _activeCollectionId = state.ActiveCollectionId;
+            using (var context = PaperbunkrDb.CreateContext())
+            {
+                _activeCollectionMembers = _activeCollectionId is int browseCollectionId
+                    ? new List<CollectionMember>(CollectionResolver.GetMembers(context, browseCollectionId))
+                    : new List<CollectionMember>();
+            }
+
             SearchQuery = state.SearchQuery; // Goes through the normal setter - same reload/save path as any other search-query change.
             SaveLibrarySettings();
             RebuildView();
@@ -517,11 +533,20 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
     /// <summary>Every <see cref="ContentType"/> with at least one series, real counts, sidebar filter (docs/superpowers/specs/2026-08-09-library-sidebar-categorization-design.md).</summary>
     public ObservableCollection<ContentTypeSummary> ContentTypes { get; }
 
-    /// <summary>Real <c>Collection</c> rows (docs/superpowers/specs/2026-08-27-collections-design.md).
-    /// The schema/query layer supports mixed Series/Issue/Book membership; the sidebar create/rename/
-    /// reorder/delete UI and the mixed-membership grid view aren't reimplemented against current code
-    /// yet, so this only surfaces whatever collections already exist as a series-only filter.</summary>
+    /// <summary>Real <c>Collection</c> rows (docs/superpowers/specs/2026-08-27-collections-design.md) -
+    /// create/rename/reorder/delete via the sidebar, appearance/members via <see cref="MainViewModel.CollectionProperties"/>.</summary>
     public ObservableCollection<CollectionSummary> Collections { get; }
+
+    /// <summary>The active collection's members as kind-agnostic tiles, populated only when
+    /// <see cref="IsCollectionView"/> is true (a series-only collection keeps using the normal
+    /// series-card grid, which already has full sort/group support this mixed grid doesn't try to
+    /// duplicate).</summary>
+    public ObservableCollection<LibraryTile> CollectionTiles { get; }
+
+    /// <summary>True when the active collection has at least one Issue/Book member, so the mixed
+    /// grid (<see cref="CollectionTiles"/>) replaces every normal view-mode grid instead of the
+    /// series-only filter <see cref="_activeCollectionId"/> alone already provides.</summary>
+    public bool IsCollectionView => _activeCollectionId is not null && _activeCollectionHasNonSeriesMembers;
 
     [ObservableProperty]
     private int _allSeriesCount;
@@ -624,7 +649,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
 
     /// <summary>P6 fix (docs/alpha-todo.md) - none of the display modes had a "no series match"
     /// empty state; delegates to whichever granularity is active.</summary>
-    public bool HasAnyResults => IsSeriesGranularity ? (Covers.Count > 0 || Groups.Count > 0) : IssueList.HasAnyResults;
+    public bool HasAnyResults => IsCollectionView ? CollectionTiles.Count > 0 : IsSeriesGranularity ? (Covers.Count > 0 || Groups.Count > 0) : IssueList.HasAnyResults;
 
     /// <summary>Sort/Group toolbar pills show whichever granularity's own label is currently active -
     /// lets the XAML toolbar bind one pair of pills instead of branching per granularity itself.</summary>
@@ -663,6 +688,14 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
             .ToList();
 
         _allCollections = context.Collections.Include(c => c.Items).AsNoTracking().AsSplitQuery().OrderBy(c => c.SortOrder).ToList();
+
+        // Resolved separately from _allCollections (which only carries bare CollectionItem rows for
+        // the sidebar counts) - the mixed grid needs the actual Series/Issue/Book entities, which
+        // CollectionResolver.GetMembers already joins in. Only worth the extra query when a
+        // collection is actually active.
+        _activeCollectionMembers = _activeCollectionId is int loadCollectionId
+            ? new List<CollectionMember>(CollectionResolver.GetMembers(context, loadCollectionId))
+            : new List<CollectionMember>();
 
         // "Add to Reading List" flyout (docs/superpowers/specs/2026-08-24-library-multiselect-
         // slice2-design.md §2) - same ordering ReadingScreenViewModel's own sidebar uses. Its own
@@ -724,6 +757,24 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
             });
         }
 
+        bool wasCollectionView = IsCollectionView;
+        _activeCollectionHasNonSeriesMembers = _activeCollectionId is int activeId
+            && _allCollections.FirstOrDefault(c => c.Id == activeId) is { } activeCollection
+            && activeCollection.Items.Any(i => i.IssueId is not null || i.BookId is not null);
+        if (wasCollectionView != IsCollectionView)
+        {
+            RaiseCollectionViewChanged();
+        }
+
+        CollectionTiles.Clear();
+        if (IsCollectionView)
+        {
+            foreach (var member in _activeCollectionMembers)
+            {
+                CollectionTiles.Add(BuildCollectionTile(member));
+            }
+        }
+
         IEnumerable<Series> filtered = series;
         if (_activeContentType is ContentType contentType)
         {
@@ -731,9 +782,9 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         }
         else if (_activeCollectionId is int collectionId)
         {
-            // Series-only membership check - a mixed collection (Issue/Book members too) doesn't
-            // change what shows in the series grid here; that's the dedicated mixed view (Step 9,
-            // not yet reimplemented against current code).
+            // Series-only membership check - the normal series-card grid this feeds is suppressed
+            // entirely while IsCollectionView is true (the mixed grid above takes over instead), so
+            // this only matters for a series-only collection.
             filtered = filtered.Where(s => s.CollectionItems.Any(ci => ci.CollectionId == collectionId));
         }
 
@@ -895,6 +946,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
     {
         _activeContentType = null;
         _activeCollectionId = null;
+        _activeCollectionMembers = new List<CollectionMember>();
         SaveLibrarySettings();
         RebuildView();
         PushBrowseHistory();
@@ -910,6 +962,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
 
         _activeContentType = summary.ContentType;
         _activeCollectionId = null;
+        _activeCollectionMembers = new List<CollectionMember>();
         SaveLibrarySettings();
         RebuildView();
         PushBrowseHistory();
@@ -925,9 +978,82 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
 
         _activeCollectionId = summary.Id;
         _activeContentType = null;
+
+        // RebuildView() below works off in-memory snapshots with no DB round-trip (the whole point
+        // of the LoadFromDatabase/RebuildView split) - but the resolved member list for the mixed
+        // grid is only ever fetched inside LoadFromDatabase, so switching collections needs its own
+        // small fetch here or CollectionTiles would keep showing the *previous* collection's members.
+        using (var context = PaperbunkrDb.CreateContext())
+        {
+            _activeCollectionMembers = new List<CollectionMember>(CollectionResolver.GetMembers(context, summary.Id));
+        }
+
         SaveLibrarySettings();
         RebuildView();
         PushBrowseHistory();
+    }
+
+    private static LibraryTile BuildCollectionTile(CollectionMember member) => member.Kind switch
+    {
+        CollectionMemberKind.Series when member.Series is { } series => new LibraryTile
+        {
+            Kind = LibraryTileKind.Series,
+            TargetId = series.Id,
+            Title = series.Name,
+            Subtitle = $"{series.ContentType} · {series.Issues.Count} issues",
+            CoverBrush = SeriesCardSample.CoverBrushFor(series.Name),
+            CoverIssueId = (series.Issues.FirstOrDefault(i => i.Id == series.CoverIssueId) ?? series.Issues.OrderByNumber().FirstOrDefault())?.Id,
+        },
+        CollectionMemberKind.Issue when member.Issue is { } issue => new LibraryTile
+        {
+            Kind = LibraryTileKind.Issue,
+            TargetId = issue.Id,
+            Title = member.DisplayTitle,
+            Subtitle = issue.Series?.Name,
+            CoverBrush = SeriesCardSample.CoverBrushFor(member.DisplayTitle),
+            CoverIssueId = issue.Id,
+        },
+        CollectionMemberKind.Book when member.Book is { } book => new LibraryTile
+        {
+            Kind = LibraryTileKind.Book,
+            TargetId = book.Id,
+            Title = book.Title,
+            Subtitle = "Book",
+            CoverBrush = SeriesCardSample.CoverBrushFor(book.Title),
+            CoverImage = BookCoverImageCache.Get(book.Id),
+        },
+        // A member whose target row was deleted out from under it without the CollectionItem being
+        // cleaned up (shouldn't happen - FK cascade handles that - but a display-layer fallback is
+        // cheaper than letting a null-ref take the whole grid down).
+        _ => new LibraryTile
+        {
+            Kind = member.Kind switch { CollectionMemberKind.Issue => LibraryTileKind.Issue, CollectionMemberKind.Book => LibraryTileKind.Book, _ => LibraryTileKind.Series },
+            TargetId = member.TargetId,
+            Title = member.DisplayTitle,
+            CoverBrush = SeriesCardSample.CoverBrushFor(member.DisplayTitle),
+        },
+    };
+
+    [RelayCommand]
+    private void SelectCollectionMember(LibraryTile? tile)
+    {
+        if (tile is null)
+        {
+            return;
+        }
+
+        switch (tile.Kind)
+        {
+            case LibraryTileKind.Series:
+                _goDetail(tile.TargetId);
+                break;
+            case LibraryTileKind.Issue:
+                _goReaderForIssue(tile.TargetId);
+                break;
+            case LibraryTileKind.Book:
+                _goBookDetailForBook(tile.TargetId);
+                break;
+        }
     }
 
     /// <summary>Sidebar "+" toggle - shows the inline name field in place of the button.</summary>
@@ -1980,12 +2106,14 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
 
     /// <summary>Phase 4a: the single poster grid, replacing Compact/Comfortable/Cover-only (docs/
     /// superpowers/specs/2026-08-27-library-browsing-4a-poster-grid-design.md).</summary>
-    public bool IsPosterGrid => ViewMode == LibraryViewMode.PosterGrid;
-    public bool IsPanoramaGrid => ViewMode == LibraryViewMode.PanoramaGrid;
-    public bool IsListView => ViewMode == LibraryViewMode.List;
-    public bool IsDetailsView => ViewMode == LibraryViewMode.Details;
-    public bool IsTilesView => ViewMode == LibraryViewMode.Tiles;
-    public bool IsIssueListView => ViewMode == LibraryViewMode.IssueList;
+    /// <summary>Every normal view-mode grid is suppressed while <see cref="IsCollectionView"/> - the
+    /// mixed collection grid (<see cref="CollectionTiles"/>) takes over <c>Grid.Row="1"</c> instead.</summary>
+    public bool IsPosterGrid => ViewMode == LibraryViewMode.PosterGrid && !IsCollectionView;
+    public bool IsPanoramaGrid => ViewMode == LibraryViewMode.PanoramaGrid && !IsCollectionView;
+    public bool IsListView => ViewMode == LibraryViewMode.List && !IsCollectionView;
+    public bool IsDetailsView => ViewMode == LibraryViewMode.Details && !IsCollectionView;
+    public bool IsTilesView => ViewMode == LibraryViewMode.Tiles && !IsCollectionView;
+    public bool IsIssueListView => ViewMode == LibraryViewMode.IssueList && !IsCollectionView;
 
     partial void OnViewModeChanged(LibraryViewMode value)
     {
@@ -1997,6 +2125,18 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         OnPropertyChanged(nameof(IsIssueListView));
         OnPropertyChanged(nameof(DisplayModeLabel));
         SaveLibrarySettings();
+    }
+
+    /// <summary>Raised wherever <see cref="_activeCollectionHasNonSeriesMembers"/> is recomputed (every <see cref="RebuildView"/>) - the view-mode grids above all depend on it via <see cref="IsCollectionView"/>.</summary>
+    private void RaiseCollectionViewChanged()
+    {
+        OnPropertyChanged(nameof(IsCollectionView));
+        OnPropertyChanged(nameof(IsPosterGrid));
+        OnPropertyChanged(nameof(IsPanoramaGrid));
+        OnPropertyChanged(nameof(IsListView));
+        OnPropertyChanged(nameof(IsDetailsView));
+        OnPropertyChanged(nameof(IsTilesView));
+        OnPropertyChanged(nameof(IsIssueListView));
     }
 
     /// <summary>Every Display mode now renders the exact same <see cref="IssueList"/> rows/groups

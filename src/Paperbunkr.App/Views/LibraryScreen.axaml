@@ -583,6 +583,36 @@
                 </Grid>
             </Button>
         </DataTemplate>
+        <!-- Mixed-membership Collection grid (docs/superpowers/specs/2026-08-27-collections-
+             design.md, step 9) - a trimmed PosterGridIssueTemplate: no selection checkbox/publisher
+             badge/unread dot, since a Collection's grid isn't multi-select-aware and members span
+             three entity kinds those badges don't uniformly apply to. Series/Issue tiles resolve
+             their cover lazily via CoverIssueId; Book tiles carry an already-decoded CoverImage
+             instead (see LibraryTile's own doc comment) - stacking both Images is simpler than a
+             null-check converter, since whichever one is unbound just renders nothing. -->
+        <DataTemplate x:Key="CollectionTileTemplate" x:DataType="models:LibraryTile">
+            <Button Classes="card" Margin="0"
+                    Width="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PosterCardWidth}"
+                    Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SelectCollectionMemberCommand}"
+                    CommandParameter="{Binding}">
+                <Grid RowDefinitions="*,Auto">
+                    <Border Grid.Row="0" Classes="cover posterCover" Background="{Binding CoverBrush}"
+                            Height="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PosterCoverHeight}">
+                        <Grid>
+                            <Image views:AsyncCoverImage.SourceId="{Binding CoverIssueId}" Stretch="UniformToFill" />
+                            <Image Source="{Binding CoverImage}" Stretch="UniformToFill" />
+                            <Border Classes="posterScrim" />
+                        </Grid>
+                    </Border>
+                    <StackPanel Grid.Row="1" Margin="0,8,0,0" Spacing="1">
+                        <TextBlock Text="{Binding Title}" FontSize="12" FontWeight="SemiBold"
+                                   Foreground="{DynamicResource PbTextBrush}" TextTrimming="CharacterEllipsis"
+                                   ToolTip.Tip="{Binding Title}" />
+                        <TextBlock Text="{Binding Subtitle}" Classes="pbTextCaption" TextTrimming="CharacterEllipsis" />
+                    </StackPanel>
+                </Grid>
+            </Button>
+        </DataTemplate>
     </UserControl.Resources>
 
     <Grid RowDefinitions="Auto,*">
@@ -867,6 +897,18 @@
                     </ItemsControl>
                 </Panel>
             </Grid>
+        </ScrollViewer>
+
+        <!-- ============ Mixed-membership Collection grid (Step 9) - only shown for a collection
+             with at least one Issue/Book member; a series-only collection keeps using whichever
+             normal view-mode grid above is active (full sort/group support, no need to duplicate
+             it here). ============ -->
+        <ScrollViewer x:Name="CollectionGridScrollViewer" Grid.Row="1" IsVisible="{Binding IsCollectionView}">
+            <ItemsControl ItemsSource="{Binding CollectionTiles}" ItemTemplate="{StaticResource CollectionTileTemplate}" Margin="24,22,24,40">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate><controls:VirtualizingWrapPanel ItemWidth="{Binding PosterCardWidth}" ItemHeight="{Binding PosterCardHeight}" ItemSpacing="20" LineSpacing="20" /></ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+            </ItemsControl>
         </ScrollViewer>
 
         <!-- ============ Comic List ============ -->

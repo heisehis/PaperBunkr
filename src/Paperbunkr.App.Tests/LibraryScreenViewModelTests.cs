@@ -293,6 +293,115 @@ public class LibraryScreenViewModelTests : IDisposable
         Assert.Equal(collectionId, openedId);
     }
 
+    private static int CreateMixedCollection(int seriesId, int issueId, int bookId)
+    {
+        using var context = PaperbunkrDb.CreateContext();
+        var collection = new Collection { Name = "Mixed" };
+        collection.Items.Add(new CollectionItem { SeriesId = seriesId, SortOrder = 0 });
+        collection.Items.Add(new CollectionItem { IssueId = issueId, SortOrder = 1 });
+        collection.Items.Add(new CollectionItem { BookId = bookId, SortOrder = 2 });
+        context.Collections.Add(collection);
+        context.SaveChanges();
+        return collection.Id;
+    }
+
+    private static int CreateBook(string title)
+    {
+        using var context = PaperbunkrDb.CreateContext();
+        var book = new Book { Title = title, FilePath = $"C:/books/{title}.epub", AddedTime = DateTime.UtcNow };
+        context.Books.Add(book);
+        context.SaveChanges();
+        return book.Id;
+    }
+
+    [Fact]
+    public void SelectCollection_WithMixedMembers_EntersCollectionView_WithAllThreeKinds_InManualOrder()
+    {
+        int seriesId = CreateSeriesWithIssue("Alpha Series");
+        int otherSeriesId = CreateSeriesWithIssue("Beta Series");
+        int issueId;
+        using (var context = PaperbunkrDb.CreateContext())
+        {
+            issueId = context.Issues.First(i => i.SeriesId == otherSeriesId).Id;
+        }
+        int bookId = CreateBook("Some Novel");
+        int collectionId = CreateMixedCollection(seriesId, issueId, bookId);
+        var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { }, goToNewIssueProperties: (_, _, _) => { });
+
+        vm.SelectCollectionCommand.Execute(vm.Collections.Single(c => c.Id == collectionId));
+
+        Assert.True(vm.IsCollectionView);
+        Assert.False(vm.IsPosterGrid);
+        Assert.Equal(3, vm.CollectionTiles.Count);
+        Assert.Equal(new[] { LibraryTileKind.Series, LibraryTileKind.Issue, LibraryTileKind.Book }, vm.CollectionTiles.Select(t => t.Kind));
+        Assert.Equal("Alpha Series", vm.CollectionTiles[0].Title);
+        Assert.Equal("Some Novel", vm.CollectionTiles[2].Title);
+        Assert.True(vm.HasAnyResults);
+    }
+
+    [Fact]
+    public void SelectCollection_SeriesOnly_DoesNotEnterCollectionView()
+    {
+        int seriesId = CreateSeriesWithIssue("Alpha");
+        int collectionId = CreateCollectionWithSeries("Series Only", seriesId);
+        var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { }, goToNewIssueProperties: (_, _, _) => { });
+
+        vm.SelectCollectionCommand.Execute(vm.Collections.Single(c => c.Id == collectionId));
+
+        Assert.False(vm.IsCollectionView);
+        Assert.Empty(vm.CollectionTiles);
+    }
+
+    [Fact]
+    public void SelectAllSeries_AfterMixedCollection_LeavesCollectionView()
+    {
+        int seriesId = CreateSeriesWithIssue("Alpha Series");
+        int issueId;
+        using (var context = PaperbunkrDb.CreateContext())
+        {
+            issueId = context.Issues.First(i => i.SeriesId == seriesId).Id;
+        }
+        int bookId = CreateBook("A Novel");
+        int collectionId = CreateMixedCollection(seriesId, issueId, bookId);
+        var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { }, goToNewIssueProperties: (_, _, _) => { });
+        vm.SelectCollectionCommand.Execute(vm.Collections.Single(c => c.Id == collectionId));
+        Assert.True(vm.IsCollectionView);
+
+        vm.SelectAllSeriesCommand.Execute(null);
+
+        Assert.False(vm.IsCollectionView);
+        Assert.Empty(vm.CollectionTiles);
+        Assert.True(vm.IsPosterGrid);
+    }
+
+    [Fact]
+    public void SelectCollectionMember_DispatchesByKind()
+    {
+        int? openedSeriesId = null, openedIssueId = null, openedBookId = null;
+        int seriesId = CreateSeriesWithIssue("Alpha Series");
+        int issueId;
+        using (var context = PaperbunkrDb.CreateContext())
+        {
+            issueId = context.Issues.First(i => i.SeriesId == seriesId).Id;
+        }
+        int bookId = CreateBook("A Novel");
+        int collectionId = CreateMixedCollection(seriesId, issueId, bookId);
+        var vm = new LibraryScreenViewModel(
+            goDetail: id => openedSeriesId = id,
+            goReaderForIssue: id => openedIssueId = id,
+            goToNewIssueProperties: (_, _, _) => { },
+            goBookDetailForBook: id => openedBookId = id);
+        vm.SelectCollectionCommand.Execute(vm.Collections.Single(c => c.Id == collectionId));
+
+        vm.SelectCollectionMemberCommand.Execute(vm.CollectionTiles.Single(t => t.Kind == LibraryTileKind.Series));
+        vm.SelectCollectionMemberCommand.Execute(vm.CollectionTiles.Single(t => t.Kind == LibraryTileKind.Issue));
+        vm.SelectCollectionMemberCommand.Execute(vm.CollectionTiles.Single(t => t.Kind == LibraryTileKind.Book));
+
+        Assert.Equal(seriesId, openedSeriesId);
+        Assert.Equal(issueId, openedIssueId);
+        Assert.Equal(bookId, openedBookId);
+    }
+
     [Fact]
     public void SelectAllSeries_ClearsFilter_RestoresFullRows()
     {

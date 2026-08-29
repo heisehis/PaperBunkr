@@ -58,7 +58,7 @@ public static class CollectionResolver
     {
         var items = context.CollectionItems
             .Where(ci => ci.CollectionId == collectionId)
-            .Include(ci => ci.Series)
+            .Include(ci => ci.Series).ThenInclude(s => s!.Issues)
             .Include(ci => ci.Issue).ThenInclude(i => i!.Series)
             .Include(ci => ci.Book)
             .OrderBy(ci => ci.SortOrder)

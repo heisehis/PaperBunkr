@@ -14,7 +14,9 @@ public class PaperbunkrDbContext : DbContext
 
     public DbSet<Issue> Issues => Set<Issue>();
 
-    public DbSet<Category> Categories => Set<Category>();
+    public DbSet<Collection> Collections => Set<Collection>();
+
+    public DbSet<CollectionItem> CollectionItems => Set<CollectionItem>();
 
     public DbSet<TrackingLink> TrackingLinks => Set<TrackingLink>();
 
@@ -177,8 +179,10 @@ public class PaperbunkrDbContext : DbContext
                 .HasForeignKey(s => s.CoverIssueId)
                 .OnDelete(DeleteBehavior.Restrict);
 
-            builder.HasMany(s => s.Categories)
-                .WithMany(c => c.Series);
+            builder.HasMany(s => s.CollectionItems)
+                .WithOne(ci => ci.Series)
+                .HasForeignKey(ci => ci.SeriesId)
+                .OnDelete(DeleteBehavior.Cascade);
 
 
             builder.HasMany(s => s.MetadataProposals)
@@ -256,10 +260,48 @@ public class PaperbunkrDbContext : DbContext
             builder.HasIndex(t => t.SeriesId);
         });
 
-        modelBuilder.Entity<Category>(builder =>
+        modelBuilder.Entity<Collection>(builder =>
         {
             builder.HasKey(c => c.Id);
             builder.Property(c => c.Name).IsRequired();
+        });
+
+        modelBuilder.Entity<CollectionItem>(builder =>
+        {
+            builder.HasKey(ci => ci.Id);
+
+            builder.HasOne(ci => ci.Collection)
+                .WithMany(c => c.Items)
+                .HasForeignKey(ci => ci.CollectionId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // Series FK is configured on the Series entity above (HasMany(s => s.CollectionItems)).
+            builder.HasOne(ci => ci.Issue)
+                .WithMany(i => i.CollectionItems)
+                .HasForeignKey(ci => ci.IssueId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            builder.HasOne(ci => ci.Book)
+                .WithMany(b => b.CollectionItems)
+                .HasForeignKey(ci => ci.BookId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // Exactly one target set. Enforced in the DB (EnsureCreated honours it for test schemas
+            // too) and guarded in CollectionService.AddItems so a bad call is a logged no-op.
+            builder.ToTable(t => t.HasCheckConstraint(
+                "CK_CollectionItem_OneTarget",
+                "((\"SeriesId\" IS NOT NULL) + (\"IssueId\" IS NOT NULL) + (\"BookId\" IS NOT NULL)) = 1"));
+
+            // Block duplicate membership per target kind.
+            builder.HasIndex(ci => new { ci.CollectionId, ci.SeriesId })
+                .IsUnique()
+                .HasFilter("\"SeriesId\" IS NOT NULL");
+            builder.HasIndex(ci => new { ci.CollectionId, ci.IssueId })
+                .IsUnique()
+                .HasFilter("\"IssueId\" IS NOT NULL");
+            builder.HasIndex(ci => new { ci.CollectionId, ci.BookId })
+                .IsUnique()
+                .HasFilter("\"BookId\" IS NOT NULL");
         });
 
         modelBuilder.Entity<TrackingLink>(builder =>

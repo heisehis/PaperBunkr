@@ -10,6 +10,7 @@ using Microsoft.EntityFrameworkCore;
 using Paperbunkr.App.Models;
 using Paperbunkr.App.Services;
 using Paperbunkr.Data;
+using Paperbunkr.Data.Collections;
 using Paperbunkr.Data.Credentials;
 using Paperbunkr.Data.Entities;
 using Paperbunkr.Data.Metadata;
@@ -56,6 +57,8 @@ public partial class DetailTabsViewModel : ViewModelBase
         Related = new ObservableCollection<RelatedSeriesSample>();
         SameContinuity = new ObservableCollection<RelatedGroupSeriesSample>();
         ContinuityChips = new ObservableCollection<ContinuityChip>();
+        SameCollection = new ObservableCollection<RelatedGroupSeriesSample>();
+        CollectionChips = new ObservableCollection<CollectionChip>();
         SameEvent = new ObservableCollection<RelatedGroupSeriesSample>();
         ExternalLinks = new ObservableCollection<ExternalLinkSample>();
         MetadataSearchResults = new ObservableCollection<AniListMatchSample>();
@@ -120,6 +123,20 @@ public partial class DetailTabsViewModel : ViewModelBase
     public ObservableCollection<ContinuityChip> ContinuityChips { get; }
 
     /// <summary>
+    /// Other series sharing at least one <see cref="Data.Entities.Collection"/> with the loaded
+    /// series (docs/superpowers/specs/2026-08-27-collections-design.md, step 10) - populated by
+    /// <see cref="LoadSeries"/> via <see cref="CollectionResolver.GetOtherSeriesSharingCollection"/>.
+    /// Mirrors <see cref="SameContinuity"/> exactly; series membership only (an Issue/Book member of
+    /// a mixed collection has no "other series" to surface here).
+    /// </summary>
+    public ObservableCollection<RelatedGroupSeriesSample> SameCollection { get; }
+
+    public bool HasSameCollection => SameCollection.Count > 0;
+
+    /// <summary>The loaded series' own <see cref="Data.Entities.Collection"/> memberships, shown as removable chips.</summary>
+    public ObservableCollection<CollectionChip> CollectionChips { get; }
+
+    /// <summary>
     /// Real data as of docs/superpowers/specs/2026-08-17-metadata-model-phase4b-story-events-
     /// design.md - other series sharing at least one <see cref="Data.Entities.StoryEvent"/> with
     /// the loaded series, populated by <see cref="LoadSeries"/> via
@@ -173,6 +190,7 @@ public partial class DetailTabsViewModel : ViewModelBase
         {
             RefreshRelated(context, series.Id);
             RefreshContinuity(context, series.Id);
+            RefreshCollections(context, series.Id);
             RefreshSameEvent(context, series.Id);
             RefreshMoreLikeThis(context, series.Id);
             RefreshExternalLinks(context, series.Id);
@@ -449,6 +467,125 @@ public partial class DetailTabsViewModel : ViewModelBase
         using var context = _contextFactory();
         ContinuityResolver.RemoveSeriesFromContinuity(context, currentSeriesId, chip.ContinuityId);
         RefreshContinuity(context, currentSeriesId);
+    }
+
+    // --- Related tab: Collection membership (docs/superpowers/specs/2026-08-27-collections-
+    // design.md, step 10) - byte-for-byte the Continuity picker above, series membership only. ---
+
+    private void RefreshCollections(PaperbunkrDbContext context, int seriesId)
+    {
+        CollectionChips.Clear();
+        foreach (var collection in CollectionResolver.GetCollections(context, seriesId))
+        {
+            CollectionChips.Add(new CollectionChip { CollectionId = collection.Id, Name = collection.Name });
+        }
+
+        SameCollection.Clear();
+        CollectionRail.Clear();
+        foreach (var otherSeries in CollectionResolver.GetOtherSeriesSharingCollection(context, seriesId))
+        {
+            SameCollection.Add(new RelatedGroupSeriesSample
+            {
+                Title = otherSeries.Name,
+                Name = otherSeries.Name,
+                Note = "Same collection",
+                CoverBrush = SeriesCardSample.CoverBrushFor(otherSeries.Name),
+                SeriesId = otherSeries.Id,
+            });
+            CollectionRail.Add(new PosterRailItem
+            {
+                Id = otherSeries.Id,
+                Name = otherSeries.Name,
+                CoverBrush = SeriesCardSample.CoverBrushFor(otherSeries.Name),
+                CoverImage = RailCoverFor(context, otherSeries.Id),
+                Payload = otherSeries.Id,
+            });
+        }
+
+        OnPropertyChanged(nameof(HasSameCollection));
+        OnPropertyChanged(nameof(HasAnyRelatedRail));
+    }
+
+    [ObservableProperty]
+    private bool _isAddingCollection;
+
+    [ObservableProperty]
+    private string _collectionSearchQuery = string.Empty;
+
+    public ObservableCollection<CollectionSearchResult> CollectionSearchResults { get; } = new();
+
+    [RelayCommand]
+    private void ToggleAddCollection()
+    {
+        IsAddingCollection = !IsAddingCollection;
+        CollectionSearchQuery = string.Empty;
+        CollectionSearchResults.Clear();
+    }
+
+    partial void OnCollectionSearchQueryChanged(string value) => SearchCollectionCandidates();
+
+    [RelayCommand]
+    private void SearchCollectionCandidates()
+    {
+        CollectionSearchResults.Clear();
+        string query = CollectionSearchQuery.Trim();
+        if (query.Length == 0)
+        {
+            return;
+        }
+
+        using var context = _contextFactory();
+        var matches = context.Collections
+            .AsEnumerable()
+            .Where(c => c.Name.Contains(query, StringComparison.OrdinalIgnoreCase))
+            .Take(20)
+            .ToList();
+
+        foreach (var collection in matches)
+        {
+            CollectionSearchResults.Add(new CollectionSearchResult { CollectionId = collection.Id, Name = collection.Name });
+        }
+
+        // No exact (case-insensitive) match among the results - offer a "create new" row, same
+        // rationale as the Continuity picker's identical fallback.
+        if (!matches.Any(c => string.Equals(c.Name, query, StringComparison.OrdinalIgnoreCase)))
+        {
+            CollectionSearchResults.Add(new CollectionSearchResult { Name = query, IsNew = true });
+        }
+    }
+
+    [RelayCommand]
+    private void AddCollection(CollectionSearchResult? target)
+    {
+        if (target is null || _seriesId is not int currentSeriesId)
+        {
+            return;
+        }
+
+        using var context = _contextFactory();
+        var collection = target.IsNew ? CollectionService.Create(context, target.Name) : context.Collections.Find(target.CollectionId);
+        if (collection is not null)
+        {
+            CollectionService.AddItems(context, collection.Id, seriesIds: new[] { currentSeriesId });
+        }
+
+        IsAddingCollection = false;
+        CollectionSearchQuery = string.Empty;
+        CollectionSearchResults.Clear();
+        RefreshCollections(context, currentSeriesId);
+    }
+
+    [RelayCommand]
+    private void RemoveCollection(CollectionChip? chip)
+    {
+        if (chip is null || _seriesId is not int currentSeriesId)
+        {
+            return;
+        }
+
+        using var context = _contextFactory();
+        CollectionService.RemoveTargets(context, chip.CollectionId, seriesIds: new[] { currentSeriesId });
+        RefreshCollections(context, currentSeriesId);
     }
 
     // --- Related tab: Same Event (docs/superpowers/specs/2026-08-17-metadata-model-phase4b-
@@ -1184,13 +1321,16 @@ public partial class DetailTabsViewModel : ViewModelBase
     /// <summary>Same Event as rail cards (read-only). Mirrors <see cref="SameEvent"/>.</summary>
     public ObservableCollection<PosterRailItem> EventRail { get; }
 
+    /// <summary>Same Collection as rail cards (read-only). Mirrors <see cref="SameCollection"/> - see its own doc comment on why both exist (this is what the View actually renders; the other feeds <see cref="HasAnyRelatedRail"/>).</summary>
+    public ObservableCollection<PosterRailItem> CollectionRail { get; } = new();
+
     /// <summary>"More Like This" - relationally-anchored recommendations (<see cref="RecommendationResolver"/>).</summary>
     public ObservableCollection<PosterRailItem> MoreLikeThisRail { get; }
 
     public bool HasMoreLikeThis => MoreLikeThisRail.Count > 0;
 
     /// <summary>Any related-media rail has content - drives the Related tab's empty-state.</summary>
-    public bool HasAnyRelatedRail => Related.Count > 0 || SameContinuity.Count > 0 || SameEvent.Count > 0 || MoreLikeThisRail.Count > 0;
+    public bool HasAnyRelatedRail => Related.Count > 0 || SameContinuity.Count > 0 || SameCollection.Count > 0 || SameEvent.Count > 0 || MoreLikeThisRail.Count > 0;
 
     private void RefreshMoreLikeThis(PaperbunkrDbContext context, int seriesId)
     {

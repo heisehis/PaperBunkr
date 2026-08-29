@@ -562,6 +562,130 @@ public class DetailTabsViewModelTests : IDisposable
         Assert.False(vm.HasSameContinuity);
     }
 
+    // --- Collection membership (docs/superpowers/specs/2026-08-27-collections-design.md, step 10) -
+    // byte-for-byte the Continuity tests above. ---
+
+    [Fact]
+    public void LoadSeries_NoCollections_HasSameCollectionFalse_NoChips()
+    {
+        var vm = CreateViewModel();
+
+        vm.LoadSeries(LoadSeriesEntity());
+
+        Assert.False(vm.HasSameCollection);
+        Assert.Empty(vm.SameCollection);
+        Assert.Empty(vm.CollectionChips);
+    }
+
+    [Fact]
+    public void ToggleAddCollection_TogglesPanelState_AndClearsSearch()
+    {
+        var vm = CreateViewModel();
+        vm.LoadSeries(LoadSeriesEntity());
+
+        vm.ToggleAddCollectionCommand.Execute(null);
+        Assert.True(vm.IsAddingCollection);
+
+        vm.ToggleAddCollectionCommand.Execute(null);
+        Assert.False(vm.IsAddingCollection);
+        Assert.Equal(string.Empty, vm.CollectionSearchQuery);
+    }
+
+    [Fact]
+    public void CollectionSearchQuery_NoExistingMatch_OffersCreateNewRow()
+    {
+        var vm = CreateViewModel();
+        vm.LoadSeries(LoadSeriesEntity());
+
+        vm.CollectionSearchQuery = "Favorites";
+
+        var result = Assert.Single(vm.CollectionSearchResults);
+        Assert.True(result.IsNew);
+        Assert.Equal("Favorites", result.Name);
+    }
+
+    [Fact]
+    public void CollectionSearchQuery_ExistingMatch_DoesNotOfferCreateNewRow()
+    {
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            Paperbunkr.Data.Collections.CollectionService.Create(context, "Favorites");
+        }
+        var vm = CreateViewModel();
+        vm.LoadSeries(LoadSeriesEntity());
+
+        vm.CollectionSearchQuery = "favorites"; // case-insensitive substring, matches the exact-name check
+
+        var result = Assert.Single(vm.CollectionSearchResults);
+        Assert.False(result.IsNew);
+    }
+
+    [Fact]
+    public void AddCollection_NewName_CreatesCollectionAndMembership_ClosesPanel()
+    {
+        var vm = CreateViewModel();
+        vm.LoadSeries(LoadSeriesEntity());
+        vm.ToggleAddCollectionCommand.Execute(null);
+        vm.CollectionSearchQuery = "Favorites";
+        var target = Assert.Single(vm.CollectionSearchResults);
+
+        vm.AddCollectionCommand.Execute(target);
+
+        Assert.False(vm.IsAddingCollection);
+        var chip = Assert.Single(vm.CollectionChips);
+        Assert.Equal("Favorites", chip.Name);
+
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        Assert.Single(context.Collections);
+    }
+
+    [Fact]
+    public void AddCollection_ExistingCollection_SameSeriesSharesItAppearsUnderSameCollection()
+    {
+        int otherId = AddOtherSeries("Ultimate Spider-Man");
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            var collection = Paperbunkr.Data.Collections.CollectionService.Create(context, "Favorites");
+            Paperbunkr.Data.Collections.CollectionService.AddItems(context, collection.Id, seriesIds: new[] { otherId });
+        }
+        var vm = CreateViewModel();
+        vm.LoadSeries(LoadSeriesEntity());
+        vm.ToggleAddCollectionCommand.Execute(null);
+        vm.CollectionSearchQuery = "Favorites";
+        var target = Assert.Single(vm.CollectionSearchResults);
+        Assert.False(target.IsNew);
+
+        vm.AddCollectionCommand.Execute(target);
+
+        var sameCollection = Assert.Single(vm.SameCollection);
+        Assert.Equal(otherId, sameCollection.SeriesId);
+        Assert.True(vm.HasSameCollection);
+        Assert.Single(vm.CollectionRail);
+    }
+
+    [Fact]
+    public void RemoveCollection_ClearsChipAndSameCollectionSection()
+    {
+        int otherId = AddOtherSeries("Ultimate Spider-Man");
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            var collection = Paperbunkr.Data.Collections.CollectionService.Create(context, "Favorites");
+            Paperbunkr.Data.Collections.CollectionService.AddItems(context, collection.Id, seriesIds: new[] { otherId });
+        }
+        var vm = CreateViewModel();
+        vm.LoadSeries(LoadSeriesEntity());
+        vm.ToggleAddCollectionCommand.Execute(null);
+        vm.CollectionSearchQuery = "Favorites";
+        vm.AddCollectionCommand.Execute(Assert.Single(vm.CollectionSearchResults));
+        var chip = Assert.Single(vm.CollectionChips);
+
+        vm.RemoveCollectionCommand.Execute(chip);
+
+        Assert.Empty(vm.CollectionChips);
+        Assert.Empty(vm.SameCollection);
+        Assert.False(vm.HasSameCollection);
+    }
+
     // --- Same Event (docs/superpowers/specs/2026-08-17-metadata-model-phase4b-story-events-
     // design.md) - read-only derived section. ---
 

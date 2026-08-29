@@ -247,6 +247,9 @@ public class Issue
 
     public List<IssueCustomValue> CustomValues { get; set; } = new();
 
+    /// <summary>Collections this standalone issue belongs to, via the polymorphic <see cref="CollectionItem"/> join (docs/superpowers/specs/2026-08-27-collections-design.md).</summary>
+    public List<CollectionItem> CollectionItems { get; set; } = new();
+
     /// <summary>Page-labeled bookmarks (docs/superpowers/specs/2026-08-17-metadata-model-phase1-canonical-metadata-design.md), mirrors <see cref="BookBookmark"/>'s shape. BookmarkCount is computed as <c>Bookmarks.Count</c>, never stored.</summary>
     public List<IssueBookmark> Bookmarks { get; set; } = new();
 

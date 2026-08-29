@@ -218,6 +218,7 @@ public partial class DetailScreenViewModel : ViewModelBase, IDetailHeaderSource
 
         Tabs.LoadSeries(series);
         Band.LoadSeries(series, enabledVirtualTags);
+        UpdateBandIssueMarks(series.Issues.FirstOrDefault(i => i.Id == _coverIssueId) ?? series.Issues.FirstOrDefault());
 
         _isLoadingSeries = false;
         RaiseEditStateChanged();
@@ -299,6 +300,7 @@ public partial class DetailScreenViewModel : ViewModelBase, IDetailHeaderSource
             Band.Summary = Summary;
             Band.IsSynopsisExpanded = false;
             Band.LoadIssue(issue, enabledVirtualTags);
+            UpdateBandIssueMarks(issue);
         }
         else
         {
@@ -315,9 +317,19 @@ public partial class DetailScreenViewModel : ViewModelBase, IDetailHeaderSource
             Band.Summary = _seriesSummary;
             Band.IsSynopsisExpanded = false;
             Band.LoadSeries(series, enabledVirtualTags);
+            UpdateBandIssueMarks(series.Issues.FirstOrDefault(i => i.Id == _coverIssueId) ?? series.Issues.FirstOrDefault());
         }
 
         RaiseEditStateChanged();
+    }
+
+    /// <summary>Feeds the band's Format / AgeRating / Special marks from whichever issue is the
+    /// current focus (the selected issue, or the cover issue in whole-series view).</summary>
+    private void UpdateBandIssueMarks(Issue? issue)
+    {
+        Band.FormatText = issue?.Format ?? string.Empty;
+        Band.AgeRatingText = issue?.AgeRating ?? string.Empty;
+        Band.SetSpecialMarks(issue);
     }
 
     private void RaiseEditStateChanged()

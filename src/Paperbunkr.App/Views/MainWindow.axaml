@@ -1,5 +1,6 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:fi="using:FluentIcons.Avalonia"
         xmlns:vm="using:Paperbunkr.App.ViewModels"
         xmlns:views="using:Paperbunkr.App.Views"
         xmlns:models="using:Paperbunkr.App.Models"
@@ -56,20 +57,11 @@
             <Setter Property="FontWeight" Value="Bold" />
         </Style>
 
-        <!-- Rail nav icon: follows the button's own Foreground so the existing
-             pointerover/active Setters (below) recolor the icon along with everything else.
-             Path.pbIcon (Styles/Icons.axaml) instead of the old Border.icon/OpacityMask pattern -
-             Stroke instead of Background is the recolor hook now. -->
-        <Style Selector="Button.rail Path.pbIcon">
-            <Setter Property="Width" Value="20" />
-            <Setter Property="Height" Value="20" />
-            <Setter Property="Stroke" Value="{DynamicResource PbTextFaintBrush}" />
-        </Style>
-        <Style Selector="Button.rail:pointerover Path.pbIcon">
-            <Setter Property="Stroke" Value="{DynamicResource PbTextFaintBrush}" />
-        </Style>
-        <Style Selector="Button.rail.active Path.pbIcon">
-            <Setter Property="Stroke" Value="{DynamicResource PbAccentTextBrush}" />
+        <!-- Rail nav icon: fi:SymbolIcon inherits the button's own Foreground, so the existing
+             Button.rail / Button.rail.active Foreground Setters recolor the icon for free. Only
+             the glyph size needs setting here. -->
+        <Style Selector="Button.rail fi|SymbolIcon">
+            <Setter Property="FontSize" Value="20" />
         </Style>
 
         <!-- Rail expand/collapse (docs/superpowers/specs/2026-08-24-navigation-shell-motion-system-
@@ -190,7 +182,7 @@
                             Command="{Binding GoHomeCommand}" ToolTip.Tip="Home"
                             AutomationProperties.AutomationId="HomeRailButton">
                         <StackPanel Orientation="Horizontal">
-                            <Path Classes="pbIcon" Data="{StaticResource PbIconHome}" />
+                            <fi:SymbolIcon Symbol="Home" />
                             <TextBlock Classes="railLabel" Text="Home" IsVisible="{Binding IsNavRailExpanded}" />
                         </StackPanel>
                     </Button>
@@ -198,7 +190,7 @@
                             Command="{Binding GoLibraryCommand}" ToolTip.Tip="Library"
                             AutomationProperties.AutomationId="LibraryRailButton">
                         <StackPanel Orientation="Horizontal">
-                            <Path Classes="pbIcon" Data="{StaticResource PbIconBook}" />
+                            <fi:SymbolIcon Symbol="Book" />
                             <TextBlock Classes="railLabel" Text="Library" IsVisible="{Binding IsNavRailExpanded}" />
                         </StackPanel>
                     </Button>
@@ -206,28 +198,28 @@
                             Command="{Binding GoBooksCommand}" ToolTip.Tip="Books"
                             AutomationProperties.AutomationId="BooksRailButton">
                         <StackPanel Orientation="Horizontal">
-                            <Path Classes="pbIcon" Data="{StaticResource PbIconBook}" />
+                            <fi:SymbolIcon Symbol="Book" />
                             <TextBlock Classes="railLabel" Text="Books" IsVisible="{Binding IsNavRailExpanded}" />
                         </StackPanel>
                     </Button>
                     <Button Classes="rail" Classes.active="{Binding IsSmart}"
                             Command="{Binding GoSmartCommand}" ToolTip.Tip="Smart Lists">
                         <StackPanel Orientation="Horizontal">
-                            <Path Classes="pbIcon" Data="{StaticResource PbIconFilter}" />
+                            <fi:SymbolIcon Symbol="Filter" />
                             <TextBlock Classes="railLabel" Text="Smart Lists" IsVisible="{Binding IsNavRailExpanded}" />
                         </StackPanel>
                     </Button>
                     <Button Classes="rail" Classes.active="{Binding IsReading}"
                             Command="{Binding GoReadingCommand}" ToolTip.Tip="Reading Lists">
                         <StackPanel Orientation="Horizontal">
-                            <Path Classes="pbIcon" Data="{StaticResource PbIconBookmark}" />
+                            <fi:SymbolIcon Symbol="Bookmark" />
                             <TextBlock Classes="railLabel" Text="Reading Lists" IsVisible="{Binding IsNavRailExpanded}" />
                         </StackPanel>
                     </Button>
                     <Button Classes="rail" Classes.active="{Binding IsEvents}"
                             Command="{Binding GoEventsCommand}" ToolTip.Tip="Continuity">
                         <StackPanel Orientation="Horizontal">
-                            <Path Classes="pbIcon" Data="{StaticResource PbIconStar}" />
+                            <fi:SymbolIcon Symbol="Star" />
                             <TextBlock Classes="railLabel" Text="Continuity" IsVisible="{Binding IsNavRailExpanded}" />
                         </StackPanel>
                     </Button>
@@ -239,13 +231,13 @@
                          is the one place they're always reachable regardless of what's on screen. -->
                     <Button Classes="rail" Command="{Binding UndoCommand}" ToolTip.Tip="Undo last metadata edit">
                         <StackPanel Orientation="Horizontal">
-                            <Path Classes="pbIcon" Data="{StaticResource PbIconUndo}" />
+                            <fi:SymbolIcon Symbol="ArrowUndo" />
                             <TextBlock Classes="railLabel" Text="Undo" IsVisible="{Binding IsNavRailExpanded}" />
                         </StackPanel>
                     </Button>
                     <Button Classes="rail" Command="{Binding RedoCommand}" ToolTip.Tip="Redo">
                         <StackPanel Orientation="Horizontal">
-                            <Path Classes="pbIcon" Data="{StaticResource PbIconUndo}" RenderTransform="scaleX(-1)" />
+                            <fi:SymbolIcon Symbol="ArrowUndo" RenderTransform="scaleX(-1)" />
                             <TextBlock Classes="railLabel" Text="Redo" IsVisible="{Binding IsNavRailExpanded}" />
                         </StackPanel>
                     </Button>
@@ -254,7 +246,7 @@
                             Command="{Binding GoPreferencesCommand}" ToolTip.Tip="Preferences"
                             AutomationProperties.AutomationId="PreferencesRailButton">
                         <StackPanel Orientation="Horizontal">
-                            <Path Classes="pbIcon" Data="{StaticResource PbIconSettings}" />
+                            <fi:SymbolIcon Symbol="Settings" />
                             <TextBlock Classes="railLabel" Text="Preferences" IsVisible="{Binding IsNavRailExpanded}" />
                         </StackPanel>
                     </Button>
@@ -262,7 +254,7 @@
                             Command="{Binding ToggleNavRailPinCommand}"
                             ToolTip.Tip="Pin nav rail open" IsVisible="{Binding IsNavRailExpanded}">
                         <StackPanel Orientation="Horizontal">
-                            <Path Classes="pbIcon" Data="{StaticResource PbIconPin}" />
+                            <fi:SymbolIcon Symbol="Pin" />
                             <TextBlock Classes="railLabel" Text="Pin" IsVisible="{Binding !NavRailPinned}" />
                             <TextBlock Classes="railLabel" Text="Unpin" IsVisible="{Binding NavRailPinned}" />
                         </StackPanel>
@@ -374,14 +366,8 @@
                                         <Button Grid.Column="1" Classes="headerAction ghost" Padding="6" Margin="2,0,0,0"
                                                 Command="{Binding DeleteConfirm.TriggerCommand}" ToolTip.Tip="{Binding DeleteConfirm.Label}">
                                             <Panel>
-                                                <Border Classes="icon" Width="11" Height="11" Background="{DynamicResource PbTextFaintBrush}"
-                                                        IsVisible="{Binding !DeleteConfirm.IsArmed}">
-                                                    <Border.OpacityMask><ImageBrush Source="/Assets/Icons/Trash_Empty.png" Stretch="Uniform" /></Border.OpacityMask>
-                                                </Border>
-                                                <Border Classes="icon" Width="11" Height="11" Background="{DynamicResource PbBadgeBrush}"
-                                                        IsVisible="{Binding DeleteConfirm.IsArmed}">
-                                                    <Border.OpacityMask><ImageBrush Source="/Assets/Icons/Trash_Empty.png" Stretch="Uniform" /></Border.OpacityMask>
-                                                </Border>
+                                                <fi:SymbolIcon Symbol="Delete" FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" IsVisible="{Binding !DeleteConfirm.IsArmed}" />
+                                                <fi:SymbolIcon Symbol="Delete" FontSize="11" Foreground="{DynamicResource PbBadgeBrush}" IsVisible="{Binding DeleteConfirm.IsArmed}" />
                                             </Panel>
                                         </Button>
                                     </Grid>
@@ -422,11 +408,7 @@
                                     Command="{Binding Smart.CreateNewCommand}"
                                     Foreground="{DynamicResource PbTextFaintBrush}">
                                 <StackPanel Orientation="Horizontal" Spacing="6" HorizontalAlignment="Center">
-                                    <Border Classes="icon" Width="11" Height="11" Background="{DynamicResource PbTextFaintBrush}">
-                                        <Border.OpacityMask>
-                                            <ImageBrush Source="/Assets/Icons/Add_Plus.png" Stretch="Uniform" />
-                                        </Border.OpacityMask>
-                                    </Border>
+                                    <fi:SymbolIcon Symbol="Add" FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" />
                                     <TextBlock Text="New Smart List" FontSize="12" />
                                 </StackPanel>
                             </Button>
@@ -460,7 +442,7 @@
                                     Background="{DynamicResource PbSurface2Brush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
                                     Command="{Binding OpenNewReadingListDialogCommand}" ToolTip.Tip="New reading list"
                                     AutomationProperties.AutomationId="NewReadingListButton">
-                                <Path Classes="pbIcon" Width="11" Height="11" Data="{StaticResource PbIconPlus}" />
+                                <fi:SymbolIcon Symbol="Add" FontSize="11" />
                             </Button>
                         </Grid>
 
@@ -495,14 +477,8 @@
                                                     VerticalAlignment="Center"
                                                     Command="{Binding DeleteConfirm.TriggerCommand}" ToolTip.Tip="{Binding DeleteConfirm.Label}">
                                                 <Panel>
-                                                    <Border Classes="icon" Width="11" Height="11" Background="{DynamicResource PbTextFaintBrush}"
-                                                            IsVisible="{Binding !DeleteConfirm.IsArmed}">
-                                                        <Border.OpacityMask><ImageBrush Source="/Assets/Icons/Trash_Empty.png" Stretch="Uniform" /></Border.OpacityMask>
-                                                    </Border>
-                                                    <Border Classes="icon" Width="11" Height="11" Background="{DynamicResource PbBadgeBrush}"
-                                                            IsVisible="{Binding DeleteConfirm.IsArmed}">
-                                                        <Border.OpacityMask><ImageBrush Source="/Assets/Icons/Trash_Empty.png" Stretch="Uniform" /></Border.OpacityMask>
-                                                    </Border>
+                                                    <fi:SymbolIcon Symbol="Delete" FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" IsVisible="{Binding !DeleteConfirm.IsArmed}" />
+                                                    <fi:SymbolIcon Symbol="Delete" FontSize="11" Foreground="{DynamicResource PbBadgeBrush}" IsVisible="{Binding DeleteConfirm.IsArmed}" />
                                                 </Panel>
                                             </Button>
                                         </Grid>
@@ -528,7 +504,7 @@
                             <TextBlock Grid.Column="0" Text="Events &amp; Continuity" FontSize="15" FontWeight="Bold" Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
                             <Button Grid.Column="1" Width="24" Height="24" Padding="0" CornerRadius="6"
                                     Background="{DynamicResource PbSurface2Brush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1" ToolTip.Tip="New...">
-                                <Path Classes="pbIcon" Width="11" Height="11" Data="{StaticResource PbIconPlus}" />
+                                <fi:SymbolIcon Symbol="Add" FontSize="11" />
                                 <Button.Flyout>
                                     <MenuFlyout>
                                         <MenuItem Header="New event" Command="{Binding OpenNewEventDialogCommand}" CommandParameter="Event" />
@@ -553,12 +529,8 @@
                                             <Button Grid.Column="1" Classes="headerAction ghost ecDelete" Padding="6" Margin="2,0,4,0" VerticalAlignment="Center"
                                                     Command="{Binding DeleteConfirm.TriggerCommand}" ToolTip.Tip="{Binding DeleteConfirm.Label}">
                                                 <Panel>
-                                                    <Border Classes="icon" Width="11" Height="11" Background="{DynamicResource PbTextFaintBrush}" IsVisible="{Binding !DeleteConfirm.IsArmed}">
-                                                        <Border.OpacityMask><ImageBrush Source="/Assets/Icons/Trash_Empty.png" Stretch="Uniform" /></Border.OpacityMask>
-                                                    </Border>
-                                                    <Border Classes="icon" Width="11" Height="11" Background="{DynamicResource PbBadgeBrush}" IsVisible="{Binding DeleteConfirm.IsArmed}">
-                                                        <Border.OpacityMask><ImageBrush Source="/Assets/Icons/Trash_Empty.png" Stretch="Uniform" /></Border.OpacityMask>
-                                                    </Border>
+                                                    <fi:SymbolIcon Symbol="Delete" FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" IsVisible="{Binding !DeleteConfirm.IsArmed}" />
+                                                    <fi:SymbolIcon Symbol="Delete" FontSize="11" Foreground="{DynamicResource PbBadgeBrush}" IsVisible="{Binding DeleteConfirm.IsArmed}" />
                                                 </Panel>
                                             </Button>
                                         </Grid>
@@ -584,12 +556,8 @@
                                             <Button Grid.Column="1" Classes="headerAction ghost ecDelete" Padding="6" Margin="2,0,4,0" VerticalAlignment="Center"
                                                     Command="{Binding DeleteConfirm.TriggerCommand}" ToolTip.Tip="{Binding DeleteConfirm.Label}">
                                                 <Panel>
-                                                    <Border Classes="icon" Width="11" Height="11" Background="{DynamicResource PbTextFaintBrush}" IsVisible="{Binding !DeleteConfirm.IsArmed}">
-                                                        <Border.OpacityMask><ImageBrush Source="/Assets/Icons/Trash_Empty.png" Stretch="Uniform" /></Border.OpacityMask>
-                                                    </Border>
-                                                    <Border Classes="icon" Width="11" Height="11" Background="{DynamicResource PbBadgeBrush}" IsVisible="{Binding DeleteConfirm.IsArmed}">
-                                                        <Border.OpacityMask><ImageBrush Source="/Assets/Icons/Trash_Empty.png" Stretch="Uniform" /></Border.OpacityMask>
-                                                    </Border>
+                                                    <fi:SymbolIcon Symbol="Delete" FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" IsVisible="{Binding !DeleteConfirm.IsArmed}" />
+                                                    <fi:SymbolIcon Symbol="Delete" FontSize="11" Foreground="{DynamicResource PbBadgeBrush}" IsVisible="{Binding DeleteConfirm.IsArmed}" />
                                                 </Panel>
                                             </Button>
                                         </Grid>
@@ -698,11 +666,7 @@
                     Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
                     Command="{Binding CloseMigrationOverlayCommand}" ToolTip.Tip="Close"
                     AutomationProperties.AutomationId="MigrationOverlayCloseButton">
-                <Border Classes="icon" Width="13" Height="13">
-                    <Border.OpacityMask>
-                        <ImageBrush Source="/Assets/Icons/Close_Circle.png" Stretch="Uniform" />
-                    </Border.OpacityMask>
-                </Border>
+                <fi:SymbolIcon Symbol="DismissCircle" FontSize="13" />
             </Button>
         </Grid>
     </Border>
@@ -718,11 +682,7 @@
                     Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
                     Command="{Binding CloseReadingListPropertiesOverlayCommand}" ToolTip.Tip="Close"
                     AutomationProperties.AutomationId="ReadingListPropertiesOverlayCloseButton">
-                <Border Classes="icon" Width="13" Height="13">
-                    <Border.OpacityMask>
-                        <ImageBrush Source="/Assets/Icons/Close_Circle.png" Stretch="Uniform" />
-                    </Border.OpacityMask>
-                </Border>
+                <fi:SymbolIcon Symbol="DismissCircle" FontSize="13" />
             </Button>
         </Grid>
     </Border>
@@ -737,11 +697,7 @@
                     Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
                     Command="{Binding CloseNewReadingListDialogCommand}" ToolTip.Tip="Close"
                     AutomationProperties.AutomationId="NewReadingListOverlayCloseButton">
-                <Border Classes="icon" Width="13" Height="13">
-                    <Border.OpacityMask>
-                        <ImageBrush Source="/Assets/Icons/Close_Circle.png" Stretch="Uniform" />
-                    </Border.OpacityMask>
-                </Border>
+                <fi:SymbolIcon Symbol="DismissCircle" FontSize="13" />
             </Button>
         </Grid>
     </Border>
@@ -755,11 +711,7 @@
                     HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-14,-14,0"
                     Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
                     Command="{Binding CloseNewEventDialogCommand}" ToolTip.Tip="Close">
-                <Border Classes="icon" Width="13" Height="13">
-                    <Border.OpacityMask>
-                        <ImageBrush Source="/Assets/Icons/Close_Circle.png" Stretch="Uniform" />
-                    </Border.OpacityMask>
-                </Border>
+                <fi:SymbolIcon Symbol="DismissCircle" FontSize="13" />
             </Button>
         </Grid>
     </Border>
@@ -774,11 +726,7 @@
                     Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
                     Command="{Binding CloseBookPropertiesOverlayCommand}" ToolTip.Tip="Close"
                     AutomationProperties.AutomationId="BookPropertiesOverlayCloseButton">
-                <Border Classes="icon" Width="13" Height="13">
-                    <Border.OpacityMask>
-                        <ImageBrush Source="/Assets/Icons/Close_Circle.png" Stretch="Uniform" />
-                    </Border.OpacityMask>
-                </Border>
+                <fi:SymbolIcon Symbol="DismissCircle" FontSize="13" />
             </Button>
         </Grid>
     </Border>
@@ -793,11 +741,7 @@
                     Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
                     Command="{Binding CloseBulkBookPropertiesOverlayCommand}" ToolTip.Tip="Close"
                     AutomationProperties.AutomationId="BulkBookPropertiesOverlayCloseButton">
-                <Border Classes="icon" Width="13" Height="13">
-                    <Border.OpacityMask>
-                        <ImageBrush Source="/Assets/Icons/Close_Circle.png" Stretch="Uniform" />
-                    </Border.OpacityMask>
-                </Border>
+                <fi:SymbolIcon Symbol="DismissCircle" FontSize="13" />
             </Button>
         </Grid>
     </Border>
@@ -812,11 +756,7 @@
                     Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
                     Command="{Binding CloseBookSeriesPropertiesOverlayCommand}" ToolTip.Tip="Close"
                     AutomationProperties.AutomationId="BookSeriesPropertiesOverlayCloseButton">
-                <Border Classes="icon" Width="13" Height="13">
-                    <Border.OpacityMask>
-                        <ImageBrush Source="/Assets/Icons/Close_Circle.png" Stretch="Uniform" />
-                    </Border.OpacityMask>
-                </Border>
+                <fi:SymbolIcon Symbol="DismissCircle" FontSize="13" />
             </Button>
         </Grid>
     </Border>
@@ -831,11 +771,7 @@
                     Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
                     Command="{Binding CloseQuickRateOverlayCommand}" ToolTip.Tip="Close"
                     AutomationProperties.AutomationId="QuickRateOverlayCloseButton">
-                <Border Classes="icon" Width="13" Height="13">
-                    <Border.OpacityMask>
-                        <ImageBrush Source="/Assets/Icons/Close_Circle.png" Stretch="Uniform" />
-                    </Border.OpacityMask>
-                </Border>
+                <fi:SymbolIcon Symbol="DismissCircle" FontSize="13" />
             </Button>
         </Grid>
     </Border>
@@ -850,11 +786,7 @@
                     Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
                     Command="{Binding CloseDesignShowcaseOverlayCommand}" ToolTip.Tip="Close"
                     AutomationProperties.AutomationId="DesignShowcaseOverlayCloseButton">
-                <Border Classes="icon" Width="13" Height="13">
-                    <Border.OpacityMask>
-                        <ImageBrush Source="/Assets/Icons/Close_Circle.png" Stretch="Uniform" />
-                    </Border.OpacityMask>
-                </Border>
+                <fi:SymbolIcon Symbol="DismissCircle" FontSize="13" />
             </Button>
         </Grid>
     </Border>
@@ -870,11 +802,7 @@
                     Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
                     Command="{Binding CloseIssuePropertiesOverlayCommand}" ToolTip.Tip="Close"
                     AutomationProperties.AutomationId="IssuePropertiesOverlayCloseButton">
-                <Border Classes="icon" Width="13" Height="13">
-                    <Border.OpacityMask>
-                        <ImageBrush Source="/Assets/Icons/Close_Circle.png" Stretch="Uniform" />
-                    </Border.OpacityMask>
-                </Border>
+                <fi:SymbolIcon Symbol="DismissCircle" FontSize="13" />
             </Button>
         </Grid>
     </Border>
@@ -889,11 +817,7 @@
                     Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
                     Command="{Binding CloseBulkIssuePropertiesOverlayCommand}" ToolTip.Tip="Close"
                     AutomationProperties.AutomationId="BulkIssuePropertiesOverlayCloseButton">
-                <Border Classes="icon" Width="13" Height="13">
-                    <Border.OpacityMask>
-                        <ImageBrush Source="/Assets/Icons/Close_Circle.png" Stretch="Uniform" />
-                    </Border.OpacityMask>
-                </Border>
+                <fi:SymbolIcon Symbol="DismissCircle" FontSize="13" />
             </Button>
         </Grid>
     </Border>
@@ -908,11 +832,7 @@
                     Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
                     Command="{Binding CloseBulkSeriesPropertiesOverlayCommand}" ToolTip.Tip="Close"
                     AutomationProperties.AutomationId="BulkSeriesPropertiesOverlayCloseButton">
-                <Border Classes="icon" Width="13" Height="13">
-                    <Border.OpacityMask>
-                        <ImageBrush Source="/Assets/Icons/Close_Circle.png" Stretch="Uniform" />
-                    </Border.OpacityMask>
-                </Border>
+                <fi:SymbolIcon Symbol="DismissCircle" FontSize="13" />
             </Button>
         </Grid>
     </Border>
@@ -926,11 +846,7 @@
                 BorderThickness="1" CornerRadius="8" Padding="20">
             <StackPanel Spacing="14">
                 <StackPanel Orientation="Horizontal" Spacing="8">
-                    <Border Classes="icon" Width="18" Height="18" Background="#D96C6C">
-                        <Border.OpacityMask>
-                            <ImageBrush Source="/Assets/Icons/Circle_Warning.png" Stretch="Uniform" />
-                        </Border.OpacityMask>
-                    </Border>
+                    <fi:SymbolIcon Symbol="Warning" FontSize="18" Foreground="#D96C6C" />
                     <TextBlock Text="Unsaved changes" FontSize="15" FontWeight="Bold"
                                Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
                 </StackPanel>

@@ -1,5 +1,6 @@
 <Styles xmlns="https://github.com/avaloniaui"
-        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="using:Paperbunkr.App.Controls">
     <!--
         Type scale (docs/superpowers/specs/2026-08-24-design-language-foundation-design.md
         Typography section). Hero/Heading use PbDisplayFontFamily (Bebas Neue) directly via
@@ -7,7 +8,58 @@
         the Preferences font picker. Body/Caption inherit the app-wide {DynamicResource PbFontFamily}
         default already set on TextBlock in App.axaml, so they don't need to set FontFamily
         themselves - only size/weight/color differ.
+
+        SplitText (docs/superpowers/specs/2026-08-28-home-screen-redesign-design.md §5) is the
+        RGB-misregistration display treatment - its implicit ControlTheme lives here since it is,
+        in effect, a fourth entry in the type scale.
     -->
+    <Styles.Resources>
+        <ControlTheme x:Key="{x:Type controls:SplitText}" TargetType="controls:SplitText">
+            <Setter Property="FontFamily" Value="{StaticResource PbDisplayFontFamily}" />
+            <Setter Property="FontSize" Value="22" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextBrush}" />
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Panel>
+                        <TextBlock Name="PART_Red" Text="{TemplateBinding Text}" IsHitTestVisible="False"
+                                   FontFamily="{TemplateBinding FontFamily}" FontSize="{TemplateBinding FontSize}"
+                                   FontWeight="{TemplateBinding FontWeight}" LineHeight="{TemplateBinding FontSize}"
+                                   TextWrapping="Wrap" MaxLines="2" TextTrimming="CharacterEllipsis"
+                                   Foreground="#FFFF2E3A" Opacity="0.5" RenderTransform="translateX(-1px)">
+                            <TextBlock.Transitions>
+                                <Transitions>
+                                    <TransformOperationsTransition Property="RenderTransform" Duration="{DynamicResource PbMotionFast}" />
+                                </Transitions>
+                            </TextBlock.Transitions>
+                        </TextBlock>
+                        <TextBlock Name="PART_Cyan" Text="{TemplateBinding Text}" IsHitTestVisible="False"
+                                   FontFamily="{TemplateBinding FontFamily}" FontSize="{TemplateBinding FontSize}"
+                                   FontWeight="{TemplateBinding FontWeight}" LineHeight="{TemplateBinding FontSize}"
+                                   TextWrapping="Wrap" MaxLines="2" TextTrimming="CharacterEllipsis"
+                                   Foreground="#FF25C8FF" Opacity="0.5" RenderTransform="translateX(1px)">
+                            <TextBlock.Transitions>
+                                <Transitions>
+                                    <TransformOperationsTransition Property="RenderTransform" Duration="{DynamicResource PbMotionFast}" />
+                                </Transitions>
+                            </TextBlock.Transitions>
+                        </TextBlock>
+                        <TextBlock Name="PART_Main" Text="{TemplateBinding Text}"
+                                   FontFamily="{TemplateBinding FontFamily}" FontSize="{TemplateBinding FontSize}"
+                                   FontWeight="{TemplateBinding FontWeight}" LineHeight="{TemplateBinding FontSize}"
+                                   TextWrapping="Wrap" MaxLines="2" TextTrimming="CharacterEllipsis"
+                                   Foreground="{TemplateBinding Foreground}" />
+                    </Panel>
+                </ControlTemplate>
+            </Setter>
+
+            <Style Selector="^:pointerover /template/ TextBlock#PART_Red">
+                <Setter Property="RenderTransform" Value="translateX(-2px)" />
+            </Style>
+            <Style Selector="^:pointerover /template/ TextBlock#PART_Cyan">
+                <Setter Property="RenderTransform" Value="translateX(2px)" />
+            </Style>
+        </ControlTheme>
+    </Styles.Resources>
 
     <Style Selector="TextBlock.pbTextHero">
         <Setter Property="FontFamily" Value="{StaticResource PbDisplayFontFamily}" />
@@ -31,5 +83,12 @@
     <Style Selector="TextBlock.pbTextCaption">
         <Setter Property="FontSize" Value="11" />
         <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
+    </Style>
+
+    <Style Selector="controls|SplitText.hero">
+        <Setter Property="FontSize" Value="42" />
+    </Style>
+    <Style Selector="controls|SplitText.heading">
+        <Setter Property="FontSize" Value="22" />
     </Style>
 </Styles>

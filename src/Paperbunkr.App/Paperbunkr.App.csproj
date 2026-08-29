@@ -44,6 +44,10 @@
     <PackageReference Include="Optris.Icons.Avalonia" Version="12.0.7" />
     <PackageReference Include="Optris.Icons.Avalonia.FontAwesome" Version="12.0.7" />
     <PackageReference Include="Optris.Icons.Avalonia.MaterialDesign" Version="12.0.7" />
+    <!-- Svg.Skia 5.1.0 pins SkiaSharp 3.119.2 / HarfBuzzSharp 8.3.1.3 - matches Avalonia 12.1.1's
+         own SkiaSharp/HarfBuzzSharp (5.2.x jumps to SkiaSharp 4.x and conflicts). Used to rasterise
+         the bundled brand/flag SVGs into cached Bitmaps (Services/SvgMarkRenderer.cs). -->
+    <PackageReference Include="Svg.Skia" Version="5.1.0" />
   </ItemGroup>
 
   <ItemGroup>

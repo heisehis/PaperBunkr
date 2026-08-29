@@ -1,5 +1,6 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:fi="using:FluentIcons.Avalonia"
              xmlns:vm="using:Paperbunkr.App.ViewModels"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -16,11 +17,7 @@
     <Grid>
         <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="6" MaxWidth="360"
                     IsVisible="{Binding !HasPlugins}">
-            <Border Classes="icon" Width="40" Height="40" Margin="0,0,0,10" HorizontalAlignment="Center">
-                <Border.OpacityMask>
-                    <ImageBrush Source="/Assets/Icons/Puzzle.png" Stretch="Uniform" />
-                </Border.OpacityMask>
-            </Border>
+            <fi:SymbolIcon Symbol="PuzzlePiece" FontSize="40" Margin="0,0,0,10" HorizontalAlignment="Center" />
             <TextBlock Text="Plugins" FontSize="22" FontWeight="Bold" Foreground="{DynamicResource PbTextBrush}"
                        HorizontalAlignment="Center" />
             <TextBlock Text="No plugins installed yet." FontSize="13" Foreground="{DynamicResource PbTextMutedBrush}"
@@ -73,13 +70,9 @@
                                                             Command="{Binding RunCommand}"
                                                             ToolTip.Tip="Runs this command now and shows its result as a toast - this hook needs no live selection/context, so it can be triggered on demand." />
 
-                                                    <Border Grid.Column="4" Classes="icon" Width="16" Height="16"
+                                                    <fi:SymbolIcon Grid.Column="4" Symbol="Settings" FontSize="16"
                                                             VerticalAlignment="Top" IsVisible="{Binding HasConfigure}"
-                                                            ToolTip.Tip="This command has its own configuration script.">
-                                                        <Border.OpacityMask>
-                                                            <ImageBrush Source="/Assets/Icons/Settings.png" Stretch="Uniform" />
-                                                        </Border.OpacityMask>
-                                                    </Border>
+                                                            ToolTip.Tip="This command has its own configuration script." />
                                                 </Grid>
                                             </DataTemplate>
                                         </ItemsControl.ItemTemplate>

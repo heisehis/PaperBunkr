@@ -1341,7 +1341,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
     }
 
     /// <summary>Context-menu "Add to Reading List ▸ &lt;list&gt;". Acts on the right-click union
-    /// (current selection ∩ the right-clicked issue), unlike the selection-only action-bar
+    /// (current selection ∪ the right-clicked issue), unlike the selection-only action-bar
     /// <see cref="AddSelectionToReadingListCommand"/>. Parameter is <c>(issueId, readingListId)</c>.</summary>
     [RelayCommand]
     private void AddIssueToReadingList((int IssueId, int ReadingListId) target)

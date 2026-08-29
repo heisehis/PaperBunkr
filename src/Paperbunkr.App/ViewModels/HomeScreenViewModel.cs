@@ -1,6 +1,9 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
+using Avalonia;
+using Avalonia.Media.Imaging;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -55,8 +58,20 @@ public partial class HomeScreenViewModel : ViewModelBase
         _spotlightTimer.Tick += (_, _) => AdvanceSpotlight();
         _spotlightTimer.Start();
 
+        SpotlightHeader = new HomeSpotlightHeaderSource(() => CurrentSpotlight, OpenSpotlightCommand);
+
         LoadFromDatabase();
     }
+
+    /// <summary>The spotlight pick adapted to <see cref="IDetailHeaderSource"/> so the Home hero
+    /// renders through the shared <c>DetailHero</c> control (docs/superpowers/specs/
+    /// 2026-08-28-home-screen-redesign-design.md §3).</summary>
+    public HomeSpotlightHeaderSource SpotlightHeader { get; }
+
+    /// <summary>The blurred "cover-wall" behind the masthead - null until the first load, and null
+    /// on a library with no covers (the view falls back to a flat gradient).</summary>
+    [ObservableProperty]
+    private Bitmap? _mastheadBackdrop;
 
     public ObservableCollection<HomeContinueReadingCard> ContinueReading { get; }
 
@@ -80,7 +95,11 @@ public partial class HomeScreenViewModel : ViewModelBase
     public SpotlightIssueSample? CurrentSpotlight =>
         SpotlightIndex >= 0 && SpotlightIndex < SpotlightItems.Count ? SpotlightItems[SpotlightIndex] : null;
 
-    partial void OnSpotlightIndexChanged(int value) => OnPropertyChanged(nameof(CurrentSpotlight));
+    partial void OnSpotlightIndexChanged(int value)
+    {
+        OnPropertyChanged(nameof(CurrentSpotlight));
+        SpotlightHeader.RaiseChanged();
+    }
 
     private void AdvanceSpotlight()
     {
@@ -215,6 +234,9 @@ public partial class HomeScreenViewModel : ViewModelBase
 
         SpotlightIndex = 0;
         OnPropertyChanged(nameof(CurrentSpotlight)); // SetProperty no-ops above if the index was already 0
+        SpotlightHeader.RaiseChanged();
+
+        MastheadBackdrop = BuildMastheadBackdrop();
 
         var spotlightList = HomeFeedResolver.GetReadingListSpotlight(context, _random);
         ReadingListSpotlight = spotlightList is null ? null : ReadingListSpotlightSample.FromReadingList(spotlightList);
@@ -227,6 +249,48 @@ public partial class HomeScreenViewModel : ViewModelBase
     }
 
     partial void OnReadingListSpotlightChanged(ReadingListSpotlightSample? value) => OnPropertyChanged(nameof(HasReadingListSpotlight));
+
+    /// <summary>Gathers up to 8 cover thumbnails already loaded for this visit (Recently Added,
+    /// Because You Read, Continue Reading, Spotlight) and composes the blurred masthead cover-wall
+    /// (docs/superpowers/specs/2026-08-28-home-screen-redesign-design.md §2). Returns null on a
+    /// library with no covers - the view then shows a flat gradient.</summary>
+    private Bitmap? BuildMastheadBackdrop()
+    {
+        var covers = new List<Bitmap>();
+
+        void TryAdd(Bitmap? bmp)
+        {
+            if (bmp is not null && covers.Count < 8 && !covers.Contains(bmp))
+            {
+                covers.Add(bmp);
+            }
+        }
+
+        foreach (var card in RecentlyAdded)
+        {
+            TryAdd(card.CoverIssueId is int id ? CoverImageCache.Get(id) : null);
+        }
+
+        foreach (var row in BecauseYouRead)
+        {
+            foreach (var card in row.Cards)
+            {
+                TryAdd(card.CoverIssueId is int id ? CoverImageCache.Get(id) : null);
+            }
+        }
+
+        foreach (var card in ContinueReading)
+        {
+            TryAdd(card.Series.CoverIssueId is int id ? CoverImageCache.Get(id) : null);
+        }
+
+        foreach (var item in SpotlightItems)
+        {
+            TryAdd(item.CoverImage);
+        }
+
+        return covers.Count == 0 ? null : CoverWallRenderer.Render(covers, new PixelSize(1600, 460));
+    }
 
     [RelayCommand]
     private void OpenContinueReading(int issueId) => _goReaderForIssue(issueId);

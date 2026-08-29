@@ -1,5 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:pbc="using:Paperbunkr.App.Controls"
+             xmlns:fi="using:FluentIcons.Avalonia"
              xmlns:vm="using:Paperbunkr.App.ViewModels"
              xmlns:models="using:Paperbunkr.App.Models"
              xmlns:views="using:Paperbunkr.App.Views"
@@ -91,9 +93,7 @@
                       Command="{Binding #Root.((vm:DetailTabsViewModel)DataContext).EditIssuePropertiesCommand}"
                       CommandParameter="{Binding}">
                 <MenuItem.Icon>
-                    <Border Classes="icon" Width="13" Height="13">
-                        <Border.OpacityMask><ImageBrush Source="/Assets/Icons/Edit_Pencil.png" Stretch="Uniform" /></Border.OpacityMask>
-                    </Border>
+                    <fi:SymbolIcon Symbol="Edit" FontSize="13" />
                 </MenuItem.Icon>
             </MenuItem>
             <MenuItem Header="Show in Explorer"
@@ -238,17 +238,17 @@
                                         <Button Classes="creditName"
                                                 Command="{Binding #Root.((vm:DetailTabsViewModel)DataContext).MarkIssueReadCommand}"
                                                 CommandParameter="{Binding}" ToolTip.Tip="Mark read">
-                                            <Path Classes="pbIcon" Data="{StaticResource PbIconCheck}" Width="13" Height="13" />
+                                            <fi:SymbolIcon Symbol="Checkmark" FontSize="13" />
                                         </Button>
                                         <Button Classes="creditName"
                                                 Command="{Binding #Root.((vm:DetailTabsViewModel)DataContext).EditIssuePropertiesCommand}"
                                                 CommandParameter="{Binding}" ToolTip.Tip="Edit">
-                                            <Path Classes="pbIcon" Data="{StaticResource PbIconEdit}" Width="13" Height="13" />
+                                            <fi:SymbolIcon Symbol="Edit" FontSize="13" />
                                         </Button>
                                         <Button Classes="creditName"
                                                 Command="{Binding #Root.((vm:DetailTabsViewModel)DataContext).RevealIssueCommand}"
                                                 CommandParameter="{Binding}" IsEnabled="{Binding HasFile}" ToolTip.Tip="Show in Explorer">
-                                            <Path Classes="pbIcon" Data="{StaticResource PbIconFolderOpen}" Width="13" Height="13" />
+                                            <fi:SymbolIcon Symbol="FolderOpen" FontSize="13" />
                                         </Button>
                                     </StackPanel>
                                 </StackPanel>
@@ -361,7 +361,8 @@
         <Grid IsVisible="{Binding IsDetailsTab}" ColumnDefinitions="*,*" Margin="0,20,0,0">
             <StackPanel Grid.Column="0" Margin="0,0,28,0">
                 <TextBlock Text="PUBLISHER" FontSize="10.5" Foreground="{DynamicResource PbTextFaintBrush}" Margin="0,0,0,4" />
-                <TextBlock Text="{Binding Publisher}" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
+                <pbc:BrandMark Family="Publisher" Value="{Binding Publisher}" ShowText="True" MarkSize="16"
+                               HorizontalAlignment="Left" Foreground="{DynamicResource PbTextBrush}" />
             </StackPanel>
             <StackPanel Grid.Column="1">
                 <TextBlock Text="READING MODE" FontSize="10.5" Foreground="{DynamicResource PbTextFaintBrush}" Margin="0,0,0,4" />

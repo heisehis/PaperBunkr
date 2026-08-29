@@ -36,6 +36,12 @@ public interface IDetailHeaderSource : INotifyPropertyChanged
     /// <summary>Single dot-separated meta line, e.g. "Image · Ongoing · 66 issues · 12 unread".</summary>
     string MetaLine { get; }
 
+    /// <summary>Optional body line under <see cref="MetaLine"/> - a written synopsis / blurb. Null or
+    /// empty hides it. Default null so the three detail-screen ViewModels are unaffected until they
+    /// opt in; the Home spotlight adapter sets it (docs/superpowers/specs/2026-08-28-home-screen-
+    /// redesign-design.md §3).</summary>
+    string? Synopsis => null;
+
     /// <summary>Ordered action buttons; first <c>IsPrimary</c> one is the accent button.</summary>
     IReadOnlyList<DetailHeroAction> Actions { get; }
 

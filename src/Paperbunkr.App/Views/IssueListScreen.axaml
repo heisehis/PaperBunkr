@@ -1,5 +1,6 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:pbc="using:Paperbunkr.App.Controls"
              xmlns:vm="using:Paperbunkr.App.ViewModels"
              xmlns:models="using:Paperbunkr.App.Models"
              xmlns:entities="using:Paperbunkr.Data.Entities"
@@ -19,7 +20,8 @@
                     <TextBlock Grid.Column="2" Text="{Binding Title}" VerticalAlignment="Center" FontSize="12.5" Margin="8,0" TextTrimming="CharacterEllipsis" />
                     <TextBlock Grid.Column="3" Text="{Binding SeriesName}" VerticalAlignment="Center" FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" TextTrimming="CharacterEllipsis" />
                     <TextBlock Grid.Column="4" Text="{Binding Writer}" VerticalAlignment="Center" FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" TextTrimming="CharacterEllipsis" />
-                    <TextBlock Grid.Column="5" Text="{Binding Publisher}" VerticalAlignment="Center" FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" TextTrimming="CharacterEllipsis" />
+                    <pbc:BrandMark Grid.Column="5" Family="Publisher" Value="{Binding Publisher}" ShowText="True"
+                                   MarkSize="13" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
                     <TextBlock Grid.Column="6" Text="{Binding AddedTime, StringFormat='{}{0:yyyy-MM-dd}'}" VerticalAlignment="Center" FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" />
                 </Grid>
             </Button>

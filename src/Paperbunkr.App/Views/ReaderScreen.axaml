@@ -1,5 +1,6 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:fi="using:FluentIcons.Avalonia"
              xmlns:vm="using:Paperbunkr.App.ViewModels"
              xmlns:views="using:Paperbunkr.App.Views"
              xmlns:models="using:Paperbunkr.App.Models"
@@ -103,19 +104,9 @@
             <Setter Property="FontWeight" Value="SemiBold" />
         </Style>
 
-        <!-- Vector-icon active state (docs/superpowers/specs/2026-08-27-reader-chrome-icon-pass-
-             design.md §4) - accent-recolour the Path.pbIcon stroke on .active, matching the nav
-             rail's `Button.rail.active Path.pbIcon` pattern. No geometry swap; the base muted stroke
-             comes from Path.pbIcon's own style in Styles/Icons.axaml. -->
-        <Style Selector="Button.clusterIcon.active Path.pbIcon">
-            <Setter Property="Stroke" Value="{DynamicResource PbAccentTextBrush}" />
-        </Style>
-        <Style Selector="Button.clusterPill.active Path.pbIcon">
-            <Setter Property="Stroke" Value="{DynamicResource PbAccentTextBrush}" />
-        </Style>
-        <Style Selector="Button.drawerRow.active Path.pbIcon">
-            <Setter Property="Stroke" Value="{DynamicResource PbAccentTextBrush}" />
-        </Style>
+        <!-- fi:SymbolIcon inherits each button's Foreground, so the existing
+             Button.clusterIcon/clusterPill/drawerRow .active Foreground Setters recolour the
+             icon on activation for free - no per-icon selector needed. -->
 
         <!-- Corner clusters - floatingPanel (Primitives.axaml) gives translucent surface + border +
              elevation shadow + an Opacity DoubleTransition on PbMotionFast/PbMotionEase already;
@@ -203,8 +194,7 @@
                                                        Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center" />
                                         </Border>
                                         <!-- Rotation indicator (docs/ce-feature-inventory.md §A). -->
-                                        <Path Classes="pbIcon" Data="{StaticResource PbIconRotateCw}" Width="12" Height="12" Stroke="White"
-                                              IsVisible="{Binding IsRotated}" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,3,2" />
+                                        <fi:SymbolIcon Symbol="ArrowRotateClockwise" FontSize="12" Foreground="White" IsVisible="{Binding IsRotated}" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,3,2" />
                                     </Grid>
                                     <Border.ContextMenu>
                                         <ContextMenu>
@@ -362,16 +352,16 @@
                     <Border Classes="bookmarkGlow" Classes.pulsing="{Binding BookmarkJustToggled}" CornerRadius="{DynamicResource PbRadiusSm}">
                         <Button Classes="clusterIcon" Classes.active="{Binding IsCurrentPageBookmarked}"
                                 Command="{Binding ToggleBookmarkCommand}" ToolTip.Tip="Toggle bookmark">
-                            <Path Classes="pbIcon" Data="{StaticResource PbIconBookmark}" />
+                            <fi:SymbolIcon Symbol="Bookmark" />
                         </Button>
                     </Border>
                     <Button Classes="clusterIcon" Classes.active="{Binding IsDrawerOpen}"
                             Command="{Binding ToggleDrawerCommand}" ToolTip.Tip="More tools">
-                        <Path Classes="pbIcon" Data="{StaticResource PbIconMoreVertical}" />
+                        <fi:SymbolIcon Symbol="MoreVertical" />
                     </Button>
                     <Button Classes="clusterIcon" Classes.active="{Binding IsFullscreen}"
                             Command="{Binding ToggleFullscreenCommand}" ToolTip.Tip="Fullscreen (F)">
-                        <Path Classes="pbIcon" Data="{StaticResource PbIconFullscreen}" />
+                        <fi:SymbolIcon Symbol="FullScreenMaximize" />
                     </Button>
                 </StackPanel>
             </Border>
@@ -384,8 +374,8 @@
                 <StackPanel Orientation="Horizontal" Spacing="6">
                     <Button Classes="clusterPill">
                         <StackPanel Orientation="Horizontal" Spacing="6">
-                            <Path Classes="pbIcon" Width="12" Height="12"
-                                  Data="{Binding EffectiveReadingMode, Converter={x:Static views:ReadingModeIconConverter.Instance}}" />
+                            <fi:SymbolIcon FontSize="12"
+                                  Symbol="{Binding EffectiveReadingMode, Converter={x:Static views:ReadingModeIconConverter.Instance}}" />
                             <TextBlock Text="{Binding ReadingModeLabel}" VerticalAlignment="Center" />
                         </StackPanel>
                         <Button.Flyout>
@@ -407,7 +397,7 @@
                         <Button Classes="clusterPill" ToolTip.Tip="Fit mode"
                                 IsVisible="{Binding !IsContinuousMode}">
                             <StackPanel Orientation="Horizontal" Spacing="6">
-                                <Path Classes="pbIcon" Width="12" Height="12" Data="{StaticResource PbIconFit}" />
+                                <fi:SymbolIcon Symbol="AutoFit" FontSize="12" />
                                 <TextBlock Text="{Binding FitMode}" VerticalAlignment="Center" />
                             </StackPanel>
                             <Button.Flyout>
@@ -424,11 +414,11 @@
                         </Button>
 
                         <Button Classes="clusterIcon" Command="{Binding ZoomOutCommand}" ToolTip.Tip="{Binding ZoomOutHint}">
-                            <Path Classes="pbIcon" Data="{StaticResource PbIconMinus}" />
+                            <fi:SymbolIcon Symbol="Subtract" />
                         </Button>
                         <Button Classes="clusterPill" Padding="8,6" ToolTip.Tip="Zoom presets">
                             <StackPanel Orientation="Horizontal" Spacing="6">
-                                <Path Classes="pbIcon" Width="12" Height="12" Data="{StaticResource PbIconSearch}" />
+                                <fi:SymbolIcon Symbol="Search" FontSize="12" />
                                 <TextBlock Text="{Binding ZoomLevel, StringFormat={}{0:P0}}" VerticalAlignment="Center" />
                             </StackPanel>
                             <Button.Flyout>
@@ -444,7 +434,7 @@
                             </Button.Flyout>
                         </Button>
                         <Button Classes="clusterIcon" Command="{Binding ZoomInCommand}" ToolTip.Tip="{Binding ZoomInHint}">
-                            <Path Classes="pbIcon" Data="{StaticResource PbIconPlus}" />
+                            <fi:SymbolIcon Symbol="Add" />
                         </Button>
                         <Slider IsVisible="{Binding IsContinuousMode}" Width="100" Minimum="0.5" Maximum="4" Value="{Binding ZoomLevel}"
                                 VerticalAlignment="Center" ToolTip.Tip="Zoom" />
@@ -457,11 +447,11 @@
                     HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="16" MinWidth="260">
                 <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto">
                     <Button Grid.Column="0" Classes="clusterIcon" Command="{Binding PreviousChapterCommand}" ToolTip.Tip="Previous chapter">
-                        <Path Classes="pbIcon" Data="{StaticResource PbIconChevronsLeft}" />
+                        <fi:SymbolIcon Symbol="ChevronDoubleLeft" />
                     </Button>
                     <Button Grid.Column="1" Classes="clusterIcon" Command="{Binding GoLeftCommand}" Margin="0,0,10,0"
                             ToolTip.Tip="{Binding PageTurnLeftHint}">
-                        <Path Classes="pbIcon" Data="{StaticResource PbIconSkipBack}" Width="13" Height="13" />
+                        <fi:SymbolIcon Symbol="Previous" FontSize="13" />
                     </Button>
                     <!-- Per-page dot strip, replacing a plain ProgressBar (docs/superpowers/specs/
                          2026-08-25-reader-chrome-design.md follow-up) - one dot per Thumbnails entry,
@@ -492,10 +482,10 @@
                     </ScrollViewer>
                     <Button Grid.Column="3" Classes="clusterIcon" Command="{Binding GoRightCommand}" Margin="10,0,0,0"
                             ToolTip.Tip="{Binding PageTurnRightHint}">
-                        <Path Classes="pbIcon" Data="{StaticResource PbIconSkipForward}" Width="13" Height="13" />
+                        <fi:SymbolIcon Symbol="Next" FontSize="13" />
                     </Button>
                     <Button Grid.Column="4" Classes="clusterIcon" Command="{Binding NextChapterCommand}" ToolTip.Tip="Next chapter">
-                        <Path Classes="pbIcon" Data="{StaticResource PbIconChevronsRight}" />
+                        <fi:SymbolIcon Symbol="ChevronDoubleRight" />
                     </Button>
                 </Grid>
             </Border>
@@ -511,7 +501,7 @@
                         <TextBlock Grid.Column="0" Text="Reader Tools" FontSize="13" FontWeight="Bold" Foreground="{DynamicResource PbTextBrush}" />
                         <Button Grid.Column="1" Classes="clusterIcon" Padding="4"
                                 Command="{Binding ToggleDrawerCommand}" ToolTip.Tip="Close">
-                            <Path Classes="pbIcon" Width="12" Height="12" Data="{StaticResource PbIconClose}" />
+                            <fi:SymbolIcon Symbol="Dismiss" FontSize="12" />
                         </Button>
                     </Grid>
                     <ScrollViewer Grid.Row="1">
@@ -523,7 +513,7 @@
                                 <TextBlock Grid.Column="0" Text="Fit mode" FontSize="12.5" VerticalAlignment="Center" Foreground="{DynamicResource PbTextBrush}" />
                                 <Button Grid.Column="1" Classes="clusterPill" Padding="8,4">
                                     <StackPanel Orientation="Horizontal" Spacing="6">
-                                        <Path Classes="pbIcon" Width="12" Height="12" Data="{StaticResource PbIconFit}" />
+                                        <fi:SymbolIcon Symbol="AutoFit" FontSize="12" />
                                         <TextBlock Text="{Binding FitMode}" VerticalAlignment="Center" />
                                     </StackPanel>
                                     <Button.Flyout>
@@ -541,11 +531,11 @@
                             </Grid>
                             <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,0,0,4">
                                 <Button Classes="clusterIcon" Command="{Binding ZoomOutCommand}">
-                                    <Path Classes="pbIcon" Data="{StaticResource PbIconMinus}" />
+                                    <fi:SymbolIcon Symbol="Subtract" />
                                 </Button>
                                 <TextBlock Text="{Binding ZoomLevel, StringFormat={}{0:P0}}" FontSize="12.5" VerticalAlignment="Center" Foreground="{DynamicResource PbTextBrush}" />
                                 <Button Classes="clusterIcon" Command="{Binding ZoomInCommand}">
-                                    <Path Classes="pbIcon" Data="{StaticResource PbIconPlus}" />
+                                    <fi:SymbolIcon Symbol="Add" />
                                 </Button>
                             </StackPanel>
                         </StackPanel>
@@ -553,22 +543,22 @@
                         <TextBlock Classes="drawerSectionHeader" Text="PAGE" />
                         <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,0,0,6">
                             <Button Classes="clusterIcon" Command="{Binding RotateClockwiseCommand}" ToolTip.Tip="{Binding RotateClockwiseHint}">
-                                <Path Classes="pbIcon" Data="{StaticResource PbIconRotateCw}" />
+                                <fi:SymbolIcon Symbol="ArrowRotateClockwise" />
                             </Button>
                             <Button Classes="clusterIcon" Command="{Binding RotateCounterClockwiseCommand}" ToolTip.Tip="{Binding RotateCounterClockwiseHint}">
-                                <Path Classes="pbIcon" Data="{StaticResource PbIconRotateCcw}" />
+                                <fi:SymbolIcon Symbol="ArrowRotateCounterclockwise" />
                             </Button>
                         </StackPanel>
                         <Button Classes="drawerRow" Classes.active="{Binding AutoRotate}" Command="{Binding ToggleAutoRotateCommand}">
                             <StackPanel Orientation="Horizontal" Spacing="8">
-                                <Path Classes="pbIcon" Data="{StaticResource PbIconRotateCw}" />
+                                <fi:SymbolIcon Symbol="ArrowRotateClockwise" />
                                 <TextBlock Text="Auto-rotate landscape pages" VerticalAlignment="Center" />
                             </StackPanel>
                         </Button>
                         <Button Classes="drawerRow" Classes.active="{Binding IsDoublePageMode}"
                                 Command="{Binding ToggleDoublePageModeCommand}" IsVisible="{Binding !IsContinuousMode}">
                             <StackPanel Orientation="Horizontal" Spacing="8">
-                                <Path Classes="pbIcon" Data="{StaticResource PbIconBookOpen}" />
+                                <fi:SymbolIcon Symbol="BookOpen" />
                                 <TextBlock Text="Double-page spread" VerticalAlignment="Center" />
                             </StackPanel>
                         </Button>
@@ -576,7 +566,7 @@
                             <Button Classes="drawerRow" Classes.active="{Binding IsAutoScrolling}"
                                     Command="{Binding ToggleAutoScrollCommand}" ToolTip.Tip="{Binding AutoScrollHint}">
                                 <StackPanel Orientation="Horizontal" Spacing="8">
-                                    <Path Classes="pbIcon" Data="{StaticResource PbIconPlay}" />
+                                    <fi:SymbolIcon Symbol="Play" />
                                     <TextBlock Text="Auto-scroll" VerticalAlignment="Center" />
                                 </StackPanel>
                             </Button>
@@ -636,12 +626,12 @@
                                             <Button Grid.Column="1" Classes="clusterIcon"
                                                     Command="{Binding $parent[UserControl].((vm:ReaderScreenViewModel)DataContext).BeginRenameBookmarkCommand}"
                                                     CommandParameter="{Binding}" ToolTip.Tip="Rename bookmark">
-                                                <Path Classes="pbIcon" Width="12" Height="12" Data="{StaticResource PbIconEdit}" />
+                                                <fi:SymbolIcon Symbol="Edit" FontSize="12" />
                                             </Button>
                                             <Button Grid.Column="2" Classes="clusterIcon"
                                                     Command="{Binding $parent[UserControl].((vm:ReaderScreenViewModel)DataContext).DeleteBookmarkCommand}"
                                                     CommandParameter="{Binding}" ToolTip.Tip="Remove bookmark">
-                                                <Path Classes="pbIcon" Width="12" Height="12" Data="{StaticResource PbIconTrash}" />
+                                                <fi:SymbolIcon Symbol="Delete" FontSize="12" />
                                             </Button>
                                         </Grid>
                                         <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding IsEditing}">
@@ -649,7 +639,7 @@
                                             <Button Grid.Column="1" Classes="clusterIcon" Margin="4,0,0,0"
                                                     Command="{Binding $parent[UserControl].((vm:ReaderScreenViewModel)DataContext).CommitRenameBookmarkCommand}"
                                                     CommandParameter="{Binding}" ToolTip.Tip="Save name">
-                                                <Path Classes="pbIcon" Width="12" Height="12" Data="{StaticResource PbIconCheck}" />
+                                                <fi:SymbolIcon Symbol="Checkmark" FontSize="12" />
                                             </Button>
                                         </Grid>
                                     </Panel>
@@ -661,14 +651,14 @@
                         <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,8,0,0" IsVisible="{Binding Bookmarks.Count}">
                             <Button Classes="drawerRow" Command="{Binding PreviousBookmarkCommand}" ToolTip.Tip="{Binding PreviousBookmarkHint}">
                                 <StackPanel Orientation="Horizontal" Spacing="6">
-                                    <Path Classes="pbIcon" Width="12" Height="12" Data="{StaticResource PbIconChevronLeft}" />
+                                    <fi:SymbolIcon Symbol="ChevronLeft" FontSize="12" />
                                     <TextBlock Text="Prev" VerticalAlignment="Center" />
                                 </StackPanel>
                             </Button>
                             <Button Classes="drawerRow" Command="{Binding NextBookmarkCommand}" ToolTip.Tip="{Binding NextBookmarkHint}">
                                 <StackPanel Orientation="Horizontal" Spacing="6">
                                     <TextBlock Text="Next" VerticalAlignment="Center" />
-                                    <Path Classes="pbIcon" Width="12" Height="12" Data="{StaticResource PbIconChevronRight}" />
+                                    <fi:SymbolIcon Symbol="ChevronRight" FontSize="12" />
                                 </StackPanel>
                             </Button>
                         </StackPanel>

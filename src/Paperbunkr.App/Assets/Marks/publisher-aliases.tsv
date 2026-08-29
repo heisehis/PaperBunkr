@@ -1,0 +1,44 @@
+# Publisher alias map  (docs/superpowers/specs/2026-08-28-brand-metadata-iconography-design.md §3)
+# Columns, tab-separated:
+#   canonical   display name
+#   aliases     pipe-separated extra spellings (canonical is matched too; matching is
+#               case-insensitive and ignores a trailing "comics"/"publishing"/"entertainment"/"press")
+#   asset       filename stem under Assets/Marks/Publishers/ (<stem>.svg); blank = no logo
+#   bg          hex for the coloured letter-mark fallback when there is no asset (or the asset
+#               is missing); blank = plain monochrome letter-mark
+#
+# canonical	aliases	asset	bg
+Marvel	marvel comics|marvel worldwide|mvl	marvel	#EC1D24
+DC	dc comics|d.c. comics|national periodical	dc	#0476F2
+Image	image comics	image	#4D4D4D
+Dark Horse	dark horse comics|dark horse books	dark-horse	#000000
+IDW	idw publishing|idw	idw	#000000
+VIZ	viz media|viz communications|viz llc|shonen jump advanced	viz	#000000
+BOOM! Studios	boom studios|boom! entertainment|boom	boom	#1A1A1A
+Dynamite	dynamite entertainment|dynamic forces	dynamite	#B01E23
+Valiant	valiant entertainment|valiant comics	valiant	#0A0A0A
+Titan	titan comics|titan books	titan	#E5202E
+Oni Press	oni press|oni-lion forge|oni	oni	#000000
+DSTLRY	dstlry media		#C9A24B
+Kodansha	kodansha usa|kodansha comics|kodansha ltd|講談社	kodansha	#000000
+Shueisha	weekly shonen jump|weekly shōnen jump|shonen jump|集英社	shueisha	#E60012
+Shogakukan	shogakukan inc|小学館	shogakukan	#003894
+Kadokawa	kadokawa corporation|kadokawa shoten|ascii media works|enterbrain|kadokawa future publishing	kadokawa	#00A040
+Square Enix	square enix manga|square-enix|gangan comics	square-enix	#D4202B
+Yen Press	yen press llc	yen-press	#ED1C24
+Seven Seas	seven seas entertainment	seven-seas	#0F4C81
+Dark Horse Manga	dark horse manga	dark-horse	#000000
+Vertigo	dc vertigo|vertigo comics		#111111
+WildStorm	wildstorm productions		#111111
+Boom Box	boombox		#1A1A1A
+Vault	vault comics		#101820
+Mad Cave	mad cave studios		#F26522
+AWA	artists writers & artisans|awa studios		#111111
+Ablaze	ablaze publishing|ablaze media		#111111
+Fantagraphics	fantagraphics books		#111111
+Drawn & Quarterly	drawn and quarterly		#111111
+Rebellion	2000 ad|rebellion developments		#DA1A32
+Humanoids	humanoids inc|humanoids publishing		#111111
+Tokyopop	tokyopop inc|mixx entertainment		#000000
+Kodansha Advanced Media	k manga		#000000
+Scholastic	graphix|scholastic corporation		#E4181C

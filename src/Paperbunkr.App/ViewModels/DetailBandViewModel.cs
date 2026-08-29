@@ -56,13 +56,47 @@ public partial class DetailBandViewModel : ViewModelBase
     [ObservableProperty]
     private string _yearText = string.Empty;
 
+    /// <summary>Focused issue's Format / AgeRating (docs/superpowers/specs/
+    /// 2026-08-28-brand-metadata-iconography-design.md §4) - rendered as a BrandMark on the meta
+    /// row when set, nothing otherwise. Populated by the host screen, like PublisherText.</summary>
+    [ObservableProperty]
+    private string _formatText = string.Empty;
+
+    [ObservableProperty]
+    private string _ageRatingText = string.Empty;
+
+    /// <summary>Short labels for derived "special" marks (manga / B&amp;W), from
+    /// <c>MarkResolver.ResolveSpecial</c>.</summary>
+    public ObservableCollection<string> SpecialMarks { get; } = new();
+
     public bool HasStatus => !string.IsNullOrWhiteSpace(StatusText);
     public bool HasPublisher => !string.IsNullOrWhiteSpace(PublisherText);
     public bool HasYear => !string.IsNullOrWhiteSpace(YearText);
+    public bool HasFormat => !string.IsNullOrWhiteSpace(FormatText);
+    public bool HasAgeRating => !string.IsNullOrWhiteSpace(AgeRatingText);
 
     partial void OnStatusTextChanged(string value) => OnPropertyChanged(nameof(HasStatus));
     partial void OnPublisherTextChanged(string value) => OnPropertyChanged(nameof(HasPublisher));
     partial void OnYearTextChanged(string value) => OnPropertyChanged(nameof(HasYear));
+    partial void OnFormatTextChanged(string value) => OnPropertyChanged(nameof(HasFormat));
+    partial void OnAgeRatingTextChanged(string value) => OnPropertyChanged(nameof(HasAgeRating));
+
+    /// <summary>Sets the derived special-mark labels from a focused issue (empty for series mode /
+    /// book mode). Host screens call this alongside setting <see cref="FormatText"/> etc.</summary>
+    public void SetSpecialMarks(Data.Entities.Issue? issue)
+    {
+        SpecialMarks.Clear();
+        if (issue is not null)
+        {
+            foreach (var spec in Services.MarkResolver.Instance.ResolveSpecial(issue))
+            {
+                if (!string.IsNullOrWhiteSpace(spec.Text))
+                {
+                    SpecialMarks.Add(spec.Text!);
+                }
+            }
+        }
+    }
 
     // --- Synopsis ---
 

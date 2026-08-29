@@ -1,0 +1,49 @@
+# Language (ISO 639) -> flag region (ISO 3166-1 alpha-2, lowercased)  (design §5)
+# A language is not a country; these are the conventional "which flag does a comic library show"
+# picks. Matching lowercases the input and turns '_' into '-'. An iso with no row here (or a
+# region-less code like 'eo') renders as the uppercase text chip instead of a flag.
+#
+# iso	region
+ja	jp
+ja-ro	jp
+en	us
+en-us	us
+en-gb	gb
+ko	kr
+zh	cn
+zh-hans	cn
+zh-cn	cn
+zh-hant	tw
+zh-tw	tw
+zh-hk	hk
+es	es
+es-es	es
+es-la	mx
+es-mx	mx
+fr	fr
+de	de
+it	it
+pt	br
+pt-br	br
+pt-pt	pt
+ru	ru
+nl	nl
+pl	pl
+id	id
+th	th
+vi	vn
+tr	tr
+ar	sa
+uk	ua
+hu	hu
+cs	cz
+sv	se
+fi	fi
+da	dk
+no	no
+el	gr
+he	il
+hi	in
+fil	ph
+tl	ph
+ms	my

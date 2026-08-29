@@ -112,22 +112,27 @@
     </Styles.Resources>
 
     <!-- PosterTile - see Views/PosterTile.axaml. Root there is a Border (not Button) specifically
-         so BoxShadow (needed for the glow ring) is unambiguously supported. -->
+         so BoxShadow (needed for the glow ring) is unambiguously supported. Cover-forward restyle
+         (docs/superpowers/specs/2026-08-28-home-screen-redesign-design.md §4): the root is now
+         transparent - no panel - and the drop shadow + glow ring live on the inner .posterCover
+         so they wrap the art, not the caption text below it. -->
     <Style Selector="Border.posterTile">
-        <Setter Property="Background" Value="{DynamicResource PbSurface2Brush}" />
-        <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusSm}" />
+        <Setter Property="Background" Value="Transparent" />
         <Setter Property="Cursor" Value="Hand" />
+    </Style>
+    <Style Selector="Border.posterCover">
+        <Setter Property="BoxShadow" Value="0 6 18 -4 #80000000" />
         <Setter Property="Transitions">
             <Transitions>
                 <BoxShadowsTransition Property="BoxShadow" Duration="{DynamicResource PbMotionFast}" Easing="{StaticResource PbMotionEase}" />
             </Transitions>
         </Setter>
     </Style>
-    <Style Selector="Border.posterTile:pointerover">
-        <Setter Property="BoxShadow" Value="{StaticResource PbGlowRing}" />
+    <Style Selector="Border.posterTile:pointerover Border.posterCover">
+        <Setter Property="BoxShadow" Value="0 6 18 -4 #80000000, 0 0 0 2 #66E0995A" />
     </Style>
-    <Style Selector="Border.posterTile:focus-visible">
-        <Setter Property="BoxShadow" Value="{StaticResource PbGlowRing}" />
+    <Style Selector="Border.posterTile:focus-visible Border.posterCover">
+        <Setter Property="BoxShadow" Value="0 6 18 -4 #80000000, 0 0 0 2 #66E0995A" />
     </Style>
 
     <!-- Poster cover scrim (docs/superpowers/specs/2026-08-27-library-browsing-4a-poster-grid-

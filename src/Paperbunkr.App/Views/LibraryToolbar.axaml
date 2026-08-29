@@ -1,5 +1,6 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:fi="using:FluentIcons.Avalonia"
              xmlns:vm="using:Paperbunkr.App.ViewModels"
              xmlns:views="using:Paperbunkr.App.Views"
              xmlns:controls="using:Paperbunkr.App.Controls"
@@ -30,11 +31,8 @@
             <Setter Property="Background" Value="{DynamicResource PbAccentSoftBrush}" />
             <Setter Property="Foreground" Value="{DynamicResource PbAccentTextBrush}" />
         </Style>
-        <Style Selector="Button.toolbarPill Path.pbIcon">
-            <Setter Property="Stroke" Value="{DynamicResource PbTextMutedBrush}" />
-        </Style>
-        <Style Selector="Button.toolbarPill.open Path.pbIcon">
-            <Setter Property="Stroke" Value="{DynamicResource PbAccentTextBrush}" />
+        <Style Selector="Button.toolbarPill.open fi|SymbolIcon">
+            <Setter Property="Foreground" Value="{DynamicResource PbAccentTextBrush}" />
         </Style>
 
         <Style Selector="Button.browseBtn">
@@ -43,7 +41,7 @@
             <Setter Property="Padding" Value="6" />
             <Setter Property="Cursor" Value="Hand" />
         </Style>
-        <Style Selector="Button.browseBtn:disabled Path.pbIcon">
+        <Style Selector="Button.browseBtn:disabled fi|SymbolIcon">
             <Setter Property="Opacity" Value="0.35" />
         </Style>
 
@@ -55,8 +53,8 @@
             <Setter Property="Padding" Value="10,7" />
             <Setter Property="Cursor" Value="Hand" />
         </Style>
-        <Style Selector="Button.addBtn Path.pbIcon">
-            <Setter Property="Stroke" Value="{DynamicResource PbBadgeTextBrush}" />
+        <Style Selector="Button.addBtn fi|SymbolIcon">
+            <Setter Property="Foreground" Value="{DynamicResource PbBadgeTextBrush}" />
         </Style>
 
         <Style Selector="Border.dropdown">
@@ -153,18 +151,18 @@
                 <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="2" VerticalAlignment="Center">
                     <Button Classes="browseBtn" Command="{Binding BrowsePreviousCommand}" IsEnabled="{Binding CanBrowsePrevious}"
                             ToolTip.Tip="Back" AutomationProperties.AutomationId="LibraryBrowsePreviousButton">
-                        <Path Classes="pbIcon" Data="{StaticResource PbIconChevronLeft}" />
+                        <fi:SymbolIcon Symbol="ChevronLeft" />
                     </Button>
                     <Button Classes="browseBtn" Command="{Binding BrowseNextCommand}" IsEnabled="{Binding CanBrowseNext}"
                             ToolTip.Tip="Forward" AutomationProperties.AutomationId="LibraryBrowseNextButton">
-                        <Path Classes="pbIcon" Data="{StaticResource PbIconChevronRight}" />
+                        <fi:SymbolIcon Symbol="ChevronRight" />
                     </Button>
                 </StackPanel>
 
                 <Border Grid.Column="1" Background="{DynamicResource PbSurface3Brush}" CornerRadius="{DynamicResource PbRadius}"
                         BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1" Padding="10,0" MaxWidth="560" HorizontalAlignment="Stretch">
                     <DockPanel LastChildFill="True">
-                        <Path DockPanel.Dock="Left" Classes="pbIcon" Data="{StaticResource PbIconSearch}" VerticalAlignment="Center" Margin="0,0,8,0" />
+                        <fi:SymbolIcon DockPanel.Dock="Left" Symbol="Search" VerticalAlignment="Center" Margin="0,0,8,0" />
                         <Button DockPanel.Dock="Right" x:Name="SearchModeButton" Classes.open="{Binding IsSearchModeOpen}"
                                 Background="Transparent" BorderThickness="0" Padding="6,0,0,0" FontSize="12" Cursor="Hand"
                                 Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center"
@@ -182,7 +180,7 @@
                         Command="{Binding ToggleAddFilterCommand}" VerticalAlignment="Center"
                         AutomationProperties.AutomationId="LibraryFilterButton" AutomationProperties.Name="Filter">
                     <StackPanel Orientation="Horizontal" Spacing="6">
-                        <Path Classes="pbIcon" Data="{StaticResource PbIconFilter}" />
+                        <fi:SymbolIcon Symbol="Filter" />
                         <TextBlock Text="Filter" />
                     </StackPanel>
                 </Button>
@@ -192,14 +190,14 @@
                         AutomationProperties.AutomationId="LibraryViewSortButton"
                         AutomationProperties.Name="{Binding DisplayModeLabel, StringFormat='View and Sort: {0}'}">
                     <StackPanel Orientation="Horizontal" Spacing="6">
-                        <Path Classes="pbIcon" Data="{StaticResource PbIconViewSort}" />
+                        <fi:SymbolIcon Symbol="ArrowSort" />
                         <TextBlock Text="View &amp; Sort" />
                     </StackPanel>
                 </Button>
 
                 <Button Grid.Column="4" Classes="addBtn" Command="{Binding OpenAddIssueCommand}" VerticalAlignment="Center"
                         ToolTip.Tip="Add issue to library" AutomationProperties.AutomationId="LibraryAddIssueButton" AutomationProperties.Name="Add issue">
-                    <Path Classes="pbIcon" Data="{StaticResource PbIconPlus}" />
+                    <fi:SymbolIcon Symbol="Add" />
                 </Button>
             </Grid>
         </Border>
@@ -363,7 +361,7 @@
                             <CheckBox Content="Unread badge" FontSize="12.5" IsChecked="{Binding ShowUnreadBadge}" />
                             <CheckBox Content="Publisher badge" FontSize="12.5" IsChecked="{Binding ShowPublisherBadge}" />
                             <CheckBox Content="Language badge" FontSize="12.5" IsChecked="{Binding ShowLanguageBadge}" />
-                            <CheckBox Content="Use language icon" FontSize="12.5" IsChecked="{Binding UseLanguageIcon}" />
+                            <CheckBox Content="Show language flag" FontSize="12.5" IsChecked="{Binding UseLanguageIcon}" />
                             <CheckBox Content="Continue reading button" FontSize="12.5" IsChecked="{Binding ShowContinueReadingButton}"
                                       IsVisible="{Binding IsSeriesGranularity}" />
                         </StackPanel>

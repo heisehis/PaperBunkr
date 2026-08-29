@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- NSFW: prohibition sign, redrawn from ComicRack CE's NSFW.png. Colour mark - used as-is (warning red). -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="#E1251B">
+  <path fill-rule="evenodd" d="M32 3a29 29 0 1 0 0 58 29 29 0 0 0 0-58zm0 8.5a20.5 20.5 0 1 1 0 41 20.5 20.5 0 0 1 0-41z"/>
+  <path d="M14.68 21.04 L21.04 14.68 L49.32 42.96 L42.96 49.32 Z"/>
+</svg>

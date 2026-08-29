@@ -1,5 +1,6 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:pbc="using:Paperbunkr.App.Controls"
              xmlns:vm="using:Paperbunkr.App.ViewModels"
              xmlns:entities="using:Paperbunkr.Data.Entities"
              xmlns:conv="using:Avalonia.Data.Converters"
@@ -106,11 +107,29 @@
                 <TextBlock Text="{Binding StatusText}" IsVisible="{Binding HasStatus}" FontSize="11.5"
                            FontWeight="SemiBold" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
                 <TextBlock Text="·" Foreground="{DynamicResource PbTextFaintBrush}" IsVisible="{Binding HasPublisher}" VerticalAlignment="Center" />
-                <TextBlock Text="{Binding PublisherText}" IsVisible="{Binding HasPublisher}" FontSize="11.5"
-                           Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
+                <pbc:BrandMark Family="Publisher" Value="{Binding PublisherText}" ShowText="True" MarkSize="13"
+                               Foreground="{DynamicResource PbTextMutedBrush}" IsVisible="{Binding HasPublisher}" VerticalAlignment="Center" />
                 <TextBlock Text="·" Foreground="{DynamicResource PbTextFaintBrush}" IsVisible="{Binding HasYear}" VerticalAlignment="Center" />
                 <TextBlock Text="{Binding YearText}" IsVisible="{Binding HasYear}" FontSize="11.5"
                            Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
+                <TextBlock Text="·" Foreground="{DynamicResource PbTextFaintBrush}" IsVisible="{Binding HasFormat}" VerticalAlignment="Center" />
+                <pbc:BrandMark Family="Format" Value="{Binding FormatText}" ShowText="True" MarkSize="13"
+                               Foreground="{DynamicResource PbTextMutedBrush}" IsVisible="{Binding HasFormat}" VerticalAlignment="Center" />
+                <pbc:BrandMark Family="AgeRating" Value="{Binding AgeRatingText}" ShowText="False" MarkSize="18"
+                               IsVisible="{Binding HasAgeRating}" VerticalAlignment="Center" Margin="2,0,0,0" />
+                <ItemsControl ItemsSource="{Binding SpecialMarks}" VerticalAlignment="Center">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate><StackPanel Orientation="Horizontal" Spacing="6" /></ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="x:String">
+                            <Border Classes="pbChip">
+                                <TextBlock Text="{Binding}" FontSize="9.5" FontWeight="Bold"
+                                           Foreground="{DynamicResource PbTextMutedBrush}" />
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
             </StackPanel>
 
             <!-- Synopsis -->

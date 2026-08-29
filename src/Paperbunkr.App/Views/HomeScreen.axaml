@@ -1,21 +1,26 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:fi="using:FluentIcons.Avalonia"
              xmlns:vm="using:Paperbunkr.App.ViewModels"
              xmlns:models="using:Paperbunkr.App.Models"
              xmlns:views="using:Paperbunkr.App.Views"
+             xmlns:controls="using:Paperbunkr.App.Controls"
              xmlns:conv="using:Avalonia.Data.Converters"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-             mc:Ignorable="d" d:DesignWidth="900" d:DesignHeight="700"
+             mc:Ignorable="d" d:DesignWidth="1000" d:DesignHeight="900"
              x:Class="Paperbunkr.App.Views.HomeScreen"
+             x:Name="Root"
              x:DataType="vm:HomeScreenViewModel">
 
     <!--
-    App launch screen (docs/superpowers/specs/2026-08-18-home-screen-design.md) - a hero header
-    (title/subtitle/search-to-Library/refresh), three horizontal-scrolling card rows (Continue
-    Reading, Recently Added, Because You Read), and two single-card "spotlight" modules (a small
-    auto-advancing carousel, Try This Reading List). All data/pick logic lives in
-    HomeScreenViewModel/HomeFeedResolver/RecommendationResolver - this view only renders it.
+        App launch screen (docs/superpowers/specs/2026-08-28-home-screen-redesign-design.md,
+        supersedes the 2026-08-24 pass). Top to bottom: a masthead on a blurred "cover-wall" of the
+        user's own covers (MastheadBackdrop, built by CoverWallRenderer), a spotlight hero rendered
+        through the shared DetailHero control (SpotlightHeader adapter), then the shelves - Continue
+        Reading, Continue Reading - Books, Recently Added, Because You Read, Try This Reading List -
+        each a horizontal row of PosterTile cards. All data/pick logic lives in HomeScreenViewModel /
+        HomeFeedResolver / RecommendationResolver; this view only renders it.
     -->
 
     <UserControl.Styles>
@@ -55,13 +60,10 @@
         <Style Selector="Button.headerLink:pointerover TextBlock">
             <Setter Property="Foreground" Value="{DynamicResource PbAccentTextBrush}" />
         </Style>
-        <Style Selector="Button.headerLink:pointerover Path.pbIcon">
-            <Setter Property="Stroke" Value="{DynamicResource PbAccentTextBrush}" />
+        <Style Selector="Button.headerLink:pointerover fi|SymbolIcon">
+            <Setter Property="Foreground" Value="{DynamicResource PbAccentTextBrush}" />
         </Style>
 
-        <!-- Search box focus treatment - TextBox has no BoxShadow property to consume PbGlowRing
-             directly (confirmed via AVLN2000 at build time, not guessed), so this uses a
-             BorderBrush shift instead, the standard input-focus-ring pattern. -->
         <Style Selector="TextBox.searchBox">
             <Setter Property="Transitions">
                 <Transitions>
@@ -73,10 +75,8 @@
             <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
         </Style>
 
-
-        <!-- Hero card (docs/superpowers/specs/2026-08-24-home-screen-design.md) - full-bleed backdrop
-             art with a bottom-up PbHeroGradient vignette, distinct from Button.spotlightCard below
-             (which "Try This Reading List" keeps, unchanged in shape). -->
+        <!-- Hero card wrapper: a Button so a click anywhere on the card opens the spotlight issue
+             (the DetailHero "Read now" action does the same). No fixed height - DetailHero drives it. -->
         <Style Selector="Button.heroCard">
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="BorderThickness" Value="0" />
@@ -84,7 +84,6 @@
             <Setter Property="Cursor" Value="Hand" />
             <Setter Property="HorizontalContentAlignment" Value="Stretch" />
             <Setter Property="HorizontalAlignment" Value="Stretch" />
-            <Setter Property="Height" Value="260" />
         </Style>
 
         <Style Selector="Button.spotlightCard">
@@ -126,257 +125,243 @@
             <Setter Property="Width" Value="22" />
             <Setter Property="Background" Value="{DynamicResource PbAccentBrush}" />
         </Style>
-        <!-- Explicit, not relying on selector-precedence ordering: hovering the active dot must
-             not fall back to the plain hover color. -->
         <Style Selector="Button.spotlightDot.active:pointerover">
             <Setter Property="Background" Value="{DynamicResource PbAccentBrush}" />
         </Style>
-
     </UserControl.Styles>
 
     <ScrollViewer>
-        <StackPanel Margin="24" Spacing="28">
+        <StackPanel Margin="0,0,0,48">
 
-            <!-- ============ Hero header ============ -->
-            <Border CornerRadius="{DynamicResource PbRadiusLg}" ClipToBounds="True">
-                <Panel>
-                    <!-- Header backdrop reuses the current Spotlight pick's already-computed
-                         BackdropImage (same blurred bitmap the hero itself shows) rather than
-                         building a second, separate collage-compositor - genuinely reactive since
-                         it changes as the Spotlight carousel rotates, unlike a fixed backdrop. -->
-                    <Image Source="{Binding CurrentSpotlight.BackdropImage}" Stretch="UniformToFill" Opacity="0.6" />
-                    <Border Background="#B3000000" />
+            <!-- ============ Masthead on the cover-wall (full-bleed, edge to edge) ============ -->
+            <Panel Height="210">
+                <Image Source="{Binding MastheadBackdrop}" Stretch="UniformToFill"
+                       IsVisible="{Binding MastheadBackdrop, Converter={x:Static conv:ObjectConverters.IsNotNull}}" />
+                <Border IsVisible="{Binding MastheadBackdrop, Converter={x:Static conv:ObjectConverters.IsNull}}">
+                    <Border.Background>
+                        <RadialGradientBrush GradientOrigin="18%,0%" Center="18%,0%" RadiusX="1.1" RadiusY="0.9">
+                            <GradientStop Offset="0" Color="#241812" />
+                            <GradientStop Offset="0.5" Color="#0C0B0A" />
+                            <GradientStop Offset="1" Color="#060606" />
+                        </RadialGradientBrush>
+                    </Border.Background>
+                </Border>
+                <Border>
+                    <Border.Background>
+                        <LinearGradientBrush StartPoint="0%,55%" EndPoint="0%,100%">
+                            <GradientStop Offset="0" Color="#00000000" />
+                            <GradientStop Offset="1" Color="{DynamicResource PbSurface0Color}" />
+                        </LinearGradientBrush>
+                    </Border.Background>
+                </Border>
 
-                    <StackPanel HorizontalAlignment="Center" Spacing="14" MaxWidth="620" Margin="0,28,0,28">
-                        <TextBlock Text="Your Library" FontSize="28" FontWeight="Black"
-                                   HorizontalAlignment="Center" Foreground="{DynamicResource PbTextBrush}" />
-                        <TextBlock Text="Search for a specific series or discover something new below"
-                                   FontSize="13" HorizontalAlignment="Center" Foreground="{DynamicResource PbTextMutedBrush}" />
-                        <Grid ColumnDefinitions="*,Auto" Width="480">
-                            <TextBox Grid.Column="0" Classes="searchBox" Text="{Binding SearchQuery}" Watermark="Search for a comic series..."
-                                     FontSize="12.5" AutomationProperties.AutomationId="HomeSearchBox">
-                                <TextBox.KeyBindings>
-                                    <KeyBinding Gesture="Enter" Command="{Binding SearchCommand}" />
-                                </TextBox.KeyBindings>
-                            </TextBox>
-                            <Button Grid.Column="1" Classes="primary" Content="Search" Margin="8,0,0,0"
-                                    Command="{Binding SearchCommand}" AutomationProperties.AutomationId="HomeSearchButton" />
-                        </Grid>
+                <controls:SplitText Text="PAPERBUNKR" FontSize="15" Foreground="{DynamicResource PbAccentTextBrush}"
+                                    HorizontalAlignment="Left" VerticalAlignment="Top" Margin="22,18,0,0" />
+
+                <Button Classes="headerLink" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,14,18,0"
+                        Command="{Binding RefreshCommand}" AutomationProperties.AutomationId="HomeRefreshButton"
+                        ToolTip.Tip="Refresh">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <fi:SymbolIcon Symbol="ArrowClockwise" FontSize="13" />
+                        <TextBlock Text="Refresh library" FontSize="11.5" Foreground="{DynamicResource PbTextMutedBrush}" />
                     </StackPanel>
-                    <Button Classes="headerLink" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,4,0,0"
-                            Command="{Binding RefreshCommand}" AutomationProperties.AutomationId="HomeRefreshButton"
-                            ToolTip.Tip="Refresh">
-                        <StackPanel Orientation="Horizontal" Spacing="6">
-                            <Path Classes="pbIcon" Data="{StaticResource PbIconRefresh}" Width="14" Height="14" />
-                            <TextBlock Text="Refresh" FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" />
-                        </StackPanel>
-                    </Button>
-                </Panel>
-            </Border>
+                </Button>
 
-            <!-- ============ Spotlight hero (first thing after the header, no label above it -
-                 matches the streaming-app convention this was modeled on: the hero IS the
-                 announcement, it doesn't need one) ============ -->
-            <StackPanel Spacing="10" AutomationProperties.AutomationId="HomeSpotlightHeader">
-                <StackPanel Spacing="10" IsVisible="{Binding HasSpotlight}">
-                    <!-- Backdrop is a pre-rendered blur (BackdropImage, see SpotlightIssueSample) -
-                         same MangaDetailScreen technique, not a live Effect (known Avalonia bug,
-                         AvaloniaUI/Avalonia#11416, blurs only a small square instead of filling the
-                         banner). A flat dark scrim + the real, undistorted cover inset on top is
-                         what makes this read as atmosphere instead of a stretched/broken image -
-                         the first version of this card skipped both and just stretched the raw
-                         cover art directly. -->
-                    <Button Classes="heroCard" Command="{Binding OpenSpotlightCommand}" AutomationProperties.AutomationId="HomeSpotlightCard">
-                        <Border CornerRadius="{DynamicResource PbRadiusLg}" ClipToBounds="True">
-                            <Grid>
-                                <Image Source="{Binding CurrentSpotlight.BackdropImage}" Stretch="UniformToFill" />
-                                <Border Background="#B3000000" />
-                                <Border>
-                                    <Border.Background>
-                                        <LinearGradientBrush StartPoint="0%,0%" EndPoint="0%,100%">
-                                            <GradientStop Color="{StaticResource PbHeroGradientStartColor}" Offset="0.5" />
-                                            <GradientStop Color="{StaticResource PbHeroGradientEndColor}" Offset="1" />
-                                        </LinearGradientBrush>
-                                    </Border.Background>
-                                </Border>
-                                <Grid ColumnDefinitions="Auto,*" Margin="28" VerticalAlignment="Center">
-                                    <Border Grid.Column="0" CornerRadius="{DynamicResource PbRadiusSm}" ClipToBounds="True"
-                                            Width="140" Height="196" VerticalAlignment="Center" BorderThickness="1" BorderBrush="#33FFFFFF">
-                                        <Image Source="{Binding CurrentSpotlight.CoverImage}" Stretch="UniformToFill" />
-                                    </Border>
-                                    <StackPanel Grid.Column="1" Margin="28,0,0,0" VerticalAlignment="Center" Spacing="4" MaxWidth="460">
-                                        <TextBlock Text="{Binding CurrentSpotlight.SeriesName}" Classes="pbTextCaption" />
-                                        <TextBlock Text="{Binding CurrentSpotlight.Title}" Classes="pbTextHero" TextWrapping="Wrap" />
-                                        <TextBlock Text="{Binding CurrentSpotlight.Meta}" Classes="pbTextCaption" />
-                                        <TextBlock Text="Read Now" FontSize="12.5" FontWeight="SemiBold" Margin="0,6,0,0"
-                                                   Foreground="{DynamicResource PbAccentTextBrush}" />
-                                    </StackPanel>
-                                </Grid>
-                            </Grid>
-                        </Border>
-                    </Button>
-                    <ItemsControl ItemsSource="{Binding SpotlightItems}" HorizontalAlignment="Center"
-                                  AutomationProperties.AutomationId="HomeSpotlightDots">
-                        <ItemsControl.ItemsPanel>
-                            <ItemsPanelTemplate><StackPanel Orientation="Horizontal" Spacing="6" /></ItemsPanelTemplate>
-                        </ItemsControl.ItemsPanel>
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate x:DataType="models:SpotlightIssueSample">
-                                <Button Classes="spotlightDot"
-                                        Classes.active="{Binding $parent[UserControl].((vm:HomeScreenViewModel)DataContext).CurrentSpotlight, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={Binding}}"
-                                        Command="{Binding $parent[UserControl].((vm:HomeScreenViewModel)DataContext).SetSpotlightItemCommand}"
-                                        CommandParameter="{Binding}" />
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
+                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="12" MaxWidth="620">
+                    <controls:SplitText Text="Your Library" FontSize="40" HorizontalAlignment="Center"
+                                        Foreground="{DynamicResource PbTextBrush}" />
+                    <TextBlock Text="Search for a specific series, or discover something new below."
+                               FontSize="12.5" HorizontalAlignment="Center" Foreground="{DynamicResource PbTextMutedBrush}" />
+                    <Grid ColumnDefinitions="*,Auto" Width="470">
+                        <TextBox Grid.Column="0" Classes="searchBox" Text="{Binding SearchQuery}" Watermark="Search for a comic series..."
+                                 FontSize="12.5" AutomationProperties.AutomationId="HomeSearchBox">
+                            <TextBox.KeyBindings>
+                                <KeyBinding Gesture="Enter" Command="{Binding SearchCommand}" />
+                            </TextBox.KeyBindings>
+                        </TextBox>
+                        <Button Grid.Column="1" Classes="primary" Content="Search" Margin="8,0,0,0"
+                                Command="{Binding SearchCommand}" AutomationProperties.AutomationId="HomeSearchButton" />
+                    </Grid>
                 </StackPanel>
-                <TextBlock Text="Your library's all caught up" Classes="emptyState" IsVisible="{Binding !HasSpotlight}" />
-            </StackPanel>
+            </Panel>
 
-            <!-- ============ Continue Reading ============ -->
-            <StackPanel Spacing="10">
-                <TextBlock Text="Continue Reading" Classes="pbTextHeading" AutomationProperties.AutomationId="HomeContinueReadingHeader" />
-                <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" IsVisible="{Binding HasContinueReading}">
-                    <ItemsControl ItemsSource="{Binding ContinueReading}" Margin="0,0,0,12" AutomationProperties.AutomationId="HomeContinueReadingList">
-                        <ItemsControl.ItemsPanel>
-                            <ItemsPanelTemplate><StackPanel Orientation="Horizontal" Spacing="16" /></ItemsPanelTemplate>
-                        </ItemsControl.ItemsPanel>
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate x:DataType="models:HomeContinueReadingCard">
-                                <views:PosterTile
-                                    CoverSource="{Binding Series.CoverIssueId, Converter={x:Static views:CoverImageConverter.Instance}}"
-                                    TitleText="{Binding Series.Name}"
-                                    BadgeText="{Binding ResumeIssueBadge}"
-                                    ShowProgress="True"
-                                    ProgressFraction="{Binding ResumeProgressFraction}"
-                                    Command="{Binding $parent[UserControl].((vm:HomeScreenViewModel)DataContext).OpenContinueReadingCommand}"
-                                    CommandParameter="{Binding ResumeIssueId}" />
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                </ScrollViewer>
-                <TextBlock Text="Nothing in progress yet" Classes="emptyState" IsVisible="{Binding !HasContinueReading}" />
-            </StackPanel>
+            <Border Height="1" Background="{DynamicResource PbBorderBrush}" />
 
-            <!-- ============ Continue Reading — Books (only when the library has any books) ============ -->
-            <StackPanel Spacing="10" IsVisible="{Binding HasBooksLibrary}">
-                <TextBlock Text="Continue Reading — Books" Classes="pbTextHeading" AutomationProperties.AutomationId="HomeContinueReadingBooksHeader" />
-                <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" IsVisible="{Binding HasContinueReadingBooks}">
-                    <ItemsControl ItemsSource="{Binding ContinueReadingBooks}" Margin="0,0,0,12" AutomationProperties.AutomationId="HomeContinueReadingBooksList">
-                        <ItemsControl.ItemsPanel>
-                            <ItemsPanelTemplate><StackPanel Orientation="Horizontal" Spacing="16" /></ItemsPanelTemplate>
-                        </ItemsControl.ItemsPanel>
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate x:DataType="models:HomeBookCard">
-                                <views:PosterTile
-                                    CoverSource="{Binding BookId, Converter={x:Static views:BookCoverImageConverter.Instance}}"
-                                    TitleText="{Binding Title}"
-                                    MetaText="{Binding Author}"
-                                    ShowProgress="{Binding ShowProgress}"
-                                    ProgressFraction="{Binding ProgressFraction}"
-                                    Command="{Binding $parent[UserControl].((vm:HomeScreenViewModel)DataContext).OpenContinueReadingBookCommand}"
-                                    CommandParameter="{Binding}" />
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                </ScrollViewer>
-                <TextBlock Text="Nothing in progress yet" Classes="emptyState" IsVisible="{Binding !HasContinueReadingBooks}" />
-            </StackPanel>
+            <StackPanel HorizontalAlignment="Center" MaxWidth="1180" Margin="24,20,24,0" Spacing="28">
 
-            <!-- ============ Recently Added ============ -->
-            <StackPanel Spacing="10">
-                <Grid ColumnDefinitions="*,Auto">
-                    <TextBlock Grid.Column="0" Text="Recently Added" Classes="pbTextHeading" AutomationProperties.AutomationId="HomeRecentlyAddedHeader" />
-                    <Button Grid.Column="1" Classes="viewAllLink" Content="View Library →"
-                            Command="{Binding GoToLibraryCommand}"
-                            AutomationProperties.AutomationId="HomeViewLibraryLink" />
-                </Grid>
-                <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" IsVisible="{Binding HasRecentlyAdded}">
-                    <ItemsControl ItemsSource="{Binding RecentlyAdded}" Margin="0,0,0,12" AutomationProperties.AutomationId="HomeRecentlyAddedList">
-                        <ItemsControl.ItemsPanel>
-                            <ItemsPanelTemplate><StackPanel Orientation="Horizontal" Spacing="16" /></ItemsPanelTemplate>
-                        </ItemsControl.ItemsPanel>
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate x:DataType="models:SeriesCardSample">
-                                <views:PosterTile
-                                    CoverSource="{Binding CoverIssueId, Converter={x:Static views:CoverImageConverter.Instance}}"
-                                    TitleText="{Binding Name}"
-                                    BadgeText="{Binding RecentAddBadgeLabel}"
-                                    Command="{Binding $parent[UserControl].((vm:HomeScreenViewModel)DataContext).OpenSeriesCommand}"
-                                    CommandParameter="{Binding}" />
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                </ScrollViewer>
-                <TextBlock Text="Nothing added yet" Classes="emptyState" IsVisible="{Binding !HasRecentlyAdded}" />
-            </StackPanel>
+                <!-- ============ Spotlight hero ============ -->
+                <StackPanel Spacing="12">
+                    <StackPanel Spacing="12" IsVisible="{Binding HasSpotlight}">
+                        <Button Classes="heroCard" Command="{Binding OpenSpotlightCommand}"
+                                AutomationProperties.AutomationId="HomeSpotlightCard">
+                            <Border CornerRadius="{DynamicResource PbRadiusLg}" ClipToBounds="True">
+                                <views:DetailHero DataContext="{Binding SpotlightHeader}" MutedBackdrop="True" HeroHeight="264" />
+                            </Border>
+                        </Button>
+                        <ItemsControl ItemsSource="{Binding SpotlightItems}" HorizontalAlignment="Center"
+                                      AutomationProperties.AutomationId="HomeSpotlightDots">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate><StackPanel Orientation="Horizontal" Spacing="6" /></ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="models:SpotlightIssueSample">
+                                    <Button Classes="spotlightDot"
+                                            Classes.active="{Binding $parent[UserControl].((vm:HomeScreenViewModel)DataContext).CurrentSpotlight, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={Binding}}"
+                                            Command="{Binding $parent[UserControl].((vm:HomeScreenViewModel)DataContext).SetSpotlightItemCommand}"
+                                            CommandParameter="{Binding}" />
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                    <TextBlock AutomationProperties.AutomationId="HomeSpotlightHeader"
+                               Text="Your library's all caught up" Classes="emptyState" IsVisible="{Binding !HasSpotlight}" />
+                </StackPanel>
 
-            <!-- ============ Because You Read ============ -->
-            <ItemsControl ItemsSource="{Binding BecauseYouRead}" IsVisible="{Binding HasBecauseYouRead}"
-                          AutomationProperties.AutomationId="HomeBecauseYouReadSection">
-                <ItemsControl.ItemTemplate>
-                    <DataTemplate x:DataType="models:BecauseYouReadRow">
-                        <StackPanel Spacing="10" Margin="0,0,0,20">
-                            <TextBlock Text="{Binding SeedSeriesName, StringFormat='Because you read {0}'}" Classes="pbTextHeading" />
-                            <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
-                                <ItemsControl ItemsSource="{Binding Cards}" Margin="0,0,0,12">
+                <!-- ============ Continue Reading ============ -->
+                <StackPanel Spacing="12">
+                    <controls:SplitText Classes="heading" Text="Continue Reading" AutomationProperties.AutomationId="HomeContinueReadingHeader" />
+                    <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" IsVisible="{Binding HasContinueReading}">
+                        <ItemsControl ItemsSource="{Binding ContinueReading}" Margin="0,0,0,12" AutomationProperties.AutomationId="HomeContinueReadingList">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate><StackPanel Orientation="Horizontal" Spacing="16" /></ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="models:HomeContinueReadingCard">
+                                    <views:PosterTile
+                                        CoverSource="{Binding Series.CoverIssueId, Converter={x:Static views:CoverImageConverter.Instance}}"
+                                        TitleText="{Binding Series.Name}"
+                                        BadgeText="{Binding ResumeIssueBadge}"
+                                        ShowProgress="True"
+                                        ProgressFraction="{Binding ResumeProgressFraction}"
+                                        Command="{Binding $parent[UserControl].((vm:HomeScreenViewModel)DataContext).OpenContinueReadingCommand}"
+                                        CommandParameter="{Binding ResumeIssueId}" />
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                    <TextBlock Text="Nothing in progress yet" Classes="emptyState" IsVisible="{Binding !HasContinueReading}" />
+                </StackPanel>
+
+                <!-- ============ Continue Reading — Books ============ -->
+                <StackPanel Spacing="12" IsVisible="{Binding HasBooksLibrary}">
+                    <controls:SplitText Classes="heading" Text="Continue Reading — Books" AutomationProperties.AutomationId="HomeContinueReadingBooksHeader" />
+                    <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" IsVisible="{Binding HasContinueReadingBooks}">
+                        <ItemsControl ItemsSource="{Binding ContinueReadingBooks}" Margin="0,0,0,12" AutomationProperties.AutomationId="HomeContinueReadingBooksList">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate><StackPanel Orientation="Horizontal" Spacing="16" /></ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="models:HomeBookCard">
+                                    <views:PosterTile
+                                        CoverSource="{Binding BookId, Converter={x:Static views:BookCoverImageConverter.Instance}}"
+                                        TitleText="{Binding Title}"
+                                        MetaText="{Binding Author}"
+                                        ShowProgress="{Binding ShowProgress}"
+                                        ProgressFraction="{Binding ProgressFraction}"
+                                        Command="{Binding $parent[UserControl].((vm:HomeScreenViewModel)DataContext).OpenContinueReadingBookCommand}"
+                                        CommandParameter="{Binding}" />
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                    <TextBlock Text="Nothing in progress yet" Classes="emptyState" IsVisible="{Binding !HasContinueReadingBooks}" />
+                </StackPanel>
+
+                <!-- ============ Recently Added ============ -->
+                <StackPanel Spacing="12">
+                    <Grid ColumnDefinitions="*,Auto">
+                        <controls:SplitText Grid.Column="0" Classes="heading" Text="Recently Added" AutomationProperties.AutomationId="HomeRecentlyAddedHeader" />
+                        <Button Grid.Column="1" Classes="viewAllLink" Content="View Library →"
+                                Command="{Binding GoToLibraryCommand}"
+                                AutomationProperties.AutomationId="HomeViewLibraryLink" />
+                    </Grid>
+                    <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" IsVisible="{Binding HasRecentlyAdded}">
+                        <ItemsControl ItemsSource="{Binding RecentlyAdded}" Margin="0,0,0,12" AutomationProperties.AutomationId="HomeRecentlyAddedList">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate><StackPanel Orientation="Horizontal" Spacing="16" /></ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="models:SeriesCardSample">
+                                    <views:PosterTile
+                                        CoverSource="{Binding CoverIssueId, Converter={x:Static views:CoverImageConverter.Instance}}"
+                                        TitleText="{Binding Name}"
+                                        BadgeText="{Binding RecentAddBadgeLabel}"
+                                        Command="{Binding $parent[UserControl].((vm:HomeScreenViewModel)DataContext).OpenSeriesCommand}"
+                                        CommandParameter="{Binding}" />
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                    <TextBlock Text="Nothing added yet" Classes="emptyState" IsVisible="{Binding !HasRecentlyAdded}" />
+                </StackPanel>
+
+                <!-- ============ Because You Read ============ -->
+                <ItemsControl ItemsSource="{Binding BecauseYouRead}" IsVisible="{Binding HasBecauseYouRead}"
+                              AutomationProperties.AutomationId="HomeBecauseYouReadSection">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="models:BecauseYouReadRow">
+                            <StackPanel Spacing="12" Margin="0,0,0,20">
+                                <controls:SplitText Classes="heading" Text="{Binding SeedSeriesName, StringFormat='Because you read {0}'}" />
+                                <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+                                    <ItemsControl ItemsSource="{Binding Cards}" Margin="0,0,0,12">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate><StackPanel Orientation="Horizontal" Spacing="16" /></ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate x:DataType="models:SeriesCardSample">
+                                                <views:PosterTile
+                                                    CoverSource="{Binding CoverIssueId, Converter={x:Static views:CoverImageConverter.Instance}}"
+                                                    TitleText="{Binding Name}"
+                                                    BadgeText="{Binding IssueCountLabel}"
+                                                    Command="{Binding $parent[UserControl].((vm:HomeScreenViewModel)DataContext).OpenSeriesCommand}"
+                                                    CommandParameter="{Binding}" />
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </ScrollViewer>
+                            </StackPanel>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+                <TextBlock Text="No recommendations yet — link related series from a series' Detail screen to see them here."
+                           Classes="emptyState" TextWrapping="Wrap" IsVisible="{Binding !HasBecauseYouRead}"
+                           AutomationProperties.AutomationId="HomeBecauseYouReadEmptyState" />
+
+                <!-- ============ Try This Reading List ============ -->
+                <StackPanel Spacing="12">
+                    <controls:SplitText Classes="heading" Text="Try This Reading List" AutomationProperties.AutomationId="HomeReadingListSpotlightHeader" />
+                    <Button Classes="spotlightCard" IsVisible="{Binding HasReadingListSpotlight}"
+                            Command="{Binding OpenReadingListSpotlightCommand}" AutomationProperties.AutomationId="HomeReadingListSpotlightCard">
+                        <Grid ColumnDefinitions="Auto,*">
+                            <Border Grid.Column="0" Classes="spotlightCover" Background="{Binding ReadingListSpotlight.CoverBrush}">
+                                <Image Source="{Binding ReadingListSpotlight.CoverImage}" Stretch="UniformToFill" />
+                            </Border>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="22,0" Spacing="6">
+                                <TextBlock Text="{Binding ReadingListSpotlight.Name}" Classes="pbTextHeading" FontSize="24" />
+                                <TextBlock Text="{Binding ReadingListSpotlight.Synopsis}" FontSize="12.5"
+                                           Foreground="{DynamicResource PbTextMutedBrush}" TextWrapping="Wrap" />
+                                <ItemsControl ItemsSource="{Binding ReadingListSpotlight.Tags}">
                                     <ItemsControl.ItemsPanel>
-                                        <ItemsPanelTemplate><StackPanel Orientation="Horizontal" Spacing="16" /></ItemsPanelTemplate>
+                                        <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
                                     </ItemsControl.ItemsPanel>
                                     <ItemsControl.ItemTemplate>
-                                        <DataTemplate x:DataType="models:SeriesCardSample">
-                                            <views:PosterTile
-                                                CoverSource="{Binding CoverIssueId, Converter={x:Static views:CoverImageConverter.Instance}}"
-                                                TitleText="{Binding Name}"
-                                                BadgeText="{Binding IssueCountLabel}"
-                                                Command="{Binding $parent[UserControl].((vm:HomeScreenViewModel)DataContext).OpenSeriesCommand}"
-                                                CommandParameter="{Binding}" />
+                                        <DataTemplate x:DataType="x:String">
+                                            <Border Classes="pbChip" Margin="0,4,6,0">
+                                                <TextBlock Text="{Binding}" FontSize="10.5" FontWeight="SemiBold"
+                                                           Foreground="{DynamicResource PbAccentTextBrush}" />
+                                            </Border>
                                         </DataTemplate>
                                     </ItemsControl.ItemTemplate>
                                 </ItemsControl>
-                            </ScrollViewer>
-                        </StackPanel>
-                    </DataTemplate>
-                </ItemsControl.ItemTemplate>
-            </ItemsControl>
-            <TextBlock Text="No recommendations yet — link related series from a series' Detail screen to see them here."
-                       Classes="emptyState" TextWrapping="Wrap" IsVisible="{Binding !HasBecauseYouRead}"
-                       AutomationProperties.AutomationId="HomeBecauseYouReadEmptyState" />
+                                <TextBlock Text="Start the list →" FontSize="13" FontWeight="SemiBold" Margin="0,4,0,0"
+                                           Foreground="{DynamicResource PbAccentTextBrush}" />
+                            </StackPanel>
+                        </Grid>
+                    </Button>
+                    <TextBlock Text="No reading lists with anything left to read" Classes="emptyState" IsVisible="{Binding !HasReadingListSpotlight}" />
+                </StackPanel>
 
-            <!-- ============ Try This Reading List ============ -->
-            <StackPanel Spacing="10">
-                <TextBlock Text="Try This Reading List" Classes="pbTextHeading" AutomationProperties.AutomationId="HomeReadingListSpotlightHeader" />
-                <Button Classes="spotlightCard" IsVisible="{Binding HasReadingListSpotlight}"
-                        Command="{Binding OpenReadingListSpotlightCommand}" AutomationProperties.AutomationId="HomeReadingListSpotlightCard">
-                    <Grid ColumnDefinitions="Auto,*">
-                        <Border Grid.Column="0" Classes="spotlightCover" Background="{Binding ReadingListSpotlight.CoverBrush}">
-                            <Image Source="{Binding ReadingListSpotlight.CoverImage}" Stretch="UniformToFill" />
-                        </Border>
-                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="22,0" Spacing="6">
-                            <TextBlock Text="{Binding ReadingListSpotlight.Name}" Classes="pbTextHeading" FontSize="24" />
-                            <TextBlock Text="{Binding ReadingListSpotlight.Synopsis}" FontSize="12.5"
-                                       Foreground="{DynamicResource PbTextMutedBrush}" TextWrapping="Wrap" />
-                            <ItemsControl ItemsSource="{Binding ReadingListSpotlight.Tags}">
-                                <ItemsControl.ItemsPanel>
-                                    <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
-                                </ItemsControl.ItemsPanel>
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate x:DataType="x:String">
-                                        <Border Classes="pbChip" Margin="0,4,6,0">
-                                            <TextBlock Text="{Binding}" FontSize="10.5" FontWeight="SemiBold"
-                                                       Foreground="{DynamicResource PbAccentTextBrush}" />
-                                        </Border>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-                            <TextBlock Text="Start the list →" FontSize="13" FontWeight="SemiBold" Margin="0,4,0,0"
-                                       Foreground="{DynamicResource PbAccentTextBrush}" />
-                        </StackPanel>
-                    </Grid>
-                </Button>
-                <TextBlock Text="No reading lists with anything left to read" Classes="emptyState" IsVisible="{Binding !HasReadingListSpotlight}" />
             </StackPanel>
-
         </StackPanel>
     </ScrollViewer>
 </UserControl>

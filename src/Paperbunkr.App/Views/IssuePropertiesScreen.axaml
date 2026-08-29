@@ -1,5 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:pbc="using:Paperbunkr.App.Controls"
+             xmlns:fi="using:FluentIcons.Avalonia"
              xmlns:vm="using:Paperbunkr.App.ViewModels"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -55,13 +57,13 @@
             <Setter Property="Padding" Value="2" />
             <Setter Property="Cursor" Value="Hand" />
         </Style>
-        <Style Selector="Button.star Path.pbIcon">
-            <Setter Property="Width" Value="16" />
-            <Setter Property="Height" Value="16" />
-            <Setter Property="Stroke" Value="{DynamicResource PbTextFaintBrush}" />
+        <Style Selector="Button.star fi|SymbolIcon">
+            <Setter Property="FontSize" Value="16" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextFaintBrush}" />
         </Style>
-        <Style Selector="Button.star.filled Path.pbIcon">
-            <Setter Property="Stroke" Value="{DynamicResource PbAccentBrush}" />
+        <Style Selector="Button.star.filled fi|SymbolIcon">
+            <Setter Property="Foreground" Value="{DynamicResource PbAccentBrush}" />
+            <Setter Property="IconVariant" Value="Filled" />
         </Style>
 
         <!-- Token-insert flyout button (docs/ce-feature-inventory.md §A "Templated/token text field
@@ -109,7 +111,7 @@
                          open a different book, and paste the same values in. -->
                     <Button Classes="ghost" FontSize="12.5" Command="{Binding CopyFieldsCommand}" ToolTip.Tip="Copy every field on this screen">
                         <StackPanel Orientation="Horizontal" Spacing="6">
-                            <Path Classes="pbIcon" Data="{StaticResource PbIconCopy}" Stroke="{DynamicResource PbTextMutedBrush}" />
+                            <fi:SymbolIcon Symbol="Copy" Foreground="{DynamicResource PbTextMutedBrush}" />
                             <TextBlock Text="Copy" />
                         </StackPanel>
                     </Button>
@@ -119,13 +121,13 @@
                     <Border Width="1" Height="24" Background="{DynamicResource PbBorderBrush}" />
                     <Button Classes="ghost" FontSize="12.5" Command="{Binding CancelCommand}">
                         <StackPanel Orientation="Horizontal" Spacing="6">
-                            <Path Classes="pbIcon" Data="{StaticResource PbIconCloseCircle}" Stroke="{DynamicResource PbTextMutedBrush}" />
+                            <fi:SymbolIcon Symbol="DismissCircle" Foreground="{DynamicResource PbTextMutedBrush}" />
                             <TextBlock Text="Cancel" />
                         </StackPanel>
                     </Button>
                     <Button Classes="primary" FontSize="12.5" Command="{Binding SaveCommand}">
                         <StackPanel Orientation="Horizontal" Spacing="6">
-                            <Path Classes="pbIcon" Data="{StaticResource PbIconSave}" Stroke="{DynamicResource PbBadgeTextBrush}" />
+                            <fi:SymbolIcon Symbol="Save" Foreground="{DynamicResource PbBadgeTextBrush}" />
                             <TextBlock Text="Save" />
                         </StackPanel>
                     </Button>
@@ -186,21 +188,21 @@
                                     <StackPanel>
                                         <TextBlock Classes="fieldLabel" Text="MY RATING" />
                                         <StackPanel Orientation="Horizontal" Spacing="2">
-                                            <Button Classes="star" Classes.filled="{Binding MyRatingStar1}" Command="{Binding SetMyRating1Command}"><Path Classes="pbIcon" Data="{StaticResource PbIconStar}" /></Button>
-                                            <Button Classes="star" Classes.filled="{Binding MyRatingStar2}" Command="{Binding SetMyRating2Command}"><Path Classes="pbIcon" Data="{StaticResource PbIconStar}" /></Button>
-                                            <Button Classes="star" Classes.filled="{Binding MyRatingStar3}" Command="{Binding SetMyRating3Command}"><Path Classes="pbIcon" Data="{StaticResource PbIconStar}" /></Button>
-                                            <Button Classes="star" Classes.filled="{Binding MyRatingStar4}" Command="{Binding SetMyRating4Command}"><Path Classes="pbIcon" Data="{StaticResource PbIconStar}" /></Button>
-                                            <Button Classes="star" Classes.filled="{Binding MyRatingStar5}" Command="{Binding SetMyRating5Command}"><Path Classes="pbIcon" Data="{StaticResource PbIconStar}" /></Button>
+                                            <Button Classes="star" Classes.filled="{Binding MyRatingStar1}" Command="{Binding SetMyRating1Command}"><fi:SymbolIcon Symbol="Star" /></Button>
+                                            <Button Classes="star" Classes.filled="{Binding MyRatingStar2}" Command="{Binding SetMyRating2Command}"><fi:SymbolIcon Symbol="Star" /></Button>
+                                            <Button Classes="star" Classes.filled="{Binding MyRatingStar3}" Command="{Binding SetMyRating3Command}"><fi:SymbolIcon Symbol="Star" /></Button>
+                                            <Button Classes="star" Classes.filled="{Binding MyRatingStar4}" Command="{Binding SetMyRating4Command}"><fi:SymbolIcon Symbol="Star" /></Button>
+                                            <Button Classes="star" Classes.filled="{Binding MyRatingStar5}" Command="{Binding SetMyRating5Command}"><fi:SymbolIcon Symbol="Star" /></Button>
                                         </StackPanel>
                                     </StackPanel>
                                     <StackPanel>
                                         <TextBlock Classes="fieldLabel" Text="COMMUNITY RATING" />
                                         <StackPanel Orientation="Horizontal" Spacing="2">
-                                            <Button Classes="star" Classes.filled="{Binding CommunityRatingStar1}" Command="{Binding SetCommunityRating1Command}"><Path Classes="pbIcon" Data="{StaticResource PbIconStar}" /></Button>
-                                            <Button Classes="star" Classes.filled="{Binding CommunityRatingStar2}" Command="{Binding SetCommunityRating2Command}"><Path Classes="pbIcon" Data="{StaticResource PbIconStar}" /></Button>
-                                            <Button Classes="star" Classes.filled="{Binding CommunityRatingStar3}" Command="{Binding SetCommunityRating3Command}"><Path Classes="pbIcon" Data="{StaticResource PbIconStar}" /></Button>
-                                            <Button Classes="star" Classes.filled="{Binding CommunityRatingStar4}" Command="{Binding SetCommunityRating4Command}"><Path Classes="pbIcon" Data="{StaticResource PbIconStar}" /></Button>
-                                            <Button Classes="star" Classes.filled="{Binding CommunityRatingStar5}" Command="{Binding SetCommunityRating5Command}"><Path Classes="pbIcon" Data="{StaticResource PbIconStar}" /></Button>
+                                            <Button Classes="star" Classes.filled="{Binding CommunityRatingStar1}" Command="{Binding SetCommunityRating1Command}"><fi:SymbolIcon Symbol="Star" /></Button>
+                                            <Button Classes="star" Classes.filled="{Binding CommunityRatingStar2}" Command="{Binding SetCommunityRating2Command}"><fi:SymbolIcon Symbol="Star" /></Button>
+                                            <Button Classes="star" Classes.filled="{Binding CommunityRatingStar3}" Command="{Binding SetCommunityRating3Command}"><fi:SymbolIcon Symbol="Star" /></Button>
+                                            <Button Classes="star" Classes.filled="{Binding CommunityRatingStar4}" Command="{Binding SetCommunityRating4Command}"><fi:SymbolIcon Symbol="Star" /></Button>
+                                            <Button Classes="star" Classes.filled="{Binding CommunityRatingStar5}" Command="{Binding SetCommunityRating5Command}"><fi:SymbolIcon Symbol="Star" /></Button>
                                         </StackPanel>
                                     </StackPanel>
                                 </StackPanel>
@@ -316,7 +318,13 @@
                                     </StackPanel>
                                     <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="PUBLISHER" /><TextBox Text="{Binding Publisher}" /></StackPanel>
                                     <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="IMPRINT" /><TextBox Text="{Binding Imprint}" /></StackPanel>
-                                    <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="FORMAT" /><AutoCompleteBox Text="{Binding Format}" ItemsSource="{Binding FormatOptions}" /></StackPanel>
+                                    <StackPanel Classes="field">
+                                        <Grid ColumnDefinitions="*,Auto">
+                                            <TextBlock Grid.Column="0" Classes="fieldLabel" Text="FORMAT" />
+                                            <pbc:BrandMark Grid.Column="1" Family="Format" Value="{Binding Format}" ShowText="False" MarkSize="14" />
+                                        </Grid>
+                                        <AutoCompleteBox Text="{Binding Format}" ItemsSource="{Binding FormatOptions}" />
+                                    </StackPanel>
                                     <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="YEAR" /><TextBox Text="{Binding YearText}" /></StackPanel>
                                     <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="MONTH" /><TextBox Text="{Binding MonthText}" /></StackPanel>
                                     <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="DAY" /><TextBox Text="{Binding DayText}" /></StackPanel>
@@ -330,8 +338,20 @@
                                     <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="COVER ARTIST" /><TextBox Text="{Binding CoverArtist}" /></StackPanel>
                                     <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="EDITOR" /><TextBox Text="{Binding Editor}" /></StackPanel>
                                     <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="TRANSLATOR" /><TextBox Text="{Binding Translator}" /></StackPanel>
-                                    <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="AGE RATING" /><TextBox Text="{Binding AgeRating}" /></StackPanel>
-                                    <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="LANGUAGE (ISO)" /><TextBox Text="{Binding LanguageIso}" /></StackPanel>
+                                    <StackPanel Classes="field">
+                                        <Grid ColumnDefinitions="*,Auto">
+                                            <TextBlock Grid.Column="0" Classes="fieldLabel" Text="AGE RATING" />
+                                            <pbc:BrandMark Grid.Column="1" Family="AgeRating" Value="{Binding AgeRating}" ShowText="False" MarkSize="18" />
+                                        </Grid>
+                                        <TextBox Text="{Binding AgeRating}" />
+                                    </StackPanel>
+                                    <StackPanel Classes="field">
+                                        <Grid ColumnDefinitions="*,Auto">
+                                            <TextBlock Grid.Column="0" Classes="fieldLabel" Text="LANGUAGE (ISO)" />
+                                            <pbc:BrandMark Grid.Column="1" Family="Language" Value="{Binding LanguageIso}" ShowText="False" MarkSize="13" />
+                                        </Grid>
+                                        <TextBox Text="{Binding LanguageIso}" />
+                                    </StackPanel>
                                     <StackPanel Classes="field">
                                         <TextBlock Classes="fieldLabel" Text="COLOR MODE" />
                                         <ComboBox ItemsSource="{Binding ColorModeOptions}" SelectedItem="{Binding ColorModeText}" />

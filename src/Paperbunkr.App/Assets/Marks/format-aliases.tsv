@@ -1,0 +1,51 @@
+# Format alias map  (design §4). Vocabulary + aliases taken verbatim from ComicRack CE:
+# _reference/ComicRackCE/ComicRack/Output/Resources/Icons/Formats/*.png filenames (split on '#')
+# and Formats/map.ini. Rendered as our own glyph + label, not CE's rasters.
+# Columns, tab-separated:
+#   canonical   the ComicInfo Format value
+#   aliases     pipe-separated extra spellings (canonical matched too, case-insensitive)
+#   symbol      FluentIcons.Common.Symbol name; blank = letter-mark only
+#   label       short chip text; blank = uppercased canonical
+#   bg          hex chip background; blank = default surface
+#   asset       filename stem under Assets/Marks/Formats/ (<stem>.svg); non-blank -> render that
+#               SVG instead of the symbol/label (CE had only two true pictograms - see SOURCES.md)
+#
+# canonical	aliases	symbol	label	bg	asset
+1/2	1_2|one half|half issue		½
+.1	point 1|point one		.1
+-1	minus 1|minus one		−1
+Annotation	annotations		NOTE
+Annual			ANNUAL
+Anthology		Book	ANTH
+Black & White	b&w|b/w|b_w|bw|black and white		B/W
+Box Set	box-set|boxset|box	BoxMultiple	BOX
+Crossover		ArrowSwap	X-OVER		crossover
+Director's Cut	directors cut|director s cut	Video	DC
+Epilogue			EPILOGUE
+Event		Flash	EVENT
+FCBD	free comic book day	Gift	FCBD
+Fan Made	fanmade|fan-made	People	FAN
+Flyer		DocumentText	FLYER
+Giant	giant-size|giant size|giant sized	ArrowMaximize	GIANT
+Graphic Novel	gn	Book	GN
+Hardcover	hard cover|hc	Book	HC
+King	king-size|king size	Crown	KING
+Limited Series	limited	Ribbon	LTD
+Magazine		News	MAG
+Main	main series		MAIN
+NSFW	not safe for work	EyeOff	NSFW	#7A1F1F	nsfw
+Omnibus	omni	Book	OMNI
+One Shot	one-shot|1 shot|1-shot|oneshot		1-SHOT
+Preview	prev	Eye	PREVIEW
+Prologue			PROLOGUE
+Reference	ref	Info	REF
+Reviewed	review	CheckmarkCircle	REVIEW
+Scanlation	scanlated	Scan	SCAN
+Script		DocumentText	SCRIPT
+Series			SERIES
+Sketch	sketchbook	Edit	SKETCH
+Special	spec	Sparkle	SPECIAL
+Trade Paper Back	trade paperback|tpb|trade	Book	TPB
+Web Comic	webcomic|web	Globe	WEB
+Year One	year 1	Bookmark	YEAR ONE
+Year Zero	year 0	Bookmark	YEAR ZERO

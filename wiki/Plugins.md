@@ -35,10 +35,38 @@ trigger it from the surface its hook targets.
 ## Writing a plugin
 
 You get an environment object exposing library CRUD, navigation, and thumbnails —
-comparable in power to CE's `IPluginEnvironment`. The reference test plugin is a
-**Duplicate Finder**. See the design spec in the repo
-(`docs/superpowers/specs/2026-08-24-plugin-api-v2-design.md`) for the full hook list and
-API surface.
+comparable in power to CE's `IPluginEnvironment`. A **Data Manager**-class plugin also gets:
+
+- **`Environment.Metadata`** — read access to the relationship / continuity / story-event /
+  comic-age graph (the same data the Detail and Story Events screens show).
+- **`Environment.Rules`** — run the app's own Smart List matcher: evaluate a throwaway rule,
+  or `EvaluateSmartList(id)` to get exactly what a saved Smart List currently matches.
+- **`Environment.Writer`** — a curated, audited per-field write surface (format, book age,
+  custom values, tags). Every successful write is logged to `startup.log`.
+- **`Environment.GetSetting` / `SetSetting`** — persistent per-plugin key/value config,
+  scoped to your plugin so two plugins can't collide on a key.
+
+A command that writes in bulk should declare `confirmWrites="true"` on its `<Command>`
+element. When it does, `Environment.Writer` calls **fail closed** (return `false`, no DB
+write) until the command has shown an `Environment.App.AskQuestion(...)` prompt and the user
+has chosen the primary (affirmative) button in that same run — so a bulk edit is
+*structurally* required to ask first.
+
+The reference test plugin is a **Duplicate Finder**. See the design specs in the repo
+(`docs/superpowers/specs/2026-08-24-plugin-api-v2-design.md` and
+`docs/superpowers/specs/2026-08-28-plugin-api-v3-data-manager-design.md`) for the full hook
+list and API surface.
+
+### A note on the sandbox
+
+The `.csx` compile step is fenced so a **well-meaning plugin author can't accidentally reach
+past the curated environment** — the app's internal rule/graph engine types aren't
+compile-visible to a script, and `#r` directives can't pull extra assemblies (an EF Core
+raw-database handle, say) into scope. This is **accidental-overreach protection, not
+adversarial isolation**: scripts still run in-process with no AppDomain or process boundary,
+so someone *deliberately* trying to escape the reference set via reflection
+(`Type.GetType` + `Activator.CreateInstance` against an internal type name) can still
+technically succeed. Only run plugins you trust.
 
 Python interop (`pythonnet`) is a possible future addition but is not in the current
 build.

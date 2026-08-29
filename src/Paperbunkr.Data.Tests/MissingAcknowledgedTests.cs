@@ -36,9 +36,12 @@ public class MissingAcknowledgedTests : IDisposable
 
     private static SmartList MissingFilesList() => new()
     {
-        Conditions = new List<SmartListCondition>
+        RootGroup = new SmartListConditionGroup
         {
-            new() { Field = SmartListField.IsMissing, Operator = SmartListOperator.Is, Value = "true" },
+            Conditions =
+            {
+                new() { Field = SmartListField.IsMissing, Operator = SmartListOperator.Is, Value = "true" },
+            },
         },
     };
 

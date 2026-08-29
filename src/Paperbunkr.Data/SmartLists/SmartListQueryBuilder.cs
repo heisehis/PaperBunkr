@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
 using Paperbunkr.Data.Entities;
 using Paperbunkr.Data.Metadata;
@@ -6,15 +7,33 @@ using Paperbunkr.Data.VirtualTags;
 namespace Paperbunkr.Data.SmartLists;
 
 /// <summary>
-/// Evaluates a <see cref="SmartList"/>'s AND-ed conditions against the library. In-memory
-/// predicate evaluation over the fully materialized issue set — see
-/// <see cref="SmartListCatalog"/>'s remarks for why that's the CE-faithful choice here, not just a
-/// convenience.
+/// Evaluates a <see cref="SmartList"/>'s nested AND/OR condition tree against the library
+/// (docs/superpowers/specs/2026-08-28-smartlist-engine-v2-design.md §2). In-memory predicate
+/// evaluation over the fully materialized issue set — see <see cref="SmartListCatalog"/>'s remarks
+/// for why that's the CE-faithful choice here, not just a convenience.
+///
+/// <see cref="Build"/> is recursive: a <see cref="SmartListConditionGroup"/> matches an issue when
+/// its own <see cref="SmartListConditionGroup.Conditions"/> (each XOR'd with its
+/// <see cref="SmartListCondition.Not"/> flag) and its <see cref="SmartListConditionGroup.ChildGroups"/>
+/// (recursively), combined by <see cref="SmartListConditionGroup.Mode"/>, agree. Leaf-condition
+/// evaluation (<see cref="EvaluateText"/> etc.) is unchanged from v1 apart from §3's new operators.
+///
+/// Callers must load the full tree first (<see cref="SmartListTreeLoader"/>); an in-memory list
+/// with its <see cref="SmartList.RootGroup"/> populated works directly.
+///
+/// <b>Visibility:</b> <see langword="internal"/> (docs/superpowers/specs/2026-08-28-plugin-api-v3-
+/// data-manager-design.md §7) — the app's <c>IRulesEngine</c> adapter reaches it via
+/// <c>InternalsVisibleTo("Paperbunkr.App")</c>, but a plugin <c>.csx</c> script referencing
+/// <c>Paperbunkr.Data.dll</c> can no longer resolve it. A plugin evaluates rules through
+/// <c>IRulesEngine</c>, never this type directly.
 /// </summary>
-public static class SmartListQueryBuilder
+internal static class SmartListQueryBuilder
 {
     public static List<Issue> Build(PaperbunkrDbContext ctx, SmartList list)
     {
+        var root = list.RootGroup;
+        var allConditions = Flatten(root).ToList();
+
         // Include(Tags) - SmartListCatalog's Genre/Tags TextSelectors read Issue.Tags (docs/
         // superpowers/specs/2026-08-23-weighted-categorized-tags-design.md); without it every issue
         // would look like it has no Genre/Tags at all, silently breaking every Smart List condition
@@ -29,38 +48,71 @@ public static class SmartListQueryBuilder
         // Continuity condition reads i.Series.ContinuityMemberships (docs/superpowers/specs/2026-08-27-
         // metadata-model-phase4f-continuity-browse-design.md) - loaded separately so the common
         // no-continuity-condition case doesn't pay for the join.
-        if (list.Conditions.Any(c => c.Field == SmartListField.Continuity))
+        if (allConditions.Any(c => c.Field == SmartListField.Continuity))
         {
             ctx.Series.Include(s => s.ContinuityMemberships).ThenInclude(m => m.Continuity).Load();
         }
 
-        HashSet<int>? duplicateIds = list.Conditions.Any(c => c.Field == SmartListField.Duplicate)
+        HashSet<int>? duplicateIds = allConditions.Any(c => c.Field == SmartListField.Duplicate)
             ? DuplicateIssueIds(issues)
             : null;
 
         // Disabled tags are excluded, not just unpicklable in the rule-builder UI - a condition
         // saved against a tag that's since been disabled in Preferences stops matching too,
         // consistent with the Detail-screen pills surface also only showing enabled tags.
-        Dictionary<int, VirtualTagDefinition>? virtualTags = list.Conditions.Any(c => c.Field == SmartListField.VirtualTag)
+        Dictionary<int, VirtualTagDefinition>? virtualTags = allConditions.Any(c => c.Field == SmartListField.VirtualTag)
             ? ctx.VirtualTagDefinitions.Where(v => v.IsEnabled).ToDictionary(v => v.Id)
             : null;
 
-        IEnumerable<Issue> result = issues;
-        foreach (var condition in list.Conditions.OrderBy(c => c.SortOrder))
-        {
-            result = result.Where(i => Evaluate(i, condition, duplicateIds, virtualTags));
-        }
-
-        return result.ToList();
+        var evalContext = new EvalContext(duplicateIds, virtualTags);
+        return issues.Where(i => EvaluateGroup(i, root, evalContext)).ToList();
     }
 
     public static int MatchCount(PaperbunkrDbContext ctx, SmartList list) => Build(ctx, list).Count;
 
-    private static bool Evaluate(Issue issue, SmartListCondition condition, HashSet<int>? duplicateIds, Dictionary<int, VirtualTagDefinition>? virtualTags)
+    /// <summary>Every condition anywhere in the tree — used for Include-gating and quick "does this list touch field X" checks.</summary>
+    public static IEnumerable<SmartListCondition> Flatten(SmartListConditionGroup group)
+    {
+        foreach (var condition in group.Conditions)
+        {
+            yield return condition;
+        }
+
+        foreach (var child in group.ChildGroups)
+        {
+            foreach (var condition in Flatten(child))
+            {
+                yield return condition;
+            }
+        }
+    }
+
+    private sealed record EvalContext(HashSet<int>? DuplicateIds, Dictionary<int, VirtualTagDefinition>? VirtualTags);
+
+    /// <summary>
+    /// A group matches when its conditions (XOR'd with <see cref="SmartListCondition.Not"/>) and
+    /// child groups, combined by <see cref="SmartListConditionGroup.Mode"/>, agree. An empty
+    /// <see cref="SmartListGroupMode.And"/> group matches every issue (vacuous truth — matches CE's
+    /// <c>ComicBookGroupMatcher.Match</c>, which returns all items when it holds no matchers, and the
+    /// v1 "a list with no conditions matches everything" behavior).
+    /// </summary>
+    private static bool EvaluateGroup(Issue issue, SmartListConditionGroup group, EvalContext ctx)
+    {
+        IEnumerable<bool> results = group.Conditions
+            .OrderBy(c => c.SortOrder)
+            .Select(c => EvaluateCondition(issue, c, ctx) ^ c.Not)
+            .Concat(group.ChildGroups
+                .OrderBy(g => g.SortOrder)
+                .Select(g => EvaluateGroup(issue, g, ctx)));
+
+        return group.Mode == SmartListGroupMode.Or ? results.Any(r => r) : results.All(r => r);
+    }
+
+    private static bool EvaluateCondition(Issue issue, SmartListCondition condition, EvalContext ctx)
     {
         if (condition.Field == SmartListField.Duplicate)
         {
-            bool isDuplicate = duplicateIds?.Contains(issue.Id) ?? false;
+            bool isDuplicate = ctx.DuplicateIds?.Contains(issue.Id) ?? false;
             return condition.Operator == SmartListOperator.IsNot ? !isDuplicate : isDuplicate;
         }
 
@@ -71,7 +123,12 @@ public static class SmartListQueryBuilder
 
         if (condition.Field == SmartListField.VirtualTag)
         {
-            return EvaluateVirtualTag(issue, condition, virtualTags);
+            return EvaluateVirtualTag(issue, condition, ctx.VirtualTags);
+        }
+
+        if (condition.Field == SmartListField.AllProperties)
+        {
+            return EvaluateAllProperties(issue, condition);
         }
 
         var definition = SmartListCatalog.Definitions[condition.Field];
@@ -85,9 +142,20 @@ public static class SmartListQueryBuilder
         };
     }
 
+    /// <summary>
+    /// <see cref="SmartListField.AllProperties"/> (docs/superpowers/specs/2026-08-28-smartlist-engine-
+    /// v2-design.md §4): match if <em>any</em> field value in the <see cref="SmartListCondition.SearchMode"/>
+    /// bundle satisfies the condition's operator. Same <see cref="EvaluateText"/> codepath as every
+    /// other Text condition, so List Contains / Regular Expression / case-sensitivity all apply here
+    /// for free.
+    /// </summary>
+    private static bool EvaluateAllProperties(Issue issue, SmartListCondition condition) =>
+        SearchFieldBundleCatalog.For(condition.SearchMode)(issue)
+            .Any(value => EvaluateText(value ?? string.Empty, condition));
+
     private static bool EvaluateText(string value, SmartListCondition c)
     {
-        const StringComparison sc = StringComparison.OrdinalIgnoreCase;
+        StringComparison sc = c.IgnoreCase ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
         return c.Operator switch
         {
             SmartListOperator.Is => value.Equals(c.Value, sc),
@@ -97,8 +165,51 @@ public static class SmartListQueryBuilder
             SmartListOperator.ContainsAll => SplitValues(c.Value).All(v => value.Contains(v, sc)),
             SmartListOperator.StartsWith => value.StartsWith(c.Value, sc),
             SmartListOperator.EndsWith => value.EndsWith(c.Value, sc),
+            SmartListOperator.ListContains => ListContains(value, c),
+            SmartListOperator.RegularExpression => RegexMatches(value, c),
             _ => false,
         };
+    }
+
+    /// <summary>
+    /// CE operator 6 (<c>_reference/ComicRackCE/ComicRack.Engine/ComicBookStringMatcher.cs:114-118,152</c>):
+    /// the match value is one whole <c>,</c>/<c>;</c>-delimited item of <paramref name="value"/>,
+    /// surrounding whitespace ignored — the same delimiter set <see cref="SplitValues"/> and the
+    /// <c>JoinedTags()</c>/<c>JoinedGenre()</c> helpers use. Unlike CE (whose <c>rxList</c> is
+    /// hard-wired <c>RegexOptions.IgnoreCase</c>), this honours <see cref="SmartListCondition.IgnoreCase"/>
+    /// per the v2 spec's "case-sensitivity-aware" wording.
+    /// </summary>
+    private static bool ListContains(string value, SmartListCondition c)
+    {
+        string needle = c.Value.Trim();
+        var comparer = c.IgnoreCase ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+        return value
+            .Split([',', ';'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Any(item => comparer.Equals(item, needle));
+    }
+
+    /// <summary>
+    /// CE operator 7 — a raw .NET regex. Bounded by a 250ms timeout (the same "thousands not
+    /// millions" per-condition budget <see cref="SmartListCatalog"/> documents); a
+    /// <see cref="RegexParseException"/>/<see cref="ArgumentException"/> (malformed pattern) or a
+    /// <see cref="RegexMatchTimeoutException"/> is treated as "no match" rather than surfaced as an
+    /// app error — same "never let one bad input crash the host" spirit as the plugin engine.
+    /// </summary>
+    private static bool RegexMatches(string value, SmartListCondition c)
+    {
+        try
+        {
+            var options = c.IgnoreCase ? RegexOptions.IgnoreCase : RegexOptions.None;
+            return Regex.IsMatch(value, c.Value, options, TimeSpan.FromMilliseconds(250));
+        }
+        catch (ArgumentException)
+        {
+            return false;
+        }
+        catch (RegexMatchTimeoutException)
+        {
+            return false;
+        }
     }
 
     private static IEnumerable<string> SplitValues(string raw) =>

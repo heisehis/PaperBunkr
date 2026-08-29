@@ -35,6 +35,9 @@ public sealed class PluginHostService
             OpenBooks = new PaperbunkrOpenBooksManager(main),
             Browser = new PaperbunkrBrowser(main),
             ComicDisplay = new PaperbunkrComicDisplay(main.Reader),
+            Metadata = new PaperbunkrMetadataGraph(),
+            Rules = new PaperbunkrRulesEngine(),
+            Writer = new PaperbunkrMetadataWriter(),
             ThemePlugin = new PaperbunkrThemePlugin(),
         };
 

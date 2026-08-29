@@ -16,7 +16,8 @@ public sealed record EventSuggestion(Issue Issue, FormatSignalStrength Strength,
 /// relation creation. Creates nothing; the Story Events screen turns a suggestion into a real
 /// <see cref="EventMembership"/> only on the user's explicit Add.
 /// </summary>
-public static class EventSuggestionResolver
+// internal - see MediaRelationResolver (Plugin API v3 §7). Plugins read through IMetadataGraph.
+internal static class EventSuggestionResolver
 {
     public static IReadOnlyList<EventSuggestion> GetSuggestions(PaperbunkrDbContext context, int storyEventId)
     {

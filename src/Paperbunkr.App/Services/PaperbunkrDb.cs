@@ -97,9 +97,13 @@ public static class PaperbunkrDb
                 Name = name,
                 IsSystem = true,
                 SortOrder = sortOrder++,
-                Conditions = new List<SmartListCondition>
+                RootGroup = new SmartListConditionGroup
                 {
-                    new() { Field = field, Operator = op, Value = value, Value2 = value2, SortOrder = 0 },
+                    Mode = SmartListGroupMode.And,
+                    Conditions =
+                    {
+                        new() { Field = field, Operator = op, Value = value, Value2 = value2, SortOrder = 0 },
+                    },
                 },
             });
         }

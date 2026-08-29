@@ -20,7 +20,11 @@ namespace Paperbunkr.Data.Metadata;
 /// early version inverted on the target side instead, which would have shown "Sequel" on the
 /// earlier work's own page instead of the later one's.
 /// </summary>
-public static class MediaRelationResolver
+// internal (docs/superpowers/specs/2026-08-28-plugin-api-v3-data-manager-design.md §7) - reachable
+// from Paperbunkr.App (IMetadataGraph adapter) and the test assemblies via InternalsVisibleTo, but
+// not from a plugin .csx script referencing Paperbunkr.Data.dll. Plugins read this graph through
+// IMetadataGraph.
+internal static class MediaRelationResolver
 {
     /// <summary>One related series, the <see cref="RelationType"/> to display for it (already resolved for whichever side <paramref name="seriesId"/> is on), and the underlying <see cref="MediaRelation.Id"/> (for removal).</summary>
     public static IReadOnlyList<(Series OtherSeries, RelationType DisplayType, int MediaRelationId)> GetRelatedSeries(PaperbunkrDbContext context, int seriesId)

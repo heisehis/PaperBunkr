@@ -8,7 +8,8 @@ namespace Paperbunkr.Data.Metadata;
 /// 2026-08-27-metadata-model-phase4g-age-progression-design.md). Not a stored/backfilled column and
 /// not a reviewable <c>MetadataProposal</c> - runs on demand wherever an age is displayed.
 /// </summary>
-public static class BookAgeResolver
+// internal - see MediaRelationResolver (Plugin API v3 §7). Plugins read through IMetadataGraph.
+internal static class BookAgeResolver
 {
     private const string DisputedWindowReason =
         "1980-84 is Modern per ComicRack CE's own boundaries, but commonly cited elsewhere as still Bronze Age";

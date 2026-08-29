@@ -97,9 +97,12 @@ public partial class NeedsReviewViewModel : ViewModelBase
         // system smart list uses for IsMissing) rather than a bespoke Series query.
         var transient = new SmartList
         {
-            Conditions = new List<SmartListCondition>
+            RootGroup = new SmartListConditionGroup
             {
-                new() { Field = SmartListField.ContentType, Operator = SmartListOperator.Is, Value = ContentType.Unknown.ToString() },
+                Conditions =
+                {
+                    new() { Field = SmartListField.ContentType, Operator = SmartListOperator.Is, Value = ContentType.Unknown.ToString() },
+                },
             },
         };
 
@@ -120,11 +123,14 @@ public partial class NeedsReviewViewModel : ViewModelBase
 
     private void RefreshMissingFileItems(PaperbunkrDbContext context)
     {
-        var missingFilesList = context.SmartLists.Include(s => s.Conditions)
-            .FirstOrDefault(s => s.IsSystem && s.Name == "Missing Files");
+        var missingFilesListId = context.SmartLists
+            .Where(s => s.IsSystem && s.Name == "Missing Files")
+            .Select(s => (int?)s.Id)
+            .FirstOrDefault();
 
         MissingFileItems.Clear();
-        if (missingFilesList is null)
+        if (missingFilesListId is not int listId
+            || SmartListTreeLoader.LoadWithTree(context, listId) is not { } missingFilesList)
         {
             return;
         }

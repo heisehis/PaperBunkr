@@ -25,6 +25,14 @@ public abstract class Command
     /// <summary>Relative path (from the plugin's folder) to an icon image, or null.</summary>
     public string? Image { get; init; }
 
+    /// <summary>
+    /// Manifest <c>confirmWrites</c> attribute (docs/superpowers/specs/2026-08-28-plugin-api-v3-data-
+    /// manager-design.md §5), default false. When true, <c>IMetadataWriter</c> calls from this
+    /// command fail closed until the user has answered an <c>IApplication.AskQuestion</c>
+    /// affirmatively in the same invocation.
+    /// </summary>
+    public bool ConfirmWrites { get; init; }
+
     public bool Enabled { get; set; } = true;
 
     /// <summary>Per-command clone of the environment, with <see cref="IPluginEnvironment.CommandPath"/> set to this command's plugin folder. Set by <see cref="Initialize"/>.</summary>
@@ -47,6 +55,7 @@ public abstract class Command
         {
             Environment = (IPluginEnvironment)env.Clone();
             Environment.CommandPath = pluginPath;
+            Environment.PluginKey = PluginKey;
             OnInitialize(pluginPath);
             return true;
         }
@@ -59,6 +68,10 @@ public abstract class Command
 
     public async Task<object?> InvokeAsync(PluginGlobals globals)
     {
+        // Per-invocation confirmation gate for IMetadataWriter (docs/superpowers/specs/2026-08-28-
+        // plugin-api-v3-data-manager-design.md §5) - scoped to exactly this call, flows across the
+        // script's awaits.
+        using var _ = PluginInvocationContext.Enter(PluginKey, ConfirmWrites);
         return await OnInvokeAsync(globals).ConfigureAwait(false);
     }
 

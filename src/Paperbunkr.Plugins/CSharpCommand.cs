@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Scripting;
 using Microsoft.CodeAnalysis.Scripting;
@@ -13,6 +14,16 @@ namespace Paperbunkr.Plugins;
 /// 2026-08-24-plugin-api-v2-design.md §2/§3. Compiles <see cref="ScriptPath"/> eagerly via
 /// <see cref="PreCompile"/> against the globals type <see cref="Hooks.PluginGlobalsTypeMap"/>
 /// resolves for this command's <see cref="Command.Hook"/>.
+///
+/// Sandbox note (docs/superpowers/specs/2026-08-28-plugin-api-v3-data-manager-design.md §7,
+/// verified at implementation time): Roslyn scripting's default <c>MetadataReferenceResolver</c>
+/// (<c>RuntimeMetadataReferenceResolver</c>) <b>does</b> resolve <c>#r "SomeAssembly"</c> directives
+/// against the running app's assemblies and NuGet package folders - a throwaway
+/// <c>#r "Microsoft.EntityFrameworkCore"</c> script compiled cleanly and could name EF Core types.
+/// <see cref="Options"/> pins <see cref="BlockedMetadataReferenceResolver"/> so directive-driven
+/// assembly loading resolves to nothing: the fixed <see cref="ScriptOptions.WithReferences(System.Reflection.Assembly[])"/>
+/// list is the complete set a script can ever see, and a script trying to pull in EF Core / any
+/// other assembly this way fails to *compile* rather than gaining access.
 /// </summary>
 public sealed class CSharpCommand : Command
 {
@@ -22,6 +33,7 @@ public sealed class CSharpCommand : Command
             typeof(Enumerable).Assembly,
             typeof(Issue).Assembly,
             typeof(IPluginEnvironment).Assembly)
+        .WithMetadataResolver(BlockedMetadataReferenceResolver.Instance)
         .WithImports(
             "System",
             "System.Linq",
@@ -73,4 +85,50 @@ public sealed class CSharpCommand : Command
         ScriptState<object> state = await _script.RunAsync(globals).ConfigureAwait(false);
         return state.ReturnValue;
     }
+}
+
+/// <summary>
+/// Closes the <c>#r</c>-directive assembly-loading hole (docs/superpowers/specs/2026-08-28-plugin-
+/// api-v3-data-manager-design.md §7).
+///
+/// Verified at implementation time: Roslyn scripting's default resolver
+/// (<c>RuntimeMetadataReferenceResolver</c>, via <see cref="ScriptMetadataResolver.Default"/>)
+/// <b>does</b> honour <c>#r "SomeAssembly"</c> against the running app's loaded assemblies and its
+/// NuGet package folders — a throwaway <c>#r "Microsoft.EntityFrameworkCore"</c> script compiled
+/// cleanly and could name <c>DbContext</c>. This resolver:
+/// <list type="bullet">
+/// <item>resolves <b>every</b> <c>#r</c> directive to nothing, so the fixed
+/// <see cref="ScriptOptions.WithReferences(System.Reflection.Assembly[])"/> list is the complete
+/// set a script can ever name;</item>
+/// <item>still delegates <em>transitive</em> assembly resolution (types reachable from the fixed
+/// references) to the default resolver — otherwise a legitimate <c>Environment.App.GetLibraryBooks()</c>
+/// script won't compile — but denies the EF Core / SQLite family specifically, so
+/// <c>PaperbunkrDbContext</c>'s <c>DbContext</c> base still can't be pulled in that way either.</item>
+/// </list>
+/// </summary>
+internal sealed class BlockedMetadataReferenceResolver : MetadataReferenceResolver
+{
+    public static readonly BlockedMetadataReferenceResolver Instance = new();
+
+    private static readonly string[] DeniedAssemblyPrefixes =
+    {
+        "Microsoft.EntityFrameworkCore", "Microsoft.Data.Sqlite", "SQLitePCLRaw",
+    };
+
+    private readonly MetadataReferenceResolver _inner = ScriptMetadataResolver.Default;
+
+    public override bool ResolveMissingAssemblies => true;
+
+    public override PortableExecutableReference? ResolveMissingAssembly(MetadataReference definition, AssemblyIdentity referenceIdentity) =>
+        IsDenied(referenceIdentity.Name) ? null : _inner.ResolveMissingAssembly(definition, referenceIdentity);
+
+    public override ImmutableArray<PortableExecutableReference> ResolveReference(string reference, string? baseFilePath, MetadataReferenceProperties properties) =>
+        ImmutableArray<PortableExecutableReference>.Empty;
+
+    public override bool Equals(object? other) => other is BlockedMetadataReferenceResolver;
+
+    public override int GetHashCode() => typeof(BlockedMetadataReferenceResolver).GetHashCode();
+
+    private static bool IsDenied(string assemblyName) =>
+        DeniedAssemblyPrefixes.Any(p => assemblyName.StartsWith(p, StringComparison.OrdinalIgnoreCase));
 }

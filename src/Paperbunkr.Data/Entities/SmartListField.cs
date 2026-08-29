@@ -3,8 +3,10 @@ namespace Paperbunkr.Data.Entities;
 /// <summary>
 /// Every condition field the smart-list rule builder can filter on, matching CE's
 /// <c>ComicBook*Matcher</c> catalog field-for-field (docs/superpowers/specs/2026-08-06-smart-lists-design.md
-/// §4) except <c>AllProperties</c> and <c>Week</c>, both deliberately deferred/omitted per that
-/// spec. <see cref="SmartListCatalog"/> maps each value to its label, <see cref="SmartListDataType"/>,
+/// §4) except <c>Week</c>, deliberately omitted per that spec. <c>AllProperties</c> (deferred in the
+/// original spec) is now present, wired to <see cref="SearchFieldBundleCatalog"/>
+/// (docs/superpowers/specs/2026-08-28-smartlist-engine-v2-design.md §4).
+/// <see cref="SmartListCatalog"/> maps each value to its label, <see cref="SmartListDataType"/>,
 /// and the <see cref="Issue"/> column(s) it reads.
 /// </summary>
 public enum SmartListField
@@ -113,4 +115,14 @@ public enum SmartListField
     /// caption as text.
     /// </summary>
     VirtualTag,
+
+    /// <summary>
+    /// CE's <c>ComicBookAllPropertiesMatcher</c> — match against a curated bundle of fields at once,
+    /// scoped by <see cref="SmartListCondition.SearchMode"/> (docs/superpowers/specs/2026-08-28-
+    /// smartlist-engine-v2-design.md §4). Special-cased in <see cref="SmartListQueryBuilder"/> (like
+    /// <see cref="CustomValue"/>/<see cref="VirtualTag"/>) rather than having a flat
+    /// <see cref="SmartListCatalog"/> selector; the same <see cref="SearchFieldBundleCatalog"/> the
+    /// Library search box uses.
+    /// </summary>
+    AllProperties,
 }

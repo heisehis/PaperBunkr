@@ -14,7 +14,8 @@ namespace Paperbunkr.Data.Metadata;
 /// explicit <see cref="ContinuityMembership"/> join entity, which also carries a per-membership
 /// note and sort order.
 /// </summary>
-public static class ContinuityResolver
+// internal - see MediaRelationResolver (Plugin API v3 §7). Plugins read through IMetadataGraph.
+internal static class ContinuityResolver
 {
     public static IReadOnlyList<Continuity> GetContinuities(PaperbunkrDbContext context, int seriesId)
     {

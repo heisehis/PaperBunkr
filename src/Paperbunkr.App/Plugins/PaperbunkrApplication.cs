@@ -36,17 +36,34 @@ public sealed class PaperbunkrApplication : IApplication
         _ = new LibraryFolderScanner().ScanAllAsync(new Progress<(int Done, int Total)>());
     }
 
+    /// <summary>
+    /// Eager-loads Tags/CustomValues/MetadataProposals/Bookmarks alongside Series (docs/superpowers/
+    /// specs/2026-08-28-plugin-api-v3-data-manager-design.md §3). No lazy-loading proxies are
+    /// configured anywhere, so without these Includes a plugin would silently see empty collections
+    /// - the worse failure mode. The result set now matches what <c>SmartListQueryBuilder</c> sees,
+    /// which is what makes <see cref="Paperbunkr.Plugins.Automation.IRulesEngine"/> trustworthy:
+    /// evaluating a rule against this output and asking <c>IRulesEngine</c> to evaluate the same
+    /// rule see the same underlying data.
+    /// </summary>
     public IEnumerable<Issue> GetLibraryBooks()
     {
         using var context = PaperbunkrDb.CreateContext();
-        return context.Issues.Include(i => i.Series).ToList();
+        return IncludePluginRelations(context.Issues).ToList();
     }
 
+    /// <summary>Same eager-load set as <see cref="GetLibraryBooks"/> (docs §3).</summary>
     public Issue? GetBook(int issueId)
     {
         using var context = PaperbunkrDb.CreateContext();
-        return context.Issues.Include(i => i.Series).FirstOrDefault(i => i.Id == issueId);
+        return IncludePluginRelations(context.Issues).FirstOrDefault(i => i.Id == issueId);
     }
+
+    private static IQueryable<Issue> IncludePluginRelations(IQueryable<Issue> issues) => issues
+        .Include(i => i.Series)
+        .Include(i => i.Tags)
+        .Include(i => i.CustomValues)
+        .Include(i => i.MetadataProposals)
+        .Include(i => i.Bookmarks);
 
     public bool RemoveBook(Issue issue)
     {
@@ -114,8 +131,22 @@ public sealed class PaperbunkrApplication : IApplication
         }
     }
 
-    public int AskQuestion(string question, string buttonText, string optionText) =>
-        PluginQuestionDialog.ShowModal(question, buttonText, optionText);
+    /// <summary>
+    /// Shows the native question dialog and returns the chosen option index (0 = primary button,
+    /// 1 = secondary). Answering affirmatively (index 0) also opens the per-invocation write
+    /// confirmation gate for a <c>confirmWrites="true"</c> command (docs/superpowers/specs/2026-08-28-
+    /// plugin-api-v3-data-manager-design.md §5) - the one native primitive that gate reuses.
+    /// </summary>
+    public int AskQuestion(string question, string buttonText, string optionText)
+    {
+        int answer = PluginQuestionDialog.ShowModal(question, buttonText, optionText);
+        if (answer == 0 && Paperbunkr.Plugins.PluginInvocationContext.Current is { RequiresWriteConfirmation: true } ctx)
+        {
+            ctx.WritesConfirmed = true;
+        }
+
+        return answer;
+    }
 
     public void ShowComicInfo(IEnumerable<Issue> books)
     {

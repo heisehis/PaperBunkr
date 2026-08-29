@@ -47,6 +47,45 @@
             <Setter Property="MinWidth" Value="120" />
         </Style>
 
+        <!-- NOT / Aa toggles on a condition row -->
+        <Style Selector="ToggleButton.conditionFlag">
+            <Setter Property="Background" Value="{DynamicResource PbChromeBrush}" />
+            <Setter Property="BorderBrush" Value="#383D47" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="5" />
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="FontWeight" Value="Bold" />
+            <Setter Property="Padding" Value="7,5" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextFaintBrush}" />
+        </Style>
+        <Style Selector="ToggleButton.conditionFlag:checked">
+            <Setter Property="Background" Value="{DynamicResource PbAccentBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource PbBadgeTextBrush}" />
+        </Style>
+
+        <!-- And/Or toggle at the top of a group card -->
+        <Style Selector="Button.modeToggle">
+            <Setter Property="Background" Value="{DynamicResource PbAccentBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource PbBadgeTextBrush}" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="CornerRadius" Value="5" />
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="FontWeight" Value="Bold" />
+            <Setter Property="Padding" Value="9,4" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+
+        <Style Selector="Border.groupCard">
+            <Setter Property="Background" Value="{DynamicResource PbChromeBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="CornerRadius" Value="7" />
+            <Setter Property="Padding" Value="16" />
+        </Style>
+
         <!-- Matches Button.card in LibraryScreen.axaml - transparent hit-target wrapper. -->
         <Style Selector="Button.resultCard">
             <Setter Property="Background" Value="Transparent" />
@@ -66,6 +105,115 @@
             <Setter Property="ClipToBounds" Value="True" />
         </Style>
     </UserControl.Styles>
+
+    <UserControl.Resources>
+        <!-- Recursive group card: the nested ItemsControl below references this same key, so an
+             arbitrarily deep AND/OR tree renders (docs/superpowers/specs/2026-08-28-smartlist-
+             engine-v2-design.md §2). A single non-nested group renders as a flat pill list,
+             exactly like the pre-v2 UI. -->
+        <DataTemplate x:Key="GroupCardTemplate" x:DataType="vm:SmartListGroupViewModel">
+            <Border Classes="groupCard" Margin="0,0,0,10">
+                <StackPanel Spacing="10">
+
+                    <Grid ColumnDefinitions="Auto,*,Auto">
+                        <Button Grid.Column="0" Classes="modeToggle" Command="{Binding ToggleModeCommand}"
+                                Content="{Binding ModeLabel}" IsEnabled="{Binding !IsReadOnly}"
+                                ToolTip.Tip="Switch between matching ALL and ANY of the rows below" />
+                        <TextBlock Grid.Column="1" Text="{Binding MatchSummary}" FontSize="11.5" FontWeight="Bold"
+                                   Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" Margin="10,0,0,0" />
+                        <Button Grid.Column="2" Classes="headerAction ghost" Command="{Binding RemoveCommand}"
+                                IsVisible="{Binding CanRemove}" ToolTip.Tip="Remove this group" Content="✕" />
+                    </Grid>
+
+                    <ItemsControl ItemsSource="{Binding Conditions}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:SmartListConditionViewModel">
+                                <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,0,0,1" Padding="0,9">
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <ToggleButton Classes="conditionFlag" Content="NOT" IsChecked="{Binding Not}"
+                                                      ToolTip.Tip="Negate this condition"
+                                                      IsEnabled="{Binding !$parent[UserControl].((vm:SmartScreenViewModel)DataContext).IsReadOnly}" />
+
+                                        <ComboBox Classes="conditionPicker" ItemsSource="{Binding FieldOptions}"
+                                                  SelectedItem="{Binding SelectedField}"
+                                                  IsEnabled="{Binding !$parent[UserControl].((vm:SmartScreenViewModel)DataContext).IsReadOnly}" />
+
+                                        <ComboBox Classes="conditionPicker" Width="140" PlaceholderText="search in"
+                                                  ItemsSource="{Binding SearchModeOptions}" SelectedItem="{Binding SelectedSearchMode}"
+                                                  IsVisible="{Binding IsAllPropertiesField}"
+                                                  IsEnabled="{Binding !$parent[UserControl].((vm:SmartScreenViewModel)DataContext).IsReadOnly}" />
+
+                                        <TextBox Classes="conditionValue" Width="150" Watermark="value name"
+                                                 Text="{Binding CustomValueName}" IsVisible="{Binding IsCustomValueField}"
+                                                 IsReadOnly="{Binding $parent[UserControl].((vm:SmartScreenViewModel)DataContext).IsReadOnly}" />
+
+                                        <ComboBox Classes="conditionPicker" Width="150" PlaceholderText="virtual tag"
+                                                  ItemsSource="{Binding VirtualTagOptions}" SelectedItem="{Binding SelectedVirtualTag}"
+                                                  IsVisible="{Binding IsVirtualTagField}"
+                                                  IsEnabled="{Binding !$parent[UserControl].((vm:SmartScreenViewModel)DataContext).IsReadOnly}" />
+
+                                        <ComboBox Classes="conditionPicker" ItemsSource="{Binding OperatorOptions}"
+                                                  SelectedItem="{Binding SelectedOperator}" IsVisible="{Binding !IsDuplicateField}"
+                                                  IsEnabled="{Binding !$parent[UserControl].((vm:SmartScreenViewModel)DataContext).IsReadOnly}" />
+
+                                        <ToggleButton Classes="conditionFlag" Content="Aa" IsChecked="{Binding IgnoreCase}"
+                                                      IsVisible="{Binding ShowCaseToggle}"
+                                                      ToolTip.Tip="Ignore case (on) / match case exactly (off)"
+                                                      IsEnabled="{Binding !$parent[UserControl].((vm:SmartScreenViewModel)DataContext).IsReadOnly}" />
+
+                                        <TextBox Classes="conditionValue" Text="{Binding Value}" IsVisible="{Binding !IsDuplicateField}"
+                                                  IsReadOnly="{Binding $parent[UserControl].((vm:SmartScreenViewModel)DataContext).IsReadOnly}" />
+
+                                        <TextBlock Text="and" FontSize="12.5" Foreground="{DynamicResource PbTextFaintBrush}"
+                                                   VerticalAlignment="Center" IsVisible="{Binding ShowValue2}" />
+                                        <TextBox Classes="conditionValue" Width="90" Text="{Binding Value2}" IsVisible="{Binding ShowValue2}"
+                                                  IsReadOnly="{Binding $parent[UserControl].((vm:SmartScreenViewModel)DataContext).IsReadOnly}" />
+
+                                        <Button Classes="headerAction ghost" Command="{Binding RemoveCommand}" ToolTip.Tip="Remove condition"
+                                                IsVisible="{Binding !$parent[UserControl].((vm:SmartScreenViewModel)DataContext).IsReadOnly}">
+                                            <Border Classes="icon" Width="13" Height="13">
+                                                <Border.OpacityMask>
+                                                    <ImageBrush Source="/Assets/Icons/Remove_Minus_Circle.png" Stretch="Uniform" />
+                                                </Border.OpacityMask>
+                                            </Border>
+                                        </Button>
+                                    </StackPanel>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <!-- Nested group cards (recursive: same template key). -->
+                    <ItemsControl ItemsSource="{Binding ChildGroups}" Margin="16,0,0,0"
+                                  ItemTemplate="{StaticResource GroupCardTemplate}" />
+
+                    <StackPanel Orientation="Horizontal" Spacing="16" Margin="0,4,0,0"
+                                IsVisible="{Binding !IsReadOnly}">
+                        <Button Classes="headerAction ghost" Command="{Binding AddConditionCommand}" Padding="0"
+                                Foreground="{DynamicResource PbAccentTextBrush}">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <Grid Width="10" Height="10" VerticalAlignment="Center">
+                                    <Rectangle Width="10" Height="1.6" Fill="{DynamicResource PbAccentTextBrush}" VerticalAlignment="Center" />
+                                    <Rectangle Width="1.6" Height="10" Fill="{DynamicResource PbAccentTextBrush}" HorizontalAlignment="Center" />
+                                </Grid>
+                                <TextBlock Text="Add condition" />
+                            </StackPanel>
+                        </Button>
+                        <Button Classes="headerAction ghost" Command="{Binding AddGroupCommand}" Padding="0"
+                                Foreground="{DynamicResource PbTextMutedBrush}">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <Grid Width="10" Height="10" VerticalAlignment="Center">
+                                    <Rectangle Width="10" Height="1.6" Fill="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
+                                    <Rectangle Width="1.6" Height="10" Fill="{DynamicResource PbTextMutedBrush}" HorizontalAlignment="Center" />
+                                </Grid>
+                                <TextBlock Text="Add group" />
+                            </StackPanel>
+                        </Button>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+        </DataTemplate>
+    </UserControl.Resources>
 
     <ScrollViewer>
         <StackPanel>
@@ -100,7 +248,7 @@
             </Grid>
             <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,0,0,1" Margin="0,0,0,24" />
 
-            <StackPanel MaxWidth="760" HorizontalAlignment="Left" Margin="28,0,28,40">
+            <StackPanel MaxWidth="820" HorizontalAlignment="Left" Margin="28,0,28,40">
 
                 <Border Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}"
                         BorderThickness="1" CornerRadius="999" Padding="12,6" HorizontalAlignment="Left" Margin="0,0,0,20">
@@ -114,75 +262,7 @@
                     </StackPanel>
                 </Border>
 
-                <Border Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}"
-                        BorderThickness="1" CornerRadius="7" Padding="16">
-                    <StackPanel>
-                        <TextBlock Text="Match ALL of the following:" FontSize="11.5" FontWeight="Bold"
-                                   Foreground="{DynamicResource PbTextFaintBrush}" Margin="0,0,0,10" />
-
-                        <ItemsControl ItemsSource="{Binding Conditions}">
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate x:DataType="vm:SmartListConditionViewModel">
-                                    <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,0,0,1" Padding="0,9">
-                                        <StackPanel Orientation="Horizontal" Spacing="8">
-                                            <ComboBox Classes="conditionPicker" ItemsSource="{Binding FieldOptions}"
-                                                      SelectedItem="{Binding SelectedField}"
-                                                      IsEnabled="{Binding !$parent[UserControl].((vm:SmartScreenViewModel)DataContext).IsReadOnly}" />
-
-                                            <TextBox Classes="conditionValue" Width="150" Watermark="value name"
-                                                     Text="{Binding CustomValueName}" IsVisible="{Binding IsCustomValueField}"
-                                                     IsReadOnly="{Binding $parent[UserControl].((vm:SmartScreenViewModel)DataContext).IsReadOnly}" />
-
-                                            <ComboBox Classes="conditionPicker" Width="150" PlaceholderText="virtual tag"
-                                                      ItemsSource="{Binding VirtualTagOptions}" SelectedItem="{Binding SelectedVirtualTag}"
-                                                      IsVisible="{Binding IsVirtualTagField}"
-                                                      IsEnabled="{Binding !$parent[UserControl].((vm:SmartScreenViewModel)DataContext).IsReadOnly}" />
-
-                                            <ComboBox Classes="conditionPicker" ItemsSource="{Binding OperatorOptions}"
-                                                      SelectedItem="{Binding SelectedOperator}" IsVisible="{Binding !IsDuplicateField}"
-                                                      IsEnabled="{Binding !$parent[UserControl].((vm:SmartScreenViewModel)DataContext).IsReadOnly}" />
-
-                                            <TextBox Classes="conditionValue" Text="{Binding Value}" IsVisible="{Binding !IsDuplicateField}"
-                                                      IsReadOnly="{Binding $parent[UserControl].((vm:SmartScreenViewModel)DataContext).IsReadOnly}" />
-
-                                            <TextBlock Text="and" FontSize="12.5" Foreground="{DynamicResource PbTextFaintBrush}"
-                                                       VerticalAlignment="Center" IsVisible="{Binding ShowValue2}" />
-                                            <TextBox Classes="conditionValue" Width="90" Text="{Binding Value2}" IsVisible="{Binding ShowValue2}"
-                                                      IsReadOnly="{Binding $parent[UserControl].((vm:SmartScreenViewModel)DataContext).IsReadOnly}" />
-
-                                            <Button Classes="headerAction ghost" Command="{Binding RemoveCommand}" ToolTip.Tip="Remove condition"
-                                                    IsVisible="{Binding !$parent[UserControl].((vm:SmartScreenViewModel)DataContext).IsReadOnly}">
-                                                <Border Classes="icon" Width="13" Height="13">
-                                                    <Border.OpacityMask>
-                                                        <ImageBrush Source="/Assets/Icons/Remove_Minus_Circle.png" Stretch="Uniform" />
-                                                    </Border.OpacityMask>
-                                                </Border>
-                                            </Button>
-                                        </StackPanel>
-                                    </Border>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-
-                        <Button Classes="headerAction ghost" Command="{Binding AddConditionCommand}"
-                                HorizontalAlignment="Left" Padding="0" Margin="0,12,0,0"
-                                Foreground="{DynamicResource PbAccentTextBrush}" IsVisible="{Binding !IsReadOnly}">
-                            <StackPanel Orientation="Horizontal" Spacing="6">
-                                <!-- Plain crossed bars, not the Add_Plus.png OpacityMask used elsewhere for
-                                     "add" actions - that pattern silently failed to render in this one spot
-                                     (confirmed via a live repro: a plain solid-color Border in the same slot
-                                     rendered fine, so it's specific to OpacityMask+ImageBrush here, not
-                                     StackPanel/Button layout) and wasn't worth chasing further. Two Rectangles
-                                     avoid the whole ImageBrush/OpacityMask path. -->
-                                <Grid Width="10" Height="10" VerticalAlignment="Center">
-                                    <Rectangle Width="10" Height="1.6" Fill="{DynamicResource PbAccentTextBrush}" VerticalAlignment="Center" />
-                                    <Rectangle Width="1.6" Height="10" Fill="{DynamicResource PbAccentTextBrush}" HorizontalAlignment="Center" />
-                                </Grid>
-                                <TextBlock Text="Add condition" />
-                            </StackPanel>
-                        </Button>
-                    </StackPanel>
-                </Border>
+                <ContentControl Content="{Binding RootGroup}" ContentTemplate="{StaticResource GroupCardTemplate}" />
 
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="9" Margin="0,20,0,0" IsVisible="{Binding !IsReadOnly}">
                     <Button Classes="headerAction ghost" Padding="14,8" Command="{Binding CancelCommand}">

@@ -73,7 +73,12 @@ public class Series
 
     public List<Issue> Issues { get; set; } = new();
 
-    public List<Category> Categories { get; set; } = new();
+    /// <summary>
+    /// Collections this series belongs to, reached via the polymorphic <see cref="CollectionItem"/>
+    /// join (docs/superpowers/specs/2026-08-27-collections-design.md) — replaces the old implicit
+    /// <c>Category</c> M:M skip-navigation.
+    /// </summary>
+    public List<CollectionItem> CollectionItems { get; set; } = new();
 
     public List<TrackingLink> TrackingLinks { get; set; } = new();
 

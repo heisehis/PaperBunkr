@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Paperbunkr.Data;
 
@@ -10,9 +11,11 @@ using Paperbunkr.Data;
 namespace Paperbunkr.Data.Migrations
 {
     [DbContext(typeof(PaperbunkrDbContext))]
-    partial class PaperbunkrDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260829145431_AddCollections")]
+    partial class AddCollections
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.11");
@@ -596,38 +599,6 @@ namespace Paperbunkr.Data.Migrations
                         {
                             t.HasCheckConstraint("CK_CollectionItem_OneTarget", "((\"SeriesId\" IS NOT NULL) + (\"IssueId\" IS NOT NULL) + (\"BookId\" IS NOT NULL)) = 1");
                         });
-                });
-
-            modelBuilder.Entity("Paperbunkr.Data.Entities.CollectionRelation", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Notes")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("RelationType")
-                        .IsRequired()
-                        .HasMaxLength(32)
-                        .HasColumnType("TEXT");
-
-                    b.Property<int>("SourceCollectionId")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<int>("TargetCollectionId")
-                        .HasColumnType("INTEGER");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("SourceCollectionId");
-
-                    b.HasIndex("TargetCollectionId");
-
-                    b.ToTable("CollectionRelations");
                 });
 
             modelBuilder.Entity("Paperbunkr.Data.Entities.Continuity", b =>
@@ -2005,25 +1976,6 @@ namespace Paperbunkr.Data.Migrations
                     b.Navigation("Issue");
 
                     b.Navigation("Series");
-                });
-
-            modelBuilder.Entity("Paperbunkr.Data.Entities.CollectionRelation", b =>
-                {
-                    b.HasOne("Paperbunkr.Data.Entities.Collection", "SourceCollection")
-                        .WithMany()
-                        .HasForeignKey("SourceCollectionId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("Paperbunkr.Data.Entities.Collection", "TargetCollection")
-                        .WithMany()
-                        .HasForeignKey("TargetCollectionId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("SourceCollection");
-
-                    b.Navigation("TargetCollection");
                 });
 
             modelBuilder.Entity("Paperbunkr.Data.Entities.ContinuityMembership", b =>

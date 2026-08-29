@@ -115,6 +115,24 @@ public class RecommendationResolverTests : IDisposable
     }
 
     [Fact]
+    public void GetRecommendations_SharedCollectionOnly_ReasonIsSameCollection()
+    {
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        int sourceId = SeedSeries(context, "Source Series");
+        int targetId = SeedSeries(context, "Target Series");
+        var collection = Paperbunkr.Data.Collections.CollectionService.Create(context, "Favorites");
+        Paperbunkr.Data.Collections.CollectionService.AddItems(context, collection.Id, seriesIds: new[] { sourceId, targetId });
+
+        var results = RecommendationResolver.GetRecommendations(context, sourceId);
+
+        var candidate = Assert.Single(results);
+        Assert.Equal(RecommendationReason.SameCollection, candidate.ReasonType);
+        Assert.Equal(0m, candidate.Signals.RelationScore);
+        Assert.Equal(1.0m, candidate.Signals.CollectionScore);
+        Assert.Contains("same collection", candidate.Explanation);
+    }
+
+    [Fact]
     public void GetRecommendations_ContentOverlapCanOutweighWeakRelation_FlippingDominantReason()
     {
         using var context = new PaperbunkrDbContext(_dbOptions);

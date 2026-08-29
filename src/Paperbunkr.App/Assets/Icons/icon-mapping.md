@@ -15,6 +15,8 @@ everywhere at once — don't fork.
 | Search / find / filter results empty-state | `Search` | |
 | Add / new / add condition | `Add` | |
 | Add a folder | `FolderAdd` | |
+| Add to a Collection (context-menu submenu) | `CollectionsAdd` | |
+| More actions on a sidebar row (Collections "⋯" menu) | `MoreVertical` | same as the overflow-menu row below |
 | Remove / delete (destructive) | `Delete` | red `Foreground` at the call site |
 | Remove one item from a list | `SubtractCircle` | non-destructive list edit |
 | Minus / collapse / decrement | `Subtract` | |

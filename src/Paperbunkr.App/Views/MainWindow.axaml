@@ -289,23 +289,94 @@
                             </Grid>
                         </Button>
 
-                        <TextBlock Classes="sideHeading" Text="COLLECTIONS" Margin="8,12,8,6" />
-                        <TextBlock Text="No collections yet." FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}"
-                                   Margin="8,0,8,4" IsVisible="{Binding !Library.HasCollections}" />
-                        <ItemsControl x:Name="LibraryCollections" ItemsSource="{Binding Library.Collections}">
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate x:DataType="models:CategorySummary">
-                                    <Button Classes="sideItemButton" Classes.active="{Binding IsActive}"
-                                            Command="{Binding #LibraryCollections.((vm:MainViewModel)DataContext).Library.SelectCollectionCommand}"
-                                            CommandParameter="{Binding}">
-                                        <Grid ColumnDefinitions="*,Auto">
-                                            <TextBlock Grid.Column="0" Classes="sideItemLabel" Text="{Binding Name}" FontSize="13" Foreground="{DynamicResource PbTextMutedBrush}" />
-                                            <TextBlock Grid.Column="1" Classes="count" Text="{Binding Count}" Foreground="{DynamicResource PbTextFaintBrush}" />
-                                        </Grid>
-                                    </Button>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
+                        <!-- Collections (docs/superpowers/specs/2026-08-27-collections-design.md, step 6) -
+                             row treatment mirrors ecRow/rlRow/smRow above. -->
+                        <StackPanel Spacing="1">
+                            <StackPanel.Styles>
+                                <Style Selector="Border.colRow"><Setter Property="BorderBrush" Value="Transparent" /></Style>
+                                <Style Selector="Border.colRow.active">
+                                    <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
+                                    <Setter Property="Background" Value="{DynamicResource PbSurface2Brush}" />
+                                </Style>
+                                <Style Selector="Border.colRow Button.colHover"><Setter Property="Opacity" Value="0" /><Setter Property="IsHitTestVisible" Value="False" /></Style>
+                                <Style Selector="Border.colRow:pointerover Button.colHover"><Setter Property="Opacity" Value="1" /><Setter Property="IsHitTestVisible" Value="True" /></Style>
+                            </StackPanel.Styles>
+
+                            <Grid ColumnDefinitions="*,Auto" Margin="8,12,6,6">
+                                <TextBlock Grid.Column="0" Classes="sideHeading" Text="COLLECTIONS" VerticalAlignment="Center" />
+                                <Button Grid.Column="1" Width="24" Height="24" Padding="0" CornerRadius="6"
+                                        Background="{DynamicResource PbSurface2Brush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
+                                        Command="{Binding Library.BeginCreateCollectionCommand}" ToolTip.Tip="New collection"
+                                        IsVisible="{Binding !Library.IsCreatingCollection}">
+                                    <fi:SymbolIcon Symbol="Add" FontSize="11" />
+                                </Button>
+                            </Grid>
+
+                            <Grid ColumnDefinitions="*,Auto,Auto" Margin="8,0,6,8" IsVisible="{Binding Library.IsCreatingCollection}">
+                                <TextBox Grid.Column="0" Text="{Binding Library.NewCollectionName}" Watermark="Collection name" FontSize="12.5"
+                                         AutomationProperties.AutomationId="NewCollectionNameBox">
+                                    <TextBox.KeyBindings>
+                                        <KeyBinding Gesture="Enter" Command="{Binding Library.CommitCreateCollectionCommand}" />
+                                        <KeyBinding Gesture="Escape" Command="{Binding Library.CancelCreateCollectionCommand}" />
+                                    </TextBox.KeyBindings>
+                                </TextBox>
+                                <Button Grid.Column="1" Classes="headerAction ghost" Padding="6" Command="{Binding Library.CommitCreateCollectionCommand}">
+                                    <fi:SymbolIcon Symbol="Checkmark" FontSize="11" />
+                                </Button>
+                                <Button Grid.Column="2" Classes="headerAction ghost" Padding="6" Command="{Binding Library.CancelCreateCollectionCommand}">
+                                    <fi:SymbolIcon Symbol="Dismiss" FontSize="11" />
+                                </Button>
+                            </Grid>
+
+                            <TextBlock Text="No collections yet." FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}"
+                                       Margin="8,0,8,4" IsVisible="{Binding !Library.HasCollections}" />
+                            <ItemsControl x:Name="LibraryCollections" ItemsSource="{Binding Library.Collections}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="models:CollectionSummary">
+                                        <Border Classes="colRow" Classes.active="{Binding IsActive}" CornerRadius="6" BorderThickness="3,0,0,0" Margin="0,1">
+                                            <Grid ColumnDefinitions="Auto,*,Auto,Auto">
+                                                <Ellipse Grid.Column="0" Width="8" Height="8" Margin="9,0,0,0" VerticalAlignment="Center"
+                                                         Fill="{Binding AccentColor, Converter={x:Static views:AccentColorToBrushConverter.Instance}}" />
+                                                <Button Grid.Column="1" Classes="sideItemButton" Padding="8,7"
+                                                        Command="{Binding #LibraryCollections.((vm:MainViewModel)DataContext).Library.SelectCollectionCommand}"
+                                                        CommandParameter="{Binding}">
+                                                    <Grid ColumnDefinitions="*,Auto">
+                                                        <TextBlock Grid.Column="0" Classes="sideItemLabel" Text="{Binding Name}" FontSize="13"
+                                                                   TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Name}"
+                                                                   Foreground="{DynamicResource PbTextMutedBrush}" />
+                                                        <TextBlock Grid.Column="1" Classes="count" Text="{Binding Count}" Foreground="{DynamicResource PbTextFaintBrush}" />
+                                                    </Grid>
+                                                </Button>
+                                                <Button Grid.Column="2" Classes="headerAction ghost colHover" Padding="6" Margin="2,0,0,0" VerticalAlignment="Center"
+                                                        ToolTip.Tip="More">
+                                                    <fi:SymbolIcon Symbol="MoreVertical" FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" />
+                                                    <Button.Flyout>
+                                                        <MenuFlyout>
+                                                            <MenuItem Header="Edit…"
+                                                                      Command="{Binding #LibraryCollections.((vm:MainViewModel)DataContext).Library.OpenCollectionPropertiesCommand}"
+                                                                      CommandParameter="{Binding}" />
+                                                            <MenuItem Header="Move up"
+                                                                      Command="{Binding #LibraryCollections.((vm:MainViewModel)DataContext).Library.MoveCollectionUpCommand}"
+                                                                      CommandParameter="{Binding}" />
+                                                            <MenuItem Header="Move down"
+                                                                      Command="{Binding #LibraryCollections.((vm:MainViewModel)DataContext).Library.MoveCollectionDownCommand}"
+                                                                      CommandParameter="{Binding}" />
+                                                        </MenuFlyout>
+                                                    </Button.Flyout>
+                                                </Button>
+                                                <Button Grid.Column="3" Classes="headerAction ghost colHover" Padding="6" Margin="2,0,4,0" VerticalAlignment="Center"
+                                                        Command="{Binding DeleteConfirm.TriggerCommand}" ToolTip.Tip="{Binding DeleteConfirm.Label}">
+                                                    <Panel>
+                                                        <fi:SymbolIcon Symbol="Delete" FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" IsVisible="{Binding !DeleteConfirm.IsArmed}" />
+                                                        <fi:SymbolIcon Symbol="Delete" FontSize="11" Foreground="{DynamicResource PbBadgeBrush}" IsVisible="{Binding DeleteConfirm.IsArmed}" />
+                                                    </Panel>
+                                                </Button>
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
 
                         <Border Height="1" Background="{DynamicResource PbBorderBrush}" Margin="0,12" />
 
@@ -694,6 +765,21 @@
                     Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
                     Command="{Binding CloseReadingListPropertiesOverlayCommand}" ToolTip.Tip="Close"
                     AutomationProperties.AutomationId="ReadingListPropertiesOverlayCloseButton">
+                <fi:SymbolIcon Symbol="DismissCircle" FontSize="13" />
+            </Button>
+        </Grid>
+    </Border>
+
+    <!-- ============ Collection properties overlay (docs/superpowers/specs/2026-08-27-collections-
+         design.md, step 8) - same backdrop-popup pattern as the Reading List overlay above ============ -->
+    <Border IsVisible="{Binding IsCollectionPropertiesOverlayOpen}" Background="#B0000000">
+        <Grid HorizontalAlignment="Center" VerticalAlignment="Center">
+            <views:CollectionPropertiesOverlay DataContext="{Binding CollectionProperties}" />
+            <Button Classes="rail" Width="28" Height="28"
+                    HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-14,-14,0"
+                    Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
+                    Command="{Binding CloseCollectionPropertiesOverlayCommand}" ToolTip.Tip="Close"
+                    AutomationProperties.AutomationId="CollectionPropertiesOverlayCloseButton">
                 <fi:SymbolIcon Symbol="DismissCircle" FontSize="13" />
             </Button>
         </Grid>

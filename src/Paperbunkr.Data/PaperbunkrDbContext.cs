@@ -14,7 +14,11 @@ public class PaperbunkrDbContext : DbContext
 
     public DbSet<Issue> Issues => Set<Issue>();
 
-    public DbSet<Category> Categories => Set<Category>();
+    public DbSet<Collection> Collections => Set<Collection>();
+
+    public DbSet<CollectionItem> CollectionItems => Set<CollectionItem>();
+
+    public DbSet<CollectionRelation> CollectionRelations => Set<CollectionRelation>();
 
     public DbSet<TrackingLink> TrackingLinks => Set<TrackingLink>();
 
@@ -177,8 +181,10 @@ public class PaperbunkrDbContext : DbContext
                 .HasForeignKey(s => s.CoverIssueId)
                 .OnDelete(DeleteBehavior.Restrict);
 
-            builder.HasMany(s => s.Categories)
-                .WithMany(c => c.Series);
+            builder.HasMany(s => s.CollectionItems)
+                .WithOne(ci => ci.Series)
+                .HasForeignKey(ci => ci.SeriesId)
+                .OnDelete(DeleteBehavior.Cascade);
 
 
             builder.HasMany(s => s.MetadataProposals)
@@ -256,10 +262,70 @@ public class PaperbunkrDbContext : DbContext
             builder.HasIndex(t => t.SeriesId);
         });
 
-        modelBuilder.Entity<Category>(builder =>
+        modelBuilder.Entity<Collection>(builder =>
         {
             builder.HasKey(c => c.Id);
             builder.Property(c => c.Name).IsRequired();
+        });
+
+        modelBuilder.Entity<CollectionItem>(builder =>
+        {
+            builder.HasKey(ci => ci.Id);
+
+            builder.HasOne(ci => ci.Collection)
+                .WithMany(c => c.Items)
+                .HasForeignKey(ci => ci.CollectionId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // Series FK is configured on the Series entity above (HasMany(s => s.CollectionItems)).
+            builder.HasOne(ci => ci.Issue)
+                .WithMany(i => i.CollectionItems)
+                .HasForeignKey(ci => ci.IssueId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            builder.HasOne(ci => ci.Book)
+                .WithMany(b => b.CollectionItems)
+                .HasForeignKey(ci => ci.BookId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // Exactly one target set. Enforced in the DB (EnsureCreated honours it for test schemas
+            // too) and guarded in CollectionService.AddItems so a bad call is a logged no-op.
+            builder.ToTable(t => t.HasCheckConstraint(
+                "CK_CollectionItem_OneTarget",
+                "((\"SeriesId\" IS NOT NULL) + (\"IssueId\" IS NOT NULL) + (\"BookId\" IS NOT NULL)) = 1"));
+
+            // Block duplicate membership per target kind.
+            builder.HasIndex(ci => new { ci.CollectionId, ci.SeriesId })
+                .IsUnique()
+                .HasFilter("\"SeriesId\" IS NOT NULL");
+            builder.HasIndex(ci => new { ci.CollectionId, ci.IssueId })
+                .IsUnique()
+                .HasFilter("\"IssueId\" IS NOT NULL");
+            builder.HasIndex(ci => new { ci.CollectionId, ci.BookId })
+                .IsUnique()
+                .HasFilter("\"BookId\" IS NOT NULL");
+        });
+
+        // Brand-new table (like MediaRelation) - no existing rows to backfill. Same
+        // both-sides-Cascade choice as MediaRelation's own config above (see its comment for why:
+        // there's no interactive delete path in this codebase that should ever be blocked by a
+        // relation existing).
+        modelBuilder.Entity<CollectionRelation>(builder =>
+        {
+            builder.HasKey(r => r.Id);
+            builder.Property(r => r.RelationType).HasConversion<string>().HasMaxLength(32);
+            builder.HasIndex(r => r.SourceCollectionId);
+            builder.HasIndex(r => r.TargetCollectionId);
+
+            builder.HasOne(r => r.SourceCollection)
+                .WithMany()
+                .HasForeignKey(r => r.SourceCollectionId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            builder.HasOne(r => r.TargetCollection)
+                .WithMany()
+                .HasForeignKey(r => r.TargetCollectionId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<TrackingLink>(builder =>

@@ -8,4 +8,4 @@ namespace Paperbunkr.App.Models;
 /// (`ComicListBrowser.cs`) but scoped to fields Paperbunkr's sidebar actually has. Record equality
 /// gives <c>CursorList&lt;T&gt;.AddAtCursor</c>'s duplicate-of-cursor dedup check the right
 /// behavior for free.</summary>
-public sealed record LibraryBrowseState(ContentType? ActiveContentType, int? ActiveCategoryId, string SearchQuery);
+public sealed record LibraryBrowseState(ContentType? ActiveContentType, int? ActiveCollectionId, string SearchQuery);

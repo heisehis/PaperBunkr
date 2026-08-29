@@ -38,9 +38,9 @@ public partial class MainViewModel : ViewModelBase
 
     public MainViewModel()
     {
-        Home = new HomeScreenViewModel(GoDetailForSeries, GoReaderForIssue, GoLibraryWithSearch, GoReaderForIssueInReadingList, GoBookReaderForBook);
-        Library = new LibraryScreenViewModel(GoDetailForSeries, GoReaderForIssue, GoNewIssuePropertiesForPlaceholder, OpenQuickRateOverlay, GoIssuePropertiesForIssue, GoBulkIssuePropertiesForIssues, ShowToast, GoBulkSeriesPropertiesForSeries, GoLibraryFoldersPreferences);
-        Books = new BooksScreenViewModel(GoBookDetailForBook, GoBookSeriesDetailForSeries, GoBookPropertiesForBook, GoBulkBookPropertiesForBooks, GoBookSeriesPropertiesForSeries, GoLibraryFoldersPreferences);
+        Home = new HomeScreenViewModel(GoDetailForSeries, GoReaderForIssue, GoLibraryWithSearch, GoReaderForIssueInReadingList, GoBookReaderForBook, GoLibraryWithCollection);
+        Library = new LibraryScreenViewModel(GoDetailForSeries, GoReaderForIssue, GoNewIssuePropertiesForPlaceholder, OpenQuickRateOverlay, GoIssuePropertiesForIssue, GoBulkIssuePropertiesForIssues, ShowToast, GoBulkSeriesPropertiesForSeries, GoLibraryFoldersPreferences, OpenCollectionPropertiesOverlay, GoBookDetailForBook);
+        Books = new BooksScreenViewModel(GoBookDetailForBook, GoBookSeriesDetailForSeries, GoBookPropertiesForBook, GoBulkBookPropertiesForBooks, GoBookSeriesPropertiesForSeries, GoLibraryFoldersPreferences, ShowToast);
         BookDetail = new BookDetailScreenViewModel(GoBooks, GoBookReaderForBook, GoBookPropertiesForBook, GoBulkBookPropertiesForBooks, GoBookSeriesPropertiesForSeries);
         BookProperties = new BookPropertiesScreenViewModel(CloseBookPropertiesOverlay, ShowToast);
         BulkBookProperties = new BulkBookPropertiesScreenViewModel(CloseBulkBookPropertiesOverlay, ShowToast);
@@ -60,6 +60,7 @@ public partial class MainViewModel : ViewModelBase
         Plugin = new PluginScreenViewModel();
         Migration = new MigrationOverlayViewModel(new FilePickerService(), OpenSeriesDetailFromReview);
         ReadingListProperties = new ReadingListPropertiesScreenViewModel(CloseReadingListPropertiesOverlay);
+        CollectionProperties = new CollectionPropertiesScreenViewModel(CloseCollectionPropertiesOverlay);
         NewReadingList = new NewReadingListViewModel(new FilePickerService(), OnNewReadingListCreated, CloseNewReadingListDialog);
         NewEventOrContinuity = new NewEventOrContinuityViewModel(OnEventOrContinuityCreated, CloseNewEventDialog);
         QuickRate = new QuickRateScreenViewModel(CloseQuickRateOverlay);
@@ -168,6 +169,7 @@ public partial class MainViewModel : ViewModelBase
     public PreferencesScreenViewModel Preferences { get; }
     public MigrationOverlayViewModel Migration { get; }
     public ReadingListPropertiesScreenViewModel ReadingListProperties { get; }
+    public CollectionPropertiesScreenViewModel CollectionProperties { get; }
     public NewReadingListViewModel NewReadingList { get; }
     public NewEventOrContinuityViewModel NewEventOrContinuity { get; }
     public QuickRateScreenViewModel QuickRate { get; }
@@ -201,6 +203,9 @@ public partial class MainViewModel : ViewModelBase
 
     [ObservableProperty]
     private bool _isReadingListPropertiesOverlayOpen;
+
+    [ObservableProperty]
+    private bool _isCollectionPropertiesOverlayOpen;
 
     [ObservableProperty]
     private bool _isNewReadingListDialogOpen;
@@ -356,6 +361,16 @@ public partial class MainViewModel : ViewModelBase
         CurrentScreen = "library";
     });
 
+    /// <summary>Home's Collections shelf click-through (docs/superpowers/specs/2026-08-27-
+    /// collections-design.md's own deferred "Home-feed shelf" follow-on) - same shape as
+    /// <see cref="GoLibraryWithSearch"/>.</summary>
+    private void GoLibraryWithCollection(int collectionId) => TryLeaveCurrentEditor(() =>
+    {
+        Library.LoadFromDatabase();
+        Library.SelectCollectionById(collectionId);
+        CurrentScreen = "library";
+    });
+
     [RelayCommand]
     private void GoLibrary() => TryLeaveCurrentEditor(() =>
     {
@@ -453,6 +468,21 @@ public partial class MainViewModel : ViewModelBase
     {
         IsReadingListPropertiesOverlayOpen = false;
         Reading.EnsureListLoaded();
+    }
+
+    /// <summary>Entry point wired into the Library sidebar's "Edit…" row menu (docs/superpowers/specs/2026-08-27-collections-design.md, step 8) - same open shape as <see cref="OpenReadingListPropertiesOverlay"/>.</summary>
+    private void OpenCollectionPropertiesOverlay(int collectionId)
+    {
+        CollectionProperties.Load(collectionId);
+        IsCollectionPropertiesOverlayOpen = true;
+    }
+
+    /// <summary>Save/Cancel's shared <c>goBack</c> callback, and the explicit close button's command - reloads the Library sidebar either way.</summary>
+    [RelayCommand]
+    private void CloseCollectionPropertiesOverlay()
+    {
+        IsCollectionPropertiesOverlayOpen = false;
+        Library.LoadFromDatabase();
     }
 
     /// <summary>The sidebar's "＋" opens this (docs/superpowers/specs/2026-08-28-reading-lists-screen-redesign-design.md → v2).</summary>
@@ -1010,6 +1040,10 @@ public partial class MainViewModel : ViewModelBase
         else if (IsReadingListPropertiesOverlayOpen)
         {
             ReadingListProperties.CancelCommand.Execute(null);
+        }
+        else if (IsCollectionPropertiesOverlayOpen)
+        {
+            CollectionProperties.CancelCommand.Execute(null);
         }
         else if (IsBookProperties)
         {

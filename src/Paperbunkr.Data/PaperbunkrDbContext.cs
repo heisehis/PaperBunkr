@@ -18,6 +18,8 @@ public class PaperbunkrDbContext : DbContext
 
     public DbSet<CollectionItem> CollectionItems => Set<CollectionItem>();
 
+    public DbSet<CollectionRelation> CollectionRelations => Set<CollectionRelation>();
+
     public DbSet<TrackingLink> TrackingLinks => Set<TrackingLink>();
 
     public DbSet<IssueCustomValue> IssueCustomValues => Set<IssueCustomValue>();
@@ -302,6 +304,28 @@ public class PaperbunkrDbContext : DbContext
             builder.HasIndex(ci => new { ci.CollectionId, ci.BookId })
                 .IsUnique()
                 .HasFilter("\"BookId\" IS NOT NULL");
+        });
+
+        // Brand-new table (like MediaRelation) - no existing rows to backfill. Same
+        // both-sides-Cascade choice as MediaRelation's own config above (see its comment for why:
+        // there's no interactive delete path in this codebase that should ever be blocked by a
+        // relation existing).
+        modelBuilder.Entity<CollectionRelation>(builder =>
+        {
+            builder.HasKey(r => r.Id);
+            builder.Property(r => r.RelationType).HasConversion<string>().HasMaxLength(32);
+            builder.HasIndex(r => r.SourceCollectionId);
+            builder.HasIndex(r => r.TargetCollectionId);
+
+            builder.HasOne(r => r.SourceCollection)
+                .WithMany()
+                .HasForeignKey(r => r.SourceCollectionId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            builder.HasOne(r => r.TargetCollection)
+                .WithMany()
+                .HasForeignKey(r => r.TargetCollectionId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<TrackingLink>(builder =>

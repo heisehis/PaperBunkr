@@ -4,9 +4,11 @@ using System.Collections.ObjectModel;
 using System.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Paperbunkr.App.Models;
 using Paperbunkr.App.Services;
 using Paperbunkr.Data;
 using Paperbunkr.Data.Collections;
+using Paperbunkr.Data.Entities;
 
 namespace Paperbunkr.App.ViewModels;
 
@@ -91,6 +93,8 @@ public partial class CollectionPropertiesScreenViewModel : ViewModelBase
         {
             Members.Add(new CollectionMemberRowViewModel(member, RemoveMemberRow));
         }
+
+        RefreshRelatedCollections(context, collectionId);
     }
 
     [RelayCommand]
@@ -191,4 +195,115 @@ public partial class CollectionPropertiesScreenViewModel : ViewModelBase
     private void Cancel() => _goBack();
 
     private static string? NullIfEmpty(string value) => string.IsNullOrWhiteSpace(value) ? null : value;
+
+    // --- Related Collections (Collection-to-Collection relations, e.g. "these two collections are
+    // the same fictional universe") - byte-for-byte DetailTabsViewModel's MediaRelation add/remove
+    // section, just against CollectionRelationResolver/context.Collections instead of
+    // MediaRelationResolver/context.Series. Immediate-write like that section (not part of the
+    // buffered Save/Cancel flow above), same rationale: a relation isn't a property of *this*
+    // collection's own row, it's a fact about two collections that should persist the moment it's
+    // asserted, same as MediaRelation never waited for a Detail-page "Save" either. ---
+
+    public ObservableCollection<RelatedCollectionChip> RelatedCollections { get; } = new();
+
+    private void RefreshRelatedCollections(PaperbunkrDbContext context, int collectionId)
+    {
+        RelatedCollections.Clear();
+        foreach (var (other, displayType, relationId) in CollectionRelationResolver.GetRelatedCollections(context, collectionId))
+        {
+            RelatedCollections.Add(new RelatedCollectionChip
+            {
+                CollectionRelationId = relationId,
+                CollectionId = other.Id,
+                Name = other.Name,
+                RelationTypeLabel = RelationTypeOption.FormatLabel(displayType),
+            });
+        }
+    }
+
+    public static IReadOnlyList<RelationTypeOption> RelationTypeOptions => RelationTypeOption.All;
+
+    [ObservableProperty]
+    private bool _isAddingRelation;
+
+    [ObservableProperty]
+    private string _relationSearchQuery = string.Empty;
+
+    [ObservableProperty]
+    private RelationType _selectedRelationType = RelationType.Related;
+
+    /// <summary>Bound to the ComboBox's SelectedItem, not SelectedValue/SelectedValueBinding - see
+    /// DetailTabsViewModel.SelectedRelationTypeOption's own doc comment for why (a real, permanent
+    /// XAML binding-resolution bug in this Avalonia version, not tooling noise).</summary>
+    [ObservableProperty]
+    private RelationTypeOption _selectedRelationTypeOption = RelationTypeOptions.First(o => o.Type == RelationType.Related);
+
+    partial void OnSelectedRelationTypeOptionChanged(RelationTypeOption value) => SelectedRelationType = value.Type;
+
+    public ObservableCollection<CollectionSearchResult> RelationSearchResults { get; } = new();
+
+    [RelayCommand]
+    private void ToggleAddRelation()
+    {
+        IsAddingRelation = !IsAddingRelation;
+        RelationSearchQuery = string.Empty;
+        RelationSearchResults.Clear();
+    }
+
+    partial void OnRelationSearchQueryChanged(string value) => SearchRelationCandidates();
+
+    /// <summary>No "create new" row here (unlike the Add-to-Collection picker's <c>CollectionSearchResult.IsNew</c>) -
+    /// a relation always names an existing collection on the other end, same as the Series relation
+    /// picker only ever searches real series.</summary>
+    [RelayCommand]
+    private void SearchRelationCandidates()
+    {
+        RelationSearchResults.Clear();
+        if (string.IsNullOrWhiteSpace(RelationSearchQuery) || _collectionId is not int currentCollectionId)
+        {
+            return;
+        }
+
+        using var context = _contextFactory();
+        var matches = context.Collections
+            .Where(c => c.Id != currentCollectionId)
+            .AsEnumerable()
+            .Where(c => c.Name.Contains(RelationSearchQuery, StringComparison.OrdinalIgnoreCase))
+            .Take(20);
+
+        foreach (var collection in matches)
+        {
+            RelationSearchResults.Add(new CollectionSearchResult { CollectionId = collection.Id, Name = collection.Name });
+        }
+    }
+
+    [RelayCommand]
+    private void AddRelation(CollectionSearchResult? target)
+    {
+        if (target is null || _collectionId is not int currentCollectionId)
+        {
+            return;
+        }
+
+        using var context = _contextFactory();
+        CollectionRelationResolver.TryCreate(context, currentCollectionId, target.CollectionId, SelectedRelationType);
+
+        IsAddingRelation = false;
+        RelationSearchQuery = string.Empty;
+        RelationSearchResults.Clear();
+        RefreshRelatedCollections(context, currentCollectionId);
+    }
+
+    [RelayCommand]
+    private void RemoveRelation(RelatedCollectionChip? chip)
+    {
+        if (chip is null || _collectionId is not int currentCollectionId)
+        {
+            return;
+        }
+
+        using var context = _contextFactory();
+        CollectionRelationResolver.Remove(context, chip.CollectionRelationId);
+        RefreshRelatedCollections(context, currentCollectionId);
+    }
 }

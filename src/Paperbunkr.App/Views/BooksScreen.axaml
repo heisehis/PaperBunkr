@@ -5,11 +5,13 @@
              xmlns:models="using:Paperbunkr.App.Models"
              xmlns:entities="using:Paperbunkr.Data.Entities"
              xmlns:conv="using:Avalonia.Data.Converters"
+             xmlns:controls="using:Paperbunkr.App.Controls"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d" d:DesignWidth="900" d:DesignHeight="760"
              x:Class="Paperbunkr.App.Views.BooksScreen"
-             x:DataType="vm:BooksScreenViewModel">
+             x:DataType="vm:BooksScreenViewModel"
+             controls:ContextMenuHost.Provider="{Binding}">
 
     <UserControl.Styles>
         <Style Selector="Button.card">
@@ -117,18 +119,6 @@
             <Button Classes="card" Width="150" Margin="0,0,20,20"
                     Command="{Binding $parent[UserControl].((vm:BooksScreenViewModel)DataContext).CardClickCommand}"
                     CommandParameter="{Binding}">
-                <Button.ContextMenu>
-                    <ContextMenu>
-                        <MenuItem Header="Edit…"
-                                  Command="{Binding $parent[UserControl].((vm:BooksScreenViewModel)DataContext).EditBookCommand}"
-                                  CommandParameter="{Binding BookId}" />
-                        <MenuItem Header="Delete Book">
-                            <MenuItem Header="Yes, delete this book"
-                                      Command="{Binding $parent[UserControl].((vm:BooksScreenViewModel)DataContext).DeleteBookCommand}"
-                                      CommandParameter="{Binding BookId}" />
-                        </MenuItem>
-                    </ContextMenu>
-                </Button.ContextMenu>
                 <StackPanel Spacing="8">
                     <Border Classes="bookCover" Background="{Binding CoverBrush}" Height="216">
                         <Grid>
@@ -259,13 +249,6 @@
                                         Command="{Binding $parent[UserControl].((vm:BooksScreenViewModel)DataContext).OpenSeriesCommand}"
                                         CommandParameter="{Binding BookSeriesId}"
                                         ToolTip.Tip="Open this series">
-                                    <Button.ContextMenu>
-                                        <ContextMenu>
-                                            <MenuItem Header="Edit series…"
-                                                      Command="{Binding $parent[UserControl].((vm:BooksScreenViewModel)DataContext).EditSeriesCommand}"
-                                                      CommandParameter="{Binding BookSeriesId}" />
-                                        </ContextMenu>
-                                    </Button.ContextMenu>
                                     <DockPanel>
                                         <TextBlock DockPanel.Dock="Left" Text="{Binding Header}" Classes="pbTextHeading" VerticalAlignment="Center" />
                                         <TextBlock DockPanel.Dock="Left" Text="{Binding Items.Count}" Classes="pbTextCaption" Margin="8,0,0,0" VerticalAlignment="Center" />

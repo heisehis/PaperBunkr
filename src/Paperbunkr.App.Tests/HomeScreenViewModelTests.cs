@@ -124,6 +124,48 @@ public class HomeScreenViewModelTests : IDisposable
         Assert.Equal(seriesId, navigatedSeriesId);
     }
 
+    // --- Collections shelf (docs/superpowers/specs/2026-08-27-collections-design.md's own deferred
+    // "Home-feed shelf" follow-on) ---
+
+    [Fact]
+    public void Construct_PopulatesCollections_ExcludingEmptyOnes()
+    {
+        var (seriesId, _) = SeedSeriesWithIssue("Some Series");
+        using (var context = PaperbunkrDb.CreateContext())
+        {
+            var populated = Paperbunkr.Data.Collections.CollectionService.Create(context, "Favorites");
+            Paperbunkr.Data.Collections.CollectionService.AddItems(context, populated.Id, seriesIds: new[] { seriesId });
+            Paperbunkr.Data.Collections.CollectionService.Create(context, "Empty One");
+        }
+
+        var vm = new HomeScreenViewModel(_ => { }, _ => { }, _ => { }, (_, _) => { }, (_, _) => { });
+
+        var card = Assert.Single(vm.Collections);
+        Assert.Equal("Favorites", card.Name);
+        Assert.Equal(1, card.Count);
+        Assert.True(vm.HasCollections);
+    }
+
+    [Fact]
+    public void OpenCollectionCommand_InvokesGoLibraryWithCollection_WithTheCardsCollectionId()
+    {
+        var (seriesId, _) = SeedSeriesWithIssue("Some Series");
+        int collectionId;
+        using (var context = PaperbunkrDb.CreateContext())
+        {
+            var collection = Paperbunkr.Data.Collections.CollectionService.Create(context, "Favorites");
+            Paperbunkr.Data.Collections.CollectionService.AddItems(context, collection.Id, seriesIds: new[] { seriesId });
+            collectionId = collection.Id;
+        }
+        int? navigatedCollectionId = null;
+        var vm = new HomeScreenViewModel(_ => { }, _ => { }, _ => { }, (_, _) => { }, (_, _) => { },
+            goLibraryWithCollection: id => navigatedCollectionId = id);
+
+        vm.OpenCollectionCommand.Execute(vm.Collections[0]);
+
+        Assert.Equal(collectionId, navigatedCollectionId);
+    }
+
     /// <summary>
     /// End-to-end coverage for Module 3 ("Because You Read") - only the empty-state path
     /// (<see cref="Construct_NoData_AllModulesEmpty"/>) had a test before this; the actual wiring
@@ -164,6 +206,7 @@ public class HomeScreenViewModelTests : IDisposable
 
         Assert.False(vm.HasContinueReading);
         Assert.False(vm.HasRecentlyAdded);
+        Assert.False(vm.HasCollections);
         Assert.False(vm.HasBecauseYouRead);
         Assert.False(vm.HasSpotlight);
         Assert.False(vm.HasReadingListSpotlight);

@@ -5,9 +5,11 @@ using System.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.EntityFrameworkCore;
+using Paperbunkr.App.ContextMenus;
 using Paperbunkr.App.Models;
 using Paperbunkr.App.Services;
 using Paperbunkr.Data;
+using Paperbunkr.Data.Collections;
 using Paperbunkr.Data.Entities;
 
 namespace Paperbunkr.App.ViewModels;
@@ -20,14 +22,24 @@ namespace Paperbunkr.App.ViewModels;
 /// editing-design.md). Folder management + scanning live in Preferences → Libraries. Sort/group
 /// persist via <see cref="AppSettings"/>; search and selection do not.
 /// </summary>
-public partial class BooksScreenViewModel : ViewModelBase
+public partial class BooksScreenViewModel : ViewModelBase, IContextMenuProvider
 {
+    /// <summary>Right-click menu for a book tile / series-group header (docs/superpowers/specs/
+    /// 2026-08-29-context-menu-rebuild-design.md's own follow-up list named this screen - the old
+    /// in-template Button.ContextMenu blocks never rendered at all, same root cause Library had
+    /// before its rebuild: a ContextMenu popup doesn't render in this Avalonia build, and its
+    /// $parent[UserControl] ancestor bindings resolve to null inside that popup's own visual tree
+    /// anyway.</summary>
+    IReadOnlyList<ContextMenuEntry>? IContextMenuProvider.BuildContextMenu(object? target) =>
+        new BooksContextMenuBuilder(this).Build(target);
+
     private readonly Action<int> _goBookDetail;
     private readonly Action<int> _goBookSeriesDetail;
     private readonly Action<int> _goEditBook;
     private readonly Action<IReadOnlyList<int>> _goBulkEdit;
     private readonly Action<int> _goEditSeries;
     private readonly Action _goLibrarySettings;
+    private readonly Action<string, string> _showToast;
 
     /// <summary>Every book, unfiltered/ungrouped - <see cref="Rebuild"/> derives <see cref="Books"/>
     /// / <see cref="Groups"/> from this on every search/sort/group change without re-querying.</summary>
@@ -38,7 +50,8 @@ public partial class BooksScreenViewModel : ViewModelBase
     private bool _shiftHeld;
 
     public BooksScreenViewModel(Action<int> goBookDetail, Action<int> goBookSeriesDetail, Action<int> goEditBook,
-        Action<IReadOnlyList<int>> goBulkEdit, Action<int> goEditSeries, Action goLibrarySettings)
+        Action<IReadOnlyList<int>> goBulkEdit, Action<int> goEditSeries, Action goLibrarySettings,
+        Action<string, string>? showToast = null)
     {
         _goBookDetail = goBookDetail;
         _goBookSeriesDetail = goBookSeriesDetail;
@@ -46,8 +59,10 @@ public partial class BooksScreenViewModel : ViewModelBase
         _goBulkEdit = goBulkEdit;
         _goEditSeries = goEditSeries;
         _goLibrarySettings = goLibrarySettings;
+        _showToast = showToast ?? ((_, _) => { });
         Books = new ObservableCollection<BookCardSample>();
         Groups = new ObservableCollection<BookCardGroup>();
+        Collections = new ObservableCollection<CollectionSummary>();
 
         LoadBooksSettings();
         LoadFromDatabase();
@@ -125,6 +140,9 @@ public partial class BooksScreenViewModel : ViewModelBase
     public ObservableCollection<BookCardSample> Books { get; }
 
     public ObservableCollection<BookCardGroup> Groups { get; }
+
+    /// <summary>Every <c>Collection</c> row, for the tile context menu's "Add to Collection ▸" submenu only - see <see cref="LoadFromDatabase"/>'s own note on why there's no <c>DeleteConfirm</c> here.</summary>
+    public ObservableCollection<CollectionSummary> Collections { get; }
 
     public bool IsGrouped => GroupField != BooksGroupField.None;
 
@@ -225,7 +243,43 @@ public partial class BooksScreenViewModel : ViewModelBase
         Selection.Clear();
         RaiseSelectionChanged();
 
+        // Read-only list for the tile context menu's "Add to Collection ▸" submenu - this screen
+        // doesn't manage collections (no create/rename/delete UI here, that's the Library sidebar),
+        // so unlike LibraryScreenViewModel.Collections there's no DeleteConfirm to wire up.
+        Collections.Clear();
+        foreach (var collection in context.Collections.Include(c => c.Items).OrderBy(c => c.SortOrder))
+        {
+            Collections.Add(new CollectionSummary { Id = collection.Id, Name = collection.Name, Count = collection.Items.Count, AccentColor = collection.AccentColor });
+        }
+
         Rebuild();
+    }
+
+    /// <summary>Context-menu "Add to Collection ▸ {name}" for a book tile. Parameter is <c>(bookId, collectionId)</c>.</summary>
+    [RelayCommand]
+    private void AddBookToCollection((int BookId, int CollectionId) target)
+    {
+        using var context = PaperbunkrDb.CreateContext();
+        var collection = context.Collections.Find(target.CollectionId);
+        if (collection is null)
+        {
+            return;
+        }
+
+        int before = context.CollectionItems.Count(ci => ci.CollectionId == collection.Id);
+        CollectionService.AddItems(context, collection.Id, bookIds: new[] { target.BookId });
+        bool added = context.CollectionItems.Count(ci => ci.CollectionId == collection.Id) > before;
+        _showToast("Added to collection", added ? $"Added to \"{collection.Name}\"." : $"Already in \"{collection.Name}\".");
+    }
+
+    /// <summary>"Add to Collection ▸ New collection…" for a book tile.</summary>
+    [RelayCommand]
+    private void CreateCollectionAndAddBook(int bookId)
+    {
+        using var context = PaperbunkrDb.CreateContext();
+        var collection = CollectionService.Create(context, "New Collection");
+        CollectionService.AddItems(context, collection.Id, bookIds: new[] { bookId });
+        LoadFromDatabase();
     }
 
     private void Rebuild()

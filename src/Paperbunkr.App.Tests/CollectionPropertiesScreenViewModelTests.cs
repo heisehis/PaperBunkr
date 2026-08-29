@@ -149,4 +149,79 @@ public class CollectionPropertiesScreenViewModelTests : IDisposable
         Assert.True(goBackCalled);
         Assert.Equal("Original Name", GetCollection().Name);
     }
+
+    // --- Related Collections (Collection-to-Collection relations) ---
+
+    private int CreateOtherCollection(string name)
+    {
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        return CollectionService.Create(context, name).Id;
+    }
+
+    [Fact]
+    public void ToggleAddRelation_TogglesPanelState_AndClearsSearch()
+    {
+        var vm = new CollectionPropertiesScreenViewModel(() => { }, () => new PaperbunkrDbContext(_dbOptions));
+        vm.Load(_collectionId);
+
+        vm.ToggleAddRelationCommand.Execute(null);
+        Assert.True(vm.IsAddingRelation);
+
+        vm.ToggleAddRelationCommand.Execute(null);
+        Assert.False(vm.IsAddingRelation);
+        Assert.Equal(string.Empty, vm.RelationSearchQuery);
+    }
+
+    [Fact]
+    public void RelationSearchQuery_ExcludesCurrentCollection_MatchesByName()
+    {
+        CreateOtherCollection("Justice League Saga");
+        var vm = new CollectionPropertiesScreenViewModel(() => { }, () => new PaperbunkrDbContext(_dbOptions));
+        vm.Load(_collectionId);
+
+        vm.RelationSearchQuery = "justice";
+
+        var result = Assert.Single(vm.RelationSearchResults);
+        Assert.Equal("Justice League Saga", result.Name);
+    }
+
+    [Fact]
+    public void AddRelation_CreatesRelation_RefreshesRelatedCollections_ClosesPanel()
+    {
+        int otherId = CreateOtherCollection("Justice League Saga");
+        var vm = new CollectionPropertiesScreenViewModel(() => { }, () => new PaperbunkrDbContext(_dbOptions));
+        vm.Load(_collectionId);
+        vm.ToggleAddRelationCommand.Execute(null);
+        vm.RelationSearchQuery = "justice";
+        var target = Assert.Single(vm.RelationSearchResults);
+
+        vm.AddRelationCommand.Execute(target);
+
+        Assert.False(vm.IsAddingRelation);
+        var chip = Assert.Single(vm.RelatedCollections);
+        Assert.Equal(otherId, chip.CollectionId);
+        Assert.Equal("Justice League Saga", chip.Name);
+        Assert.Equal("Related", chip.RelationTypeLabel);
+
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        Assert.Single(context.CollectionRelations);
+    }
+
+    [Fact]
+    public void RemoveRelation_DeletesRelation_ClearsFromRelatedCollections()
+    {
+        int otherId = CreateOtherCollection("Justice League Saga");
+        var vm = new CollectionPropertiesScreenViewModel(() => { }, () => new PaperbunkrDbContext(_dbOptions));
+        vm.Load(_collectionId);
+        vm.ToggleAddRelationCommand.Execute(null);
+        vm.RelationSearchQuery = "justice";
+        vm.AddRelationCommand.Execute(Assert.Single(vm.RelationSearchResults));
+        var related = Assert.Single(vm.RelatedCollections);
+
+        vm.RemoveRelationCommand.Execute(related);
+
+        Assert.Empty(vm.RelatedCollections);
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        Assert.Empty(context.CollectionRelations);
+    }
 }

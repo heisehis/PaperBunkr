@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Microsoft.EntityFrameworkCore;
+using Paperbunkr.Data.Collections;
 using Paperbunkr.Data.Entities;
 
 namespace Paperbunkr.Data.Metadata;
@@ -21,6 +22,7 @@ public sealed record RecommendationSignals(
     decimal RelationScore,
     decimal ContinuityScore,
     decimal EventScore,
+    decimal CollectionScore,
     decimal CharacterScore,
     decimal CreatorScore,
     decimal GenreScore,
@@ -36,9 +38,14 @@ public sealed record RecommendationSignals(
 /// </summary>
 public static class RecommendationResolver
 {
-    private const decimal RelationWeight = 0.30m;
-    private const decimal ContinuityWeight = 0.15m;
-    private const decimal EventWeight = 0.15m;
+    // Rebalanced to make room for CollectionWeight (still summing to 1.0): Relation 0.30->0.25,
+    // Continuity/Event 0.15->0.10 each - a Collection is at least as deliberate an editorial anchor
+    // as Continuity/Event membership (the user hand-picks every member), so it gets a comparable
+    // weight rather than being tacked on as an afterthought.
+    private const decimal RelationWeight = 0.25m;
+    private const decimal ContinuityWeight = 0.10m;
+    private const decimal EventWeight = 0.10m;
+    private const decimal CollectionWeight = 0.15m;
     private const decimal CharacterWeight = 0.15m;
     private const decimal CreatorWeight = 0.10m;
     private const decimal GenreWeight = 0.10m;
@@ -66,9 +73,14 @@ public static class RecommendationResolver
             .Select(s => s.Id)
             .ToHashSet();
 
+        var collectionTargetIds = CollectionResolver.GetOtherSeriesSharingCollection(context, seriesId)
+            .Select(s => s.Id)
+            .ToHashSet();
+
         var candidateIds = relationsByTarget.Keys
             .Union(continuityTargetIds)
             .Union(eventTargetIds)
+            .Union(collectionTargetIds)
             .ToList();
 
         if (candidateIds.Count == 0)
@@ -102,6 +114,7 @@ public static class RecommendationResolver
             RelationType? relationDisplayType = hasRelation ? relation.DisplayType : null;
             decimal continuityScore = continuityTargetIds.Contains(targetId) ? 1.0m : 0m;
             decimal eventScore = eventTargetIds.Contains(targetId) ? 1.0m : 0m;
+            decimal collectionScore = collectionTargetIds.Contains(targetId) ? 1.0m : 0m;
 
             var targetCharacters = AggregateTokens(target.Issues, i => i.Characters);
             var targetCreators = AggregateCreatorTokens(target.Issues);
@@ -113,12 +126,13 @@ public static class RecommendationResolver
             decimal genreScore = OverlapRatio(sourceGenre, targetGenre);
             decimal tagScore = OverlapRatio(sourceTags, targetTags);
 
-            var signals = new RecommendationSignals(relationScore, continuityScore, eventScore, characterScore, creatorScore, genreScore, tagScore);
+            var signals = new RecommendationSignals(relationScore, continuityScore, eventScore, collectionScore, characterScore, creatorScore, genreScore, tagScore);
 
             decimal finalScore =
                 relationScore * RelationWeight +
                 continuityScore * ContinuityWeight +
                 eventScore * EventWeight +
+                collectionScore * CollectionWeight +
                 characterScore * CharacterWeight +
                 creatorScore * CreatorWeight +
                 genreScore * GenreWeight +
@@ -163,6 +177,7 @@ public static class RecommendationResolver
             ("Relation", signals.RelationScore * RelationWeight),
             ("Continuity", signals.ContinuityScore * ContinuityWeight),
             ("Event", signals.EventScore * EventWeight),
+            ("Collection", signals.CollectionScore * CollectionWeight),
             ("Character", signals.CharacterScore * CharacterWeight),
             ("Creator", signals.CreatorScore * CreatorWeight),
             ("Genre", signals.GenreScore * GenreWeight),
@@ -176,6 +191,7 @@ public static class RecommendationResolver
             "Relation" => (MapRelationType(relationDisplayType), ExplainRelation(relationDisplayType, targetName)),
             "Continuity" => (RecommendationReason.SameContinuity, $"Shares continuity with {targetName}"),
             "Event" => (RecommendationReason.SameEvent, $"Shares a story event with {targetName}"),
+            "Collection" => (RecommendationReason.SameCollection, $"In the same collection as {targetName}"),
             "Character" => (RecommendationReason.SharedCharacters, $"Shares {Intersect(sourceCharacters, targetCharacters).Count} character(s) with {targetName}"),
             "Creator" => (RecommendationReason.SharedCreators, $"Shares {Intersect(sourceCreators, targetCreators).Count} creator(s) with {targetName}"),
             "Genre" => (RecommendationReason.SharedGenre, $"Shares {Intersect(sourceGenre, targetGenre).Count} genre(s) with {targetName}"),

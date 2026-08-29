@@ -14,6 +14,7 @@ public enum RecommendationReason
     SameUniverse,
     SameContinuity,
     SameEvent,
+    SameCollection,
     Crossover,
     Prequel,
     Sequel,

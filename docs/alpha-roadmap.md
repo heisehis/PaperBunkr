@@ -532,6 +532,40 @@ the design spec called for (ComicInfoHtml/UI info panel tab, QuickOpenHtml/UI co
 DrawThumbnailOverlay paint hook) were not built this session despite being in scope on paper — full
 skeleton for all 17 hooks plus all 3 stub surfaces is a larger follow-on, not a quick add-on.
 
+### SmartList Engine v2 — nested groups + operators + AllProperties split (shipped 2026-08-29)
+Design spec: `2026-08-28-smartlist-engine-v2-design.md`. Three CE-parity gaps closed:
+(§2) `SmartList.Conditions` flat always-AND list → nested `SmartListConditionGroup` tree
+(`SmartListGroupMode` And/Or, self-referencing, per-condition `Not`); one EF migration with a
+zero-data-loss backfill (one And root group per existing list, every condition repointed,
+`Not=false`/`IgnoreCase=true`); `SmartListQueryBuilder.Build` now recursive; SmartScreen rule
+builder rebuilt as a recursive group card (a single flat group renders like the pre-v2 pill list).
+(§3) `SmartListOperator.ListContains` (whole `,`/`;`-delimited item, verified against
+`_reference/ComicRackCE/…/ComicBookStringMatcher.cs`) + `.RegularExpression` (250ms timeout,
+malformed→no-match, never throws); `SmartListCondition.IgnoreCase` (default true) replaces the
+hardcoded `OrdinalIgnoreCase`; "Aa" toggle + the two operators in the Text-field row editor.
+(§4) new shared `SearchFieldBundleCatalog` (Paperbunkr.Data): `LibraryScreenViewModel.MatchesSearch`
+refactored onto it (behaviour-preserving, golden-list parity test) and `SmartListField.AllProperties`
++ `SmartListCondition.SearchMode` special-cased in the query builder, two-dropdown field picker.
+Tests: 1704 (App 1134 + Data 565 + the new v2/parity/migration suites) green; migration verified
+applying to a fresh DB; app smoke-launched to "Startup complete". On-screen GUI pass still pending.
+
+### Plugin API v3 — metadata/rules/writer for Data-Manager plugins (shipped 2026-08-29)
+Design spec: `2026-08-28-plugin-api-v3-data-manager-design.md`. Extends the v2 host (no new hooks).
+(§2) `IMetadataGraph` — 6th `IPluginEnvironment` sub-interface, read facade over the Phase 3-4g
+resolvers. (§3) `IApplication.GetLibraryBooks()`/`GetBook()` now eager-load Tags/CustomValues/
+MetadataProposals/Bookmarks (were silently empty). (§4) `IRulesEngine` — `PluginCondition`/
+`PluginConditionGroup` DTOs + adapter calling `SmartListQueryBuilder` directly (zero duplicated
+matching); `EvaluateSmartList(id)` for the common case. (§5) `IMetadataWriter` — audited per-field
+setters + `confirmWrites="true"` manifest gate (per-invocation `PluginInvocationContext`, writes
+fail closed until `AskQuestion` is answered affirmatively). (§6) `PluginSettingState` entity +
+migration, `IPluginConfig.GetSetting`/`SetSetting` scoped per `PluginKey`. (§7) sandbox fence —
+`SmartListQueryBuilder` + the 7 metadata resolvers are now `internal` (`InternalsVisibleTo` App +
+both test assemblies, never Plugins); `BlockedMetadataReferenceResolver` closes the verified
+`#r "Microsoft.EntityFrameworkCore"` hole; `PaperbunkrDbContext` ctor kept public (broad test
+usage) but a script still can't open one; `wiki/Plugins.md` updated with the "accidental overreach,
+not adversarial isolation" framing. §8 tests incl. an end-to-end Data-Manager fixture plugin.
+Plugins.Tests 16/16, no regressions. On-screen GUI pass still pending.
+
 ### App chrome (crash reporter + minimize-to-tray shipped 2026-08-23/24)
 Crash reporter dialog, minimize-to-tray, external "open with" app associations.
 *(Backup manager and file association are already shipped as part of Alpha's Advanced tab.)*

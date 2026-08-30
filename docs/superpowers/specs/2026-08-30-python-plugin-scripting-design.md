@@ -91,18 +91,44 @@ hardened boundary against a plugin author who's actively trying to escape it," j
 fixed small set `CSharpCommand.Options.WithReferences` already uses - BCL, `Paperbunkr.Data`
 entities assembly, `Paperbunkr.Plugins` assembly. EF Core / SQLite are never registered.
 
-**Caveat, stated plainly rather than oversold**: IronPython's `clr.AddReference("SomeAssembly")`
-resolves by probing already-*loaded* assemblies in the process (and configured search paths), not
-strictly the engine's own `LoadAssembly` allowlist. Paperbunkr's own EF Core assemblies are already
-loaded elsewhere in the same process by the time any plugin runs. Whether `clr.AddReference` can
-still reach an assembly this app loaded for its own purposes but never explicitly handed to the
-script engine needs verification once real `PythonCommand` code exists (`clr.AddReference` result
-+ probing behavior under the actual .NET 10 `AssemblyLoadContext`), not assumed from documentation
-alone - same "verified at implementation time" honesty standard `CSharpCommand`'s own
-`BlockedMetadataReferenceResolver` doc comment already sets for its Roslyn-side equivalent. If
-probing does reach loaded-but-unlisted assemblies, closing that gap (an `AssemblyLoadContext`-level
-block list, or an IronPython-side `import`/`clr.AddReference` hook) is this spec's one open
-follow-up item, not silently declared solved here.
+**The caveat this section originally flagged turned out to be real, and worse than expected -
+verified empirically, twice, before landing on the actual mitigation below:**
+
+1. **The obvious fix (a custom `PlatformAdaptationLayer` on the `ScriptHost`) does not work.**
+   Confirmed against IronPython 3's actual source (`src/core/IronPython/Runtime/ClrModule.cs`):
+   `clr.AddReference`'s implementation wraps its call to `LoadAssemblyByName` (which *does* route
+   through the host's `PlatformAdaptationLayer`) in a bare `try { } catch { }`, then unconditionally
+   falls back to `Assembly.LoadWithPartialName` on *any* failure - including a deliberate denial.
+   The host-customization point exists and works exactly as documented; IronPython's own fallback
+   just never asks it a second time.
+2. **True `AssemblyLoadContext` isolation does not work either** - confirmed via a real, running
+   repro, not assumed. A custom ALC correctly gates its own `Load(AssemblyName)` override (verified:
+   the override fires, correctly denies `Microsoft.EntityFrameworkCore`, and - genuinely useful
+   finding - correctly *shares* `Paperbunkr.Data`/`Paperbunkr.Plugins` types by identity, so
+   `Issue` round-trips through an isolated engine with no duplicate-type breakage). But
+   `Assembly.LoadWithPartialName` resolves by simple-name lookup against **whatever's already
+   loaded anywhere in the process**, not scoped to the calling code's ALC at all. Since Paperbunkr's
+   own main process always has EF Core loaded (for its own database access), `LoadWithPartialName`
+   finds it regardless of which ALC asked. The repro's isolated `Load()` override visibly firing and
+   denying the assembly, immediately followed by the script reaching `DbContext` anyway, proved this
+   directly.
+3. **The only mechanism that would truly close this is out-of-process plugin execution** - real
+   IPC, marshaling `Issue`/`IPluginEnvironment` across a process boundary. Categorically bigger than
+   this feature, and a limitation the *existing* C# `.csx` sandbox already explicitly accepts too
+   (its own spec: "no AppDomain/process isolation... that boundary was never part of the design").
+   This isn't a Python-specific gap - it's a property of the whole in-process plugin architecture -
+   and is explicitly **out of scope** here.
+
+**Actual mitigation, chosen once the above ruled out anything stronger**: `PreCompile()` does a
+static text scan of the raw `.py` source for `clr.AddReference(...)` calls naming any assembly in
+the *same* denylist `CSharpCommand`'s `BlockedMetadataReferenceResolver` already uses
+(`Microsoft.EntityFrameworkCore`, `Microsoft.Data.Sqlite`, `SQLitePCLRaw`) - extracted into one
+shared list both command types reference, so the two sandboxes can't quietly drift apart. A match
+is a `CompileError`, same as any other broken command - the script never executes at all, so there
+is no "make the call itself fail" race to lose. This is a text-level check, not a parse of Python
+semantics - trivially defeated by a determined author (string concatenation, `getattr` indirection),
+which is consistent with, not a regression from, the "accidental overreach, not adversarial
+isolation" bar this whole sandbox has always targeted.
 
 ## Python 2 → 3
 

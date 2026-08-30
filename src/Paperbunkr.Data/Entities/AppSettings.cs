@@ -325,4 +325,12 @@ public class AppSettings
     /// <see cref="RenderingBackend"/>.
     /// </summary>
     public bool PreferNativeOpenGl { get; set; }
+
+    /// <summary>
+    /// UTC timestamp of the last completed full cover-content verification pass (docs/superpowers/
+    /// specs/2026-08-30-cover-thumbnail-content-verification-design.md). Null means never run.
+    /// Only set on successful completion - an interrupted pass (app closed mid-run) retries next
+    /// launch rather than being marked done early.
+    /// </summary>
+    public DateTime? LastCoverVerificationUtc { get; set; }
 }

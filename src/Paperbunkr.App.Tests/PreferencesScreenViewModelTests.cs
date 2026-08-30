@@ -20,6 +20,7 @@ public class PreferencesScreenViewModelTests : IDisposable
     private readonly string _originalInstalledDirectory;
     private readonly string _originalExtractedDirectory;
     private readonly string _originalThumbnailDirectory;
+    private readonly string _originalBookThumbnailDirectory;
     private readonly string? _originalDbPathOverride;
     private readonly string _dbPath;
     private readonly DbContextOptions<PaperbunkrDbContext> _dbOptions;
@@ -31,11 +32,13 @@ public class PreferencesScreenViewModelTests : IDisposable
         _originalInstalledDirectory = SkinPaths.InstalledDirectory;
         _originalExtractedDirectory = SkinPaths.ExtractedDirectory;
         _originalThumbnailDirectory = CoverThumbnailPaths.ThumbnailDirectory;
+        _originalBookThumbnailDirectory = BookCoverThumbnailPaths.ThumbnailDirectory;
 
         string root = Path.Combine(Path.GetTempPath(), $"paperbunkr_prefsvm_test_{Guid.NewGuid():N}");
         SkinPaths.InstalledDirectory = Path.Combine(root, "skins");
         SkinPaths.ExtractedDirectory = Path.Combine(root, "skins-extracted");
         CoverThumbnailPaths.ThumbnailDirectory = Path.Combine(root, "thumbs");
+        BookCoverThumbnailPaths.ThumbnailDirectory = Path.Combine(root, "book-thumbs");
 
         _dbPath = Path.Combine(Path.GetTempPath(), $"paperbunkr_prefsvm_db_test_{Guid.NewGuid():N}.db");
         _dbOptions = new DbContextOptionsBuilder<PaperbunkrDbContext>().UseSqlite($"Data Source={_dbPath}").Options;
@@ -66,6 +69,7 @@ public class PreferencesScreenViewModelTests : IDisposable
         SkinPaths.InstalledDirectory = _originalInstalledDirectory;
         SkinPaths.ExtractedDirectory = _originalExtractedDirectory;
         CoverThumbnailPaths.ThumbnailDirectory = _originalThumbnailDirectory;
+        BookCoverThumbnailPaths.ThumbnailDirectory = _originalBookThumbnailDirectory;
         PaperbunkrDbContext.DatabasePathOverride = _originalDbPathOverride;
         GraphicsBootstrap.CachePathOverride = null;
 
@@ -946,6 +950,43 @@ public class PreferencesScreenViewModelTests : IDisposable
         Assert.False(vm.IsGeneratingCovers);
         Assert.NotNull(completionToast);
         Assert.Equal("Covers generated", completionToast!.Value.Title);
+    }
+
+    /// <summary>
+    /// docs/superpowers/specs/2026-08-30-cover-thumbnail-content-verification-design.md - separate
+    /// command from GenerateCovers, covers comics and books in one run. Seeds one of each so the
+    /// completion toast's combined total (a real bug caught during design review: two sequential
+    /// progress callbacks sharing one toast can make the total undercount/jump backward if not
+    /// accumulated) is actually checkable.
+    /// </summary>
+    [Fact]
+    public async Task VerifyCoversCommand_ShowsThenClosesProgressToast_ThenFiresCompletionToastWithCombinedTotal()
+    {
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            var series = context.Series.Add(new Series { Name = "Verify Covers Series" }).Entity;
+            context.SaveChanges();
+            context.Issues.Add(new Issue { SeriesId = series.Id, Number = "1", FilePath = @"C:\nowhere\missing.cbz" });
+            context.Books.Add(new Book { Title = "T", Format = BookFormat.Epub, FilePath = @"C:\nowhere\missing.epub" });
+            context.SaveChanges();
+        }
+
+        ToastProgressViewModel? shown = null;
+        ToastProgressViewModel? closed = null;
+        (string Title, string Message)? completionToast = null;
+        var vm = CreateViewModel(
+            showProgressToast: t => shown = t,
+            closeProgressToast: t => closed = t,
+            showToast: (title, message) => completionToast = (title, message));
+
+        await vm.VerifyCoversCommand.ExecuteAsync(null);
+
+        Assert.NotNull(shown);
+        Assert.Same(shown, closed);
+        Assert.False(vm.IsVerifyingCovers);
+        Assert.NotNull(completionToast);
+        Assert.Equal("Covers verified", completionToast!.Value.Title);
+        Assert.Equal("Re-checked 2 covers.", completionToast!.Value.Message); // 1 issue + 1 book
     }
 
     [Fact]

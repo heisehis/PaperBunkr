@@ -1205,6 +1205,62 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     }
 
     [ObservableProperty]
+    private bool _isVerifyingCovers;
+
+    /// <summary>
+    /// Unconditionally re-derives every comic and book cover from its source file and overwrites
+    /// the cache, catching a cover that was wrong from the moment it was scanned - not just the
+    /// identity-fingerprint mismatches <see cref="GenerateCovers"/> already self-heals in the
+    /// background (docs/superpowers/specs/2026-08-30-cover-thumbnail-content-verification-design.md).
+    /// Deliberately a separate command/button from <see cref="GenerateCovers"/> rather than a
+    /// behavior change to it, so today's "fill gaps only" semantics (and its tests) stay intact.
+    /// Covers both comics and books in one run/toast, unlike <see cref="GenerateCovers"/> which is
+    /// comics-only.
+    /// </summary>
+    [RelayCommand]
+    private async Task VerifyCovers()
+    {
+        if (IsVerifyingCovers)
+        {
+            return;
+        }
+
+        IsVerifyingCovers = true;
+        var toast = new ToastProgressViewModel("Verifying covers…");
+        _showProgressToast(toast);
+
+        // Two sequential passes sharing one toast - accumulate rather than assign directly, or the
+        // second pass's smaller Total would make the bar jump backward and undercount the summary.
+        int comicTotal = 0;
+        int bookTotal = 0;
+        try
+        {
+            var comicProgress = new Progress<(int Done, int Total)>(p =>
+            {
+                comicTotal = p.Total;
+                toast.Done = p.Done;
+                toast.Total = comicTotal;
+            });
+            await new CoverThumbnailService(_contextFactory).VerifyAllAsync(comicProgress);
+
+            var bookProgress = new Progress<(int Done, int Total)>(p =>
+            {
+                bookTotal = p.Total;
+                toast.Done = comicTotal + p.Done;
+                toast.Total = comicTotal + bookTotal;
+            });
+            await new BookCoverThumbnailService(_contextFactory).VerifyAllAsync(bookProgress);
+        }
+        finally
+        {
+            IsVerifyingCovers = false;
+            _closeProgressToast(toast);
+            int total = comicTotal + bookTotal;
+            _showToast("Covers verified", $"Re-checked {total} cover{(total == 1 ? "" : "s")}.");
+        }
+    }
+
+    [ObservableProperty]
     private bool _isSyncingMetadata;
 
     /// <summary>

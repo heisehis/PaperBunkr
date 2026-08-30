@@ -1,7 +1,7 @@
 # Database Corruption Safeguards
 
 **Date:** 2026-08-29
-**Status:** Draft, pending review
+**Status:** Approved — open questions resolved 2026-08-30 (see bottom)
 **Source doc:** Design session with Ehis (2026-08-29), prompted by a real "database disk image is
 malformed" failure on his own machine, tracing back to a force-quit (or process crash) while a
 write was in flight. Confirmed against the current codebase rather than assumed: `PaperbunkrDb.cs`
@@ -53,7 +53,7 @@ public static PaperbunkrDbContext CreateContext()
     var context = new PaperbunkrDbContext(options);
     context.Database.OpenConnection();
     context.Database.ExecuteSqlRaw("PRAGMA journal_mode = 'WAL';");
-    context.Database.ExecuteSqlRaw("PRAGMA synchronous = 'NORMAL';");
+    context.Database.ExecuteSqlRaw("PRAGMA synchronous = 'FULL';");
     context.Database.ExecuteSqlRaw("PRAGMA busy_timeout = 5000;");
     context.Database.ExecuteSqlRaw("PRAGMA foreign_keys = 'ON';");
     return context;
@@ -66,10 +66,9 @@ public static PaperbunkrDbContext CreateContext()
   SQLite detects and discards automatically on the next open — there is no page-level corruption
   mode for an interrupted write the way rollback-journal mode has. This is the single highest-
   leverage change here.
-- **`synchronous = NORMAL`** is the documented pairing for WAL (SQLite's own recommendation) —
-  `FULL` is stricter but WAL+NORMAL already guarantees the database itself can't be corrupted by
-  an OS crash or app crash, only that the very last few committed transactions could be lost in a
-  true power-loss event, which is an acceptable trade for a single-user desktop library app.
+- **`synchronous = FULL`** — stricter than the standard WAL+NORMAL pairing; costs an extra fsync on
+  the WAL file per transaction but guarantees zero committed-transaction loss even on true power
+  loss, not just crash-safety. Ehis chose this over NORMAL on 2026-08-30 (see open questions).
 - **`busy_timeout = 5000`** guards against a second short-lived context racing another (this app
   opens many short-lived contexts, not one long-lived one) hitting `SQLITE_BUSY` instead of just
   waiting — cheap insurance, not corruption-related but worth bundling since it's the same call
@@ -115,8 +114,11 @@ building a parallel mechanism — it already has `BackupLocation`/`BackupsToKeep
   seam for it.
 - **New trigger: on app startup**, after a successful `EnsureCreated()` (so a launch never backs up
   a database it hasn't verified opens cleanly — see §3 for why open-verification comes first).
-  Fire-and-forget on a background thread so it can't add to startup latency perceptibly.
-- **New trigger: on clean shutdown**, best-effort (wrap in try/catch, never block/delay exit).
+  Fire-and-forget on a background thread so it can't add to startup latency perceptibly. This is
+  the fallback that catches crashes/force-quits that skip shutdown entirely.
+- **New trigger: on clean shutdown**, best-effort (wrap in try/catch, never block/delay exit). This
+  is the primary trigger — it catches sessions left open all day that never restart, which
+  startup-only would otherwise miss entirely.
 - **De-dupe guard:** skip the automated backup if the most recent backup file (by the existing
   `paperbunkr_backup_*` naming/sort in `GetAvailableBackups()`) is less than some minimum age (default
   4 hours, configurable alongside `BackupsToKeep`) — otherwise a user who restarts the app
@@ -179,7 +181,9 @@ Startup flow (`App.axaml.cs`, replacing the top of `OnFrameworkInitializationCom
      an app restart... no safe way to hot-swap the file underneath a running app").
    - **Start fresh library** (rename the corrupt file to `paperbunkr.db.corrupt-<timestamp>` next
      to it rather than deleting — never destroy the one artifact that might let Ehis or a future
-     session hand-recover data from it — then let normal fresh-install flow proceed).
+     session hand-recover data from it — then let normal fresh-install flow proceed as a full
+     reset: no watched-folder paths or other settings carried over, identical to a brand-new
+     install).
    - **Quit** (current behavior, unchanged, for anyone who'd rather investigate manually first).
    - If `GetAvailableBackups()` is empty, the "Restore" option is disabled with an explanatory
      line rather than hidden — a user should learn from this dialog that no backup existed, which
@@ -221,14 +225,12 @@ detector.
   pre-change. Worth Ehis doing this once against a throwaway library before calling this done,
   since it's the actual failure mode that prompted the spec.
 
-## Open questions for Ehis
+## Open questions — resolved 2026-08-30
 
-1. `synchronous = NORMAL` (recommended WAL pairing, tiny last-transaction-loss risk on true power
-   loss) vs. `FULL` (zero loss, marginally slower) — NORMAL is the standard WAL recommendation and
-   what's written above, but worth confirming since it's a real (if narrow) trade-off.
-2. Auto-backup default `4`-hour min-interval and on-startup-only-if-stale trigger — reasonable
-   default, or should on-shutdown be the primary trigger instead (catches "was open all day"
-   sessions that never restart) with on-startup as the fallback for crashes that skip shutdown?
-3. Recovery window's "Start fresh library" option — should it also try to preserve the *file
-   layout* (still point the library-folder scan at wherever the user's comics live) or fully reset
-   as if this were a brand-new install, folder paths included?
+1. `synchronous`: **`FULL`**, not `NORMAL`. Ehis chose zero committed-transaction loss over the
+   marginal fsync cost.
+2. Auto-backup trigger: **both startup and shutdown**, shutdown as the primary trigger (catches
+   "was open all day" sessions that never restart), startup as the fallback (catches crashes that
+   skip shutdown entirely). Both still gated by the same 4-hour min-interval de-dupe guard.
+3. "Start fresh library": **full reset**, identical to a brand-new install — no watched-folder
+   paths or other settings carried over from the corrupt database.

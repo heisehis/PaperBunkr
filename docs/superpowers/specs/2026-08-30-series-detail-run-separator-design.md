@@ -59,10 +59,20 @@ the series has one or zero distinct `EffectiveVolume()` values total (the overwh
 of series), grouping is skipped entirely — a single unlabeled group, rendering exactly as today.
 Bars only appear when there's genuinely more than one run to separate.
 
-New `IssueRunGroup` (Header: `string?` — `null` for the no-volume bucket, `"Volume {value}"`
-otherwise; Items: `ObservableCollection<IssueCardSample>`), and a new
-`ObservableCollection<IssueRunGroup> IssueGroups` on `DetailTabsViewModel`, built alongside the
-existing flat `Issues` collection (kept as-is for anything that doesn't care about grouping).
+New `IssueRunGroup` (Header: `string?` — `null` for the no-volume bucket; Items:
+`ObservableCollection<IssueCardSample>`), and a new `ObservableCollection<IssueRunGroup>
+IssueGroups` on `DetailTabsViewModel`, built alongside the existing flat `Issues` collection (kept
+as-is for anything that doesn't care about grouping).
+
+**Header label (added after initial ship, per Ehis's on-screen review):** rather than a bare
+`"Volume {value}"`, the header leads with the run's main writer — `"{Writer} ({value})"` (e.g.
+"Al Ewing (2018)") — since that's how readers actually distinguish eras of a long-running title,
+not just the launch year. `DetailTabsViewModel.RunHeaderFor` computes it as the most common
+non-blank `Issue.Writer` across the run (ties broken by first occurrence, matching `GroupBy`'s
+stable ordering) — a run can carry a fill-in issue credited to a different writer than its main
+creative team, so a straight "first issue's writer" read would be wrong more often than a
+majority vote. Falls back to plain `"Volume {value}"` when no issue in the run has a Writer set
+(the pre-existing behavior, unchanged for libraries that haven't tagged Writer).
 
 ## UI
 

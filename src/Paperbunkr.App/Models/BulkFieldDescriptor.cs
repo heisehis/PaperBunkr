@@ -124,8 +124,11 @@ public static class BulkFieldRegistry
         Text("Publisher", Main, i => i.Publisher, (i, v) => i.Publisher = v),
         Text("Imprint", Main, i => i.Imprint, (i, v) => i.Imprint = v),
         // Autocomplete seeded with CE's 16 shipped [Book Formats] defaults (docs/superpowers/specs/
-        // 2026-08-27-metadata-model-phase4e-format-signal-suggestions-design.md) - still free text.
-        Text("Format", Main, i => i.Format, (i, v) => i.Format = v, autocomplete: FormatSignalCatalog.CeDefaultFormats),
+        // 2026-08-27-metadata-model-phase4e-format-signal-suggestions-design.md) plus
+        // SpecialFormatCatalog's Kavita-only additions (docs/superpowers/specs/2026-08-28-series-
+        // detail-specials-tab-design.md) - still free text.
+        Text("Format", Main, i => i.Format, (i, v) => i.Format = v,
+            autocomplete: FormatSignalCatalog.CeDefaultFormats.Union(SpecialFormatCatalog.KavitaOnlyAdditions, StringComparer.OrdinalIgnoreCase).ToList()),
         // Book Age - free text (docs/superpowers/specs/2026-08-27-metadata-model-phase4g-age-
         // progression-design.md), autocomplete seeded with CE's five [Book Ages] defaults.
         Text("Book Age", Main, i => i.BookAge, (i, v) => i.BookAge = v,

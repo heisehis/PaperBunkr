@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Avalonia.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.EntityFrameworkCore;
@@ -57,6 +58,8 @@ public partial class DetailTabsViewModel : ViewModelBase
         _contextFactory = contextFactory;
         _metadataProvider = metadataProvider ?? new AniListMetadataProvider(AniListHttpClient.Shared);
         Issues = new ObservableCollection<IssueCardSample>();
+        IssueGroups = new ObservableCollection<IssueRunGroup>();
+        Specials = new ObservableCollection<IssueCardSample>();
         Related = new ObservableCollection<RelatedSeriesSample>();
         SameContinuity = new ObservableCollection<RelatedGroupSeriesSample>();
         ContinuityChips = new ObservableCollection<ContinuityChip>();
@@ -101,6 +104,25 @@ public partial class DetailTabsViewModel : ViewModelBase
     public bool ShowTabStrip { get; set; } = true;
 
     public ObservableCollection<IssueCardSample> Issues { get; }
+
+    /// <summary>
+    /// Same cards as <see cref="Issues"/>, partitioned into run groups by <see cref="Issue.Volume"/>
+    /// (docs/superpowers/specs/2026-08-30-series-detail-run-separator-design.md) - what the Issues
+    /// tab's Poster/List/Card templates actually bind to. Collapses to a single <see langword="null"/>-
+    /// header group (rendering with no separator bar) when the series has at most one distinct
+    /// Volume value, so the overwhelming majority of series look exactly as before this feature.
+    /// </summary>
+    public ObservableCollection<IssueRunGroup> IssueGroups { get; }
+
+    /// <summary>
+    /// Issues pulled out of the main numbered flow by <see cref="IssueMetadataExtensions.IsSpecial"/>
+    /// (docs/superpowers/specs/2026-08-28-series-detail-specials-tab-design.md) - one-shots,
+    /// annuals, omnibuses, etc. Never also present in <see cref="Issues"/>/<see cref="IssueGroups"/>.
+    /// </summary>
+    public ObservableCollection<IssueCardSample> Specials { get; }
+
+    /// <summary>Drives the Specials tab button's visibility - hidden entirely when a series has none, matching Kavita's own UX (the overwhelming majority of series have zero specials).</summary>
+    public bool HasSpecials => Specials.Count > 0;
 
     /// <summary>
     /// Real data as of docs/superpowers/specs/2026-08-17-metadata-model-phase3-media-relations-
@@ -160,28 +182,33 @@ public partial class DetailTabsViewModel : ViewModelBase
         var coverBrush = SeriesCardSample.CoverBrushFor(series.Name);
 
         Issues.Clear();
+        IssueGroups.Clear();
+        Specials.Clear();
         _selection.Clear();
-        foreach (var issue in series.Issues.OrderByNumber())
+
+        // Specials are pulled fully out of the numbered flow (docs/superpowers/specs/2026-08-28-
+        // series-detail-specials-tab-design.md) - not duplicated into Issues/IssueGroups, and not
+        // volume-grouped (a handful of one-shots/omnibuses doesn't need a run separator).
+        foreach (var issue in series.Issues.Where(i => i.IsSpecial()).OrderByNumber())
         {
-            double readFraction = issue.PageCount is int pc and > 0 && issue.LastPageRead is int lpr and > 0
-                ? System.Math.Clamp((double)lpr / pc, 0, 1)
-                : issue.HasBeenRead() ? 1 : 0;
-            Issues.Add(new IssueCardSample
+            Specials.Add(BuildIssueCard(issue, series.Id, coverBrush));
+        }
+        OnPropertyChanged(nameof(HasSpecials));
+
+        var orderedIssues = series.Issues.Where(i => !i.IsSpecial()).OrderByRun().ToList();
+        int distinctVolumes = orderedIssues.Select(i => i.EffectiveVolume()).Distinct(StringComparer.OrdinalIgnoreCase).Count();
+
+        foreach (var runOfIssues in orderedIssues.GroupBy(i => i.EffectiveVolume(), StringComparer.OrdinalIgnoreCase))
+        {
+            var group = new IssueRunGroup { Header = distinctVolumes > 1 && runOfIssues.Key is not null ? RunHeaderFor(runOfIssues) : null };
+            foreach (var issue in runOfIssues)
             {
-                Id = issue.Id,
-                SeriesId = series.Id,
-                Title = string.IsNullOrWhiteSpace(issue.EffectiveNumber()) ? "#?" : $"#{issue.EffectiveNumber()}",
-                IsUnread = issue.LastPageRead is null or 0,
-                CoverBrush = coverBrush,
-                CoverImage = CoverImageCache.Get(issue.Id),
-                FilePath = issue.FilePath,
-                FullTitle = issue.EffectiveTitle(),
-                ArcTitle = issue.StoryArc,
-                CoverDate = issue.ReleasedTime,
-                Rating = issue.Rating,
-                IsRead = issue.HasBeenRead(),
-                ReadFraction = readFraction,
-            });
+                var card = BuildIssueCard(issue, series.Id, coverBrush);
+                Issues.Add(card);
+                group.Items.Add(card);
+            }
+
+            IssueGroups.Add(group);
         }
 
         _seriesId = series.Id;
@@ -211,6 +238,49 @@ public partial class DetailTabsViewModel : ViewModelBase
 
         ActiveTab = ShowIssuesTab ? "issues" : "related";
         _onSelectionChanged?.Invoke();
+    }
+
+    private static IssueCardSample BuildIssueCard(Issue issue, int seriesId, IBrush coverBrush)
+    {
+        double readFraction = issue.PageCount is int pc and > 0 && issue.LastPageRead is int lpr and > 0
+            ? System.Math.Clamp((double)lpr / pc, 0, 1)
+            : issue.HasBeenRead() ? 1 : 0;
+        return new IssueCardSample
+        {
+            Id = issue.Id,
+            SeriesId = seriesId,
+            Title = string.IsNullOrWhiteSpace(issue.EffectiveNumber()) ? "#?" : $"#{issue.EffectiveNumber()}",
+            IsUnread = issue.LastPageRead is null or 0,
+            CoverBrush = coverBrush,
+            CoverImage = CoverImageCache.Get(issue.Id),
+            FilePath = issue.FilePath,
+            FullTitle = issue.EffectiveTitle(),
+            ArcTitle = issue.StoryArc,
+            CoverDate = issue.ReleasedTime,
+            Rating = issue.Rating,
+            IsRead = issue.HasBeenRead(),
+            ReadFraction = readFraction,
+        };
+    }
+
+    /// <summary>
+    /// "{Writer} ({Volume})" for a run's separator bar - the most common non-blank
+    /// <see cref="Issue.Writer"/> across the run (ties go to whichever appears first, matching
+    /// <c>GroupBy</c>'s stable first-occurrence order), since a run can carry fill-in issues with a
+    /// different credited writer than its main creative team. Falls back to plain "Volume {value}"
+    /// when no issue in the run has a Writer set.
+    /// </summary>
+    private static string RunHeaderFor(IGrouping<string?, Issue> runOfIssues)
+    {
+        string? mainWriter = runOfIssues
+            .Select(i => i.Writer)
+            .Where(w => !string.IsNullOrWhiteSpace(w))
+            .GroupBy(w => w!, StringComparer.OrdinalIgnoreCase)
+            .OrderByDescending(g => g.Count())
+            .Select(g => g.Key)
+            .FirstOrDefault();
+
+        return mainWriter is not null ? $"{mainWriter} ({runOfIssues.Key})" : $"Volume {runOfIssues.Key}";
     }
 
     /// <summary>
@@ -1134,6 +1204,7 @@ public partial class DetailTabsViewModel : ViewModelBase
     private string _activeTab = "issues";
 
     public bool IsIssuesTab => ActiveTab == "issues";
+    public bool IsSpecialsTab => ActiveTab == "specials";
     public bool IsRelatedTab => ActiveTab == "related";
     public bool IsDetailsTab => ActiveTab == "details";
     public bool IsActivityTab => ActiveTab == "activity";
@@ -1141,6 +1212,7 @@ public partial class DetailTabsViewModel : ViewModelBase
     partial void OnActiveTabChanged(string value)
     {
         OnPropertyChanged(nameof(IsIssuesTab));
+        OnPropertyChanged(nameof(IsSpecialsTab));
         OnPropertyChanged(nameof(IsRelatedTab));
         OnPropertyChanged(nameof(IsDetailsTab));
         OnPropertyChanged(nameof(IsActivityTab));
@@ -1148,6 +1220,9 @@ public partial class DetailTabsViewModel : ViewModelBase
 
     [RelayCommand]
     private void GoIssues() => ActiveTab = "issues";
+
+    [RelayCommand]
+    private void GoSpecials() => ActiveTab = "specials";
 
     [RelayCommand]
     private void GoRelated() => ActiveTab = "related";

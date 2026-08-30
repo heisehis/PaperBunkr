@@ -59,6 +59,32 @@ public class BackupService
         context.SaveChanges();
     }
 
+    public bool GetAutoBackupEnabled()
+    {
+        using var context = _contextFactory();
+        return context.GetOrCreateAppSettings().AutoBackupEnabled;
+    }
+
+    public void SetAutoBackupEnabled(bool enabled)
+    {
+        using var context = _contextFactory();
+        context.GetOrCreateAppSettings().AutoBackupEnabled = enabled;
+        context.SaveChanges();
+    }
+
+    public int GetAutoBackupMinIntervalHours()
+    {
+        using var context = _contextFactory();
+        return context.GetOrCreateAppSettings().AutoBackupMinIntervalHours;
+    }
+
+    public void SetAutoBackupMinIntervalHours(int hours)
+    {
+        using var context = _contextFactory();
+        context.GetOrCreateAppSettings().AutoBackupMinIntervalHours = Math.Max(hours, 1);
+        context.SaveChanges();
+    }
+
     private static string DefaultBackupLocation() =>
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Paperbunkr", "backups");
 
@@ -77,13 +103,88 @@ public class BackupService
         string location = GetBackupLocation();
         Directory.CreateDirectory(location);
 
-        Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
         string dbPath = PaperbunkrDbContext.GetDefaultDatabasePath();
+        CheckpointWal(dbPath);
+
+        Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
         string backupPath = Path.Combine(location, $"{FilePrefix}{DateTime.UtcNow:yyyyMMdd_HHmmss}.db");
         File.Copy(dbPath, backupPath, overwrite: false);
 
         PruneOldBackups(location);
         return backupPath;
+    }
+
+    /// <summary>
+    /// Flushes WAL-mode's <c>-wal</c> file into the main <c>.db</c> file before a plain byte copy
+    /// (docs/superpowers/specs/2026-08-29-db-corruption-safeguards-design.md §2) - since
+    /// <see cref="PaperbunkrDb.CreateContext"/> now sets <c>journal_mode=WAL</c>, recently committed
+    /// data can live only in the <c>-wal</c> sidecar until checkpointed, and a raw copy of just
+    /// <c>paperbunkr.db</c> would silently miss it. <c>TRUNCATE</c> (not <c>PASSIVE</c>/<c>FULL</c>)
+    /// both flushes and truncates the <c>-wal</c> file back to zero bytes, so this keeps
+    /// <see cref="BackupNow"/> a single-file copy rather than needing to also copy the sidecars.
+    /// No-op (harmless) if the file doesn't exist yet or isn't in WAL mode.
+    /// </summary>
+    private static void CheckpointWal(string dbPath)
+    {
+        if (!File.Exists(dbPath))
+        {
+            return;
+        }
+
+        Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
+        using var conn = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={dbPath}");
+        conn.Open();
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "PRAGMA wal_checkpoint(TRUNCATE);";
+        cmd.ExecuteNonQuery();
+    }
+
+    /// <summary>
+    /// Automatic backup trigger (docs/superpowers/specs/2026-08-29-db-corruption-safeguards-
+    /// design.md §2), called from <c>App.axaml.cs</c> on startup and clean shutdown. No-ops if
+    /// <see cref="Data.Entities.AppSettings.AutoBackupEnabled"/> is off, or if the newest existing
+    /// backup is younger than <see cref="Data.Entities.AppSettings.AutoBackupMinIntervalHours"/> -
+    /// otherwise every restart in a short session would add its own backup and
+    /// <c>BackupsToKeep</c>'s rotation window would fill with startup noise instead of history.
+    /// Best-effort: any failure (missing file, locked file, etc.) is swallowed, since both call
+    /// sites treat this as a background nicety, never something that should block startup or delay
+    /// shutdown.
+    /// </summary>
+    public void RunAutoBackupIfDue()
+    {
+        try
+        {
+            if (!GetAutoBackupEnabled())
+            {
+                return;
+            }
+
+            var newest = GetAvailableBackups().FirstOrDefault();
+            if (newest is not null && TryParseBackupTimestamp(newest, out DateTime newestUtc))
+            {
+                double ageHours = (DateTime.UtcNow - newestUtc).TotalHours;
+                if (ageHours < GetAutoBackupMinIntervalHours())
+                {
+                    return;
+                }
+            }
+
+            BackupNow();
+        }
+        catch (Exception)
+        {
+        }
+    }
+
+    /// <summary>Parses the UTC timestamp out of a <c>paperbunkr_backup_yyyyMMdd_HHmmss.db</c> filename, as written by <see cref="BackupNow"/>.</summary>
+    private static bool TryParseBackupTimestamp(string backupPath, out DateTime utc)
+    {
+        string name = Path.GetFileNameWithoutExtension(backupPath);
+        string stamp = name.StartsWith(FilePrefix, StringComparison.Ordinal) ? name[FilePrefix.Length..] : name;
+        return DateTime.TryParseExact(
+            stamp, "yyyyMMdd_HHmmss", System.Globalization.CultureInfo.InvariantCulture,
+            System.Globalization.DateTimeStyles.AssumeUniversal | System.Globalization.DateTimeStyles.AdjustToUniversal,
+            out utc);
     }
 
     private void PruneOldBackups(string location)

@@ -131,4 +131,103 @@ public class BackupServiceTests : IDisposable
         Assert.Contains("Paperbunkr", location);
         Assert.Contains("backups", location);
     }
+
+    /// <summary>
+    /// Proves the checkpoint-before-copy fix (docs/superpowers/specs/2026-08-29-db-corruption-
+    /// safeguards-design.md §2) actually closes the WAL gap, not just the happy path where nothing
+    /// was pending: puts the live db into WAL mode, writes a row via a second connection that stays
+    /// open (so the write sits in the -wal sidecar rather than the main file), then asserts
+    /// <see cref="BackupService.BackupNow"/>'s output has the row anyway.
+    /// </summary>
+    [Fact]
+    public void BackupNow_IncludesRecentWrites_StillPendingInWalFile()
+    {
+        using (var setup = new PaperbunkrDbContext(_dbOptions))
+        {
+            setup.Database.ExecuteSqlRaw("PRAGMA journal_mode = 'WAL';");
+        }
+
+        using var pendingWriter = new PaperbunkrDbContext(_dbOptions);
+        pendingWriter.Database.OpenConnection();
+        pendingWriter.Database.ExecuteSqlRaw("PRAGMA journal_mode = 'WAL';");
+        pendingWriter.Series.Add(new Data.Entities.Series { Name = "Pending In WAL" });
+        pendingWriter.SaveChanges();
+
+        var service = CreateService();
+        string backupPath = service.BackupNow();
+
+        var backupOptions = new DbContextOptionsBuilder<PaperbunkrDbContext>()
+            .UseSqlite($"Data Source={backupPath}").Options;
+        using var backupContext = new PaperbunkrDbContext(backupOptions);
+        Assert.Contains(backupContext.Series, s => s.Name == "Pending In WAL");
+    }
+
+    [Fact]
+    public void RunAutoBackupIfDue_DoesNothing_WhenAutoBackupDisabled()
+    {
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            context.GetOrCreateAppSettings().AutoBackupEnabled = false;
+            context.SaveChanges();
+        }
+
+        CreateService().RunAutoBackupIfDue();
+
+        Assert.Empty(CreateService().GetAvailableBackups());
+    }
+
+    [Fact]
+    public void RunAutoBackupIfDue_RunsBackup_WhenNoneExistYet()
+    {
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            context.GetOrCreateAppSettings().AutoBackupEnabled = true;
+            context.SaveChanges();
+        }
+
+        CreateService().RunAutoBackupIfDue();
+
+        Assert.Single(CreateService().GetAvailableBackups());
+    }
+
+    [Fact]
+    public void RunAutoBackupIfDue_Skips_WhenNewestBackupIsUnderMinInterval()
+    {
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            var settings = context.GetOrCreateAppSettings();
+            settings.AutoBackupEnabled = true;
+            settings.AutoBackupMinIntervalHours = 4;
+            context.SaveChanges();
+        }
+
+        var service = CreateService();
+        service.BackupNow();
+
+        service.RunAutoBackupIfDue();
+
+        Assert.Single(service.GetAvailableBackups());
+    }
+
+    [Fact]
+    public void RunAutoBackupIfDue_Runs_WhenNewestBackupIsOlderThanMinInterval()
+    {
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            var settings = context.GetOrCreateAppSettings();
+            settings.AutoBackupEnabled = true;
+            settings.AutoBackupMinIntervalHours = 4;
+            context.SaveChanges();
+        }
+
+        var service = CreateService();
+        string oldBackup = service.BackupNow();
+        string agedStamp = DateTime.UtcNow.AddHours(-5).ToString("yyyyMMdd_HHmmss");
+        string agedName = Path.Combine(Path.GetDirectoryName(oldBackup)!, $"paperbunkr_backup_{agedStamp}.db");
+        File.Move(oldBackup, agedName);
+
+        service.RunAutoBackupIfDue();
+
+        Assert.Equal(2, service.GetAvailableBackups().Count);
+    }
 }

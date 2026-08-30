@@ -115,6 +115,20 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         NavigationKeyBindings = new ObservableCollection<KeyBindingRowViewModel>();
         ZoomFitKeyBindings = new ObservableCollection<KeyBindingRowViewModel>();
         DisplayKeyBindings = new ObservableCollection<KeyBindingRowViewModel>();
+
+        // Clear Cover Cache (docs/superpowers/specs/2026-08-30-cover-thumbnail-content-
+        // verification-design.md) - manual escape hatch, independent of VerifyCovers' detection
+        // logic. Two-step inline confirm, same pattern every other destructive action in this
+        // codebase uses (docs/superpowers/specs/2026-08-22-delete-functionality-design.md), not a
+        // modal dialog.
+        ClearComicCoverCacheConfirm = new TwoStepConfirm(
+            onConfirmed: () => _ = ClearComicCoverCacheAsync(),
+            idleLabel: "Clear Comic Cover Cache",
+            armedLabel: "Confirm clear?");
+        ClearBookCoverCacheConfirm = new TwoStepConfirm(
+            onConfirmed: () => _ = ClearBookCoverCacheAsync(),
+            idleLabel: "Clear Book Cover Cache",
+            armedLabel: "Confirm clear?");
     }
 
     private static Issue SampleIssue() => new()
@@ -1257,6 +1271,101 @@ public partial class PreferencesScreenViewModel : ViewModelBase
             _closeProgressToast(toast);
             int total = comicTotal + bookTotal;
             _showToast("Covers verified", $"Re-checked {total} cover{(total == 1 ? "" : "s")}.");
+        }
+    }
+
+    /// <summary>
+    /// Manual, unconditional escape hatch (docs/superpowers/specs/2026-08-30-cover-thumbnail-
+    /// content-verification-design.md) - wipes the entire comic cover cache and rebuilds it, no
+    /// detection logic involved at all. Separate from <see cref="ClearBookCoverCacheConfirm"/> so
+    /// one side can be nuked without touching the other. Guarded by <see cref="IsGeneratingCovers"/>
+    /// (not a new flag) since the rebuild step reuses <see cref="GenerateCovers"/>'s own pipeline.
+    /// </summary>
+    public TwoStepConfirm ClearComicCoverCacheConfirm { get; }
+
+    private async Task ClearComicCoverCacheAsync()
+    {
+        if (IsGeneratingCovers)
+        {
+            return;
+        }
+
+        foreach (string path in CoverThumbnailPaths.EnumerateAll())
+        {
+            try
+            {
+                File.Delete(path);
+            }
+            catch (IOException)
+            {
+            }
+        }
+
+        // Directory is now empty, so the cheap presence-based path regenerates everything - no
+        // need for VerifyAllAsync/force here.
+        IsGeneratingCovers = true;
+        var toast = new ToastProgressViewModel("Rebuilding comic covers…");
+        _showProgressToast(toast);
+        try
+        {
+            var progress = new Progress<(int Done, int Total)>(p =>
+            {
+                toast.Done = p.Done;
+                toast.Total = p.Total;
+            });
+            await new CoverThumbnailService(_contextFactory).GenerateAllAsync(progress);
+        }
+        finally
+        {
+            IsGeneratingCovers = false;
+            _closeProgressToast(toast);
+            _showToast("Comic covers rebuilt", $"Regenerated {toast.Total} cover{(toast.Total == 1 ? "" : "s")}.");
+        }
+    }
+
+    /// <summary>Book counterpart of <see cref="ClearComicCoverCacheConfirm"/> - see its doc comment.
+    /// Guarded by <see cref="IsClearingBookCoverCache"/>, since <see cref="IsGeneratingCovers"/> is
+    /// comic-only and there's no pre-existing "generating book covers" flag to reuse.</summary>
+    public TwoStepConfirm ClearBookCoverCacheConfirm { get; }
+
+    [ObservableProperty]
+    private bool _isClearingBookCoverCache;
+
+    private async Task ClearBookCoverCacheAsync()
+    {
+        if (IsClearingBookCoverCache)
+        {
+            return;
+        }
+
+        foreach (string path in BookCoverThumbnailPaths.EnumerateAll())
+        {
+            try
+            {
+                File.Delete(path);
+            }
+            catch (IOException)
+            {
+            }
+        }
+
+        IsClearingBookCoverCache = true;
+        var toast = new ToastProgressViewModel("Rebuilding book covers…");
+        _showProgressToast(toast);
+        try
+        {
+            var progress = new Progress<(int Done, int Total)>(p =>
+            {
+                toast.Done = p.Done;
+                toast.Total = p.Total;
+            });
+            await new BookCoverThumbnailService(_contextFactory).GenerateAllAsync(progress);
+        }
+        finally
+        {
+            IsClearingBookCoverCache = false;
+            _closeProgressToast(toast);
+            _showToast("Book covers rebuilt", $"Regenerated {toast.Total} cover{(toast.Total == 1 ? "" : "s")}.");
         }
     }
 

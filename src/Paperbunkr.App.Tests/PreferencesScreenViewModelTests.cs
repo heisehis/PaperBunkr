@@ -989,6 +989,91 @@ public class PreferencesScreenViewModelTests : IDisposable
         Assert.Equal("Re-checked 2 covers.", completionToast!.Value.Message); // 1 issue + 1 book
     }
 
+    // --- Clear Cover Cache (docs/superpowers/specs/2026-08-30-cover-thumbnail-content-
+    //     verification-design.md) - TwoStepConfirm escape hatch, independent of VerifyCovers. ---
+
+    [Fact]
+    public void ClearComicCoverCacheConfirm_FirstTrigger_ArmsWithoutDeletingAnything()
+    {
+        Directory.CreateDirectory(CoverThumbnailPaths.ThumbnailDirectory);
+        string existing = Path.Combine(CoverThumbnailPaths.ThumbnailDirectory, "1-deadbeef.jpg");
+        File.WriteAllBytes(existing, new byte[] { 1 });
+        var vm = CreateViewModel();
+
+        vm.ClearComicCoverCacheConfirm.TriggerCommand.Execute(null);
+
+        Assert.True(vm.ClearComicCoverCacheConfirm.IsArmed);
+        Assert.True(File.Exists(existing));
+    }
+
+    [Fact]
+    public async Task ClearComicCoverCacheConfirm_SecondTrigger_DeletesEverythingAndRebuilds()
+    {
+        CbzFixture.Create(Path.Combine(_scanRoot, "1.cbz"), pageCount: 1);
+        int issueId;
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            var series = context.Series.Add(new Series { Name = "Clear Cache Series" }).Entity;
+            context.SaveChanges();
+            var issue = new Issue { SeriesId = series.Id, Number = "1", FilePath = Path.Combine(_scanRoot, "1.cbz"), FileSize = 1 };
+            context.Issues.Add(issue);
+            context.SaveChanges();
+            issueId = issue.Id;
+        }
+        new CoverThumbnailService(() => new PaperbunkrDbContext(_dbOptions)).TryGenerateThumbnail(issueId, Path.Combine(_scanRoot, "1.cbz"), fileSize: 1);
+        Directory.CreateDirectory(CoverThumbnailPaths.ThumbnailDirectory);
+        string strayFile = Path.Combine(CoverThumbnailPaths.ThumbnailDirectory, "999-cafef00d.jpg"); // an orphan that must go too
+        File.WriteAllBytes(strayFile, new byte[] { 1 });
+
+        (string Title, string Message)? completionToast = null;
+        var vm = CreateViewModel(showToast: (title, message) => completionToast = (title, message));
+
+        vm.ClearComicCoverCacheConfirm.TriggerCommand.Execute(null); // arm
+        vm.ClearComicCoverCacheConfirm.TriggerCommand.Execute(null); // confirm - fire-and-forget
+        await Task.Delay(500); // let the fire-and-forget rebuild finish (headless dispatcher, no completion signal to await directly)
+
+        Assert.False(File.Exists(strayFile)); // wiped, not just skipped
+        Assert.False(vm.IsGeneratingCovers);
+        Assert.NotNull(completionToast);
+        Assert.Equal("Comic covers rebuilt", completionToast!.Value.Title);
+        var stem = CoverFingerprint.Stem(issueId, Path.Combine(_scanRoot, "1.cbz"), 1);
+        Assert.True(File.Exists(CoverThumbnailPaths.GetCachePath(stem))); // regenerated, not left blank
+    }
+
+    [Fact]
+    public void ClearBookCoverCacheConfirm_FirstTrigger_ArmsWithoutDeletingAnything()
+    {
+        Directory.CreateDirectory(BookCoverThumbnailPaths.ThumbnailDirectory);
+        string existing = Path.Combine(BookCoverThumbnailPaths.ThumbnailDirectory, "1-deadbeef.jpg");
+        File.WriteAllBytes(existing, new byte[] { 1 });
+        var vm = CreateViewModel();
+
+        vm.ClearBookCoverCacheConfirm.TriggerCommand.Execute(null);
+
+        Assert.True(vm.ClearBookCoverCacheConfirm.IsArmed);
+        Assert.True(File.Exists(existing));
+    }
+
+    [Fact]
+    public async Task ClearBookCoverCacheConfirm_SecondTrigger_DeletesEverythingAndRebuilds()
+    {
+        Directory.CreateDirectory(BookCoverThumbnailPaths.ThumbnailDirectory);
+        string strayFile = Path.Combine(BookCoverThumbnailPaths.ThumbnailDirectory, "999-cafef00d.jpg");
+        File.WriteAllBytes(strayFile, new byte[] { 1 });
+
+        (string Title, string Message)? completionToast = null;
+        var vm = CreateViewModel(showToast: (title, message) => completionToast = (title, message));
+
+        vm.ClearBookCoverCacheConfirm.TriggerCommand.Execute(null); // arm
+        vm.ClearBookCoverCacheConfirm.TriggerCommand.Execute(null); // confirm - fire-and-forget
+        await Task.Delay(500);
+
+        Assert.False(File.Exists(strayFile));
+        Assert.False(vm.IsClearingBookCoverCache);
+        Assert.NotNull(completionToast);
+        Assert.Equal("Book covers rebuilt", completionToast!.Value.Title);
+    }
+
     [Fact]
     public async Task SyncMetadataCommand_ShowsThenClosesProgressToast_ThenFiresCompletionToast()
     {

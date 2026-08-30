@@ -38,7 +38,7 @@
             <Setter Property="Padding" Value="10,3" />
             <Setter Property="Margin" Value="0,0,6,6" />
             <Setter Property="Cursor" Value="Hand" />
-            <Setter Property="FontSize" Value="11.5" />
+            <Setter Property="FontSize" Value="{StaticResource PbFontSizeMeta}" />
             <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
             <Setter Property="Transitions">
                 <Transitions>
@@ -104,13 +104,13 @@
             <!-- Inline meta row -->
             <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
                 <ContentControl Content="{Binding #u.LeadingContent}" VerticalAlignment="Center" />
-                <TextBlock Text="{Binding StatusText}" IsVisible="{Binding HasStatus}" FontSize="11.5"
+                <TextBlock Text="{Binding StatusText}" IsVisible="{Binding HasStatus}" FontSize="{StaticResource PbFontSizeMeta}"
                            FontWeight="SemiBold" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
                 <TextBlock Text="·" Foreground="{DynamicResource PbTextFaintBrush}" IsVisible="{Binding HasPublisher}" VerticalAlignment="Center" />
                 <pbc:BrandMark Family="Publisher" Value="{Binding PublisherText}" ShowText="True" MarkSize="13"
                                Foreground="{DynamicResource PbTextMutedBrush}" IsVisible="{Binding HasPublisher}" VerticalAlignment="Center" />
                 <TextBlock Text="·" Foreground="{DynamicResource PbTextFaintBrush}" IsVisible="{Binding HasYear}" VerticalAlignment="Center" />
-                <TextBlock Text="{Binding YearText}" IsVisible="{Binding HasYear}" FontSize="11.5"
+                <TextBlock Text="{Binding YearText}" IsVisible="{Binding HasYear}" FontSize="{StaticResource PbFontSizeMeta}"
                            Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
                 <TextBlock Text="·" Foreground="{DynamicResource PbTextFaintBrush}" IsVisible="{Binding HasFormat}" VerticalAlignment="Center" />
                 <pbc:BrandMark Family="Format" Value="{Binding FormatText}" ShowText="True" MarkSize="13"
@@ -124,7 +124,7 @@
                     <ItemsControl.ItemTemplate>
                         <DataTemplate x:DataType="x:String">
                             <Border Classes="pbChip">
-                                <TextBlock Text="{Binding}" FontSize="9.5" FontWeight="Bold"
+                                <TextBlock Text="{Binding}" FontSize="{StaticResource PbFontSizeMicro}" FontWeight="Bold"
                                            Foreground="{DynamicResource PbTextMutedBrush}" />
                             </Border>
                         </DataTemplate>
@@ -134,10 +134,10 @@
 
             <!-- Synopsis -->
             <StackPanel IsVisible="{Binding Summary, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}">
-                <TextBlock Text="{Binding Summary}" FontSize="13" Foreground="{DynamicResource PbTextMutedBrush}"
+                <TextBlock Text="{Binding Summary}" FontSize="{StaticResource PbFontSizeBody}" Foreground="{DynamicResource PbTextMutedBrush}"
                            TextWrapping="Wrap" MaxLines="3" TextTrimming="CharacterEllipsis"
                            IsVisible="{Binding !IsSynopsisExpanded}" />
-                <TextBlock Text="{Binding Summary}" FontSize="13" Foreground="{DynamicResource PbTextMutedBrush}"
+                <TextBlock Text="{Binding Summary}" FontSize="{StaticResource PbFontSizeBody}" Foreground="{DynamicResource PbTextMutedBrush}"
                            TextWrapping="Wrap" IsVisible="{Binding IsSynopsisExpanded}" />
                 <Button Classes="detailGroupMore" Content="{Binding SynopsisToggleLabel}"
                         Command="{Binding ToggleSynopsisCommand}" Margin="0,3,0,0" HorizontalAlignment="Left" />
@@ -165,7 +165,7 @@
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate x:DataType="vm:TagPillViewModel">
                                             <Button Classes="creditName" Command="{Binding SearchCommand}" Background="Transparent" BorderThickness="0" Padding="0,0,6,0" Cursor="Hand">
-                                                <TextBlock Text="{Binding Value}" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
+                                                <TextBlock Text="{Binding Value}" FontSize="{StaticResource PbFontSizeBody}" Foreground="{DynamicResource PbTextBrush}" />
                                             </Button>
                                         </DataTemplate>
                                     </ItemsControl.ItemTemplate>
@@ -177,7 +177,7 @@
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate x:DataType="vm:TagPillViewModel">
                                             <Button Classes="creditName" Command="{Binding SearchCommand}" Background="Transparent" BorderThickness="0" Padding="0,0,6,0" Cursor="Hand">
-                                                <TextBlock Text="{Binding Value}" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
+                                                <TextBlock Text="{Binding Value}" FontSize="{StaticResource PbFontSizeBody}" Foreground="{DynamicResource PbTextBrush}" />
                                             </Button>
                                         </DataTemplate>
                                     </ItemsControl.ItemTemplate>
@@ -225,8 +225,11 @@
                     <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
                     <ItemsControl.ItemTemplate>
                         <DataTemplate x:DataType="sys:String">
-                            <Border Classes="bandChip" Background="#24D7AC4C" BorderBrush="{DynamicResource PbBadgeBrush}">
-                                <TextBlock Text="{Binding}" FontSize="11.5" FontWeight="SemiBold" Foreground="{DynamicResource PbBadgeBrush}" />
+                            <Border Classes="bandChip" BorderBrush="{DynamicResource PbBadgeBrush}">
+                                <Border.Background>
+                                    <SolidColorBrush Color="{DynamicResource PbBadgeColor}" Opacity="0.14" />
+                                </Border.Background>
+                                <TextBlock Text="{Binding}" FontSize="{StaticResource PbFontSizeMeta}" FontWeight="SemiBold" Foreground="{DynamicResource PbBadgeBrush}" />
                             </Border>
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>

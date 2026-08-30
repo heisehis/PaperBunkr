@@ -62,6 +62,23 @@
 
         <x:Double x:Key="PbSpacingUnit">4</x:Double>
 
+        <!-- Type scale, named steps (docs/superpowers/specs/2026-08-24-design-language-foundation-
+             design.md's Typography section only documented Hero/Heading/Body/Caption as TextBlock
+             style classes bundling FontFamily+color - PbFontSizeBody/PbFontSizeCaption expose just
+             their sizes as plain doubles so a surface that needs Body/Caption's size with a
+             different Foreground (e.g. DetailBand's muted synopsis) can reference the size alone.
+             Micro/Overline/Meta/Control formalize four denser sizes that had drifted into the
+             codebase as unnamed magic numbers (Detail band chips/labels, tab counter, hero action
+             buttons) - added 2026-08-30 via the avalonia-pro-max/review-checklist audit, values
+             kept identical to the prior literals so this is a zero-visual-diff rename, not a
+             redesign. -->
+        <x:Double x:Key="PbFontSizeBody">13</x:Double>
+        <x:Double x:Key="PbFontSizeCaption">11</x:Double>
+        <x:Double x:Key="PbFontSizeControl">12.5</x:Double>
+        <x:Double x:Key="PbFontSizeMeta">11.5</x:Double>
+        <x:Double x:Key="PbFontSizeOverline">10.5</x:Double>
+        <x:Double x:Key="PbFontSizeMicro">9.5</x:Double>
+
         <!-- Genuinely CornerRadius-typed, not x:Double - a Style Setter's DynamicResource
              resolution does NOT run the CornerRadius TypeConverter the way a plain XAML attribute
              does (confirmed the hard way: System.InvalidCastException, "Unable to cast object of

@@ -39,10 +39,23 @@ sanctioned; there is nothing to verify against `_reference/ComicRackCE`.
   `CollectionResolver.GetMembers` unions manual + rule-matched membership. Scope grew beyond the
   one-line note below during brainstorming (user chose the larger option each time) — see that
   spec for the final shape, not this note.
-- `RecommendationReason.SameCollection` + `RecommendationResolver` wiring.
+- ~~`RecommendationReason.SameCollection` + `RecommendationResolver` wiring.~~ — done (found
+  already shipped, 2026-08-30 audit): `RecommendationResolver` has a `CollectionScore`/
+  `CollectionWeight` (0.15) signal off `CollectionResolver.GetOtherSeriesSharingCollection`, and
+  `DescribeDominantSignal` returns `SameCollection` when it dominates. Surfaces today in Home's
+  "Because You Read" and Detail's "More Like This". This bullet had gone stale — it shipped at
+  some earlier point without this doc being updated.
+- ~~A Home-feed shelf for collections (`HomeFeedResolver`).~~ — done (found already shipped,
+  2026-08-30 audit): `HomeFeedResolver.GetHomeCollections` + `HomeScreenViewModel.Collections`/
+  `HasCollections` + a full `HomeScreen.axaml` "Collections" shelf + `HomeCollectionCard` are all
+  wired end-to-end. Same staleness as above. One small gap noted in passing: the masthead
+  cover-wall (`BuildMastheadBackdrop`) doesn't pull from `Collections`, only from
+  RecentlyAdded/BecauseYouRead/ContinueReading/SpotlightItems — not itself part of this deferred
+  item's original scope, just an observation.
 - Typed `MediaRelation` edges involving collections (collections as nodes in the pairwise
-  relation graph).
-- A Home-feed shelf for collections (`HomeFeedResolver`).
+  relation graph). **Still open** — `MediaRelation` is still strictly `Series ↔ Series`
+  (non-nullable `SourceSeriesId`/`TargetSeriesId`, no Collection FK at all). This is the one
+  genuinely remaining item; see the follow-on design doc it gets.
 
 ## Architecture
 

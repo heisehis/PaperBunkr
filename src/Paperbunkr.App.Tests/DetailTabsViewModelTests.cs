@@ -51,8 +51,8 @@ public class DetailTabsViewModelTests : IDisposable
         }
     }
 
-    private DetailTabsViewModel CreateViewModel(Action<int>? goToProperties = null, Action<IReadOnlyList<int>>? goToBulkProperties = null, Action? onSelectionChanged = null, IMetadataProvider? metadataProvider = null) =>
-        new(goToProperties ?? (_ => { }), goToBulkProperties ?? (_ => { }), onSelectionChanged, () => new PaperbunkrDbContext(_dbOptions), metadataProvider);
+    private DetailTabsViewModel CreateViewModel(Action<int>? goToProperties = null, Action<IReadOnlyList<int>>? goToBulkProperties = null, Action? onSelectionChanged = null, IMetadataProvider? metadataProvider = null, Action<int>? navigateToCollection = null) =>
+        new(goToProperties ?? (_ => { }), goToBulkProperties ?? (_ => { }), onSelectionChanged, () => new PaperbunkrDbContext(_dbOptions), metadataProvider, onQuickRate: null, navigateToSeries: null, openInReader: null, navigateToCollection: navigateToCollection);
 
     /// <summary>No-network stand-in for <see cref="AniListMetadataProvider"/> - see docs/superpowers/specs/2026-08-19-metadata-model-anilist-search-and-link-design.md.</summary>
     private sealed class FakeMetadataProvider : IMetadataProvider
@@ -404,7 +404,7 @@ public class DetailTabsViewModelTests : IDisposable
         var vm = CreateViewModel();
         vm.LoadSeries(LoadSeriesEntity());
         vm.SelectedRelationType = RelationType.Prequel;
-        var target = new Paperbunkr.App.Models.SeriesSearchResult { SeriesId = otherId, Name = "Justice League Origin" };
+        var target = new Paperbunkr.App.Models.RelationSearchResult(MediaRelationEndpointKind.Series, otherId, null, "Justice League Origin");
 
         vm.AddRelationCommand.Execute(target);
 
@@ -427,7 +427,7 @@ public class DetailTabsViewModelTests : IDisposable
         int otherId = AddOtherSeries("Justice League");
         var vm = CreateViewModel();
         vm.LoadSeries(LoadSeriesEntity());
-        var target = new Paperbunkr.App.Models.SeriesSearchResult { SeriesId = otherId, Name = "Justice League" };
+        var target = new Paperbunkr.App.Models.RelationSearchResult(MediaRelationEndpointKind.Series, otherId, null, "Justice League");
         vm.AddRelationCommand.Execute(target);
         var related = Assert.Single(vm.Related);
 
@@ -437,6 +437,67 @@ public class DetailTabsViewModelTests : IDisposable
         Assert.False(vm.HasRelated);
         using var context = new PaperbunkrDbContext(_dbOptions);
         Assert.Empty(context.MediaRelations);
+    }
+
+    // --- Collection nodes (docs/superpowers/specs/2026-08-30-media-relation-collection-nodes-
+    // design.md) ---
+
+    private int AddCollection(string name)
+    {
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        var collection = new Collection { Name = name };
+        context.Collections.Add(collection);
+        context.SaveChanges();
+        return collection.Id;
+    }
+
+    [Fact]
+    public void SearchRelationCandidates_FindsBothSeriesAndCollections()
+    {
+        AddOtherSeries("Justice League");
+        AddCollection("Justice League Omnibus");
+        var vm = CreateViewModel();
+        vm.LoadSeries(LoadSeriesEntity());
+
+        vm.RelationSearchQuery = "justice";
+
+        Assert.Equal(2, vm.RelationSearchResults.Count);
+        Assert.Contains(vm.RelationSearchResults, r => r.Kind == MediaRelationEndpointKind.Series);
+        Assert.Contains(vm.RelationSearchResults, r => r.Kind == MediaRelationEndpointKind.Collection);
+    }
+
+    [Fact]
+    public void AddRelation_ToCollection_PopulatesRelatedTabWithCollectionEndpoint()
+    {
+        int collectionId = AddCollection("Omnibus");
+        var vm = CreateViewModel();
+        vm.LoadSeries(LoadSeriesEntity());
+        vm.SelectedRelationType = RelationType.Crossover;
+        var target = new Paperbunkr.App.Models.RelationSearchResult(MediaRelationEndpointKind.Collection, null, collectionId, "Omnibus");
+
+        vm.AddRelationCommand.Execute(target);
+
+        var related = Assert.Single(vm.Related);
+        Assert.Equal(MediaRelationEndpointKind.Collection, related.Kind);
+        Assert.Equal(collectionId, related.RelatedCollectionId);
+        Assert.Null(related.RelatedSeriesId);
+        Assert.Equal("Omnibus", related.Name);
+    }
+
+    [Fact]
+    public void OpenRelatedSeries_CollectionPayload_RoutesToNavigateToCollection()
+    {
+        int collectionId = AddCollection("Omnibus");
+        int? navigatedCollectionId = null;
+        var vm = CreateViewModel(navigateToCollection: id => navigatedCollectionId = id);
+        vm.LoadSeries(LoadSeriesEntity());
+        var target = new Paperbunkr.App.Models.RelationSearchResult(MediaRelationEndpointKind.Collection, null, collectionId, "Omnibus");
+        vm.AddRelationCommand.Execute(target);
+        var related = Assert.Single(vm.Related);
+
+        vm.OpenRelatedSeriesCommand.Execute(related);
+
+        Assert.Equal(collectionId, navigatedCollectionId);
     }
 
     // --- Continuity membership (docs/superpowers/specs/2026-08-17-metadata-model-phase4a-

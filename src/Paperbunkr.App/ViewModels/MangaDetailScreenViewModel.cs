@@ -31,14 +31,14 @@ namespace Paperbunkr.App.ViewModels;
 /// </summary>
 public partial class MangaDetailScreenViewModel : ViewModelBase, IDetailHeaderSource
 {
-    public MangaDetailScreenViewModel(Action goBack, Action<int> goToReader, Action<int> goToProperties, Action<IReadOnlyList<int>> goToBulkProperties, Action<int>? goDetailForSeries = null, Action<string>? goLibraryWithSearch = null)
+    public MangaDetailScreenViewModel(Action goBack, Action<int> goToReader, Action<int> goToProperties, Action<IReadOnlyList<int>> goToBulkProperties, Action<int>? goDetailForSeries = null, Action<string>? goLibraryWithSearch = null, Action<int>? goLibraryWithCollection = null)
     {
         _goBack = goBack;
         _goToReader = goToReader;
         _goToProperties = goToProperties;
         _goToBulkProperties = goToBulkProperties;
         _goDetailForSeries = goDetailForSeries ?? (_ => { });
-        Tabs = new DetailTabsViewModel(goToProperties, goToBulkProperties, navigateToSeries: _goDetailForSeries, openInReader: goToReader) { ShowIssuesTab = false, ShowTabStrip = false };
+        Tabs = new DetailTabsViewModel(goToProperties, goToBulkProperties, navigateToSeries: _goDetailForSeries, openInReader: goToReader, navigateToCollection: goLibraryWithCollection) { ShowIssuesTab = false, ShowTabStrip = false };
         // No reweight callback - LoadSeries below is always the series-aggregated view (chapter-list
         // screen, no single-issue pill focus like the Western DetailScreenViewModel has), so every
         // chip's CanReweight is naturally false here regardless.

@@ -35,7 +35,41 @@ public sealed class PaperbunkrMetadataGraph : IMetadataGraph
     public IReadOnlyList<Series> GetRelatedSeries(Series series)
     {
         using var context = PaperbunkrDb.CreateContext();
-        return MediaRelationResolver.GetRelatedSeries(context, series.Id).Select(r => r.OtherSeries).ToList();
+        return MediaRelationResolver.GetRelatedFromSeries(context, series.Id)
+            .Where(r => r.Kind == MediaRelationEndpointKind.Series)
+            .Select(r => r.Series!)
+            .ToList();
+    }
+
+    public IReadOnlyList<Collection> GetRelatedCollections(Series series)
+    {
+        using var context = PaperbunkrDb.CreateContext();
+        return MediaRelationResolver.GetRelatedFromSeries(context, series.Id)
+            .Where(r => r.Kind == MediaRelationEndpointKind.Collection)
+            .Select(r => r.Collection!)
+            .ToList();
+    }
+
+    public IReadOnlyList<MediaRelation> GetRelations(Collection collection)
+    {
+        using var context = PaperbunkrDb.CreateContext();
+        return context.MediaRelations
+            .Include(m => m.SourceSeries)
+            .Include(m => m.TargetSeries)
+            .Include(m => m.SourceCollection)
+            .Include(m => m.TargetCollection)
+            .Where(m => m.SourceCollectionId == collection.Id || m.TargetCollectionId == collection.Id)
+            .OrderBy(m => m.CreatedAt)
+            .ToList();
+    }
+
+    public IReadOnlyList<Series> GetRelatedSeries(Collection collection)
+    {
+        using var context = PaperbunkrDb.CreateContext();
+        return MediaRelationResolver.GetRelatedFromCollection(context, collection.Id)
+            .Where(r => r.Kind == MediaRelationEndpointKind.Series)
+            .Select(r => r.Series!)
+            .ToList();
     }
 
     public IReadOnlyList<Continuity> GetContinuities(Series series)

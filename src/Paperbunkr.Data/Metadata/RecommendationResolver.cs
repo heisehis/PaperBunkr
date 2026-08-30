@@ -61,8 +61,9 @@ public static class RecommendationResolver
 
         // Strongest MediaRelation per target (a pair can have more than one relation type), plus
         // Continuity/Event anchoring - all three already-tested resolvers, reused as-is.
-        var relationsByTarget = MediaRelationResolver.GetRelatedSeries(context, seriesId)
-            .GroupBy(r => r.OtherSeries.Id)
+        var relationsByTarget = MediaRelationResolver.GetRelatedFromSeries(context, seriesId)
+            .Where(r => r.Kind == MediaRelationEndpointKind.Series)
+            .GroupBy(r => r.Series!.Id)
             .ToDictionary(g => g.Key, g => LoadStrongestEvidence(context, g));
 
         var continuityTargetIds = ContinuityResolver.GetOtherSeriesSharingContinuity(context, seriesId)
@@ -148,7 +149,7 @@ public static class RecommendationResolver
 
     private static (RelationType DisplayType, decimal Confidence) LoadStrongestEvidence(
         PaperbunkrDbContext context,
-        IEnumerable<(Series OtherSeries, RelationType DisplayType, int MediaRelationId)> relationsForTarget)
+        IEnumerable<MediaRelationEndpoint> relationsForTarget)
     {
         var relationIds = relationsForTarget.Select(r => r.MediaRelationId).ToList();
         var relations = context.MediaRelations

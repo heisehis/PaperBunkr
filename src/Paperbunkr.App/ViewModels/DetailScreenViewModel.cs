@@ -28,7 +28,7 @@ namespace Paperbunkr.App.ViewModels;
 /// </summary>
 public partial class DetailScreenViewModel : ViewModelBase, IDetailHeaderSource
 {
-    public DetailScreenViewModel(Action goBack, Action<int> goToReader, Action<int> goToProperties, Action<IReadOnlyList<int>> goToBulkProperties, Action<int>? goDetailForSeries = null, Action<string>? goLibraryWithSearch = null, Action<int>? onQuickRate = null)
+    public DetailScreenViewModel(Action goBack, Action<int> goToReader, Action<int> goToProperties, Action<IReadOnlyList<int>> goToBulkProperties, Action<int>? goDetailForSeries = null, Action<string>? goLibraryWithSearch = null, Action<int>? onQuickRate = null, Action<int>? goLibraryWithCollection = null)
     {
         _goBack = goBack;
         _goToReader = goToReader;
@@ -36,7 +36,7 @@ public partial class DetailScreenViewModel : ViewModelBase, IDetailHeaderSource
         _goToBulkProperties = goToBulkProperties;
         _goDetailForSeries = goDetailForSeries ?? (_ => { });
         CoverBrush = SeriesCardSample.Gradient("#442a1c", "#c9803f");
-        Tabs = new DetailTabsViewModel(goToProperties, goToBulkProperties, RefreshForSelection, onQuickRate, _goDetailForSeries, goToReader);
+        Tabs = new DetailTabsViewModel(goToProperties, goToBulkProperties, RefreshForSelection, onQuickRate, _goDetailForSeries, goToReader, goLibraryWithCollection);
         Band = new DetailBandViewModel(goLibraryWithSearch, () => Tabs.GoDetailsCommand.Execute(null), ReweightTag);
     }
 

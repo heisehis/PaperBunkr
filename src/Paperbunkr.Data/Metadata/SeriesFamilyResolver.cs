@@ -39,7 +39,9 @@ internal static class SeriesFamilyResolver
         {
             int current = queue.Dequeue();
 
-            var neighbours = MediaRelationResolver.GetRelatedSeries(context, current).Select(r => r.OtherSeries.Id)
+            var neighbours = MediaRelationResolver.GetRelatedFromSeries(context, current)
+                .Where(r => r.Kind == MediaRelationEndpointKind.Series)
+                .Select(r => r.Series!.Id)
                 .Concat(ContinuityResolver.GetOtherSeriesSharingContinuity(context, current).Select(s => s.Id));
 
             foreach (int neighbour in neighbours)

@@ -93,6 +93,7 @@ public sealed class PluginApiV3Tests : IDisposable
 
         Assert.Single(graph.GetRelations(seriesA));
         Assert.Contains(graph.GetRelatedSeries(seriesA), s => s.Id == b);
+        Assert.Empty(graph.GetRelatedCollections(seriesA)); // no Collection-sided edge yet
 
         var continuities = graph.GetContinuities(seriesA);
         var prime = Assert.Single(continuities);
@@ -105,6 +106,33 @@ public sealed class PluginApiV3Tests : IDisposable
         Assert.Single(graph.GetMemberships(evt));
 
         Assert.Equal(2, graph.GetSeriesFamily(seriesA).Count); // Alpha + Beta, connected by the relation/continuity
+    }
+
+    // --- Collection nodes (docs/superpowers/specs/2026-08-30-media-relation-collection-nodes-
+    // design.md) - the 3 new IMetadataGraph overloads ---
+
+    [Fact]
+    public void MetadataGraph_GetRelatedCollections_AndCollectionRootedOverloads_MirrorTheResolver()
+    {
+        int a = AddSeries("Alpha");
+        int collectionId;
+        using (var context = PaperbunkrDb.CreateContext())
+        {
+            var collection = new Collection { Name = "Omnibus" };
+            context.Collections.Add(collection);
+            context.SaveChanges();
+            collectionId = collection.Id;
+
+            MediaRelationResolver.TryCreate(context, MediaRelationEndpointKind.Series, a, MediaRelationEndpointKind.Collection, collectionId, RelationType.Crossover);
+        }
+
+        var graph = new PaperbunkrMetadataGraph();
+        var seriesA = new Series { Id = a };
+        var omnibus = new Collection { Id = collectionId };
+
+        Assert.Contains(graph.GetRelatedCollections(seriesA), c => c.Id == collectionId);
+        Assert.Single(graph.GetRelations(omnibus));
+        Assert.Contains(graph.GetRelatedSeries(omnibus), s => s.Id == a);
     }
 
     // --- §3 GetLibraryBooks/GetBook includes ---

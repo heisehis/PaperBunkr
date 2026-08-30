@@ -210,6 +210,61 @@ public static class CollectionService
         context.SaveChanges();
     }
 
+    /// <summary>
+    /// Sets the collection's Issue rule slot to <paramref name="smartListId"/> (docs/superpowers/
+    /// specs/2026-08-30-smart-collections-design.md). A <paramref name="smartListId"/> that doesn't
+    /// exist, or whose <see cref="SmartList.TargetKind"/> isn't <see cref="SmartListTargetKind.Issue"/>,
+    /// is a logged no-op — same posture as the exactly-one-target <see cref="CollectionItem"/> guard
+    /// in <see cref="AddItems"/>.
+    /// </summary>
+    public static void SetIssueSmartList(PaperbunkrDbContext context, int collectionId, int smartListId) =>
+        SetSmartList(context, collectionId, smartListId, SmartListTargetKind.Issue, (c, id) => c.IssueSmartListId = id);
+
+    public static void SetSeriesSmartList(PaperbunkrDbContext context, int collectionId, int smartListId) =>
+        SetSmartList(context, collectionId, smartListId, SmartListTargetKind.Series, (c, id) => c.SeriesSmartListId = id);
+
+    public static void SetNovelSmartList(PaperbunkrDbContext context, int collectionId, int smartListId) =>
+        SetSmartList(context, collectionId, smartListId, SmartListTargetKind.Novel, (c, id) => c.NovelSmartListId = id);
+
+    public static void ClearIssueSmartList(PaperbunkrDbContext context, int collectionId) =>
+        ClearSmartList(context, collectionId, c => c.IssueSmartListId = null);
+
+    public static void ClearSeriesSmartList(PaperbunkrDbContext context, int collectionId) =>
+        ClearSmartList(context, collectionId, c => c.SeriesSmartListId = null);
+
+    public static void ClearNovelSmartList(PaperbunkrDbContext context, int collectionId) =>
+        ClearSmartList(context, collectionId, c => c.NovelSmartListId = null);
+
+    private static void SetSmartList(
+        PaperbunkrDbContext context,
+        int collectionId,
+        int smartListId,
+        SmartListTargetKind expectedKind,
+        Action<Collection, int?> assign)
+    {
+        var collection = context.Collections.Find(collectionId);
+        var smartList = context.SmartLists.Find(smartListId);
+        if (collection is null || smartList is null || smartList.TargetKind != expectedKind)
+        {
+            return;
+        }
+
+        assign(collection, smartListId);
+        context.SaveChanges();
+    }
+
+    private static void ClearSmartList(PaperbunkrDbContext context, int collectionId, Action<Collection> clear)
+    {
+        var collection = context.Collections.Find(collectionId);
+        if (collection is null)
+        {
+            return;
+        }
+
+        clear(collection);
+        context.SaveChanges();
+    }
+
     private static IEnumerable<int> Distinct(IEnumerable<int>? ids) => (ids ?? Enumerable.Empty<int>()).Distinct();
 
     private static string? NullIfBlank(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();

@@ -23,9 +23,18 @@ public class SmartList
     public int SortOrder { get; set; }
 
     /// <summary>
+    /// Which entity this list's conditions evaluate against (docs/superpowers/specs/2026-08-30-
+    /// smart-collections-design.md). Defaults to <see cref="SmartListTargetKind.Issue"/> - every
+    /// list created before this existed. Immutable after creation; see the enum's own doc comment.
+    /// </summary>
+    public SmartListTargetKind TargetKind { get; set; } = SmartListTargetKind.Issue;
+
+    /// <summary>
     /// Root of the condition tree — every list has exactly one, <see cref="SmartListGroupMode.And"/>
     /// by default. Load the full tree via <see cref="SmartLists.SmartListTreeLoader"/> before
-    /// handing the list to <see cref="SmartLists.SmartListQueryBuilder"/>.
+    /// handing the list to <see cref="SmartLists.SmartListQueryBuilder"/> (or the
+    /// <see cref="TargetKind"/>-matching builder — see docs/superpowers/specs/2026-08-30-smart-
+    /// collections-design.md).
     /// </summary>
     public SmartListConditionGroup RootGroup { get; set; } = new();
 }

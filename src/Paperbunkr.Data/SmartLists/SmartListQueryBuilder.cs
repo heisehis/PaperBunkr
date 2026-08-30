@@ -1,4 +1,3 @@
-using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
 using Paperbunkr.Data.Entities;
 using Paperbunkr.Data.Metadata;
@@ -192,10 +191,10 @@ internal static class SmartListQueryBuilder
         var definition = SmartListCatalog.Definitions[condition.Field];
         return definition.DataType switch
         {
-            SmartListDataType.Text => EvaluateText(SmartListCatalog.TextSelectors[condition.Field](issue), condition),
-            SmartListDataType.Number => EvaluateNumber(SmartListCatalog.NumberSelectors[condition.Field](issue), condition),
-            SmartListDataType.Toggle => EvaluateToggle(SmartListCatalog.ToggleSelectors[condition.Field](issue), condition),
-            SmartListDataType.Date => EvaluateDate(SmartListCatalog.DateSelectors[condition.Field](issue), condition),
+            SmartListDataType.Text => SmartListLeafEvaluator.EvaluateText(SmartListCatalog.TextSelectors[condition.Field](issue), condition),
+            SmartListDataType.Number => SmartListLeafEvaluator.EvaluateNumber(SmartListCatalog.NumberSelectors[condition.Field](issue), condition),
+            SmartListDataType.Toggle => SmartListLeafEvaluator.EvaluateToggle(SmartListCatalog.ToggleSelectors[condition.Field](issue), condition),
+            SmartListDataType.Date => SmartListLeafEvaluator.EvaluateDate(SmartListCatalog.DateSelectors[condition.Field](issue), condition),
             _ => false,
         };
     }
@@ -209,116 +208,12 @@ internal static class SmartListQueryBuilder
     /// </summary>
     private static bool EvaluateAllProperties(Issue issue, SmartListCondition condition) =>
         SearchFieldBundleCatalog.For(condition.SearchMode)(issue)
-            .Any(value => EvaluateText(value ?? string.Empty, condition));
-
-    private static bool EvaluateText(string value, SmartListCondition c)
-    {
-        StringComparison sc = c.IgnoreCase ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
-        return c.Operator switch
-        {
-            SmartListOperator.Is => value.Equals(c.Value, sc),
-            SmartListOperator.IsNot => !value.Equals(c.Value, sc),
-            SmartListOperator.Contains => value.Contains(c.Value, sc),
-            SmartListOperator.ContainsAny => SplitValues(c.Value).Any(v => value.Contains(v, sc)),
-            SmartListOperator.ContainsAll => SplitValues(c.Value).All(v => value.Contains(v, sc)),
-            SmartListOperator.StartsWith => value.StartsWith(c.Value, sc),
-            SmartListOperator.EndsWith => value.EndsWith(c.Value, sc),
-            SmartListOperator.ListContains => ListContains(value, c),
-            SmartListOperator.RegularExpression => RegexMatches(value, c),
-            _ => false,
-        };
-    }
-
-    /// <summary>
-    /// CE operator 6 (<c>_reference/ComicRackCE/ComicRack.Engine/ComicBookStringMatcher.cs:114-118,152</c>):
-    /// the match value is one whole <c>,</c>/<c>;</c>-delimited item of <paramref name="value"/>,
-    /// surrounding whitespace ignored — the same delimiter set <see cref="SplitValues"/> and the
-    /// <c>JoinedTags()</c>/<c>JoinedGenre()</c> helpers use. Unlike CE (whose <c>rxList</c> is
-    /// hard-wired <c>RegexOptions.IgnoreCase</c>), this honours <see cref="SmartListCondition.IgnoreCase"/>
-    /// per the v2 spec's "case-sensitivity-aware" wording.
-    /// </summary>
-    private static bool ListContains(string value, SmartListCondition c)
-    {
-        string needle = c.Value.Trim();
-        var comparer = c.IgnoreCase ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
-        return value
-            .Split([',', ';'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-            .Any(item => comparer.Equals(item, needle));
-    }
-
-    /// <summary>
-    /// CE operator 7 — a raw .NET regex. Bounded by a 250ms timeout (the same "thousands not
-    /// millions" per-condition budget <see cref="SmartListCatalog"/> documents); a
-    /// <see cref="RegexParseException"/>/<see cref="ArgumentException"/> (malformed pattern) or a
-    /// <see cref="RegexMatchTimeoutException"/> is treated as "no match" rather than surfaced as an
-    /// app error — same "never let one bad input crash the host" spirit as the plugin engine.
-    /// </summary>
-    private static bool RegexMatches(string value, SmartListCondition c)
-    {
-        try
-        {
-            var options = c.IgnoreCase ? RegexOptions.IgnoreCase : RegexOptions.None;
-            return Regex.IsMatch(value, c.Value, options, TimeSpan.FromMilliseconds(250));
-        }
-        catch (ArgumentException)
-        {
-            return false;
-        }
-        catch (RegexMatchTimeoutException)
-        {
-            return false;
-        }
-    }
-
-    private static IEnumerable<string> SplitValues(string raw) =>
-        raw.Split([',', ';'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-
-    private static bool EvaluateNumber(float value, SmartListCondition c)
-    {
-        float target = ParseFloat(c.Value);
-        return c.Operator switch
-        {
-            SmartListOperator.Is => Math.Abs(value - target) < 0.0001f,
-            SmartListOperator.IsNot => Math.Abs(value - target) >= 0.0001f,
-            SmartListOperator.GreaterThan => value > target,
-            SmartListOperator.LessThan => value < target,
-            SmartListOperator.InRange => value >= target && value <= ParseFloat(c.Value2 ?? c.Value),
-            _ => false,
-        };
-    }
-
-    private static float ParseFloat(string s) => float.TryParse(s, out var f) ? f : 0f;
-
-    private static bool EvaluateToggle(bool value, SmartListCondition c)
-    {
-        bool target = bool.TryParse(c.Value, out var b) && b;
-        return c.Operator == SmartListOperator.IsNot ? value != target : value == target;
-    }
-
-    private static bool EvaluateDate(DateTime? value, SmartListCondition c)
-    {
-        // An unset date never matches a date condition — there's nothing to compare.
-        if (value is not { } dt)
-        {
-            return false;
-        }
-
-        return c.Operator switch
-        {
-            SmartListOperator.Is => DateTime.TryParse(c.Value, out var eq) && dt.Date == eq.Date,
-            SmartListOperator.IsAfter => DateTime.TryParse(c.Value, out var after) && dt > after,
-            SmartListOperator.IsBefore => DateTime.TryParse(c.Value, out var before) && dt < before,
-            SmartListOperator.WithinLastDays => int.TryParse(c.Value, out var days) && dt >= DateTime.Now.AddDays(-days),
-            SmartListOperator.DateInRange => DateTime.TryParse(c.Value, out var start)
-                && DateTime.TryParse(c.Value2, out var end) && dt >= start && dt <= end,
-            _ => false,
-        };
-    }
+            .Any(value => SmartListLeafEvaluator.EvaluateText(value ?? string.Empty, condition));
 
     private static bool EvaluateCustomValue(Issue issue, SmartListCondition c)
     {
         var match = issue.CustomValues.FirstOrDefault(cv => cv.Name == c.CustomValueName);
-        return match is not null && EvaluateText(match.Value, c);
+        return match is not null && SmartListLeafEvaluator.EvaluateText(match.Value, c);
     }
 
     /// <summary>
@@ -335,7 +230,7 @@ internal static class SmartListQueryBuilder
         }
 
         string value = VirtualTagTemplateEvaluator.Evaluate(tag.CaptionFormat, issue, issue.Series);
-        return EvaluateText(value, c);
+        return SmartListLeafEvaluator.EvaluateText(value, c);
     }
 
     /// <summary>

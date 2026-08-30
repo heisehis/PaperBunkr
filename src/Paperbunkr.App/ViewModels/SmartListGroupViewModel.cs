@@ -19,6 +19,7 @@ namespace Paperbunkr.App.ViewModels;
 public partial class SmartListGroupViewModel : ViewModelBase
 {
     private readonly SmartListConditionGroup _group;
+    private readonly SmartListTargetKind _targetKind;
     private readonly Action _onChanged;
     private readonly Action<SmartListGroupViewModel>? _onRemove;
     private readonly IReadOnlyList<VirtualTagOption> _virtualTagOptions;
@@ -26,12 +27,14 @@ public partial class SmartListGroupViewModel : ViewModelBase
 
     public SmartListGroupViewModel(
         SmartListConditionGroup group,
+        SmartListTargetKind targetKind,
         Action onChanged,
         Func<bool> isReadOnly,
         IReadOnlyList<VirtualTagOption> virtualTagOptions,
         Action<SmartListGroupViewModel>? onRemove)
     {
         _group = group;
+        _targetKind = targetKind;
         _onChanged = onChanged;
         _isReadOnly = isReadOnly;
         _virtualTagOptions = virtualTagOptions;
@@ -100,7 +103,10 @@ public partial class SmartListGroupViewModel : ViewModelBase
 
         var condition = new SmartListCondition
         {
-            Field = SmartListField.SeriesName,
+            // SeriesName exists in both the Issue and Series catalogs; Novel has no such field, so
+            // its new-condition default is NovelTitle instead (docs/superpowers/specs/2026-08-30-
+            // smart-collections-design.md).
+            Field = _targetKind == SmartListTargetKind.Novel ? SmartListField.NovelTitle : SmartListField.SeriesName,
             Operator = SmartListOperator.Is,
             Value = string.Empty,
             SortOrder = _group.Conditions.Count,
@@ -132,10 +138,10 @@ public partial class SmartListGroupViewModel : ViewModelBase
     private void Remove() => _onRemove?.Invoke(this);
 
     private SmartListConditionViewModel NewConditionVm(SmartListCondition condition) =>
-        new(condition, RemoveCondition, _onChanged, _virtualTagOptions);
+        new(condition, _targetKind, RemoveCondition, _onChanged, _virtualTagOptions);
 
     private SmartListGroupViewModel NewChildVm(SmartListConditionGroup child) =>
-        new(child, _onChanged, _isReadOnly, _virtualTagOptions, RemoveChild);
+        new(child, _targetKind, _onChanged, _isReadOnly, _virtualTagOptions, RemoveChild);
 
     private void RemoveCondition(SmartListConditionViewModel row)
     {

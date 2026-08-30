@@ -82,7 +82,7 @@ public class SmartScreenViewModelTests : IDisposable
         CreateSeriesWithIssues("Series Two", "1");
         int listId = CreateSmartList("Everything"); // zero conditions -> matches every issue
 
-        var vm = new SmartScreenViewModel(goToSeries: _ => { });
+        var vm = new SmartScreenViewModel(goToSeries: _ => { }, goToBook: _ => { });
         vm.LoadSmartList(listId);
 
         Assert.Equal(3, vm.Results.Count);
@@ -98,7 +98,7 @@ public class SmartScreenViewModelTests : IDisposable
         var condition = new SmartListCondition { Field = SmartListField.SeriesName, Operator = SmartListOperator.Is, Value = "Nonexistent" };
         int listId = CreateSmartList("Filtered", condition);
 
-        var vm = new SmartScreenViewModel(goToSeries: _ => { });
+        var vm = new SmartScreenViewModel(goToSeries: _ => { }, goToBook: _ => { });
         vm.LoadSmartList(listId);
         Assert.Empty(vm.Results);
         Assert.False(vm.HasResults);
@@ -119,7 +119,7 @@ public class SmartScreenViewModelTests : IDisposable
         int seriesBId = CreateSeriesWithIssues("Series B", "1");
         int listId = CreateSmartList("Everything");
 
-        var vm = new SmartScreenViewModel(goToSeries: _ => { });
+        var vm = new SmartScreenViewModel(goToSeries: _ => { }, goToBook: _ => { });
         vm.LoadSmartList(listId);
 
         var expectedColorA = FirstStopColor(SeriesCardSample.CoverBrushFor("Series A"));
@@ -142,7 +142,7 @@ public class SmartScreenViewModelTests : IDisposable
         int seriesId = CreateSeriesWithIssues("Only Series", "1");
         int listId = CreateSmartList("Everything");
         int? navigatedSeriesId = null;
-        var vm = new SmartScreenViewModel(goToSeries: id => navigatedSeriesId = id);
+        var vm = new SmartScreenViewModel(goToSeries: id => navigatedSeriesId = id, goToBook: _ => { });
         vm.LoadSmartList(listId);
 
         vm.SelectResultCommand.Execute(vm.Results[0]);
@@ -157,7 +157,7 @@ public class SmartScreenViewModelTests : IDisposable
     [Fact]
     public void ToggleMaintenance_FlipsIsMaintenanceExpanded()
     {
-        var vm = new SmartScreenViewModel(goToSeries: _ => { });
+        var vm = new SmartScreenViewModel(goToSeries: _ => { }, goToBook: _ => { });
         Assert.True(vm.IsMaintenanceExpanded);
 
         vm.ToggleMaintenanceCommand.Execute(null);
@@ -175,7 +175,7 @@ public class SmartScreenViewModelTests : IDisposable
     public void RootGroup_AddConditionAndAddGroup_MutateTheTree_AndAGroupCanBeRemoved()
     {
         SeedSystemList("All Series");
-        var vm = new SmartScreenViewModel(goToSeries: _ => { });
+        var vm = new SmartScreenViewModel(goToSeries: _ => { }, goToBook: _ => { });
         vm.CreateNewCommand.Execute(null);
 
         var root = vm.RootGroup!;
@@ -198,7 +198,7 @@ public class SmartScreenViewModelTests : IDisposable
     public void RootGroup_CannotBeRemoved()
     {
         SeedSystemList("All Series");
-        var vm = new SmartScreenViewModel(goToSeries: _ => { });
+        var vm = new SmartScreenViewModel(goToSeries: _ => { }, goToBook: _ => { });
         vm.CreateNewCommand.Execute(null);
 
         Assert.True(vm.RootGroup!.IsRoot);
@@ -209,7 +209,7 @@ public class SmartScreenViewModelTests : IDisposable
     public void SelectingAllPropertiesField_RevealsTheSecondarySearchInDropdown_DefaultingToAll()
     {
         SeedSystemList("All Series");
-        var vm = new SmartScreenViewModel(goToSeries: _ => { });
+        var vm = new SmartScreenViewModel(goToSeries: _ => { }, goToBook: _ => { });
         vm.CreateNewCommand.Execute(null);
         vm.RootGroup!.AddConditionCommand.Execute(null);
 
@@ -231,7 +231,7 @@ public class SmartScreenViewModelTests : IDisposable
         CreateSeriesWithIssues("Other", "1");
         SeedSystemList("All Series");
 
-        var vm = new SmartScreenViewModel(goToSeries: _ => { });
+        var vm = new SmartScreenViewModel(goToSeries: _ => { }, goToBook: _ => { });
         vm.CreateNewCommand.Execute(null);
 
         // Root AND: SeriesName contains "Zenith"  AND  child OR( SeriesName is "Zenith A" , SeriesName is "Zenith B" )
@@ -252,7 +252,7 @@ public class SmartScreenViewModelTests : IDisposable
         vm.SaveCommand.Execute(null);
 
         // Reload fresh and confirm the tree + evaluation survived.
-        var reloaded = new SmartScreenViewModel(goToSeries: _ => { });
+        var reloaded = new SmartScreenViewModel(goToSeries: _ => { }, goToBook: _ => { });
         reloaded.LoadSmartList(vm.CustomLists.Single().Id);
         Assert.Single(reloaded.RootGroup!.ChildGroups);
         Assert.True(reloaded.RootGroup.ChildGroups[0].IsOr);
@@ -278,7 +278,7 @@ public class SmartScreenViewModelTests : IDisposable
     public void BuiltInAndMaintenanceLists_HaveNoDeleteConfirm()
     {
         SeedSystemList("All Series");
-        var vm = new SmartScreenViewModel(goToSeries: _ => { });
+        var vm = new SmartScreenViewModel(goToSeries: _ => { }, goToBook: _ => { });
 
         Assert.NotEmpty(vm.BuiltInLists);
         Assert.All(vm.BuiltInLists, l => Assert.Null(l.DeleteConfirm));
@@ -289,7 +289,7 @@ public class SmartScreenViewModelTests : IDisposable
     public void DeleteConfirm_Trigger_RequiresTwoClicks_ThenRemovesTheCustomList()
     {
         SeedSystemList("All Series"); // something to fall back to once the active custom list is gone
-        var vm = new SmartScreenViewModel(goToSeries: _ => { });
+        var vm = new SmartScreenViewModel(goToSeries: _ => { }, goToBook: _ => { });
         vm.CreateNewCommand.Execute(null);
         var summary = vm.CustomLists.Single();
         Assert.NotNull(summary.DeleteConfirm);
@@ -308,7 +308,7 @@ public class SmartScreenViewModelTests : IDisposable
     public void Delete_OfTheActiveCustomList_FallsBackToABuiltInList()
     {
         SeedSystemList("All Series");
-        var vm = new SmartScreenViewModel(goToSeries: _ => { });
+        var vm = new SmartScreenViewModel(goToSeries: _ => { }, goToBook: _ => { });
         vm.CreateNewCommand.Execute(null); // becomes active
         var summary = vm.CustomLists.Single();
 
@@ -324,7 +324,7 @@ public class SmartScreenViewModelTests : IDisposable
     {
         int systemListId = SeedSystemList("All Series");
 
-        var vm = new SmartScreenViewModel(goToSeries: _ => { });
+        var vm = new SmartScreenViewModel(goToSeries: _ => { }, goToBook: _ => { });
         var summary = vm.BuiltInLists.Concat(vm.MaintenanceLists).First(l => l.Id == systemListId);
 
         Assert.Null(summary.DeleteConfirm); // no delete affordance exists for a system list at all

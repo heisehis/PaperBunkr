@@ -280,12 +280,12 @@
 
                 <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,32,0,0" IsVisible="{Binding !HasResults}">
                     <fi:SymbolIcon Symbol="Search" FontSize="13" />
-                    <TextBlock Text="No issues match this list yet." FontSize="12.5"
+                    <TextBlock Text="{Binding NoResultsMessage}" FontSize="12.5"
                                Foreground="{DynamicResource PbTextFaintBrush}" />
                 </StackPanel>
 
                 <ItemsControl x:Name="ResultsList" ItemsSource="{Binding Results}" Margin="0,32,0,0"
-                              IsVisible="{Binding HasResults}">
+                              IsVisible="{Binding HasIssueResults}">
                     <ItemsControl.ItemsPanel>
                         <ItemsPanelTemplate>
                             <controls:VirtualizingWrapPanel ItemWidth="120" ItemHeight="168" ItemSpacing="16" LineSpacing="16" />
@@ -301,6 +301,57 @@
                                         <Image views:AsyncCoverImage.SourceId="{Binding CoverIssueId}" Stretch="UniformToFill" />
                                         <TextBlock Text="{Binding Title}" FontSize="13" FontWeight="Black" Foreground="#FFFFF8EC"
                                                    VerticalAlignment="Bottom" Margin="9" />
+                                    </Grid>
+                                </Border>
+                            </Button>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+
+                <!-- Series/Novel result grids (docs/superpowers/specs/2026-08-30-smart-collections-
+                     design.md) - only one of the three results grids is ever populated at a time,
+                     matching whichever target kind the active list is. -->
+                <ItemsControl x:Name="SeriesResultsList" ItemsSource="{Binding SeriesResults}" Margin="0,32,0,0"
+                              IsVisible="{Binding HasSeriesResults}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <controls:VirtualizingWrapPanel ItemWidth="120" ItemHeight="168" ItemSpacing="16" LineSpacing="16" />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="models:SeriesCardSample">
+                            <Button Classes="resultCard" Width="120"
+                                    Command="{Binding #SeriesResultsList.((vm:SmartScreenViewModel)DataContext).SelectSeriesResultCommand}"
+                                    CommandParameter="{Binding}">
+                                <Border Classes="resultTile" Background="{Binding CoverBrush}">
+                                    <Grid>
+                                        <Image views:AsyncCoverImage.SourceId="{Binding CoverIssueId}" Stretch="UniformToFill" />
+                                        <TextBlock Text="{Binding Title}" FontSize="13" FontWeight="Black" Foreground="#FFFFF8EC"
+                                                   VerticalAlignment="Bottom" Margin="9" TextTrimming="CharacterEllipsis" />
+                                    </Grid>
+                                </Border>
+                            </Button>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+
+                <ItemsControl x:Name="NovelResultsList" ItemsSource="{Binding NovelResults}" Margin="0,32,0,0"
+                              IsVisible="{Binding HasNovelResults}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <controls:VirtualizingWrapPanel ItemWidth="120" ItemHeight="168" ItemSpacing="16" LineSpacing="16" />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="models:BookCardSample">
+                            <Button Classes="resultCard" Width="120"
+                                    Command="{Binding #NovelResultsList.((vm:SmartScreenViewModel)DataContext).SelectNovelResultCommand}"
+                                    CommandParameter="{Binding}">
+                                <Border Classes="resultTile" Background="{Binding CoverBrush}">
+                                    <Grid>
+                                        <Image Source="{Binding CoverImage}" Stretch="UniformToFill" />
+                                        <TextBlock Text="{Binding Title}" FontSize="13" FontWeight="Black" Foreground="#FFFFF8EC"
+                                                   VerticalAlignment="Bottom" Margin="9" TextTrimming="CharacterEllipsis" />
                                     </Grid>
                                 </Border>
                             </Button>

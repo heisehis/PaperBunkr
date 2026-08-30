@@ -94,6 +94,7 @@ public partial class CollectionPropertiesScreenViewModel : ViewModelBase
             Members.Add(new CollectionMemberRowViewModel(member, RemoveMemberRow));
         }
 
+        LoadRuleSlots(context, collection);
         RefreshRelatedCollections(context, collectionId);
     }
 
@@ -127,8 +128,13 @@ public partial class CollectionPropertiesScreenViewModel : ViewModelBase
 
     private void RemoveMemberRow(CollectionMemberRowViewModel row)
     {
-        Members.Remove(row);
-        _removedItemIds.Add(row.CollectionItemId);
+        // Remove is disabled (CanExecute) for a rule-matched row, so CollectionItemId is always set
+        // here in practice - the null-check is a defensive no-op backstop, not the primary guard.
+        if (row.CollectionItemId is int itemId)
+        {
+            Members.Remove(row);
+            _removedItemIds.Add(itemId);
+        }
     }
 
     [RelayCommand]
@@ -183,9 +189,12 @@ public partial class CollectionPropertiesScreenViewModel : ViewModelBase
             CollectionService.RemoveItem(context, itemId);
         }
 
-        if (Members.Count > 0)
+        // Rule-matched rows (CollectionItemId null) aren't part of the manual order at all - only
+        // real CollectionItem rows are reordered here.
+        var manualOrder = Members.Where(m => m.CollectionItemId is not null).Select(m => m.CollectionItemId!.Value).ToList();
+        if (manualOrder.Count > 0)
         {
-            CollectionService.ReorderItems(context, collectionId, Members.Select(m => m.CollectionItemId).ToList());
+            CollectionService.ReorderItems(context, collectionId, manualOrder);
         }
 
         _goBack();
@@ -195,6 +204,119 @@ public partial class CollectionPropertiesScreenViewModel : ViewModelBase
     private void Cancel() => _goBack();
 
     private static string? NullIfEmpty(string value) => string.IsNullOrWhiteSpace(value) ? null : value;
+
+    // --- Rule slots (docs/superpowers/specs/2026-08-30-smart-collections-design.md) - up to three
+    // independent SmartList rules, one per target kind, whose live matches union with the manual
+    // members above (CollectionResolver.GetMembers). Each slot is set/cleared immediately (like the
+    // Related Collections section below), not buffered into Save - picking a rule is a structural
+    // change to what the collection *is*, not a property edit worth an accidental-Cancel undo. ---
+
+    public ObservableCollection<SmartListOption> IssueSmartLists { get; } = new();
+
+    public ObservableCollection<SmartListOption> SeriesSmartLists { get; } = new();
+
+    public ObservableCollection<SmartListOption> NovelSmartLists { get; } = new();
+
+    [ObservableProperty]
+    private SmartListOption? _selectedIssueSmartList;
+
+    [ObservableProperty]
+    private SmartListOption? _selectedSeriesSmartList;
+
+    [ObservableProperty]
+    private SmartListOption? _selectedNovelSmartList;
+
+    private void LoadRuleSlots(PaperbunkrDbContext context, Collection collection)
+    {
+        IssueSmartLists.Clear();
+        SeriesSmartLists.Clear();
+        NovelSmartLists.Clear();
+
+        foreach (var list in context.SmartLists.Where(l => l.TargetKind == SmartListTargetKind.Issue).OrderBy(l => l.Name))
+        {
+            IssueSmartLists.Add(new SmartListOption(list.Id, list.Name));
+        }
+
+        foreach (var list in context.SmartLists.Where(l => l.TargetKind == SmartListTargetKind.Series).OrderBy(l => l.Name))
+        {
+            SeriesSmartLists.Add(new SmartListOption(list.Id, list.Name));
+        }
+
+        foreach (var list in context.SmartLists.Where(l => l.TargetKind == SmartListTargetKind.Novel).OrderBy(l => l.Name))
+        {
+            NovelSmartLists.Add(new SmartListOption(list.Id, list.Name));
+        }
+
+        SelectedIssueSmartList = IssueSmartLists.FirstOrDefault(o => o.Id == collection.IssueSmartListId);
+        SelectedSeriesSmartList = SeriesSmartLists.FirstOrDefault(o => o.Id == collection.SeriesSmartListId);
+        SelectedNovelSmartList = NovelSmartLists.FirstOrDefault(o => o.Id == collection.NovelSmartListId);
+    }
+
+    [RelayCommand]
+    private void SetIssueRule()
+    {
+        if (_collectionId is int collectionId && SelectedIssueSmartList is { } option)
+        {
+            using var context = _contextFactory();
+            CollectionService.SetIssueSmartList(context, collectionId, option.Id);
+            Load(collectionId);
+        }
+    }
+
+    [RelayCommand]
+    private void ClearIssueRule()
+    {
+        if (_collectionId is int collectionId)
+        {
+            using var context = _contextFactory();
+            CollectionService.ClearIssueSmartList(context, collectionId);
+            Load(collectionId);
+        }
+    }
+
+    [RelayCommand]
+    private void SetSeriesRule()
+    {
+        if (_collectionId is int collectionId && SelectedSeriesSmartList is { } option)
+        {
+            using var context = _contextFactory();
+            CollectionService.SetSeriesSmartList(context, collectionId, option.Id);
+            Load(collectionId);
+        }
+    }
+
+    [RelayCommand]
+    private void ClearSeriesRule()
+    {
+        if (_collectionId is int collectionId)
+        {
+            using var context = _contextFactory();
+            CollectionService.ClearSeriesSmartList(context, collectionId);
+            Load(collectionId);
+        }
+    }
+
+    [RelayCommand]
+    private void SetNovelRule()
+    {
+        if (_collectionId is int collectionId && SelectedNovelSmartList is { } option)
+        {
+            using var context = _contextFactory();
+            CollectionService.SetNovelSmartList(context, collectionId, option.Id);
+            Load(collectionId);
+        }
+    }
+
+    [RelayCommand]
+    private void ClearNovelRule()
+    {
+        if (_collectionId is int collectionId)
+        {
+            using var context = _contextFactory();
+            CollectionService.ClearNovelSmartList(context, collectionId);
+            Load(collectionId);
+        }
+    }
 
     // --- Related Collections (Collection-to-Collection relations, e.g. "these two collections are
     // the same fictional universe") - byte-for-byte DetailTabsViewModel's MediaRelation add/remove

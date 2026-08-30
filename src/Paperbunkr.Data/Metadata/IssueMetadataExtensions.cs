@@ -56,6 +56,9 @@ public static class IssueMetadataExtensions
 
     public static string? EffectiveFormat(this Issue issue) => issue.Format ?? AcceptedProposalValue(issue, MetadataProposalField.Format);
 
+    /// <summary>Detail screen's Specials tab membership (docs/superpowers/specs/2026-08-28-series-detail-specials-tab-design.md) - Format-only, deliberately not the accepted-proposal-resolved <see cref="EffectiveFormat"/> (a pending proposal shouldn't move an issue in/out of Specials before it's accepted).</summary>
+    public static bool IsSpecial(this Issue issue) => SpecialFormatCatalog.IsSpecial(issue.Format);
+
     public static string? EffectiveVolume(this Issue issue) => issue.Volume ?? AcceptedProposalValue(issue, MetadataProposalField.Volume);
 
     public static string? EffectiveNumber(this Issue issue) => issue.Number ?? AcceptedProposalValue(issue, MetadataProposalField.Number);

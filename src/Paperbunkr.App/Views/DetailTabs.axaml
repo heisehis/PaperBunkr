@@ -36,6 +36,14 @@
         <Style Selector="StackPanel.posterItem.read">
             <Setter Property="Opacity" Value="0.45" />
         </Style>
+        <!-- Run separator bar (docs/superpowers/specs/2026-08-30-series-detail-run-separator-design.md) -
+             same treatment as IssueListScreen.axaml's TextBlock.groupHeader. -->
+        <Style Selector="TextBlock.runHeader">
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="FontWeight" Value="Bold" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextBrush}" />
+            <Setter Property="Margin" Value="0,4,0,10" />
+        </Style>
         <Style Selector="Grid.issueRow">
             <Setter Property="Cursor" Value="Hand" />
             <Setter Property="Background" Value="Transparent" />
@@ -117,6 +125,87 @@
                       Command="{Binding #Root.((vm:DetailTabsViewModel)DataContext).ResetIssueCoverCommand}"
                       CommandParameter="{Binding}" />
         </ContextMenu>
+
+        <!-- Shared IssueCardSample tile templates (docs/superpowers/specs/2026-08-28-series-detail-
+             specials-tab-design.md) - the Issues tab's run groups and the flat Specials tab both
+             render the same tiles, just from different source collections. -->
+        <DataTemplate x:Key="IssuePosterTileTemplate" x:DataType="models:IssueCardSample">
+            <StackPanel Classes="posterItem" Classes.read="{Binding IsRead}" Width="118" Margin="0,0,14,16" Spacing="5">
+                <Border Classes="issueTile" Classes.selected="{Binding IsSelected}" Height="168"
+                        Background="{Binding CoverBrush}" Focusable="True"
+                        ContextMenu="{StaticResource IssueContextMenu}"
+                        PointerPressed="OnIssueTilePointerPressed" KeyDown="OnIssueTileKeyDown">
+                    <Grid>
+                        <Image Source="{Binding CoverImage}" Stretch="UniformToFill" />
+                        <Border Classes="posterScrim" />
+                        <Border Height="3" VerticalAlignment="Bottom" Background="{DynamicResource PbAccentBrush}"
+                                IsVisible="{Binding IsInProgress}" HorizontalAlignment="Left" Width="70" />
+                    </Grid>
+                </Border>
+                <TextBlock Text="{Binding Title}" FontSize="12" FontWeight="Bold" Foreground="{DynamicResource PbTextBrush}" />
+                <TextBlock Text="{Binding ArcTitle}" FontSize="10" Foreground="{DynamicResource PbTextFaintBrush}"
+                           TextTrimming="CharacterEllipsis"
+                           IsVisible="{Binding ArcTitle, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
+            </StackPanel>
+        </DataTemplate>
+
+        <DataTemplate x:Key="IssueListRowTemplate" x:DataType="models:IssueCardSample">
+            <Grid Classes="issueRow" Classes.selected="{Binding IsSelected}" Classes.read="{Binding IsRead}"
+                  ColumnDefinitions="44,*,150,80,50" Height="30" Focusable="True"
+                  ContextMenu="{StaticResource IssueContextMenu}"
+                  PointerPressed="OnIssueTilePointerPressed" KeyDown="OnIssueTileKeyDown">
+                <TextBlock Grid.Column="0" Text="{Binding Title}" FontWeight="Bold" VerticalAlignment="Center"
+                           Foreground="{DynamicResource PbTextBrush}" />
+                <TextBlock Grid.Column="1" Text="{Binding FullTitle}" VerticalAlignment="Center" Margin="8,0"
+                           TextTrimming="CharacterEllipsis" Foreground="{DynamicResource PbTextMutedBrush}" FontSize="12" />
+                <TextBlock Grid.Column="2" Text="{Binding ArcTitle}" VerticalAlignment="Center"
+                           Foreground="{DynamicResource PbTextFaintBrush}" FontSize="11" TextTrimming="CharacterEllipsis" />
+                <TextBlock Grid.Column="3" Text="{Binding CoverDateLabel}" VerticalAlignment="Center"
+                           Foreground="{DynamicResource PbTextFaintBrush}" FontSize="11" />
+                <TextBlock Grid.Column="4" Text="{Binding RatingLabel}" VerticalAlignment="Center"
+                           Foreground="{DynamicResource PbBadgeBrush}" FontSize="11" />
+            </Grid>
+        </DataTemplate>
+
+        <DataTemplate x:Key="IssueCardTileTemplate" x:DataType="models:IssueCardSample">
+            <Border Classes="issueCard" Classes.selected="{Binding IsSelected}" Width="250" Margin="0,0,12,12"
+                    Focusable="True" ContextMenu="{StaticResource IssueContextMenu}"
+                    PointerPressed="OnIssueTilePointerPressed" KeyDown="OnIssueTileKeyDown">
+                <Grid ColumnDefinitions="54,*">
+                    <Border Grid.Column="0" Width="54" Height="80" CornerRadius="3" ClipToBounds="True"
+                            Background="{Binding CoverBrush}" VerticalAlignment="Top">
+                        <Image Source="{Binding CoverImage}" Stretch="UniformToFill" />
+                    </Border>
+                    <StackPanel Grid.Column="1" Margin="10,0,0,0" Spacing="4">
+                        <TextBlock Text="{Binding FullTitle}" FontSize="12.5" FontWeight="SemiBold"
+                                   Foreground="{DynamicResource PbTextBrush}" TextWrapping="Wrap" MaxLines="2" TextTrimming="CharacterEllipsis" />
+                        <TextBlock Text="{Binding CardProgressLabel}" FontSize="9.5" Foreground="{DynamicResource PbTextFaintBrush}" />
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <Button Content="{Binding CardActionLabel}" Padding="10,2" FontSize="11" FontWeight="SemiBold"
+                                    CornerRadius="4" Background="{DynamicResource PbAccentBrush}" Foreground="{DynamicResource PbBadgeTextBrush}"
+                                    BorderThickness="0"
+                                    Command="{Binding #Root.((vm:DetailTabsViewModel)DataContext).OpenIssueInReaderCommand}"
+                                    CommandParameter="{Binding}" />
+                            <Button Classes="creditName"
+                                    Command="{Binding #Root.((vm:DetailTabsViewModel)DataContext).MarkIssueReadCommand}"
+                                    CommandParameter="{Binding}" ToolTip.Tip="Mark read">
+                                <fi:SymbolIcon Symbol="Checkmark" FontSize="13" />
+                            </Button>
+                            <Button Classes="creditName"
+                                    Command="{Binding #Root.((vm:DetailTabsViewModel)DataContext).EditIssuePropertiesCommand}"
+                                    CommandParameter="{Binding}" ToolTip.Tip="Edit">
+                                <fi:SymbolIcon Symbol="Edit" FontSize="13" />
+                            </Button>
+                            <Button Classes="creditName"
+                                    Command="{Binding #Root.((vm:DetailTabsViewModel)DataContext).RevealIssueCommand}"
+                                    CommandParameter="{Binding}" IsEnabled="{Binding HasFile}" ToolTip.Tip="Show in Explorer">
+                                <fi:SymbolIcon Symbol="FolderOpen" FontSize="13" />
+                            </Button>
+                        </StackPanel>
+                    </StackPanel>
+                </Grid>
+            </Border>
+        </DataTemplate>
     </UserControl.Resources>
 
     <StackPanel>
@@ -126,6 +215,12 @@
                     <StackPanel Orientation="Horizontal" Spacing="7">
                         <TextBlock Text="Issues" />
                         <TextBlock Classes="tabCount" Text="{Binding Issues.Count}" VerticalAlignment="Center" />
+                    </StackPanel>
+                </Button>
+                <Button Classes="tab" Classes.active="{Binding IsSpecialsTab}" Command="{Binding GoSpecialsCommand}" IsVisible="{Binding HasSpecials}">
+                    <StackPanel Orientation="Horizontal" Spacing="7">
+                        <TextBlock Text="Specials" />
+                        <TextBlock Classes="tabCount" Text="{Binding Specials.Count}" VerticalAlignment="Center" />
                     </StackPanel>
                 </Button>
                 <Button Classes="tab" Classes.active="{Binding IsRelatedTab}" Command="{Binding GoRelatedCommand}">
@@ -160,102 +255,73 @@
             </DockPanel>
 
             <!-- POSTER -->
-            <ItemsControl x:Name="IssuesList" IsVisible="{Binding IsPosterView}" ItemsSource="{Binding Issues}">
-                <ItemsControl.ItemsPanel>
-                    <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
-                </ItemsControl.ItemsPanel>
+            <ItemsControl x:Name="IssuesList" IsVisible="{Binding IsPosterView}" ItemsSource="{Binding IssueGroups}">
                 <ItemsControl.ItemTemplate>
-                    <DataTemplate x:DataType="models:IssueCardSample">
-                        <StackPanel Classes="posterItem" Classes.read="{Binding IsRead}" Width="118" Margin="0,0,14,16" Spacing="5">
-                            <Border Classes="issueTile" Classes.selected="{Binding IsSelected}" Height="168"
-                                    Background="{Binding CoverBrush}" Focusable="True"
-                                    ContextMenu="{StaticResource IssueContextMenu}"
-                                    PointerPressed="OnIssueTilePointerPressed" KeyDown="OnIssueTileKeyDown">
-                                <Grid>
-                                    <Image Source="{Binding CoverImage}" Stretch="UniformToFill" />
-                                    <Border Classes="posterScrim" />
-                                    <Border Height="3" VerticalAlignment="Bottom" Background="{DynamicResource PbAccentBrush}"
-                                            IsVisible="{Binding IsInProgress}" HorizontalAlignment="Left" Width="70" />
-                                </Grid>
-                            </Border>
-                            <TextBlock Text="{Binding Title}" FontSize="12" FontWeight="Bold" Foreground="{DynamicResource PbTextBrush}" />
-                            <TextBlock Text="{Binding ArcTitle}" FontSize="10" Foreground="{DynamicResource PbTextFaintBrush}"
-                                       TextTrimming="CharacterEllipsis"
-                                       IsVisible="{Binding ArcTitle, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
+                    <DataTemplate x:DataType="models:IssueRunGroup">
+                        <StackPanel Margin="0,0,0,4">
+                            <TextBlock Text="{Binding Header}" Classes="runHeader"
+                                       IsVisible="{Binding Header, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
+                            <ItemsControl ItemsSource="{Binding Items}" ItemTemplate="{StaticResource IssuePosterTileTemplate}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                            </ItemsControl>
                         </StackPanel>
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
 
             <!-- LIST -->
-            <ItemsControl IsVisible="{Binding IsListView}" ItemsSource="{Binding Issues}">
+            <ItemsControl IsVisible="{Binding IsListView}" ItemsSource="{Binding IssueGroups}">
                 <ItemsControl.ItemTemplate>
-                    <DataTemplate x:DataType="models:IssueCardSample">
-                        <Grid Classes="issueRow" Classes.selected="{Binding IsSelected}" Classes.read="{Binding IsRead}"
-                              ColumnDefinitions="44,*,150,80,50" Height="30" Focusable="True"
-                              ContextMenu="{StaticResource IssueContextMenu}"
-                              PointerPressed="OnIssueTilePointerPressed" KeyDown="OnIssueTileKeyDown">
-                            <TextBlock Grid.Column="0" Text="{Binding Title}" FontWeight="Bold" VerticalAlignment="Center"
-                                       Foreground="{DynamicResource PbTextBrush}" />
-                            <TextBlock Grid.Column="1" Text="{Binding FullTitle}" VerticalAlignment="Center" Margin="8,0"
-                                       TextTrimming="CharacterEllipsis" Foreground="{DynamicResource PbTextMutedBrush}" FontSize="12" />
-                            <TextBlock Grid.Column="2" Text="{Binding ArcTitle}" VerticalAlignment="Center"
-                                       Foreground="{DynamicResource PbTextFaintBrush}" FontSize="11" TextTrimming="CharacterEllipsis" />
-                            <TextBlock Grid.Column="3" Text="{Binding CoverDateLabel}" VerticalAlignment="Center"
-                                       Foreground="{DynamicResource PbTextFaintBrush}" FontSize="11" />
-                            <TextBlock Grid.Column="4" Text="{Binding RatingLabel}" VerticalAlignment="Center"
-                                       Foreground="{DynamicResource PbBadgeBrush}" FontSize="11" />
-                        </Grid>
+                    <DataTemplate x:DataType="models:IssueRunGroup">
+                        <StackPanel Margin="0,0,0,4">
+                            <TextBlock Text="{Binding Header}" Classes="runHeader"
+                                       IsVisible="{Binding Header, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
+                            <ItemsControl ItemsSource="{Binding Items}" ItemTemplate="{StaticResource IssueListRowTemplate}" />
+                        </StackPanel>
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
 
             <!-- CARD -->
-            <ItemsControl IsVisible="{Binding IsCardView}" ItemsSource="{Binding Issues}">
+            <ItemsControl IsVisible="{Binding IsCardView}" ItemsSource="{Binding IssueGroups}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="models:IssueRunGroup">
+                        <StackPanel Margin="0,0,0,4">
+                            <TextBlock Text="{Binding Header}" Classes="runHeader"
+                                       IsVisible="{Binding Header, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
+                            <ItemsControl ItemsSource="{Binding Items}" ItemTemplate="{StaticResource IssueCardTileTemplate}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                            </ItemsControl>
+                        </StackPanel>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </StackPanel>
+
+        <!-- ================= SPECIALS TAB ================= -->
+        <!-- One-shots/annuals/omnibuses etc. (docs/superpowers/specs/2026-08-28-series-detail-
+             specials-tab-design.md) - flat, no run grouping (a handful of specials doesn't need a
+             separator), sharing the Issues tab's own view-mode toggle rather than growing a second
+             one. Same tile templates as the Issues tab, bound to Specials instead of IssueGroups. -->
+        <StackPanel IsVisible="{Binding IsSpecialsTab}" Margin="0,16,0,0">
+            <TextBlock Text="{Binding Specials.Count, StringFormat='{}{0} specials'}" Classes="pbTextCaption" Margin="0,0,0,14" />
+
+            <ItemsControl IsVisible="{Binding IsPosterView}" ItemsSource="{Binding Specials}" ItemTemplate="{StaticResource IssuePosterTileTemplate}">
                 <ItemsControl.ItemsPanel>
                     <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
                 </ItemsControl.ItemsPanel>
-                <ItemsControl.ItemTemplate>
-                    <DataTemplate x:DataType="models:IssueCardSample">
-                        <Border Classes="issueCard" Classes.selected="{Binding IsSelected}" Width="250" Margin="0,0,12,12"
-                                Focusable="True" ContextMenu="{StaticResource IssueContextMenu}"
-                                PointerPressed="OnIssueTilePointerPressed" KeyDown="OnIssueTileKeyDown">
-                            <Grid ColumnDefinitions="54,*">
-                                <Border Grid.Column="0" Width="54" Height="80" CornerRadius="3" ClipToBounds="True"
-                                        Background="{Binding CoverBrush}" VerticalAlignment="Top">
-                                    <Image Source="{Binding CoverImage}" Stretch="UniformToFill" />
-                                </Border>
-                                <StackPanel Grid.Column="1" Margin="10,0,0,0" Spacing="4">
-                                    <TextBlock Text="{Binding FullTitle}" FontSize="12.5" FontWeight="SemiBold"
-                                               Foreground="{DynamicResource PbTextBrush}" TextWrapping="Wrap" MaxLines="2" TextTrimming="CharacterEllipsis" />
-                                    <TextBlock Text="{Binding CardProgressLabel}" FontSize="9.5" Foreground="{DynamicResource PbTextFaintBrush}" />
-                                    <StackPanel Orientation="Horizontal" Spacing="10">
-                                        <Button Content="{Binding CardActionLabel}" Padding="10,2" FontSize="11" FontWeight="SemiBold"
-                                                CornerRadius="4" Background="{DynamicResource PbAccentBrush}" Foreground="{DynamicResource PbBadgeTextBrush}"
-                                                BorderThickness="0"
-                                                Command="{Binding #Root.((vm:DetailTabsViewModel)DataContext).OpenIssueInReaderCommand}"
-                                                CommandParameter="{Binding}" />
-                                        <Button Classes="creditName"
-                                                Command="{Binding #Root.((vm:DetailTabsViewModel)DataContext).MarkIssueReadCommand}"
-                                                CommandParameter="{Binding}" ToolTip.Tip="Mark read">
-                                            <fi:SymbolIcon Symbol="Checkmark" FontSize="13" />
-                                        </Button>
-                                        <Button Classes="creditName"
-                                                Command="{Binding #Root.((vm:DetailTabsViewModel)DataContext).EditIssuePropertiesCommand}"
-                                                CommandParameter="{Binding}" ToolTip.Tip="Edit">
-                                            <fi:SymbolIcon Symbol="Edit" FontSize="13" />
-                                        </Button>
-                                        <Button Classes="creditName"
-                                                Command="{Binding #Root.((vm:DetailTabsViewModel)DataContext).RevealIssueCommand}"
-                                                CommandParameter="{Binding}" IsEnabled="{Binding HasFile}" ToolTip.Tip="Show in Explorer">
-                                            <fi:SymbolIcon Symbol="FolderOpen" FontSize="13" />
-                                        </Button>
-                                    </StackPanel>
-                                </StackPanel>
-                            </Grid>
-                        </Border>
-                    </DataTemplate>
-                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+            <ItemsControl IsVisible="{Binding IsListView}" ItemsSource="{Binding Specials}" ItemTemplate="{StaticResource IssueListRowTemplate}" />
+
+            <ItemsControl IsVisible="{Binding IsCardView}" ItemsSource="{Binding Specials}" ItemTemplate="{StaticResource IssueCardTileTemplate}">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
             </ItemsControl>
         </StackPanel>
 

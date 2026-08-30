@@ -1,4 +1,6 @@
 using System.Linq;
+using System.Threading;
+using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Paperbunkr.Data.Entities;
 
@@ -102,6 +104,42 @@ public class PaperbunkrDbContext : DbContext
         : base(options)
     {
     }
+
+    /// <summary>
+    /// Retries on SQLite's own transient lock errors (BUSY=5, LOCKED=6) - each call site in this
+    /// app opens a fresh short-lived context/connection (<c>PaperbunkrDb.CreateContext</c>'s own
+    /// doc comment), so two of them can legitimately race against each other (e.g. the Library
+    /// screen's per-keystroke settings save landing while a background scan or the live-folder
+    /// watcher is also writing). Microsoft.Data.Sqlite already retries internally via its own
+    /// 30-second default busy timeout, but that alone wasn't enough to prevent a real "database is
+    /// locked" `DbUpdateException` surfacing to the user - this adds a small additional retry at
+    /// the EF layer rather than changing that timeout, which is already generous. Every other
+    /// <see cref="SqliteException"/> (constraint violations, corruption, etc.) rethrows immediately
+    /// on the first attempt, same as before this override existed.
+    /// </summary>
+    public override int SaveChanges(bool acceptAllChangesOnSuccess)
+    {
+        const int maxAttempts = 3;
+        for (int attempt = 1; ; attempt++)
+        {
+            try
+            {
+                return base.SaveChanges(acceptAllChangesOnSuccess);
+            }
+            catch (DbUpdateException ex) when (attempt < maxAttempts && IsTransientLockError(ex))
+            {
+                Thread.Sleep(attempt * 150);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Exposed for callers that persist a non-critical, easily-recomputed value (e.g. a UI display
+    /// preference) and would rather silently skip that one save than surface a crash for it - see
+    /// <c>LibraryScreenViewModel.SaveLibrarySettings</c>, called on every Library search keystroke.
+    /// </summary>
+    public static bool IsTransientLockError(DbUpdateException ex) =>
+        ex.InnerException is SqliteException { SqliteErrorCode: 5 or 6 };
 
     /// <summary>
     /// Returns the singleton <see cref="Entities.AppSettings"/> row (<c>Id</c> always 1), creating

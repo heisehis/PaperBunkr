@@ -11,6 +11,28 @@ namespace Paperbunkr.Data.Tests;
 /// </summary>
 public class IssueMetadataExtensionsTests
 {
+    /// <summary>docs/superpowers/specs/2026-08-28-series-detail-specials-tab-design.md - Format-only, raw field not EffectiveFormat (a pending proposal shouldn't move an issue in/out of Specials).</summary>
+    [Fact]
+    public void IsSpecial_FormatValue_DelegatesToSpecialFormatCatalog()
+    {
+        Assert.True(new Issue { Format = "One Shot" }.IsSpecial());
+        Assert.False(new Issue { Format = null }.IsSpecial());
+        Assert.True(new Issue { Format = "Trade Paper Back" }.IsSpecial());
+        Assert.False(new Issue { Format = "Hardcover" }.IsSpecial());
+    }
+
+    [Fact]
+    public void IsSpecial_PendingProposalOnly_DoesNotCount()
+    {
+        var issue = new Issue
+        {
+            Format = null,
+            MetadataProposals = { Proposal(MetadataProposalField.Format, "Omnibus", MetadataProposalStatus.Pending) },
+        };
+
+        Assert.False(issue.IsSpecial());
+    }
+
     [Theory]
     [InlineData(null, 0, 0)]
     [InlineData(0, 100, 0)]

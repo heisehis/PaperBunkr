@@ -386,7 +386,18 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         // rather than clobbering a real customization with an empty string.
         settings.LibraryDetailsColumns = DetailsColumns.Count == 0 ? _detailsColumnsSetting : SerializeDetailsColumns();
 
-        context.SaveChanges();
+        // A display preference isn't worth crashing the search box over - PaperbunkrDbContext's own
+        // SaveChanges already retries a transient SQLite lock a few times (e.g. this same method
+        // firing again from the next keystroke while another connection is mid-write); if it's
+        // still locked after that, skip this one save silently rather than surface it. The search
+        // itself is unaffected either way (RebuildView works entirely off the in-memory snapshot).
+        try
+        {
+            context.SaveChanges();
+        }
+        catch (DbUpdateException ex) when (PaperbunkrDbContext.IsTransientLockError(ex))
+        {
+        }
     }
 
     // --- Configurable Details table columns (docs/superpowers/specs/2026-08-27-library-browsing-4b-

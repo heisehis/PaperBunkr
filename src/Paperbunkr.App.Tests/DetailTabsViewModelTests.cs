@@ -123,6 +123,147 @@ public class DetailTabsViewModelTests : IDisposable
         Assert.All(vm.Issues, issue => Assert.False(issue.HasFile));
     }
 
+    /// <summary>docs/superpowers/specs/2026-08-30-series-detail-run-separator-design.md - collapse rule.</summary>
+    [Fact]
+    public void LoadSeries_NoVolumeSetAnywhere_CollapsesToOneUnheadedGroup()
+    {
+        var vm = CreateViewModel();
+
+        vm.LoadSeries(LoadSeriesEntity());
+
+        var group = Assert.Single(vm.IssueGroups);
+        Assert.Null(group.Header);
+        Assert.Equal(new[] { "#1", "#2", "#3" }, group.Items.Select(i => i.Title));
+        Assert.Equal(vm.Issues.Select(i => i.Id), group.Items.Select(i => i.Id));
+    }
+
+    [Fact]
+    public void LoadSeries_MultipleVolumes_GroupsByVolumeWithMainWriterInHeader()
+    {
+        int seriesId;
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            var series = new Series { Name = "Venom" };
+            context.Series.Add(series);
+            context.SaveChanges();
+            seriesId = series.Id;
+
+            context.Issues.AddRange(
+                new Issue { SeriesId = seriesId, Number = "1" }, // no Volume - "no volume set" bucket
+                new Issue { SeriesId = seriesId, Number = "1", Volume = "2018", Writer = "Al Ewing" },
+                new Issue { SeriesId = seriesId, Number = "2", Volume = "2018", Writer = "Al Ewing" },
+                new Issue { SeriesId = seriesId, Number = "3", Volume = "2018", Writer = "Fill-In Writer" }, // one fill-in issue - main writer still wins
+                new Issue { SeriesId = seriesId, Number = "1", Volume = "2022", Writer = "Donny Cates" });
+            context.SaveChanges();
+        }
+
+        var vm = CreateViewModel();
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            vm.LoadSeries(context.Series.Include(s => s.Issues).First(s => s.Id == seriesId));
+        }
+
+        Assert.Equal(3, vm.IssueGroups.Count);
+
+        Assert.Null(vm.IssueGroups[0].Header);
+        Assert.Equal(new[] { "#1" }, vm.IssueGroups[0].Items.Select(i => i.Title));
+
+        Assert.Equal("Al Ewing (2018)", vm.IssueGroups[1].Header);
+        Assert.Equal(new[] { "#1", "#2", "#3" }, vm.IssueGroups[1].Items.Select(i => i.Title));
+
+        Assert.Equal("Donny Cates (2022)", vm.IssueGroups[2].Header);
+        Assert.Equal(new[] { "#1" }, vm.IssueGroups[2].Items.Select(i => i.Title));
+
+        Assert.Equal(5, vm.IssueGroups.Sum(g => g.Items.Count));
+        Assert.Equal(5, vm.Issues.Count);
+        Assert.Equal(vm.Issues.Select(i => i.Id), vm.IssueGroups.SelectMany(g => g.Items).Select(i => i.Id));
+    }
+
+    /// <summary>No issue in the run has a Writer set - header falls back to plain "Volume {value}".</summary>
+    [Fact]
+    public void LoadSeries_MultipleVolumes_NoWriterSet_HeaderFallsBackToVolumeOnly()
+    {
+        int seriesId;
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            var series = new Series { Name = "Venom" };
+            context.Series.Add(series);
+            context.SaveChanges();
+            seriesId = series.Id;
+
+            context.Issues.AddRange(
+                new Issue { SeriesId = seriesId, Number = "1", Volume = "2018" },
+                new Issue { SeriesId = seriesId, Number = "1", Volume = "2022" });
+            context.SaveChanges();
+        }
+
+        var vm = CreateViewModel();
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            vm.LoadSeries(context.Series.Include(s => s.Issues).First(s => s.Id == seriesId));
+        }
+
+        Assert.Equal(new[] { "Volume 2018", "Volume 2022" }, vm.IssueGroups.Select(g => g.Header));
+    }
+
+    /// <summary>docs/superpowers/specs/2026-08-28-series-detail-specials-tab-design.md.</summary>
+    [Fact]
+    public void LoadSeries_NoSpecialFormatIssues_HasSpecialsFalse()
+    {
+        var vm = CreateViewModel();
+
+        vm.LoadSeries(LoadSeriesEntity());
+
+        Assert.False(vm.HasSpecials);
+        Assert.Empty(vm.Specials);
+    }
+
+    [Fact]
+    public void LoadSeries_SpecialFormatIssue_RoutesToSpecialsNotIssuesAndNotDuplicated()
+    {
+        int seriesId;
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            var series = new Series { Name = "Venom" };
+            context.Series.Add(series);
+            context.SaveChanges();
+            seriesId = series.Id;
+
+            context.Issues.AddRange(
+                new Issue { SeriesId = seriesId, Number = "1" },
+                new Issue { SeriesId = seriesId, Number = "2" },
+                new Issue { SeriesId = seriesId, Number = "1", Format = "Annual" });
+            context.SaveChanges();
+        }
+
+        var vm = CreateViewModel();
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            vm.LoadSeries(context.Series.Include(s => s.Issues).First(s => s.Id == seriesId));
+        }
+
+        Assert.True(vm.HasSpecials);
+        var special = Assert.Single(vm.Specials);
+        Assert.Equal("#1", special.Title);
+
+        Assert.Equal(2, vm.Issues.Count);
+        Assert.DoesNotContain(vm.Issues, i => i.Id == special.Id);
+        Assert.DoesNotContain(vm.IssueGroups.SelectMany(g => g.Items), i => i.Id == special.Id);
+    }
+
+    [Fact]
+    public void GoSpecialsCommand_SetsActiveTabAndIsSpecialsTab()
+    {
+        var vm = CreateViewModel();
+        vm.LoadSeries(LoadSeriesEntity());
+
+        vm.GoSpecialsCommand.Execute(null);
+
+        Assert.Equal("specials", vm.ActiveTab);
+        Assert.True(vm.IsSpecialsTab);
+        Assert.False(vm.IsIssuesTab);
+    }
+
     [Fact]
     public void RevealIssue_WithNoFilePath_DoesNotThrow()
     {

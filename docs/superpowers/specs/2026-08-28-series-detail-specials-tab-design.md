@@ -1,7 +1,7 @@
 # Series Detail — Specials Tab
 
 **Date:** 2026-08-28
-**Status:** Approved, pending implementation
+**Status:** Implemented 2026-08-30 (built alongside docs/superpowers/specs/2026-08-30-series-detail-run-separator-design.md - the Issues tab's tile templates were extracted to shared `StaticResource`s so both features reuse them without duplicating XAML three times over).
 **Source doc:** Design session with Ehis (2026-08-28), following on from the Kavita comparison
 research recorded in project memory (`event-section-planning` — Kavita comparison, 2026-08-28).
 Kavita's own specials-detection behavior verified against its wiki

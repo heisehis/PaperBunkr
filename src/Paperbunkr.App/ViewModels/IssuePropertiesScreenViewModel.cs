@@ -210,8 +210,9 @@ public partial class IssuePropertiesScreenViewModel : ViewModelBase
     [ObservableProperty] private string _imprint = string.Empty;
     [ObservableProperty] private string _format = string.Empty;
 
-    /// <summary>ComicRack CE's shipped <c>[Book Formats]</c> default list (docs/superpowers/specs/2026-08-27-metadata-model-phase4e-format-signal-suggestions-design.md) - autocomplete for the free-text Format field.</summary>
-    public static IReadOnlyList<string> FormatOptions => FormatSignalCatalog.CeDefaultFormats;
+    /// <summary>ComicRack CE's shipped <c>[Book Formats]</c> default list (docs/superpowers/specs/2026-08-27-metadata-model-phase4e-format-signal-suggestions-design.md) plus <see cref="SpecialFormatCatalog"/>'s Kavita-only additions (docs/superpowers/specs/2026-08-28-series-detail-specials-tab-design.md) - autocomplete for the free-text Format field.</summary>
+    public static IReadOnlyList<string> FormatOptions { get; } =
+        FormatSignalCatalog.CeDefaultFormats.Union(SpecialFormatCatalog.KavitaOnlyAdditions, StringComparer.OrdinalIgnoreCase).ToList();
 
     /// <summary>Book Age - free text, ported from CE's own autocomplete combo (docs/superpowers/specs/2026-08-27-metadata-model-phase4g-age-progression-design.md). Autocomplete seeded with CE's five <c>[Book Ages]</c> defaults; the Timeline mode's <c>BookAgeResolver</c> reads this as the authoritative age when set.</summary>
     [ObservableProperty] private string _bookAge = string.Empty;

@@ -17,4 +17,17 @@ public static class IssueOrdering
 {
     public static IOrderedEnumerable<Issue> OrderByNumber(this IEnumerable<Issue> issues) =>
         issues.OrderBy(i => new TextNumberFloat(i.EffectiveNumber() ?? string.Empty));
+
+    /// <summary>
+    /// Groups a series' issues into runs for the Detail screen's Issues tab (docs/superpowers/specs/
+    /// 2026-08-30-series-detail-run-separator-design.md): primarily by <see cref="Issue.Volume"/>
+    /// (issues with no parseable Volume sort first - <see cref="IssueMetadataExtensions.VolumeSortKey"/>
+    /// is <see langword="null"/> for them, and nullable-float ordering already puts null first), then
+    /// by <see cref="Issue.Number"/> within each run - the exact same key <see cref="OrderByNumber"/>
+    /// uses, so a single-run series (the common case) orders identically to today.
+    /// </summary>
+    public static IOrderedEnumerable<Issue> OrderByRun(this IEnumerable<Issue> issues) =>
+        issues
+            .OrderBy(i => i.VolumeSortKey())
+            .ThenBy(i => new TextNumberFloat(i.EffectiveNumber() ?? string.Empty));
 }

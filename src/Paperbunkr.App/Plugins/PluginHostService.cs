@@ -31,7 +31,7 @@ public sealed class PluginHostService
         var environment = new PaperbunkrPluginEnvironment
         {
             MainWindow = new PaperbunkrPluginHostWindow(mainWindow),
-            App = new PaperbunkrApplication(),
+            App = new PaperbunkrApplication(main),
             OpenBooks = new PaperbunkrOpenBooksManager(main),
             Browser = new PaperbunkrBrowser(main),
             ComicDisplay = new PaperbunkrComicDisplay(main.Reader),

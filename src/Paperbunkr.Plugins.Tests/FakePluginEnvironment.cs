@@ -122,5 +122,12 @@ internal sealed class FakePluginEnvironment : IPluginEnvironment
             return 0;
         }
         public void ShowComicInfo(IEnumerable<Data.Entities.Issue> books) { }
+        public int GetOrCreateSeriesId(string seriesName) => 0;
+        public Data.Entities.Issue? AddNewBook(int seriesId, bool showDialog) => null;
+        public byte[]? GetComicPublisherIcon(Data.Entities.Issue issue) => null;
+        public byte[]? GetComicImprintIcon(Data.Entities.Issue issue) => null;
+        public byte[]? GetComicAgeRatingIcon(Data.Entities.Issue issue) => null;
+        public byte[]? GetComicFormatIcon(Data.Entities.Issue issue) => null;
+        public IDictionary<string, string> GetComicFields() => new Dictionary<string, string>();
     }
 }

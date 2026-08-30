@@ -12,8 +12,9 @@ namespace Paperbunkr.App.Plugins;
 /// Real adapter for <see cref="IBrowser"/> (docs/superpowers/specs/2026-08-24-plugin-api-v2-design.md
 /// §4), self-contained against the whole library (ordered by Series/Number) relative to whatever
 /// the Reader currently has open - doesn't depend on the Library screen's own selection model.
-/// <see cref="SelectComics"/> is a documented no-op: Paperbunkr's Library grid doesn't yet expose a
-/// selection API a plugin can drive (deferred, see the spec's follow-on notes).
+/// <see cref="SelectComics"/> drives Library's real selection model (docs/superpowers/specs/
+/// 2026-08-30-plugin-api-automation-gaps-design.md) - it was a documented no-op until multiselect
+/// shipped.
 /// </summary>
 public sealed class PaperbunkrBrowser : IBrowser
 {
@@ -39,9 +40,21 @@ public sealed class PaperbunkrBrowser : IBrowser
         return true;
     }
 
+    /// <summary>
+    /// Only issues actually present in Library's currently-loaded <c>IssueList.Rows</c> get
+    /// selected - doesn't force-clear an active search/filter to make everything visible, matching
+    /// CE's own behavior of only ever operating on the currently-visible list. Navigates to Library
+    /// first so the selection is immediately visible, not set invisibly on a screen nobody's
+    /// looking at.
+    /// </summary>
     public void SelectComics(IEnumerable<Issue> books)
     {
-        // No-op - see class doc comment.
+        var targetIds = books.Select(b => b.Id).ToHashSet();
+        var matchingRows = _main.Library.IssueList.Rows.Where(r => targetIds.Contains(r.Id)).ToList();
+
+        _main.Library.Selection.Clear();
+        _main.Library.Selection.SelectAll(matchingRows);
+        _main.GoLibraryCommand.Execute(null);
     }
 
     private bool OpenRelative(int offset)

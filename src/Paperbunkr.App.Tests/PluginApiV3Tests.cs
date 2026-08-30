@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using Paperbunkr.App.Plugins;
 using Paperbunkr.App.Services;
+using Paperbunkr.App.ViewModels;
 using Paperbunkr.Data;
 using Paperbunkr.Data.Entities;
 using Paperbunkr.Data.Metadata;
@@ -153,7 +154,7 @@ public sealed class PluginApiV3Tests : IDisposable
             context.SaveChanges();
         }
 
-        var app = new PaperbunkrApplication();
+        var app = new PaperbunkrApplication(new MainViewModel());
 
         var fromList = Assert.Single(app.GetLibraryBooks().Where(i => i.Id == issueId));
         Assert.NotEmpty(fromList.Tags);
@@ -247,14 +248,14 @@ public sealed class PluginApiV3Tests : IDisposable
         Assert.True(writer.SetCustomValue(stale, "Shelf", "B7"));
         Assert.True(writer.AddTag(stale, "curated"));
 
-        var book = new PaperbunkrApplication().GetBook(issueId)!;
+        var book = new PaperbunkrApplication(new MainViewModel()).GetBook(issueId)!;
         Assert.Equal("CBZ", book.Format);
         Assert.Equal("Modern", book.BookAge);
         Assert.Contains(book.CustomValues, cv => cv is { Name: "Shelf", Value: "B7" });
         Assert.Contains(book.Tags, t => t.Field == IssueTagField.Tags && t.Value == "curated");
 
         Assert.True(writer.RemoveTag(stale, "curated"));
-        Assert.DoesNotContain(new PaperbunkrApplication().GetBook(issueId)!.Tags, t => t.Value == "curated");
+        Assert.DoesNotContain(new PaperbunkrApplication(new MainViewModel()).GetBook(issueId)!.Tags, t => t.Value == "curated");
     }
 
     [Fact]
@@ -279,7 +280,7 @@ public sealed class PluginApiV3Tests : IDisposable
             Assert.False(writer.AddTag(new Issue { Id = issueId }, "blocked"));
             return Task.CompletedTask;
         });
-        Assert.DoesNotContain(new PaperbunkrApplication().GetBook(issueId)!.Tags, t => t.Value == "blocked");
+        Assert.DoesNotContain(new PaperbunkrApplication(new MainViewModel()).GetBook(issueId)!.Tags, t => t.Value == "blocked");
 
         // Same command after an affirmative AskQuestion (answer index 0): the write goes through.
         await RunInInvocation(pluginKey: "gate", confirmWrites: true, () =>
@@ -289,7 +290,7 @@ public sealed class PluginApiV3Tests : IDisposable
             Assert.True(writer.AddTag(new Issue { Id = issueId }, "allowed"));
             return Task.CompletedTask;
         });
-        Assert.Contains(new PaperbunkrApplication().GetBook(issueId)!.Tags, t => t.Value == "allowed");
+        Assert.Contains(new PaperbunkrApplication(new MainViewModel()).GetBook(issueId)!.Tags, t => t.Value == "allowed");
 
         // A command that doesn't declare confirmWrites writes freely.
         await RunInInvocation(pluginKey: "free", confirmWrites: false, () =>
@@ -379,7 +380,7 @@ public sealed class PluginApiV3Tests : IDisposable
             var blocked = await engine.InvokeAsync(PluginHooks.Library,
                 env => new BooksHookGlobals { Environment = env, Books = new List<Issue> { new() { Id = m1, SeriesId = seriesId } } });
             Assert.Equal(0, Assert.Single(blocked).ReturnValue); // nothing tagged
-            Assert.DoesNotContain(new PaperbunkrApplication().GetBook(m1)!.Tags, t => t.Value == "data-manager");
+            Assert.DoesNotContain(new PaperbunkrApplication(new MainViewModel()).GetBook(m1)!.Tags, t => t.Value == "data-manager");
 
             // 2. affirmative answer (index 0): both Black Library issues get tagged, the third doesn't.
             FakeConfirmingApp.Answer(0);
@@ -387,7 +388,7 @@ public sealed class PluginApiV3Tests : IDisposable
                 env => new BooksHookGlobals { Environment = env, Books = new List<Issue> { new() { Id = m1, SeriesId = seriesId } } });
             Assert.Equal(2, Assert.Single(ran).ReturnValue);
 
-            var app = new PaperbunkrApplication();
+            var app = new PaperbunkrApplication(new MainViewModel());
             Assert.Contains(app.GetBook(m1)!.Tags, t => t.Value == "data-manager");
             Assert.Contains(app.GetBook(m2)!.Tags, t => t.Value == "data-manager");
 
@@ -432,14 +433,21 @@ public sealed class PluginApiV3Tests : IDisposable
         public string ProductVersion => "test";
         public void Restart() { }
         public void ScanFolders() { }
-        public IEnumerable<Issue> GetLibraryBooks() => new PaperbunkrApplication().GetLibraryBooks();
-        public Issue? GetBook(int issueId) => new PaperbunkrApplication().GetBook(issueId);
+        public IEnumerable<Issue> GetLibraryBooks() => new PaperbunkrApplication(new MainViewModel()).GetLibraryBooks();
+        public Issue? GetBook(int issueId) => new PaperbunkrApplication(new MainViewModel()).GetBook(issueId);
         public bool RemoveBook(Issue issue) => false;
         public bool SetCustomBookThumbnail(Issue issue, byte[] imageBytes) => false;
         public byte[]? GetComicPage(Issue issue, int page) => null;
         public byte[]? GetComicThumbnail(Issue issue) => null;
         public Task<string?> ReadInternetAsync(string url) => Task.FromResult<string?>(null);
         public void ShowComicInfo(IEnumerable<Issue> books) { }
+        public int GetOrCreateSeriesId(string seriesName) => 0;
+        public Issue? AddNewBook(int seriesId, bool showDialog) => null;
+        public byte[]? GetComicPublisherIcon(Issue issue) => null;
+        public byte[]? GetComicImprintIcon(Issue issue) => null;
+        public byte[]? GetComicAgeRatingIcon(Issue issue) => null;
+        public byte[]? GetComicFormatIcon(Issue issue) => null;
+        public IDictionary<string, string> GetComicFields() => new Dictionary<string, string>();
 
         public int AskQuestion(string question, string buttonText, string optionText)
         {

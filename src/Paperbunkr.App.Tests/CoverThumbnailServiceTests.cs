@@ -353,4 +353,74 @@ public class CoverThumbnailServiceTests : IDisposable
         Assert.False(File.Exists(legacyPath));
         Assert.True(File.Exists(CachePath(issueId, _cbzPath, 12)));
     }
+
+    // --- Content verification (docs/superpowers/specs/2026-08-30-cover-thumbnail-content-
+    //     verification-design.md) - force-regeneration, since the identity fingerprint alone
+    //     doesn't catch a cache entry that was wrong from the moment it was written. ---
+
+    [Fact]
+    public void TryGenerateThumbnail_Force_OverwritesEvenWhenFileAlreadyExists()
+    {
+        CbzFixture.Create(_cbzPath, pageCount: 1);
+        var service = Service();
+        Assert.True(service.TryGenerateThumbnail(issueId: 21, _cbzPath, fileSize: 30));
+        string path = CachePath(21, _cbzPath, 30);
+        var firstWrite = File.GetLastWriteTimeUtc(path);
+
+        Thread.Sleep(10);
+        Assert.True(service.TryGenerateThumbnail(issueId: 21, _cbzPath, fileSize: 30, force: true));
+
+        Assert.True(File.GetLastWriteTimeUtc(path) > firstWrite);
+    }
+
+    [Fact]
+    public async Task VerifyAllAsync_RegeneratesEveryCandidate_RegardlessOfPriorCacheState()
+    {
+        CbzFixture.Create(_cbzPath, pageCount: 1);
+        int alreadyCachedId = AddIssue(_cbzPath, fileSize: 40);
+        Service().TryGenerateThumbnail(alreadyCachedId, _cbzPath, fileSize: 40);
+        string alreadyCachedPath = CachePath(alreadyCachedId, _cbzPath, 40);
+        var firstWrite = File.GetLastWriteTimeUtc(alreadyCachedPath);
+
+        int notYetCachedId = AddIssue(_cbzPath, fileSize: 40);
+
+        Thread.Sleep(10);
+        var reports = new List<(int Done, int Total)>();
+        await Service().VerifyAllAsync(new Progress<(int Done, int Total)>(reports.Add));
+
+        // Both candidates got a real decode+write, not just the one missing a cache file.
+        Assert.Equal((0, 2), reports.First());
+        Assert.Equal((2, 2), reports.Last());
+        Assert.True(File.GetLastWriteTimeUtc(alreadyCachedPath) > firstWrite);
+        Assert.True(File.Exists(CachePath(notYetCachedId, _cbzPath, 40)));
+    }
+
+    [Fact]
+    public async Task VerifyAllAsync_OneBadFileDoesNotStopTheBatch_AndStillGarbageCollectsOrphans()
+    {
+        var corruptPath = Path.Combine(Path.GetTempPath(), $"paperbunkr_cover_verify_corrupt_{Guid.NewGuid():N}.cbz");
+        File.WriteAllBytes(corruptPath, new byte[] { 9, 9, 9 });
+        CbzFixture.Create(_cbzPath, pageCount: 1);
+
+        try
+        {
+            int goodId = AddIssue(_cbzPath, fileSize: 15);
+            int corruptId = AddIssue(corruptPath, fileSize: 3);
+
+            // An orphan from a since-deleted issue - VerifyAllAsync must still sweep it.
+            string orphanStem = CoverFingerprint.Stem(99999, "C:/gone/deleted.cbz", 1);
+            Directory.CreateDirectory(_thumbnailDirectory);
+            File.WriteAllBytes(CoverThumbnailPaths.GetCachePath(orphanStem), new byte[] { 1 });
+
+            await Service().VerifyAllAsync(new Progress<(int Done, int Total)>());
+
+            Assert.True(File.Exists(CachePath(goodId, _cbzPath, 15)));
+            Assert.False(File.Exists(CachePath(corruptId, corruptPath, 3)));
+            Assert.False(File.Exists(CoverThumbnailPaths.GetCachePath(orphanStem)));
+        }
+        finally
+        {
+            try { if (File.Exists(corruptPath)) File.Delete(corruptPath); } catch (IOException) { }
+        }
+    }
 }

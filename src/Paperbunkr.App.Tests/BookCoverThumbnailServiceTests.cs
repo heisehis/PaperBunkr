@@ -190,4 +190,89 @@ public class BookCoverThumbnailServiceTests : IDisposable
 
         Assert.Empty(BookCoverThumbnailPaths.EnumerateForBook(bookId));
     }
+
+    // --- Content verification (docs/superpowers/specs/2026-08-30-cover-thumbnail-content-
+    //     verification-design.md) - force-regeneration. Uses PdfFixture (not EpubFixture, which has
+    //     no embedded cover metadata - same rationale EpubBookSourceTests/PdfBookSourceTests
+    //     already established) so the positive "regenerated a real cover" case has a source that
+    //     genuinely decodes. ---
+
+    [Fact]
+    public void TryGenerateThumbnail_Force_OverwritesEvenWhenFileAlreadyExists()
+    {
+        string pdfPath = Path.Combine(Path.GetTempPath(), $"paperbunkr_bookcover_verify_{Guid.NewGuid():N}.pdf");
+        PdfFixture.Create(pdfPath, "Hello from page one.");
+        try
+        {
+            int bookId = AddBook(pdfPath, BookFormat.Pdf);
+            string stem = CoverFingerprint.Stem(bookId, pdfPath, null);
+            var service = Service();
+            Assert.True(service.TryGenerateThumbnail(bookId, pdfPath, BookFormat.Pdf));
+            var firstWrite = File.GetLastWriteTimeUtc(BookCoverThumbnailPaths.GetCachePath(stem));
+
+            Thread.Sleep(10);
+            Assert.True(service.TryGenerateThumbnail(bookId, pdfPath, BookFormat.Pdf, force: true));
+
+            Assert.True(File.GetLastWriteTimeUtc(BookCoverThumbnailPaths.GetCachePath(stem)) > firstWrite);
+        }
+        finally
+        {
+            try { if (File.Exists(pdfPath)) File.Delete(pdfPath); } catch (IOException) { }
+        }
+    }
+
+    [Fact]
+    public async Task VerifyAllAsync_RegeneratesEveryCandidate_RegardlessOfPriorCacheState()
+    {
+        string pdfPath = Path.Combine(Path.GetTempPath(), $"paperbunkr_bookcover_verify2_{Guid.NewGuid():N}.pdf");
+        PdfFixture.Create(pdfPath, "Hello from page one.");
+        try
+        {
+            int alreadyCachedId = AddBook(pdfPath, BookFormat.Pdf);
+            Service().TryGenerateThumbnail(alreadyCachedId, pdfPath, BookFormat.Pdf);
+            string alreadyCachedPath = BookCoverThumbnailPaths.GetCachePath(CoverFingerprint.Stem(alreadyCachedId, pdfPath, null));
+            var firstWrite = File.GetLastWriteTimeUtc(alreadyCachedPath);
+
+            int notYetCachedId = AddBook(pdfPath, BookFormat.Pdf);
+
+            Thread.Sleep(10);
+            var reports = new List<(int Done, int Total)>();
+            await Service().VerifyAllAsync(new Progress<(int Done, int Total)>(reports.Add));
+
+            Assert.Equal((0, 2), reports.First());
+            Assert.Equal((2, 2), reports.Last());
+            Assert.True(File.GetLastWriteTimeUtc(alreadyCachedPath) > firstWrite);
+            Assert.True(File.Exists(BookCoverThumbnailPaths.GetCachePath(CoverFingerprint.Stem(notYetCachedId, pdfPath, null))));
+        }
+        finally
+        {
+            try { if (File.Exists(pdfPath)) File.Delete(pdfPath); } catch (IOException) { }
+        }
+    }
+
+    [Fact]
+    public async Task VerifyAllAsync_OneBadFileDoesNotStopTheBatch_AndStillGarbageCollectsOrphans()
+    {
+        string pdfPath = Path.Combine(Path.GetTempPath(), $"paperbunkr_bookcover_verify3_{Guid.NewGuid():N}.pdf");
+        PdfFixture.Create(pdfPath, "Hello from page one.");
+        try
+        {
+            int goodId = AddBook(pdfPath, BookFormat.Pdf);
+            int missingFileId = AddBook(@"C:\nowhere\missing.pdf", BookFormat.Pdf);
+
+            // An orphan from a since-deleted book - VerifyAllAsync must still sweep it.
+            string orphanStem = CoverFingerprint.Stem(99999, @"C:\gone\deleted.epub", null);
+            Plant(orphanStem);
+
+            await Service().VerifyAllAsync(new Progress<(int Done, int Total)>());
+
+            Assert.True(File.Exists(BookCoverThumbnailPaths.GetCachePath(CoverFingerprint.Stem(goodId, pdfPath, null))));
+            Assert.False(File.Exists(BookCoverThumbnailPaths.GetCachePath(CoverFingerprint.Stem(missingFileId, @"C:\nowhere\missing.pdf", null))));
+            Assert.False(File.Exists(BookCoverThumbnailPaths.GetCachePath(orphanStem)));
+        }
+        finally
+        {
+            try { if (File.Exists(pdfPath)) File.Delete(pdfPath); } catch (IOException) { }
+        }
+    }
 }

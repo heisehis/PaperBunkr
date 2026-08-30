@@ -48,12 +48,14 @@ public class BookCoverThumbnailService
     /// any stale <c>{bookId}-*.jpg</c> sibling. Returns false (without throwing) for a
     /// missing/unsupported/corrupt file or a book with no embedded cover - callers treat that as
     /// "skip, try again next run", same contract as <see cref="CoverThumbnailService.TryGenerateThumbnail"/>.
+    /// <paramref name="force"/> skips the presence check - see
+    /// <see cref="CoverThumbnailService.TryGenerateThumbnail"/>'s doc comment for why.
     /// </summary>
-    public bool TryGenerateThumbnail(int bookId, string filePath, BookFormat format)
+    public bool TryGenerateThumbnail(int bookId, string filePath, BookFormat format, bool force = false)
     {
         string stem = CoverFingerprint.Stem(bookId, filePath, null);
         string destPath = BookCoverThumbnailPaths.GetCachePath(stem);
-        if (File.Exists(destPath))
+        if (!force && File.Exists(destPath))
         {
             return true;
         }
@@ -226,6 +228,51 @@ public class BookCoverThumbnailService
                     try
                     {
                         TryGenerateThumbnail(candidate.Id, candidate.FilePath, candidate.Format);
+                    }
+                    catch
+                    {
+                        // One bad file doesn't stop the batch.
+                    }
+
+                    progress.Report((++done, total));
+                }
+
+                CollectOrphans(validStems);
+            },
+            ct);
+    }
+
+    /// <summary>
+    /// Unconditionally re-derives every Book's cover from its source file and overwrites the
+    /// cache, then runs the same orphan GC as <see cref="GenerateAllAsync"/> - mirrors
+    /// <see cref="CoverThumbnailService.VerifyAllAsync"/>'s doc comment for the full rationale
+    /// (docs/superpowers/specs/2026-08-30-cover-thumbnail-content-verification-design.md).
+    /// </summary>
+    public async Task VerifyAllAsync(IProgress<(int Done, int Total)> progress, CancellationToken ct = default)
+    {
+        await Task.Run(
+            () =>
+            {
+                using var context = _contextFactory();
+                var all = context.Books
+                    .Select(b => new { b.Id, b.FilePath, b.Format })
+                    .ToList();
+
+                var validStems = new HashSet<string>(
+                    all.Select(b => CoverFingerprint.Stem(b.Id, b.FilePath, null)),
+                    StringComparer.Ordinal);
+
+                int total = all.Count;
+                int done = 0;
+                progress.Report((0, total));
+
+                foreach (var candidate in all)
+                {
+                    ct.ThrowIfCancellationRequested();
+
+                    try
+                    {
+                        TryGenerateThumbnail(candidate.Id, candidate.FilePath, candidate.Format, force: true);
                     }
                     catch
                     {

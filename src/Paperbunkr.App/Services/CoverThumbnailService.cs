@@ -50,12 +50,16 @@ public class CoverThumbnailService
     /// for a missing/unsupported/corrupt file - callers treat that as "skip, try again next run".
     /// <paramref name="fileSize"/> is the issue's persisted <c>FileSize</c>; pass it so the stem
     /// here matches the one <see cref="GenerateAllAsync"/> and the card models compute.
+    /// <paramref name="force"/> skips the presence check - the identity fingerprint alone doesn't
+    /// catch a cache file that's wrong from the moment it was written (docs/superpowers/specs/
+    /// 2026-08-30-cover-thumbnail-content-verification-design.md), so <see cref="VerifyAllAsync"/>
+    /// passes true to unconditionally re-derive every cover from source.
     /// </summary>
-    public bool TryGenerateThumbnail(int issueId, string filePath, long? fileSize = null)
+    public bool TryGenerateThumbnail(int issueId, string filePath, long? fileSize = null, bool force = false)
     {
         string stem = CoverFingerprint.Stem(issueId, filePath, fileSize);
         string destPath = CoverThumbnailPaths.GetCachePath(stem);
-        if (File.Exists(destPath))
+        if (!force && File.Exists(destPath))
         {
             return true;
         }
@@ -185,6 +189,56 @@ public class CoverThumbnailService
                     try
                     {
                         TryGenerateThumbnail(candidate.Id, candidate.FilePath!, candidate.FileSize);
+                    }
+                    catch
+                    {
+                        // One bad file doesn't stop the batch.
+                    }
+
+                    progress.Report((++done, total));
+                }
+
+                CollectOrphans(validStems);
+            },
+            ct);
+    }
+
+    /// <summary>
+    /// Unconditionally re-derives every linked Issue's cover from its source file and overwrites
+    /// the cache, then runs the same orphan GC as <see cref="GenerateAllAsync"/> (docs/superpowers/
+    /// specs/2026-08-30-cover-thumbnail-content-verification-design.md). Every candidate gets a
+    /// real decode+scale+encode+write, not just the ones missing a fingerprint-matching file - the
+    /// identity fingerprint alone doesn't catch a cache entry that was wrong from the moment it was
+    /// written. Heavier than <see cref="GenerateAllAsync"/>; only the manual "Verify & Repair
+    /// Covers" action and the periodic background sweep call this, never the startup/library-load
+    /// reconcile.
+    /// </summary>
+    public async Task VerifyAllAsync(IProgress<(int Done, int Total)> progress, CancellationToken ct = default)
+    {
+        await Task.Run(
+            () =>
+            {
+                using var context = _contextFactory();
+                var all = context.Issues
+                    .Where(i => i.FilePath != null)
+                    .Select(i => new { i.Id, i.FilePath, i.FileSize })
+                    .ToList();
+
+                var validStems = new HashSet<string>(
+                    all.Select(i => CoverFingerprint.Stem(i.Id, i.FilePath, i.FileSize)),
+                    StringComparer.Ordinal);
+
+                int total = all.Count;
+                int done = 0;
+                progress.Report((0, total));
+
+                foreach (var candidate in all)
+                {
+                    ct.ThrowIfCancellationRequested();
+
+                    try
+                    {
+                        TryGenerateThumbnail(candidate.Id, candidate.FilePath!, candidate.FileSize, force: true);
                     }
                     catch
                     {

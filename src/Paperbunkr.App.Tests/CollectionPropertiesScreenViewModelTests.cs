@@ -224,4 +224,86 @@ public class CollectionPropertiesScreenViewModelTests : IDisposable
         using var context = new PaperbunkrDbContext(_dbOptions);
         Assert.Empty(context.CollectionRelations);
     }
+
+    // --- Rule slots (docs/superpowers/specs/2026-08-30-smart-collections-design.md) ---
+
+    private int CreateSeriesSmartList(string matchName)
+    {
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        var list = new SmartList
+        {
+            Name = "series rule",
+            TargetKind = SmartListTargetKind.Series,
+            RootGroup = new SmartListConditionGroup
+            {
+                Mode = SmartListGroupMode.And,
+                Conditions = [new SmartListCondition { Field = SmartListField.SeriesName, Operator = SmartListOperator.Is, Value = matchName }],
+            },
+        };
+        context.SmartLists.Add(list);
+        context.SaveChanges();
+        return list.Id;
+    }
+
+    [Fact]
+    public void SetSeriesRule_PersistsTheSlot_AndReflectsRuleMatchedMemberOnReload()
+    {
+        int seriesCId = default;
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            var seriesC = new Series { Name = "Charlie" };
+            context.Series.Add(seriesC);
+            context.SaveChanges();
+            seriesCId = seriesC.Id;
+        }
+        int ruleId = CreateSeriesSmartList("Charlie");
+
+        var vm = new CollectionPropertiesScreenViewModel(() => { }, () => new PaperbunkrDbContext(_dbOptions));
+        vm.Load(_collectionId);
+        vm.SelectedSeriesSmartList = vm.SeriesSmartLists.Single(o => o.Id == ruleId);
+        vm.SetSeriesRuleCommand.Execute(null);
+
+        Assert.Equal(ruleId, GetCollection().SeriesSmartListId);
+        var ruleRow = Assert.Single(vm.Members, m => m.DisplayTitle == "Charlie");
+        Assert.True(ruleRow.IsRuleMatched);
+        Assert.False(ruleRow.RemoveCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public void ClearSeriesRule_NullsTheSlot()
+    {
+        int ruleId = CreateSeriesSmartList("Alpha");
+        var vm = new CollectionPropertiesScreenViewModel(() => { }, () => new PaperbunkrDbContext(_dbOptions));
+        vm.Load(_collectionId);
+        vm.SelectedSeriesSmartList = vm.SeriesSmartLists.Single(o => o.Id == ruleId);
+        vm.SetSeriesRuleCommand.Execute(null);
+
+        vm.ClearSeriesRuleCommand.Execute(null);
+
+        Assert.Null(GetCollection().SeriesSmartListId);
+    }
+
+    [Fact]
+    public void Save_ReordersOnlyManualMembers_RuleMatchedRowsAreExcluded()
+    {
+        int ruleId = CreateSeriesSmartList("Charlie"); // matches no manual member -> rule-matched-only row
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            context.Series.Add(new Series { Name = "Charlie" });
+            context.SaveChanges();
+        }
+
+        var vm = new CollectionPropertiesScreenViewModel(() => { }, () => new PaperbunkrDbContext(_dbOptions));
+        vm.Load(_collectionId);
+        vm.SelectedSeriesSmartList = vm.SeriesSmartLists.Single(o => o.Id == ruleId);
+        vm.SetSeriesRuleCommand.Execute(null);
+        vm.Load(_collectionId); // re-load so Members reflects the newly-set rule before Save
+
+        vm.SaveCommand.Execute(null);
+
+        // Manual members (Alpha/Bravo) keep their real CollectionItem rows; the rule-matched
+        // "Charlie" row never becomes one - Save must not have thrown treating it as reorderable.
+        using var verify = new PaperbunkrDbContext(_dbOptions);
+        Assert.Equal(2, verify.CollectionItems.Count(ci => ci.CollectionId == _collectionId));
+    }
 }

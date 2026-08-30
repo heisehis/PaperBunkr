@@ -335,8 +335,13 @@
                                     <DataTemplate x:DataType="models:CollectionSummary">
                                         <Border Classes="colRow" Classes.active="{Binding IsActive}" CornerRadius="6" BorderThickness="3,0,0,0" Margin="0,1">
                                             <Grid ColumnDefinitions="Auto,*,Auto,Auto">
-                                                <Ellipse Grid.Column="0" Width="8" Height="8" Margin="9,0,0,0" VerticalAlignment="Center"
-                                                         Fill="{Binding AccentColor, Converter={x:Static views:AccentColorToBrushConverter.Instance}}" />
+                                                <Panel Grid.Column="0" Width="14" Height="8" Margin="9,0,0,0" VerticalAlignment="Center">
+                                                    <Ellipse Width="8" Height="8" HorizontalAlignment="Left"
+                                                             Fill="{Binding AccentColor, Converter={x:Static views:AccentColorToBrushConverter.Instance}}" />
+                                                    <fi:SymbolIcon Symbol="Wand" FontSize="9" HorizontalAlignment="Right"
+                                                                   Foreground="{DynamicResource PbTextFaintBrush}"
+                                                                   IsVisible="{Binding IsSmart}" ToolTip.Tip="Has a rule-based membership slot" />
+                                                </Panel>
                                                 <Button Grid.Column="1" Classes="sideItemButton" Padding="8,7"
                                                         Command="{Binding #LibraryCollections.((vm:MainViewModel)DataContext).Library.SelectCollectionCommand}"
                                                         CommandParameter="{Binding}">
@@ -400,22 +405,42 @@
                         </ItemsControl>
                     </StackPanel>
 
-                    <!-- Smart Lists sidebar (SmartSidebar.dc.html), wired to real SmartList data -->
+                    <!-- Smart Lists sidebar (docs/superpowers/specs/2026-08-29-smartlists-screen-
+                         layout-redesign-design.md), wired to real SmartList data. Row treatment
+                         mirrors ecRow/rlRow above. -->
                     <StackPanel IsVisible="{Binding IsSmart}" Spacing="1">
-                        <TextBlock Text="Smart Lists" FontSize="16" FontWeight="Bold"
-                                   Foreground="{DynamicResource PbTextBrush}" Margin="8,0,8,14" />
+                        <StackPanel.Styles>
+                            <Style Selector="Border.smRow"><Setter Property="BorderBrush" Value="Transparent" /></Style>
+                            <Style Selector="Border.smRow.active">
+                                <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
+                                <Setter Property="Background" Value="{DynamicResource PbSurface2Brush}" />
+                            </Style>
+                            <Style Selector="Border.smRow Button.smDelete"><Setter Property="Opacity" Value="0" /><Setter Property="IsHitTestVisible" Value="False" /></Style>
+                            <Style Selector="Border.smRow:pointerover Button.smDelete"><Setter Property="Opacity" Value="1" /><Setter Property="IsHitTestVisible" Value="True" /></Style>
+                        </StackPanel.Styles>
+
+                        <Grid ColumnDefinitions="*,Auto" Margin="8,0,6,14">
+                            <TextBlock Grid.Column="0" Text="Smart Lists" FontSize="16" FontWeight="Bold" Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
+                            <Button Grid.Column="1" Width="24" Height="24" Padding="0" CornerRadius="6"
+                                    Background="{DynamicResource PbSurface2Brush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
+                                    Command="{Binding Smart.CreateNewCommand}" ToolTip.Tip="New Smart List">
+                                <fi:SymbolIcon Symbol="Add" FontSize="11" />
+                            </Button>
+                        </Grid>
 
                         <ItemsControl x:Name="BuiltInSmartLists" ItemsSource="{Binding Smart.BuiltInLists}">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate x:DataType="models:SmartListSummary">
-                                    <Button Classes="sideItemButton" Classes.active="{Binding IsActive}"
-                                            Command="{Binding #BuiltInSmartLists.((vm:MainViewModel)DataContext).Smart.SelectListCommand}"
-                                            CommandParameter="{Binding}">
-                                        <Grid ColumnDefinitions="*,Auto">
-                                            <TextBlock Grid.Column="0" Classes="sideItemLabel" Text="{Binding Name}" FontSize="13" Foreground="{DynamicResource PbTextMutedBrush}" />
-                                            <Border Grid.Column="1" Classes="countBadge"><TextBlock Classes="count" Text="{Binding MatchCount}" Foreground="{DynamicResource PbTextFaintBrush}" /></Border>
-                                        </Grid>
-                                    </Button>
+                                    <Border Classes="smRow" Classes.active="{Binding IsActive}" CornerRadius="6" BorderThickness="3,0,0,0" Margin="0,1">
+                                        <Button Classes="sideItemButton" Padding="11,7"
+                                                Command="{Binding #BuiltInSmartLists.((vm:MainViewModel)DataContext).Smart.SelectListCommand}"
+                                                CommandParameter="{Binding}">
+                                            <Grid ColumnDefinitions="*,Auto">
+                                                <TextBlock Grid.Column="0" Classes="sideItemLabel" Text="{Binding Name}" FontSize="13" Foreground="{DynamicResource PbTextMutedBrush}" />
+                                                <Border Grid.Column="1" Classes="countBadge"><TextBlock Classes="count" Text="{Binding MatchCount}" Foreground="{DynamicResource PbTextFaintBrush}" /></Border>
+                                            </Grid>
+                                        </Button>
+                                    </Border>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
@@ -425,65 +450,128 @@
                         <ItemsControl x:Name="CustomSmartLists" ItemsSource="{Binding Smart.CustomLists}">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate x:DataType="models:SmartListSummary">
-                                    <Grid ColumnDefinitions="*,Auto">
-                                        <Button Grid.Column="0" Classes="sideItemButton" Classes.active="{Binding IsActive}"
-                                                Command="{Binding #CustomSmartLists.((vm:MainViewModel)DataContext).Smart.SelectListCommand}"
-                                                CommandParameter="{Binding}">
-                                            <Grid ColumnDefinitions="*,Auto">
-                                                <TextBlock Grid.Column="0" Classes="sideItemLabel" Text="{Binding Name}" FontSize="13" Foreground="{DynamicResource PbTextMutedBrush}" />
-                                                <Border Grid.Column="1" Classes="countBadge"><TextBlock Classes="count" Text="{Binding MatchCount}" Foreground="{DynamicResource PbTextFaintBrush}" /></Border>
-                                            </Grid>
-                                        </Button>
-                                        <Button Grid.Column="1" Classes="headerAction ghost" Padding="6" Margin="2,0,0,0"
-                                                Command="{Binding DeleteConfirm.TriggerCommand}" ToolTip.Tip="{Binding DeleteConfirm.Label}">
-                                            <Panel>
-                                                <fi:SymbolIcon Symbol="Delete" FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" IsVisible="{Binding !DeleteConfirm.IsArmed}" />
-                                                <fi:SymbolIcon Symbol="Delete" FontSize="11" Foreground="{DynamicResource PbBadgeBrush}" IsVisible="{Binding DeleteConfirm.IsArmed}" />
-                                            </Panel>
-                                        </Button>
-                                    </Grid>
+                                    <Border Classes="smRow" Classes.active="{Binding IsActive}" CornerRadius="6" BorderThickness="3,0,0,0" Margin="0,1">
+                                        <Grid ColumnDefinitions="*,Auto">
+                                            <Button Grid.Column="0" Classes="sideItemButton" Padding="11,7"
+                                                    Command="{Binding #CustomSmartLists.((vm:MainViewModel)DataContext).Smart.SelectListCommand}"
+                                                    CommandParameter="{Binding}">
+                                                <Grid ColumnDefinitions="*,Auto">
+                                                    <TextBlock Grid.Column="0" Classes="sideItemLabel" Text="{Binding Name}" FontSize="13" Foreground="{DynamicResource PbTextMutedBrush}" />
+                                                    <Border Grid.Column="1" Classes="countBadge"><TextBlock Classes="count" Text="{Binding MatchCount}" Foreground="{DynamicResource PbTextFaintBrush}" /></Border>
+                                                </Grid>
+                                            </Button>
+                                            <Button Grid.Column="1" Classes="headerAction ghost smDelete" Padding="6" Margin="2,0,4,0" VerticalAlignment="Center"
+                                                    Command="{Binding DeleteConfirm.TriggerCommand}" ToolTip.Tip="{Binding DeleteConfirm.Label}">
+                                                <Panel>
+                                                    <fi:SymbolIcon Symbol="Delete" FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" IsVisible="{Binding !DeleteConfirm.IsArmed}" />
+                                                    <fi:SymbolIcon Symbol="Delete" FontSize="11" Foreground="{DynamicResource PbBadgeBrush}" IsVisible="{Binding DeleteConfirm.IsArmed}" />
+                                                </Panel>
+                                            </Button>
+                                        </Grid>
+                                    </Border>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
 
                         <Button Classes="sideItemButton" Command="{Binding Smart.ToggleMaintenanceCommand}"
                                 Padding="8,7" HorizontalContentAlignment="Left">
-                            <Panel>
-                                <TextBlock Text="▾ Maintenance" FontSize="13" Foreground="{DynamicResource PbTextMutedBrush}"
-                                           IsVisible="{Binding Smart.IsMaintenanceExpanded}" />
-                                <TextBlock Text="▸ Maintenance" FontSize="13" Foreground="{DynamicResource PbTextMutedBrush}"
-                                           IsVisible="{Binding !Smart.IsMaintenanceExpanded}" />
-                            </Panel>
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <fi:SymbolIcon Symbol="ArrowDown" FontSize="9" Foreground="{DynamicResource PbTextMutedBrush}" IsVisible="{Binding Smart.IsMaintenanceExpanded}" />
+                                <fi:SymbolIcon Symbol="ChevronRight" FontSize="9" Foreground="{DynamicResource PbTextMutedBrush}" IsVisible="{Binding !Smart.IsMaintenanceExpanded}" />
+                                <TextBlock Text="Maintenance" FontSize="13" Foreground="{DynamicResource PbTextMutedBrush}" />
+                            </StackPanel>
                         </Button>
                         <StackPanel Margin="14,0,0,0" Spacing="0" IsVisible="{Binding Smart.IsMaintenanceExpanded}">
                             <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1,0,0,0" Padding="10,0,0,0">
                                 <ItemsControl x:Name="MaintenanceSmartLists" ItemsSource="{Binding Smart.MaintenanceLists}">
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate x:DataType="models:SmartListSummary">
-                                            <Button Classes="sideItemButton" Classes.active="{Binding IsActive}"
-                                                    Command="{Binding #MaintenanceSmartLists.((vm:MainViewModel)DataContext).Smart.SelectListCommand}"
-                                                    CommandParameter="{Binding}">
-                                                <Grid ColumnDefinitions="*,Auto">
-                                                    <TextBlock Grid.Column="0" Classes="sideItemLabel" Text="{Binding Name}" FontSize="13" Foreground="{DynamicResource PbTextMutedBrush}" />
-                                                    <TextBlock Grid.Column="1" Classes="count" Text="{Binding MatchCount}" Foreground="{DynamicResource PbTextFaintBrush}" />
-                                                </Grid>
-                                            </Button>
+                                            <Border Classes="smRow" Classes.active="{Binding IsActive}" CornerRadius="6" BorderThickness="3,0,0,0" Margin="0,1">
+                                                <Button Classes="sideItemButton" Padding="11,7"
+                                                        Command="{Binding #MaintenanceSmartLists.((vm:MainViewModel)DataContext).Smart.SelectListCommand}"
+                                                        CommandParameter="{Binding}">
+                                                    <Grid ColumnDefinitions="*,Auto">
+                                                        <TextBlock Grid.Column="0" Classes="sideItemLabel" Text="{Binding Name}" FontSize="13" Foreground="{DynamicResource PbTextMutedBrush}" />
+                                                        <TextBlock Grid.Column="1" Classes="count" Text="{Binding MatchCount}" Foreground="{DynamicResource PbTextFaintBrush}" />
+                                                    </Grid>
+                                                </Button>
+                                            </Border>
                                         </DataTemplate>
                                     </ItemsControl.ItemTemplate>
                                 </ItemsControl>
                             </Border>
                         </StackPanel>
 
-                        <Border BorderThickness="1" BorderBrush="#383D47" CornerRadius="5" Margin="0,12,0,0" Padding="8">
-                            <Button Classes="sideItemButton" HorizontalContentAlignment="Center"
-                                    Command="{Binding Smart.CreateNewCommand}"
-                                    Foreground="{DynamicResource PbTextFaintBrush}">
-                                <StackPanel Orientation="Horizontal" Spacing="6" HorizontalAlignment="Center">
-                                    <fi:SymbolIcon Symbol="Add" FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" />
-                                    <TextBlock Text="New Smart List" FontSize="12" />
-                                </StackPanel>
+                        <!-- Series/Novel smart lists (docs/superpowers/specs/2026-08-30-smart-
+                             collections-design.md) - always user-created, no built-in/maintenance
+                             split, so each kind is just a flat heading + list like CUSTOM above. -->
+                        <Grid ColumnDefinitions="*,Auto" Margin="8,12,6,6">
+                            <TextBlock Grid.Column="0" Classes="sideHeading" Text="SERIES" VerticalAlignment="Center" />
+                            <Button Grid.Column="1" Width="20" Height="20" Padding="0" CornerRadius="5"
+                                    Background="{DynamicResource PbSurface2Brush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
+                                    Command="{Binding Smart.CreateNewSeriesListCommand}" ToolTip.Tip="New Series Smart List">
+                                <fi:SymbolIcon Symbol="Add" FontSize="9" />
                             </Button>
-                        </Border>
+                        </Grid>
+                        <ItemsControl x:Name="SeriesSmartLists" ItemsSource="{Binding Smart.SeriesLists}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="models:SmartListSummary">
+                                    <Border Classes="smRow" Classes.active="{Binding IsActive}" CornerRadius="6" BorderThickness="3,0,0,0" Margin="0,1">
+                                        <Grid ColumnDefinitions="*,Auto">
+                                            <Button Grid.Column="0" Classes="sideItemButton" Padding="11,7"
+                                                    Command="{Binding #SeriesSmartLists.((vm:MainViewModel)DataContext).Smart.SelectListCommand}"
+                                                    CommandParameter="{Binding}">
+                                                <Grid ColumnDefinitions="*,Auto">
+                                                    <TextBlock Grid.Column="0" Classes="sideItemLabel" Text="{Binding Name}" FontSize="13" Foreground="{DynamicResource PbTextMutedBrush}" />
+                                                    <Border Grid.Column="1" Classes="countBadge"><TextBlock Classes="count" Text="{Binding MatchCount}" Foreground="{DynamicResource PbTextFaintBrush}" /></Border>
+                                                </Grid>
+                                            </Button>
+                                            <Button Grid.Column="1" Classes="headerAction ghost smDelete" Padding="6" Margin="2,0,4,0" VerticalAlignment="Center"
+                                                    Command="{Binding DeleteConfirm.TriggerCommand}" ToolTip.Tip="{Binding DeleteConfirm.Label}">
+                                                <Panel>
+                                                    <fi:SymbolIcon Symbol="Delete" FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" IsVisible="{Binding !DeleteConfirm.IsArmed}" />
+                                                    <fi:SymbolIcon Symbol="Delete" FontSize="11" Foreground="{DynamicResource PbBadgeBrush}" IsVisible="{Binding DeleteConfirm.IsArmed}" />
+                                                </Panel>
+                                            </Button>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                        <Grid ColumnDefinitions="*,Auto" Margin="8,12,6,6">
+                            <TextBlock Grid.Column="0" Classes="sideHeading" Text="NOVELS" VerticalAlignment="Center" />
+                            <Button Grid.Column="1" Width="20" Height="20" Padding="0" CornerRadius="5"
+                                    Background="{DynamicResource PbSurface2Brush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
+                                    Command="{Binding Smart.CreateNewNovelListCommand}" ToolTip.Tip="New Novel Smart List">
+                                <fi:SymbolIcon Symbol="Add" FontSize="9" />
+                            </Button>
+                        </Grid>
+                        <ItemsControl x:Name="NovelSmartLists" ItemsSource="{Binding Smart.NovelLists}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="models:SmartListSummary">
+                                    <Border Classes="smRow" Classes.active="{Binding IsActive}" CornerRadius="6" BorderThickness="3,0,0,0" Margin="0,1">
+                                        <Grid ColumnDefinitions="*,Auto">
+                                            <Button Grid.Column="0" Classes="sideItemButton" Padding="11,7"
+                                                    Command="{Binding #NovelSmartLists.((vm:MainViewModel)DataContext).Smart.SelectListCommand}"
+                                                    CommandParameter="{Binding}">
+                                                <Grid ColumnDefinitions="*,Auto">
+                                                    <TextBlock Grid.Column="0" Classes="sideItemLabel" Text="{Binding Name}" FontSize="13" Foreground="{DynamicResource PbTextMutedBrush}" />
+                                                    <Border Grid.Column="1" Classes="countBadge"><TextBlock Classes="count" Text="{Binding MatchCount}" Foreground="{DynamicResource PbTextFaintBrush}" /></Border>
+                                                </Grid>
+                                            </Button>
+                                            <Button Grid.Column="1" Classes="headerAction ghost smDelete" Padding="6" Margin="2,0,4,0" VerticalAlignment="Center"
+                                                    Command="{Binding DeleteConfirm.TriggerCommand}" ToolTip.Tip="{Binding DeleteConfirm.Label}">
+                                                <Panel>
+                                                    <fi:SymbolIcon Symbol="Delete" FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" IsVisible="{Binding !DeleteConfirm.IsArmed}" />
+                                                    <fi:SymbolIcon Symbol="Delete" FontSize="11" Foreground="{DynamicResource PbBadgeBrush}" IsVisible="{Binding DeleteConfirm.IsArmed}" />
+                                                </Panel>
+                                            </Button>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
                     </StackPanel>
 
                     <!-- Reading Lists sidebar (docs/superpowers/specs/2026-08-28-reading-lists-screen-redesign-design.md → v2) -->

@@ -1,3 +1,5 @@
+using System.ComponentModel.DataAnnotations.Schema;
+
 namespace Paperbunkr.Data.Entities;
 
 /// <summary>
@@ -29,4 +31,28 @@ public class Collection
     public bool IsAutoCover { get; set; } = true;
 
     public List<CollectionItem> Items { get; set; } = new();
+
+    /// <summary>
+    /// Rule-based membership slots (docs/superpowers/specs/2026-08-30-smart-collections-design.md).
+    /// Each is optional and independent; when set, it must reference a <see cref="SmartList"/> whose
+    /// <see cref="SmartList.TargetKind"/> matches the slot (enforced in <c>CollectionService</c>).
+    /// A collection with any slot set unions its manual <see cref="CollectionItem"/> rows with that
+    /// slot's live match set (see <c>CollectionResolver.GetMembers</c>) rather than being
+    /// exclusively one or the other.
+    /// </summary>
+    public int? IssueSmartListId { get; set; }
+
+    public SmartList? IssueSmartList { get; set; }
+
+    public int? SeriesSmartListId { get; set; }
+
+    public SmartList? SeriesSmartList { get; set; }
+
+    public int? NovelSmartListId { get; set; }
+
+    public SmartList? NovelSmartList { get; set; }
+
+    /// <summary>True when at least one rule slot is set - not stored, computed on read.</summary>
+    [NotMapped]
+    public bool IsSmart => IssueSmartListId is not null || SeriesSmartListId is not null || NovelSmartListId is not null;
 }

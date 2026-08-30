@@ -20,26 +20,58 @@ namespace Paperbunkr.App.ViewModels;
 /// </summary>
 public partial class SmartListConditionViewModel : ViewModelBase
 {
-    private static readonly IReadOnlyList<FieldOption> AllFieldOptions = SmartListCatalog.Definitions.Values
-        .OrderBy(d => d.Label)
-        .Select(d => new FieldOption(d.Field, d.Label))
-        .Append(new FieldOption(SmartListField.AllProperties, "All Properties"))
-        .Append(new FieldOption(SmartListField.CustomValue, "Custom Value"))
-        .Append(new FieldOption(SmartListField.Duplicate, "Duplicate"))
-        .Append(new FieldOption(SmartListField.VirtualTag, "Virtual Tag"))
-        .ToList();
+    /// <summary>
+    /// The field picker's options, scoped to <paramref name="kind"/> (docs/superpowers/specs/
+    /// 2026-08-30-smart-collections-design.md) - Issue keeps its full existing catalog plus the four
+    /// special-cased fields (AllProperties/CustomValue/Duplicate/VirtualTag are Issue-only concepts,
+    /// never offered for Series/Novel). Series and Novel each get their own small catalog with no
+    /// special fields.
+    /// </summary>
+    public static IReadOnlyList<FieldOption> FieldOptionsFor(SmartListTargetKind kind) => kind switch
+    {
+        SmartListTargetKind.Series => SeriesSmartListCatalog.Definitions.Values
+            .OrderBy(d => d.Label)
+            .Select(d => new FieldOption(d.Field, d.Label))
+            .ToList(),
+        SmartListTargetKind.Novel => NovelSmartListCatalog.Definitions.Values
+            .OrderBy(d => d.Label)
+            .Select(d => new FieldOption(d.Field, d.Label))
+            .ToList(),
+        _ => SmartListCatalog.Definitions.Values
+            .OrderBy(d => d.Label)
+            .Select(d => new FieldOption(d.Field, d.Label))
+            .Append(new FieldOption(SmartListField.AllProperties, "All Properties"))
+            .Append(new FieldOption(SmartListField.CustomValue, "Custom Value"))
+            .Append(new FieldOption(SmartListField.Duplicate, "Duplicate"))
+            .Append(new FieldOption(SmartListField.VirtualTag, "Virtual Tag"))
+            .ToList(),
+    };
+
+    private static bool TryGetDefinition(SmartListTargetKind kind, SmartListField field, out SmartListFieldDefinition definition)
+    {
+        var definitions = kind switch
+        {
+            SmartListTargetKind.Series => SeriesSmartListCatalog.Definitions,
+            SmartListTargetKind.Novel => NovelSmartListCatalog.Definitions,
+            _ => SmartListCatalog.Definitions,
+        };
+        return definitions.TryGetValue(field, out definition!);
+    }
 
     private readonly SmartListCondition _condition;
+    private readonly SmartListTargetKind _targetKind;
     private readonly Action<SmartListConditionViewModel> _onRemove;
     private readonly Action _onChanged;
 
     public SmartListConditionViewModel(
         SmartListCondition condition,
+        SmartListTargetKind targetKind,
         Action<SmartListConditionViewModel> onRemove,
         Action onChanged,
         IReadOnlyList<VirtualTagOption>? virtualTagOptions = null)
     {
         _condition = condition;
+        _targetKind = targetKind;
         _onRemove = onRemove;
         _onChanged = onChanged;
         VirtualTagOptions = virtualTagOptions ?? Array.Empty<VirtualTagOption>();
@@ -47,7 +79,7 @@ public partial class SmartListConditionViewModel : ViewModelBase
 
     public SmartListCondition Condition => _condition;
 
-    public IReadOnlyList<FieldOption> FieldOptions => AllFieldOptions;
+    public IReadOnlyList<FieldOption> FieldOptions => FieldOptionsFor(_targetKind);
 
     /// <summary>Enabled <c>VirtualTagDefinition</c>s available to pick from — supplied by <see cref="SmartScreenViewModel"/>, which owns the DB context, rather than this row querying the database itself.</summary>
     public IReadOnlyList<VirtualTagOption> VirtualTagOptions { get; }
@@ -56,7 +88,7 @@ public partial class SmartListConditionViewModel : ViewModelBase
 
     public FieldOption SelectedField
     {
-        get => AllFieldOptions.FirstOrDefault(f => f.Field == _condition.Field);
+        get => FieldOptions.FirstOrDefault(f => f.Field == _condition.Field);
         set
         {
             if (_condition.Field == value.Field)
@@ -96,7 +128,7 @@ public partial class SmartListConditionViewModel : ViewModelBase
     /// <summary>The condition ultimately routes through <c>SmartListQueryBuilder.EvaluateText</c> — Text fields plus the Custom Value / Virtual Tag / All Properties special fields, but not Duplicate (toggle-only).</summary>
     private bool IsTextLike =>
         IsCustomValueField || IsVirtualTagField || IsAllPropertiesField ||
-        (SmartListCatalog.Definitions.TryGetValue(_condition.Field, out var def) && def.DataType == SmartListDataType.Text);
+        (TryGetDefinition(_targetKind, _condition.Field, out var def) && def.DataType == SmartListDataType.Text);
 
     /// <summary>The "Aa" case-sensitivity toggle is shown for Text-like fields only (spec §3).</summary>
     public bool ShowCaseToggle => IsTextLike && !IsDuplicateField;
@@ -105,7 +137,7 @@ public partial class SmartListConditionViewModel : ViewModelBase
     {
         get
         {
-            var dataType = SmartListCatalog.Definitions.TryGetValue(_condition.Field, out var def)
+            var dataType = TryGetDefinition(_targetKind, _condition.Field, out var def)
                 ? def.DataType
                 : SmartListDataType.Toggle; // CustomValue/VirtualTag/AllProperties behave text-like but Duplicate is toggle-only
             var operators = IsCustomValueField || IsVirtualTagField || IsAllPropertiesField

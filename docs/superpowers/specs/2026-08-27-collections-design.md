@@ -33,9 +33,12 @@ sanctioned; there is nothing to verify against `_reference/ComicRackCE`.
 
 **Deferred — each gets its own follow-on spec:**
 
-- **Smart collections** — a `SmartList` flagged to also appear under `COLLECTIONS`, reusing that
-  rule engine rather than duplicating it. (User confirmed this is the desired approach for the
-  eventual rule-based layer; it is not built here.)
+- ~~**Smart collections**~~ — done. Shipped 2026-08-30 per
+  `docs/superpowers/specs/2026-08-30-smart-collections-design.md`: `SmartList` gained a
+  `TargetKind` (Issue/Series/Novel), `Collection` gained three optional rule slots, and
+  `CollectionResolver.GetMembers` unions manual + rule-matched membership. Scope grew beyond the
+  one-line note below during brainstorming (user chose the larger option each time) — see that
+  spec for the final shape, not this note.
 - `RecommendationReason.SameCollection` + `RecommendationResolver` wiring.
 - Typed `MediaRelation` edges involving collections (collections as nodes in the pairwise
   relation graph).

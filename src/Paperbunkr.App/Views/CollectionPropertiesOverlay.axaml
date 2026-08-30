@@ -129,17 +129,18 @@
                                         <DataTemplate x:DataType="vm:CollectionMemberRowViewModel">
                                             <Border Classes="memberRow">
                                                 <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto">
-                                                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                                    <StackPanel Grid.Column="0" VerticalAlignment="Center"
+                                                                ToolTip.Tip="{Binding RuleMatchedTooltip}">
                                                         <TextBlock Text="{Binding DisplayTitle}" FontSize="12.5" Foreground="{DynamicResource PbTextBrush}"
-                                                                   TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding DisplayTitle}" />
-                                                        <TextBlock Text="{Binding KindLabel}" FontSize="10" Foreground="{DynamicResource PbTextFaintBrush}" />
+                                                                   TextTrimming="CharacterEllipsis" />
+                                                        <TextBlock Text="{Binding KindLabelDisplay}" FontSize="10" Foreground="{DynamicResource PbTextFaintBrush}" />
                                                     </StackPanel>
-                                                    <Button Grid.Column="1" Classes="ghost" Padding="6"
+                                                    <Button Grid.Column="1" Classes="ghost" Padding="6" IsEnabled="{Binding !IsRuleMatched}"
                                                             Command="{Binding $parent[UserControl].((vm:CollectionPropertiesScreenViewModel)DataContext).MoveMemberUpCommand}"
                                                             CommandParameter="{Binding}" ToolTip.Tip="Move up">
                                                         <fi:SymbolIcon Symbol="ChevronUp" FontSize="11" />
                                                     </Button>
-                                                    <Button Grid.Column="2" Classes="ghost" Padding="6"
+                                                    <Button Grid.Column="2" Classes="ghost" Padding="6" IsEnabled="{Binding !IsRuleMatched}"
                                                             Command="{Binding $parent[UserControl].((vm:CollectionPropertiesScreenViewModel)DataContext).MoveMemberDownCommand}"
                                                             CommandParameter="{Binding}" ToolTip.Tip="Move down">
                                                         <fi:SymbolIcon Symbol="ChevronDown" FontSize="11" />
@@ -153,6 +154,60 @@
                                         </DataTemplate>
                                     </ItemsControl.ItemTemplate>
                                 </ItemsControl>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Classes="groupBox" Margin="0,16,0,0">
+                        <StackPanel>
+                            <Border Classes="groupHeader">
+                                <TextBlock Text="Issues rule" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
+                            </Border>
+                            <StackPanel Margin="14" Orientation="Horizontal" Spacing="8">
+                                <ComboBox ItemsSource="{Binding IssueSmartLists}" SelectedItem="{Binding SelectedIssueSmartList}"
+                                          MinWidth="220" FontSize="12" PlaceholderText="No Issue smart lists yet">
+                                    <ComboBox.ItemTemplate>
+                                        <DataTemplate x:DataType="models:SmartListOption"><TextBlock Text="{Binding Name}" /></DataTemplate>
+                                    </ComboBox.ItemTemplate>
+                                </ComboBox>
+                                <Button Classes="ghost" FontSize="11.5" Content="Set" Command="{Binding SetIssueRuleCommand}" />
+                                <Button Classes="ghost" FontSize="11.5" Content="Clear" Command="{Binding ClearIssueRuleCommand}" />
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Classes="groupBox" Margin="0,16,0,0">
+                        <StackPanel>
+                            <Border Classes="groupHeader">
+                                <TextBlock Text="Series rule" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
+                            </Border>
+                            <StackPanel Margin="14" Orientation="Horizontal" Spacing="8">
+                                <ComboBox ItemsSource="{Binding SeriesSmartLists}" SelectedItem="{Binding SelectedSeriesSmartList}"
+                                          MinWidth="220" FontSize="12" PlaceholderText="No Series smart lists yet">
+                                    <ComboBox.ItemTemplate>
+                                        <DataTemplate x:DataType="models:SmartListOption"><TextBlock Text="{Binding Name}" /></DataTemplate>
+                                    </ComboBox.ItemTemplate>
+                                </ComboBox>
+                                <Button Classes="ghost" FontSize="11.5" Content="Set" Command="{Binding SetSeriesRuleCommand}" />
+                                <Button Classes="ghost" FontSize="11.5" Content="Clear" Command="{Binding ClearSeriesRuleCommand}" />
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Classes="groupBox" Margin="0,16,0,0">
+                        <StackPanel>
+                            <Border Classes="groupHeader">
+                                <TextBlock Text="Novels rule" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
+                            </Border>
+                            <StackPanel Margin="14" Orientation="Horizontal" Spacing="8">
+                                <ComboBox ItemsSource="{Binding NovelSmartLists}" SelectedItem="{Binding SelectedNovelSmartList}"
+                                          MinWidth="220" FontSize="12" PlaceholderText="No Novel smart lists yet">
+                                    <ComboBox.ItemTemplate>
+                                        <DataTemplate x:DataType="models:SmartListOption"><TextBlock Text="{Binding Name}" /></DataTemplate>
+                                    </ComboBox.ItemTemplate>
+                                </ComboBox>
+                                <Button Classes="ghost" FontSize="11.5" Content="Set" Command="{Binding SetNovelRuleCommand}" />
+                                <Button Classes="ghost" FontSize="11.5" Content="Clear" Command="{Binding ClearNovelRuleCommand}" />
                             </StackPanel>
                         </StackPanel>
                     </Border>

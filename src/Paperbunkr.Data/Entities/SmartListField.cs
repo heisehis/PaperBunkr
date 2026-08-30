@@ -20,6 +20,12 @@ public enum SmartListField
     SeriesComplete,
     ReadingStatus,
 
+    /// <summary>Series-target only (docs/superpowers/specs/2026-08-30-smart-collections-design.md) - <see cref="Series.Status"/>, the publisher's completion state. Distinct from <see cref="ReadingStatus"/> (the reader's relationship) and the computed <see cref="SeriesComplete"/>.</summary>
+    SeriesStatus,
+
+    /// <summary>Series-target only - <see cref="Series.SortName"/>.</summary>
+    SeriesSortName,
+
     /// <summary>
     /// The <c>Continuity</c> rows the issue's series belongs to, joined as text (docs/superpowers/
     /// specs/2026-08-27-metadata-model-phase4f-continuity-browse-design.md's deferred continuity-
@@ -125,4 +131,19 @@ public enum SmartListField
     /// Library search box uses.
     /// </summary>
     AllProperties,
+
+    // Novel-target fields (docs/superpowers/specs/2026-08-30-smart-collections-design.md). Prefixed
+    // "Novel" rather than "Book" to avoid colliding with the "Book-collection text" group above,
+    // which is CE's physical-book-collector metadata on a comic Issue, unrelated to Paperbunkr's
+    // Book entity (an EPUB/PDF novel).
+    NovelTitle,
+    NovelAuthor,
+    NovelSeries,
+    NovelFormat,
+    NovelSummary,
+    NovelFinished,
+    NovelChapterCount,
+    NovelAdded,
+    NovelOpened,
+    NovelPublished,
 }

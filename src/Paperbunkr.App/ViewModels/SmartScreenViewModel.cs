@@ -28,19 +28,28 @@ namespace Paperbunkr.App.ViewModels;
 public partial class SmartScreenViewModel : ViewModelBase
 {
     private readonly Action<int> _goToSeries;
+    private readonly Action<int> _goToBook;
 
-    public SmartScreenViewModel(Action<int> goToSeries)
+    public SmartScreenViewModel(Action<int> goToSeries, Action<int> goToBook)
     {
         _goToSeries = goToSeries;
+        _goToBook = goToBook;
         BuiltInLists = new ObservableCollection<SmartListSummary>();
         MaintenanceLists = new ObservableCollection<SmartListSummary>();
         CustomLists = new ObservableCollection<SmartListSummary>();
+        SeriesLists = new ObservableCollection<SmartListSummary>();
+        NovelLists = new ObservableCollection<SmartListSummary>();
         Results = new ObservableCollection<IssueCardSample>();
+        SeriesResults = new ObservableCollection<SeriesCardSample>();
+        NovelResults = new ObservableCollection<BookCardSample>();
         RefreshSidebar();
     }
 
     // "Missing Files"/"Duplicate Candidates" render under a separate Maintenance heading in the
-    // wireframe sidebar, matching the seed order in PaperbunkrDb.SeedSystemSmartLists.
+    // wireframe sidebar, matching the seed order in PaperbunkrDb.SeedSystemSmartLists. Both are
+    // Issue-kind built-ins - Series/Novel lists are always user-created (docs/superpowers/specs/
+    // 2026-08-30-smart-collections-design.md), so they only ever land in SeriesLists/NovelLists,
+    // never split into built-in/maintenance sub-groups.
     private static readonly string[] MaintenanceListNames = ["Missing Files", "Duplicate Candidates"];
 
     private int? _activeSmartListId;
@@ -50,6 +59,8 @@ public partial class SmartScreenViewModel : ViewModelBase
     public ObservableCollection<SmartListSummary> BuiltInLists { get; }
     public ObservableCollection<SmartListSummary> MaintenanceLists { get; }
     public ObservableCollection<SmartListSummary> CustomLists { get; }
+    public ObservableCollection<SmartListSummary> SeriesLists { get; }
+    public ObservableCollection<SmartListSummary> NovelLists { get; }
 
     /// <summary>The root AND/OR group of the currently-open list (spec §2). Null until a list is loaded.</summary>
     [ObservableProperty]
@@ -62,13 +73,34 @@ public partial class SmartScreenViewModel : ViewModelBase
     /// </summary>
     public ObservableCollection<IssueCardSample> Results { get; }
 
+    /// <summary>Live matches for a Series-target list (docs/superpowers/specs/2026-08-30-smart-collections-design.md) - populated instead of <see cref="Results"/> when the active list's <see cref="SmartList.TargetKind"/> is <see cref="SmartListTargetKind.Series"/>.</summary>
+    public ObservableCollection<SeriesCardSample> SeriesResults { get; }
+
+    /// <summary>Live matches for a Novel-target list - populated instead of <see cref="Results"/> when the active list's kind is <see cref="SmartListTargetKind.Novel"/>.</summary>
+    public ObservableCollection<BookCardSample> NovelResults { get; }
+
     /// <summary>
-    /// XAML's compiled-binding <c>!</c> negation needs a real <see langword="bool"/> - <c>Results</c>
-    /// itself has no bindable <c>Count</c>-as-bool, so this exists purely for the empty-state
-    /// <c>IsVisible</c> toggle, raised manually in <see cref="RecomputeMatchCount"/> since
+    /// XAML's compiled-binding <c>!</c> negation needs a real <see langword="bool"/> - the results
+    /// collections have no bindable <c>Count</c>-as-bool, so this exists purely for the empty-state
+    /// <c>IsVisible</c> toggle, raised manually in <see cref="RecomputeMatchCount()"/> since
     /// <see cref="ObservableCollection{T}"/> doesn't raise property-changed for a derived property.
+    /// Reflects whichever of the three results collections is active for the current list's kind.
     /// </summary>
-    public bool HasResults => Results.Count > 0;
+    public bool HasResults => Results.Count > 0 || SeriesResults.Count > 0 || NovelResults.Count > 0;
+
+    /// <summary>Per-kind visibility for the three results grids - only one is ever non-empty at a time (each RecomputeMatchCount overload clears the other two), but the view needs a real bool per grid to gate IsVisible.</summary>
+    public bool HasIssueResults => Results.Count > 0;
+
+    public bool HasSeriesResults => SeriesResults.Count > 0;
+
+    public bool HasNovelResults => NovelResults.Count > 0;
+
+    public string NoResultsMessage => _workingList?.TargetKind switch
+    {
+        SmartListTargetKind.Series => "No series match this list yet.",
+        SmartListTargetKind.Novel => "No novels match this list yet.",
+        _ => "No issues match this list yet.",
+    };
 
     [ObservableProperty]
     private string _listName = string.Empty;
@@ -121,21 +153,44 @@ public partial class SmartScreenViewModel : ViewModelBase
 
         RootGroup = new SmartListGroupViewModel(
             list.RootGroup,
+            list.TargetKind,
             onChanged: RecomputeMatchCount,
             isReadOnly: () => IsReadOnly,
             _virtualTagOptions,
             onRemove: null);
 
-        // One library load feeds both the active list's Results and every list's sidebar count -
-        // opening the screen used to materialize the whole library twice (once here, once in
-        // RefreshSidebar) plus once more per sidebar list.
+        // One library load feeds both the active Issue-kind list's Results and every Issue-kind
+        // list's sidebar count - opening the screen used to materialize the whole library twice
+        // (once here, once in RefreshSidebar) plus once more per sidebar list. Series/Novel lists
+        // are a newer, smaller surface (docs/superpowers/specs/2026-08-30-smart-collections-design.md)
+        // and don't share that batched-snapshot optimization - see RefreshSidebarCore.
         var all = context.SmartLists.OrderBy(s => s.SortOrder).ToList();
         var trees = LoadTrees(context, all);
+        var issueTrees = trees.Where(t => t.TargetKind == SmartListTargetKind.Issue).ToList();
         var snapshot = SmartListQueryBuilder.LoadSnapshot(
-            context, trees.SelectMany(t => SmartListQueryBuilder.Flatten(t.RootGroup)).ToList());
+            context, issueTrees.SelectMany(t => SmartListQueryBuilder.Flatten(t.RootGroup)).ToList());
 
-        RecomputeMatchCount(snapshot);
-        RefreshSidebarCore(all, trees.ToDictionary(t => t.Id, t => SmartListQueryBuilder.Evaluate(snapshot, t).Count));
+        if (list.TargetKind == SmartListTargetKind.Issue)
+        {
+            RecomputeMatchCount(snapshot);
+        }
+        else
+        {
+            RecomputeMatchCount();
+        }
+
+        var matchCounts = issueTrees.ToDictionary(t => t.Id, t => SmartListQueryBuilder.Evaluate(snapshot, t).Count);
+        foreach (var seriesList in trees.Where(t => t.TargetKind == SmartListTargetKind.Series))
+        {
+            matchCounts[seriesList.Id] = SeriesSmartListQueryBuilder.MatchCount(context, seriesList);
+        }
+
+        foreach (var novelList in trees.Where(t => t.TargetKind == SmartListTargetKind.Novel))
+        {
+            matchCounts[novelList.Id] = NovelSmartListQueryBuilder.MatchCount(context, novelList);
+        }
+
+        RefreshSidebarCore(all, matchCounts);
     }
 
     /// <summary>Loads each list's full nested condition tree (<see cref="SmartListTreeLoader"/>), dropping any that vanished.</summary>
@@ -174,10 +229,24 @@ public partial class SmartScreenViewModel : ViewModelBase
         using var context = PaperbunkrDb.CreateContext();
         var all = context.SmartLists.OrderBy(s => s.SortOrder).ToList();
         var trees = LoadTrees(context, all);
+        var issueTrees = trees.Where(t => t.TargetKind == SmartListTargetKind.Issue).ToList();
 
-        // One library load for every list's count, not one full-library materialization per list -
-        // the Smart screen open path was ~N of them.
-        RefreshSidebarCore(all, SmartListQueryBuilder.MatchCounts(context, trees));
+        // One library load for every Issue-kind list's count, not one full-library materialization
+        // per list - the Smart screen open path was ~N of them. Series/Novel lists are evaluated
+        // individually below - a much smaller, newer surface that doesn't need that optimization yet
+        // (docs/superpowers/specs/2026-08-30-smart-collections-design.md).
+        var matchCounts = SmartListQueryBuilder.MatchCounts(context, issueTrees);
+        foreach (var seriesList in trees.Where(t => t.TargetKind == SmartListTargetKind.Series))
+        {
+            matchCounts[seriesList.Id] = SeriesSmartListQueryBuilder.MatchCount(context, seriesList);
+        }
+
+        foreach (var novelList in trees.Where(t => t.TargetKind == SmartListTargetKind.Novel))
+        {
+            matchCounts[novelList.Id] = NovelSmartListQueryBuilder.MatchCount(context, novelList);
+        }
+
+        RefreshSidebarCore(all, matchCounts);
     }
 
     private void RefreshSidebarCore(List<SmartList> all, Dictionary<int, int> matchCounts)
@@ -185,6 +254,8 @@ public partial class SmartScreenViewModel : ViewModelBase
         BuiltInLists.Clear();
         MaintenanceLists.Clear();
         CustomLists.Clear();
+        SeriesLists.Clear();
+        NovelLists.Clear();
 
         foreach (var list in all)
         {
@@ -195,12 +266,21 @@ public partial class SmartScreenViewModel : ViewModelBase
                 Name = list.Name,
                 MatchCount = matchCounts.TryGetValue(list.Id, out var mc) ? mc : 0,
                 IsActive = list.Id == _activeSmartListId,
+                TargetKind = list.TargetKind,
                 DeleteConfirm = list.IsSystem
                     ? null
                     : new TwoStepConfirm(() => DeleteSmartList(listId), idleLabel: "Delete", armedLabel: "Confirm delete?"),
             };
 
-            if (!list.IsSystem)
+            if (list.TargetKind == SmartListTargetKind.Series)
+            {
+                SeriesLists.Add(summary);
+            }
+            else if (list.TargetKind == SmartListTargetKind.Novel)
+            {
+                NovelLists.Add(summary);
+            }
+            else if (!list.IsSystem)
             {
                 CustomLists.Add(summary);
             }
@@ -253,6 +333,39 @@ public partial class SmartScreenViewModel : ViewModelBase
         }
 
         using var context = PaperbunkrDb.CreateContext();
+
+        if (_workingList.TargetKind == SmartListTargetKind.Series)
+        {
+            var transient = new SmartList { RootGroup = _workingList.RootGroup };
+            SeriesResults.Clear();
+            foreach (var series in SeriesSmartListQueryBuilder.Build(context, transient))
+            {
+                SeriesResults.Add(SeriesCardSample.FromSeries(series));
+            }
+
+            Results.Clear();
+            NovelResults.Clear();
+            MatchCountLabel = SeriesResults.Count.ToString();
+            NotifyResultsChanged();
+            return;
+        }
+
+        if (_workingList.TargetKind == SmartListTargetKind.Novel)
+        {
+            var transient = new SmartList { RootGroup = _workingList.RootGroup };
+            NovelResults.Clear();
+            foreach (var book in NovelSmartListQueryBuilder.Build(context, transient))
+            {
+                NovelResults.Add(BookCardSample.FromBook(book));
+            }
+
+            Results.Clear();
+            SeriesResults.Clear();
+            MatchCountLabel = NovelResults.Count.ToString();
+            NotifyResultsChanged();
+            return;
+        }
+
         RecomputeMatchCount(SmartListQueryBuilder.LoadSnapshot(
             context, SmartListQueryBuilder.Flatten(_workingList.RootGroup).ToList()));
     }
@@ -274,6 +387,8 @@ public partial class SmartScreenViewModel : ViewModelBase
         var matched = SmartListQueryBuilder.Evaluate(snapshot, transient);
 
         Results.Clear();
+        SeriesResults.Clear();
+        NovelResults.Clear();
         foreach (var issue in matched)
         {
             Results.Add(new IssueCardSample
@@ -288,7 +403,16 @@ public partial class SmartScreenViewModel : ViewModelBase
         }
 
         MatchCountLabel = Results.Count.ToString();
+        NotifyResultsChanged();
+    }
+
+    private void NotifyResultsChanged()
+    {
         OnPropertyChanged(nameof(HasResults));
+        OnPropertyChanged(nameof(HasIssueResults));
+        OnPropertyChanged(nameof(HasSeriesResults));
+        OnPropertyChanged(nameof(HasNovelResults));
+        OnPropertyChanged(nameof(NoResultsMessage));
     }
 
     [RelayCommand]
@@ -297,6 +421,24 @@ public partial class SmartScreenViewModel : ViewModelBase
         if (issue is not null)
         {
             _goToSeries(issue.SeriesId);
+        }
+    }
+
+    [RelayCommand]
+    private void SelectSeriesResult(SeriesCardSample? series)
+    {
+        if (series is not null)
+        {
+            _goToSeries(series.SeriesId);
+        }
+    }
+
+    [RelayCommand]
+    private void SelectNovelResult(BookCardSample? book)
+    {
+        if (book is not null)
+        {
+            _goToBook(book.Id);
         }
     }
 
@@ -368,6 +510,7 @@ public partial class SmartScreenViewModel : ViewModelBase
         {
             Name = $"{ListName} Copy",
             IsSystem = false,
+            TargetKind = _workingList.TargetKind,
             SortOrder = context.SmartLists.Count(),
             RootGroup = CloneGroup(_workingList.RootGroup),
         };
@@ -378,13 +521,27 @@ public partial class SmartScreenViewModel : ViewModelBase
     }
 
     [RelayCommand]
-    private void CreateNew()
+    private void CreateNew() => CreateNewList(SmartListTargetKind.Issue);
+
+    [RelayCommand]
+    private void CreateNewSeriesList() => CreateNewList(SmartListTargetKind.Series);
+
+    [RelayCommand]
+    private void CreateNewNovelList() => CreateNewList(SmartListTargetKind.Novel);
+
+    private void CreateNewList(SmartListTargetKind kind)
     {
         using var context = PaperbunkrDb.CreateContext();
         var list = new SmartList
         {
-            Name = "New Smart List",
+            Name = kind switch
+            {
+                SmartListTargetKind.Series => "New Series Smart List",
+                SmartListTargetKind.Novel => "New Novel Smart List",
+                _ => "New Smart List",
+            },
             IsSystem = false,
+            TargetKind = kind,
             SortOrder = context.SmartLists.Count(),
             RootGroup = new SmartListConditionGroup { Mode = SmartListGroupMode.And },
         };

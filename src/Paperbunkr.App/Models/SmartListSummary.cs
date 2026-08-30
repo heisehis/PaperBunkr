@@ -1,4 +1,5 @@
 using Paperbunkr.App.ViewModels;
+using Paperbunkr.Data.Entities;
 
 namespace Paperbunkr.App.Models;
 
@@ -12,6 +13,9 @@ public class SmartListSummary
     public int MatchCount { get; init; }
 
     public bool IsActive { get; init; }
+
+    /// <summary>Which entity this list evaluates against (docs/superpowers/specs/2026-08-30-smart-collections-design.md) - determines which sidebar kind-section this row renders under.</summary>
+    public SmartListTargetKind TargetKind { get; init; }
 
     /// <summary>
     /// Deletes the whole list (docs/superpowers/specs/2026-08-22-delete-functionality-design.md) -

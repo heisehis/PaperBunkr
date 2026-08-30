@@ -266,6 +266,24 @@ public class PaperbunkrDbContext : DbContext
         {
             builder.HasKey(c => c.Id);
             builder.Property(c => c.Name).IsRequired();
+
+            // Rule slots (docs/superpowers/specs/2026-08-30-smart-collections-design.md) - one-
+            // directional FKs, no inverse nav on SmartList. SetNull rather than Cascade: deleting the
+            // underlying SmartList reverts the collection to manual-only instead of deleting it too.
+            builder.HasOne(c => c.IssueSmartList)
+                .WithMany()
+                .HasForeignKey(c => c.IssueSmartListId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            builder.HasOne(c => c.SeriesSmartList)
+                .WithMany()
+                .HasForeignKey(c => c.SeriesSmartListId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            builder.HasOne(c => c.NovelSmartList)
+                .WithMany()
+                .HasForeignKey(c => c.NovelSmartListId)
+                .OnDelete(DeleteBehavior.SetNull);
         });
 
         modelBuilder.Entity<CollectionItem>(builder =>
@@ -347,6 +365,7 @@ public class PaperbunkrDbContext : DbContext
         {
             builder.HasKey(s => s.Id);
             builder.Property(s => s.Name).IsRequired();
+            builder.Property(s => s.TargetKind).HasConversion<string>().HasMaxLength(16).HasDefaultValue(SmartListTargetKind.Issue);
 
             // Nested AND/OR groups (docs/superpowers/specs/2026-08-28-smartlist-engine-v2-design.md
             // §2) - one root group per list, cascade so deleting the list takes the whole tree with

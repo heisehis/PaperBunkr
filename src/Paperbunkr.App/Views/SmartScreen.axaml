@@ -14,7 +14,7 @@
     <UserControl.Styles>
         <Style Selector="Button.headerAction">
             <Setter Property="Padding" Value="10,5" />
-            <Setter Property="CornerRadius" Value="5" />
+            <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusSm}" />
             <Setter Property="FontSize" Value="11.5" />
             <Setter Property="FontWeight" Value="SemiBold" />
             <Setter Property="Cursor" Value="Hand" />
@@ -33,18 +33,18 @@
 
         <Style Selector="ComboBox.conditionPicker">
             <Setter Property="Background" Value="{DynamicResource PbChromeBrush}" />
-            <Setter Property="BorderBrush" Value="#383D47" />
+            <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
             <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="CornerRadius" Value="5" />
+            <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusSm}" />
             <Setter Property="FontSize" Value="12.5" />
             <Setter Property="Padding" Value="10,5" />
             <Setter Property="MinWidth" Value="120" />
         </Style>
         <Style Selector="TextBox.conditionValue">
             <Setter Property="Background" Value="{DynamicResource PbChromeBrush}" />
-            <Setter Property="BorderBrush" Value="#383D47" />
+            <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
             <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="CornerRadius" Value="5" />
+            <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusSm}" />
             <Setter Property="FontSize" Value="12.5" />
             <Setter Property="Padding" Value="10,5" />
             <Setter Property="MinWidth" Value="120" />
@@ -53,9 +53,9 @@
         <!-- NOT / Aa toggles on a condition row -->
         <Style Selector="ToggleButton.conditionFlag">
             <Setter Property="Background" Value="{DynamicResource PbChromeBrush}" />
-            <Setter Property="BorderBrush" Value="#383D47" />
+            <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
             <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="CornerRadius" Value="5" />
+            <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusSm}" />
             <Setter Property="FontSize" Value="11" />
             <Setter Property="FontWeight" Value="Bold" />
             <Setter Property="Padding" Value="7,5" />
@@ -74,7 +74,7 @@
             <Setter Property="Background" Value="{DynamicResource PbAccentBrush}" />
             <Setter Property="Foreground" Value="{DynamicResource PbBadgeTextBrush}" />
             <Setter Property="BorderThickness" Value="0" />
-            <Setter Property="CornerRadius" Value="5" />
+            <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusSm}" />
             <Setter Property="FontSize" Value="11" />
             <Setter Property="FontWeight" Value="Bold" />
             <Setter Property="Padding" Value="9,4" />
@@ -85,7 +85,7 @@
             <Setter Property="Background" Value="{DynamicResource PbChromeBrush}" />
             <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
             <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="CornerRadius" Value="7" />
+            <Setter Property="CornerRadius" Value="{DynamicResource PbRadius}" />
             <Setter Property="Padding" Value="16" />
         </Style>
 
@@ -101,7 +101,7 @@
              2026-08-09-smart-lists-results-view-design.md) - same visual, no selection state since
              results here are read-only/click-to-navigate. -->
         <Style Selector="Border.resultTile">
-            <Setter Property="CornerRadius" Value="6" />
+            <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusSm}" />
             <Setter Property="BorderThickness" Value="1" />
             <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
             <Setter Property="Height" Value="168" />
@@ -214,9 +214,10 @@
         </DataTemplate>
     </UserControl.Resources>
 
-    <ScrollViewer>
-        <StackPanel>
+    <Grid RowDefinitions="Auto,Auto,*">
 
+        <!-- Row 0: pinned top band - title/subtitle + Duplicate/Save. -->
+        <StackPanel Grid.Row="0">
             <Grid ColumnDefinitions="*,Auto" Margin="28,20,28,16">
                 <StackPanel Grid.Column="0" VerticalAlignment="Bottom">
                     <TextBlock Text="{Binding ListName}" FontSize="22" FontWeight="Bold" Foreground="{DynamicResource PbTextBrush}" />
@@ -237,21 +238,28 @@
                     </Button>
                 </StackPanel>
             </Grid>
-            <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,0,0,1" Margin="0,0,0,24" />
+            <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,0,0,1" />
+        </StackPanel>
 
-            <StackPanel MaxWidth="820" HorizontalAlignment="Left" Margin="28,0,28,40">
+        <!-- Row 1: pinned stat row - stays visible while row 2 scrolls. -->
+        <StackPanel Grid.Row="1">
+            <Border Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}"
+                    BorderThickness="1" CornerRadius="999" Padding="12,6" HorizontalAlignment="Left" Margin="28,16,28,16">
+                <StackPanel Orientation="Horizontal" Spacing="7">
+                    <Ellipse Width="7" Height="7" Fill="{DynamicResource PbSuccessBrush}" VerticalAlignment="Center" />
+                    <TextBlock FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}">
+                        <Run Text="Currently matches " />
+                        <Run Text="{Binding MatchCountLabel}" FontFamily="Consolas,monospace" FontWeight="Bold" Foreground="{DynamicResource PbTextBrush}" />
+                        <Run Text=" issues" />
+                    </TextBlock>
+                </StackPanel>
+            </Border>
+            <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,0,0,1" />
+        </StackPanel>
 
-                <Border Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}"
-                        BorderThickness="1" CornerRadius="999" Padding="12,6" HorizontalAlignment="Left" Margin="0,0,0,20">
-                    <StackPanel Orientation="Horizontal" Spacing="7">
-                        <Ellipse Width="7" Height="7" Fill="{DynamicResource PbSuccessBrush}" VerticalAlignment="Center" />
-                        <TextBlock FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}">
-                            <Run Text="Currently matches " />
-                            <Run Text="{Binding MatchCountLabel}" FontFamily="Consolas,monospace" FontWeight="Bold" Foreground="{DynamicResource PbTextBrush}" />
-                            <Run Text=" issues" />
-                        </TextBlock>
-                    </StackPanel>
-                </Border>
+        <!-- Row 2: scrolling content - condition builder, Cancel/Apply, results. -->
+        <ScrollViewer Grid.Row="2">
+        <StackPanel MaxWidth="820" HorizontalAlignment="Left" Margin="28,24,28,40">
 
                 <ContentControl Content="{Binding RootGroup}" ContentTemplate="{StaticResource GroupCardTemplate}" />
 
@@ -272,12 +280,12 @@
 
                 <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,32,0,0" IsVisible="{Binding !HasResults}">
                     <fi:SymbolIcon Symbol="Search" FontSize="13" />
-                    <TextBlock Text="No issues match this list yet." FontSize="12.5"
+                    <TextBlock Text="{Binding NoResultsMessage}" FontSize="12.5"
                                Foreground="{DynamicResource PbTextFaintBrush}" />
                 </StackPanel>
 
                 <ItemsControl x:Name="ResultsList" ItemsSource="{Binding Results}" Margin="0,32,0,0"
-                              IsVisible="{Binding HasResults}">
+                              IsVisible="{Binding HasIssueResults}">
                     <ItemsControl.ItemsPanel>
                         <ItemsPanelTemplate>
                             <controls:VirtualizingWrapPanel ItemWidth="120" ItemHeight="168" ItemSpacing="16" LineSpacing="16" />
@@ -300,7 +308,58 @@
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
 
-            </StackPanel>
+                <!-- Series/Novel result grids (docs/superpowers/specs/2026-08-30-smart-collections-
+                     design.md) - only one of the three results grids is ever populated at a time,
+                     matching whichever target kind the active list is. -->
+                <ItemsControl x:Name="SeriesResultsList" ItemsSource="{Binding SeriesResults}" Margin="0,32,0,0"
+                              IsVisible="{Binding HasSeriesResults}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <controls:VirtualizingWrapPanel ItemWidth="120" ItemHeight="168" ItemSpacing="16" LineSpacing="16" />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="models:SeriesCardSample">
+                            <Button Classes="resultCard" Width="120"
+                                    Command="{Binding #SeriesResultsList.((vm:SmartScreenViewModel)DataContext).SelectSeriesResultCommand}"
+                                    CommandParameter="{Binding}">
+                                <Border Classes="resultTile" Background="{Binding CoverBrush}">
+                                    <Grid>
+                                        <Image views:AsyncCoverImage.SourceId="{Binding CoverIssueId}" Stretch="UniformToFill" />
+                                        <TextBlock Text="{Binding Title}" FontSize="13" FontWeight="Black" Foreground="#FFFFF8EC"
+                                                   VerticalAlignment="Bottom" Margin="9" TextTrimming="CharacterEllipsis" />
+                                    </Grid>
+                                </Border>
+                            </Button>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+
+                <ItemsControl x:Name="NovelResultsList" ItemsSource="{Binding NovelResults}" Margin="0,32,0,0"
+                              IsVisible="{Binding HasNovelResults}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <controls:VirtualizingWrapPanel ItemWidth="120" ItemHeight="168" ItemSpacing="16" LineSpacing="16" />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="models:BookCardSample">
+                            <Button Classes="resultCard" Width="120"
+                                    Command="{Binding #NovelResultsList.((vm:SmartScreenViewModel)DataContext).SelectNovelResultCommand}"
+                                    CommandParameter="{Binding}">
+                                <Border Classes="resultTile" Background="{Binding CoverBrush}">
+                                    <Grid>
+                                        <Image Source="{Binding CoverImage}" Stretch="UniformToFill" />
+                                        <TextBlock Text="{Binding Title}" FontSize="13" FontWeight="Black" Foreground="#FFFFF8EC"
+                                                   VerticalAlignment="Bottom" Margin="9" TextTrimming="CharacterEllipsis" />
+                                    </Grid>
+                                </Border>
+                            </Button>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+
         </StackPanel>
-    </ScrollViewer>
+        </ScrollViewer>
+    </Grid>
 </UserControl>

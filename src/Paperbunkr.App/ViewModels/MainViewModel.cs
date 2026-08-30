@@ -54,7 +54,7 @@ public partial class MainViewModel : ViewModelBase
         IssueProperties = new IssuePropertiesScreenViewModel(CloseIssuePropertiesOverlayAndReload, ShowToast);
         BulkIssueProperties = new BulkIssuePropertiesScreenViewModel(CloseBulkIssuePropertiesOverlayAndReload, ShowToast);
         BulkSeriesProperties = new BulkSeriesPropertiesScreenViewModel(CloseBulkSeriesPropertiesOverlayAndReload);
-        Smart = new SmartScreenViewModel(GoDetailForSeries);
+        Smart = new SmartScreenViewModel(GoDetailForSeries, GoBookDetailForBook);
         Reading = new ReadingScreenViewModel(new FilePickerService(), GoReaderForIssueInReadingList, OpenReadingListPropertiesOverlay);
         Events = new EventsScreenViewModel(GoDetailForSeries, GoReaderForIssue, GoReadingWithList, ShowToast);
         Plugin = new PluginScreenViewModel();

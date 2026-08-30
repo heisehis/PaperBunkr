@@ -98,6 +98,16 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
     /// <summary>Resolved members of the active collection, refreshed alongside <see cref="_allCollections"/> in <see cref="LoadFromDatabase"/> - only populated when a collection with non-series members is active (see <see cref="IsCollectionView"/>).</summary>
     private List<CollectionMember> _activeCollectionMembers = new();
 
+    /// <summary>
+    /// Sidebar member counts, keyed by <see cref="Collection.Id"/> - computed once in
+    /// <see cref="LoadFromDatabase"/> (docs/superpowers/specs/2026-08-30-smart-collections-design.md),
+    /// not in <see cref="RebuildView"/>, so a smart collection's rule doesn't get re-evaluated on
+    /// every search/sort/filter keystroke. A plain manual collection's count is just
+    /// <c>collection.Items.Count</c> (already in memory, free); only a collection with a rule slot
+    /// set pays for a <see cref="CollectionResolver.GetMembers"/> call here.
+    /// </summary>
+    private Dictionary<int, int> _collectionMemberCounts = new();
+
     private bool _activeCollectionHasNonSeriesMembers;
 
     public LibraryScreenViewModel(
@@ -697,6 +707,10 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
             ? new List<CollectionMember>(CollectionResolver.GetMembers(context, loadCollectionId))
             : new List<CollectionMember>();
 
+        _collectionMemberCounts = _allCollections.ToDictionary(
+            c => c.Id,
+            c => c.IsSmart ? CollectionResolver.GetMembers(context, c.Id).Count : c.Items.Count);
+
         // "Add to Reading List" flyout (docs/superpowers/specs/2026-08-24-library-multiselect-
         // slice2-design.md §2) - same ordering ReadingScreenViewModel's own sidebar uses. Its own
         // table, so it only refreshes with a real reload, not on every RebuildView.
@@ -750,17 +764,21 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
             {
                 Id = collection.Id,
                 Name = collection.Name,
-                Count = collection.Items.Count,
+                Count = _collectionMemberCounts.GetValueOrDefault(collection.Id, collection.Items.Count),
                 AccentColor = collection.AccentColor,
                 IsActive = _activeCollectionId == collection.Id,
+                IsSmart = collection.IsSmart,
                 DeleteConfirm = new TwoStepConfirm(() => DeleteCollection(cid), idleLabel: "Delete", armedLabel: "Confirm delete?"),
             });
         }
 
         bool wasCollectionView = IsCollectionView;
-        _activeCollectionHasNonSeriesMembers = _activeCollectionId is int activeId
-            && _allCollections.FirstOrDefault(c => c.Id == activeId) is { } activeCollection
-            && activeCollection.Items.Any(i => i.IssueId is not null || i.BookId is not null);
+        // Reads the already-resolved manual+rule-matched union (_activeCollectionMembers), not raw
+        // CollectionItem rows - so a smart collection whose only non-series members are rule-matched
+        // still renders the mixed grid below (docs/superpowers/specs/2026-08-30-smart-collections-
+        // design.md).
+        _activeCollectionHasNonSeriesMembers = _activeCollectionId is not null
+            && _activeCollectionMembers.Any(m => m.Kind != CollectionMemberKind.Series);
         if (wasCollectionView != IsCollectionView)
         {
             RaiseCollectionViewChanged();
@@ -769,7 +787,16 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         CollectionTiles.Clear();
         if (IsCollectionView)
         {
-            foreach (var member in _activeCollectionMembers)
+            // Manual members keep their curated CollectionItem.SortOrder-derived order (unchanged);
+            // rule-matched members (no meaningful SortOrder - see CollectionMember's doc comment)
+            // are appended after, grouped by kind then by display title as a reasonable stand-in for
+            // "each kind's own default sort" without needing a bespoke comparer per kind.
+            var manual = _activeCollectionMembers.Where(m => m.CollectionItemId is not null);
+            var ruleMatched = _activeCollectionMembers
+                .Where(m => m.CollectionItemId is null)
+                .OrderBy(m => m.Kind)
+                .ThenBy(m => m.DisplayTitle, StringComparer.OrdinalIgnoreCase);
+            foreach (var member in manual.Concat(ruleMatched))
             {
                 CollectionTiles.Add(LibraryTile.FromMember(member));
             }
@@ -784,8 +811,14 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         {
             // Series-only membership check - the normal series-card grid this feeds is suppressed
             // entirely while IsCollectionView is true (the mixed grid above takes over instead), so
-            // this only matters for a series-only collection.
-            filtered = filtered.Where(s => s.CollectionItems.Any(ci => ci.CollectionId == collectionId));
+            // this only matters for a series-only collection. Reads _activeCollectionMembers (the
+            // manual+rule-matched union) rather than raw CollectionItem rows, so a collection whose
+            // Series membership comes from a SeriesSmartListId rule filters correctly too.
+            var memberSeriesIds = _activeCollectionMembers
+                .Where(m => m.Kind == CollectionMemberKind.Series)
+                .Select(m => m.TargetId)
+                .ToHashSet();
+            filtered = filtered.Where(s => memberSeriesIds.Contains(s.Id));
         }
 
         if (!string.IsNullOrWhiteSpace(SearchQuery))

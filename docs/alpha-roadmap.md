@@ -549,6 +549,37 @@ refactored onto it (behaviour-preserving, golden-list parity test) and `SmartLis
 Tests: 1704 (App 1134 + Data 565 + the new v2/parity/migration suites) green; migration verified
 applying to a fresh DB; app smoke-launched to "Startup complete". On-screen GUI pass still pending.
 
+### Smart Collections — rule-based Collection membership (shipped 2026-08-30)
+Design spec: `2026-08-30-smart-collections-design.md`, plan: `2026-08-30-smart-collections-plan.md`.
+Closes the deferred "smart collections" item from `2026-08-27-collections-design.md` — scope grew
+beyond that item's one-line note during brainstorming (user chose the larger option at each fork).
+`SmartList` gains `TargetKind` (Issue/Series/Novel, default Issue — zero behavior change for every
+pre-existing list). Ten new `SmartListField` values for Series/Novel (`SeriesStatus`/
+`SeriesSortName` plus `Novel*` — prefixed to avoid colliding with the pre-existing "Book-collection"
+comic-collector fields, unrelated to the `Book`/novel entity). New `SeriesSmartListCatalog`/
+`NovelSmartListCatalog` + `SeriesSmartListQueryBuilder`/`NovelSmartListQueryBuilder`, mirroring the
+Issue builder's shape; leaf operator evaluation (`EvaluateText`/`Number`/`Toggle`/`Date`) extracted
+into a shared `SmartListLeafEvaluator` used by all three (a mid-flight refactor, not just new code —
+those methods were already kind-agnostic in everything but visibility). `Collection` gains three
+optional rule slots (`IssueSmartListId`/`SeriesSmartListId`/`NovelSmartListId`); `CollectionResolver.
+GetMembers` unions manual `CollectionItem` rows with each slot's live matches, deduped by target id
+(hybrid membership — approved design, not the original minimal "100% rule-derived" option). Also
+fixed two real pre-existing bugs found during implementation: `CollectionSummary.Count` and
+`LibraryScreenViewModel`'s non-series-member check read raw `CollectionItem` rows instead of
+`CollectionResolver.GetMembers`, and `GetOtherSeriesSharingCollection` queried `CollectionItem`
+directly rather than going through `GetMembers` — both now correctly reflect rule-matched
+membership. Smart Lists screen generalized to 3 kinds (sidebar SERIES/NOVELS sections, per-kind
+field-picker scoping, per-kind results grids). `CollectionPropertiesOverlay` gained three rule-slot
+pickers (dropdown + Set + Clear — no inline "New rule…" round-trip to the Smart Lists screen, a
+deliberate scope trim); rule-matched member rows render with disabled Remove/Move and an explanatory
+tooltip. One EF migration (`AddSmartCollections`) — a real enum-string default-value bug
+(`defaultValue: ""` instead of `"Issue"`) caught and fixed before shipping, same class of bug as the
+Preferences Reader tab session's `HasSentinel` catch. Tests: 1909 total (Data 633 + App 1260 +
+Plugins 16), all green; app smoke-launched to "Startup complete" via a properly-detached process
+(an earlier attempt to launch it from a backgrounded bash job was killed by shell teardown, not a
+real crash — worth remembering for future smoke-launches in this environment). On-screen GUI pass
+still pending.
+
 ### Plugin API v3 — metadata/rules/writer for Data-Manager plugins (shipped 2026-08-29)
 Design spec: `2026-08-28-plugin-api-v3-data-manager-design.md`. Extends the v2 host (no new hooks).
 (§2) `IMetadataGraph` — 6th `IPluginEnvironment` sub-interface, read facade over the Phase 3-4g

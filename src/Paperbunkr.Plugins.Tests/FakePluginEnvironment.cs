@@ -38,6 +38,9 @@ internal sealed class FakePluginEnvironment : IPluginEnvironment
     {
         public IReadOnlyList<Data.Entities.MediaRelation> GetRelations(Data.Entities.Series series) => Array.Empty<Data.Entities.MediaRelation>();
         public IReadOnlyList<Data.Entities.Series> GetRelatedSeries(Data.Entities.Series series) => Array.Empty<Data.Entities.Series>();
+        public IReadOnlyList<Data.Entities.Collection> GetRelatedCollections(Data.Entities.Series series) => Array.Empty<Data.Entities.Collection>();
+        public IReadOnlyList<Data.Entities.MediaRelation> GetRelations(Data.Entities.Collection collection) => Array.Empty<Data.Entities.MediaRelation>();
+        public IReadOnlyList<Data.Entities.Series> GetRelatedSeries(Data.Entities.Collection collection) => Array.Empty<Data.Entities.Series>();
         public IReadOnlyList<Data.Entities.Continuity> GetContinuities(Data.Entities.Series series) => Array.Empty<Data.Entities.Continuity>();
         public IReadOnlyList<Data.Entities.Series> GetOtherSeriesInContinuity(Data.Entities.Continuity continuity) => Array.Empty<Data.Entities.Series>();
         public IReadOnlyList<Data.Entities.StoryEvent> GetEvents(Data.Entities.Issue issue) => Array.Empty<Data.Entities.StoryEvent>();

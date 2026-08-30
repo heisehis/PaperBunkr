@@ -525,6 +525,18 @@ public class PaperbunkrDbContext : DbContext
             builder.Property(m => m.RelationType).HasConversion<string>().HasMaxLength(32);
             builder.HasIndex(m => m.SourceSeriesId);
             builder.HasIndex(m => m.TargetSeriesId);
+            builder.HasIndex(m => m.SourceCollectionId);
+            builder.HasIndex(m => m.TargetCollectionId);
+
+            // Exactly one of Series/Collection per side (docs/superpowers/specs/2026-08-30-media-
+            // relation-collection-nodes-design.md) - mirrors CollectionItem's own exactly-one-
+            // target CHECK pattern rather than a discriminator-enum shape.
+            builder.ToTable(t => t.HasCheckConstraint(
+                "CK_MediaRelation_OneSourceTarget",
+                "((\"SourceSeriesId\" IS NOT NULL) + (\"SourceCollectionId\" IS NOT NULL)) = 1"));
+            builder.ToTable(t => t.HasCheckConstraint(
+                "CK_MediaRelation_OneTargetTarget",
+                "((\"TargetSeriesId\" IS NOT NULL) + (\"TargetCollectionId\" IS NOT NULL)) = 1"));
 
             // Cascade, not Restrict - unlike ReadingListItem.Issue (a direct, interactive user
             // action), every existing Series-deletion path in this codebase
@@ -532,7 +544,8 @@ public class PaperbunkrDbContext : DbContext
             // 2b) is automatic empty-series cleanup with no chance to pause and check for
             // relations first. Restrict would turn those into a real runtime FK-violation
             // regression the moment a relation exists; Cascade just quietly removes a relation
-            // that's lost one of its two endpoints, which is the only sane outcome here.
+            // that's lost one of its two endpoints, which is the only sane outcome here. Same
+            // reasoning extended to the new Collection FKs.
             builder.HasOne(m => m.SourceSeries)
                 .WithMany()
                 .HasForeignKey(m => m.SourceSeriesId)
@@ -541,6 +554,16 @@ public class PaperbunkrDbContext : DbContext
             builder.HasOne(m => m.TargetSeries)
                 .WithMany()
                 .HasForeignKey(m => m.TargetSeriesId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            builder.HasOne(m => m.SourceCollection)
+                .WithMany()
+                .HasForeignKey(m => m.SourceCollectionId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            builder.HasOne(m => m.TargetCollection)
+                .WithMany()
+                .HasForeignKey(m => m.TargetCollectionId)
                 .OnDelete(DeleteBehavior.Cascade);
 
             builder.HasMany(m => m.Evidence)

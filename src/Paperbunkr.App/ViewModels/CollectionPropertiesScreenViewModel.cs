@@ -9,6 +9,7 @@ using Paperbunkr.App.Services;
 using Paperbunkr.Data;
 using Paperbunkr.Data.Collections;
 using Paperbunkr.Data.Entities;
+using Paperbunkr.Data.Metadata;
 
 namespace Paperbunkr.App.ViewModels;
 
@@ -96,6 +97,7 @@ public partial class CollectionPropertiesScreenViewModel : ViewModelBase
 
         LoadRuleSlots(context, collection);
         RefreshRelatedCollections(context, collectionId);
+        RefreshRelatedSeries(context, collectionId);
     }
 
     [RelayCommand]
@@ -427,5 +429,118 @@ public partial class CollectionPropertiesScreenViewModel : ViewModelBase
         using var context = _contextFactory();
         CollectionRelationResolver.Remove(context, chip.CollectionRelationId);
         RefreshRelatedCollections(context, currentCollectionId);
+    }
+
+    // --- Related (Series-node MediaRelation edges, docs/superpowers/specs/2026-08-30-media-
+    // relation-collection-nodes-design.md) - a Collection can now sit on one side of a typed
+    // MediaRelation with a Series on the other (e.g. "this omnibus is a Crossover tying into this
+    // standalone series"). Structurally parallel to "Related Collections" above, distinctly named
+    // to avoid colliding with it, and deliberately Series-only in its search: a Collection↔
+    // Collection match found here would just be rejected by MediaRelationResolver.TryCreate (that's
+    // "Related Collections"'/CollectionRelation's job), so scoping the search up front avoids a
+    // confusing "found it, but can't add it" dead end. Same immediate-write posture as "Related
+    // Collections" - not part of the buffered Save/Cancel flow. ---
+
+    public ObservableCollection<RelatedSeriesChip> RelatedSeries { get; } = new();
+
+    private void RefreshRelatedSeries(PaperbunkrDbContext context, int collectionId)
+    {
+        RelatedSeries.Clear();
+        foreach (var endpoint in MediaRelationResolver.GetRelatedFromCollection(context, collectionId))
+        {
+            if (endpoint.Kind != MediaRelationEndpointKind.Series || endpoint.Series is not { } series)
+            {
+                continue;
+            }
+
+            RelatedSeries.Add(new RelatedSeriesChip
+            {
+                MediaRelationId = endpoint.MediaRelationId,
+                SeriesId = series.Id,
+                Name = series.Name,
+                RelationTypeLabel = RelationTypeOption.FormatLabel(endpoint.DisplayType),
+            });
+        }
+    }
+
+    [ObservableProperty]
+    private bool _isAddingSeriesRelation;
+
+    [ObservableProperty]
+    private string _seriesRelationSearchQuery = string.Empty;
+
+    [ObservableProperty]
+    private RelationType _selectedSeriesRelationType = RelationType.Related;
+
+    [ObservableProperty]
+    private RelationTypeOption _selectedSeriesRelationTypeOption = RelationTypeOptions.First(o => o.Type == RelationType.Related);
+
+    partial void OnSelectedSeriesRelationTypeOptionChanged(RelationTypeOption value) => SelectedSeriesRelationType = value.Type;
+
+    public ObservableCollection<SeriesSearchResult> SeriesRelationSearchResults { get; } = new();
+
+    [RelayCommand]
+    private void ToggleAddSeriesRelation()
+    {
+        IsAddingSeriesRelation = !IsAddingSeriesRelation;
+        SeriesRelationSearchQuery = string.Empty;
+        SeriesRelationSearchResults.Clear();
+    }
+
+    partial void OnSeriesRelationSearchQueryChanged(string value) => SearchSeriesRelationCandidates();
+
+    [RelayCommand]
+    private void SearchSeriesRelationCandidates()
+    {
+        SeriesRelationSearchResults.Clear();
+        if (string.IsNullOrWhiteSpace(SeriesRelationSearchQuery))
+        {
+            return;
+        }
+
+        using var context = _contextFactory();
+        var matches = context.Series
+            .AsEnumerable()
+            .Where(s => s.Name.Contains(SeriesRelationSearchQuery, StringComparison.OrdinalIgnoreCase))
+            .Take(20);
+
+        foreach (var series in matches)
+        {
+            SeriesRelationSearchResults.Add(new SeriesSearchResult { SeriesId = series.Id, Name = series.Name });
+        }
+    }
+
+    [RelayCommand]
+    private void AddSeriesRelation(SeriesSearchResult? target)
+    {
+        if (target is null || _collectionId is not int currentCollectionId)
+        {
+            return;
+        }
+
+        using var context = _contextFactory();
+        MediaRelationResolver.TryCreate(
+            context,
+            MediaRelationEndpointKind.Collection, currentCollectionId,
+            MediaRelationEndpointKind.Series, target.SeriesId,
+            SelectedSeriesRelationType);
+
+        IsAddingSeriesRelation = false;
+        SeriesRelationSearchQuery = string.Empty;
+        SeriesRelationSearchResults.Clear();
+        RefreshRelatedSeries(context, currentCollectionId);
+    }
+
+    [RelayCommand]
+    private void RemoveSeriesRelation(RelatedSeriesChip? chip)
+    {
+        if (chip is null || _collectionId is not int currentCollectionId)
+        {
+            return;
+        }
+
+        using var context = _contextFactory();
+        MediaRelationResolver.Remove(context, chip.MediaRelationId);
+        RefreshRelatedSeries(context, currentCollectionId);
     }
 }

@@ -274,6 +274,68 @@
                         </StackPanel>
                     </Border>
 
+                    <Border Classes="groupBox" Margin="0,16,0,0">
+                        <StackPanel>
+                            <Grid ColumnDefinitions="*,Auto" Classes="groupHeader">
+                                <TextBlock Grid.Column="0" Text="Related" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
+                                <Button Grid.Column="1" Classes="ghost" FontSize="11.5" Content="+ Add" Command="{Binding ToggleAddSeriesRelationCommand}" />
+                            </Grid>
+                            <StackPanel Margin="14">
+                                <Border IsVisible="{Binding IsAddingSeriesRelation}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
+                                        CornerRadius="6" Padding="12" Margin="0,0,0,12">
+                                    <StackPanel Spacing="8">
+                                        <StackPanel Orientation="Horizontal" Spacing="8">
+                                            <TextBlock Text="Relationship:" FontSize="12" VerticalAlignment="Center" Foreground="{DynamicResource PbTextMutedBrush}" />
+                                            <ComboBox ItemsSource="{Binding RelationTypeOptions}" SelectedItem="{Binding SelectedSeriesRelationTypeOption}" MinWidth="160" FontSize="12">
+                                                <ComboBox.ItemTemplate>
+                                                    <DataTemplate x:DataType="models:RelationTypeOption"><TextBlock Text="{Binding Label}" /></DataTemplate>
+                                                </ComboBox.ItemTemplate>
+                                            </ComboBox>
+                                        </StackPanel>
+                                        <TextBox Text="{Binding SeriesRelationSearchQuery}" Watermark="Search for a series…" FontSize="12" />
+                                        <ItemsControl ItemsSource="{Binding SeriesRelationSearchResults}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate x:DataType="models:SeriesSearchResult">
+                                                    <Button HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Padding="8,6" Margin="0,2"
+                                                            Background="Transparent" BorderThickness="0" FontSize="12.5"
+                                                            Foreground="{DynamicResource PbTextMutedBrush}"
+                                                            Command="{Binding $parent[UserControl].((vm:CollectionPropertiesScreenViewModel)DataContext).AddSeriesRelationCommand}"
+                                                            CommandParameter="{Binding}">
+                                                        <TextBlock Text="{Binding Name}" />
+                                                    </Button>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </StackPanel>
+                                </Border>
+
+                                <TextBlock Text="No related series yet." FontSize="11.5"
+                                           Foreground="{DynamicResource PbTextFaintBrush}" IsVisible="{Binding !RelatedSeries.Count}" />
+                                <ItemsControl ItemsSource="{Binding RelatedSeries}">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="models:RelatedSeriesChip">
+                                            <Border Background="{DynamicResource PbSurfaceAltBrush}" CornerRadius="{DynamicResource PbRadius}" Padding="10,4" Margin="0,0,6,6">
+                                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                                    <TextBlock FontSize="11.5" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center">
+                                                        <Run Text="{Binding Name}" FontWeight="SemiBold" />
+                                                        <Run Text="{Binding RelationTypeLabel, StringFormat=' · {0}'}" Foreground="{DynamicResource PbTextFaintBrush}" />
+                                                    </TextBlock>
+                                                    <Button Content="✕" Padding="0" Width="16" Height="16" FontSize="9.5" CornerRadius="8"
+                                                            Background="Transparent" BorderThickness="0" Foreground="{DynamicResource PbTextFaintBrush}"
+                                                            Command="{Binding $parent[UserControl].((vm:CollectionPropertiesScreenViewModel)DataContext).RemoveSeriesRelationCommand}"
+                                                            CommandParameter="{Binding}" ToolTip.Tip="Remove this relation" />
+                                                </StackPanel>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+
                 </StackPanel>
             </ScrollViewer>
         </DockPanel>

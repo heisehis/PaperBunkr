@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -31,25 +32,27 @@ public partial class DetailTabsViewModel : ViewModelBase
     private readonly Action? _onSelectionChanged;
     private readonly Action<int> _onQuickRate;
     private readonly Action<int> _navigateToSeries;
+    private readonly Action<int> _navigateToCollection;
     private readonly Action<int> _openInReader;
     private readonly Func<PaperbunkrDbContext> _contextFactory;
     private readonly IMetadataProvider _metadataProvider;
     private int? _seriesId;
     private readonly TileSelectionController<IssueCardSample> _selection = new();
 
-    public DetailTabsViewModel(Action<int> goToProperties, Action<IReadOnlyList<int>> goToBulkProperties, Action? onSelectionChanged = null, Action<int>? onQuickRate = null, Action<int>? navigateToSeries = null, Action<int>? openInReader = null)
-        : this(goToProperties, goToBulkProperties, onSelectionChanged, PaperbunkrDb.CreateContext, new AniListMetadataProvider(AniListHttpClient.Shared), onQuickRate, navigateToSeries, openInReader)
+    public DetailTabsViewModel(Action<int> goToProperties, Action<IReadOnlyList<int>> goToBulkProperties, Action? onSelectionChanged = null, Action<int>? onQuickRate = null, Action<int>? navigateToSeries = null, Action<int>? openInReader = null, Action<int>? navigateToCollection = null)
+        : this(goToProperties, goToBulkProperties, onSelectionChanged, PaperbunkrDb.CreateContext, new AniListMetadataProvider(AniListHttpClient.Shared), onQuickRate, navigateToSeries, openInReader, navigateToCollection)
     {
     }
 
     /// <summary>Test-only seam - production always uses the default ctor (the real per-user database and a real <see cref="AniListMetadataProvider"/>).</summary>
-    internal DetailTabsViewModel(Action<int> goToProperties, Action<IReadOnlyList<int>> goToBulkProperties, Action? onSelectionChanged, Func<PaperbunkrDbContext> contextFactory, IMetadataProvider? metadataProvider = null, Action<int>? onQuickRate = null, Action<int>? navigateToSeries = null, Action<int>? openInReader = null)
+    internal DetailTabsViewModel(Action<int> goToProperties, Action<IReadOnlyList<int>> goToBulkProperties, Action? onSelectionChanged, Func<PaperbunkrDbContext> contextFactory, IMetadataProvider? metadataProvider = null, Action<int>? onQuickRate = null, Action<int>? navigateToSeries = null, Action<int>? openInReader = null, Action<int>? navigateToCollection = null)
     {
         _goToProperties = goToProperties;
         _goToBulkProperties = goToBulkProperties;
         _onSelectionChanged = onSelectionChanged;
         _onQuickRate = onQuickRate ?? (_ => { });
         _navigateToSeries = navigateToSeries ?? (_ => { });
+        _navigateToCollection = navigateToCollection ?? (_ => { });
         _openInReader = openInReader ?? (_ => { });
         _contextFactory = contextFactory;
         _metadataProvider = metadataProvider ?? new AniListMetadataProvider(AniListHttpClient.Shared);
@@ -147,7 +150,7 @@ public partial class DetailTabsViewModel : ViewModelBase
 
     public bool HasSameEvent => SameEvent.Count > 0;
 
-    public ObservableCollection<SeriesSearchResult> RelationSearchResults { get; } = new();
+    public ObservableCollection<RelationSearchResult> RelationSearchResults { get; } = new();
 
     public string Publisher { get; private set; } = "Unknown";
     public string ReadingModeLabel { get; private set; } = "Left to Right";
@@ -233,25 +236,68 @@ public partial class DetailTabsViewModel : ViewModelBase
     {
         Related.Clear();
         RelatedRail.Clear();
-        foreach (var (otherSeries, displayType, mediaRelationId) in MediaRelationResolver.GetRelatedSeries(context, seriesId))
+        foreach (var endpoint in MediaRelationResolver.GetRelatedFromSeries(context, seriesId))
         {
-            var sample = new RelatedSeriesSample
+            RelatedSeriesSample sample;
+            Avalonia.Media.Imaging.Bitmap? coverImage;
+
+            if (endpoint.Kind == MediaRelationEndpointKind.Series && endpoint.Series is { } otherSeries)
             {
-                Title = otherSeries.Name,
-                Name = otherSeries.Name,
-                Note = RelationTypeOption.FormatLabel(displayType),
-                CoverBrush = SeriesCardSample.CoverBrushFor(otherSeries.Name),
-                RelatedSeriesId = otherSeries.Id,
-                MediaRelationId = mediaRelationId,
-            };
+                sample = new RelatedSeriesSample
+                {
+                    Title = otherSeries.Name,
+                    Name = otherSeries.Name,
+                    Note = RelationTypeOption.FormatLabel(endpoint.DisplayType),
+                    CoverBrush = SeriesCardSample.CoverBrushFor(otherSeries.Name),
+                    Kind = MediaRelationEndpointKind.Series,
+                    RelatedSeriesId = otherSeries.Id,
+                    MediaRelationId = endpoint.MediaRelationId,
+                };
+                coverImage = RailCoverFor(context, otherSeries.Id);
+            }
+            else if (endpoint.Kind == MediaRelationEndpointKind.Collection && endpoint.Collection is { } collection)
+            {
+                // Same manual-cover-then-first-member resolution HomeCollectionCard.FromCollection
+                // already uses for a collection's own cover.
+                var hint = CollectionResolver.GetCoverHint(context, collection.Id);
+                var coverBrush = SeriesCardSample.CoverBrushFor(collection.Name);
+                coverImage = null;
+                if (hint.ManualPath is { } path && File.Exists(path))
+                {
+                    try { coverImage = new Avalonia.Media.Imaging.Bitmap(path); }
+                    catch { coverImage = null; }
+                }
+                else if (hint.FirstMember is { } member)
+                {
+                    var tile = LibraryTile.FromMember(member);
+                    coverBrush = tile.CoverBrush;
+                    coverImage = tile.CoverImage ?? (tile.CoverIssueId is int issueId ? CoverImageCache.Get(issueId) : null);
+                }
+
+                sample = new RelatedSeriesSample
+                {
+                    Title = collection.Name,
+                    Name = collection.Name,
+                    Note = RelationTypeOption.FormatLabel(endpoint.DisplayType),
+                    CoverBrush = coverBrush,
+                    Kind = MediaRelationEndpointKind.Collection,
+                    RelatedCollectionId = collection.Id,
+                    MediaRelationId = endpoint.MediaRelationId,
+                };
+            }
+            else
+            {
+                continue;
+            }
+
             Related.Add(sample);
             RelatedRail.Add(new PosterRailItem
             {
-                Id = otherSeries.Id,
-                Name = otherSeries.Name,
+                Id = sample.RelatedSeriesId ?? sample.RelatedCollectionId ?? 0,
+                Name = sample.Name,
                 SubLabel = sample.Note,
                 CoverBrush = sample.CoverBrush,
-                CoverImage = RailCoverFor(context, otherSeries.Id),
+                CoverImage = coverImage,
                 Payload = sample,
             });
         }
@@ -307,20 +353,32 @@ public partial class DetailTabsViewModel : ViewModelBase
         }
 
         using var context = _contextFactory();
-        var matches = context.Series
+        var seriesMatches = context.Series
             .Where(s => s.Id != currentSeriesId)
             .AsEnumerable()
             .Where(s => s.Name.Contains(RelationSearchQuery, StringComparison.OrdinalIgnoreCase))
             .Take(20);
 
-        foreach (var series in matches)
+        foreach (var series in seriesMatches)
         {
-            RelationSearchResults.Add(new SeriesSearchResult { SeriesId = series.Id, Name = series.Name });
+            RelationSearchResults.Add(new RelationSearchResult(MediaRelationEndpointKind.Series, series.Id, null, series.Name));
+        }
+
+        // Collections join the same mixed search (docs/superpowers/specs/2026-08-30-media-relation-
+        // collection-nodes-design.md) - a Collection can sit on either side of a MediaRelation now.
+        var collectionMatches = context.Collections
+            .AsEnumerable()
+            .Where(c => c.Name.Contains(RelationSearchQuery, StringComparison.OrdinalIgnoreCase))
+            .Take(20);
+
+        foreach (var collection in collectionMatches)
+        {
+            RelationSearchResults.Add(new RelationSearchResult(MediaRelationEndpointKind.Collection, null, collection.Id, collection.Name));
         }
     }
 
     [RelayCommand]
-    private void AddRelation(SeriesSearchResult? target)
+    private void AddRelation(RelationSearchResult? target)
     {
         if (target is null || _seriesId is not int currentSeriesId)
         {
@@ -328,7 +386,8 @@ public partial class DetailTabsViewModel : ViewModelBase
         }
 
         using var context = _contextFactory();
-        MediaRelationResolver.TryCreate(context, currentSeriesId, target.SeriesId, SelectedRelationType);
+        int targetId = target.Kind == MediaRelationEndpointKind.Series ? target.SeriesId!.Value : target.CollectionId!.Value;
+        MediaRelationResolver.TryCreate(context, MediaRelationEndpointKind.Series, currentSeriesId, target.Kind, targetId, SelectedRelationType);
 
         IsAddingRelation = false;
         RelationSearchQuery = string.Empty;
@@ -1368,10 +1427,20 @@ public partial class DetailTabsViewModel : ViewModelBase
         }
     }
 
-    /// <summary>PosterRail click-through - <paramref name="payload"/> is a series id (int) or a sample carrying one.</summary>
+    /// <summary>PosterRail click-through - <paramref name="payload"/> is a series id (int) or a sample carrying one. A <see cref="RelatedSeriesSample"/> for a Collection endpoint (docs/superpowers/specs/2026-08-30-media-relation-collection-nodes-design.md) routes to the Library-with-collection-selected callback instead of Series Detail.</summary>
     [RelayCommand]
     private void OpenRelatedSeries(object? payload)
     {
+        if (payload is RelatedSeriesSample { Kind: MediaRelationEndpointKind.Collection } collectionSample)
+        {
+            if (collectionSample.RelatedCollectionId is int collectionId)
+            {
+                _navigateToCollection(collectionId);
+            }
+
+            return;
+        }
+
         int? id = payload switch
         {
             int seriesId => seriesId,

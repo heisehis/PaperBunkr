@@ -47,8 +47,8 @@ public partial class MainViewModel : ViewModelBase
         BookSeriesProperties = new BookSeriesPropertiesScreenViewModel(CloseBookSeriesPropertiesOverlay, ShowToast);
         BookReader = new BookReaderScreenViewModel(GoBackFromBookReader);
         PdfReader = new PdfPageReaderScreenViewModel(GoBackFromBookReader);
-        Detail = new DetailScreenViewModel(GoLibrary, GoReaderForIssue, GoIssuePropertiesForIssue, GoBulkIssuePropertiesForIssues, GoDetailForSeries, GoLibraryWithSearch, OpenQuickRateOverlay);
-        MangaDetail = new MangaDetailScreenViewModel(GoLibrary, GoReaderForIssue, GoIssuePropertiesForIssue, GoBulkIssuePropertiesForIssues, GoDetailForSeries, GoLibraryWithSearch);
+        Detail = new DetailScreenViewModel(GoLibrary, GoReaderForIssue, GoIssuePropertiesForIssue, GoBulkIssuePropertiesForIssues, GoDetailForSeries, GoLibraryWithSearch, OpenQuickRateOverlay, GoLibraryWithCollection);
+        MangaDetail = new MangaDetailScreenViewModel(GoLibrary, GoReaderForIssue, GoIssuePropertiesForIssue, GoBulkIssuePropertiesForIssues, GoDetailForSeries, GoLibraryWithSearch, GoLibraryWithCollection);
         var keyBindingService = new KeyBindingService();
         Reader = new ReaderScreenViewModel(GoBackFromReader, keyBindingService);
         IssueProperties = new IssuePropertiesScreenViewModel(CloseIssuePropertiesOverlayAndReload, ShowToast);

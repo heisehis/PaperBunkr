@@ -580,6 +580,31 @@ Plugins 16), all green; app smoke-launched to "Startup complete" via a properly-
 real crash — worth remembering for future smoke-launches in this environment). On-screen GUI pass
 still pending.
 
+### MediaRelation collection nodes (shipped 2026-08-30)
+Design spec: `2026-08-30-media-relation-collection-nodes-design.md`, plan: `2026-08-30-media-
+relation-collection-nodes-plan.md`. Closes the last item from `2026-08-27-collections-design.md`'s
+deferred list — the other two (`RecommendationReason.SameCollection` wiring, Home-feed shelf) were
+found already shipped during the audit that led to this spec; that doc's own note was stale.
+`MediaRelation`'s `SourceSeriesId`/`TargetSeriesId` relaxed to nullable, plus two new nullable
+`SourceCollectionId`/`TargetCollectionId` columns, each side guarded by an exactly-one `CHECK`
+(mirrors `CollectionItem`'s existing polymorphic-target pattern). Collection↔Collection is rejected
+in `MediaRelationResolver.TryCreate` — that combination stays `CollectionRelation`'s job, avoiding
+two inconsistent ways to link two collections. `MediaRelationResolver.GetRelatedSeries` replaced by
+`GetRelatedFromSeries`/`GetRelatedFromCollection`, both returning a new mixed-kind
+`MediaRelationEndpoint` (mirrors `CollectionResolver.CollectionMember`'s discriminated shape).
+`IMetadataGraph` gains 3 additive overloads (`GetRelatedCollections(Series)`,
+`GetRelations(Collection)`, `GetRelatedSeries(Collection)`) — user chose the larger "full first-class
+plugin type" scope over the smaller additive-only option during brainstorming. Series Detail's
+"Related Series" rail renamed "Related" with a mixed Series+Collection add-flow; Collection editor
+gains a parallel Series-only "Related" section (deliberately scoped to Series-only search — a
+Collection↔Collection match found there would just be rejected). Two real bugs caught during
+implementation: `TryCreate`'s duplicate check used a custom C# method EF couldn't translate to SQL
+(fixed by materializing the candidate rows first, `AsEnumerable()` before the in-memory filter); a
+migration round-trip test's own directional-inversion assertions were initially written backwards
+and caught by the test itself. Tests: 1926 total (Data 642 + App 1268 + Plugins 16), all green (one
+known-flaky, unrelated concurrency test confirmed passing in isolation); app smoke-launched to
+"Startup complete". On-screen GUI pass still pending.
+
 ### Plugin API v3 — metadata/rules/writer for Data-Manager plugins (shipped 2026-08-29)
 Design spec: `2026-08-28-plugin-api-v3-data-manager-design.md`. Extends the v2 host (no new hooks).
 (§2) `IMetadataGraph` — 6th `IPluginEnvironment` sub-interface, read facade over the Phase 3-4g

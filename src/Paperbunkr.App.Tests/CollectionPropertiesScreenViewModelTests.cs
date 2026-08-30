@@ -306,4 +306,89 @@ public class CollectionPropertiesScreenViewModelTests : IDisposable
         using var verify = new PaperbunkrDbContext(_dbOptions);
         Assert.Equal(2, verify.CollectionItems.Count(ci => ci.CollectionId == _collectionId));
     }
+
+    // --- Related (Series-node MediaRelation edges, docs/superpowers/specs/2026-08-30-media-
+    // relation-collection-nodes-design.md) ---
+
+    private int AddOtherSeries(string name)
+    {
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        var series = new Series { Name = name };
+        context.Series.Add(series);
+        context.SaveChanges();
+        return series.Id;
+    }
+
+    [Fact]
+    public void SearchSeriesRelationCandidates_FindsSeriesOnly()
+    {
+        AddOtherSeries("Justice League Origin");
+        var vm = new CollectionPropertiesScreenViewModel(() => { }, () => new PaperbunkrDbContext(_dbOptions));
+        vm.Load(_collectionId);
+
+        vm.SeriesRelationSearchQuery = "justice";
+
+        var result = Assert.Single(vm.SeriesRelationSearchResults);
+        Assert.Equal("Justice League Origin", result.Name);
+    }
+
+    [Fact]
+    public void AddSeriesRelation_PersistsMixedMediaRelation_PopulatesRelatedSeriesChip()
+    {
+        int otherId = AddOtherSeries("Justice League Origin");
+        var vm = new CollectionPropertiesScreenViewModel(() => { }, () => new PaperbunkrDbContext(_dbOptions));
+        vm.Load(_collectionId);
+        vm.SelectedSeriesRelationTypeOption = CollectionPropertiesScreenViewModel.RelationTypeOptions.First(o => o.Type == RelationType.Crossover);
+        vm.SeriesRelationSearchQuery = "justice";
+        var target = Assert.Single(vm.SeriesRelationSearchResults);
+
+        vm.AddSeriesRelationCommand.Execute(target);
+
+        var chip = Assert.Single(vm.RelatedSeries);
+        Assert.Equal(otherId, chip.SeriesId);
+        Assert.Equal("Justice League Origin", chip.Name);
+
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        var relation = Assert.Single(context.MediaRelations);
+        Assert.Equal(_collectionId, relation.SourceCollectionId);
+        Assert.Equal(otherId, relation.TargetSeriesId);
+    }
+
+    [Fact]
+    public void RemoveSeriesRelation_DeletesRelation_ClearsFromRelatedSeries()
+    {
+        int otherId = AddOtherSeries("Justice League Origin");
+        var vm = new CollectionPropertiesScreenViewModel(() => { }, () => new PaperbunkrDbContext(_dbOptions));
+        vm.Load(_collectionId);
+        vm.SeriesRelationSearchQuery = "justice";
+        vm.AddSeriesRelationCommand.Execute(Assert.Single(vm.SeriesRelationSearchResults));
+        var chip = Assert.Single(vm.RelatedSeries);
+
+        vm.RemoveSeriesRelationCommand.Execute(chip);
+
+        Assert.Empty(vm.RelatedSeries);
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        Assert.Empty(context.MediaRelations);
+    }
+
+    [Fact]
+    public void RelatedSeriesSection_DoesNotInterfereWith_RelatedCollectionsSection()
+    {
+        int otherCollectionId = CreateOtherCollection("Sister Collection");
+        int otherSeriesId = AddOtherSeries("Justice League Origin");
+        var vm = new CollectionPropertiesScreenViewModel(() => { }, () => new PaperbunkrDbContext(_dbOptions));
+        vm.Load(_collectionId);
+
+        vm.ToggleAddRelationCommand.Execute(null);
+        vm.RelationSearchQuery = "sister";
+        vm.AddRelationCommand.Execute(Assert.Single(vm.RelationSearchResults));
+
+        vm.SeriesRelationSearchQuery = "justice";
+        vm.AddSeriesRelationCommand.Execute(Assert.Single(vm.SeriesRelationSearchResults));
+
+        var collectionChip = Assert.Single(vm.RelatedCollections);
+        Assert.Equal(otherCollectionId, collectionChip.CollectionId);
+        var seriesChip = Assert.Single(vm.RelatedSeries);
+        Assert.Equal(otherSeriesId, seriesChip.SeriesId);
+    }
 }

@@ -23,6 +23,15 @@ public interface IMetadataGraph
     /// <summary>The related series for <paramref name="series"/>, each already resolved to the role it plays relative to <paramref name="series"/> (via <c>MediaRelationResolver</c>).</summary>
     IReadOnlyList<Series> GetRelatedSeries(Series series);
 
+    /// <summary>The related collections for <paramref name="series"/> (docs/superpowers/specs/2026-08-30-media-relation-collection-nodes-design.md) - a Collection can now sit on either side of a <see cref="MediaRelation"/>.</summary>
+    IReadOnlyList<Collection> GetRelatedCollections(Series series);
+
+    /// <summary>Every <see cref="MediaRelation"/> row touching <paramref name="collection"/> (as source or target).</summary>
+    IReadOnlyList<MediaRelation> GetRelations(Collection collection);
+
+    /// <summary>The related series for <paramref name="collection"/>, each already resolved to the role it plays relative to <paramref name="collection"/>. A collection's own relations can only have a Series on the other side (Collection↔Collection is <c>CollectionRelation</c>'s job, not this graph's).</summary>
+    IReadOnlyList<Series> GetRelatedSeries(Collection collection);
+
     /// <summary>The <see cref="Continuity"/> rows <paramref name="series"/> belongs to.</summary>
     IReadOnlyList<Continuity> GetContinuities(Series series);
 

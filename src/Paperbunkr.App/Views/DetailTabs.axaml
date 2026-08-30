@@ -363,16 +363,19 @@
                             </ComboBox.ItemTemplate>
                         </ComboBox>
                     </StackPanel>
-                    <TextBox Text="{Binding RelationSearchQuery}" Watermark="Search for a series…" FontSize="12" />
+                    <TextBox Text="{Binding RelationSearchQuery}" Watermark="Search for a series or collection…" FontSize="12" />
                     <ItemsControl ItemsSource="{Binding RelationSearchResults}">
                         <ItemsControl.ItemTemplate>
-                            <DataTemplate x:DataType="models:SeriesSearchResult">
+                            <DataTemplate x:DataType="models:RelationSearchResult">
                                 <Button HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Padding="8,6" Margin="0,2"
                                         Background="Transparent" BorderThickness="0" FontSize="12.5"
                                         Foreground="{DynamicResource PbTextMutedBrush}"
                                         Command="{Binding #Root.((vm:DetailTabsViewModel)DataContext).AddRelationCommand}"
                                         CommandParameter="{Binding}">
-                                    <TextBlock Text="{Binding Name}" />
+                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                        <TextBlock Text="{Binding Name}" />
+                                        <TextBlock Text="{Binding Kind}" FontSize="10.5" Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" />
+                                    </StackPanel>
                                 </Button>
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
@@ -383,7 +386,7 @@
             <TextBlock IsVisible="{Binding !HasAnyRelatedRail}" Text="No related series yet." FontSize="12.5"
                        Foreground="{DynamicResource PbTextFaintBrush}" Margin="0,6,0,10" />
 
-            <views:PosterRail Title="Related Series" ContextLabel="{Binding Related.Count, StringFormat='{}{0} · manage'}"
+            <views:PosterRail Title="Related" ContextLabel="{Binding Related.Count, StringFormat='{}{0} · manage'}"
                               ItemsSource="{Binding RelatedRail}" ShowAddCard="True"
                               AddCommand="{Binding ToggleAddRelationCommand}"
                               RemoveCommand="{Binding RemoveRelationCommand}"

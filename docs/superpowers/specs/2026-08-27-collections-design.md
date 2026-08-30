@@ -52,10 +52,14 @@ sanctioned; there is nothing to verify against `_reference/ComicRackCE`.
   cover-wall (`BuildMastheadBackdrop`) doesn't pull from `Collections`, only from
   RecentlyAdded/BecauseYouRead/ContinueReading/SpotlightItems — not itself part of this deferred
   item's original scope, just an observation.
-- Typed `MediaRelation` edges involving collections (collections as nodes in the pairwise
-  relation graph). **Still open** — `MediaRelation` is still strictly `Series ↔ Series`
-  (non-nullable `SourceSeriesId`/`TargetSeriesId`, no Collection FK at all). This is the one
-  genuinely remaining item; see the follow-on design doc it gets.
+- ~~Typed `MediaRelation` edges involving collections (collections as nodes in the pairwise
+  relation graph).~~ — done. Shipped 2026-08-30 per docs/superpowers/specs/2026-08-30-media-
+  relation-collection-nodes-design.md: `MediaRelation` gained nullable dual-FK pairs (Series or
+  Collection per side, exactly one via a `CHECK`), Collection↔Collection rejected in favor of
+  `CollectionRelation`, `MediaRelationResolver` gained mixed-kind `GetRelatedFromSeries`/
+  `GetRelatedFromCollection`, `IMetadataGraph` gained 3 additive overloads, the Series Detail
+  "Related" rail and a new Collection-editor section both support the mixed edge. This closes out
+  every item this doc originally deferred.
 
 ## Architecture
 

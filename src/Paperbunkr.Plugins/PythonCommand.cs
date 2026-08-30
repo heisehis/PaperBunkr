@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using IronPython.Hosting;
 using Microsoft.Scripting.Hosting;
 using Paperbunkr.Data.Entities;
@@ -13,16 +14,26 @@ namespace Paperbunkr.Plugins;
 /// dispatches by <see cref="Script"/>'s file extension, not a manifest schema difference.
 ///
 /// <para>
-/// Sandbox note (mirrors <see cref="CSharpCommand"/>'s own <see cref="BlockedMetadataReferenceResolver"/>
-/// rationale, verify at test time - see <c>PythonCommandTests</c>' sandbox probe): the engine only
-/// ever <see cref="ScriptRuntime.LoadAssembly"/>s the same fixed small set <c>CSharpCommand.Options</c>
-/// already uses (BCL, <see cref="Issue"/>'s assembly, this assembly). EF Core/SQLite are never
-/// registered with it - whether a script's own <c>clr.AddReference</c> can still probe an assembly
-/// this process loaded for other reasons is the open question that test settles, not this comment.
+/// Sandbox (docs/superpowers/specs/2026-08-30-python-plugin-scripting-design.md's "Sandbox"
+/// section has the full story): the engine only ever <see cref="ScriptRuntime.LoadAssembly"/>s the
+/// same fixed small set <c>CSharpCommand.Options</c> already uses (BCL, <see cref="Issue"/>'s
+/// assembly, this assembly) - EF Core/SQLite are never registered with it. That alone isn't
+/// enough: IronPython's own <c>clr.AddReference</c> falls back to <c>Assembly.LoadWithPartialName</c>
+/// on any failure, which resolves against whatever's already loaded anywhere in the process -
+/// confirmed to bypass both a custom <c>PlatformAdaptationLayer</c> and real
+/// <c>AssemblyLoadContext</c> isolation, neither scopes it. <see cref="PreCompile"/> instead does a
+/// static text scan and rejects a script outright (never executes) if it names a
+/// <see cref="PluginSandboxDenylist"/> assembly via <c>clr.AddReference</c> - same
+/// "accidental overreach, not adversarial isolation" bar the whole in-process plugin architecture
+/// has always targeted, not a hardened boundary.
 /// </para>
 /// </summary>
 public sealed class PythonCommand : Command
 {
+    private static readonly Regex AddReferenceCall = new(
+        @"AddReference\s*\(\s*['""]([^'""]+)['""]",
+        RegexOptions.Compiled);
+
     /// <summary>Absolute path to the .py script this command's <see cref="Method"/> lives in, resolved by <see cref="XmlPluginInitializer"/> against the manifest's own folder.</summary>
     public required string ScriptPath { get; init; }
 
@@ -42,13 +53,21 @@ public sealed class PythonCommand : Command
     {
         try
         {
+            string code = File.ReadAllText(ScriptPath);
+            string? deniedName = FindDeniedAddReference(code);
+            if (deniedName is not null)
+            {
+                CompileError = $"Script calls clr.AddReference('{deniedName}') - not allowed. See docs/superpowers/specs/2026-08-30-python-plugin-scripting-design.md's Sandbox section.";
+                return;
+            }
+
             ScriptEngine engine = Python.CreateEngine();
             engine.Runtime.LoadAssembly(typeof(object).Assembly); // BCL
             engine.Runtime.LoadAssembly(typeof(Issue).Assembly); // Paperbunkr.Data entities
             engine.Runtime.LoadAssembly(typeof(PluginGlobals).Assembly); // this assembly (Paperbunkr.Plugins)
 
             ScriptScope scope = engine.CreateScope();
-            ScriptSource source = engine.CreateScriptSourceFromFile(ScriptPath);
+            ScriptSource source = engine.CreateScriptSourceFromString(code, Microsoft.Scripting.SourceCodeKind.File);
             source.Execute(scope);
 
             if (!scope.ContainsVariable(Method))
@@ -64,6 +83,23 @@ public sealed class PythonCommand : Command
             CompileError = ex.Message;
             _scope = null;
         }
+    }
+
+    /// <summary>Text-level scan, not a Python parse - trivially defeated by a determined author
+    /// (string concatenation, getattr indirection), consistent with this sandbox's own stated
+    /// "accidental overreach" bar. Returns the first denied assembly name found, or null.</summary>
+    private static string? FindDeniedAddReference(string code)
+    {
+        foreach (Match match in AddReferenceCall.Matches(code))
+        {
+            string name = match.Groups[1].Value;
+            if (PluginSandboxDenylist.IsDenied(name))
+            {
+                return name;
+            }
+        }
+
+        return null;
     }
 
     protected override Task<object?> OnInvokeAsync(PluginGlobals globals)

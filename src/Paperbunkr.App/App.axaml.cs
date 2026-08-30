@@ -28,6 +28,21 @@ public partial class App : Application
     {
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
+            DiagnosticsService.LogMilestone("Checking database integrity...");
+
+            // Corruption safeguard (docs/superpowers/specs/2026-08-29-db-corruption-safeguards-
+            // design.md §3) - runs before HasAnySeries()/EnsureCreated() ever touch the live file,
+            // so a genuinely corrupt database is caught before EF/migrations attempt to open it
+            // and crash. CheckIntegrity() itself returns true (nothing to check) on a fresh install.
+            if (!DatabaseIntegrityService.CheckIntegrity(out string? integrityDetail))
+            {
+                DiagnosticsService.LogMilestone($"Database integrity check failed: {integrityDetail}");
+                if (!HandleDatabaseRecovery(desktop, integrityDetail))
+                {
+                    return;
+                }
+            }
+
             DiagnosticsService.LogMilestone("Checking for an existing library...");
 
             // No demo/placeholder data is ever seeded (see PaperbunkrDb.EnsureCreated) - checked
@@ -59,6 +74,12 @@ public partial class App : Application
                 DiagnosticsService.LogCrash("Database migration/open (EnsureCreated)", ex, isTerminating: true);
                 throw;
             }
+
+            // Auto-backup startup trigger (spec §2) - fire-and-forget on a background thread so a
+            // checkpoint+file-copy never adds to startup latency. This is the fallback trigger; the
+            // primary one fires on clean shutdown below. RunAutoBackupIfDue() is itself gated by
+            // AutoBackupEnabled and the min-interval de-dupe guard, and swallows its own failures.
+            System.Threading.Tasks.Task.Run(() => new BackupService().RunAutoBackupIfDue());
 
             DiagnosticsService.LogMilestone("Database ready. Applying skin/theme...");
             new SkinService().ApplyPersistedSettings();
@@ -110,9 +131,84 @@ public partial class App : Application
             mainViewModel.Library.AttachHost(pluginHost);
             desktop.Exit += (_, _) => pluginHost.Shutdown();
 
+            // Auto-backup shutdown trigger (spec §2) - the primary trigger, since it also catches
+            // sessions left open all day that never restart. Synchronous and best-effort: a normal
+            // checkpoint+file-copy is fast enough not to perceptibly delay exit, and
+            // RunAutoBackupIfDue() swallows its own failures rather than blocking shutdown on one.
+            desktop.Exit += (_, _) => new BackupService().RunAutoBackupIfDue();
+
             DiagnosticsService.LogMilestone("Startup complete.");
         }
 
         base.OnFrameworkInitializationCompleted();
+    }
+
+    /// <summary>
+    /// Shows <see cref="DatabaseRecoveryWindow"/> and acts on the user's choice (spec §3). Restore
+    /// and Quit both terminate this process (Restore relaunches first) and never return; only
+    /// Start Fresh returns, so the caller can fall through to the normal fresh-install flow that
+    /// already runs when <c>HasAnySeries()</c> finds an empty/nonexistent database.
+    /// </summary>
+    private static bool HandleDatabaseRecovery(IClassicDesktopStyleApplicationLifetime desktop, string? detail)
+    {
+        var backupService = new BackupService();
+        var (outcome, selectedBackupPath) = DatabaseRecoveryWindow.ShowModal(detail, backupService.GetAvailableBackups());
+
+        switch (outcome)
+        {
+            case DatabaseRecoveryOutcome.Restore when selectedBackupPath is not null:
+                DiagnosticsService.LogMilestone($"Restoring database from backup: {selectedBackupPath}");
+                backupService.RestoreBackup(selectedBackupPath);
+                RelaunchAndExit();
+                return false;
+
+            case DatabaseRecoveryOutcome.StartFresh:
+                DiagnosticsService.LogMilestone("Starting fresh library - corrupt database renamed aside.");
+                QuarantineCorruptDatabase();
+                return true;
+
+            default:
+                DiagnosticsService.LogMilestone("User chose to quit after a database integrity failure.");
+                Environment.Exit(0);
+                return false;
+        }
+    }
+
+    /// <summary>Same relaunch mechanism as <c>DiagnosticsService.ActOnCrashOutcome</c>'s Restart outcome - a new process, then this one exits.</summary>
+    private static void RelaunchAndExit()
+    {
+        try
+        {
+            string? exePath = Environment.ProcessPath;
+            if (exePath is not null)
+            {
+                System.Diagnostics.Process.Start(exePath);
+            }
+        }
+        catch
+        {
+        }
+
+        Environment.Exit(0);
+    }
+
+    /// <summary>
+    /// Renames the corrupt database (and its WAL sidecars, if present) aside rather than deleting -
+    /// never destroy the one artifact that might let someone hand-recover data from it later
+    /// (spec §3). The normal fresh-install flow then creates a brand-new file at the original path.
+    /// </summary>
+    private static void QuarantineCorruptDatabase()
+    {
+        string dbPath = Paperbunkr.Data.PaperbunkrDbContext.GetDefaultDatabasePath();
+        string suffix = DateTime.UtcNow.ToString("yyyyMMdd_HHmmss");
+
+        Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
+        foreach (string path in new[] { dbPath, dbPath + "-wal", dbPath + "-shm" })
+        {
+            if (File.Exists(path))
+            {
+                File.Move(path, $"{path}.corrupt-{suffix}");
+            }
+        }
     }
 }

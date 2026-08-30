@@ -381,4 +381,36 @@ public class MainViewModelTests : IDisposable
         using var context = new PaperbunkrDbContext(new DbContextOptionsBuilder<PaperbunkrDbContext>().UseSqlite($"Data Source={_dbPath}").Options);
         Assert.True(context.GetOrCreateAppSettings().NavRailPinned);
     }
+
+    // --- Periodic cover verification gate (docs/superpowers/specs/2026-08-30-cover-thumbnail-
+    // content-verification-design.md) - a pure function, tested directly rather than through
+    // MainViewModel construction: the actual sweep is fire-and-forget with no completion signal,
+    // so asserting its side effects from a unit test would be inherently racy. ---
+
+    [Fact]
+    public void ShouldRunCoverVerification_NeverRunBefore_ReturnsTrue()
+    {
+        Assert.True(MainViewModel.ShouldRunCoverVerification(lastRunUtc: null, nowUtc: DateTime.UtcNow));
+    }
+
+    [Fact]
+    public void ShouldRunCoverVerification_RanThreeDaysAgo_ReturnsFalse()
+    {
+        var now = DateTime.UtcNow;
+        Assert.False(MainViewModel.ShouldRunCoverVerification(now.AddDays(-3), now));
+    }
+
+    [Fact]
+    public void ShouldRunCoverVerification_RanEightDaysAgo_ReturnsTrue()
+    {
+        var now = DateTime.UtcNow;
+        Assert.True(MainViewModel.ShouldRunCoverVerification(now.AddDays(-8), now));
+    }
+
+    [Fact]
+    public void ShouldRunCoverVerification_RanExactlySevenDaysAgo_ReturnsTrue()
+    {
+        var now = DateTime.UtcNow;
+        Assert.True(MainViewModel.ShouldRunCoverVerification(now.AddDays(-7), now));
+    }
 }

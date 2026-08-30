@@ -113,6 +113,13 @@ public partial class MainViewModel : ViewModelBase
         // files. Presence-based, so it's cheap when nothing changed. Fire-and-forget - a slow first
         // run after an upgrade must not block the shell.
         _ = ReconcileCoverCachesAsync();
+
+        // Periodic content verification (docs/superpowers/specs/2026-08-30-cover-thumbnail-content-
+        // verification-design.md): unlike the reconcile above (identity-fingerprint presence only),
+        // this unconditionally re-derives every cover from source, catching a cache entry that was
+        // simply wrong from the moment it was written. Heavier, so it's gated to once every 7 days
+        // rather than every launch - independent fire-and-forget task, silent by design (no toast).
+        _ = PeriodicCoverVerificationAsync();
     }
 
     private static async Task ReconcileCoverCachesAsync()
@@ -133,6 +140,48 @@ public partial class MainViewModel : ViewModelBase
         }
         catch
         {
+        }
+    }
+
+    private static readonly TimeSpan CoverVerificationInterval = TimeSpan.FromDays(7);
+
+    /// <summary>
+    /// Whether a periodic cover-verification pass is due, given when it last completed
+    /// (<paramref name="lastRunUtc"/>, null if never) and the current time. A pure function so the
+    /// gating logic is testable without waiting out real elapsed time or constructing a full
+    /// <see cref="MainViewModel"/>.
+    /// </summary>
+    internal static bool ShouldRunCoverVerification(DateTime? lastRunUtc, DateTime nowUtc) =>
+        lastRunUtc is not DateTime last || nowUtc - last >= CoverVerificationInterval;
+
+    private static async Task PeriodicCoverVerificationAsync()
+    {
+        DateTime? lastRunUtc;
+        using (var context = PaperbunkrDb.CreateContext())
+        {
+            lastRunUtc = context.GetOrCreateAppSettings().LastCoverVerificationUtc;
+        }
+
+        if (!ShouldRunCoverVerification(lastRunUtc, DateTime.UtcNow))
+        {
+            return;
+        }
+
+        var noProgress = new Progress<(int Done, int Total)>();
+        try
+        {
+            await new CoverThumbnailService().VerifyAllAsync(noProgress);
+            await new BookCoverThumbnailService().VerifyAllAsync(noProgress);
+
+            using var context = PaperbunkrDb.CreateContext();
+            var settings = context.GetOrCreateAppSettings();
+            settings.LastCoverVerificationUtc = DateTime.UtcNow;
+            context.SaveChanges();
+        }
+        catch
+        {
+            // Best-effort, same rationale as ReconcileCoverCachesAsync - retried next launch either
+            // way, since the timestamp only advances on full completion.
         }
     }
 

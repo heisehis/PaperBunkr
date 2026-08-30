@@ -86,6 +86,12 @@
                         <TextBlock Text="Backups to Keep" FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" Margin="0,6,0,0" />
                         <NumericUpDown Value="{Binding BackupsToKeep}" Minimum="0" Maximum="99" Width="120" HorizontalAlignment="Left" />
 
+                        <CheckBox Content="Automatically back up on startup and shutdown" IsChecked="{Binding AutoBackupEnabled}" Margin="0,6,0,0" />
+                        <TextBlock Text="Minimum Hours Between Automatic Backups" FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}"
+                                   IsVisible="{Binding AutoBackupEnabled}" />
+                        <NumericUpDown Value="{Binding AutoBackupMinIntervalHours}" Minimum="1" Maximum="168" Width="120" HorizontalAlignment="Left"
+                                       IsVisible="{Binding AutoBackupEnabled}" />
+
                         <Button Classes="headerAction primary" Command="{Binding BackupNowCommand}"
                                 HorizontalAlignment="Left" Margin="0,6,0,0">
                             <StackPanel Orientation="Horizontal" Spacing="6">

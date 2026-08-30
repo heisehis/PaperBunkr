@@ -1061,6 +1061,40 @@ public class PreferencesScreenViewModelTests : IDisposable
         Assert.Equal(10, context.GetOrCreateAppSettings().BackupsToKeep);
     }
 
+    /// <summary>docs/superpowers/specs/2026-08-29-db-corruption-safeguards-design.md §2.</summary>
+    [Fact]
+    public void ChangingAutoBackupSettings_PersistsToAppSettings()
+    {
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+
+        vm.AutoBackupEnabled = false;
+        vm.AutoBackupMinIntervalHours = 12;
+
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        var settings = context.GetOrCreateAppSettings();
+        Assert.False(settings.AutoBackupEnabled);
+        Assert.Equal(12, settings.AutoBackupMinIntervalHours);
+    }
+
+    [Fact]
+    public void EnsureLoaded_LoadsAutoBackupSettings_FromAppSettings()
+    {
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            var settings = context.GetOrCreateAppSettings();
+            settings.AutoBackupEnabled = false;
+            settings.AutoBackupMinIntervalHours = 8;
+            context.SaveChanges();
+        }
+
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+
+        Assert.False(vm.AutoBackupEnabled);
+        Assert.Equal(8, vm.AutoBackupMinIntervalHours);
+    }
+
     [Fact]
     public void BackupNow_CreatesBackupRow_AndSetsStatus()
     {

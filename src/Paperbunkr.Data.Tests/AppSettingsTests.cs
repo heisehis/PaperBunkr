@@ -198,6 +198,34 @@ public class AppSettingsTests : IDisposable
         Assert.True(reloaded.PreferNativeOpenGl);
     }
 
+    /// <summary>
+    /// New columns from migration <c>AddAutoBackupSettings</c> (docs/superpowers/specs/
+    /// 2026-08-29-db-corruption-safeguards-design.md §2) round-trip with their defaults.
+    /// </summary>
+    [Fact]
+    public void GetOrCreateAppSettings_AutoBackupFields_DefaultToEnabledAndFourHours()
+    {
+        var settings = _context.GetOrCreateAppSettings();
+
+        Assert.True(settings.AutoBackupEnabled);
+        Assert.Equal(4, settings.AutoBackupMinIntervalHours);
+    }
+
+    [Fact]
+    public void GetOrCreateAppSettings_AutoBackupFields_PersistAcrossContexts()
+    {
+        var settings = _context.GetOrCreateAppSettings();
+        settings.AutoBackupEnabled = false;
+        settings.AutoBackupMinIntervalHours = 12;
+        _context.SaveChanges();
+
+        using var freshContext = new PaperbunkrDbContext(_options);
+        var reloaded = freshContext.GetOrCreateAppSettings();
+
+        Assert.False(reloaded.AutoBackupEnabled);
+        Assert.Equal(12, reloaded.AutoBackupMinIntervalHours);
+    }
+
     [Fact]
     public void GetOrCreateAppSettings_IsIdempotent_DoesNotDuplicateRow()
     {

@@ -325,4 +325,19 @@ public class AppSettings
     /// <see cref="RenderingBackend"/>.
     /// </summary>
     public bool PreferNativeOpenGl { get; set; }
+
+    /// <summary>
+    /// Whether <c>BackupService.RunAutoBackupIfDue</c> fires automatically on app startup and clean
+    /// shutdown (docs/superpowers/specs/2026-08-29-db-corruption-safeguards-design.md §2), on top of
+    /// the existing manual "Backup Now". Default true - a user should have a recent backup even if
+    /// they've never touched the Advanced tab.
+    /// </summary>
+    public bool AutoBackupEnabled { get; set; } = true;
+
+    /// <summary>
+    /// Minimum age (hours) the newest existing backup must be before an automatic backup trigger
+    /// fires another one - see <see cref="AutoBackupEnabled"/>. Default 4, so a user who restarts
+    /// the app repeatedly in one session doesn't accumulate a backup per launch.
+    /// </summary>
+    public int AutoBackupMinIntervalHours { get; set; } = 4;
 }

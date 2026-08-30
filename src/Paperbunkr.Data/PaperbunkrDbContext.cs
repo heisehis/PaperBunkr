@@ -803,6 +803,8 @@ public class PaperbunkrDbContext : DbContext
             builder.Property(a => a.OpenLastPage).HasDefaultValue(true);
             builder.Property(a => a.AutoNavigateComics).HasDefaultValue(true);
             builder.Property(a => a.BackupsToKeep).HasDefaultValue(5);
+            builder.Property(a => a.AutoBackupEnabled).HasDefaultValue(true);
+            builder.Property(a => a.AutoBackupMinIntervalHours).HasDefaultValue(4);
             builder.Property(a => a.ReverseRtlNavigation).HasDefaultValue(true);
             builder.Property(a => a.HighQualityPageDisplay).HasDefaultValue(true);
             builder.Property(a => a.ResetZoomOnPageChange).HasDefaultValue(false);

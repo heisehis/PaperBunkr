@@ -508,6 +508,8 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         _suppressBackupSettingsApply = true;
         BackupLocation = _backupService.GetBackupLocation();
         BackupsToKeep = _backupService.GetBackupsToKeep();
+        AutoBackupEnabled = _backupService.GetAutoBackupEnabled();
+        AutoBackupMinIntervalHours = _backupService.GetAutoBackupMinIntervalHours();
         _suppressBackupSettingsApply = false;
         RefreshBackups();
 
@@ -1291,6 +1293,14 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     [ObservableProperty]
     private int _backupsToKeep;
 
+    /// <summary>docs/superpowers/specs/2026-08-29-db-corruption-safeguards-design.md §2.</summary>
+    [ObservableProperty]
+    private bool _autoBackupEnabled;
+
+    /// <summary>See <see cref="AutoBackupEnabled"/>.</summary>
+    [ObservableProperty]
+    private int _autoBackupMinIntervalHours;
+
     [ObservableProperty]
     private string? _backupStatus;
 
@@ -1327,6 +1337,26 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         }
 
         _backupService.SetBackupsToKeep(value);
+    }
+
+    partial void OnAutoBackupEnabledChanged(bool value)
+    {
+        if (_suppressBackupSettingsApply)
+        {
+            return;
+        }
+
+        _backupService.SetAutoBackupEnabled(value);
+    }
+
+    partial void OnAutoBackupMinIntervalHoursChanged(int value)
+    {
+        if (_suppressBackupSettingsApply)
+        {
+            return;
+        }
+
+        _backupService.SetAutoBackupMinIntervalHours(value);
     }
 
     [RelayCommand]

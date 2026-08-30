@@ -34,8 +34,8 @@
             <Setter Property="BoxShadow" Value="{StaticResource PbGlowRing}" />
         </Style>
         <Style Selector="Button.railRemove">
-            <Setter Property="Width" Value="18" />
-            <Setter Property="Height" Value="18" />
+            <Setter Property="Width" Value="22" />
+            <Setter Property="Height" Value="22" />
             <Setter Property="Padding" Value="0" />
             <Setter Property="FontSize" Value="10" />
             <Setter Property="CornerRadius" Value="999" />
@@ -76,7 +76,7 @@
                                         <Button Classes="railRemove" Content="✕"
                                                 Command="{Binding #u.RemoveCommand}" CommandParameter="{Binding Payload}"
                                                 IsVisible="{Binding #u.RemoveCommand, Converter={x:Static conv:ObjectConverters.IsNotNull}}"
-                                                ToolTip.Tip="Remove" />
+                                                ToolTip.Tip="Remove" AutomationProperties.Name="{Binding Name, StringFormat='Remove {0}'}" />
                                     </Panel>
                                     <TextBlock Text="{Binding Name}" FontSize="10.5" Foreground="{DynamicResource PbTextMutedBrush}"
                                                TextWrapping="Wrap" MaxLines="2" TextTrimming="CharacterEllipsis" />

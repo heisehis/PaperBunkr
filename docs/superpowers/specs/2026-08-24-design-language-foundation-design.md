@@ -78,6 +78,23 @@ A small type-scale is defined as named styles, not every size in the app:
 
 The existing global `TextBlock`/`Button`/`TextBox` style setters in `App.axaml` get a default `FontFamily` from this scale; screens opt into the named styles as they're touched in later phases.
 
+**Addendum, 2026-08-30 (avalonia-pro-max/review-checklist audit of the Phase 5 detail screens):**
+the audit found four distinct font sizes — 9.5/10.5/11.5/12.5 — repeated as unnamed literals across
+`DetailBand`/`DetailChrome` (chip/pill text, uppercase section labels + the tab counter, inline
+meta text, and hero/tab-strip buttons+links) with no home in the four-step scale above, plus two
+places (13, 11) that already matched `PbTextBody`/`PbTextCaption`'s size but restated the literal
+instead of referencing it. Rather than snapping the odd values onto the nearest existing step
+(which would visibly resize already-shipped, user-verified chrome) or leaving them as magic
+numbers, they're now named `x:Double` resources in `App.axaml`, matching the prior literals
+exactly (zero visual diff) — `PbFontSizeMicro` (9.5), `PbFontSizeOverline` (10.5),
+`PbFontSizeMeta` (11.5), `PbFontSizeControl` (12.5), plus `PbFontSizeBody`/`PbFontSizeCaption`
+(13/11, now the single source of truth `PbTextBody`/`PbTextCaption` also reference) — for a
+surface that needs Body/Caption's size with a different `Foreground` than those bundled classes
+provide, e.g. `DetailBand`'s muted synopsis. These are font-size-only (no bundled `FontFamily`/
+color) since, unlike Hero/Heading/Body/Caption, they're chrome-density tiers rather than semantic
+text roles — a chip and a section label at the same size still mean different things and keep
+their own `Foreground`/`FontWeight` locally.
+
 ## Iconography
 
 The existing 39 icons in [Assets/Icons/](../../../src/Paperbunkr.App/Assets/Icons) get re-traced as vector `StreamGeometry` resources in a new `Icons.axaml` dictionary, named `PbIcon*` (e.g. `PbIconBook`, `PbIconStar`, `PbIconSettings`) — vector over raster so icons scale cleanly if a later phase needs a larger size (e.g. an empty-state glyph) without a second asset. No new icon *concepts* are invented in this phase, only the format changes.

@@ -76,12 +76,12 @@
     </Style>
 
     <Style Selector="TextBlock.pbTextBody">
-        <Setter Property="FontSize" Value="13" />
+        <Setter Property="FontSize" Value="{StaticResource PbFontSizeBody}" />
         <Setter Property="Foreground" Value="{DynamicResource PbTextBrush}" />
     </Style>
 
     <Style Selector="TextBlock.pbTextCaption">
-        <Setter Property="FontSize" Value="11" />
+        <Setter Property="FontSize" Value="{StaticResource PbFontSizeCaption}" />
         <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
     </Style>
 

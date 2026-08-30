@@ -26,7 +26,7 @@
     </Style>
     <Style Selector="TextBlock.tabCount">
         <Setter Property="FontFamily" Value="Consolas,monospace" />
-        <Setter Property="FontSize" Value="10.5" />
+        <Setter Property="FontSize" Value="{StaticResource PbFontSizeOverline}" />
         <Setter Property="Foreground" Value="{DynamicResource PbTextFaintBrush}" />
         <Setter Property="Background" Value="{DynamicResource PbChromeBrush}" />
         <Setter Property="Padding" Value="6,1" />
@@ -36,7 +36,7 @@
     <Style Selector="Button.detailAction">
         <Setter Property="Padding" Value="14,8" />
         <Setter Property="CornerRadius" Value="5" />
-        <Setter Property="FontSize" Value="12.5" />
+        <Setter Property="FontSize" Value="{StaticResource PbFontSizeControl}" />
         <Setter Property="FontWeight" Value="SemiBold" />
         <Setter Property="Cursor" Value="Hand" />
     </Style>
@@ -59,14 +59,14 @@
         <Setter Property="BorderThickness" Value="0" />
         <Setter Property="Padding" Value="0" />
         <Setter Property="Foreground" Value="{DynamicResource PbTextFaintBrush}" />
-        <Setter Property="FontSize" Value="12.5" />
+        <Setter Property="FontSize" Value="{StaticResource PbFontSizeControl}" />
         <Setter Property="FontWeight" Value="SemiBold" />
         <Setter Property="Cursor" Value="Hand" />
     </Style>
 
     <!-- ============ DetailBand metadata groups ============ -->
     <Style Selector="TextBlock.detailGroupLabel">
-        <Setter Property="FontSize" Value="10.5" />
+        <Setter Property="FontSize" Value="{StaticResource PbFontSizeOverline}" />
         <Setter Property="FontWeight" Value="Bold" />
         <Setter Property="Foreground" Value="{DynamicResource PbTextFaintBrush}" />
         <Setter Property="LetterSpacing" Value="0.6" />
@@ -75,7 +75,7 @@
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="BorderThickness" Value="0" />
         <Setter Property="Padding" Value="0" />
-        <Setter Property="FontSize" Value="11" />
+        <Setter Property="FontSize" Value="{StaticResource PbFontSizeCaption}" />
         <Setter Property="FontWeight" Value="SemiBold" />
         <Setter Property="Foreground" Value="{DynamicResource PbAccentTextBrush}" />
         <Setter Property="Cursor" Value="Hand" />

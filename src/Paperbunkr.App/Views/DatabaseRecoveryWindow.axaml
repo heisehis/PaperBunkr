@@ -1,0 +1,45 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" d:DesignWidth="560" d:DesignHeight="440"
+        x:Class="Paperbunkr.App.Views.DatabaseRecoveryWindow"
+        Title="Paperbunkr - Database Recovery"
+        Width="560" Height="440" MinWidth="480" MinHeight="360"
+        WindowStartupLocation="CenterScreen"
+        Topmost="True"
+        Background="{DynamicResource PbSurface3Brush}">
+
+    <!--
+        Deliberately plain code-behind, no ViewModel/bindings - shown before MainWindow exists (the
+        database itself couldn't be opened), same pattern as CrashReportWindow. See
+        docs/superpowers/specs/2026-08-29-db-corruption-safeguards-design.md §3.
+    -->
+    <Grid RowDefinitions="Auto,Auto,*,Auto" Margin="20">
+        <TextBlock Grid.Row="0" Text="Paperbunkr's database could not be opened."
+                   FontWeight="Bold" FontSize="15" Foreground="{DynamicResource PbTextBrush}"
+                   Margin="0,0,0,8" TextWrapping="Wrap" />
+        <TextBlock x:Name="DetailTextBlock" Grid.Row="1"
+                   FontFamily="Consolas,monospace" FontSize="11.5"
+                   Foreground="{DynamicResource PbTextMutedBrush}"
+                   Margin="0,0,0,14" TextWrapping="Wrap" />
+
+        <Border Grid.Row="2" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1" CornerRadius="{DynamicResource PbRadius}">
+            <DockPanel Margin="10">
+                <TextBlock x:Name="NoBackupsTextBlock" DockPanel.Dock="Top"
+                           Text="No backups were found - Restore is unavailable."
+                           Foreground="{DynamicResource PbTextFaintBrush}" FontSize="12"
+                           Margin="0,0,0,8" IsVisible="False" TextWrapping="Wrap" />
+                <TextBlock DockPanel.Dock="Top" Text="Available backups (newest first):"
+                           Foreground="{DynamicResource PbTextFaintBrush}" FontSize="12" Margin="0,0,0,6" />
+                <ListBox x:Name="BackupsListBox" Background="Transparent" BorderThickness="0" />
+            </DockPanel>
+        </Border>
+
+        <Grid Grid.Row="3" ColumnDefinitions="*,Auto,Auto,Auto" Margin="0,14,0,0">
+            <Button Classes="secondary" Grid.Column="1" x:Name="QuitButton" Content="Quit" Click="OnQuitClick" Margin="0,0,8,0" />
+            <Button Classes="secondary" Grid.Column="2" x:Name="StartFreshButton" Content="Start Fresh Library" Click="OnStartFreshClick" Margin="0,0,8,0" />
+            <Button Classes="primary" Grid.Column="3" x:Name="RestoreButton" Content="Restore Selected Backup" Click="OnRestoreClick" />
+        </Grid>
+    </Grid>
+</Window>

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Paperbunkr.App.Models;
@@ -104,6 +105,34 @@ public partial class MainViewModel : ViewModelBase
         using (var context = PaperbunkrDb.CreateContext())
         {
             _navRailPinned = context.GetOrCreateAppSettings().NavRailPinned;
+        }
+
+        // Cover-cache reconciliation (docs/superpowers/specs/2026-08-27-cover-thumbnail-identity-
+        // validation-design.md): on every launch, regenerate any cover whose fingerprint no longer
+        // matches its issue/book (e.g. after a library rebuild reassigned ids) and sweep orphaned
+        // files. Presence-based, so it's cheap when nothing changed. Fire-and-forget - a slow first
+        // run after an upgrade must not block the shell.
+        _ = ReconcileCoverCachesAsync();
+    }
+
+    private static async Task ReconcileCoverCachesAsync()
+    {
+        var noProgress = new Progress<(int Done, int Total)>();
+        try
+        {
+            await new CoverThumbnailService().GenerateAllAsync(noProgress);
+        }
+        catch
+        {
+            // Best-effort - the "Generate Covers" button and per-screen reloads still self-heal.
+        }
+
+        try
+        {
+            await new BookCoverThumbnailService().GenerateAllAsync(noProgress);
+        }
+        catch
+        {
         }
     }
 

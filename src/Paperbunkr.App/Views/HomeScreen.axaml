@@ -228,7 +228,7 @@
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate x:DataType="models:HomeContinueReadingCard">
                                     <views:PosterTile
-                                        CoverSource="{Binding Series.CoverIssueId, Converter={x:Static views:CoverImageConverter.Instance}}"
+                                        CoverSource="{Binding Series.CoverKey, Converter={x:Static views:CoverImageConverter.Instance}}"
                                         TitleText="{Binding Series.Name}"
                                         BadgeText="{Binding ResumeIssueBadge}"
                                         ShowProgress="True"
@@ -253,7 +253,7 @@
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate x:DataType="models:HomeBookCard">
                                     <views:PosterTile
-                                        CoverSource="{Binding BookId, Converter={x:Static views:BookCoverImageConverter.Instance}}"
+                                        CoverSource="{Binding CoverKey, Converter={x:Static views:BookCoverImageConverter.Instance}}"
                                         TitleText="{Binding Title}"
                                         MetaText="{Binding Author}"
                                         ShowProgress="{Binding ShowProgress}"
@@ -283,7 +283,7 @@
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate x:DataType="models:SeriesCardSample">
                                     <views:PosterTile
-                                        CoverSource="{Binding CoverIssueId, Converter={x:Static views:CoverImageConverter.Instance}}"
+                                        CoverSource="{Binding CoverKey, Converter={x:Static views:CoverImageConverter.Instance}}"
                                         TitleText="{Binding Name}"
                                         BadgeText="{Binding RecentAddBadgeLabel}"
                                         Command="{Binding $parent[UserControl].((vm:HomeScreenViewModel)DataContext).OpenSeriesCommand}"
@@ -338,7 +338,7 @@
                                         <ItemsControl.ItemTemplate>
                                             <DataTemplate x:DataType="models:SeriesCardSample">
                                                 <views:PosterTile
-                                                    CoverSource="{Binding CoverIssueId, Converter={x:Static views:CoverImageConverter.Instance}}"
+                                                    CoverSource="{Binding CoverKey, Converter={x:Static views:CoverImageConverter.Instance}}"
                                                     TitleText="{Binding Name}"
                                                     BadgeText="{Binding IssueCountLabel}"
                                                     Command="{Binding $parent[UserControl].((vm:HomeScreenViewModel)DataContext).OpenSeriesCommand}"

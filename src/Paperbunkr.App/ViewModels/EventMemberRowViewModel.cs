@@ -76,6 +76,12 @@ public partial class EventMemberRowViewModel : ViewModelBase, Models.ISelectable
 
     public int? CoverIssueId => Member.Issue?.Id;
 
+    /// <summary>What <c>views:AsyncCoverImage.SourceId</c> actually keys its lookup on - see
+    /// <see cref="Models.IssueCardSample.CoverKey"/>'s doc comment.</summary>
+    public string? CoverKey => Member.Issue is { } issue
+        ? Services.CoverFingerprint.Stem(issue.Id, issue.FilePath, issue.FileSize)
+        : null;
+
     public bool HasRole => true; // role is always set on an EventMembership (no "unset" state)
 
     public string RoleChipLabel => SelectedRoleOption?.Label ?? string.Empty;

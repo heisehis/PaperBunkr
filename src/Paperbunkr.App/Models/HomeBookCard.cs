@@ -1,4 +1,5 @@
 using System;
+using Paperbunkr.App.Services;
 using Paperbunkr.Data.Entities;
 
 namespace Paperbunkr.App.Models;
@@ -12,6 +13,10 @@ namespace Paperbunkr.App.Models;
 public sealed class HomeBookCard
 {
     public int BookId { get; init; }
+
+    /// <summary>What <c>BookCoverImageConverter</c> actually keys its lookup on - see
+    /// <see cref="IssueCardSample.CoverKey"/>'s doc comment.</summary>
+    public string? CoverKey { get; init; }
 
     public BookFormat Format { get; init; }
 
@@ -30,6 +35,7 @@ public sealed class HomeBookCard
         return new HomeBookCard
         {
             BookId = book.Id,
+            CoverKey = CoverFingerprint.Stem(book.Id, book.FilePath, null),
             Format = book.Format,
             Title = book.Title,
             Author = book.Author,

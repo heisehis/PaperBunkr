@@ -118,7 +118,7 @@ public partial class BookPropertiesScreenViewModel : ViewModelBase
         SeriesAuthor = book.BookSeries?.Author ?? string.Empty;
         SeriesSortName = book.BookSeries?.SortName ?? string.Empty;
 
-        CoverPreview = BookCoverImageCache.Get(bookId);
+        CoverPreview = BookCoverImageCache.Get(bookId, book.FilePath);
 
         _beforeSnapshot = BookMetadataSnapshot.Capture(book);
         _loadSignature = BufferSignature();

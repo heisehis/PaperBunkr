@@ -251,7 +251,7 @@ public partial class BookDetailScreenViewModel : ViewModelBase, IDetailHeaderSou
         Author = book.Author ?? string.Empty;
         FormatBadge = book.Format == BookFormat.Epub ? "EPUB" : "PDF";
         CoverBrush = SeriesCardSample.CoverBrushFor(book.Title);
-        CoverImage = BookCoverImageCache.Get(bookId);
+        CoverImage = BookCoverImageCache.Get(bookId, book.FilePath);
         BackdropImage = CoverImage is not null ? BackdropBlurRenderer.Render(CoverImage, new PixelSize(1600, 680)) : null;
 
         HasSeries = book.BookSeries is not null;
@@ -396,7 +396,7 @@ public partial class BookDetailScreenViewModel : ViewModelBase, IDetailHeaderSou
 
         var representative = series.Books.OrderBy(b => b.Title, StringComparer.OrdinalIgnoreCase).FirstOrDefault();
         CoverBrush = SeriesCardSample.CoverBrushFor(series.Name);
-        CoverImage = representative is not null ? BookCoverImageCache.Get(representative.Id) : null;
+        CoverImage = representative is not null ? BookCoverImageCache.Get(representative.Id, representative.FilePath) : null;
         BackdropImage = CoverImage is not null ? BackdropBlurRenderer.Render(CoverImage, new PixelSize(1600, 680)) : null;
         MetaLine = string.Join("  ·  ", new[] { SeriesAuthor, SeriesBookCountLabel }.Where(s => !string.IsNullOrWhiteSpace(s)));
         Band.Summary = string.Empty;

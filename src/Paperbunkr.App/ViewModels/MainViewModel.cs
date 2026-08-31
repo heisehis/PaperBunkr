@@ -75,6 +75,12 @@ public partial class MainViewModel : ViewModelBase
         LiveFolderWatch = new LiveFolderWatchService(ShowToast, () => Migration.NeedsReview.Refresh());
         LiveFolderWatch.Start();
 
+        // First-run welcome flow (replaces auto-opening Migration on a detected CE install - that
+        // assumed everyone arriving at Paperbunkr is a ComicRack CE migrant). CE import stays
+        // available as one option among several, offered only when OnboardingViewModel.Open()
+        // actually detects a CE install, never assumed. See App.axaml.cs for what triggers Open().
+        Onboarding = new OnboardingViewModel(new FilePickerService(), new LibraryFolderScanner(), LiveFolderWatch.Reload, SwitchToMigrationFromOnboarding, CloseOnboardingOverlay);
+
         Preferences = new PreferencesScreenViewModel(
             new SkinService(),
             new FilePickerService(),
@@ -168,6 +174,7 @@ public partial class MainViewModel : ViewModelBase
     public PluginScreenViewModel Plugin { get; }
     public PreferencesScreenViewModel Preferences { get; }
     public MigrationOverlayViewModel Migration { get; }
+    public OnboardingViewModel Onboarding { get; }
     public ReadingListPropertiesScreenViewModel ReadingListProperties { get; }
     public CollectionPropertiesScreenViewModel CollectionProperties { get; }
     public NewReadingListViewModel NewReadingList { get; }
@@ -179,6 +186,9 @@ public partial class MainViewModel : ViewModelBase
 
     [ObservableProperty]
     private bool _isMigrationOverlayOpen;
+
+    [ObservableProperty]
+    private bool _isOnboardingOverlayOpen;
 
     /// <summary>
     /// Borderless-overlay flags for Issue Properties/Bulk Editing (docs/superpowers/specs/2026-08-23-
@@ -453,6 +463,27 @@ public partial class MainViewModel : ViewModelBase
     {
         IsMigrationOverlayOpen = false;
         GoDetailForSeries(seriesId);
+    }
+
+    [RelayCommand]
+    private void OpenOnboardingOverlay()
+    {
+        Onboarding.Open();
+        IsOnboardingOverlayOpen = true;
+    }
+
+    [RelayCommand]
+    private void CloseOnboardingOverlay()
+    {
+        IsOnboardingOverlayOpen = false;
+        Library.LoadFromDatabase();
+    }
+
+    /// <summary>Onboarding's "Import from ComicRack CE" card - hands off to the existing Migration overlay rather than duplicating its flow.</summary>
+    private void SwitchToMigrationFromOnboarding()
+    {
+        IsOnboardingOverlayOpen = false;
+        OpenMigrationOverlay();
     }
 
     /// <summary>Entry point wired into <see cref="Reading"/>'s Edit affordance (docs/superpowers/specs/2026-08-23-reading-list-tags-design.md) - same open shape as <see cref="OpenMigrationOverlay"/>.</summary>
@@ -1025,7 +1056,11 @@ public partial class MainViewModel : ViewModelBase
     [RelayCommand]
     private void Escape()
     {
-        if (IsMigrationOverlayOpen)
+        if (IsOnboardingOverlayOpen)
+        {
+            CloseOnboardingOverlay();
+        }
+        else if (IsMigrationOverlayOpen)
         {
             CloseMigrationOverlay();
         }

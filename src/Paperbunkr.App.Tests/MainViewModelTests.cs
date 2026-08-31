@@ -68,6 +68,30 @@ public class MainViewModelTests : IDisposable
         Assert.False(vm.IsMigrationOverlayOpen);
     }
 
+    [Fact]
+    public void Escape_OnboardingOverlayOpen_ClosesIt()
+    {
+        var vm = new MainViewModel();
+        vm.IsOnboardingOverlayOpen = true;
+
+        vm.EscapeCommand.Execute(null);
+
+        Assert.False(vm.IsOnboardingOverlayOpen);
+    }
+
+    /// <summary>Onboarding's "Import from ComicRack CE" card hands off to the existing Migration overlay rather than duplicating its flow (see <see cref="MainViewModel"/>'s wiring of <c>OnboardingViewModel</c>'s onImportFromCe callback).</summary>
+    [Fact]
+    public void OnboardingImportFromCe_ClosesOnboarding_AndOpensMigrationOverlay()
+    {
+        var vm = new MainViewModel();
+        vm.IsOnboardingOverlayOpen = true;
+
+        vm.Onboarding.ImportFromCeCommand.Execute(null);
+
+        Assert.False(vm.IsOnboardingOverlayOpen);
+        Assert.True(vm.IsMigrationOverlayOpen);
+    }
+
     /// <summary>
     /// Post-overlay-conversion (docs/superpowers/specs/2026-08-23-issue-editor-borderless-overlay-
     /// design.md): the editor is drawn on top of whatever screen is current rather than switching

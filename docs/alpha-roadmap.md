@@ -284,6 +284,30 @@ unrelated memory-usage fix done the same session), `docs/superpowers/specs/2026-
 curated-browse-design.md`. **Not yet committed as of this write-up** — still sitting as local
 changes in this working tree.
 
+### First-run onboarding: general welcome flow (done)
+**Real problem, not a hypothetical:** the only first-run experience Paperbunkr had was
+auto-opening the CE Migration overlay whenever a fresh install happened to find a ComicRack CE
+library on the machine (§14's own scope never covered the case where no CE library exists — every
+other new user just landed on an empty Library screen with no guidance at all). That baked in the
+assumption that everyone arriving at Paperbunkr is a ComicRack CE migrant, which stops being true
+the moment the app has any user who never touched CE.
+
+Replaced with a general `OnboardingViewModel`/`OnboardingOverlay` shown on every fresh install
+(`App.axaml.cs`, gated on `isFreshInstall` alone, no longer on CE detection): a Choice stage
+offering "Add Your Comics" (primary — reuses `LibraryFolderScanner.ScanAllAsync` +
+`CoverThumbnailService`, same pipeline as Preferences → Library → Scan Now) and "Import from
+ComicRack CE" (secondary, `IsVisible` bound to a live re-check of `MigrationViewModel
+.GetDefaultCePath()` each time the overlay opens — offered, never assumed), plus "I'll do this
+later". Add Your Comics flows into a Scanning stage (progress) and a Done stage (issue/series
+counts, or a plain "no comics found yet, add more from Preferences" message for an empty folder).
+Import from ComicRack CE hands off to the existing, unmodified Migration overlay rather than
+duplicating its flow. Migration UX (§14) itself is untouched — still reachable from Preferences →
+Libraries as before, just no longer the thing that hijacks a stranger's first launch.
+
+Tests: `OnboardingViewModelTests` (cancel/empty-folder/reload-folder-watch/callback wiring) +
+two `MainViewModelTests` cases (Escape closes it; "Import from ComicRack CE" closes Onboarding and
+opens Migration).
+
 ### Remote/server library sharing
 Client (connect to another instance's shared library) + server (host, password-protected,
 per-list sharing) + background job/task monitor. Substantial subsystem, not named anywhere in the

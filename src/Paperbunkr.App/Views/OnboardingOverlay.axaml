@@ -1,0 +1,113 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Paperbunkr.App.ViewModels"
+             xmlns:fi="using:FluentIcons.Avalonia"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="560" d:DesignHeight="520"
+             x:Class="Paperbunkr.App.Views.OnboardingOverlay"
+             x:DataType="vm:OnboardingViewModel">
+
+    <UserControl.Styles>
+        <Style Selector="Button.onboardCard">
+            <Setter Property="Padding" Value="16,14" />
+            <Setter Property="CornerRadius" Value="8" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Background" Value="{DynamicResource PbSurface2Brush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+        </Style>
+        <Style Selector="Button.onboardCard:pointerover">
+            <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
+        </Style>
+        <Style Selector="Button.onboardCard.primary">
+            <Setter Property="Background" Value="{DynamicResource PbAccentBrush}" />
+            <Setter Property="BorderThickness" Value="0" />
+        </Style>
+        <Style Selector="Button.primaryWide">
+            <Setter Property="Padding" Value="14,10" />
+            <Setter Property="CornerRadius" Value="6" />
+            <Setter Property="FontSize" Value="13" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Background" Value="{DynamicResource PbAccentBrush}" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Foreground" Value="{DynamicResource PbBadgeTextBrush}" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+        </Style>
+        <Style Selector="Button.linkButton">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
+            <Setter Property="FontSize" Value="12.5" />
+            <Setter Property="HorizontalAlignment" Value="Center" />
+        </Style>
+        <Style Selector="Button.linkButton:pointerover">
+            <Setter Property="Foreground" Value="{DynamicResource PbTextBrush}" />
+        </Style>
+    </UserControl.Styles>
+
+    <Border Width="520" MaxHeight="620" Classes="floatingPanel">
+        <StackPanel Margin="28,26,28,24" Spacing="18">
+
+            <!-- ============ Choice stage ============ -->
+            <StackPanel IsVisible="{Binding IsChoice}" Spacing="18">
+                <StackPanel Spacing="6">
+                    <TextBlock Text="Welcome to Paperbunkr" FontSize="20" FontWeight="Bold" Foreground="{DynamicResource PbTextBrush}" />
+                    <TextBlock Text="Your comic and manga library - browse, read, and organize everything in one place."
+                               Foreground="{DynamicResource PbTextMutedBrush}" FontSize="13" TextWrapping="Wrap" />
+                </StackPanel>
+
+                <Button Classes="onboardCard primary" Command="{Binding AddFolderCommand}" AutomationProperties.AutomationId="OnboardingAddFolderButton">
+                    <Grid ColumnDefinitions="Auto,*" VerticalAlignment="Center">
+                        <fi:SymbolIcon Grid.Column="0" Symbol="FolderOpen" FontSize="22" Foreground="{DynamicResource PbBadgeTextBrush}" Margin="0,0,14,0" />
+                        <StackPanel Grid.Column="1" Spacing="2">
+                            <TextBlock Text="Add Your Comics" FontWeight="SemiBold" FontSize="14.5" Foreground="{DynamicResource PbBadgeTextBrush}" />
+                            <TextBlock Text="Point Paperbunkr at a folder of comics or manga and we'll bring them in."
+                                       FontSize="12" Foreground="{DynamicResource PbBadgeTextBrush}" Opacity="0.85" TextWrapping="Wrap" />
+                        </StackPanel>
+                    </Grid>
+                </Button>
+
+                <Button Classes="onboardCard" Command="{Binding ImportFromCeCommand}" IsVisible="{Binding CeDetected}"
+                        AutomationProperties.AutomationId="OnboardingImportFromCeButton">
+                    <Grid ColumnDefinitions="Auto,*" VerticalAlignment="Center">
+                        <fi:SymbolIcon Grid.Column="0" Symbol="ArrowRotateClockwise" FontSize="22" Foreground="{DynamicResource PbAccentTextBrush}" Margin="0,0,14,0" />
+                        <StackPanel Grid.Column="1" Spacing="2">
+                            <TextBlock Text="Import from ComicRack CE" FontWeight="SemiBold" FontSize="14.5" Foreground="{DynamicResource PbTextBrush}" />
+                            <TextBlock Text="We found a ComicRack CE library on this PC - bring your existing collection over."
+                                       FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" TextWrapping="Wrap" />
+                        </StackPanel>
+                    </Grid>
+                </Button>
+
+                <Button Classes="linkButton" Content="I'll do this later" Command="{Binding FinishCommand}"
+                        AutomationProperties.AutomationId="OnboardingSkipButton" />
+            </StackPanel>
+
+            <!-- ============ Scanning stage ============ -->
+            <StackPanel IsVisible="{Binding IsScanning}" Spacing="14" HorizontalAlignment="Center" Margin="0,60,0,60">
+                <ProgressBar IsIndeterminate="True" Width="180" Height="6" />
+                <TextBlock Text="{Binding ScanStatusLabel}" FontSize="13" Foreground="{DynamicResource PbTextMutedBrush}" HorizontalAlignment="Center" />
+            </StackPanel>
+
+            <!-- ============ Done stage ============ -->
+            <StackPanel IsVisible="{Binding IsDone}" Spacing="14">
+                <StackPanel Orientation="Horizontal" Spacing="10">
+                    <fi:SymbolIcon Symbol="CheckmarkCircle" FontSize="22" Foreground="{DynamicResource PbAccentTextBrush}" />
+                    <TextBlock Text="You're all set" FontSize="18" FontWeight="Bold" Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
+                </StackPanel>
+                <TextBlock Text="{Binding ResultSummaryLabel}" Foreground="{DynamicResource PbTextMutedBrush}" FontSize="13" TextWrapping="Wrap" />
+                <StackPanel Orientation="Horizontal" Spacing="10">
+                    <Button Classes="primaryWide" Content="Start Reading" Command="{Binding FinishCommand}"
+                            AutomationProperties.AutomationId="OnboardingStartReadingButton" />
+                    <Button Content="Add Another Folder" Command="{Binding AddAnotherFolderCommand}" />
+                </StackPanel>
+            </StackPanel>
+
+        </StackPanel>
+    </Border>
+</UserControl>

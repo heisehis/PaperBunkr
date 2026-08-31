@@ -46,8 +46,7 @@ public partial class App : Application
             DiagnosticsService.LogMilestone("Checking for an existing library...");
 
             // No demo/placeholder data is ever seeded (see PaperbunkrDb.EnsureCreated) - checked
-            // only to decide whether to auto-open the migration overlay on a fresh install with a
-            // detected CE library (docs/superpowers/specs/2026-08-06-migration-ux-design.md §B).
+            // only to decide whether to auto-open the first-run onboarding overlay (see below).
             // HasAnySeries applies pending migrations itself (see its own doc comment), so this is
             // also the first point a stuck/broken migration would surface.
             bool isFreshInstall;
@@ -60,9 +59,6 @@ public partial class App : Application
                 DiagnosticsService.LogCrash("Database migration/open (HasAnySeries)", ex, isTerminating: true);
                 throw;
             }
-
-            bool defaultCePathFound = File.Exists(MigrationViewModel.GetDefaultCePath());
-            bool offerFirstRunMigration = isFreshInstall && defaultCePathFound;
 
             DiagnosticsService.LogMilestone("Applying pending database migrations...");
             try
@@ -112,9 +108,13 @@ public partial class App : Application
             };
             desktop.MainWindow = mainWindow;
 
-            if (offerFirstRunMigration)
+            // First-run welcome flow (replaces unconditionally auto-opening Migration on a
+            // detected CE install - that assumed every new user was migrating from ComicRack CE).
+            // OnboardingViewModel.Open() detects CE itself and offers it as one option among
+            // several, never as the default assumption.
+            if (isFreshInstall)
             {
-                mainViewModel.OpenMigrationOverlayCommand.Execute(null);
+                mainViewModel.OpenOnboardingOverlayCommand.Execute(null);
             }
 
             // App chrome (docs/superpowers/specs/2026-08-23-app-chrome-crash-reporter-and-tray-

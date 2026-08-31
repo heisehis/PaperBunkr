@@ -38,6 +38,13 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
     IReadOnlyList<ContextMenuEntry>? IContextMenuProvider.BuildContextMenu(object? target) =>
         new LibraryContextMenuBuilder(this).Build(target);
 
+    /// <summary>Second, narrowly-scoped provider for the Details-table header's column picker
+    /// (docs/superpowers/specs/2026-08-31-keyboard-operability-design.md) - bound to a dedicated
+    /// <c>ContextMenuHost.Provider</c> on just the header <c>Grid</c>, not the screen root above.
+    /// See <see cref="DetailsColumnsContextMenuBuilder"/>'s own doc comment for why this needs
+    /// element-scoping rather than the usual target-type switch.</summary>
+    public IContextMenuProvider DetailsColumnsMenuProvider => new DetailsColumnsContextMenuBuilder(DetailsColumns);
+
     private readonly Action<int> _goDetail;
     private readonly Action<int> _goReaderForIssue;
     private readonly Action<int, int, bool> _goToNewIssueProperties;

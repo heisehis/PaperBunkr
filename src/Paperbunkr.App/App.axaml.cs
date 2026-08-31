@@ -45,15 +45,15 @@ public partial class App : Application
 
             DiagnosticsService.LogMilestone("Checking for an existing library...");
 
-            // No demo/placeholder data is ever seeded (see PaperbunkrDb.EnsureCreated) - checked
-            // only to decide whether to auto-open the migration overlay on a fresh install with a
-            // detected CE library (docs/superpowers/specs/2026-08-06-migration-ux-design.md §B).
-            // HasAnySeries applies pending migrations itself (see its own doc comment), so this is
-            // also the first point a stuck/broken migration would surface.
-            bool isFreshInstall;
+            // No demo/placeholder data is ever seeded (see PaperbunkrDb.EnsureCreated) - HasAnySeries
+            // applies pending migrations itself (see its own doc comment), so this is also the first
+            // point a stuck/broken migration would surface. No longer used to decide whether to show
+            // onboarding (docs/superpowers/specs/2026-08-31-first-run-onboarding-design.md) - that's
+            // now gated on AppSettings.WelcomeScreenShown below, independent of library contents, so
+            // a user who skips or imports zero comics never sees it re-trigger on a later launch.
             try
             {
-                isFreshInstall = !PaperbunkrDb.HasAnySeries();
+                PaperbunkrDb.HasAnySeries();
             }
             catch (Exception ex)
             {
@@ -61,8 +61,9 @@ public partial class App : Application
                 throw;
             }
 
-            bool defaultCePathFound = File.Exists(MigrationViewModel.GetDefaultCePath());
-            bool offerFirstRunMigration = isFreshInstall && defaultCePathFound;
+            // Still detected the same way, now just badges the welcome screen's CE card instead of
+            // driving an auto-launch decision.
+            bool ceInstallDetected = File.Exists(MigrationViewModel.GetDefaultCePath());
 
             DiagnosticsService.LogMilestone("Applying pending database migrations...");
             try
@@ -112,9 +113,26 @@ public partial class App : Application
             };
             desktop.MainWindow = mainWindow;
 
-            if (offerFirstRunMigration)
+            // App shell navigation history (docs/superpowers/specs/2026-08-30-app-shell-navigation-
+            // history-design.md) - a CLI deep link takes priority over restoring the prior session's
+            // last screen; on a fresh install (offerFirstRunMigration below) there's nothing to
+            // restore yet, so RestoreLastScreen's own "no usable last screen" fallback to Home
+            // covers that case too, no separate branch needed here.
+            if (NavigationCliArgs.TryParseOpenArg(desktop.Args ?? Array.Empty<string>(), out var deepLinkTarget) && deepLinkTarget is not null)
             {
-                mainViewModel.OpenMigrationOverlayCommand.Execute(null);
+                mainViewModel.OpenDeepLink(deepLinkTarget);
+            }
+            else
+            {
+                mainViewModel.RestoreLastScreen();
+            }
+
+            using (var welcomeSettingsContext = PaperbunkrDb.CreateContext())
+            {
+                if (!welcomeSettingsContext.GetOrCreateAppSettings().WelcomeScreenShown)
+                {
+                    mainViewModel.OpenWelcomeOverlayCommand.Execute(ceInstallDetected);
+                }
             }
 
             // App chrome (docs/superpowers/specs/2026-08-23-app-chrome-crash-reporter-and-tray-

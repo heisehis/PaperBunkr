@@ -12,6 +12,7 @@ using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.EntityFrameworkCore;
+using Paperbunkr.App.ContextMenus;
 using Paperbunkr.App.Models;
 using Paperbunkr.App.Services;
 using Paperbunkr.App.Views;
@@ -30,8 +31,14 @@ namespace Paperbunkr.App.ViewModels;
 /// the placeholder colored tile with a static page number is gone; <see cref="CurrentPage"/> is a
 /// real decoded bitmap now. Continuous/webtoon rendering (onboarding.md §8) stays deferred to Beta.
 /// </summary>
-public partial class ReaderScreenViewModel : ViewModelBase
+public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
 {
+    /// <summary>Right-click/Menu-key menu for the page-thumbnail rail (docs/superpowers/specs/
+    /// 2026-08-31-keyboard-operability-design.md) - delegated out, same pattern as
+    /// <see cref="LibraryScreenViewModel"/>'s own <see cref="IContextMenuProvider"/> implementation.</summary>
+    IReadOnlyList<ContextMenuEntry>? IContextMenuProvider.BuildContextMenu(object? target) =>
+        new ReaderPageContextMenuBuilder(this).Build(target);
+
     // A single issue's page thumbnails aren't decoded eagerly (spec §5's virtualization principle
     // is specifically about not decoding pages that aren't needed) - still lightweight color-swatch
     // placeholders, just with correct count/selection tracking the real current page now.

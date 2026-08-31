@@ -9,6 +9,7 @@ using Avalonia.Media.Imaging;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.EntityFrameworkCore;
+using Paperbunkr.App.ContextMenus;
 using Paperbunkr.App.Models;
 using Paperbunkr.App.Services;
 using Paperbunkr.Data;
@@ -29,8 +30,14 @@ namespace Paperbunkr.App.ViewModels;
 /// embedded here with its own Issues tab suppressed (<see cref="DetailTabsViewModel.ShowIssuesTab"/>)
 /// - Related/Details(tracker linking + external metadata)/Activity are shared, not duplicated.
 /// </summary>
-public partial class MangaDetailScreenViewModel : ViewModelBase, IDetailHeaderSource
+public partial class MangaDetailScreenViewModel : ViewModelBase, IDetailHeaderSource, IContextMenuProvider
 {
+    /// <summary>Right-click/Menu-key menu for the chapter list (docs/superpowers/specs/2026-08-31-
+    /// keyboard-operability-design.md) - delegated out, same pattern as
+    /// <see cref="LibraryScreenViewModel"/>'s own <see cref="IContextMenuProvider"/> implementation.</summary>
+    IReadOnlyList<ContextMenuEntry>? IContextMenuProvider.BuildContextMenu(object? target) =>
+        new MangaDetailContextMenuBuilder(this).Build(target);
+
     public MangaDetailScreenViewModel(Action goBack, Action<int> goToReader, Action<int> goToProperties, Action<IReadOnlyList<int>> goToBulkProperties, Action<int>? goDetailForSeries = null, Action<string>? goLibraryWithSearch = null, Action<int>? goLibraryWithCollection = null)
     {
         _goBack = goBack;

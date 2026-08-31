@@ -173,29 +173,45 @@ entry present but `IsEnabled: false` (via the command's own `CanExecute`).
 **Verify:** new `ReadingListMemberContextMenuBuilderTests.cs`, including the toggle label flipping
 with `IsRead`.
 
-## Step 8: Continuity/Events card menu
-**Files:**
-- `src/Paperbunkr.App/ViewModels/EventsCardContextMenuBuilder.cs` (new) — one `Build` case for
-  whichever card summary type `EventsScreen.axaml`'s card `ItemsControl`s actually bind (confirm
-  exact type - `StoryEventSummary` is the closest confirmed name, but the *displayed* card model may
-  differ, e.g. a `EventCardSample`/`ContinuityCardSample` wrapper - read `EventsScreenViewModel`'s
-  card-collection properties at implementation time): Edit details, Delete. Since
-  `EventsScreenViewModel` has no per-id edit/delete command, each entry's effective action is
-  "select this card, then invoke the existing no-id action" - implemented either as a small
-  composed `RelayCommand` added to `EventsScreenViewModel` (e.g. `EditEventFromContextMenuCommand(int
-  id)` that calls `SelectEvent`/`SelectContinuity` then `MainViewModel`'s dialog opener) or, if
-  `MainViewModel.OpenEditEventDialog`/`OpenEditContinuityDialog`/`DeleteActiveEvent` are reachable
-  from `EventsScreenViewModel` already (check its constructor callbacks), a direct two-call compose
-  inside the builder itself. Exact shape decided at implementation time against what's actually
-  wired through the constructor today - this is the one builder in this plan needing a small new
-  compose-command rather than a pure mirror, since no existing single command already does "act on
-  this specific card" for Events.
-- `src/Paperbunkr.App/Views/EventsScreen.axaml` (edit) — add
-  `controls:ContextMenuHost.Provider="{Binding}"` to the screen root.
+## Step 8: Events & Continuity sidebar row menu — corrected during implementation
+**Real finding that overturned this step's original assumption**: there is no card grid for
+Events/Continuities inside `EventsScreen.axaml` at all. The actual browse surface is a linear,
+single-column sidebar list declared in `MainWindow.axaml` (the shared contextual sidebar,
+`<StackPanel IsVisible="{Binding IsEvents}">`, lines ~661-739), bound to
+`Events.Events`/`Events.Continuities` with row types `StoryEventSummary`/`ContinuitySummary`. Each
+row already has its own inline Open (`Events.SelectEventCommand`/`SelectContinuityCommand`) and
+Delete (`row.DeleteConfirm` - a per-row `TwoStepConfirm`, `ContinuitySummary.DeleteConfirm` is
+nullable for picker-context rows with no delete affordance) — so Delete needed **no** new compose
+command, only Edit details did. Since this sidebar's `DataContext` is `MainViewModel` (not
+`EventsScreenViewModel`), the provider had to live there too - which turned out to simplify the
+"needs a new compose command" problem the original plan text worried about, since `MainViewModel`
+already owns both the select entry points and `OpenEditEventDialog`/`OpenEditContinuityDialog`
+directly, no new wiring between view models needed.
+
+**Files (as actually implemented):**
+- `src/Paperbunkr.App/ViewModels/EventsCardContextMenuBuilder.cs` (new) — `Build` cases for
+  `StoryEventSummary`/`ContinuitySummary`: Open, Edit details, — Delete (row's own `DeleteConfirm`,
+  omitted entirely when null).
+- `src/Paperbunkr.App/ViewModels/MainViewModel.cs` (edit) — implements `IContextMenuProvider`
+  delegating to the new builder; two new small `[RelayCommand]` methods,
+  `EditEventFromContextMenu(StoryEventSummary?)`/`EditContinuityFromContextMenu(ContinuitySummary?)`,
+  each composing the existing `Events.SelectEventCommand`/`SelectContinuityCommand` with the existing
+  `OpenEditEventDialog`/`OpenEditContinuityDialog` (both already no-id, act-on-active-item methods).
+- `src/Paperbunkr.App/Views/MainWindow.axaml` (edit) — new `xmlns:controls` import; added
+  `controls:ContextMenuHost.Provider="{Binding}"` to the Events-sidebar `StackPanel` specifically
+  (not the whole window or the whole shared contextual-sidebar container), scoping it to exactly the
+  Events/Continuities rows and leaving Library/Smart/Reading's own sidebar content untouched.
 **Depends on:** none
 **Verify:** new `EventsCardContextMenuBuilderTests.cs`.
 
 ## Step 9: Grid navigation rollout — non-virtualized screens
+**Correction found during Step 8's survey**: Events/Continuities are a single-column sidebar *list*
+(`MainWindow.axaml`, see Step 8), not a card grid — dropped from this step entirely, since 2D
+spatial nav doesn't mean anything for one column (Up/Down is already native Tab-order behavior, the
+P5 baseline). The two `WrapPanel`s actually present in `EventsScreen.axaml` (`OverlappingContinuities`
+comparison chips at ~line 318, `ContinuityMembers` series-chip grid at ~line 587) are transient
+secondary views, not primary browsing surfaces — left out of scope as low-value, matching the design
+doc's "mirror only what's needed" principle rather than padding this step out for coverage's own sake.
 **Files:**
 - `src/Paperbunkr.App/Views/BooksScreen.axaml` + `.axaml.cs` (edit) — mirror
   `LibraryScreen.axaml.cs`'s `OnCardKeyDown` exactly (`KeyDown` on the card `Button`, walk
@@ -204,8 +220,6 @@ with `IsRead`.
 - `src/Paperbunkr.App/Views/BookDetailScreen.axaml` + `.axaml.cs` (edit, `.axaml.cs` new if it doesn't
   exist yet - check at implementation time) — same pattern for the series-mode book-card `WrapPanel`
   (line ~177-192).
-- `src/Paperbunkr.App/Views/EventsScreen.axaml` + `.axaml.cs` (edit) — same pattern for both
-  `WrapPanel`-backed card lists (lines ~318, ~587 per the earlier grep).
 **Depends on:** none
 **Verify:** `GridKeyboardNavigationTests.cs` (existing) already covers the core math and needs no
 changes; each screen gets one new smoke test in its own `*ScreenViewModelTests.cs` (or a thin

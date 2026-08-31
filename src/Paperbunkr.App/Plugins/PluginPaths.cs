@@ -9,9 +9,23 @@ public static class PluginPaths
     /// <summary>Mutable so tests can redirect discovery at a temp folder instead of the real one - never set this outside a test's own constructor/teardown.</summary>
     public static string RootDirectory { get; set; } = BuildDefaultDirectory();
 
+    /// <summary>
+    /// <c>PluginPackageService</c>'s staging folder for <c>PackageManager</c>'s pending-install/
+    /// pending-remove bookkeeping - kept as a sibling of <see cref="RootDirectory"/> rather than a
+    /// subfolder inside it, so <c>PluginEngine.Discover</c>'s <c>SearchOption.AllDirectories</c> walk
+    /// of <see cref="RootDirectory"/> never wanders into a half-installed package.
+    /// </summary>
+    public static string StagingDirectory { get; set; } = BuildDefaultStagingDirectory();
+
     private static string BuildDefaultDirectory()
     {
         string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
         return Path.Combine(appData, "Paperbunkr", "plugins");
+    }
+
+    private static string BuildDefaultStagingDirectory()
+    {
+        string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+        return Path.Combine(appData, "Paperbunkr", "plugin-staging");
     }
 }

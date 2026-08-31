@@ -4,6 +4,7 @@
         xmlns:vm="using:Paperbunkr.App.ViewModels"
         xmlns:views="using:Paperbunkr.App.Views"
         xmlns:models="using:Paperbunkr.App.Models"
+        xmlns:controls="using:Paperbunkr.App.Controls"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d" d:DesignWidth="1200" d:DesignHeight="760"
@@ -23,6 +24,15 @@
          Properties/Bulk Editing are real Windows/Popups with native dialog-Escape behavior. -->
     <Window.KeyBindings>
         <KeyBinding Gesture="Escape" Command="{Binding EscapeCommand}" />
+        <!-- docs/superpowers/specs/2026-08-30-app-shell-navigation-history-design.md - back only,
+             no keyboard binding for forward by design (breadcrumb click / trackpad swipe only). Not
+             a KeyboardCommandRegistry entry - that registry is Reader-scoped (its ConflictContext is
+             defined purely in terms of PageCanvas's paged/continuous states), this is a shell-wide
+             binding, same mechanism as Escape above. Gesture name is "Back" (Avalonia.Input.Key.Back),
+             not "Backspace" - confirmed via reflection against the installed Avalonia.Base.dll after
+             "Backspace" crashed KeyGesture.Parse at startup (ArgumentException, Key enum has no
+             member by that name). -->
+        <KeyBinding Gesture="Back" Command="{Binding NavigateBackCommand}" />
     </Window.KeyBindings>
 
     <Window.Styles>
@@ -202,14 +212,14 @@
                             <TextBlock Classes="railLabel" Text="Books" IsVisible="{Binding IsNavRailExpanded}" />
                         </StackPanel>
                     </Button>
-                    <Button Classes="rail" Classes.active="{Binding IsSmart}"
+                    <Button x:Name="SmartListsRailButton" Classes="rail" Classes.active="{Binding IsSmart}"
                             Command="{Binding GoSmartCommand}" ToolTip.Tip="Smart Lists">
                         <StackPanel Orientation="Horizontal">
                             <fi:SymbolIcon Symbol="Filter" />
                             <TextBlock Classes="railLabel" Text="Smart Lists" IsVisible="{Binding IsNavRailExpanded}" />
                         </StackPanel>
                     </Button>
-                    <Button Classes="rail" Classes.active="{Binding IsReading}"
+                    <Button x:Name="ReadingListsRailButton" Classes="rail" Classes.active="{Binding IsReading}"
                             Command="{Binding GoReadingCommand}" ToolTip.Tip="Reading Lists">
                         <StackPanel Orientation="Horizontal">
                             <fi:SymbolIcon Symbol="Bookmark" />
@@ -217,7 +227,8 @@
                         </StackPanel>
                     </Button>
                     <Button Classes="rail" Classes.active="{Binding IsEvents}"
-                            Command="{Binding GoEventsCommand}" ToolTip.Tip="Continuity">
+                            Command="{Binding GoEventsCommand}" ToolTip.Tip="Continuity"
+                            AutomationProperties.AutomationId="EventsRailButton">
                         <StackPanel Orientation="Horizontal">
                             <fi:SymbolIcon Symbol="Star" />
                             <TextBlock Classes="railLabel" Text="Continuity" IsVisible="{Binding IsNavRailExpanded}" />
@@ -648,7 +659,8 @@
                     </StackPanel>
 
                     <!-- Events & Continuity sidebar (docs/superpowers/specs/2026-08-28-events-continuity-screen-redesign-design.md) -->
-                    <StackPanel IsVisible="{Binding IsEvents}" Spacing="1">
+                    <StackPanel IsVisible="{Binding IsEvents}" Spacing="1"
+                                controls:ContextMenuHost.Provider="{Binding}">
                         <StackPanel.Styles>
                             <Style Selector="Border.ecRow"><Setter Property="BorderBrush" Value="Transparent" /></Style>
                             <Style Selector="Border.ecRow.active">
@@ -734,6 +746,19 @@
 
         <!-- ============ Main content ============ -->
         <Grid>
+            <!-- docs/superpowers/specs/2026-08-30-app-shell-navigation-history-design.md - real
+                 layout row for the breadcrumb bar (Auto-height, collapses to 0 when IsVisible=False
+                 since Avalonia skips Measure/Arrange for invisible elements), not a same-cell
+                 overlay. A same-cell overlay (the first cut of this) visually covered each drill-
+                 down screen's own top-of-content controls - e.g. DetailScreen.axaml's "← Back to
+                 Library" button - with the breadcrumb bar's opaque background, found via on-screen
+                 user testing. Row 1 (everything else) gets pushed down by the breadcrumb's real
+                 height instead. -->
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+
             <!-- The 7 rail-ordered lateral screens (docs/superpowers/specs/2026-08-24-navigation-
                  shell-motion-system-design.md) share one TransitioningContentControl - direction
                  comes from MainViewModel.IsTransitionReversed (computed from rail-order comparison
@@ -741,7 +766,7 @@
                  screens below (BookReader/PdfReader/Detail/MangaDetail/Reader) are unchanged from
                  before this phase - still individually always-instantiated, still an instant
                  IsVisible cut, deliberately out of scope here. -->
-            <TransitioningContentControl IsVisible="{Binding IsLateralScreen}"
+            <TransitioningContentControl Grid.Row="1" IsVisible="{Binding IsLateralScreen}"
                                           Content="{Binding ActiveScreenContent}"
                                           IsTransitionReversed="{Binding IsTransitionReversed}"
                                           PageTransition="{StaticResource PbScreenSlide}">
@@ -770,48 +795,53 @@
                 </TransitioningContentControl.DataTemplates>
             </TransitioningContentControl>
 
-            <ContentControl IsVisible="{Binding IsBookReader}" Content="{Binding BookReader}">
+            <ContentControl Grid.Row="1" IsVisible="{Binding IsBookReader}" Content="{Binding BookReader}">
                 <ContentControl.ContentTemplate>
                     <DataTemplate x:DataType="vm:BookReaderScreenViewModel">
                         <views:BookReaderScreen />
                     </DataTemplate>
                 </ContentControl.ContentTemplate>
             </ContentControl>
-            <ContentControl IsVisible="{Binding IsPdfReader}" Content="{Binding PdfReader}">
+            <ContentControl Grid.Row="1" IsVisible="{Binding IsPdfReader}" Content="{Binding PdfReader}">
                 <ContentControl.ContentTemplate>
                     <DataTemplate x:DataType="vm:PdfPageReaderScreenViewModel">
                         <views:PdfPageReaderScreen />
                     </DataTemplate>
                 </ContentControl.ContentTemplate>
             </ContentControl>
-            <ContentControl IsVisible="{Binding IsDetail}" Content="{Binding Detail}">
+            <ContentControl Grid.Row="1" IsVisible="{Binding IsDetail}" Content="{Binding Detail}">
                 <ContentControl.ContentTemplate>
                     <DataTemplate x:DataType="vm:DetailScreenViewModel">
                         <views:DetailScreen />
                     </DataTemplate>
                 </ContentControl.ContentTemplate>
             </ContentControl>
-            <ContentControl IsVisible="{Binding IsBookDetail}" Content="{Binding BookDetail}">
+            <ContentControl Grid.Row="1" IsVisible="{Binding IsBookDetail}" Content="{Binding BookDetail}">
                 <ContentControl.ContentTemplate>
                     <DataTemplate x:DataType="vm:BookDetailScreenViewModel">
                         <views:BookDetailScreen />
                     </DataTemplate>
                 </ContentControl.ContentTemplate>
             </ContentControl>
-            <ContentControl IsVisible="{Binding IsMangaDetail}" Content="{Binding MangaDetail}">
+            <ContentControl Grid.Row="1" IsVisible="{Binding IsMangaDetail}" Content="{Binding MangaDetail}">
                 <ContentControl.ContentTemplate>
                     <DataTemplate x:DataType="vm:MangaDetailScreenViewModel">
                         <views:MangaDetailScreen />
                     </DataTemplate>
                 </ContentControl.ContentTemplate>
             </ContentControl>
-            <ContentControl IsVisible="{Binding IsReader}" Content="{Binding Reader}">
+            <ContentControl Grid.Row="1" IsVisible="{Binding IsReader}" Content="{Binding Reader}">
                 <ContentControl.ContentTemplate>
                     <DataTemplate x:DataType="vm:ReaderScreenViewModel">
                         <views:ReaderScreen />
                     </DataTemplate>
                 </ContentControl.ContentTemplate>
             </ContentControl>
+
+            <!-- docs/superpowers/specs/2026-08-30-app-shell-navigation-history-design.md - Row 0,
+                 real layout space above whichever drill-down ContentControl (Row 1) is visible; only
+                 ever shown on the six drill-down screens, never the seven lateral rail ones. -->
+            <views:Breadcrumb Grid.Row="0" IsVisible="{Binding ShowBreadcrumb}" />
         </Grid>
 
     </DockPanel>
@@ -1033,5 +1063,55 @@
             </StackPanel>
         </Border>
     </Border>
+
+    <!-- ============ First-run welcome overlay (docs/superpowers/specs/2026-08-31-first-run-
+         onboarding-design.md) - same backdrop-popup pattern as the Migration overlay above, opened
+         from App.axaml.cs in place of the old CE-only auto-migration launch ============ -->
+    <Border IsVisible="{Binding IsWelcomeOverlayOpen}" Background="#B0000000">
+        <Grid HorizontalAlignment="Center" VerticalAlignment="Center">
+            <views:WelcomeOverlay DataContext="{Binding Welcome}" />
+            <Button Classes="rail" Width="28" Height="28"
+                    HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-14,-14,0"
+                    Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
+                    Command="{Binding Welcome.SkipCommand}" ToolTip.Tip="Close"
+                    AutomationProperties.AutomationId="WelcomeOverlayCloseButton">
+                <fi:SymbolIcon Symbol="DismissCircle" FontSize="13" />
+            </Button>
+        </Grid>
+    </Border>
+
+    <!-- ============ Post-welcome tour offer (docs/superpowers/specs/2026-08-31-first-run-
+         onboarding-design.md) - same small centered card pattern as the discard-confirm block above,
+         shown once regardless of which welcome-screen path (including Skip) was taken ============ -->
+    <Border IsVisible="{Binding IsTourOfferOpen}" Background="#B0000000">
+        <Border HorizontalAlignment="Center" VerticalAlignment="Center" Width="360"
+                Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}"
+                BorderThickness="1" CornerRadius="8" Padding="20">
+            <StackPanel Spacing="14">
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <fi:SymbolIcon Symbol="Sparkle" FontSize="18" Foreground="{DynamicResource PbAccentTextBrush}" />
+                    <TextBlock Text="Want a quick tour?" FontSize="15" FontWeight="Bold"
+                               Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
+                </StackPanel>
+                <TextBlock Text="A short walkthrough of what's where - Library, Smart Lists, Reading Lists, and more."
+                           FontSize="12.5" Foreground="{DynamicResource PbTextMutedBrush}" TextWrapping="Wrap" />
+                <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+                    <Button Classes="discardConfirm ghost" Content="No thanks" Command="{Binding DeclineTourCommand}"
+                            AutomationProperties.AutomationId="TourOfferDecline" />
+                    <Button Classes="discardConfirm primary" Content="Take the tour" Command="{Binding TakeTourCommand}"
+                            AutomationProperties.AutomationId="TourOfferAccept" />
+                </StackPanel>
+            </StackPanel>
+        </Border>
+    </Border>
+
+    <!-- ============ Live spotlight tour (docs/superpowers/specs/2026-08-31-first-run-onboarding-
+         design.md) - topmost of everything, including the rail/sidebar/content area, since it needs
+         to highlight controls in those. Unlike every overlay above, it is NOT wrapped in the shared
+         Border/#B0000000 backdrop - it draws its own scrim internally so it can punch a cutout in
+         it, which the shared full-opacity backdrop can't do. ============ -->
+    <Panel IsVisible="{Binding IsWelcomeTourOverlayOpen}">
+        <views:WelcomeTourOverlay DataContext="{Binding WelcomeTour}" />
+    </Panel>
     </Grid>
 </Window>

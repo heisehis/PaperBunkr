@@ -11,7 +11,9 @@ namespace Paperbunkr.Plugins.Tests;
 /// </summary>
 public sealed class DuplicateFinderPluginTests
 {
-    private static string PluginsRoot => Path.Combine(AppContext.BaseDirectory, "SamplePlugins");
+    // Scoped to this plugin's own subfolder (not the shared SamplePlugins root) so a sibling sample
+    // plugin's commands never get counted alongside this one's fixed "3 commands" assertions.
+    private static string PluginsRoot => Path.Combine(AppContext.BaseDirectory, "SamplePlugins", "DuplicateFinder");
 
     private static PluginEngine DiscoverEngine(FakePluginEnvironment.FakeApplication? app = null)
     {

@@ -6,11 +6,13 @@
              xmlns:models="using:Paperbunkr.App.Models"
              xmlns:entities="using:Paperbunkr.Data.Entities"
              xmlns:conv="using:Avalonia.Data.Converters"
+             xmlns:controls="using:Paperbunkr.App.Controls"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d" d:DesignWidth="1000" d:DesignHeight="700"
              x:Class="Paperbunkr.App.Views.ReaderScreen"
-             x:DataType="vm:ReaderScreenViewModel">
+             x:DataType="vm:ReaderScreenViewModel"
+             controls:ContextMenuHost.Provider="{Binding}">
 
     <!--
     Reader chrome (docs/superpowers/specs/2026-08-25-reader-chrome-design.md) - 4 independent
@@ -196,22 +198,6 @@
                                         <!-- Rotation indicator (docs/ce-feature-inventory.md §A). -->
                                         <fi:SymbolIcon Symbol="ArrowRotateClockwise" FontSize="12" Foreground="White" IsVisible="{Binding IsRotated}" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,3,2" />
                                     </Grid>
-                                    <Border.ContextMenu>
-                                        <ContextMenu>
-                                            <MenuItem Header="Page Type">
-                                                <MenuItem Header="Story" Command="{Binding $parent[UserControl].((vm:ReaderScreenViewModel)DataContext).SetPageTypeStoryCommand}" CommandParameter="{Binding}" />
-                                                <MenuItem Header="Cover" Command="{Binding $parent[UserControl].((vm:ReaderScreenViewModel)DataContext).SetPageTypeCoverCommand}" CommandParameter="{Binding}" />
-                                                <MenuItem Header="Advertisement" Command="{Binding $parent[UserControl].((vm:ReaderScreenViewModel)DataContext).SetPageTypeAdvertisementCommand}" CommandParameter="{Binding}" />
-                                                <MenuItem Header="Deleted" Command="{Binding $parent[UserControl].((vm:ReaderScreenViewModel)DataContext).SetPageTypeDeletedCommand}" CommandParameter="{Binding}" />
-                                            </MenuItem>
-                                            <MenuItem Header="Rotate">
-                                                <MenuItem Header="No rotation" Command="{Binding $parent[UserControl].((vm:ReaderScreenViewModel)DataContext).SetPageRotation0Command}" CommandParameter="{Binding}" />
-                                                <MenuItem Header="90°" Command="{Binding $parent[UserControl].((vm:ReaderScreenViewModel)DataContext).SetPageRotation90Command}" CommandParameter="{Binding}" />
-                                                <MenuItem Header="180°" Command="{Binding $parent[UserControl].((vm:ReaderScreenViewModel)DataContext).SetPageRotation180Command}" CommandParameter="{Binding}" />
-                                                <MenuItem Header="270°" Command="{Binding $parent[UserControl].((vm:ReaderScreenViewModel)DataContext).SetPageRotation270Command}" CommandParameter="{Binding}" />
-                                            </MenuItem>
-                                        </ContextMenu>
-                                    </Border.ContextMenu>
                                 </Border>
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>

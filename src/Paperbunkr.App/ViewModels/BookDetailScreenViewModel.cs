@@ -9,6 +9,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using cYo.Projects.ComicRack.Engine.IO.Provider.Books;
 using Microsoft.EntityFrameworkCore;
+using Paperbunkr.App.ContextMenus;
 using Paperbunkr.App.Models;
 using Paperbunkr.App.Services;
 using Paperbunkr.Data;
@@ -29,8 +30,15 @@ namespace Paperbunkr.App.ViewModels;
 /// <see cref="LoadBook"/> to fill the chapter list and resolve bookmark chapter titles, then
 /// disposes the source immediately - only row snapshots are kept, never a live handle.
 /// </summary>
-public partial class BookDetailScreenViewModel : ViewModelBase, IDetailHeaderSource
+public partial class BookDetailScreenViewModel : ViewModelBase, IDetailHeaderSource, IContextMenuProvider
 {
+    /// <summary>Right-click/Menu-key menus for the bookmark list and series-mode book grid
+    /// (docs/superpowers/specs/2026-08-31-keyboard-operability-design.md) - delegated out, same
+    /// pattern as <see cref="LibraryScreenViewModel"/>'s own <see cref="IContextMenuProvider"/>
+    /// implementation.</summary>
+    IReadOnlyList<ContextMenuEntry>? IContextMenuProvider.BuildContextMenu(object? target) =>
+        new BookDetailContextMenuBuilder(this).Build(target);
+
     private const int SynopsisCollapseThreshold = 280;
 
     private readonly Action _goBooks;

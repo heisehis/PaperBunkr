@@ -5,12 +5,14 @@
              xmlns:views="using:Paperbunkr.App.Views"
              xmlns:models="using:Paperbunkr.App.Models"
              xmlns:conv="using:Avalonia.Data.Converters"
+             xmlns:controls="using:Paperbunkr.App.Controls"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d" d:DesignWidth="1000" d:DesignHeight="900"
              x:Class="Paperbunkr.App.Views.MangaDetailScreen"
              x:DataType="vm:MangaDetailScreenViewModel"
-             x:Name="Screen">
+             x:Name="Screen"
+             controls:ContextMenuHost.Provider="{Binding}">
 
     <!--
         Manga/Manhua/Manhwa detail, rebuilt on the shared DetailHero / DetailBand / DetailTabs
@@ -185,18 +187,6 @@
                                                 <Button Classes="chapterRow" Classes.read="{Binding IsRead}"
                                                         Command="{Binding #ChapterGroupsList.((vm:MangaDetailScreenViewModel)DataContext).OpenChapterCommand}"
                                                         CommandParameter="{Binding}">
-                                                    <Button.ContextMenu>
-                                                        <ContextMenu>
-                                                            <MenuItem Header="Edit Properties" Command="{Binding #ChapterGroupsList.((vm:MangaDetailScreenViewModel)DataContext).EditChapterPropertiesCommand}" CommandParameter="{Binding}" />
-                                                            <MenuItem Header="Show in Explorer" Command="{Binding #ChapterGroupsList.((vm:MangaDetailScreenViewModel)DataContext).RevealChapterCommand}" CommandParameter="{Binding}" />
-                                                            <Separator />
-                                                            <MenuItem Header="Mark as Read" Command="{Binding #ChapterGroupsList.((vm:MangaDetailScreenViewModel)DataContext).MarkChapterReadCommand}" CommandParameter="{Binding}" />
-                                                            <MenuItem Header="Mark as Unread" Command="{Binding #ChapterGroupsList.((vm:MangaDetailScreenViewModel)DataContext).MarkChapterUnreadCommand}" CommandParameter="{Binding}" />
-                                                            <Separator />
-                                                            <MenuItem Header="Set Cover…" Command="{Binding #ChapterGroupsList.((vm:MangaDetailScreenViewModel)DataContext).ChangeChapterCoverCommand}" CommandParameter="{Binding}" />
-                                                            <MenuItem Header="Reset Cover" Command="{Binding #ChapterGroupsList.((vm:MangaDetailScreenViewModel)DataContext).ResetChapterCoverCommand}" CommandParameter="{Binding}" />
-                                                        </ContextMenu>
-                                                    </Button.ContextMenu>
                                                     <Grid>
                                                         <Grid ColumnDefinitions="60,*,Auto,Auto,Auto,110" VerticalAlignment="Center">
                                                             <TextBlock Grid.Column="0" Classes="chapterNumber" Text="{Binding DisplayNumber}" />

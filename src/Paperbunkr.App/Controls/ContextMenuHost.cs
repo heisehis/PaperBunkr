@@ -15,7 +15,9 @@ namespace Paperbunkr.App.Controls;
 /// Attach <c>controls:ContextMenuHost.Provider="{Binding}"</c> to a screen root. On a right-click
 /// anywhere under it, walks the visual tree from the clicked element, asks the
 /// <see cref="IContextMenuProvider"/> to build a menu for the nearest data context, and shows it as
-/// a <see cref="MenuFlyout"/> at the pointer.
+/// a <see cref="MenuFlyout"/> at the pointer. Also reachable via the keyboard (Menu key / Shift+F10,
+/// docs/superpowers/specs/2026-08-31-keyboard-operability-design.md) - same menu, same provider
+/// lookup, just rooted at the focused element instead of the pointer.
 ///
 /// Replaces per-item <c>&lt;Button.ContextMenu&gt;</c> markup whose commands bound through
 /// <c>$parent[UserControl]</c> - unresolvable across a menu popup's own visual tree, which is why
@@ -64,6 +66,8 @@ public sealed class ContextMenuHost
         var state = new HostState { Provider = provider };
         host.AddHandler(InputElement.PointerReleasedEvent, (_, pe) => OnPointerReleased(host, state, pe),
             RoutingStrategies.Bubble, handledEventsToo: true);
+        host.AddHandler(InputElement.KeyDownEvent, (_, ke) => OnKeyDown(host, state, ke),
+            RoutingStrategies.Bubble, handledEventsToo: true);
         s_state.Add(host, state);
     }
 
@@ -74,18 +78,7 @@ public sealed class ContextMenuHost
             return;
         }
 
-        IReadOnlyList<ContextMenuEntry>? entries = null;
-        foreach (var candidate in DataContextChain(e.Source as Visual))
-        {
-            entries = state.Provider.BuildContextMenu(candidate);
-            if (entries is { Count: > 0 })
-            {
-                break;
-            }
-        }
-
-        entries ??= state.Provider.BuildContextMenu(null);
-        if (entries is not { Count: > 0 })
+        if (!TryBuildEntries(state, e.Source as Visual, out var entries))
         {
             return;
         }
@@ -98,6 +91,59 @@ public sealed class ContextMenuHost
 
         e.Handled = true;
         flyout.ShowAt(host, showAtPointer: true);
+    }
+
+    /// <summary>Menu key / Shift+F10 (docs/superpowers/specs/2026-08-31-keyboard-operability-
+    /// design.md) - same menu-building/showing logic as <see cref="OnPointerReleased"/>, just rooted
+    /// at the focused element instead of the pointer's click target, and anchored there rather than
+    /// at a pointer position that doesn't exist for a keyboard-triggered menu.</summary>
+    private static void OnKeyDown(Control host, HostState state, KeyEventArgs e)
+    {
+        bool isMenuGesture = e.Key == Key.Apps || (e.Key == Key.F10 && e.KeyModifiers == KeyModifiers.Shift);
+        if (!isMenuGesture)
+        {
+            return;
+        }
+
+        if (TopLevel.GetTopLevel(host)?.FocusManager?.GetFocusedElement() is not Control focused)
+        {
+            return;
+        }
+
+        if (!TryBuildEntries(state, focused, out var entries))
+        {
+            return;
+        }
+
+        var flyout = new MenuFlyout();
+        foreach (var item in Build(entries))
+        {
+            flyout.Items.Add(item);
+        }
+
+        e.Handled = true;
+        flyout.ShowAt(focused);
+    }
+
+    /// <summary>Shared provider-lookup step behind both <see cref="OnPointerReleased"/> and
+    /// <see cref="OnKeyDown"/> - walks <paramref name="source"/>'s <see cref="DataContextChain"/>
+    /// asking the provider for entries at each level, falling back to a <see langword="null"/>-target
+    /// call (the "empty space" menu) if nothing along the chain has any.</summary>
+    private static bool TryBuildEntries(HostState state, Visual? source, out IReadOnlyList<ContextMenuEntry> entries)
+    {
+        IReadOnlyList<ContextMenuEntry>? found = null;
+        foreach (var candidate in DataContextChain(source))
+        {
+            found = state.Provider.BuildContextMenu(candidate);
+            if (found is { Count: > 0 })
+            {
+                break;
+            }
+        }
+
+        found ??= state.Provider.BuildContextMenu(null);
+        entries = found ?? System.Array.Empty<ContextMenuEntry>();
+        return found is { Count: > 0 };
     }
 
     /// <summary>Distinct data contexts from the clicked element up to the root, nearest first.</summary>

@@ -1,0 +1,95 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Paperbunkr.App.ViewModels"
+             xmlns:fi="using:FluentIcons.Avalonia"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="620" d:DesignHeight="480"
+             x:Class="Paperbunkr.App.Views.WelcomeOverlay"
+             x:DataType="vm:WelcomeOverlayViewModel">
+
+    <UserControl.Styles>
+        <!-- Setup-path card (docs/superpowers/specs/2026-08-31-first-run-onboarding-design.md) -
+             three equal cards, CE import no longer special-cased by auto-launch, just badged. -->
+        <Style Selector="Button.setupCard">
+            <Setter Property="Padding" Value="18,16" />
+            <Setter Property="CornerRadius" Value="8" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Background" Value="{DynamicResource PbSurface2Brush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="Margin" Value="0,0,0,10" />
+        </Style>
+        <Style Selector="Button.setupCard:pointerover">
+            <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
+        </Style>
+        <Style Selector="TextBlock.setupCardTitle">
+            <Setter Property="FontSize" Value="14" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextBrush}" />
+        </Style>
+        <Style Selector="TextBlock.setupCardDescription">
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
+            <Setter Property="Margin" Value="0,3,0,0" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+        </Style>
+        <Style Selector="Button.skipLink">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextFaintBrush}" />
+            <Setter Property="FontSize" Value="12.5" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="HorizontalAlignment" Value="Center" />
+        </Style>
+    </UserControl.Styles>
+
+    <Border Width="580" Classes="floatingPanel">
+        <StackPanel Margin="24,22">
+            <TextBlock Text="Welcome to Paperbunkr" FontSize="19" FontWeight="Bold" Foreground="{DynamicResource PbTextBrush}" />
+            <TextBlock Text="Let's get your library set up. Pick a place to start - you can always add more later."
+                       FontSize="12.5" Foreground="{DynamicResource PbTextMutedBrush}" Margin="0,6,0,20" TextWrapping="Wrap" />
+
+            <Button Classes="setupCard" Command="{Binding AddComicFolderCommand}"
+                    AutomationProperties.AutomationId="WelcomeAddComicFolder">
+                <Grid ColumnDefinitions="Auto,*">
+                    <fi:SymbolIcon Grid.Column="0" Symbol="FolderOpen" FontSize="22" Foreground="{DynamicResource PbAccentTextBrush}" VerticalAlignment="Top" Margin="0,2,14,0" />
+                    <StackPanel Grid.Column="1">
+                        <TextBlock Classes="setupCardTitle" Text="Add Comic Folder" />
+                        <TextBlock Classes="setupCardDescription" Text="Point Paperbunkr at a folder of CBZ, CBR, and other comics already on disk." />
+                    </StackPanel>
+                </Grid>
+            </Button>
+
+            <Button Classes="setupCard" Command="{Binding AddBookFolderCommand}"
+                    AutomationProperties.AutomationId="WelcomeAddBookFolder">
+                <Grid ColumnDefinitions="Auto,*">
+                    <fi:SymbolIcon Grid.Column="0" Symbol="Book" FontSize="22" Foreground="{DynamicResource PbAccentTextBrush}" VerticalAlignment="Top" Margin="0,2,14,0" />
+                    <StackPanel Grid.Column="1">
+                        <TextBlock Classes="setupCardTitle" Text="Add Book Folder" />
+                        <TextBlock Classes="setupCardDescription" Text="Same idea for novels - EPUB and PDF files in a folder of their own." />
+                    </StackPanel>
+                </Grid>
+            </Button>
+
+            <Button Classes="setupCard" Command="{Binding ImportFromCeCommand}"
+                    AutomationProperties.AutomationId="WelcomeImportFromCe">
+                <Grid ColumnDefinitions="Auto,*">
+                    <fi:SymbolIcon Grid.Column="0" Symbol="CloudArrowUp" FontSize="22" Foreground="{DynamicResource PbAccentTextBrush}" VerticalAlignment="Top" Margin="0,2,14,0" />
+                    <StackPanel Grid.Column="1">
+                        <TextBlock Classes="setupCardTitle" Text="Import from ComicRack CE" />
+                        <TextBlock Classes="setupCardDescription" Text="Bring over your existing ComicRack CE library - series, issues, and reading progress." />
+                        <StackPanel Orientation="Horizontal" Spacing="5" Margin="0,6,0,0" IsVisible="{Binding CeInstallDetected}">
+                            <fi:SymbolIcon Symbol="CheckmarkCircle" FontSize="13" Foreground="{DynamicResource PbAccentTextBrush}" />
+                            <TextBlock Text="Found the default CE install" Foreground="{DynamicResource PbAccentTextBrush}" FontSize="11.5" />
+                        </StackPanel>
+                    </StackPanel>
+                </Grid>
+            </Button>
+
+            <Button Classes="skipLink" Content="Skip for now" Command="{Binding SkipCommand}" Margin="0,8,0,0"
+                    AutomationProperties.AutomationId="WelcomeSkip" />
+        </StackPanel>
+    </Border>
+</UserControl>

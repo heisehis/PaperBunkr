@@ -1,0 +1,41 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Paperbunkr.App.ViewModels"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="1200" d:DesignHeight="760"
+             x:Class="Paperbunkr.App.Views.WelcomeTourOverlay"
+             x:DataType="vm:WelcomeTourOverlayViewModel">
+
+    <Panel>
+        <!-- Dimmed scrim with a rectangular cutout punched around the current step's rail button
+             (docs/superpowers/specs/2026-08-31-first-run-onboarding-design.md) - Data is rebuilt in
+             code-behind (WelcomeTourOverlay.axaml.cs) each time the step or window size changes,
+             since it depends on another control's live bounds, not anything this ViewModel knows
+             about. Deliberately blocks all interaction with the screen underneath - this is a
+             guided display, not an interactive walkthrough. -->
+        <Path x:Name="ScrimPath" Fill="#CC000000" />
+
+        <Canvas>
+            <Border x:Name="Callout" Width="280" Classes="floatingPanel" Padding="18,16">
+                <StackPanel Spacing="10">
+                    <TextBlock Text="{Binding CurrentStep.Title}" FontSize="15" FontWeight="Bold" Foreground="{DynamicResource PbTextBrush}" />
+                    <TextBlock Text="{Binding CurrentStep.Body}" FontSize="12.5" Foreground="{DynamicResource PbTextMutedBrush}" TextWrapping="Wrap" />
+                    <Grid ColumnDefinitions="Auto,*,Auto,Auto" Margin="0,4,0,0">
+                        <Button Grid.Column="0" Classes="discardConfirm ghost" Content="Skip" Command="{Binding SkipCommand}"
+                                AutomationProperties.AutomationId="WelcomeTourSkip" />
+                        <Button Grid.Column="2" Classes="discardConfirm ghost" Content="Back" Command="{Binding BackCommand}"
+                                IsVisible="{Binding !IsFirstStep}" Margin="0,0,8,0" />
+                        <Button Grid.Column="3" Classes="discardConfirm primary" Command="{Binding NextCommand}"
+                                AutomationProperties.AutomationId="WelcomeTourNext">
+                            <Panel>
+                                <TextBlock Text="Next" IsVisible="{Binding !IsLastStep}" />
+                                <TextBlock Text="Finish" IsVisible="{Binding IsLastStep}" />
+                            </Panel>
+                        </Button>
+                    </Grid>
+                </StackPanel>
+            </Border>
+        </Canvas>
+    </Panel>
+</UserControl>

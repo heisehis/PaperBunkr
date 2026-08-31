@@ -8,6 +8,7 @@ using Avalonia.Media.Imaging;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.EntityFrameworkCore;
+using Paperbunkr.App.ContextMenus;
 using Paperbunkr.App.Models;
 using Paperbunkr.App.Services;
 using Paperbunkr.Data;
@@ -26,8 +27,18 @@ namespace Paperbunkr.App.ViewModels;
 /// immediately (add/remove/reorder each call SaveChanges) rather than through a Save/Cancel draft —
 /// the wireframe's header only ever showed Share/Refresh, no Save, for this screen.
 /// </summary>
-public partial class ReadingScreenViewModel : ViewModelBase
+public partial class ReadingScreenViewModel : ViewModelBase, IContextMenuProvider
 {
+    /// <summary>Right-click/Menu-key menu for member rows (docs/superpowers/specs/2026-08-31-
+    /// keyboard-operability-design.md) - a new menu, this screen had none before.</summary>
+    IReadOnlyList<ContextMenuEntry>? IContextMenuProvider.BuildContextMenu(object? target) =>
+        new ReadingListMemberContextMenuBuilder().Build(target)
+        // Tag-pill weight menu (docs/superpowers/specs/2026-08-31-keyboard-operability-design.md) -
+        // a second dead <ContextMenu> found in this screen during a broader sweep, beyond the
+        // originally-scoped member-row menu above. Same TagPillViewModel target/builder DetailBand
+        // now uses, so both dead instances of this menu share one fix.
+        ?? new TagPillContextMenuBuilder().Build(target);
+
     private readonly IFilePickerService _filePicker;
     private readonly Action<int, int> _goReaderForIssueInReadingList;
     private readonly Action<int> _openProperties;

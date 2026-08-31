@@ -770,21 +770,12 @@
             <!-- Configurable, click-to-sort header (4b §8) - same DetailsColumns source + fixed
                  widths as each data row, so hiding a column keeps both aligned. Right-click for the
                  column picker. -->
-            <Grid DockPanel.Dock="Top" ColumnDefinitions="52,*" Margin="0,0,16,8" IsVisible="{Binding IsIssueGranularity}">
+            <Grid DockPanel.Dock="Top" ColumnDefinitions="52,*" Margin="0,0,16,8" IsVisible="{Binding IsIssueGranularity}"
+                  controls:ContextMenuHost.Provider="{Binding DetailsColumnsMenuProvider}">
                 <ItemsControl Grid.Column="1" ItemsSource="{Binding DetailsColumns}">
                     <ItemsControl.ItemsPanel>
                         <ItemsPanelTemplate><StackPanel Orientation="Horizontal" /></ItemsPanelTemplate>
                     </ItemsControl.ItemsPanel>
-                    <ItemsControl.ContextMenu>
-                        <ContextMenu ItemsSource="{Binding DetailsColumns}">
-                            <ContextMenu.ItemTemplate>
-                                <DataTemplate x:DataType="models:DetailsColumn">
-                                    <MenuItem Header="{Binding DisplayName}" ToggleType="CheckBox"
-                                              IsChecked="{Binding IsVisible, Mode=TwoWay}" StaysOpenOnClick="True" />
-                                </DataTemplate>
-                            </ContextMenu.ItemTemplate>
-                        </ContextMenu>
-                    </ItemsControl.ContextMenu>
                     <ItemsControl.ItemTemplate>
                         <DataTemplate x:DataType="models:DetailsColumn">
                             <Button Classes="detailsHeader" IsVisible="{Binding IsVisible}" Width="{Binding Width}"

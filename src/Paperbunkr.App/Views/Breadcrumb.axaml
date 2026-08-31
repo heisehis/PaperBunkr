@@ -1,0 +1,51 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Paperbunkr.App.ViewModels"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="500" d:DesignHeight="40"
+             x:Class="Paperbunkr.App.Views.Breadcrumb"
+             x:DataType="vm:MainViewModel">
+
+    <!--
+        Drill-down screen breadcrumb trail (docs/superpowers/specs/2026-08-30-app-shell-navigation-
+        history-design.md) - shown only above the six drill-down screens (Detail/MangaDetail/
+        BookDetail/Reader/BookReader/PdfReader), never the seven lateral rail screens. Segments are
+        built imperatively in code-behind rather than an ItemsControl template, since each segment's
+        click needs its own trail index and Avalonia has no clean declarative "index of this item"
+        binding without an AlternationIndex-supporting container - simpler and more reliable as plain
+        C# than a fragile binding workaround for a handful of segments.
+    -->
+    <UserControl.Styles>
+        <Style Selector="Button.breadcrumbSegment">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="4,2" />
+            <Setter Property="FontSize" Value="12.5" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextFaintBrush}" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style Selector="Button.breadcrumbSegment:pointerover /template/ ContentPresenter">
+            <Setter Property="TextBlock.Foreground" Value="{DynamicResource PbAccentBrush}" />
+        </Style>
+        <Style Selector="Button.breadcrumbSegment.current">
+            <Setter Property="Foreground" Value="{DynamicResource PbTextBrush}" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+        </Style>
+        <Style Selector="TextBlock.breadcrumbSeparator">
+            <Setter Property="FontSize" Value="12.5" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextFaintBrush}" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Margin" Value="2,0" />
+        </Style>
+    </UserControl.Styles>
+
+    <Border Background="{DynamicResource PbSurface2Brush}"
+            BorderBrush="{DynamicResource PbBorderBrush}"
+            BorderThickness="0,0,0,1"
+            Padding="16,6"
+            HorizontalAlignment="Stretch"
+            VerticalAlignment="Top">
+        <StackPanel x:Name="Segments" Orientation="Horizontal" />
+    </Border>
+</UserControl>

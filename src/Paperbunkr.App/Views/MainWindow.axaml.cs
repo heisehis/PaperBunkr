@@ -58,6 +58,38 @@ public partial class MainWindow : Window
         _trayIconService.ExitRequested += ExitFromTray;
         PropertyChanged += OnWindowPropertyChanged;
         Closing += OnWindowClosing;
+        PointerWheelChanged += OnWindowPointerWheelChanged;
+    }
+
+    /// <summary>
+    /// Trackpad two-finger horizontal swipe → Back/Forward (docs/superpowers/specs/2026-08-30-app-
+    /// shell-navigation-history-design.md) - best-effort, not a guaranteed mechanism. Avalonia has no
+    /// first-class desktop "swipe" gesture API; on Windows, a precision-touchpad two-finger
+    /// horizontal swipe arrives as a <see cref="PointerWheelEventArgs"/> with a horizontal
+    /// <c>Delta.X</c>, the same signal ordinary horizontal scrolling produces - the threshold below
+    /// (one large delta, not the smaller accumulated deltas of deliberate horizontal scroll) is a
+    /// heuristic. An ordinary vertical mouse wheel reports <c>Delta.X == 0</c>, so this is inert for
+    /// normal scrolling. Direction convention (swipe left = Back) is a judgment call, unverified on
+    /// real hardware - same standing caveat as every other desktop-gesture spec in this project (no
+    /// unattended GUI automation available in this environment); flip the two comparisons below if it
+    /// turns out backwards once someone tries it on a real trackpad.
+    /// </summary>
+    private void OnWindowPointerWheelChanged(object? sender, PointerWheelEventArgs e)
+    {
+        const double SwipeThreshold = 1.5;
+        if (DataContext is not MainViewModel viewModel)
+        {
+            return;
+        }
+
+        if (e.Delta.X <= -SwipeThreshold && viewModel.CanNavigateBack)
+        {
+            viewModel.NavigateBackCommand.Execute(null);
+        }
+        else if (e.Delta.X >= SwipeThreshold && viewModel.CanNavigateForward)
+        {
+            viewModel.NavigateForwardCommand.Execute(null);
+        }
     }
 
     private void OnWindowPropertyChanged(object? sender, Avalonia.AvaloniaPropertyChangedEventArgs e)

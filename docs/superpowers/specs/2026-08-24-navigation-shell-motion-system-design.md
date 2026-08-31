@@ -20,6 +20,9 @@ This phase does two things: restructures the nav rail into a collapsible/hover-e
 
 **Out of scope (deferred):**
 - Drill-down screens (Detail, MangaDetail, Reader, BookReader, PdfReader) keep today's instant-cut behavior unchanged. These aren't lateral rail moves, need their own push/pop slide convention, and are getting their own redesigns in Phases 5-6 anyway — building transition logic for them now would likely be thrown away.
+  **Picked up 2026-08-31** by `2026-08-30-app-shell-navigation-history-design.md` — not the slide-
+  transition motion itself (still instant-cut, still deferred), but the drill-down history/back-
+  forward/breadcrumb concept this bullet also implicitly deferred.
 - The 5 FloatingPanel overlays already have open/close motion from Phase 1 - untouched here.
 - Any change to the Plugins screen's own content/behavior - only *where* it's hosted changes.
 

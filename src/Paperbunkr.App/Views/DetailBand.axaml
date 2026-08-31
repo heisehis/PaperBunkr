@@ -10,7 +10,8 @@
              mc:Ignorable="d" d:DesignWidth="900" d:DesignHeight="320"
              x:Class="Paperbunkr.App.Views.DetailBand"
              x:DataType="vm:DetailBandViewModel"
-             x:Name="u">
+             x:Name="u"
+             pbc:ContextMenuHost.Provider="{Binding}">
 
     <!--
         Always-visible band beneath the hero (docs/superpowers/specs/2026-08-28-detail-screens-
@@ -196,14 +197,6 @@
                                                 Classes.defining="{Binding WeightClass, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter=defining}"
                                                 Classes.recurrent="{Binding WeightClass, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter=recurrent}"
                                                 Classes.incidental="{Binding WeightClass, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter=incidental}">
-                                            <Button.ContextMenu>
-                                                <ContextMenu IsVisible="{Binding CanReweight}">
-                                                    <MenuItem Header="Incidental" Command="{Binding SetWeightCommand}" CommandParameter="{x:Static entities:IssueTagWeight.Incidental}" />
-                                                    <MenuItem Header="Recurrent" Command="{Binding SetWeightCommand}" CommandParameter="{x:Static entities:IssueTagWeight.Recurrent}" />
-                                                    <MenuItem Header="Defining" Command="{Binding SetWeightCommand}" CommandParameter="{x:Static entities:IssueTagWeight.Defining}" />
-                                                    <MenuItem Header="Core" Command="{Binding SetWeightCommand}" CommandParameter="{x:Static entities:IssueTagWeight.Core}" />
-                                                </ContextMenu>
-                                            </Button.ContextMenu>
                                             <StackPanel Orientation="Horizontal" Spacing="5">
                                                 <Ellipse Width="5" Height="5" VerticalAlignment="Center" IsVisible="{Binding IsWeighted}"
                                                          Fill="{DynamicResource PbAccentBrush}" />

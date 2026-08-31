@@ -118,7 +118,7 @@
         <DataTemplate x:Key="BookCardTemplate" x:DataType="models:BookCardSample">
             <Button Classes="card" Width="150" Margin="0,0,20,20"
                     Command="{Binding $parent[UserControl].((vm:BooksScreenViewModel)DataContext).CardClickCommand}"
-                    CommandParameter="{Binding}">
+                    CommandParameter="{Binding}" KeyDown="OnCardKeyDown">
                 <StackPanel Spacing="8">
                     <Border Classes="bookCover" Background="{Binding CoverBrush}" Height="216">
                         <Grid>

@@ -9,6 +9,7 @@ using Avalonia.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.EntityFrameworkCore;
+using Paperbunkr.App.ContextMenus;
 using Paperbunkr.App.Models;
 using Paperbunkr.App.Services;
 using Paperbunkr.Data;
@@ -26,8 +27,15 @@ namespace Paperbunkr.App.ViewModels;
 /// project 43c40b25). Populated from the real <see cref="Series"/> passed to
 /// <see cref="LoadSeries"/> rather than the wireframe's static sample data.
 /// </summary>
-public partial class DetailTabsViewModel : ViewModelBase
+public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
 {
+    /// <summary>Right-click/Menu-key menu for the Issues-tab tiles (docs/superpowers/specs/
+    /// 2026-08-31-keyboard-operability-design.md) - a new menu, this screen had none before.
+    /// Delegated out, same pattern as <see cref="LibraryScreenViewModel"/>'s own
+    /// <see cref="IContextMenuProvider"/> implementation.</summary>
+    IReadOnlyList<ContextMenuEntry>? IContextMenuProvider.BuildContextMenu(object? target) =>
+        new DetailIssueContextMenuBuilder(this).Build(target);
+
     private readonly Action<int> _goToProperties;
     private readonly Action<IReadOnlyList<int>> _goToBulkProperties;
     private readonly Action? _onSelectionChanged;

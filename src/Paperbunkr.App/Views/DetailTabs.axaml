@@ -12,7 +12,8 @@
              mc:Ignorable="d" d:DesignWidth="900" d:DesignHeight="500"
              x:Class="Paperbunkr.App.Views.DetailTabs"
              x:DataType="vm:DetailTabsViewModel"
-             x:Name="Root">
+             x:Name="Root"
+             pbc:ContextMenuHost.Provider="{Binding}">
 
     <UserControl.Styles>
         <Style Selector="Border.issueTile">
@@ -96,36 +97,6 @@
     </UserControl.Styles>
 
     <UserControl.Resources>
-        <ContextMenu x:Key="IssueContextMenu" x:DataType="models:IssueCardSample">
-            <MenuItem Header="Edit Properties"
-                      Command="{Binding #Root.((vm:DetailTabsViewModel)DataContext).EditIssuePropertiesCommand}"
-                      CommandParameter="{Binding}">
-                <MenuItem.Icon>
-                    <fi:SymbolIcon Symbol="Edit" FontSize="13" />
-                </MenuItem.Icon>
-            </MenuItem>
-            <MenuItem Header="Show in Explorer"
-                      Command="{Binding #Root.((vm:DetailTabsViewModel)DataContext).RevealIssueCommand}"
-                      CommandParameter="{Binding}" IsEnabled="{Binding HasFile}" />
-            <Separator />
-            <MenuItem Header="Mark as Read"
-                      Command="{Binding #Root.((vm:DetailTabsViewModel)DataContext).MarkIssueReadCommand}"
-                      CommandParameter="{Binding}" />
-            <MenuItem Header="Mark as Unread"
-                      Command="{Binding #Root.((vm:DetailTabsViewModel)DataContext).MarkIssueUnreadCommand}"
-                      CommandParameter="{Binding}" />
-            <MenuItem Header="Quick Rate…"
-                      Command="{Binding #Root.((vm:DetailTabsViewModel)DataContext).QuickRateCommand}"
-                      CommandParameter="{Binding}" />
-            <Separator />
-            <MenuItem Header="Set Cover…"
-                      Command="{Binding #Root.((vm:DetailTabsViewModel)DataContext).ChangeIssueCoverCommand}"
-                      CommandParameter="{Binding}" />
-            <MenuItem Header="Reset Cover"
-                      Command="{Binding #Root.((vm:DetailTabsViewModel)DataContext).ResetIssueCoverCommand}"
-                      CommandParameter="{Binding}" />
-        </ContextMenu>
-
         <!-- Shared IssueCardSample tile templates (docs/superpowers/specs/2026-08-28-series-detail-
              specials-tab-design.md) - the Issues tab's run groups and the flat Specials tab both
              render the same tiles, just from different source collections. -->
@@ -133,7 +104,6 @@
             <StackPanel Classes="posterItem" Classes.read="{Binding IsRead}" Width="118" Margin="0,0,14,16" Spacing="5">
                 <Border Classes="issueTile" Classes.selected="{Binding IsSelected}" Height="168"
                         Background="{Binding CoverBrush}" Focusable="True"
-                        ContextMenu="{StaticResource IssueContextMenu}"
                         PointerPressed="OnIssueTilePointerPressed" KeyDown="OnIssueTileKeyDown">
                     <Grid>
                         <Image Source="{Binding CoverImage}" Stretch="UniformToFill" />

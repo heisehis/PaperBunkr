@@ -234,7 +234,7 @@
                         <ItemsControl.ItemTemplate>
                             <DataTemplate x:DataType="models:IssueSearchResult">
                                 <Grid ColumnDefinitions="Auto,*,Auto,Auto" Margin="0,2,6,2" ColumnSpacing="8">
-                                    <CheckBox Grid.Column="0" IsChecked="{Binding IsSelected}" VerticalAlignment="Center" MinWidth="0" Padding="0"
+                                    <CheckBox Grid.Column="0" IsChecked="{Binding IsSelected, Mode=OneWay}" VerticalAlignment="Center" MinWidth="0" Padding="0"
                                               Command="{Binding $parent[ItemsControl].((vm:EventsScreenViewModel)DataContext).ToggleEventSearchSelectionCommand}"
                                               CommandParameter="{Binding}" />
                                     <TextBlock Grid.Column="1" Text="{Binding DisplayLabel}" FontSize="12.5" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
@@ -277,7 +277,7 @@
                         <ItemsControl.ItemTemplate>
                             <DataTemplate x:DataType="models:SeriesSearchResult">
                                 <Grid ColumnDefinitions="Auto,*,Auto" Margin="0,2,6,2" ColumnSpacing="8">
-                                    <CheckBox Grid.Column="0" IsChecked="{Binding IsSelected}" VerticalAlignment="Center" MinWidth="0" Padding="0"
+                                    <CheckBox Grid.Column="0" IsChecked="{Binding IsSelected, Mode=OneWay}" VerticalAlignment="Center" MinWidth="0" Padding="0"
                                               Command="{Binding $parent[ItemsControl].((vm:EventsScreenViewModel)DataContext).ToggleContinuitySeriesSelectionCommand}"
                                               CommandParameter="{Binding}" />
                                     <TextBlock Grid.Column="1" Text="{Binding Name}" FontSize="12.5" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
@@ -361,7 +361,7 @@
                                         <Grid ColumnDefinitions="22,26,46,*,Auto,Auto">
                                             <CheckBox Grid.Column="0" Classes="rowManage rowPick"
                                                       Classes.pinned="{Binding $parent[UserControl].((vm:EventsScreenViewModel)DataContext).AnyEventMembersSelected}"
-                                                      IsChecked="{Binding IsSelected}" VerticalAlignment="Center" MinWidth="0" Padding="0"
+                                                      IsChecked="{Binding IsSelected, Mode=OneWay}" VerticalAlignment="Center" MinWidth="0" Padding="0"
                                                       Command="{Binding $parent[UserControl].((vm:EventsScreenViewModel)DataContext).ToggleEventMemberSelectionCommand}"
                                                       CommandParameter="{Binding}" />
                                             <TextBlock Grid.Column="1" Classes="pbTextHeading" Text="{Binding Position}" FontSize="15"
@@ -598,7 +598,7 @@
                                             </Button>
                                             <CheckBox Classes="posterPick"
                                                       Classes.pinned="{Binding $parent[UserControl].((vm:EventsScreenViewModel)DataContext).AnyContinuityMembersSelected}"
-                                                      IsChecked="{Binding IsSelected}" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="4"
+                                                      IsChecked="{Binding IsSelected, Mode=OneWay}" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="4"
                                                       MinWidth="0" Padding="0"
                                                       Command="{Binding $parent[ItemsControl].((vm:EventsScreenViewModel)DataContext).ToggleContinuityMemberSelectionCommand}"
                                                       CommandParameter="{Binding}" />

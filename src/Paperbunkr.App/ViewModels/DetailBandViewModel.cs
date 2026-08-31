@@ -5,6 +5,7 @@ using System.Linq;
 using System.Text.RegularExpressions;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Paperbunkr.App.ContextMenus;
 using Paperbunkr.App.Models;
 using Paperbunkr.Data.Entities;
 using Paperbunkr.Data.VirtualTags;
@@ -22,8 +23,15 @@ namespace Paperbunkr.App.ViewModels;
 ///
 /// Book mode leaves <see cref="Groups"/> empty ("lite" band - inline meta + synopsis only).
 /// </summary>
-public partial class DetailBandViewModel : ViewModelBase
+public partial class DetailBandViewModel : ViewModelBase, IContextMenuProvider
 {
+    /// <summary>Right-click/Menu-key menu for tag pills' weight picker (docs/superpowers/specs/
+    /// 2026-08-31-keyboard-operability-design.md) - self-contained on this shared control's own
+    /// ViewModel so all three consuming screens (Detail/MangaDetail/BookDetail) get it at once.</summary>
+    IReadOnlyList<ContextMenuEntry>? IContextMenuProvider.BuildContextMenu(object? target) =>
+        new TagPillContextMenuBuilder().Build(target);
+
+
     /// <summary>ComicVine's ComicInfo exporter dumps its internal ids into &lt;Tags&gt; ("CVDB1073108").
     /// Hidden from the Tags group by default with a reveal affordance - display-only, import/DB untouched.</summary>
     internal static readonly Regex JunkTagPattern = new(@"^CVDB\d+$", RegexOptions.IgnoreCase | RegexOptions.Compiled);

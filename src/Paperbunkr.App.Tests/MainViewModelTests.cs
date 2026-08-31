@@ -309,8 +309,14 @@ public class MainViewModelTests : IDisposable
     {
         var (seriesId, _) = SeedSeriesWithIssue("Detail Series");
         var vm = new MainViewModel();
-        vm.Detail.LoadSeries(seriesId);
-        vm.CurrentScreen = "detail";
+        // Goes through the real GoToSeries -> GoDetailForSeries navigation path (unlike the
+        // Detail.LoadSeries + raw CurrentScreen poke other tests in this file use) - this test
+        // specifically exercises Back (docs/superpowers/specs/2026-08-30-app-shell-navigation-
+        // history-design.md), which depends on a real history entry having been pushed; the raw
+        // poke bypasses that entirely and isn't representative of how Detail is ever actually
+        // reached in production.
+        vm.Library.GoToSeriesCommand.Execute(seriesId);
+        Assert.True(vm.IsDetail);
 
         vm.Detail.ContinueCommand.Execute(null);
         Assert.True(vm.IsReader);
@@ -380,5 +386,359 @@ public class MainViewModelTests : IDisposable
 
         using var context = new PaperbunkrDbContext(new DbContextOptionsBuilder<PaperbunkrDbContext>().UseSqlite($"Data Source={_dbPath}").Options);
         Assert.True(context.GetOrCreateAppSettings().NavRailPinned);
+    }
+
+    // --- App shell navigation history: back/forward, breadcrumbs, restore-on-launch, CLI deep-
+    // linking (docs/superpowers/specs/2026-08-30-app-shell-navigation-history-design.md) ---
+
+    private int SeedBook(string title)
+    {
+        var options = new DbContextOptionsBuilder<PaperbunkrDbContext>().UseSqlite($"Data Source={_dbPath}").Options;
+        using var context = new PaperbunkrDbContext(options);
+        var book = new Paperbunkr.Data.Entities.Book { Title = title };
+        context.Books.Add(book);
+        context.SaveChanges();
+        return book.Id;
+    }
+
+    private int SeedCollection(string name)
+    {
+        var options = new DbContextOptionsBuilder<PaperbunkrDbContext>().UseSqlite($"Data Source={_dbPath}").Options;
+        using var context = new PaperbunkrDbContext(options);
+        var collection = new Paperbunkr.Data.Entities.Collection { Name = name };
+        context.Collections.Add(collection);
+        context.SaveChanges();
+        return collection.Id;
+    }
+
+    [Fact]
+    public void NavigateBack_InitialState_CanNotGoBack()
+    {
+        var vm = new MainViewModel();
+
+        Assert.False(vm.CanNavigateBack);
+        Assert.False(vm.CanNavigateForward);
+    }
+
+    [Fact]
+    public void GoDetailForSeries_TwiceInARow_PushesTwoEntries_BackReturnsToFirst()
+    {
+        var (seriesA, _) = SeedSeriesWithIssue("Series A");
+        var (seriesB, _) = SeedSeriesWithIssue("Series B");
+        var vm = new MainViewModel();
+        vm.GoLibraryCommand.Execute(null);
+
+        vm.Library.GoToSeriesCommand.Execute(seriesA);
+        // Already true here - one push means "there's a root (Library) to go back to", not "there
+        // are 2+ entries". CanGoBack only turns false once the cursor moves past the root.
+        Assert.True(vm.CanNavigateBack);
+        vm.Library.GoToSeriesCommand.Execute(seriesB);
+        Assert.True(vm.CanNavigateBack);
+
+        vm.NavigateBackCommand.Execute(null);
+
+        Assert.True(vm.IsDetail);
+        Assert.Equal("Series A", vm.Detail.HeaderTitle);
+        Assert.True(vm.CanNavigateForward);
+        // Still true - one more Back() step remains (to Library, the root).
+        Assert.True(vm.CanNavigateBack);
+    }
+
+    [Fact]
+    public void NavigateBack_PastFirstDrillDownEntry_ReturnsToRootScreen()
+    {
+        var (seriesId, _) = SeedSeriesWithIssue("Root Return Series");
+        var vm = new MainViewModel();
+        vm.GoLibraryCommand.Execute(null);
+        vm.Library.GoToSeriesCommand.Execute(seriesId);
+        Assert.True(vm.IsDetail);
+
+        vm.NavigateBackCommand.Execute(null);
+
+        Assert.True(vm.IsLibrary);
+        Assert.False(vm.CanNavigateBack);
+        Assert.True(vm.CanNavigateForward);
+    }
+
+    [Fact]
+    public void NavigateForward_AfterBack_ReturnsToTheSameEntry()
+    {
+        var (seriesId, _) = SeedSeriesWithIssue("Forward Series");
+        var vm = new MainViewModel();
+        vm.GoLibraryCommand.Execute(null);
+        vm.Library.GoToSeriesCommand.Execute(seriesId);
+        vm.NavigateBackCommand.Execute(null);
+        Assert.True(vm.IsLibrary);
+
+        vm.NavigateForwardCommand.Execute(null);
+
+        Assert.True(vm.IsDetail);
+        Assert.Equal("Forward Series", vm.Detail.HeaderTitle);
+        Assert.False(vm.CanNavigateForward);
+    }
+
+    [Fact]
+    public void LateralNavigation_ResetsHistory_EvenWithADrillDownChainInProgress()
+    {
+        var (seriesId, _) = SeedSeriesWithIssue("Reset Series");
+        var vm = new MainViewModel();
+        vm.GoLibraryCommand.Execute(null);
+        vm.Library.GoToSeriesCommand.Execute(seriesId);
+        Assert.True(vm.CanNavigateBack);
+
+        vm.GoBooksCommand.Execute(null);
+
+        Assert.False(vm.CanNavigateBack);
+        Assert.False(vm.CanNavigateForward);
+    }
+
+    [Fact]
+    public void BreadcrumbTrail_ReflectsPushedEntries()
+    {
+        var (seriesId, _) = SeedSeriesWithIssue("Breadcrumb Series");
+        var vm = new MainViewModel();
+        vm.GoLibraryCommand.Execute(null);
+
+        vm.Library.GoToSeriesCommand.Execute(seriesId);
+
+        Assert.Equal("Library", vm.RootScreenLabel);
+        var entry = Assert.Single(vm.BreadcrumbTrail);
+        Assert.Equal(seriesId, entry.EntityId);
+        Assert.True(vm.ShowBreadcrumb);
+    }
+
+    [Fact]
+    public void ShowBreadcrumb_IsFalse_OnLateralScreens()
+    {
+        var vm = new MainViewModel();
+
+        Assert.False(vm.ShowBreadcrumb);
+
+        vm.GoLibraryCommand.Execute(null);
+
+        Assert.False(vm.ShowBreadcrumb);
+    }
+
+    [Fact]
+    public void OpenDeepLink_Series_NavigatesToDetail()
+    {
+        var (seriesId, _) = SeedSeriesWithIssue("Deep Link Series");
+        var vm = new MainViewModel();
+
+        vm.OpenDeepLink(new Paperbunkr.App.Services.NavigationCliTarget("series", seriesId));
+
+        Assert.True(vm.IsDetail);
+        Assert.Equal("Deep Link Series", vm.Detail.HeaderTitle);
+    }
+
+    [Fact]
+    public void OpenDeepLink_Issue_NavigatesToReader()
+    {
+        var (_, issueId) = SeedSeriesWithIssue("Deep Link Issue Series");
+        var vm = new MainViewModel();
+
+        vm.OpenDeepLink(new Paperbunkr.App.Services.NavigationCliTarget("issue", issueId));
+
+        Assert.True(vm.IsReader);
+    }
+
+    [Fact]
+    public void OpenDeepLink_Book_NavigatesToBookDetail()
+    {
+        int bookId = SeedBook("Deep Link Book");
+        var vm = new MainViewModel();
+
+        vm.OpenDeepLink(new Paperbunkr.App.Services.NavigationCliTarget("book", bookId));
+
+        Assert.True(vm.IsBookDetail);
+    }
+
+    [Fact]
+    public void OpenDeepLink_Collection_NavigatesToLibraryWithCollectionSelected()
+    {
+        int collectionId = SeedCollection("Deep Link Collection");
+        var vm = new MainViewModel();
+
+        vm.OpenDeepLink(new Paperbunkr.App.Services.NavigationCliTarget("collection", collectionId));
+
+        Assert.True(vm.IsLibrary);
+    }
+
+    [Fact]
+    public void RestoreLastScreen_NoPriorSession_DefaultsToHome()
+    {
+        var vm = new MainViewModel();
+
+        vm.RestoreLastScreen();
+
+        Assert.True(vm.IsHome);
+    }
+
+    [Fact]
+    public void RestoreLastScreen_LastScreenWasDetailOfDeletedSeries_FallsBackToHome()
+    {
+        var options = new DbContextOptionsBuilder<PaperbunkrDbContext>().UseSqlite($"Data Source={_dbPath}").Options;
+        using (var context = new PaperbunkrDbContext(options))
+        {
+            var settings = context.GetOrCreateAppSettings();
+            settings.LastScreenKey = "detail";
+            settings.LastScreenEntityId = 99999; // never seeded - simulates a deleted series
+            context.SaveChanges();
+        }
+
+        var vm = new MainViewModel();
+        vm.RestoreLastScreen();
+
+        Assert.True(vm.IsHome);
+    }
+
+    [Fact]
+    public void RestoreLastScreen_LastScreenWasDetailOfExistingSeries_RestoresIt()
+    {
+        var (seriesId, _) = SeedSeriesWithIssue("Restore Series");
+        var options = new DbContextOptionsBuilder<PaperbunkrDbContext>().UseSqlite($"Data Source={_dbPath}").Options;
+        using (var context = new PaperbunkrDbContext(options))
+        {
+            var settings = context.GetOrCreateAppSettings();
+            settings.LastScreenKey = "detail";
+            settings.LastScreenEntityId = seriesId;
+            context.SaveChanges();
+        }
+
+        var vm = new MainViewModel();
+        vm.RestoreLastScreen();
+
+        Assert.True(vm.IsDetail);
+        Assert.Equal("Restore Series", vm.Detail.HeaderTitle);
+    }
+
+    [Fact]
+    public void GoDetailForSeries_PersistsLastScreenToAppSettings()
+    {
+        var (seriesId, _) = SeedSeriesWithIssue("Persist Series");
+        var vm = new MainViewModel();
+        vm.GoLibraryCommand.Execute(null);
+
+        vm.Library.GoToSeriesCommand.Execute(seriesId);
+
+        using var context = new PaperbunkrDbContext(new DbContextOptionsBuilder<PaperbunkrDbContext>().UseSqlite($"Data Source={_dbPath}").Options);
+        var settings = context.GetOrCreateAppSettings();
+        Assert.Equal("detail", settings.LastScreenKey);
+        Assert.Equal(seriesId, settings.LastScreenEntityId);
+    }
+
+    [Fact]
+    public void NavigateBack_WithUnsavedIssuePropertiesEdit_PromptsInsteadOfNavigatingImmediately()
+    {
+        var (seriesId, issueId) = SeedSeriesWithIssue("Guarded Series");
+        var vm = new MainViewModel();
+        vm.GoLibraryCommand.Execute(null);
+        vm.Library.GoToSeriesCommand.Execute(seriesId);
+        vm.IssueProperties.Load(issueId);
+        vm.IsIssuePropertiesOverlayOpen = true;
+        vm.IssueProperties.Title = "Changed Title";
+        Assert.True(vm.IssueProperties.HasUnsavedChanges());
+
+        vm.NavigateBackCommand.Execute(null);
+
+        Assert.True(vm.IsDiscardConfirmOpen);
+        Assert.True(vm.IsDetail);
+    }
+
+    // ===================== First-run onboarding (docs/superpowers/specs/2026-08-31-first-run-
+    // onboarding-design.md) =====================
+
+    [Fact]
+    public void OpenWelcomeOverlay_SetsIsOpenAndForwardsCeDetected()
+    {
+        var vm = new MainViewModel();
+
+        vm.OpenWelcomeOverlayCommand.Execute(true);
+
+        Assert.True(vm.IsWelcomeOverlayOpen);
+        Assert.True(vm.Welcome.CeInstallDetected);
+    }
+
+    [Fact]
+    public void CloseWelcomeOverlay_PersistsWelcomeScreenShown_AndOpensTourOfferFirstTimeOnly()
+    {
+        var vm = new MainViewModel();
+        vm.OpenWelcomeOverlayCommand.Execute(false);
+
+        vm.Welcome.SkipCommand.Execute(null);
+
+        Assert.False(vm.IsWelcomeOverlayOpen);
+        Assert.True(vm.IsTourOfferOpen);
+        using (var context = new PaperbunkrDbContext(new DbContextOptionsBuilder<PaperbunkrDbContext>().UseSqlite($"Data Source={_dbPath}").Options))
+        {
+            var settings = context.GetOrCreateAppSettings();
+            Assert.True(settings.WelcomeScreenShown);
+            Assert.True(settings.WelcomeTourOffered);
+        }
+
+        // A second close (e.g. Preferences reopening it someday) must not re-offer the tour.
+        vm.IsTourOfferOpen = false;
+        vm.OpenWelcomeOverlayCommand.Execute(false);
+        vm.Welcome.SkipCommand.Execute(null);
+
+        Assert.False(vm.IsTourOfferOpen);
+    }
+
+    [Fact]
+    public void TakeTour_ClosesOfferAndOpensWelcomeTour()
+    {
+        var vm = new MainViewModel();
+        vm.IsTourOfferOpen = true;
+
+        vm.TakeTourCommand.Execute(null);
+
+        Assert.False(vm.IsTourOfferOpen);
+        Assert.True(vm.IsWelcomeTourOverlayOpen);
+        Assert.True(vm.IsHome); // WelcomeTour.Open() navigates to its first step
+    }
+
+    [Fact]
+    public void DeclineTour_ClosesOfferWithoutOpeningWelcomeTour()
+    {
+        var vm = new MainViewModel();
+        vm.IsTourOfferOpen = true;
+
+        vm.DeclineTourCommand.Execute(null);
+
+        Assert.False(vm.IsTourOfferOpen);
+        Assert.False(vm.IsWelcomeTourOverlayOpen);
+    }
+
+    [Fact]
+    public void Escape_WelcomeOverlayOpen_ClosesIt()
+    {
+        var vm = new MainViewModel();
+        vm.OpenWelcomeOverlayCommand.Execute(false);
+
+        vm.EscapeCommand.Execute(null);
+
+        Assert.False(vm.IsWelcomeOverlayOpen);
+    }
+
+    [Fact]
+    public void Escape_TourOfferOpen_DeclinesIt()
+    {
+        var vm = new MainViewModel();
+        vm.IsTourOfferOpen = true;
+
+        vm.EscapeCommand.Execute(null);
+
+        Assert.False(vm.IsTourOfferOpen);
+    }
+
+    [Fact]
+    public void Escape_WelcomeTourOverlayOpen_ClosesIt()
+    {
+        var vm = new MainViewModel();
+        vm.TakeTourCommand.Execute(null);
+
+        vm.EscapeCommand.Execute(null);
+
+        Assert.False(vm.IsWelcomeTourOverlayOpen);
     }
 }

@@ -130,6 +130,12 @@ namespace Paperbunkr.Data.Migrations
                         .HasColumnType("TEXT")
                         .HasDefaultValue("Color");
 
+                    b.Property<int?>("LastScreenEntityId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("LastScreenKey")
+                        .HasColumnType("TEXT");
+
                     b.Property<int?>("LibraryActiveCollectionId")
                         .HasColumnType("INTEGER");
 
@@ -351,6 +357,12 @@ namespace Paperbunkr.Data.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER")
                         .HasDefaultValue(true);
+
+                    b.Property<bool>("WelcomeScreenShown")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("WelcomeTourOffered")
+                        .HasColumnType("INTEGER");
 
                     b.HasKey("Id");
 

@@ -4,6 +4,7 @@ using System.Collections.ObjectModel;
 using System.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Paperbunkr.App.ContextMenus;
 using Paperbunkr.App.Models;
 using Paperbunkr.App.Services;
 using Paperbunkr.Data;
@@ -22,8 +23,13 @@ namespace Paperbunkr.App.ViewModels;
 /// three different entity kinds (Series/Issue/Book) and there's no single "resolve any of them to a
 /// Bitmap" utility in the App layer yet; adding one is out of scope for this pass.
 /// </summary>
-public partial class CollectionPropertiesScreenViewModel : ViewModelBase
+public partial class CollectionPropertiesScreenViewModel : ViewModelBase, IContextMenuProvider
 {
+    /// <summary>Right-click/Menu-key menu for member rows (docs/superpowers/specs/2026-08-31-
+    /// keyboard-operability-design.md) - a new menu, this screen had none before.</summary>
+    IReadOnlyList<ContextMenuEntry>? IContextMenuProvider.BuildContextMenu(object? target) =>
+        new CollectionMemberContextMenuBuilder().Build(target);
+
     private readonly Action _goBack;
     private readonly Func<PaperbunkrDbContext> _contextFactory;
     private int? _collectionId;

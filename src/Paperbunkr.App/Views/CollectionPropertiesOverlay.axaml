@@ -4,11 +4,13 @@
              xmlns:vm="using:Paperbunkr.App.ViewModels"
              xmlns:models="using:Paperbunkr.App.Models"
              xmlns:views="using:Paperbunkr.App.Views"
+             xmlns:controls="using:Paperbunkr.App.Controls"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d" d:DesignWidth="560" d:DesignHeight="640"
              x:Class="Paperbunkr.App.Views.CollectionPropertiesOverlay"
-             x:DataType="vm:CollectionPropertiesScreenViewModel">
+             x:DataType="vm:CollectionPropertiesScreenViewModel"
+             controls:ContextMenuHost.Provider="{Binding}">
 
     <!-- Same "floatingPanel" + Button.ghost/primary primitives as ReadingListPropertiesOverlay
          (Styles/Primitives.axaml) - docs/superpowers/specs/2026-08-27-collections-design.md step 8. -->

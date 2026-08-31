@@ -295,7 +295,7 @@
                         <DataTemplate x:DataType="models:IssueCardSample">
                             <Button Classes="resultCard" Width="120"
                                     Command="{Binding #ResultsList.((vm:SmartScreenViewModel)DataContext).SelectResultCommand}"
-                                    CommandParameter="{Binding}">
+                                    CommandParameter="{Binding}" KeyDown="OnResultCardKeyDown">
                                 <Border Classes="resultTile" Background="{Binding CoverBrush}">
                                     <Grid>
                                         <Image views:AsyncCoverImage.SourceId="{Binding CoverIssueId}" Stretch="UniformToFill" />

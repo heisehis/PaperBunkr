@@ -605,6 +605,110 @@ and caught by the test itself. Tests: 1926 total (Data 642 + App 1268 + Plugins 
 known-flaky, unrelated concurrency test confirmed passing in isolation); app smoke-launched to
 "Startup complete". On-screen GUI pass still pending.
 
+### App shell navigation history — back/forward, breadcrumbs, restore-on-launch, CLI deep-linking (shipped 2026-08-31)
+Design spec: `2026-08-30-app-shell-navigation-history-design.md`, plan: `2026-08-30-app-shell-
+navigation-history-plan.md`. Follow-on to Phase 2 of the UI rework (`2026-08-24-navigation-shell-
+motion-system-design.md`), which explicitly left drill-down history/breadcrumbs out of scope. New
+`NavigationHistoryService` (list + cursor, same shape as CE's own `IBrowseHistory` — confirmed by
+reading `ComicListLibraryBrowser.cs` — generalized from "library list selection" to "drill-down
+screen + entity") replaces `MainViewModel`'s old single-slot `_screenBeforeReader`/
+`_screenBeforeBookReader` hacks, which only ever supported exactly one level and didn't cover
+Detail/MangaDetail/BookDetail at all. Every drill-down `GoX()` method split into a Core (no history
+side effect, reused by Back/Forward/restore/CLI replay) + a thin history-pushing wrapper; every
+lateral rail `GoX()` resets the stack and becomes the new root. Breadcrumb bar (new `Breadcrumb`
+control) shown only on the six drill-down screens. Backspace = Back (no keyboard binding for
+Forward, by design); trackpad two-finger swipe is a best-effort `PointerWheelChanged` heuristic,
+flagged unverified on real hardware. Restore-on-launch + `--open <kind>:<id>` CLI deep-linking both
+persist/read `AppSettings.LastScreenKey`/`LastScreenEntityId` (new migration
+`AddLastScreenState`), falling back to Home when the referenced entity was deleted.
+
+Three real issues found and fixed during implementation: (1) a design-doc assumption that
+`KeyboardCommandRegistry` was a general shell shortcut system turned out wrong — it's Reader-scoped
+infrastructure (`ConflictContext` is defined purely in terms of `PageCanvas`'s paged/continuous
+states) — caught during planning, before any code was written, fixed by using the same plain
+`<KeyBinding>` mechanism `Escape` already uses. (2) A real startup crash shipped in the first build:
+the XAML gesture string `"Backspace"` isn't a valid `Avalonia.Input.Key` enum member — the correct
+name is `Back` — confirmed via reflection against the installed `Avalonia.Base.dll` after the app
+crashed on launch (`KeyGesture.Parse` → `ArgumentException`), fixed and re-verified by an actual
+smoke launch (not just a clean build) before calling this done. (3) The breadcrumb bar's first cut
+was a same-cell overlay (topmost z-order sibling in the drill-down `Grid`, not its own layout row) —
+its opaque background visually covered each drill-down screen's own top-of-content controls, e.g.
+`DetailScreen.axaml`'s "← Back to Library" link, found by the user via actual on-screen testing (two
+screenshots) after a clean build had already passed. A first attempted fix (adding real
+`Grid.RowDefinitions`/`Grid.Row` so the breadcrumb pushes content down instead of overlaying it) was
+structurally correct but appeared not to work on the first retest — turned out the user's own running
+app instance was locking the exe the whole time, so the rebuild's copy-to-output step kept silently
+failing (`2 Error(s)`, both `MSB3021`/`MSB3027` copy locks) and the binary being tested was never
+actually updated; caught by re-checking the build output rather than assuming "user says it's still
+broken" meant the code fix was wrong. One test (`GoReaderForIssue_FromDetail_BackStillReturnsToDetail`)
+was rewritten to navigate via the real `Library.GoToSeries` entry point instead of a raw
+`CurrentScreen` poke — the poke bypassed the new history system entirely, so the test was asserting
+behavior no production code path can actually reach.
+
+Built and verified while a different concurrent session was actively landing an unrelated
+first-run-onboarding feature (`WelcomeScreenShown`/`WelcomeTourOffered` in the same `AppSettings.cs`,
+same shared working tree) — both landed cleanly with no data loss on either side, confirmed by
+`git diff` and a fully green test run after their WIP settled. Tests: `Paperbunkr.App.Tests` 1327/1327
+green, `Paperbunkr.Data.Tests` 679/679 green. App smoke-launched via `PowerShell Start-Process`
+(per this project's own documented gotcha about backgrounded shell jobs) and confirmed still running
+5+ seconds later — not just "0 Errors" on a build. Breadcrumb layout (Row 0/Row 1 split, not
+overlaying the "← Back to Library" link) user-verified on screen 2026-08-31 after the exe-lock false
+negative above. Still pending: Backspace-while-focus-is-in-a-textbox and the actual trackpad-swipe
+gesture — no unattended GUI automation available in this environment for those, same standing caveat
+as every other desktop-input spec here. The comprehensive-keyboard-operability follow-on (context
+menus, flyout menus, card navigation on screens built after P5) was deliberately split out as a
+separate future spec, not folded in here.
+
+### Comprehensive keyboard operability (shipped 2026-08-31)
+Design spec: `2026-08-31-keyboard-operability-design.md`, plan: `2026-08-31-keyboard-operability-
+plan.md`. Split out from the app-shell navigation history spec's own brainstorm (above). Three
+pieces: (1) Menu key/Shift+F10 added to `ContextMenuHost` — the one shared right-click mechanism —
+rooted at the focused element instead of pointer position; (2) migrated 4 dead `<ContextMenu>`
+instances (MangaDetail chapter rows, BookDetail bookmarks/series cards, Reader page thumbnails) plus
+4 brand-new menus (comic Detail issue tiles, Collection editor members, Reading List rows, Events &
+Continuity sidebar rows) onto that mechanism; (3) rolled `GridKeyboardNavigation` spatial nav out to
+Books and BookDetail's series-mode grid, plus a separate fix for Smart Lists' virtualized grid.
+
+Real findings during implementation, beyond what the design/plan anticipated:
+- **Events & Continuity has no card grid at all** — the actual browse surface is a single-column
+  sidebar list in `MainWindow.axaml` (`DataContext` = `MainViewModel`, not `EventsScreenViewModel`),
+  found by reading the real XAML instead of trusting the design doc's assumption. Dropped from the
+  grid-nav rollout entirely (a single column has no 2D spatial meaning); the context-menu provider
+  ended up living on `MainViewModel` for the same reason, which turned out to simplify the "needs a
+  new compose command" problem the plan worried about, since `MainViewModel` already owns both the
+  select and edit-dialog entry points.
+- **Smart Lists' `VirtualizingWrapPanel` already had the correct navigation logic built in**
+  (`GetControl(NavigationDirection)`, Avalonia's native `INavigableContainer` extension point,
+  confirmed via reflection against the installed `Avalonia.Controls.dll`) — just never invoked,
+  since a bare `ItemsControl` doesn't wire arrow keys to it the way `ListBox` does. The fix was
+  invoking Avalonia's own mechanism, not duplicating `GridKeyboardNavigation`'s realized-container
+  assumption (which would have silently broken for off-screen items).
+- **A broader sweep found 5 more dead `<ContextMenu>` instances** beyond the 4 the design doc
+  cataloged: a tag-pill weight-picker menu duplicated in both `ReadingScreen.axaml` and the shared
+  `DetailBand.axaml` (fixed once with one shared `TagPillContextMenuBuilder`, covering all 3 detail
+  screens `DetailBand` serves); Library's Details-table column-picker (`ItemsControl.ContextMenu`,
+  a different shape — element-scoped via a second `ContextMenuHost.Provider` on just the header
+  `Grid`, not target-type-scoped like every other builder, since the picker always shows the same
+  full column list regardless of what was clicked); and an already-dead `IssueContextMenu` resource
+  in `DetailTabs.axaml` that fully overlapped the new comic-Detail issue-tile menu — merged rather
+  than left duplicated, so that menu ended up with more content (Show in Explorer, Mark Read/Unread,
+  Set/Reset Cover) than originally scoped. User explicitly approved fixing all 5 mid-session rather
+  than deferring them.
+- **A real cross-test-class bug, not a build fluke**: several new test classes were missing
+  `[Collection(nameof(AvaloniaTestCollection))]`, letting them run in true parallel with the
+  Avalonia-collection test classes despite constructing Avalonia-touching ViewModels, corrupting
+  shared state and cascading into ~34 failures across unrelated pre-existing tests when run together
+  — traced by re-running individually vs. batched, not assumed from the first failing run (which
+  looked identical to an unrelated transient build-lock issue this session, so it took two separate
+  investigations to tell them apart).
+
+Tests: `Paperbunkr.App.Tests` 1385/1385 green (up from 1327 before this spec). App smoke-launched via
+`PowerShell Start-Process`, confirmed running 6+ seconds later, left open for on-screen verification.
+On-screen visual/keyboard verification (Menu key opening menus in the right place, arrow-key nav
+feel on each rolled-out grid including the Smart Lists virtualized case specifically, tag-pill and
+column-picker menus) still pending — no unattended GUI automation available in this environment,
+same standing caveat as every other input-focused spec in this project.
+
 ### Plugin API v3 — metadata/rules/writer for Data-Manager plugins (shipped 2026-08-29)
 Design spec: `2026-08-28-plugin-api-v3-data-manager-design.md`. Extends the v2 host (no new hooks).
 (§2) `IMetadataGraph` — 6th `IPluginEnvironment` sub-interface, read facade over the Phase 3-4g

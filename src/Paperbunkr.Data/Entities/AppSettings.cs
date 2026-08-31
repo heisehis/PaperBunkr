@@ -340,4 +340,38 @@ public class AppSettings
     /// the app repeatedly in one session doesn't accumulate a backup per launch.
     /// </summary>
     public int AutoBackupMinIntervalHours { get; set; } = 4;
+
+    /// <summary>
+    /// The shell screen active when the app last closed (docs/superpowers/specs/2026-08-30-app-
+    /// shell-navigation-history-design.md) - restore-on-launch reopens directly here. Matches
+    /// <c>MainViewModel.CurrentScreen</c>'s string values. Null means "never navigated/first launch",
+    /// falls back to Home.
+    /// </summary>
+    public string? LastScreenKey { get; set; }
+
+    /// <summary>
+    /// The entity id (series/issue/book id, depending on <see cref="LastScreenKey"/>) that went with
+    /// it, or null when <see cref="LastScreenKey"/> is a lateral rail screen with no entity. If the
+    /// referenced entity was deleted since last session, restore-on-launch falls back to Home rather
+    /// than rendering a broken screen - same posture as <see cref="LibraryActiveCollectionId"/>'s
+    /// existing "falls back to All Series if deleted" handling.
+    /// </summary>
+    public int? LastScreenEntityId { get; set; }
+
+    /// <summary>
+    /// Whether the first-run WelcomeOverlay has been shown and closed (docs/superpowers/specs/
+    /// 2026-08-31-first-run-onboarding-design.md). Default false. Deliberately independent of
+    /// PaperbunkrDb.HasAnySeries() - a user who skips, or adds a folder with zero comics in it, must
+    /// never see the welcome screen re-trigger on a later launch just because the library is still
+    /// empty. Replaces the old isFreshInstall-based auto-migration gate in App.axaml.cs.
+    /// </summary>
+    public bool WelcomeScreenShown { get; set; }
+
+    /// <summary>
+    /// Whether the one-time post-welcome "want a quick tour?" offer has been shown - see
+    /// <see cref="WelcomeScreenShown"/>. Flips true the moment the offer is *shown* (accepted or
+    /// declined), not just when it's answered, so an app close mid-prompt can't cause it to reappear
+    /// next launch. No replay entry point by design - once resolved, gone for this install.
+    /// </summary>
+    public bool WelcomeTourOffered { get; set; }
 }

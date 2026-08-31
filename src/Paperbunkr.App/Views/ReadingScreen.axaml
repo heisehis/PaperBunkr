@@ -6,11 +6,13 @@
              xmlns:entities="using:Paperbunkr.Data.Entities"
              xmlns:views="using:Paperbunkr.App.Views"
              xmlns:conv="using:Avalonia.Data.Converters"
+             xmlns:controls="using:Paperbunkr.App.Controls"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d" d:DesignWidth="900" d:DesignHeight="760"
              x:Class="Paperbunkr.App.Views.ReadingScreen"
-             x:DataType="vm:ReadingScreenViewModel">
+             x:DataType="vm:ReadingScreenViewModel"
+             controls:ContextMenuHost.Provider="{Binding}">
 
     <UserControl.Styles>
         <!-- statCard / issueRow / searchBox come from Styles/ScreenChrome.axaml. -->
@@ -140,14 +142,6 @@
                     <ItemsControl.ItemTemplate>
                         <DataTemplate x:DataType="vm:TagPillViewModel">
                             <Button Classes="tagPillButton" Command="{Binding SearchCommand}" ToolTip.Tip="{Binding Category}">
-                                <Button.ContextMenu>
-                                    <ContextMenu IsVisible="{Binding CanReweight}">
-                                        <MenuItem Header="Incidental" Command="{Binding SetWeightCommand}" CommandParameter="{x:Static entities:IssueTagWeight.Incidental}" />
-                                        <MenuItem Header="Recurrent" Command="{Binding SetWeightCommand}" CommandParameter="{x:Static entities:IssueTagWeight.Recurrent}" />
-                                        <MenuItem Header="Defining" Command="{Binding SetWeightCommand}" CommandParameter="{x:Static entities:IssueTagWeight.Defining}" />
-                                        <MenuItem Header="Core" Command="{Binding SetWeightCommand}" CommandParameter="{x:Static entities:IssueTagWeight.Core}" />
-                                    </ContextMenu>
-                                </Button.ContextMenu>
                                 <TextBlock Classes="tagPillText" Text="{Binding Value}" FontWeight="{Binding TextWeight}" Opacity="{Binding WeightOpacity}" />
                             </Button>
                         </DataTemplate>

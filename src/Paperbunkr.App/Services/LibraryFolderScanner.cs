@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
@@ -19,6 +20,9 @@ public record LibraryFolderScanResult(int IssuesAdded, int SeriesTouched);
 
 /// <summary>Result of a completed <see cref="LibraryFolderScanner.SyncMetadataAsync"/> run.</summary>
 public record LibraryMetadataSyncResult(int IssuesUpdated);
+
+/// <summary>Result of a completed <see cref="LibraryFolderScanner.ResyncSeriesFromFileAsync"/> run.</summary>
+public record LibrarySeriesResyncResult(int IssuesReassigned);
 
 /// <summary>
 /// On-demand folder scan-and-import (docs/superpowers/specs/2026-08-07-preferences-libraries-tab-design.md
@@ -143,7 +147,7 @@ public class LibraryFolderScanner
             try
             {
                 var nameInfo = ComicNameInfo.FromFilePath(file);
-                var embeddedInfo = TryReadEmbeddedInfo(file);
+                var embeddedInfo = EmbeddedComicInfoReader.TryRead(file);
 
                 // Series mismatch detection: embedded and filename can disagree about the series
                 // name. The issue is always attached to the embedded-derived name first, exactly as
@@ -162,6 +166,30 @@ public class LibraryFolderScanner
                 string seriesName = embeddedSeriesName ?? filenameSeriesName ?? "Unknown";
 
                 bool isNewSeries = !seriesByName.TryGetValue(seriesName, out var series);
+                if (isNewSeries)
+                {
+                    // TPB folding (docs/superpowers/specs/2026-08-31-series-identity-scan-fixes-
+                    // design.md §1): a trade paperback's embedded Series name often carries
+                    // collection wording ("Batman: Court of Owls", "Batman Vol. 1") an ongoing
+                    // single-issue series' own Series field doesn't - an exact-name miss here would
+                    // otherwise spawn a spurious second series for what's really just a collected
+                    // volume of the same story. Only attempted on the exact-name miss (never
+                    // pre-empts a real hit above), and only ever attaches to an EXISTING series -
+                    // the stripped name is never used to name a brand-new series, so a standalone
+                    // TPB-only work with no ongoing single-issue counterpart still gets its own
+                    // distinct series under its full raw name, same as before this feature existed.
+                    if (IsTradePaperback(embeddedInfo?.Format))
+                    {
+                        string stripped = StripCollectionWording(seriesName);
+                        if (!string.Equals(stripped, seriesName, StringComparison.OrdinalIgnoreCase)
+                            && seriesByName.TryGetValue(stripped, out var folded))
+                        {
+                            series = folded;
+                            isNewSeries = false;
+                        }
+                    }
+                }
+
                 if (isNewSeries)
                 {
                     series = new Series { Name = seriesName };
@@ -319,7 +347,7 @@ public class LibraryFolderScanner
             {
                 if (File.Exists(issue.FilePath))
                 {
-                    var embeddedInfo = TryReadEmbeddedInfo(issue.FilePath!);
+                    var embeddedInfo = EmbeddedComicInfoReader.TryRead(issue.FilePath!);
                     if (embeddedInfo is not null)
                     {
                         CeLibraryMigrator.MapStoryFields(embeddedInfo, issue, onlyIfBlank: true);
@@ -339,31 +367,97 @@ public class LibraryFolderScanner
         return new LibraryMetadataSyncResult(issuesUpdated);
     }
 
-    /// <summary>
-    /// Reads embedded ComicInfo.xml via the archive reader's own <see cref="IInfoStorage"/>
-    /// implementation (the same one <c>ComicBook.RefreshInfoFromFile</c> uses internally) - the
-    /// same provider <see cref="PageImageDecoder"/> opens for page decoding, just a separate
-    /// short-lived open here since only metadata is needed. Returns null - never throws - for
-    /// anything that doesn't pan out: unsupported/dynamic formats, no embedded ComicInfo.xml,
-    /// or a malformed one. Callers fall back to filename parsing in every case.
-    /// </summary>
-    private static ComicInfo? TryReadEmbeddedInfo(string file)
+    public async Task<LibrarySeriesResyncResult> ResyncSeriesFromFileAsync(IProgress<(int Done, int Total)> progress, CancellationToken ct = default)
     {
-        try
+        return await Task.Run(() => ResyncSeriesFromFile(progress, ct), ct);
+    }
+
+    /// <summary>
+    /// "Resync Series from File" (docs/superpowers/specs/2026-08-31-ce-migration-embedded-metadata-
+    /// precedence-design.md follow-up) - unlike <see cref="SyncMetadata"/> (which only ever fills
+    /// currently-blank fields, never reassigns which <see cref="Series"/> an issue belongs to), this
+    /// re-reads embedded <c>ComicInfo.xml</c> for every already-linked issue and, when its embedded
+    /// <c>Series</c> disagrees with the issue's current one, moves the issue there (creating that
+    /// series if needed) via the same <see cref="SeriesReassignmentResolver.Apply"/> move the Needs
+    /// Review/auto-accepted-proposal paths already use - no new reassignment mechanism, just a new
+    /// trigger for the existing one. Needed because neither a folder rescan (only touches genuinely
+    /// new files, <see cref="ScanAllAsync"/>) nor re-running CE migration (idempotent - skips issues
+    /// already present) ever revisits an already-imported issue's series assignment, even after the
+    /// migration-time precedence fix stops the bug for new imports going forward.
+    /// </summary>
+    private LibrarySeriesResyncResult ResyncSeriesFromFile(IProgress<(int Done, int Total)> progress, CancellationToken ct)
+    {
+        using var context = _contextFactory();
+
+        var issues = context.Issues.Include(i => i.Series).Where(i => i.FilePath != null).ToList();
+        int total = issues.Count;
+        int done = 0;
+        progress.Report((0, total));
+
+        int reassigned = 0;
+        foreach (var issue in issues)
         {
-            using var provider = Providers.Readers.CreateSourceProvider(file);
-            if (provider is not IInfoStorage infoStorage)
+            ct.ThrowIfCancellationRequested();
+
+            try
             {
-                return null;
+                if (File.Exists(issue.FilePath))
+                {
+                    var embeddedInfo = EmbeddedComicInfoReader.TryRead(issue.FilePath!);
+                    string? embeddedSeriesName = string.IsNullOrWhiteSpace(embeddedInfo?.Series) ? null : embeddedInfo!.Series.Trim();
+                    if (embeddedSeriesName is not null
+                        && !string.Equals(issue.Series?.Name, embeddedSeriesName, StringComparison.OrdinalIgnoreCase))
+                    {
+                        SeriesReassignmentResolver.Apply(context, new MetadataProposal { Issue = issue, ProposedValue = embeddedSeriesName });
+                        reassigned++;
+                    }
+                }
+            }
+            catch
+            {
+                // One bad file doesn't stop the batch - same contract as SyncMetadata/ScanAllAsync.
             }
 
-            provider.Open(async: false);
-            return infoStorage.LoadInfo(InfoLoadingMethod.Complete);
+            progress.Report((++done, total));
         }
-        catch
+
+        return new LibrarySeriesResyncResult(reassigned);
+    }
+
+    /// <summary>Mirrors <c>Assets/Marks/format-aliases.tsv</c>'s "Trade Paper Back" row (canonical
+    /// "TPB", aliases "trade paperback"/"tpb"/"trade") - a small, self-contained check rather than
+    /// routing through <c>MarkResolver</c>'s alias-table/SVG-asset machinery, which exists to
+    /// resolve UI badges, not gate scan logic. Kept in sync with that tsv row by convention, not by
+    /// sharing code with it.</summary>
+    private static readonly HashSet<string> TpbFormatAliases = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "tpb", "trade paperback", "trade",
+    };
+
+    private static bool IsTradePaperback(string? format)
+        => !string.IsNullOrWhiteSpace(format) && TpbFormatAliases.Contains(format.Trim());
+
+    private static readonly Regex TrailingVolumeRegex = new(@"\s*,?\s*(vol(ume)?\.?)\s*\d+\s*$", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+    private static readonly Regex TrailingParentheticalOrHashRegex = new(@"\s*(\(\d+\)|#\d+)\s*$", RegexOptions.Compiled);
+
+    /// <summary>Strips a TPB's collection wording down to a candidate base-series name for the fold
+    /// lookup above - e.g. "Batman: Court of Owls" or "Batman Vol. 1" both strip to "Batman". Never
+    /// used to name a newly-created series, only to look one up (see the fold-attempt comment at its
+    /// call site).</summary>
+    private static string StripCollectionWording(string seriesName)
+    {
+        string result = seriesName;
+
+        int colonIndex = result.IndexOf(':');
+        if (colonIndex >= 0)
         {
-            return null;
+            result = result[..colonIndex];
         }
+
+        result = TrailingVolumeRegex.Replace(result, string.Empty);
+        result = TrailingParentheticalOrHashRegex.Replace(result, string.Empty);
+
+        return result.Trim().TrimEnd(',', '-').Trim();
     }
 
     /// <summary>

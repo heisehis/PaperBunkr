@@ -1310,10 +1310,16 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
 
     public bool CanNavigateForward => _navigationHistory.CanGoForward;
 
-    /// <summary>Drives the breadcrumb bar's visibility - only the six drill-down screens, per the
-    /// design doc's "drill-down screens only" call. The seven lateral rail screens keep today's
-    /// slide-transition system unchanged, no breadcrumb.</summary>
-    public bool ShowBreadcrumb => IsDetail || IsMangaDetail || IsBookDetail || IsReader || IsBookReader || IsPdfReader;
+    /// <summary>Drives the breadcrumb bar's visibility. Originally shown on all six drill-down
+    /// screens per the design doc's "drill-down screens only" call; narrowed to just the three
+    /// metadata-browsing screens (Detail/MangaDetail/BookDetail) after real on-screen feedback - the
+    /// three reader screens (Reader/BookReader/PdfReader) are immersive, full-page reading views
+    /// where a persistent top bar is a real UX cost in a way it isn't on the browsing screens, and
+    /// Reader already has an established "hidden by default, chrome reveals on hover" convention
+    /// (the thumbnail rail) that a permanent breadcrumb bar cuts against. Back/Backspace navigation
+    /// is unaffected either way - this only controls the bar's visibility, not NavigateBack itself.
+    /// The seven lateral rail screens keep today's slide-transition system unchanged, no breadcrumb.</summary>
+    public bool ShowBreadcrumb => IsDetail || IsMangaDetail || IsBookDetail;
 
     public IReadOnlyList<NavigationEntry> BreadcrumbTrail => _navigationHistory.BreadcrumbTrail;
 

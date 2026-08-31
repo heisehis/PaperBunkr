@@ -273,6 +273,122 @@ public class LibraryFolderScannerTests : IDisposable
         Assert.Equal(2019, issue.EffectiveYear());
     }
 
+    // ===================== TPB series-folding (docs/superpowers/specs/2026-08-31-series-identity-
+    // scan-fixes-design.md §1) - Prompt policy used throughout except the exact-match test, so an
+    // unrelated embedded/filename Series mismatch (a different, already-covered feature) never
+    // auto-reassigns the issue out from under these assertions. =====================
+
+    private void SetPromptPolicy()
+    {
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        context.GetOrCreateAppSettings().MetadataResolutionPolicy = MetadataResolutionPolicy.Prompt;
+        context.SaveChanges();
+    }
+
+    private void SeedSeries(string name)
+    {
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        context.Series.Add(new Series { Name = name });
+        context.SaveChanges();
+    }
+
+    [Fact]
+    public async Task ScanAllAsync_TpbWithExistingBaseSeries_FoldsIntoIt()
+    {
+        SetPromptPolicy();
+        SeedSeries("Batman");
+
+        var embedded = new cYo.Projects.ComicRack.Engine.ComicInfo { Series = "Batman: Court of Owls", Format = "TPB" };
+        CbzFixture.Create(Path.Combine(_scanRoot, "Batman Court of Owls 001.cbz"), pageCount: 1, embedded);
+        AddWatchedFolder(_scanRoot);
+
+        var result = await CreateScanner().ScanAllAsync(new Progress<(int, int)>());
+
+        Assert.Equal(1, result.IssuesAdded);
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        var series = Assert.Single(context.Series);
+        Assert.Equal("Batman", series.Name); // folded, not a new "Batman: Court of Owls" row
+        var issue = Assert.Single(context.Issues);
+        Assert.Equal(series.Id, issue.SeriesId);
+    }
+
+    [Fact]
+    public async Task ScanAllAsync_TpbWithNoMatchingBaseSeries_CreatesNewSeriesUnderRawName()
+    {
+        SetPromptPolicy();
+        // No pre-existing "Batman" series - the fold lookup misses, so this falls back to today's
+        // unchanged behavior: a new series under the raw, un-stripped name.
+
+        var embedded = new cYo.Projects.ComicRack.Engine.ComicInfo { Series = "Batman: Court of Owls", Format = "TPB" };
+        CbzFixture.Create(Path.Combine(_scanRoot, "Batman Court of Owls 001.cbz"), pageCount: 1, embedded);
+        AddWatchedFolder(_scanRoot);
+
+        await CreateScanner().ScanAllAsync(new Progress<(int, int)>());
+
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        var series = Assert.Single(context.Series);
+        Assert.Equal("Batman: Court of Owls", series.Name); // raw name, not the stripped "Batman"
+    }
+
+    [Fact]
+    public async Task ScanAllAsync_TpbVolumeWording_FoldsIntoExistingSeries()
+    {
+        SetPromptPolicy();
+        SeedSeries("Batman");
+
+        var embedded = new cYo.Projects.ComicRack.Engine.ComicInfo { Series = "Batman Vol. 1", Format = "Trade Paperback" };
+        CbzFixture.Create(Path.Combine(_scanRoot, "Batman Vol 1.cbz"), pageCount: 1, embedded);
+        AddWatchedFolder(_scanRoot);
+
+        await CreateScanner().ScanAllAsync(new Progress<(int, int)>());
+
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        var series = Assert.Single(context.Series);
+        Assert.Equal("Batman", series.Name);
+    }
+
+    [Fact]
+    public async Task ScanAllAsync_NonTpbFormat_DoesNotFold()
+    {
+        SetPromptPolicy();
+        SeedSeries("Batman");
+
+        // Same collection wording as the folding test above, but no TPB format - folding is
+        // TPB-gated only, so this must create a separate series exactly like it would have before
+        // this feature existed.
+        var embedded = new cYo.Projects.ComicRack.Engine.ComicInfo { Series = "Batman: Court of Owls", Format = "Annual" };
+        CbzFixture.Create(Path.Combine(_scanRoot, "Batman Court of Owls 001.cbz"), pageCount: 1, embedded);
+        AddWatchedFolder(_scanRoot);
+
+        await CreateScanner().ScanAllAsync(new Progress<(int, int)>());
+
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        Assert.Equal(2, context.Series.Count());
+        Assert.Contains(context.Series, s => s.Name == "Batman");
+        Assert.Contains(context.Series, s => s.Name == "Batman: Court of Owls");
+    }
+
+    [Fact]
+    public async Task ScanAllAsync_TpbExactRawNameMatch_UsesItDirectly_NoStrippingAttempted()
+    {
+        SeedSeries("Batman");
+
+        // Embedded Series is already an exact match - filename parses to "Batman" too, so there's
+        // no embedded/filename mismatch here either, keeping this test isolated to just the
+        // exact-match short-circuit (default Automatic policy is fine, nothing to auto-reassign).
+        var embedded = new cYo.Projects.ComicRack.Engine.ComicInfo { Series = "Batman", Format = "TPB" };
+        CbzFixture.Create(Path.Combine(_scanRoot, "Batman 001.cbz"), pageCount: 1, embedded);
+        AddWatchedFolder(_scanRoot);
+
+        await CreateScanner().ScanAllAsync(new Progress<(int, int)>());
+
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        var series = Assert.Single(context.Series);
+        Assert.Equal("Batman", series.Name);
+        var issue = Assert.Single(context.Issues);
+        Assert.Equal(series.Id, issue.SeriesId);
+    }
+
     [Fact]
     public async Task SyncMetadataAsync_FillsBlankFields_PreservesExistingOnes()
     {
@@ -302,6 +418,90 @@ public class LibraryFolderScannerTests : IDisposable
         var updated = verify.Issues.Single(i => i.Id == issueId);
         Assert.Equal("Existing Writer", updated.Writer); // preserved
         Assert.Equal("Embedded Publisher", updated.Publisher); // filled in
+    }
+
+    [Fact]
+    public async Task ResyncSeriesFromFileAsync_EmbeddedSeriesDisagreesWithCurrent_Reassigns()
+    {
+        string cbzPath = Path.Combine(_scanRoot, "will-of-iron-05.cbz");
+        var embedded = new cYo.Projects.ComicRack.Engine.ComicInfo { Series = "Warhammer 40,000: Will of Iron" };
+        CbzFixture.Create(cbzPath, pageCount: 1, embedded);
+
+        int issueId;
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            var series = new Series { Name = "Warhammer 40" };
+            context.Series.Add(series);
+            var issue = new Issue { Series = series, FilePath = cbzPath };
+            context.Issues.Add(issue);
+            context.SaveChanges();
+            issueId = issue.Id;
+        }
+
+        var result = await CreateScanner().ResyncSeriesFromFileAsync(new Progress<(int, int)>());
+
+        Assert.Equal(1, result.IssuesReassigned);
+        using var verify = new PaperbunkrDbContext(_dbOptions);
+        var issue2 = verify.Issues.Include(i => i.Series).Single(i => i.Id == issueId);
+        Assert.Equal("Warhammer 40,000: Will of Iron", issue2.Series!.Name);
+        Assert.DoesNotContain(verify.Series, s => s.Name == "Warhammer 40"); // pruned, now empty
+    }
+
+    [Fact]
+    public async Task ResyncSeriesFromFileAsync_EmbeddedSeriesMatchesCurrent_NoOp()
+    {
+        string cbzPath = Path.Combine(_scanRoot, "already-correct.cbz");
+        var embedded = new cYo.Projects.ComicRack.Engine.ComicInfo { Series = "Correct Series" };
+        CbzFixture.Create(cbzPath, pageCount: 1, embedded);
+
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            var series = new Series { Name = "Correct Series" };
+            context.Series.Add(series);
+            context.Issues.Add(new Issue { Series = series, FilePath = cbzPath });
+            context.SaveChanges();
+        }
+
+        var result = await CreateScanner().ResyncSeriesFromFileAsync(new Progress<(int, int)>());
+
+        Assert.Equal(0, result.IssuesReassigned);
+        using var verify = new PaperbunkrDbContext(_dbOptions);
+        Assert.Single(verify.Series);
+    }
+
+    [Fact]
+    public async Task ResyncSeriesFromFileAsync_MissingFile_SkippedGracefully()
+    {
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            var series = new Series { Name = "Existing Series" };
+            context.Series.Add(series);
+            context.Issues.Add(new Issue { Series = series, FilePath = Path.Combine(_scanRoot, "does-not-exist.cbz") });
+            context.SaveChanges();
+        }
+
+        var result = await CreateScanner().ResyncSeriesFromFileAsync(new Progress<(int, int)>());
+
+        Assert.Equal(0, result.IssuesReassigned);
+    }
+
+    [Fact]
+    public async Task ResyncSeriesFromFileAsync_NoEmbeddedInfo_FallsBackGracefully_NoReassign()
+    {
+        string cbzPath = Path.Combine(_scanRoot, "no-embedded-info.cbz");
+        CbzFixture.Create(cbzPath, pageCount: 1); // no embedded ComicInfo.xml
+
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            var series = new Series { Name = "Existing Series" };
+            context.Series.Add(series);
+            context.Issues.Add(new Issue { Series = series, FilePath = cbzPath });
+            context.SaveChanges();
+        }
+
+        var result = await CreateScanner().ResyncSeriesFromFileAsync(new Progress<(int, int)>());
+
+        Assert.Equal(0, result.IssuesReassigned);
     }
 
     [Fact]

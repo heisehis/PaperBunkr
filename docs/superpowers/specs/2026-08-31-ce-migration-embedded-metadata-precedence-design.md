@@ -104,3 +104,25 @@ codebase, so a large library doesn't freeze the UI during Preview either.
 - `SeriesSplitDetector`/"Split Mismatched Series" (this session's earlier attempt) is dropped
   entirely — this fix addresses the actual root cause instead of compensating for it after the
   fact with title-based heuristics.
+
+## Follow-up: resyncing already-imported issues
+
+The migration-time fix above only prevents this bug for content imported *after* it ships —
+neither a folder rescan (`LibraryFolderScanner.ScanAllAsync`, which only ever touches genuinely
+new file paths) nor re-running CE migration (idempotent by design — skips any issue already
+present, matched by Number+Volume) ever revisits an already-migrated issue's series assignment.
+So a user whose library was already affected needs a separate, explicit way to fix already-present
+data.
+
+Added `LibraryFolderScanner.ResyncSeriesFromFileAsync`: iterates every issue with a `FilePath`,
+re-reads its embedded `ComicInfo.xml` via the same `EmbeddedComicInfoReader`, and when the
+embedded `Series` disagrees with the issue's current one, reassigns it via
+`SeriesReassignmentResolver.Apply` (a transient in-memory `MetadataProposal`, never persisted as
+its own row — reuses the existing move, doesn't invent a new one). Distinct from `SyncMetadata`,
+which only ever fills currently-*blank* fields and never reassigns which `Series` an issue
+belongs to — a different, narrower philosophy that doesn't cover this case.
+
+Exposed as a refresh-icon button directly on the Library toolbar (`LibraryToolbar.axaml`,
+`ResyncSeriesFromFileCommand`/`IsResyncingSeries` on `LibraryScreenViewModel`) rather than
+Preferences → Libraries alongside Scan Now/Sync Metadata — this is a corrective action a user
+reaches for while looking at their library, not a folder-management setting.

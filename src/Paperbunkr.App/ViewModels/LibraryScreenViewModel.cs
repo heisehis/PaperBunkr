@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
+using System.Text.Json;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -102,6 +104,43 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
     private List<Series> _allSeries = new();
     private List<Collection> _allCollections = new();
 
+    /// <summary>Distinct value pool for search-suggestion "Value matches" (docs/superpowers/specs/
+    /// 2026-08-31-library-search-suggestions-design.md), keyed by <see cref="SearchMode"/>. Rebuilt
+    /// only in <see cref="LoadFromDatabase"/> alongside <see cref="_allSeries"/> - never per
+    /// keystroke, same constraint as everything else fed by that snapshot. No <see cref="SearchMode.File"/>
+    /// entry - Value suggestions are skipped entirely for that mode (no sensible file-path autocomplete).</summary>
+    private Dictionary<SearchMode, List<string>> _suggestionIndex = new();
+
+    /// <summary>In-memory mirror of <see cref="Paperbunkr.Data.Entities.AppSettings.LibraryRecentSearches"/>,
+    /// most-recent-first. Loaded once in <see cref="LoadLibrarySettings"/>, mutated (and persisted) only
+    /// when a search settles - see <see cref="OnSearchSettled"/>.</summary>
+    private List<string> _recentSearches = new();
+
+    private bool _searchBoxHasFocus;
+
+    private const int MaxRecentSearchesStored = 8;
+    private const int MaxRecentSuggestions = 5;
+    private const int MaxValueSuggestions = 6;
+    private const int MaxSavedSearchSuggestions = 4;
+    private const int MaxFieldHintSuggestions = 3;
+    private const int MaxTotalSuggestions = 12;
+
+    /// <summary>The <c>&lt;mode&gt;:</c> prefixes <see cref="ParseFieldPrefix"/> recognizes, in the
+    /// fixed display order field-hint rows are offered in - see the design doc's §"Field-prefix
+    /// parsing".</summary>
+    private static readonly (string Keyword, SearchMode Mode)[] FieldPrefixKeywords =
+    {
+        ("all", SearchMode.All),
+        ("series", SearchMode.Series),
+        ("writer", SearchMode.Writer),
+        ("artists", SearchMode.Artists),
+        ("descriptive", SearchMode.Descriptive),
+        ("file", SearchMode.File),
+        ("catalog", SearchMode.Catalog),
+    };
+
+    private static readonly Regex FieldPrefixPattern = new(@"^([A-Za-z]+):\s*(.*)$", RegexOptions.Singleline | RegexOptions.Compiled);
+
     /// <summary>Resolved members of the active collection, refreshed alongside <see cref="_allCollections"/> in <see cref="LoadFromDatabase"/> - only populated when a collection with non-series members is active (see <see cref="IsCollectionView"/>).</summary>
     private List<CollectionMember> _activeCollectionMembers = new();
 
@@ -117,6 +156,8 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
 
     private bool _activeCollectionHasNonSeriesMembers;
 
+    private readonly LibraryFolderScanner _libraryScanner;
+
     public LibraryScreenViewModel(
         Action<int> goDetail,
         Action<int> goReaderForIssue,
@@ -128,7 +169,8 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         Action<IReadOnlyList<int>>? goBulkSeriesProperties = null,
         Action? goLibraryFolders = null,
         Action<int>? openCollectionProperties = null,
-        Action<int>? goBookDetailForBook = null)
+        Action<int>? goBookDetailForBook = null,
+        LibraryFolderScanner? libraryScanner = null)
     {
         _goDetail = goDetail;
         _goReaderForIssue = goReaderForIssue;
@@ -141,6 +183,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         _goLibraryFolders = goLibraryFolders ?? (() => { });
         _openCollectionProperties = openCollectionProperties ?? (_ => { });
         _goBookDetailForBook = goBookDetailForBook ?? (_ => { });
+        _libraryScanner = libraryScanner ?? new LibraryFolderScanner();
         Covers = new ObservableCollection<SeriesCardSample>();
         Groups = new ObservableCollection<SeriesCardGroup>();
         ContentTypes = new ObservableCollection<ContentTypeSummary>();
@@ -149,6 +192,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         ExistingSeriesNames = new ObservableCollection<string>();
         ReadingLists = new ObservableCollection<ReadingListOption>();
         DetailsColumns = new ObservableCollection<DetailsColumn>();
+        SearchSuggestions = new ObservableCollection<SearchSuggestion>();
         IssueList = new IssueListScreenViewModel(goReaderForIssue, isSelected: Selection.IsSelected);
         // Two independent axes now (docs/superpowers/specs/2026-08-18-library-book-centric-
         // redesign-design.md Slice 3, then the same-session follow-up that brought series-cards
@@ -283,9 +327,10 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         }
     }
 
-    /// <summary>Stops the search-history debounce timer (if pending) and immediately runs its push -
-    /// exists purely for testability (an 800ms real-time wait in a unit test is slow and flaky);
-    /// production code never calls this, only the timer's own <c>Tick</c> does the equivalent inline.</summary>
+    /// <summary>Stops the search-history debounce timer (if pending) and immediately runs its settle
+    /// logic - exists purely for testability (an 800ms real-time wait in a unit test is slow and
+    /// flaky); production code never calls this, only the timer's own <c>Tick</c> does the
+    /// equivalent inline.</summary>
     internal void FlushSearchHistoryDebounce()
     {
         if (_searchHistoryDebounceTimer is null)
@@ -294,7 +339,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         }
 
         _searchHistoryDebounceTimer.Stop();
-        PushBrowseHistory();
+        OnSearchSettled();
     }
 
     /// <summary>Issue-granularity's sort/group/rows owner - see the constructor's doc comment.</summary>
@@ -336,6 +381,8 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         _filterTrackedOnly = settings.LibraryFilterTrackedOnly;
         _detailsColumnsSetting = settings.LibraryDetailsColumns;
 #pragma warning restore MVVMTK0034
+
+        _recentSearches = DeserializeRecentSearches(settings.LibraryRecentSearches);
 
         // Stale-reference fallback: a collection deleted since last session falls back to "All
         // Series" rather than silently rendering an empty grid with no visible reason why.
@@ -392,6 +439,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         // seeding relay can fire SaveLibrarySettings mid-construction) keep the stored value as-is
         // rather than clobbering a real customization with an empty string.
         settings.LibraryDetailsColumns = DetailsColumns.Count == 0 ? _detailsColumnsSetting : SerializeDetailsColumns();
+        settings.LibraryRecentSearches = _recentSearches.Count == 0 ? null : JsonSerializer.Serialize(_recentSearches);
 
         // A display preference isn't worth crashing the search box over - PaperbunkrDbContext's own
         // SaveChanges already retries a transient SQLite lock a few times (e.g. this same method
@@ -404,6 +452,26 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         }
         catch (DbUpdateException ex) when (PaperbunkrDbContext.IsTransientLockError(ex))
         {
+        }
+    }
+
+    /// <summary>Defensive: a corrupted/manually-edited settings row is treated as "no history yet",
+    /// not a startup crash (docs/superpowers/specs/2026-08-31-library-search-suggestions-design.md
+    /// §Error handling) - same posture as every other nullable <c>AppSettings</c> string field.</summary>
+    private static List<string> DeserializeRecentSearches(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return new List<string>();
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize<List<string>>(json) ?? new List<string>();
+        }
+        catch (JsonException)
+        {
+            return new List<string>();
         }
     }
 
@@ -717,6 +785,8 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
 
         _allCollections = context.Collections.Include(c => c.Items).AsNoTracking().AsSplitQuery().OrderBy(c => c.SortOrder).ToList();
 
+        _suggestionIndex = BuildSuggestionIndex(context, _allSeries);
+
         // Resolved separately from _allCollections (which only carries bare CollectionItem rows for
         // the sidebar counts) - the mixed grid needs the actual Series/Issue/Book entities, which
         // CollectionResolver.GetMembers already joins in. Only worth the extra query when a
@@ -739,6 +809,63 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         }
 
         RebuildView();
+    }
+
+    /// <summary>
+    /// Distinct-value pool for search-suggestion "Value matches" (docs/superpowers/specs/2026-08-31-
+    /// library-search-suggestions-design.md), scoped per <see cref="SearchMode"/> using the same
+    /// field groupings <see cref="MatchesSearch"/>/<see cref="SearchFieldBundleCatalog"/> already
+    /// search. Series-level fields (name/titles) come from the already-loaded <paramref name="allSeries"/>
+    /// snapshot; <see cref="Character"/> names are a small separate query (not reachable from
+    /// <paramref name="allSeries"/>'s own Include chain); <see cref="IssueTag"/> values are derived
+    /// in-memory from the Tags already included on each Issue - no extra query needed for those.
+    /// </summary>
+    private static Dictionary<SearchMode, List<string>> BuildSuggestionIndex(PaperbunkrDbContext context, List<Series> allSeries)
+    {
+        var allIssues = allSeries.SelectMany(s => s.Issues).ToList();
+
+        static List<string> DistinctValues(IEnumerable<string?> values) =>
+            values.Where(v => !string.IsNullOrWhiteSpace(v))
+                .Select(v => v!.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+        var seriesValues = DistinctValues(
+            allSeries.Select(s => s.Name)
+                .Concat(allSeries.SelectMany(s => s.Titles.Select(t => t.Value)))
+                .Concat(allIssues.Select(i => i.AlternateSeries))
+                .Concat(allIssues.Select(i => i.SeriesGroup))
+                .Concat(allIssues.Select(i => i.StoryArc)));
+
+        var writerValues = DistinctValues(allIssues.Select(i => i.Writer));
+
+        var artistValues = DistinctValues(allIssues.SelectMany(i => new[]
+        {
+            i.Writer, i.Penciller, i.Inker, i.Colorist, i.Editor, i.Translator, i.Letterer, i.CoverArtist,
+        }));
+
+        var tagValues = allIssues.SelectMany(i => i.Tags).Where(t => t.Field == IssueTagField.Tags).Select(t => t.Value);
+        var characterValues = context.Characters.Select(c => c.Name).ToList();
+        var descriptiveValues = DistinctValues(
+            tagValues
+                .Concat(characterValues)
+                .Concat(allIssues.Select(i => i.MainCharacterOrTeam))
+                .Concat(allIssues.Select(i => i.Teams))
+                .Concat(allIssues.Select(i => i.Locations)));
+
+        var catalogValues = DistinctValues(allIssues.SelectMany(i => new[] { i.BookOwner, i.BookStore, i.BookLocation }));
+
+        var allValues = DistinctValues(seriesValues.Concat(writerValues).Concat(artistValues).Concat(descriptiveValues).Concat(catalogValues));
+
+        return new Dictionary<SearchMode, List<string>>
+        {
+            [SearchMode.Series] = seriesValues,
+            [SearchMode.Writer] = writerValues,
+            [SearchMode.Artists] = artistValues,
+            [SearchMode.Descriptive] = descriptiveValues,
+            [SearchMode.Catalog] = catalogValues,
+            [SearchMode.All] = allValues,
+        };
     }
 
     /// <summary>
@@ -841,8 +968,16 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
 
         if (!string.IsNullOrWhiteSpace(SearchQuery))
         {
-            string query = SearchQuery.Trim();
-            filtered = filtered.Where(s => MatchesSearch(s, query));
+            // Strip a recognized "<mode>:" prefix (already reflected in SearchMode by
+            // OnSearchQueryChanged) before matching - SearchQuery itself keeps showing the user what
+            // they typed. A prefix with nothing after it (e.g. "writer:") yields an empty effective
+            // query, meaning "mode-only scoping, no text filter" rather than matching nothing.
+            var (_, effective) = ParseFieldPrefix(SearchQuery.Trim());
+            if (!string.IsNullOrWhiteSpace(effective))
+            {
+                string query = effective.Trim();
+                filtered = filtered.Where(s => MatchesSearch(s, query));
+            }
         }
 
         if (FilterTrackedOnly)
@@ -1172,9 +1307,21 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
 
     partial void OnSearchQueryChanged(string value)
     {
+        // Field-prefix syntax (docs/superpowers/specs/2026-08-31-library-search-suggestions-
+        // design.md §"Field-prefix parsing"): typing e.g. "writer:miller" switches SearchMode the
+        // same way clicking the mode-picker button would. SearchQuery itself is never rewritten -
+        // MatchesSearch/RebuildView below and RecomputeSuggestions() both re-derive the effective
+        // (prefix-stripped) text via ParseFieldPrefix on every call instead.
+        var (impliedMode, _) = ParseFieldPrefix(value.TrimStart());
+        if (impliedMode is { } mode && mode != SearchMode)
+        {
+            SearchMode = mode; // Own OnSearchModeChanged already saves/rebuilds/recomputes - harmless redundancy with the calls below.
+        }
+
         RaiseChipAndEmptyState();
         SaveLibrarySettings();
         RebuildView();
+        RecomputeSuggestions();
 
         // History-push is debounced (~800ms pause in typing) - the reload above is not, and stays
         // exactly as instant as it always was. Guarded against ApplyBrowseState's own SearchQuery
@@ -1197,7 +1344,41 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
     private void OnSearchHistoryDebounceElapsed(object? sender, EventArgs e)
     {
         _searchHistoryDebounceTimer!.Stop();
+        OnSearchSettled();
+    }
+
+    /// <summary>Fires once typing has paused for <see cref="SearchHistoryDebounce"/> (or immediately,
+    /// via <see cref="FlushSearchHistoryDebounce"/>/an explicit Enter commit) - the single point that
+    /// treats a query as "committed" rather than still-being-typed: pushes browse history (existing
+    /// behavior) and now also records it into <see cref="_recentSearches"/> (docs/superpowers/specs/
+    /// 2026-08-31-library-search-suggestions-design.md).</summary>
+    private void OnSearchSettled()
+    {
         PushBrowseHistory();
+        RecordRecentSearch();
+    }
+
+    /// <summary>Prepends the current, trimmed <see cref="SearchQuery"/> to <see cref="_recentSearches"/>
+    /// (case-insensitive dedup - an existing equal entry moves to the front rather than duplicating),
+    /// caps at <see cref="MaxRecentSearchesStored"/>, persists, and refreshes the suggestions list so
+    /// the newly-recorded entry is immediately reflected. No-op for an empty/whitespace query.</summary>
+    private void RecordRecentSearch()
+    {
+        string trimmed = SearchQuery.Trim();
+        if (string.IsNullOrWhiteSpace(trimmed))
+        {
+            return;
+        }
+
+        _recentSearches.RemoveAll(q => string.Equals(q, trimmed, StringComparison.OrdinalIgnoreCase));
+        _recentSearches.Insert(0, trimmed);
+        if (_recentSearches.Count > MaxRecentSearchesStored)
+        {
+            _recentSearches.RemoveRange(MaxRecentSearchesStored, _recentSearches.Count - MaxRecentSearchesStored);
+        }
+
+        SaveLibrarySettings();
+        RecomputeSuggestions();
     }
 
     /// <summary>Field scope for <see cref="SearchQuery"/> - see <see cref="Paperbunkr.Data.Entities.SearchMode"/>'s doc comment for the CE source this mirrors.</summary>
@@ -1212,10 +1393,222 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         RaiseChipAndEmptyState();
         SaveLibrarySettings();
         RebuildView();
+        RecomputeSuggestions();
     }
 
     [RelayCommand]
     private void SetSearchMode(SearchMode mode) => SearchMode = mode;
+
+    /// <summary>Parses a leading <c>&lt;mode&gt;:</c> prefix (case-insensitive, one of
+    /// <see cref="FieldPrefixKeywords"/>) off <paramref name="raw"/>. Returns the matched mode (null
+    /// if no recognized prefix) and the remaining text - group 2 verbatim (not re-trimmed), so an
+    /// all-whitespace remainder after the prefix comes back empty/whitespace, which callers treat as
+    /// "no effective query" (mode-only scoping, matches every issue).</summary>
+    private static (SearchMode? Mode, string EffectiveQuery) ParseFieldPrefix(string raw)
+    {
+        var match = FieldPrefixPattern.Match(raw);
+        if (!match.Success)
+        {
+            return (null, raw);
+        }
+
+        string keyword = match.Groups[1].Value;
+        foreach (var (kw, mode) in FieldPrefixKeywords)
+        {
+            if (string.Equals(kw, keyword, StringComparison.OrdinalIgnoreCase))
+            {
+                return (mode, match.Groups[2].Value);
+            }
+        }
+
+        return (null, raw);
+    }
+
+    // --- Search suggestions popup (docs/superpowers/specs/2026-08-31-library-search-suggestions-
+    // design.md) - Recent/Value/SavedSearch/FieldHint rows, recomputed synchronously alongside the
+    // existing no-debounce search-as-you-type reload above. ---
+
+    /// <summary>Suggestion rows for the popup, in fixed priority order (FieldHint, Recent, Value,
+    /// SavedSearch) capped at <see cref="MaxTotalSuggestions"/> total - see <see cref="RecomputeSuggestions"/>.</summary>
+    public ObservableCollection<SearchSuggestion> SearchSuggestions { get; }
+
+    /// <summary>Drives the "Clear recent searches" link's visibility - only shown when the Recent section is non-empty (design doc §"Recording a completed search").</summary>
+    public bool HasRecentSuggestion => SearchSuggestions.Any(s => s.Kind == SearchSuggestionKind.Recent);
+
+    [ObservableProperty]
+    private bool _isSuggestionsOpen;
+
+    /// <summary>-1 means "no row selected" - Enter in that state commits the raw typed text (today's
+    /// existing behavior) rather than a suggestion. Up/Down clamp at both ends, they don't wrap.</summary>
+    [ObservableProperty]
+    private int _selectedSuggestionIndex = -1;
+
+    /// <summary>Called from the search <c>TextBox</c>'s <c>GotFocus</c> handler (code-behind, since
+    /// focus is a UI-side event with no XAML command equivalent here).</summary>
+    public void OnSearchBoxGotFocus()
+    {
+        _searchBoxHasFocus = true;
+        RecomputeSuggestions();
+    }
+
+    /// <summary>Called from the search <c>TextBox</c>'s <c>LostFocus</c> handler. Suggestion rows are
+    /// rendered <c>Focusable="False"</c> so clicking one never triggers this first - see the popup's
+    /// XAML for that detail.</summary>
+    public void OnSearchBoxLostFocus()
+    {
+        _searchBoxHasFocus = false;
+        IsSuggestionsOpen = false;
+    }
+
+    /// <summary>Up/Down from the search box's <c>KeyDown</c> handler - <paramref name="delta"/> is +1 or -1.</summary>
+    public void MoveSuggestionSelection(int delta)
+    {
+        if (SearchSuggestions.Count == 0)
+        {
+            SelectedSuggestionIndex = -1;
+            return;
+        }
+
+        SelectedSuggestionIndex = Math.Clamp(SelectedSuggestionIndex + delta, 0, SearchSuggestions.Count - 1);
+    }
+
+    /// <summary>Enter from the search box's <c>KeyDown</c> handler. With a row selected, that row is
+    /// committed (see <see cref="SelectSuggestion"/>); otherwise the already-live raw-text search is
+    /// simply treated as settled immediately, rather than waiting out the debounce.</summary>
+    public void CommitSearchBox()
+    {
+        if (SelectedSuggestionIndex >= 0 && SelectedSuggestionIndex < SearchSuggestions.Count)
+        {
+            SelectSuggestion(SearchSuggestions[SelectedSuggestionIndex]);
+            return;
+        }
+
+        IsSuggestionsOpen = false;
+        _searchHistoryDebounceTimer?.Stop();
+        OnSearchSettled();
+    }
+
+    /// <summary>Escape from the search box's <c>KeyDown</c> handler - closes the popup without touching <see cref="SearchQuery"/>.</summary>
+    [RelayCommand]
+    private void CloseSuggestions() => IsSuggestionsOpen = false;
+
+    [RelayCommand]
+    private void SelectSuggestion(SearchSuggestion suggestion)
+    {
+        IsSuggestionsOpen = false;
+        SelectedSuggestionIndex = -1;
+
+        if (suggestion.Kind == SearchSuggestionKind.SavedSearch)
+        {
+            SearchQuery = string.Empty;
+            if (suggestion.CollectionId is int collectionId)
+            {
+                SelectCollectionById(collectionId);
+            }
+
+            return;
+        }
+
+        SearchQuery = suggestion.InsertText ?? suggestion.DisplayText;
+    }
+
+    [RelayCommand]
+    private void ClearRecentSearches()
+    {
+        _recentSearches.Clear();
+        SaveLibrarySettings();
+        RecomputeSuggestions();
+    }
+
+    /// <summary>
+    /// Rebuilds <see cref="SearchSuggestions"/> from the four sources, in fixed priority order
+    /// (FieldHint, Recent, Value, SavedSearch), first-fit capped at <see cref="MaxTotalSuggestions"/>
+    /// total. Called from every <see cref="SearchQuery"/>/<see cref="SearchMode"/> change and from
+    /// focus/recent-search-list changes - always synchronous, off already-in-memory data (see
+    /// <see cref="_suggestionIndex"/>'s own doc comment), matching this ViewModel's existing "no
+    /// database round-trip per keystroke" constraint.
+    /// </summary>
+    private void RecomputeSuggestions()
+    {
+        string raw = SearchQuery;
+        var (impliedMode, effectiveQuery) = ParseFieldPrefix(raw.TrimStart());
+        bool hasRecognizedPrefix = impliedMode is not null;
+        SearchMode scopedMode = impliedMode ?? SearchMode;
+
+        var results = new List<SearchSuggestion>();
+
+        // Field hints - offered only while no recognized "<mode>:" prefix is already present.
+        if (!hasRecognizedPrefix)
+        {
+            string textForHints = raw.Trim();
+            int hintCount = 0;
+            foreach (var (keyword, _) in FieldPrefixKeywords)
+            {
+                if (hintCount >= MaxFieldHintSuggestions)
+                {
+                    break;
+                }
+
+                if (keyword.StartsWith(textForHints, StringComparison.OrdinalIgnoreCase))
+                {
+                    results.Add(new SearchSuggestion { Kind = SearchSuggestionKind.FieldHint, DisplayText = $"{keyword}:", InsertText = $"{keyword}: " });
+                    hintCount++;
+                }
+            }
+        }
+
+        // Recent searches - substring match (not startswith-only), most-recent-first.
+        string trimmedRaw = raw.Trim();
+        foreach (string recent in _recentSearches
+            .Where(candidate => trimmedRaw.Length == 0 || candidate.Contains(trimmedRaw, StringComparison.OrdinalIgnoreCase))
+            .Take(MaxRecentSuggestions))
+        {
+            results.Add(new SearchSuggestion { Kind = SearchSuggestionKind.Recent, DisplayText = recent, InsertText = recent });
+        }
+
+        // Value matches - skipped for File mode (no sensible file-path autocomplete) and for an
+        // empty effective query (nothing to rank against).
+        string trimmedEffective = effectiveQuery.Trim();
+        if (scopedMode != SearchMode.File && trimmedEffective.Length > 0 && _suggestionIndex.TryGetValue(scopedMode, out var candidates))
+        {
+            string prefixText = hasRecognizedPrefix ? raw.Substring(0, raw.Length - effectiveQuery.Length) : string.Empty;
+            var ranked = candidates
+                .Where(v => v.Contains(trimmedEffective, StringComparison.OrdinalIgnoreCase))
+                .OrderByDescending(v => v.StartsWith(trimmedEffective, StringComparison.OrdinalIgnoreCase))
+                .ThenBy(v => v, StringComparer.OrdinalIgnoreCase)
+                .Take(MaxValueSuggestions);
+            foreach (string v in ranked)
+            {
+                results.Add(new SearchSuggestion { Kind = SearchSuggestionKind.Value, DisplayText = v, InsertText = prefixText + v });
+            }
+        }
+
+        // Saved searches - only rule-driven collections, matched by name.
+        if (trimmedRaw.Length > 0)
+        {
+            foreach (var summary in Collections
+                .Where(c => c.IsSmart && c.Name.Contains(trimmedRaw, StringComparison.OrdinalIgnoreCase))
+                .Take(MaxSavedSearchSuggestions))
+            {
+                results.Add(new SearchSuggestion { Kind = SearchSuggestionKind.SavedSearch, DisplayText = summary.Name, CollectionId = summary.Id });
+            }
+        }
+
+        if (results.Count > MaxTotalSuggestions)
+        {
+            results.RemoveRange(MaxTotalSuggestions, results.Count - MaxTotalSuggestions);
+        }
+
+        SearchSuggestions.Clear();
+        foreach (var suggestion in results)
+        {
+            SearchSuggestions.Add(suggestion);
+        }
+
+        OnPropertyChanged(nameof(HasRecentSuggestion));
+        SelectedSuggestionIndex = -1;
+        IsSuggestionsOpen = _searchBoxHasFocus && SearchSuggestions.Count > 0;
+    }
 
     [ObservableProperty]
     private bool _filterUnreadOnly;
@@ -1332,6 +1725,43 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
 
     [RelayCommand]
     private void CloseAddIssue() => IsAddIssueOpen = false;
+
+    [ObservableProperty]
+    private bool _isResyncingSeries;
+
+    /// <summary>
+    /// Toolbar "Resync series from file" button (docs/superpowers/specs/2026-08-31-ce-migration-
+    /// embedded-metadata-precedence-design.md follow-up) - re-reads every already-imported issue's
+    /// own embedded <c>ComicInfo.xml</c> and reassigns its series when the file disagrees with what
+    /// Paperbunkr currently has, catching cases the migration-time fix can't touch retroactively
+    /// (migration only ever adds issues not already present, never revisits ones it already
+    /// migrated). Simple busy-flag + single-final-toast shape, matching <c>ScanNow</c>'s - no
+    /// natural per-item progress worth a dedicated progress toast for a toolbar action.
+    /// </summary>
+    [RelayCommand]
+    private async Task ResyncSeriesFromFile()
+    {
+        if (IsResyncingSeries)
+        {
+            return;
+        }
+
+        IsResyncingSeries = true;
+        try
+        {
+            var result = await _libraryScanner.ResyncSeriesFromFileAsync(new Progress<(int Done, int Total)>());
+            _showToast(
+                "Series resync complete",
+                result.IssuesReassigned == 0
+                    ? "Every issue's series already matched its file."
+                    : $"Reassigned {result.IssuesReassigned} issue{(result.IssuesReassigned == 1 ? "" : "s")} to match its file's embedded series.");
+            LoadFromDatabase();
+        }
+        finally
+        {
+            IsResyncingSeries = false;
+        }
+    }
 
     // --- Chips row + empty state ---
 

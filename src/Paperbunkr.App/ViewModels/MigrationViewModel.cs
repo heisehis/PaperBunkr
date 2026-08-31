@@ -155,8 +155,17 @@ public partial class MigrationViewModel : ViewModelBase
         }
     }
 
+    /// <summary>
+    /// Async since docs/superpowers/specs/2026-08-31-ce-migration-embedded-metadata-precedence-
+    /// design.md - <see cref="CeLibraryMigrator.Preview"/> now does real per-book file I/O (a fresh
+    /// embedded-metadata read for every book whose file is reachable), where before it was a pure
+    /// in-memory grouping over the parsed <c>ComicDb.xml</c>. <see cref="CeLibraryMigrator.LoadFromXml"/>
+    /// itself stays on the calling thread - it's just the one XML file, not per-book I/O, and
+    /// <see cref="ErrorMessage"/> needs to be set synchronously for a bad path before <see cref="IsBusy"/>
+    /// ever flips on.
+    /// </summary>
     [RelayCommand]
-    private void Scan()
+    private async Task Scan()
     {
         ErrorMessage = null;
 
@@ -176,8 +185,21 @@ public partial class MigrationViewModel : ViewModelBase
             return;
         }
 
-        using var context = PaperbunkrDb.CreateContext();
-        var preview = new CeLibraryMigrator().Preview(_loadedDatabase, context);
+        IsBusy = true;
+        var database = _loadedDatabase;
+        MigrationPreview preview;
+        try
+        {
+            preview = await Task.Run(() =>
+            {
+                using var context = PaperbunkrDb.CreateContext();
+                return new CeLibraryMigrator().Preview(database, context);
+            });
+        }
+        finally
+        {
+            IsBusy = false;
+        }
 
         SeriesCountLabel = preview.SeriesCount.ToString();
         IssueCountLabel = preview.IssueCount.ToString();

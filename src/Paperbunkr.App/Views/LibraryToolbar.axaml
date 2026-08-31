@@ -147,7 +147,7 @@
         <!-- ============ Row 1: two-zone bar ============ -->
         <Border Padding="24,12" Background="{DynamicResource PbSurface1Brush}"
                 BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,0,0,1">
-            <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto" ColumnSpacing="10">
+            <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto,Auto" ColumnSpacing="10">
                 <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="2" VerticalAlignment="Center">
                     <Button Classes="browseBtn" Command="{Binding BrowsePreviousCommand}" IsEnabled="{Binding CanBrowsePrevious}"
                             ToolTip.Tip="Back" AutomationProperties.AutomationId="LibraryBrowsePreviousButton">
@@ -159,7 +159,7 @@
                     </Button>
                 </StackPanel>
 
-                <Border Grid.Column="1" Background="{DynamicResource PbSurface3Brush}" CornerRadius="{DynamicResource PbRadius}"
+                <Border Grid.Column="1" x:Name="LibrarySearchBoxContainer" Background="{DynamicResource PbSurface3Brush}" CornerRadius="{DynamicResource PbRadius}"
                         BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1" Padding="10,0" MaxWidth="560" HorizontalAlignment="Stretch">
                     <DockPanel LastChildFill="True">
                         <fi:SymbolIcon DockPanel.Dock="Left" Symbol="Search" VerticalAlignment="Center" Margin="0,0,8,0" />
@@ -170,8 +170,9 @@
                                 AutomationProperties.Name="{Binding SearchModeLabel, StringFormat='Search: {0}'}">
                             <TextBlock Text="{Binding SearchModeLabel, StringFormat='{}{0} ▾'}" />
                         </Button>
-                        <TextBox Text="{Binding SearchQuery}" PlaceholderText="Search library…" FontSize="12.5"
+                        <TextBox x:Name="SearchBox" Text="{Binding SearchQuery}" PlaceholderText="Search library…" FontSize="12.5"
                                  Background="Transparent" BorderThickness="0" VerticalAlignment="Center"
+                                 GotFocus="OnSearchBoxGotFocus" LostFocus="OnSearchBoxLostFocus" KeyDown="OnSearchBoxKeyDown"
                                  AutomationProperties.AutomationId="LibrarySearchBox" />
                     </DockPanel>
                 </Border>
@@ -195,7 +196,14 @@
                     </StackPanel>
                 </Button>
 
-                <Button Grid.Column="4" Classes="addBtn" Command="{Binding OpenAddIssueCommand}" VerticalAlignment="Center"
+                <Button Grid.Column="4" Classes="browseBtn" Command="{Binding ResyncSeriesFromFileCommand}"
+                        IsEnabled="{Binding !IsResyncingSeries}" VerticalAlignment="Center"
+                        ToolTip.Tip="Resync each issue's series from its file's embedded metadata"
+                        AutomationProperties.AutomationId="LibraryResyncSeriesButton" AutomationProperties.Name="Resync series from file">
+                    <fi:SymbolIcon Symbol="ArrowClockwise" />
+                </Button>
+
+                <Button Grid.Column="5" Classes="addBtn" Command="{Binding OpenAddIssueCommand}" VerticalAlignment="Center"
                         ToolTip.Tip="Add issue to library" AutomationProperties.AutomationId="LibraryAddIssueButton" AutomationProperties.Name="Add issue">
                     <fi:SymbolIcon Symbol="Add" />
                 </Button>
@@ -461,6 +469,40 @@
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
+                </StackPanel>
+            </Border>
+        </Popup>
+
+        <!-- Search suggestions popup (docs/superpowers/specs/2026-08-31-library-search-suggestions-
+             design.md) - Recent/Value/SavedSearch/FieldHint rows, one flat keyboard-navigable list.
+             Focusable="False" on each row Button below is load-bearing: it keeps the search TextBox
+             from losing focus on click, so LostFocus never races the row's own Click. -->
+        <Popup PlacementTarget="{Binding #LibrarySearchBoxContainer}" Placement="Bottom" VerticalOffset="6"
+               IsOpen="{Binding IsSuggestionsOpen}" IsLightDismissEnabled="True">
+            <Border Classes="dropdown" MinWidth="320" MaxWidth="560">
+                <StackPanel Spacing="1">
+                    <ItemsControl ItemsSource="{Binding SearchSuggestions}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="models:SearchSuggestion">
+                                <Button Classes="modeOption" Focusable="False"
+                                        Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SelectSuggestionCommand}"
+                                        CommandParameter="{Binding}"
+                                        AutomationProperties.Name="{Binding DisplayText}">
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <fi:SymbolIcon Symbol="Clock" IsVisible="{Binding Kind, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static models:SearchSuggestionKind.Recent}}" />
+                                        <fi:SymbolIcon Symbol="Search" IsVisible="{Binding Kind, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static models:SearchSuggestionKind.Value}}" />
+                                        <fi:SymbolIcon Symbol="Bookmark" IsVisible="{Binding Kind, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static models:SearchSuggestionKind.SavedSearch}}" />
+                                        <fi:SymbolIcon Symbol="Tag" IsVisible="{Binding Kind, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static models:SearchSuggestionKind.FieldHint}}" />
+                                        <TextBlock Text="{Binding DisplayText}" />
+                                    </StackPanel>
+                                </Button>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <Border Height="1" Background="{DynamicResource PbBorderBrush}" Margin="0,4" IsVisible="{Binding HasRecentSuggestion}" />
+                    <Button Classes="modeOption" Focusable="False" Content="Clear recent searches" FontSize="11.5"
+                            IsVisible="{Binding HasRecentSuggestion}" Command="{Binding ClearRecentSearchesCommand}" />
                 </StackPanel>
             </Border>
         </Popup>

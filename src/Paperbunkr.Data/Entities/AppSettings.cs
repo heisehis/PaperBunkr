@@ -374,4 +374,13 @@ public class AppSettings
     /// next launch. No replay entry point by design - once resolved, gone for this install.
     /// </summary>
     public bool WelcomeTourOffered { get; set; }
+
+    /// <summary>
+    /// Library search box's remembered past queries (docs/superpowers/specs/2026-08-31-library-
+    /// search-suggestions-design.md) - JSON-serialized <c>List&lt;string&gt;</c>, most-recent-first,
+    /// capped at 8, case-insensitive deduped. Null/empty means no history yet. JSON rather than
+    /// <see cref="LibraryDetailsColumns"/>'s comma-join, since a search query can legally contain a
+    /// comma (an enum name never can).
+    /// </summary>
+    public string? LibraryRecentSearches { get; set; }
 }

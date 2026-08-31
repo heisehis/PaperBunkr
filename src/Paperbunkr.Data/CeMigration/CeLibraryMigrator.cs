@@ -15,8 +15,13 @@ namespace Paperbunkr.Data.CeMigration;
 /// <see cref="PaperbunkrDbContext"/>. Full design:
 /// docs/superpowers/specs/2026-08-06-migration-ux-design.md.
 ///
-/// Series identity: CE has no first-class Series entity (§6) - issues are grouped by the flat
-/// <c>ComicBook.Series</c> string, deduped case-insensitively (<see cref="GroupBySeries"/>).
+/// Series identity: CE has no first-class Series entity (§6) - issues are grouped by each book's
+/// effective series name, deduped case-insensitively (<see cref="GroupBySeries"/>). "Effective"
+/// means the book's own file's embedded <c>ComicInfo.xml</c> when reachable (matching what
+/// CE's own file-properties dialog shows, and what a real Paperbunkr folder scan already reads),
+/// falling back to CE's cached <c>ComicBook.Series</c> only when the file isn't reachable
+/// (docs/superpowers/specs/2026-08-31-ce-migration-embedded-metadata-precedence-design.md) - CE's
+/// cached value can be stale relative to the file's current embedded content.
 /// Near-but-not-exact name matches (§14 step 3) are surfaced via <see cref="SeriesNameMatcher"/>
 /// as <see cref="SeriesConflictCandidate"/>s for the UI to resolve (merge / keep separate) before
 /// or after commit - <see cref="Migrate"/> never blocks on an unresolved one, it just records it
@@ -29,6 +34,24 @@ namespace Paperbunkr.Data.CeMigration;
 /// </summary>
 public class CeLibraryMigrator
 {
+    private readonly Func<string, ComicInfo?> _embeddedInfoReader;
+
+    public CeLibraryMigrator()
+        : this(EmbeddedComicInfoReader.TryRead)
+    {
+    }
+
+    /// <summary>Test-only seam (same pattern as <c>LibraryFolderScanner</c>'s context-factory
+    /// injection) - production always uses the default ctor, which reads real files via
+    /// <see cref="EmbeddedComicInfoReader"/>. Lets tests exercise the embedded-vs-cached precedence
+    /// logic (docs/superpowers/specs/2026-08-31-ce-migration-embedded-metadata-precedence-design.md)
+    /// with a canned <see cref="ComicInfo"/> keyed by file path, without needing a real archive on
+    /// disk.</summary>
+    internal CeLibraryMigrator(Func<string, ComicInfo?> embeddedInfoReader)
+    {
+        _embeddedInfoReader = embeddedInfoReader;
+    }
+
     /// <summary>
     /// Loads a CE <c>ComicDb.xml</c> file using the ported engine parser. This is genuinely
     /// portable engine code (confirmed by reading src/Paperbunkr.Engine/Database/ComicDatabase.cs
@@ -79,8 +102,9 @@ public class CeLibraryMigrator
         var seriesNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         int guessedContentType = 0;
         int issueCount = 0;
+        var effectiveInfoCache = new Dictionary<ComicBook, ComicInfo?>();
 
-        foreach (var group in GroupBySeries(database))
+        foreach (var group in GroupBySeries(database, effectiveInfoCache))
         {
             seriesNames.Add(group.Key);
             issueCount += group.Count();
@@ -116,7 +140,8 @@ public class CeLibraryMigrator
         int issuesCreated = 0;
         int guessedContentType = 0;
 
-        var rawGroups = GroupBySeries(database).ToDictionary(g => g.Key, g => g.ToList(), StringComparer.OrdinalIgnoreCase);
+        var effectiveInfoCache = new Dictionary<ComicBook, ComicInfo?>();
+        var rawGroups = GroupBySeries(database, effectiveInfoCache).ToDictionary(g => g.Key, g => g.ToList(), StringComparer.OrdinalIgnoreCase);
         var rawNames = rawGroups.Keys.ToList();
 
         // Canonical name each raw incoming name resolves to, after applying MergeGroups - members
@@ -190,7 +215,7 @@ public class CeLibraryMigrator
                 int added = 0;
                 foreach (var book in books)
                 {
-                    var issue = MapIssue(book);
+                    var issue = MapIssue(book, effectiveInfoCache);
                     if (!existingKeys.Add((issue.EffectiveNumber(), issue.EffectiveVolume())))
                     {
                         continue;
@@ -247,7 +272,7 @@ public class CeLibraryMigrator
 
             foreach (var book in books)
             {
-                var issue = MapIssue(book);
+                var issue = MapIssue(book, effectiveInfoCache);
                 issue.Series = series;
                 series.Issues.Add(issue);
                 context.Issues.Add(issue);
@@ -340,11 +365,53 @@ public class CeLibraryMigrator
         return pendingCount;
     }
 
-    private static IEnumerable<IGrouping<string, ComicBook>> GroupBySeries(ComicDatabase database)
+    /// <summary>
+    /// Groups by each book's <em>effective</em> series name (docs/superpowers/specs/2026-08-31-ce-
+    /// migration-embedded-metadata-precedence-design.md) - the file's own embedded
+    /// <c>ComicInfo.xml</c> <c>Series</c> value when the file is reachable and has one, falling back
+    /// to CE's cached <see cref="ComicBook.Series"/> otherwise. CE's cached value can be stale
+    /// relative to what's actually embedded in the file today (confirmed with a real library: CE's
+    /// own file-properties dialog re-reads the file and shows a different, more specific series than
+    /// CE's database had cached) - grouping on the stale value collapses genuinely distinct series
+    /// into one generic bucket, which a real folder scan (which always reads embedded metadata
+    /// fresh) doesn't do for the same files.
+    /// </summary>
+    private IEnumerable<IGrouping<string, ComicBook>> GroupBySeries(ComicDatabase database, Dictionary<ComicBook, ComicInfo?> effectiveInfoCache)
     {
         return database.Books
             .Where(b => b != null)
-            .GroupBy(b => string.IsNullOrWhiteSpace(b.Series) ? "Unknown" : b.Series.Trim(), StringComparer.OrdinalIgnoreCase);
+            .GroupBy(b => EffectiveSeriesName(b, effectiveInfoCache), StringComparer.OrdinalIgnoreCase);
+    }
+
+    private string EffectiveSeriesName(ComicBook book, Dictionary<ComicBook, ComicInfo?> effectiveInfoCache)
+    {
+        var embedded = ResolveEmbeddedInfo(book, effectiveInfoCache);
+        string? series = !string.IsNullOrWhiteSpace(embedded?.Series) ? embedded!.Series : book.Series;
+        return string.IsNullOrWhiteSpace(series) ? "Unknown" : series.Trim();
+    }
+
+    /// <summary>
+    /// Reads <paramref name="book"/>'s own file's embedded <c>ComicInfo.xml</c> via the shared
+    /// <see cref="EmbeddedComicInfoReader"/> - <see langword="null"/> if the book has no
+    /// <see cref="ComicBook.FilePath"/>, the file isn't reachable on disk (moved/deleted since CE
+    /// last knew about it, or migration is running without access to the actual comic files - a
+    /// real, supported scenario, not an edge case to break on), or the read otherwise fails. Cached
+    /// per book (real file I/O, not free) since both <see cref="GroupBySeries"/> and
+    /// <see cref="MapIssue"/> need the same answer for the same book within one <see cref="Preview"/>
+    /// or <see cref="Migrate"/> call.
+    /// </summary>
+    private ComicInfo? ResolveEmbeddedInfo(ComicBook book, Dictionary<ComicBook, ComicInfo?> effectiveInfoCache)
+    {
+        if (effectiveInfoCache.TryGetValue(book, out var cached))
+        {
+            return cached;
+        }
+
+        ComicInfo? embedded = !string.IsNullOrWhiteSpace(book.FilePath)
+            ? _embeddedInfoReader(book.FilePath)
+            : null;
+        effectiveInfoCache[book] = embedded;
+        return embedded;
     }
 
     /// <summary>Exact mapping table from docs/onboarding.md §6.</summary>
@@ -356,10 +423,25 @@ public class CeLibraryMigrator
         _ => (ContentType.Unknown, ReadingMode.LeftToRight),
     };
 
-    private static Issue MapIssue(ComicBook book)
+    /// <summary>
+    /// Maps CE's cached fields first (today's baseline, unchanged), then - when the book's own file
+    /// is reachable - re-applies <see cref="MapStoryFields"/> a second time from the freshly-read
+    /// embedded <c>ComicInfo.xml</c>, which overwrites every field the embedded file actually has a
+    /// value for (docs/superpowers/specs/2026-08-31-ce-migration-embedded-metadata-precedence-
+    /// design.md). This gives "embedded wins per-field, CE's cache fills whatever the embedded file
+    /// left blank" for free, reusing <see cref="MapStoryFields"/> itself rather than hand-merging
+    /// every individual field a second time.
+    /// </summary>
+    private Issue MapIssue(ComicBook book, Dictionary<ComicBook, ComicInfo?> effectiveInfoCache)
     {
         var issue = new Issue();
         MapStoryFields(book, issue);
+
+        var embedded = ResolveEmbeddedInfo(book, effectiveInfoCache);
+        if (embedded is not null)
+        {
+            MapStoryFields(embedded, issue, preferIncomingWhenPresent: true);
+        }
 
         issue.FilePath = NullIfEmpty(book.FilePath);
         issue.AddedTime = book.AddedTime != DateTime.MinValue ? book.AddedTime : null;
@@ -393,9 +475,29 @@ public class CeLibraryMigrator
     /// a field is only set when <paramref name="issue"/>'s current value is blank - never clobbers
     /// something already there, e.g. from a prior migration or a manual edit.
     /// </param>
-    public static void MapStoryFields(ComicInfo info, Issue issue, bool onlyIfBlank = false)
+    /// <param name="preferIncomingWhenPresent">
+    /// true (docs/superpowers/specs/2026-08-31-ce-migration-embedded-metadata-precedence-design.md):
+    /// a field is overwritten from <paramref name="info"/> only when <paramref name="info"/> itself
+    /// has a non-blank value for it - a blank field on <paramref name="info"/> leaves
+    /// <paramref name="issue"/>'s current value untouched instead of clobbering it with blank. This
+    /// is the opposite direction from <paramref name="onlyIfBlank"/> (which checks whether
+    /// <paramref name="issue"/>'s current value is blank, not whether the incoming one is) - used
+    /// for a second <see cref="MapStoryFields"/> pass from a freshly-read embedded file on top of
+    /// CE's already-mapped cached fields, so the embedded file wins per-field only where it
+    /// actually has something to say. Mutually exclusive with <paramref name="onlyIfBlank"/> in
+    /// practice - no caller needs both.
+    /// </param>
+    public static void MapStoryFields(ComicInfo info, Issue issue, bool onlyIfBlank = false, bool preferIncomingWhenPresent = false)
     {
-        T Pick<T>(T current, T incoming) => onlyIfBlank && current is not null ? current : incoming;
+        T Pick<T>(T current, T incoming)
+        {
+            if (preferIncomingWhenPresent)
+            {
+                return incoming is not null ? incoming : current;
+            }
+
+            return onlyIfBlank && current is not null ? current : incoming;
+        }
 
         issue.Title = Pick(issue.Title, NullIfEmpty(info.Title));
         issue.Number = Pick(issue.Number, NullIfEmpty(info.Number));

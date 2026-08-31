@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Paperbunkr.App.Models;
 using Paperbunkr.App.Services;
@@ -131,6 +132,47 @@ public class LibraryScreenViewModelTests : IDisposable
         Assert.Equal(2, vm.ContentTypes.Count); // only Comic + Manga - no Manhua/Manhwa/Unknown rows
         Assert.Equal(2, vm.ContentTypes.Single(c => c.ContentType == ContentType.Comic).Count);
         Assert.Equal(1, vm.ContentTypes.Single(c => c.ContentType == ContentType.Manga).Count);
+    }
+
+    [Fact]
+    public async Task ResyncSeriesFromFileCommand_EmbeddedSeriesDisagrees_ReassignsAndReloadsGrid()
+    {
+        string root = Path.Combine(Path.GetTempPath(), $"paperbunkr_library_vm_resync_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        try
+        {
+            string cbzPath = Path.Combine(root, "will-of-iron-05.cbz");
+            var embedded = new cYo.Projects.ComicRack.Engine.ComicInfo { Series = "Warhammer 40,000: Will of Iron" };
+            CbzFixture.Create(cbzPath, pageCount: 1, embedded);
+
+            using (var context = PaperbunkrDb.CreateContext())
+            {
+                var series = new Series { Name = "Warhammer 40" };
+                context.Series.Add(series);
+                context.Issues.Add(new Issue { Series = series, FilePath = cbzPath });
+                context.SaveChanges();
+            }
+
+            (string Title, string Message)? toast = null;
+            var vm = new LibraryScreenViewModel(
+                goDetail: _ => { }, goReaderForIssue: _ => { }, goToNewIssueProperties: (_, _, _) => { },
+                showToast: (title, message) => toast = (title, message));
+
+            await vm.ResyncSeriesFromFileCommand.ExecuteAsync(null);
+
+            Assert.False(vm.IsResyncingSeries);
+            Assert.NotNull(toast);
+            Assert.Equal("Series resync complete", toast!.Value.Title);
+            Assert.Contains("Reassigned 1 issue", toast!.Value.Message);
+
+            using var verify = PaperbunkrDb.CreateContext();
+            Assert.Contains(verify.Series, s => s.Name == "Warhammer 40,000: Will of Iron");
+            Assert.DoesNotContain(verify.Series, s => s.Name == "Warhammer 40");
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
     }
 
     [Fact]
@@ -2086,5 +2128,274 @@ public class LibraryScreenViewModelTests : IDisposable
 
         Assert.NotNull(receivedIds);
         Assert.Equal(new[] { seriesA, seriesB }, receivedIds!.OrderBy(id => id));
+    }
+
+    // --- Search suggestions (docs/superpowers/specs/2026-08-31-library-search-suggestions-design.md) ---
+
+    /// <summary>A minimal <c>IsSmart</c> collection - the rule's own conditions are never evaluated
+    /// by these tests, only its presence/name matter for suggestion matching.</summary>
+    private static int CreateSmartCollection(string name)
+    {
+        using var context = PaperbunkrDb.CreateContext();
+        var list = new SmartList
+        {
+            Name = name + " rule",
+            TargetKind = SmartListTargetKind.Series,
+            RootGroup = new SmartListConditionGroup
+            {
+                Mode = SmartListGroupMode.And,
+                Conditions = [new SmartListCondition { Field = SmartListField.SeriesName, Operator = SmartListOperator.Is, Value = "irrelevant" }],
+            },
+        };
+        context.SmartLists.Add(list);
+        context.SaveChanges();
+
+        var collection = new Collection { Name = name, SeriesSmartListId = list.Id };
+        context.Collections.Add(collection);
+        context.SaveChanges();
+        return collection.Id;
+    }
+
+    [Fact]
+    public void RecentSearch_RecordedOnSettle_CappedAndDeduped()
+    {
+        CreateSeriesWithIssue("Batman");
+        var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { }, goToNewIssueProperties: (_, _, _) => { });
+
+        for (int i = 1; i <= 9; i++)
+        {
+            vm.SearchQuery = $"query{i}";
+            vm.FlushSearchHistoryDebounce();
+        }
+
+        // Re-searching an already-recorded query moves it to the front instead of duplicating it.
+        vm.SearchQuery = "query3";
+        vm.FlushSearchHistoryDebounce();
+
+        var recent = JsonSerializer.Deserialize<List<string>>(ReadAppSettings().LibraryRecentSearches!)!;
+        Assert.Equal(8, recent.Count); // capped at MaxRecentSearchesStored
+        Assert.Equal("query3", recent[0]); // most-recent-first
+        Assert.DoesNotContain("query1", recent); // oldest evicted first
+        Assert.Single(recent, q => q == "query3"); // not duplicated
+    }
+
+    [Fact]
+    public void RecentSearch_EmptyOrWhitespaceQuery_NeverRecorded()
+    {
+        var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { }, goToNewIssueProperties: (_, _, _) => { });
+
+        vm.SearchQuery = "   ";
+        vm.FlushSearchHistoryDebounce();
+
+        Assert.Null(ReadAppSettings().LibraryRecentSearches);
+    }
+
+    [Theory]
+    [InlineData("all", SearchMode.All)]
+    [InlineData("SERIES", SearchMode.Series)]
+    [InlineData("Writer", SearchMode.Writer)]
+    [InlineData("artists", SearchMode.Artists)]
+    [InlineData("descriptive", SearchMode.Descriptive)]
+    [InlineData("file", SearchMode.File)]
+    [InlineData("catalog", SearchMode.Catalog)]
+    public void FieldPrefix_RecognizedKeyword_SwitchesSearchMode(string keyword, SearchMode expected)
+    {
+        var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { }, goToNewIssueProperties: (_, _, _) => { });
+
+        vm.SearchQuery = $"{keyword}:miller";
+
+        Assert.Equal(expected, vm.SearchMode);
+    }
+
+    [Fact]
+    public void FieldPrefix_UnrecognizedKeyword_FallsThroughToFreeTextSearch()
+    {
+        CreateSeriesWithIssue("wri: something");
+        var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { }, goToNewIssueProperties: (_, _, _) => { });
+
+        vm.SearchQuery = "wri: something";
+
+        Assert.Equal(SearchMode.All, vm.SearchMode); // "wri" isn't a recognized keyword, mode untouched
+        Assert.Single(vm.IssueList.Rows); // and the whole string is matched as free text, prefix included
+    }
+
+    [Fact]
+    public void FieldPrefix_NoColon_NotParsed()
+    {
+        var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { }, goToNewIssueProperties: (_, _, _) => { });
+
+        vm.SearchQuery = "writer";
+
+        Assert.Equal(SearchMode.All, vm.SearchMode);
+    }
+
+    [Fact]
+    public void ValueSuggestions_StartsWithRankedAboveContains()
+    {
+        int seriesId1 = CreateSeriesWithIssue("Some Series");
+        SetIssueFields(seriesId1, i => i.Writer = "Dan Abnett");
+        int seriesId2 = CreateSeriesWithIssue("Other Series");
+        SetIssueFields(seriesId2, i => i.Writer = "Aidan Cross"); // contains "dan", doesn't start with it
+        var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { }, goToNewIssueProperties: (_, _, _) => { });
+        vm.SearchMode = SearchMode.Writer;
+
+        vm.SearchQuery = "Dan";
+
+        var values = vm.SearchSuggestions.Where(s => s.Kind == SearchSuggestionKind.Value).Select(s => s.DisplayText).ToList();
+        Assert.Equal(2, values.Count);
+        Assert.Equal("Dan Abnett", values[0]);
+        Assert.Equal("Aidan Cross", values[1]);
+    }
+
+    [Fact]
+    public void ValueSuggestions_SkippedForFileMode()
+    {
+        int seriesId = CreateSeriesWithIssue("Some Series");
+        SetIssueFields(seriesId, i => i.FilePath = "C:\\comics\\some-series-001.cbz");
+        var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { }, goToNewIssueProperties: (_, _, _) => { });
+        vm.SearchMode = SearchMode.File;
+
+        vm.SearchQuery = "some";
+
+        Assert.DoesNotContain(vm.SearchSuggestions, s => s.Kind == SearchSuggestionKind.Value);
+    }
+
+    [Fact]
+    public void ValueSuggestions_CappedAtSix()
+    {
+        for (int i = 0; i < 10; i++)
+        {
+            int seriesId = CreateSeriesWithIssue($"Filler Series {i}");
+            SetIssueFields(seriesId, issue => issue.Writer = $"Match Writer {i}");
+        }
+
+        var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { }, goToNewIssueProperties: (_, _, _) => { });
+        vm.SearchMode = SearchMode.Writer;
+
+        vm.SearchQuery = "Match";
+
+        Assert.Equal(6, vm.SearchSuggestions.Count(s => s.Kind == SearchSuggestionKind.Value));
+    }
+
+    [Fact]
+    public void SavedSearchSuggestions_OnlySmartCollectionsMatchByName()
+    {
+        CreateCollectionWithSeries("Manual Favorites", CreateSeries("X", ContentType.Comic));
+        CreateSmartCollection("Rule Based Favorites");
+        var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { }, goToNewIssueProperties: (_, _, _) => { });
+
+        vm.SearchQuery = "Favorites";
+
+        var savedSearchNames = vm.SearchSuggestions.Where(s => s.Kind == SearchSuggestionKind.SavedSearch).Select(s => s.DisplayText);
+        Assert.Equal(new[] { "Rule Based Favorites" }, savedSearchNames);
+    }
+
+    [Fact]
+    public void SelectSuggestion_SavedSearch_ClearsQueryAndSelectsCollection()
+    {
+        int collectionId = CreateSmartCollection("My Smart List");
+        var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { }, goToNewIssueProperties: (_, _, _) => { });
+        vm.SearchQuery = "Smart";
+        var suggestion = vm.SearchSuggestions.Single(s => s.Kind == SearchSuggestionKind.SavedSearch);
+
+        vm.SelectSuggestionCommand.Execute(suggestion);
+
+        Assert.Equal(string.Empty, vm.SearchQuery);
+        Assert.True(vm.Collections.Single(c => c.Id == collectionId).IsActive);
+    }
+
+    [Fact]
+    public void SelectSuggestion_Recent_SetsSearchQueryOnly()
+    {
+        CreateSeriesWithIssue("Batman");
+        var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { }, goToNewIssueProperties: (_, _, _) => { });
+        vm.SearchQuery = "Batman";
+        vm.FlushSearchHistoryDebounce();
+        vm.SearchQuery = string.Empty;
+        vm.OnSearchBoxGotFocus();
+        var recentSuggestion = vm.SearchSuggestions.Single(s => s.Kind == SearchSuggestionKind.Recent);
+
+        vm.SelectSuggestionCommand.Execute(recentSuggestion);
+
+        Assert.Equal("Batman", vm.SearchQuery);
+    }
+
+    [Fact]
+    public void SuggestionTotal_NeverExceedsTwelve()
+    {
+        for (int i = 0; i < 10; i++)
+        {
+            int seriesId = CreateSeriesWithIssue($"Alpha Series {i}");
+            SetIssueFields(seriesId, issue => issue.Writer = $"Alpha Writer {i}");
+        }
+
+        var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { }, goToNewIssueProperties: (_, _, _) => { });
+        vm.SearchMode = SearchMode.All;
+        for (int i = 0; i < 8; i++)
+        {
+            vm.SearchQuery = $"alpha{i}";
+            vm.FlushSearchHistoryDebounce();
+        }
+
+        CreateSmartCollection("Alpha Rule One");
+        CreateSmartCollection("Alpha Rule Two");
+        vm.LoadFromDatabase(); // picks up the two collections created via a separate context above
+
+        vm.SearchQuery = "alpha";
+
+        // Raw sources here total 5 (Recent, capped) + 6 (Value, capped) + 2 (SavedSearch) = 13.
+        Assert.Equal(12, vm.SearchSuggestions.Count);
+    }
+
+    [Fact]
+    public void KeyboardNav_ClampsAtBothEnds()
+    {
+        int seriesId = CreateSeriesWithIssue("Some Series");
+        SetIssueFields(seriesId, i => i.Writer = "Solo Writer");
+        var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { }, goToNewIssueProperties: (_, _, _) => { });
+        vm.SearchMode = SearchMode.Writer;
+        vm.SearchQuery = "Solo";
+        Assert.NotEmpty(vm.SearchSuggestions);
+
+        vm.MoveSuggestionSelection(-1); // Up before ever moving down - clamps at 0, not -1
+        Assert.Equal(0, vm.SelectedSuggestionIndex);
+
+        for (int i = 0; i < vm.SearchSuggestions.Count + 3; i++)
+        {
+            vm.MoveSuggestionSelection(1);
+        }
+
+        Assert.Equal(vm.SearchSuggestions.Count - 1, vm.SelectedSuggestionIndex);
+    }
+
+    [Fact]
+    public void CommitSearchBox_NoSelection_CommitsRawTextImmediately()
+    {
+        CreateSeriesWithIssue("Batman");
+        var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { }, goToNewIssueProperties: (_, _, _) => { });
+        vm.SearchQuery = "Batman";
+
+        vm.CommitSearchBox(); // no arrow-key selection made - commits the raw typed text immediately, not after the 800ms debounce
+
+        Assert.False(vm.IsSuggestionsOpen);
+        var recent = JsonSerializer.Deserialize<List<string>>(ReadAppSettings().LibraryRecentSearches!)!;
+        Assert.Equal("Batman", recent[0]);
+    }
+
+    [Fact]
+    public void CloseSuggestions_LeavesSearchQueryUntouched()
+    {
+        int seriesId = CreateSeriesWithIssue("Some Series");
+        SetIssueFields(seriesId, i => i.Writer = "Solo Writer");
+        var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { }, goToNewIssueProperties: (_, _, _) => { });
+        vm.OnSearchBoxGotFocus();
+        vm.SearchMode = SearchMode.Writer;
+        vm.SearchQuery = "Solo";
+        Assert.True(vm.IsSuggestionsOpen);
+
+        vm.CloseSuggestionsCommand.Execute(null);
+
+        Assert.False(vm.IsSuggestionsOpen);
+        Assert.Equal("Solo", vm.SearchQuery);
     }
 }

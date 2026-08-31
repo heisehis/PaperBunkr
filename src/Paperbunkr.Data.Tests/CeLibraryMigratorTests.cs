@@ -241,6 +241,156 @@ public class CeLibraryMigratorTests : IDisposable
         Assert.Equal(1, result.SeriesWithGuessedContentType);
     }
 
+    // ===================== Embedded-vs-cached precedence (docs/superpowers/specs/2026-08-31-ce-
+    // migration-embedded-metadata-precedence-design.md) - uses the internal Func<string, ComicInfo?>
+    // seam rather than a real archive, so these are fast and don't touch the filesystem. =====================
+
+    [Fact]
+    public void Migrate_EmbeddedFileSeriesDisagreesWithCeCache_UsesEmbeddedName()
+    {
+        // The real reproduction: CE's database cached a generic "Warhammer 40" for a book whose
+        // own file's embedded ComicInfo.xml actually says "Warhammer 40,000: Will of Iron" - the
+        // file is authoritative, same as CE's own file-properties dialog (which re-reads the file)
+        // and a real Paperbunkr folder scan (which always reads embedded metadata fresh).
+        var db = ComicDatabase.CreateNew();
+        db.Books.Add(new ComicBook { Series = "Warhammer 40", Number = "5", FilePath = @"C:\comics\will-of-iron-05.cbz" });
+
+        var reader = (string path) => path == @"C:\comics\will-of-iron-05.cbz"
+            ? new ComicInfo { Series = "Warhammer 40,000: Will of Iron", Number = "5" }
+            : null;
+
+        var options = BuildContextOptions(_dbPath);
+        using var context = new PaperbunkrDbContext(options);
+        context.Database.EnsureCreated();
+
+        new CeLibraryMigrator(reader).Migrate(db, context);
+
+        var series = Assert.Single(context.Series);
+        Assert.Equal("Warhammer 40,000: Will of Iron", series.Name);
+    }
+
+    [Fact]
+    public void Migrate_EmbeddedFileNotReadable_FallsBackToCeCachedSeries()
+    {
+        // File genuinely unreachable (moved/deleted, or migration running without file access) -
+        // the reader returns null, same as EmbeddedComicInfoReader.TryRead would for a missing
+        // file. Today's pre-fix behavior is preserved exactly.
+        var db = ComicDatabase.CreateNew();
+        db.Books.Add(new ComicBook { Series = "Warhammer 40", Number = "5", FilePath = @"C:\comics\missing.cbz" });
+
+        var reader = (string _) => (ComicInfo?)null;
+
+        var options = BuildContextOptions(_dbPath);
+        using var context = new PaperbunkrDbContext(options);
+        context.Database.EnsureCreated();
+
+        new CeLibraryMigrator(reader).Migrate(db, context);
+
+        var series = Assert.Single(context.Series);
+        Assert.Equal("Warhammer 40", series.Name);
+    }
+
+    [Fact]
+    public void Migrate_NoFilePath_FallsBackToCeCachedSeries_NoThrow()
+    {
+        // CE allows unlinked entries with no file at all - must degrade cleanly, not throw.
+        var db = ComicDatabase.CreateNew();
+        db.Books.Add(new ComicBook { Series = "Warhammer 40", Number = "5" });
+
+        var reader = (string _) => (ComicInfo?)null;
+
+        var options = BuildContextOptions(_dbPath);
+        using var context = new PaperbunkrDbContext(options);
+        context.Database.EnsureCreated();
+
+        new CeLibraryMigrator(reader).Migrate(db, context);
+
+        var series = Assert.Single(context.Series);
+        Assert.Equal("Warhammer 40", series.Name);
+    }
+
+    [Fact]
+    public void Migrate_EmbeddedInfoAvailable_OverridesOtherFieldsToo_NotJustSeries()
+    {
+        // The precedence rule is per-field, not Series-only - MapStoryFields is applied a second
+        // time from the embedded info, overwriting whatever it has a value for.
+        var db = ComicDatabase.CreateNew();
+        db.Books.Add(new ComicBook
+        {
+            Series = "Warhammer 40",
+            Number = "5",
+            Writer = "CE Cached Writer",
+            FilePath = @"C:\comics\will-of-iron-05.cbz",
+        });
+
+        var reader = (string path) => path == @"C:\comics\will-of-iron-05.cbz"
+            ? new ComicInfo { Series = "Warhammer 40,000: Will of Iron", Number = "5", Title = "Revelations Part 1", Writer = "Embedded Writer" }
+            : null;
+
+        var options = BuildContextOptions(_dbPath);
+        using var context = new PaperbunkrDbContext(options);
+        context.Database.EnsureCreated();
+
+        new CeLibraryMigrator(reader).Migrate(db, context);
+
+        var issue = Assert.Single(context.Issues);
+        Assert.Equal("Revelations Part 1", issue.Title);
+        Assert.Equal("Embedded Writer", issue.Writer);
+    }
+
+    [Fact]
+    public void Migrate_EmbeddedInfoBlankField_FallsBackToCeCachedValue_ForThatFieldOnly()
+    {
+        // Per-field, not all-or-nothing: the embedded file has no Writer, so CE's cached Writer
+        // survives even though Series came from the embedded file.
+        var db = ComicDatabase.CreateNew();
+        db.Books.Add(new ComicBook
+        {
+            Series = "Warhammer 40",
+            Number = "5",
+            Writer = "CE Cached Writer",
+            FilePath = @"C:\comics\will-of-iron-05.cbz",
+        });
+
+        var reader = (string path) => path == @"C:\comics\will-of-iron-05.cbz"
+            ? new ComicInfo { Series = "Warhammer 40,000: Will of Iron", Number = "5" } // no Writer
+            : null;
+
+        var options = BuildContextOptions(_dbPath);
+        using var context = new PaperbunkrDbContext(options);
+        context.Database.EnsureCreated();
+
+        new CeLibraryMigrator(reader).Migrate(db, context);
+
+        var issue = Assert.Single(context.Issues);
+        Assert.Equal("CE Cached Writer", issue.Writer);
+    }
+
+    [Fact]
+    public void Preview_AndMigrate_AgreeOnSeriesCount_WhenEmbeddedDisagreesWithCache()
+    {
+        var db = ComicDatabase.CreateNew();
+        db.Books.Add(new ComicBook { Series = "Warhammer 40", Number = "5", FilePath = @"C:\comics\will-of-iron-05.cbz" });
+        db.Books.Add(new ComicBook { Series = "Warhammer 40", Number = "1", FilePath = @"C:\comics\fallen-01.cbz" });
+
+        var reader = (string path) => path switch
+        {
+            @"C:\comics\will-of-iron-05.cbz" => new ComicInfo { Series = "Warhammer 40,000: Will of Iron", Number = "5" },
+            @"C:\comics\fallen-01.cbz" => new ComicInfo { Series = "Warhammer 40,000: Fallen", Number = "1" },
+            _ => null,
+        };
+
+        var options = BuildContextOptions(_dbPath);
+        using var previewContext = new PaperbunkrDbContext(options);
+        previewContext.Database.EnsureCreated();
+        var preview = new CeLibraryMigrator(reader).Preview(db, previewContext);
+        Assert.Equal(2, preview.SeriesCount);
+
+        using var migrateContext = new PaperbunkrDbContext(options);
+        new CeLibraryMigrator(reader).Migrate(db, migrateContext);
+        Assert.Equal(2, migrateContext.Series.Count());
+    }
+
     [Fact]
     public void Preview_AndMigrate_AgreeOnGuessedContentType_ForMixedMangaValuesWithinASeries()
     {

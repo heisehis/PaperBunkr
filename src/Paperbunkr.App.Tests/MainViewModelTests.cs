@@ -519,6 +519,24 @@ public class MainViewModelTests : IDisposable
         Assert.False(vm.ShowBreadcrumb);
     }
 
+    /// <summary>Real on-screen feedback: a persistent breadcrumb bar in Reader fought the immersive,
+    /// full-page reading experience (and Reader's own existing "hidden by default, chrome reveals on
+    /// hover" convention for the thumbnail rail) in a way it doesn't on the metadata-browsing detail
+    /// screens - narrowed <see cref="MainViewModel.ShowBreadcrumb"/> to exclude the three reader
+    /// screens after shipping with all six drill-down screens included.</summary>
+    [Fact]
+    public void ShowBreadcrumb_IsFalse_InReader_EvenThoughItIsADrillDownScreen()
+    {
+        var (_, issueId) = SeedSeriesWithIssue("No Breadcrumb In Reader Series");
+        var vm = new MainViewModel();
+        vm.GoLibraryCommand.Execute(null);
+
+        vm.OpenDeepLink(new Paperbunkr.App.Services.NavigationCliTarget("issue", issueId));
+
+        Assert.True(vm.IsReader);
+        Assert.False(vm.ShowBreadcrumb);
+    }
+
     [Fact]
     public void OpenDeepLink_Series_NavigatesToDetail()
     {

@@ -176,7 +176,8 @@
                                 <fi:SymbolIcon Symbol="Warning" FontSize="14" Foreground="#E06060" />
                                 <TextBlock Text="{Binding Migration.ErrorMessage}" Foreground="#E06060" FontSize="12.5" />
                             </StackPanel>
-                            <Button Classes="primaryWide" Content="Scan" Command="{Binding Migration.ScanCommand}" HorizontalAlignment="Left" />
+                            <Button Classes="primaryWide" Content="Scan" Command="{Binding Migration.ScanCommand}"
+                                    HorizontalAlignment="Left" IsEnabled="{Binding !Migration.IsBusy}" />
                         </StackPanel>
 
                         <!-- Preview -->

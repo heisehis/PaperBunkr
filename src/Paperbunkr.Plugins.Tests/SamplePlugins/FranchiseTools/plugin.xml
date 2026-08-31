@@ -1,0 +1,8 @@
+<Plugin key="franchise-tools" name="Franchise Tools">
+  <Command hook="Startup" key="franchise-tools.startup" name="Franchise Tools Activated"
+           description="Logs that Franchise Tools is active for this session." script="startup.csx" />
+  <Command hook="Library" key="franchise-tools.tag-series-family" name="Tag Series Family"
+           description="Tags every issue across every series connected to the right-clicked book's franchise (relations + shared continuities)." confirmWrites="true" script="tag-series-family.csx" />
+  <Command hook="CreateBookList" key="franchise-tools.rated-not-checked" name="Rated but Not Checked"
+           description="Dynamic Smart List entry: books you've rated but haven't marked Checked yet." script="rated-not-checked.csx" />
+</Plugin>

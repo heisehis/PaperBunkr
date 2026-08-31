@@ -23,12 +23,13 @@ public sealed class PluginHostService
     public PluginEngine Engine { get; } = new();
 
     private MainViewModel? _main;
+    private IPluginEnvironment? _environment;
 
     public void Initialize(MainViewModel main, Window mainWindow)
     {
         _main = main;
 
-        var environment = new PaperbunkrPluginEnvironment
+        _environment = new PaperbunkrPluginEnvironment
         {
             MainWindow = new PaperbunkrPluginHostWindow(mainWindow),
             App = new PaperbunkrApplication(),
@@ -41,17 +42,44 @@ public sealed class PluginHostService
             ThemePlugin = new PaperbunkrThemePlugin(),
         };
 
+        DiscoverAndApplyOverrides();
+
+        InvokeAndReport(PluginHooks.Startup, env => new StartupHookGlobals { Environment = env });
+    }
+
+    /// <summary>
+    /// Re-discovers everything under <see cref="PluginPaths.RootDirectory"/> - called by the Plugin
+    /// screen after <see cref="PluginPackageService"/> installs/uninstalls a package. No restart is
+    /// needed (see <see cref="PluginPackageService"/>'s doc comment): this reuses the same
+    /// long-lived environment built in <see cref="Initialize"/> rather than constructing a new one,
+    /// so per-plugin settings/state on that environment (none currently, but the shape allows for
+    /// it) survive a live reload. A no-op before <see cref="Initialize"/> has run.
+    /// </summary>
+    public void RediscoverPlugins() => DiscoverAndApplyOverrides();
+
+    /// <summary>Test seam - sets the environment used by <see cref="RediscoverPlugins"/>/discovery without going through the full <see cref="Initialize"/> path (no real <c>MainViewModel</c>/<c>Window</c> needed) and runs an initial discovery immediately.</summary>
+    internal void InitializeForTests(IPluginEnvironment environment)
+    {
+        _environment = environment;
+        DiscoverAndApplyOverrides();
+    }
+
+    private void DiscoverAndApplyOverrides()
+    {
+        if (_environment is null)
+        {
+            return;
+        }
+
         try
         {
-            Engine.Discover(PluginPaths.RootDirectory, environment);
+            Engine.Discover(PluginPaths.RootDirectory, _environment);
             ApplyPersistedOverrides();
         }
         catch (Exception ex)
         {
             DiagnosticsService.LogMilestone($"Plugin discovery failed: {ex.Message}");
         }
-
-        InvokeAndReport(PluginHooks.Startup, env => new StartupHookGlobals { Environment = env });
     }
 
     public void Shutdown()

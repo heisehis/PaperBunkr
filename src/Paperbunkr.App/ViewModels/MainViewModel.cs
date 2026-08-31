@@ -57,7 +57,7 @@ public partial class MainViewModel : ViewModelBase
         Smart = new SmartScreenViewModel(GoDetailForSeries, GoBookDetailForBook);
         Reading = new ReadingScreenViewModel(new FilePickerService(), GoReaderForIssueInReadingList, OpenReadingListPropertiesOverlay);
         Events = new EventsScreenViewModel(GoDetailForSeries, GoReaderForIssue, GoReadingWithList, ShowToast);
-        Plugin = new PluginScreenViewModel();
+        Plugin = new PluginScreenViewModel(new FilePickerService());
         Migration = new MigrationOverlayViewModel(new FilePickerService(), OpenSeriesDetailFromReview);
         ReadingListProperties = new ReadingListPropertiesScreenViewModel(CloseReadingListPropertiesOverlay);
         CollectionProperties = new CollectionPropertiesScreenViewModel(CloseCollectionPropertiesOverlay);

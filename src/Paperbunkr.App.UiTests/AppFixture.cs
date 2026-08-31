@@ -50,14 +50,28 @@ public sealed class AppFixture : IDisposable
         Window = _app.GetMainWindow(_automation, TimeSpan.FromSeconds(20))
             ?? throw new InvalidOperationException("Paperbunkr main window did not appear within 20s.");
 
+        DismissOnboardingOverlayIfPresent();
         DismissMigrationOverlayIfPresent();
     }
 
     /// <summary>
-    /// Defensive only - the migration overlay auto-opens on a fresh (empty) database solely when a
-    /// real ComicRack CE install is also found at its default %AppData% path (App.axaml.cs), which
-    /// a throwaway test database never causes on its own. Kept as a safety net in case this ever
-    /// runs on a machine that genuinely has CE installed.
+    /// The onboarding overlay now auto-opens on *every* fresh (empty) database (App.axaml.cs) -
+    /// no longer gated on a detected ComicRack CE install - so this fixture's throwaway test
+    /// database triggers it on every single launch, unlike the CE-only migration overlay below.
+    /// Every existing UI test assumes it lands straight on the real app shell, so this has to run
+    /// unconditionally, not just defensively.
+    /// </summary>
+    private void DismissOnboardingOverlayIfPresent()
+    {
+        var closeButton = Window.FindFirstDescendant(cf => cf.ByAutomationId("OnboardingOverlayCloseButton"));
+        closeButton?.AsButton().Invoke();
+    }
+
+    /// <summary>
+    /// Defensive only - the migration overlay itself is only ever reached (post-onboarding) when a
+    /// real ComicRack CE install is found at its default %AppData% path (App.axaml.cs), which a
+    /// throwaway test database never causes on its own. Kept as a safety net in case this ever runs
+    /// on a machine that genuinely has CE installed.
     /// </summary>
     private void DismissMigrationOverlayIfPresent()
     {

@@ -2,6 +2,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:fi="using:FluentIcons.Avalonia"
              xmlns:vm="using:Paperbunkr.App.ViewModels"
+             xmlns:conv="using:Avalonia.Data.Converters"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d" d:DesignWidth="900" d:DesignHeight="760"
@@ -12,73 +13,121 @@
         Real plugin list (docs/superpowers/specs/2026-08-24-plugin-api-v2-design.md §6), replacing
         the permanent empty state from docs/superpowers/specs/2026-08-09-plugin-screen-cleanup-
         design.md now that a real engine exists. The empty state below is kept for the genuine
-        zero-plugins case - it's no longer the only state.
+        zero-plugins case - it's no longer the only state. The title/Install button/Packages panel
+        sit outside that empty-vs-populated split (Grid.Row="0" below) since installing a first
+        package is exactly what the empty state needs to lead to.
     -->
-    <Grid>
-        <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="6" MaxWidth="360"
+    <Grid RowDefinitions="Auto,*" Margin="24">
+        <StackPanel Grid.Row="0" Spacing="16" MaxWidth="720" HorizontalAlignment="Stretch" Margin="0,0,0,16">
+            <Grid ColumnDefinitions="*,Auto">
+                <TextBlock Grid.Column="0" Text="Plugins" FontSize="22" FontWeight="Bold"
+                           Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
+                <Button Grid.Column="1" Content="Install Package…" Command="{Binding InstallPackageCommand}"
+                        ToolTip.Tip="Installs a plugin package (.zip containing plugin.xml + scripts) - matches ComicRackCE's own Script Archive format. Takes effect immediately, no restart needed." />
+            </Grid>
+
+            <!--
+                CE's own "Packages" panel (lvPackages in PreferencesDialog.cs), listing what's
+                installed independent of whether any of its commands compiled cleanly - a package
+                with zero valid commands still shows up here so it can be removed.
+            -->
+            <StackPanel Spacing="8" IsVisible="{Binding HasPackages}">
+                <TextBlock Text="Packages" FontSize="13" FontWeight="Bold" Foreground="{DynamicResource PbAccentBrush}" />
+                <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,0,0,1" Margin="0,0,0,4" />
+
+                <ItemsControl ItemsSource="{Binding Packages}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Grid ColumnDefinitions="*,Auto,Auto" Margin="0,4,0,4"
+                                  ToolTip.Tip="{Binding Description}" ToolTip.ShowDelay="400">
+                                <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                    <TextBlock Text="{Binding Name}" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
+                                    <TextBlock Text="{Binding Version, StringFormat='v{0}'}" FontSize="11"
+                                               Foreground="{DynamicResource PbTextMutedBrush}"
+                                               IsVisible="{Binding Version, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
+                                </StackPanel>
+
+                                <TextBlock Grid.Column="1" Text="{Binding Author}" FontSize="12" Margin="0,0,12,0"
+                                           Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center"
+                                           IsVisible="{Binding Author, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
+
+                                <Button Grid.Column="2" Content="{Binding DeleteConfirm.Label}"
+                                        Command="{Binding DeleteConfirm.TriggerCommand}"
+                                        FontSize="11" Padding="8,3" />
+                            </Grid>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
+        </StackPanel>
+
+        <StackPanel Grid.Row="1" VerticalAlignment="Center" HorizontalAlignment="Center" Spacing="6" MaxWidth="360"
                     IsVisible="{Binding !HasPlugins}">
             <fi:SymbolIcon Symbol="PuzzlePiece" FontSize="40" Margin="0,0,0,10" HorizontalAlignment="Center" />
-            <TextBlock Text="Plugins" FontSize="22" FontWeight="Bold" Foreground="{DynamicResource PbTextBrush}"
-                       HorizontalAlignment="Center" />
             <TextBlock Text="No plugins installed yet." FontSize="13" Foreground="{DynamicResource PbTextMutedBrush}"
                        HorizontalAlignment="Center" TextAlignment="Center" />
-            <TextBlock Text="Drop a plugin folder into %AppData%\Paperbunkr\plugins to get started." FontSize="12"
+            <TextBlock Text="Install a package above, or drop a plugin folder into %AppData%\Paperbunkr\plugins." FontSize="12"
                        Foreground="{DynamicResource PbTextFaintBrush}" HorizontalAlignment="Center"
                        TextAlignment="Center" TextWrapping="Wrap" />
         </StackPanel>
 
-        <ScrollViewer IsVisible="{Binding HasPlugins}" Padding="24">
+        <ScrollViewer Grid.Row="1" IsVisible="{Binding HasPlugins}">
             <StackPanel Spacing="20" MaxWidth="720" HorizontalAlignment="Stretch">
-                <TextBlock Text="Plugins" FontSize="22" FontWeight="Bold" Foreground="{DynamicResource PbTextBrush}" />
+
+                <!--
+                    Grouped by hook/extension-point rather than by installed plugin, matching
+                    ComicRackCE's real Preferences → Scripts tab (lvScripts in
+                    _reference/ComicRackCE/ComicRack/Dialogs/PreferencesDialog.cs): a category header
+                    per hook, a Name/Package column pair per row, description as a hover tooltip
+                    rather than always-visible text.
+                -->
+                <Grid ColumnDefinitions="Auto,*,Auto" Margin="4,0,28,0">
+                    <TextBlock Grid.Column="1" Text="Name" FontSize="11" FontWeight="Bold"
+                               Foreground="{DynamicResource PbTextMutedBrush}" Margin="30,0,0,0" />
+                    <TextBlock Grid.Column="2" Text="Package" FontSize="11" FontWeight="Bold"
+                               Foreground="{DynamicResource PbTextMutedBrush}" Width="140" />
+                </Grid>
 
                 <ItemsControl ItemsSource="{Binding Groups}">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
-                            <Border Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}"
-                                    BorderThickness="1" CornerRadius="8" Padding="16" Margin="0,0,0,14">
-                                <StackPanel Spacing="10">
-                                    <TextBlock Text="{Binding PluginKey}" FontSize="15" FontWeight="Bold"
-                                               Foreground="{DynamicResource PbTextBrush}" />
+                            <StackPanel Spacing="6" Margin="0,0,0,14">
+                                <TextBlock Text="{Binding Header}" FontSize="13" FontWeight="Bold"
+                                           Foreground="{DynamicResource PbAccentBrush}" />
+                                <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,0,0,1" Margin="0,0,0,4" />
 
-                                    <ItemsControl ItemsSource="{Binding Commands}">
-                                        <ItemsControl.ItemTemplate>
-                                            <DataTemplate>
-                                                <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto" Margin="0,6,0,6">
-                                                    <CheckBox Grid.Column="0" IsChecked="{Binding IsEnabled}" VerticalAlignment="Top" />
+                                <ItemsControl ItemsSource="{Binding Commands}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Grid ColumnDefinitions="Auto,*,140,Auto,Auto" Margin="0,4,0,4"
+                                                  ToolTip.Tip="{Binding Description}" ToolTip.ShowDelay="400">
+                                                <CheckBox Grid.Column="0" IsChecked="{Binding IsEnabled}" VerticalAlignment="Top" />
 
-                                                    <StackPanel Grid.Column="1" Spacing="2" Margin="8,0,8,0">
-                                                        <TextBlock Text="{Binding Name}" FontSize="13" FontWeight="Medium"
-                                                                   Foreground="{DynamicResource PbTextBrush}" />
-                                                        <TextBlock Text="{Binding Description}" FontSize="12"
-                                                                   Foreground="{DynamicResource PbTextMutedBrush}"
-                                                                   TextWrapping="Wrap" IsVisible="{Binding HasDescription}" />
-                                                        <TextBlock Text="{Binding CompileError}" FontSize="12"
-                                                                   Foreground="#E06060"
-                                                                   TextWrapping="Wrap" IsVisible="{Binding IsBroken}" />
-                                                    </StackPanel>
+                                                <StackPanel Grid.Column="1" Spacing="2" Margin="8,0,8,0">
+                                                    <TextBlock Text="{Binding Name}" FontSize="13" FontWeight="Medium"
+                                                               Foreground="{DynamicResource PbTextBrush}" />
+                                                    <TextBlock Text="{Binding CompileError}" FontSize="12"
+                                                               Foreground="#E06060"
+                                                               TextWrapping="Wrap" IsVisible="{Binding IsBroken}" />
+                                                </StackPanel>
 
-                                                    <Border Grid.Column="2" Background="{DynamicResource PbBadgeBrush}"
-                                                            CornerRadius="4" Padding="6,2" VerticalAlignment="Top" Margin="0,0,8,0"
-                                                            ToolTip.Tip="{Binding HookGroupLabel}">
-                                                        <TextBlock Text="{Binding Hook}" FontSize="11"
-                                                                   Foreground="{DynamicResource PbBadgeTextBrush}" />
-                                                    </Border>
+                                                <TextBlock Grid.Column="2" Text="{Binding Package}" FontSize="12"
+                                                           Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Top" />
 
-                                                    <Button Grid.Column="3" Content="Run" FontSize="11" Padding="8,3"
-                                                            VerticalAlignment="Top" Margin="0,0,8,0"
-                                                            IsVisible="{Binding CanRunManually}"
-                                                            Command="{Binding RunCommand}"
-                                                            ToolTip.Tip="Runs this command now and shows its result as a toast - this hook needs no live selection/context, so it can be triggered on demand." />
+                                                <Button Grid.Column="3" Content="Run" FontSize="11" Padding="8,3"
+                                                        VerticalAlignment="Top" Margin="0,0,8,0"
+                                                        IsVisible="{Binding CanRunManually}"
+                                                        Command="{Binding RunCommand}"
+                                                        ToolTip.Tip="Runs this command now and shows its result as a toast - this hook needs no live selection/context, so it can be triggered on demand." />
 
-                                                    <fi:SymbolIcon Grid.Column="4" Symbol="Settings" FontSize="16"
-                                                            VerticalAlignment="Top" IsVisible="{Binding HasConfigure}"
-                                                            ToolTip.Tip="This command has its own configuration script." />
-                                                </Grid>
-                                            </DataTemplate>
-                                        </ItemsControl.ItemTemplate>
-                                    </ItemsControl>
-                                </StackPanel>
-                            </Border>
+                                                <fi:SymbolIcon Grid.Column="4" Symbol="Settings" FontSize="16"
+                                                        VerticalAlignment="Top" IsVisible="{Binding HasConfigure}"
+                                                        ToolTip.Tip="This command has its own configuration script." />
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>

@@ -104,7 +104,7 @@ public class PreferencesScreenViewModelTests : IDisposable
             keyBindingService,
             showToast ?? ((_, _) => { }),
             migration ?? new MigrationOverlayViewModel(filePicker ?? new NoOpFilePicker(), _ => { }),
-            new PluginScreenViewModel(),
+            new PluginScreenViewModel(filePicker ?? new NoOpFilePicker()),
             openMigration ?? (() => { }),
             showProgressToast ?? (_ => { }),
             closeProgressToast ?? (_ => { }),

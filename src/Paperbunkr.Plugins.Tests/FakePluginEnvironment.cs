@@ -11,8 +11,8 @@ internal sealed class FakePluginEnvironment : IPluginEnvironment
     public IOpenBooksManager OpenBooks { get; } = new FakeOpenBooksManager();
     public IBrowser Browser { get; } = new FakeBrowser();
     public IComicDisplay ComicDisplay { get; } = new FakeComicDisplay();
-    public IMetadataGraph Metadata { get; } = new FakeMetadataGraph();
-    public IRulesEngine Rules { get; } = new FakeRulesEngine();
+    public IMetadataGraph Metadata { get; }
+    public IRulesEngine Rules { get; }
     public IMetadataWriter Writer { get; } = new FakeMetadataWriter();
     public IThemePlugin ThemePlugin { get; } = new FakeThemePlugin();
     public string CommandPath { get; set; } = string.Empty;
@@ -21,9 +21,11 @@ internal sealed class FakePluginEnvironment : IPluginEnvironment
 
     private readonly Dictionary<string, string> _settings = new();
 
-    public FakePluginEnvironment(IApplication? app = null)
+    public FakePluginEnvironment(IApplication? app = null, IMetadataGraph? metadata = null, IRulesEngine? rules = null)
     {
         App = app ?? new FakeApplication();
+        Metadata = metadata ?? new FakeMetadataGraph();
+        Rules = rules ?? new FakeRulesEngine();
     }
 
     public string? GetSetting(string key) => _settings.TryGetValue(key, out var v) ? v : null;

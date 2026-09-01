@@ -82,15 +82,25 @@ jobs:
       - name: Install NetSparkle appcast generator
         run: dotnet tool install --global NetSparkleUpdater.Tools.AppCastGenerator
 
-      # Signs with the Ed25519 private key via the SPARKLE_PRIVATE_KEY env var (netsparkle-generate-
-      # appcast's own documented mechanism - no key file written to disk, nothing to clean up).
-      # -u points at this tag's own GitHub Release download URL so the generated <enclosure> resolves
-      # correctly once the release below actually exists. --file-version pins the version explicitly
-      # rather than relying on the tool's own filename-based detection, since installer/Output/ only
-      # ever holds this run's one freshly-built .exe on a fresh runner.
+      # Signs with the Ed25519 keypair via SPARKLE_PRIVATE_KEY/SPARKLE_PUBLIC_KEY env vars
+      # (netsparkle-generate-appcast's own documented mechanism - no key file written to disk,
+      # nothing to clean up). Real bug found and fixed here: the generator's KeysExist() gate
+      # requires BOTH env vars to resolve - SPARKLE_PRIVATE_KEY alone silently skips signing
+      # ("Skipped generating signature. Generate keys with --generate-keys" in the log, no error,
+      # no failed step) and ships an unsigned appcast.xml that UpdateService.cs's
+      # Ed25519Checker(SecurityMode.Strict, ...) will then reject client-side. SPARKLE_PUBLIC_KEY
+      # isn't a secret - it's the exact same non-secret string baked into UpdateService.cs's
+      # PublicKey constant, so hardcoding it here (rather than a second GitHub secret) is the
+      # single source of truth staying in the app; keep the two in sync if the keypair ever
+      # rotates. -u points at this tag's own GitHub Release download URL so the generated
+      # <enclosure> resolves correctly once the release below actually exists. --file-version pins
+      # the version explicitly rather than relying on the tool's own filename-based detection,
+      # since installer/Output/ only ever holds this run's one freshly-built .exe on a fresh
+      # runner.
       - name: Generate signed appcast
         env:
           SPARKLE_PRIVATE_KEY: ${{ secrets.NETSPARKLE_PRIVATE_KEY }}
+          SPARKLE_PUBLIC_KEY: "e/I/0elRAtWpiqhrkwEZTr0afc7TMwb3Z+cBHeTPc3k="
         run: >
           netsparkle-generate-appcast
           -b installer/Output

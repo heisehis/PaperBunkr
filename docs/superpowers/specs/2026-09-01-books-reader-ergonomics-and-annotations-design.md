@@ -141,6 +141,16 @@ section, per the existing Novels design spec.
 - Entry points: a button on `BookDetailScreenViewModel` and a menu item in `BookReaderScreenViewModel`,
   both opening a save-file dialog with a format dropdown (Markdown default), then invoking the service.
 
+## Cross-Spec Dependency
+
+`docs/superpowers/specs/2026-09-01-books-reader-screen-reader-accessibility-design.md` (third deferred
+follow-up) depends on `ParagraphView` (Component 2 above) exposing its text to screen readers via a
+custom `ParagraphViewAutomationPeer` — a plain `TextBlock` gets this for free, a custom `Control` does
+not. That peer should be built and verified alongside `ParagraphView` itself in this spec's
+implementation plan, not deferred to the accessibility spec's own plan as separate follow-on work —
+shipping `ParagraphView` without it would make every book unreadable via screen reader, a regression
+this spec would otherwise introduce silently.
+
 ## Risks / Open Questions
 
 - **`TextLayout` word-spacing mechanism**: Avalonia's `TextLayout` doesn't expose a direct

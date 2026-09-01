@@ -709,6 +709,56 @@ feel on each rolled-out grid including the Smart Lists virtualized case specific
 column-picker menus) still pending — no unattended GUI automation available in this environment,
 same standing caveat as every other input-focused spec in this project.
 
+### App-wide & library keyboard shortcuts, sidebar arrow-key movement (shipped 2026-08-31)
+Design spec: `2026-08-31-app-wide-and-library-keyboard-shortcuts-design.md` (no separate plan doc —
+user asked to implement directly). Started as a review of an external draft spec the user dropped
+into the session proposing to (re)build keyboard control from scratch; most of it turned out already
+shipped (reader shortcuts + `KeyboardCommandRegistry` + remapping UI, card-grid arrow nav). What
+survived review, plus sidebar movement added after the user flagged it as something they specifically
+wanted from the draft:
+
+- **App-wide** (`MainWindow.axaml`'s `Window.KeyBindings`, same mechanism as the existing Escape/Back
+  entries, not `KeyboardCommandRegistry` which is deliberately Reader-scoped): `Ctrl+,` → Preferences
+  (`GoPreferencesCommand`, already existed), `Ctrl+Tab`/`Ctrl+Shift+Tab` → cycle the 7 `RailOrder`
+  screens via two new `MainViewModel` commands that dispatch to each screen's own existing `Go*`
+  method (not a raw `CurrentScreen` set) so cycling keeps the same load/history-reset/unsaved-editor
+  guard a rail click gets.
+- **Library grid** (`LibraryScreen.axaml`'s `UserControl.KeyBindings`, same mechanism as its existing
+  `Ctrl+I`): `Ctrl+A`/`Delete` via two new granularity-dispatching `LibraryScreenViewModel` commands
+  (`SelectAllVisibleCommand`/`DeleteCurrentSelectionCommand`) that just point at the existing
+  select-all/delete commands the context menu and action bar already use — no new selection or
+  deletion logic. `/` focuses the search box and Esc-with-text now clears the query and returns focus
+  to the grid (previously Esc only closed the suggestions popup) — both via a new
+  `LibraryToolbar.FocusGridRequested` event, since the toolbar has no reference to its sibling grid.
+- **Sidebar arrow-key movement** — genuinely new, not covered by the comprehensive-keyboard-
+  operability spec above (which explicitly excluded the sidebar, reasoning Tab-order alone was
+  enough). One `KeyDown` handler on `MainWindow`'s contextual-sidebar `Border`, reusing
+  `GridKeyboardNavigation.Navigate`'s existing pure core unchanged (a single-column list's Up/Down
+  row-search degenerates to plain previous/next) with a new live wrapper collecting
+  `Button.sideItemButton` descendants, since these are hand-authored buttons in a `StackPanel`, not
+  an `ItemsControl` `TryHandleArrowKey` can attach to.
+
+Real finding during implementation, not anticipated by the design doc: **`GridKeyboardNavigation.Navigate`'s
+Left/Right case is plain previous/next-in-list index math, not spatial column math** — for a
+single-column sidebar that's identical to what Up/Down already do, which would make Left/Right
+silently move focus too if wired the same way as the grids. Deliberately left unwired for the
+sidebar (only Up/Down/Home/End), found by reading `Navigate`'s actual implementation rather than
+assuming symmetry with the card-grid case.
+
+Explicitly out of scope, flagged rather than silently dropped: command palette, type-ahead-by-letter,
+`Shift+`arrow range-select, and a `Ctrl+Q` quit binding (no evidence anything needs it beyond the OS
+default) — each is real interaction/design work, not plumbing.
+
+Tests: 10 new (`MainViewModelTests` cycle-forward/back incl. wraparound and drill-down no-op;
+`LibraryScreenViewModelTests` Ctrl+A/Delete dispatch-by-granularity incl. empty-selection no-op) —
+192/192 green in the filtered run. The sidebar `KeyDown` handler and the `/`/Esc code-behind wiring
+have no unit tests, matching this codebase's existing convention that View-code-behind `KeyDown`
+handlers (`OnCardKeyDown`, `OnLibraryScreenKeyDown`, etc.) aren't unit-tested elsewhere either. App
+smoke-launched via `PowerShell Start-Process`, confirmed running 6+ seconds later. On-screen
+keyboard-feel verification (all six new gestures, sidebar Up/Down across all four screens including
+Library's grouped-with-headings layout and the inline-rename-shouldn't-steal-focus case) still
+pending — same standing caveat as the spec above.
+
 ### Plugin API v3 — metadata/rules/writer for Data-Manager plugins (shipped 2026-08-29)
 Design spec: `2026-08-28-plugin-api-v3-data-manager-design.md`. Extends the v2 host (no new hooks).
 (§2) `IMetadataGraph` — 6th `IPluginEnvironment` sub-interface, read facade over the Phase 3-4g

@@ -31,6 +31,9 @@
     "description": "A free, local-first desktop comic and manga library and reader for Windows. Reads CBZ, CBR, PDF, and EPUB with no cloud dependency.",
     "url": "https://heisehis.github.io/PaperBunkr/",
     "image": "https://heisehis.github.io/PaperBunkr/assets/paperbunkr-logo.png",
+    "softwareVersion": "0.2.0-beta",
+    "releaseNotes": "https://github.com/heisehis/PaperBunkr/releases/latest",
+    "downloadUrl": "https://github.com/heisehis/PaperBunkr/releases/latest",
     "offers": {
       "@type": "Offer",
       "price": "0",
@@ -154,7 +157,7 @@
         A free, local-first desktop comic &amp; manga library and reader for Windows.
         CBZ, CBR, PDF, EPUB — no cloud, no account, your library stays on your machine.
       </p>
-      <span class="badge">Early alpha — expect rough edges</span>
+      <span class="badge">Beta — solo project, expect rough edges</span>
       <div class="cta">
         <a class="primary" href="https://github.com/heisehis/PaperBunkr/releases/latest">Download latest release</a>
         <a class="secondary" href="https://github.com/heisehis/PaperBunkr">View on GitHub</a>
@@ -166,9 +169,10 @@
       <ul>
         <li><strong>Comic &amp; manga reading</strong> — real page rendering for <code>.cbz</code> / <code>.cbr</code> / <code>.pdf</code>, fit modes, zoom, rotation, double-page spread, continuous/webtoon scroll, and RTL manga reading direction.</li>
         <li><strong>Books</strong> — a separate section for EPUB/PDF novels.</li>
-        <li><strong>Library management</strong> — series/issue browsing, sort/group, browse history, Smart Lists, Reading Lists, and migration from an existing ComicRack CE library.</li>
+        <li><strong>Library management</strong> — series/issue browsing, Collections, sort/group, browse history, Smart Lists, Reading Lists, and migration from an existing ComicRack CE library.</li>
         <li><strong>Home dashboard</strong> — continue reading and recommendation modules driven by a relationship-aware recommendation engine.</li>
         <li><strong>Rich metadata</strong> — series relations, continuity groupings, story events, and a live AniList adapter.</li>
+        <li><strong>Plugins</strong> — an installable plugin ecosystem with its own package manager.</li>
       </ul>
     </section>
 
@@ -177,15 +181,16 @@
       <p>
         Grab the installer from the
         <a href="https://github.com/heisehis/PaperBunkr/releases/latest">latest release</a>.
-        It's fully self-contained — bundles its own .NET 8 runtime, nothing else to install.
-        Windows only for now. Full docs and build-from-source instructions are in the
+        It's fully self-contained — bundles its own .NET runtime, nothing else to install.
+        Windows only for now, and it checks for new releases on startup so you stay up to date.
+        Full docs and build-from-source instructions are in the
         <a href="https://github.com/heisehis/PaperBunkr#readme">project README</a>.
       </p>
     </section>
 
     <footer>
       <p>
-        Built on .NET 8 and Avalonia UI. No license has been chosen yet — see the
+        Built on .NET 10 and Avalonia UI. No license has been chosen yet — see the
         <a href="https://github.com/heisehis/PaperBunkr">repository</a> for current terms.
         Feedback and bug reports welcome via
         <a href="https://github.com/heisehis/PaperBunkr/issues">GitHub Issues</a>.

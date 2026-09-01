@@ -19,6 +19,11 @@
          (BulkEditSelection -> OpenIssueEditor returns early on an empty list). -->
     <UserControl.KeyBindings>
         <KeyBinding Gesture="Ctrl+I" Command="{Binding BulkEditSelectionCommand}" />
+        <!-- docs/superpowers/specs/2026-08-31-app-wide-and-library-keyboard-shortcuts-design.md -
+             Select All / Delete, dispatched by granularity inside the ViewModel commands themselves
+             so this stays a plain gesture-to-command binding like Ctrl+I above. -->
+        <KeyBinding Gesture="Ctrl+A" Command="{Binding SelectAllVisibleCommand}" />
+        <KeyBinding Gesture="Delete" Command="{Binding DeleteCurrentSelectionCommand}" />
     </UserControl.KeyBindings>
 
     <UserControl.Styles>
@@ -618,7 +623,7 @@
     <Grid RowDefinitions="Auto,*">
 
         <!-- ============ Toolbar (extracted to Views/LibraryToolbar.axaml, 4b §1) ============ -->
-        <views:LibraryToolbar Grid.Row="0" />
+        <views:LibraryToolbar x:Name="Toolbar" Grid.Row="0" />
 
         <!-- ============ Poster grid (UI rework Phase 4a) - one grid replacing Compact/
              Comfortable/Cover-only. Same 4-way inner split (Issue/Series x grouped/ungrouped);

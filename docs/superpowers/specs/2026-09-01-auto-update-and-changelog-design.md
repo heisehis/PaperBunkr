@@ -2,6 +2,41 @@
 
 *Date: 2026-09-01.*
 
+## Revision (2026-09-01, same day): Velopack → NetSparkle
+
+The rest of this doc was written and largely implemented against **Velopack** (see the "Full
+silent auto-update" decision below). It was reverted mid-implementation after the user hit a real
+`Velopack.Exceptions.NotInstalledException` crash, then surfaced a YouTube video ("I Tried VeloPack
+Installer and Regret It") documenting rough installer UX. That prompted an actual library survey
+(checked via GitHub API: stars/last-push/open-issues, not just search snippets) that should have
+happened before Velopack was ever proposed - **NetSparkleUpdater.SparkleUpdater** came out ahead for
+this project specifically because it's installer-agnostic: it downloads and runs whatever installer
+the appcast points at, rather than replacing installation entirely the way Velopack does.
+
+**What changed from the rest of this doc:**
+- **Installer stays Inno Setup** - `installer/Installer.iss`/`BuildInstaller.ps1` are NOT retired.
+  Item 6 in Scope and the entire "Installer retirement & migration" section below no longer apply.
+- **No Velopack, no `vpk`.** `UpdateService` wraps `NetSparkleUpdater.SparkleUpdater` +
+  `Ed25519Checker` instead of `UpdateManager` + `GithubSource`. No `VelopackApp.Build().Run()`
+  bootstrap in `Program.cs` - NetSparkle needs none.
+- **No pre-built Avalonia UI.** `NetSparkleUpdater.UI.Avalonia` 3.1.0 (stable) targets Avalonia
+  11.3.9 against this project's 12.1.1 (confirmed via its own nuspec) - a real compatibility risk,
+  not a style preference. The only Avalonia-12-compatible build is a `4.0.0` prerelease. Decided to
+  skip the package entirely and keep the hand-rolled `UpdateAvailableOverlay`/`UpdateReadyToastView`
+  UI originally built for Velopack, just rewired to NetSparkle's `AppCastItem`/event-based API.
+- **CI publishes an `appcast.xml`**, not a `vpk`-packed release. `netsparkle-generate-appcast`
+  generates and Ed25519-signs it (private key via the `NETSPARKLE_PRIVATE_KEY` GitHub secret, public
+  key baked into `UpdateService.cs`), pointed at the tag's own GitHub Release download URL. CI also
+  explicitly installs Inno Setup via Chocolatey - `windows-latest` stopped shipping it once the
+  underlying image moved past Windows Server 2022 (`actions/runner-images#11644`).
+- **What stayed the same:** the ask-before-download UX, `CHANGELOG.md` as the changelog source of
+  truth, the Preferences → About section, single-stream `-beta` versioning, and the CI tag-trigger/
+  version-derivation/changelog-extraction logic (those steps don't care which update engine follows).
+
+Everything below this point describes the original Velopack-based design and is kept for the
+decision trail, not as current instructions - where it conflicts with this revision note, this note
+wins.
+
 ## Problem
 
 PaperBunkr has no release pipeline and no update mechanism. Distribution today is a manually-run

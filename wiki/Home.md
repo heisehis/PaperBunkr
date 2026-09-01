@@ -4,7 +4,8 @@ PaperBunkr is a free, local-first desktop library and reader for comics and mang
 ground-up rewrite of ComicRack built on .NET and Avalonia, currently packaged for Windows.
 Your library and settings never leave your machine: no cloud, no account.
 
-> **Status: early alpha.** Expect rough edges, and keep backups of anything you point it at.
+> **Status: beta.** This is a solo project — expect rough edges here and there, and keep backups
+> of anything you point it at.
 
 ## New here? Start with these
 
@@ -35,5 +36,5 @@ Your library and settings never leave your machine: no cloud, no account.
 
 ---
 
-*This wiki documents the current alpha. Screens and wording change often; if something
+*This wiki documents the current beta. Screens and wording change often; if something
 doesn't match, check the [latest release notes](https://github.com/heisehis/PaperBunkr/releases).*

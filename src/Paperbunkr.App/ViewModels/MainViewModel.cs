@@ -1,11 +1,15 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Paperbunkr.App.ContextMenus;
 using Paperbunkr.App.Models;
 using Paperbunkr.App.Services;
+using NetSparkleUpdater;
+using NetSparkleUpdater.Enums;
 using Paperbunkr.Data.Entities;
 
 namespace Paperbunkr.App.ViewModels;
@@ -34,6 +38,9 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
     /// to avoid a naming collision.</summary>
     private readonly NavigationHistoryService _navigationHistory = new();
 
+    /// <summary>Auto-update (docs/superpowers/specs/2026-09-01-auto-update-and-changelog-design.md) - one instance, shared between the startup check and Preferences' own manual "Check for Updates" button.</summary>
+    private readonly UpdateService _updateService = new();
+
     /// <summary>
     /// Rail position of each lateral top-level screen (docs/superpowers/specs/2026-08-24-
     /// navigation-shell-motion-system-design.md) - drives <see cref="IsTransitionReversed"/>.
@@ -50,6 +57,11 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         ["events"] = 5,
         ["preferences"] = 6,
     };
+
+    /// <summary><see cref="RailOrder"/>'s keys sorted by their index, for <see cref="CycleScreen"/> -
+    /// computed once rather than re-sorting on every Ctrl+Tab press (docs/superpowers/specs/
+    /// 2026-08-31-app-wide-and-library-keyboard-shortcuts-design.md).</summary>
+    private static readonly string[] RailOrderKeys = RailOrder.OrderBy(kvp => kvp.Value).Select(kvp => kvp.Key).ToArray();
 
     public MainViewModel()
     {
@@ -79,6 +91,9 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         // are the same callbacks Preferences already reuses for the identical folder-add/migration
         // actions, CloseWelcomeOverlay is this class's own close-and-persist method (defined below).
         Welcome = new WelcomeOverlayViewModel(new FilePickerService(), () => LiveFolderWatch.Reload(), OpenMigrationOverlay, CloseWelcomeOverlay);
+        // Auto-update (docs/superpowers/specs/2026-09-01-auto-update-and-changelog-design.md) - same
+        // small-overlay-VM shape as Welcome above.
+        Update = new UpdateAvailableOverlayViewModel(DownloadUpdateAsync, CloseUpdateAvailableOverlay);
         WelcomeTour = new WelcomeTourOverlayViewModel(
             GoHomeCommand, GoLibraryCommand, GoBooksCommand, GoSmartCommand, GoReadingCommand, GoEventsCommand, GoPreferencesCommand,
             CloseWelcomeTourOverlay);
@@ -112,7 +127,8 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
             ShowProgressToast,
             CloseProgressToast,
             LiveFolderWatch.Reload,
-            OpenDesignShowcaseOverlay);
+            OpenDesignShowcaseOverlay,
+            _updateService);
 
         // Real bug, found via manual testing: Reader.CanvasBackgroundBrush/PageMarginMultiplier
         // (docs/superpowers/specs/2026-08-10-reader-polish-continuous-scroll-chrome-overlays-design.md
@@ -169,6 +185,16 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
 
     private void CloseProgressToast(ToastProgressViewModel toast) => ProgressToastCloseRequested?.Invoke(toast);
 
+    /// <summary>
+    /// "Update ready - restart to apply" toast plumbing, same event-pair pattern as
+    /// <see cref="ProgressToastRequested"/>/<see cref="ProgressToastCloseRequested"/> above but a
+    /// distinct type - <see cref="UpdateReadyToastViewModel"/> carries actions, not progress
+    /// (docs/superpowers/specs/2026-09-01-auto-update-and-changelog-design.md).
+    /// </summary>
+    public event Action<UpdateReadyToastViewModel>? UpdateReadyToastRequested;
+
+    public event Action<UpdateReadyToastViewModel>? UpdateReadyToastCloseRequested;
+
     public HomeScreenViewModel Home { get; }
     public LibraryScreenViewModel Library { get; }
     public BooksScreenViewModel Books { get; }
@@ -192,6 +218,7 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
     public PreferencesScreenViewModel Preferences { get; }
     public MigrationOverlayViewModel Migration { get; }
     public WelcomeOverlayViewModel Welcome { get; }
+    public UpdateAvailableOverlayViewModel Update { get; }
     public WelcomeTourOverlayViewModel WelcomeTour { get; }
     public ReadingListPropertiesScreenViewModel ReadingListProperties { get; }
     public CollectionPropertiesScreenViewModel CollectionProperties { get; }
@@ -207,6 +234,9 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
 
     [ObservableProperty]
     private bool _isWelcomeOverlayOpen;
+
+    [ObservableProperty]
+    private bool _isUpdateAvailableOverlayOpen;
 
     [ObservableProperty]
     private bool _isTourOfferOpen;
@@ -469,6 +499,45 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         CurrentScreen = "preferences";
         ResetHistoryRoot("preferences");
     });
+
+    /// <summary>
+    /// <c>Ctrl+Tab</c>/<c>Ctrl+Shift+Tab</c> (docs/superpowers/specs/2026-08-31-app-wide-and-library-
+    /// keyboard-shortcuts-design.md), bound in <c>MainWindow.axaml</c>'s <c>Window.KeyBindings</c>
+    /// alongside the existing Escape/Back entries. Dispatches to the same per-screen <c>Go*</c>
+    /// method each rail button already calls (not a raw <see cref="CurrentScreen"/> set) so cycling
+    /// gets the same load/history-reset/unsaved-editor-guard behavior a rail click gets - deliberately
+    /// not simplified to "just set CurrentScreen" even though that's cheaper to write.
+    /// </summary>
+    [RelayCommand]
+    private void CycleScreenForward() => CycleScreen(1);
+
+    [RelayCommand]
+    private void CycleScreenBack() => CycleScreen(-1);
+
+    private void CycleScreen(int direction)
+    {
+        if (!RailOrder.TryGetValue(CurrentScreen, out int currentIndex))
+        {
+            // A drill-down screen (Reader/Detail/etc.) is active, not one of the 7 lateral rail
+            // screens - cycling "top-level views" doesn't mean anything from here, so no-op rather
+            // than guessing which lateral screen to jump to.
+            return;
+        }
+
+        int count = RailOrderKeys.Length;
+        int nextIndex = ((currentIndex + direction) % count + count) % count;
+
+        switch (RailOrderKeys[nextIndex])
+        {
+            case "home": GoHome(); break;
+            case "library": GoLibrary(); break;
+            case "books": GoBooks(); break;
+            case "smart": GoSmart(); break;
+            case "reading": GoReading(); break;
+            case "events": GoEvents(); break;
+            case "preferences": GoPreferences(); break;
+        }
+    }
 
     /// <summary>Library's empty-state "Scan folders" action (docs/superpowers/specs/2026-08-27-
     /// library-browsing-4b-toolbar-rework-design.md §9) - opens Preferences straight to the
@@ -1199,6 +1268,94 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         settings.LastScreenKey = CurrentScreen;
         settings.LastScreenEntityId = entityId;
         context.SaveChanges();
+    }
+
+    /// <summary>
+    /// Startup update check (docs/superpowers/specs/2026-09-01-auto-update-and-changelog-design.md) -
+    /// called once from <c>App.axaml.cs</c> after the main window is shown, guarded there against
+    /// running the same launch the welcome overlay opens (avoid stacking two first-look modals).
+    /// Ask-before-download, matching CE's own confirm-first flow
+    /// (_reference/ComicRackCE/ComicRack/MainForm.cs:4510-4522) - this only ever opens the prompt,
+    /// never downloads anything itself. No install-state gate (unlike the earlier Velopack version) -
+    /// NetSparkle's appcast check works regardless of how the app was launched; wrapped in try/catch
+    /// since a startup check silently failing on a network hiccup should never surface an error to
+    /// the user, just skip quietly (same instinct as CE's own try/catch in GithubAPI.GetResponse).
+    /// </summary>
+    public async Task CheckForUpdatesOnStartupAsync()
+    {
+        bool shouldCheck;
+        using (var context = PaperbunkrDb.CreateContext())
+        {
+            shouldCheck = context.GetOrCreateAppSettings().CheckForUpdatesOnStartup;
+        }
+
+        if (!shouldCheck)
+        {
+            return;
+        }
+
+        UpdateInfo info;
+        try
+        {
+            info = await _updateService.CheckForUpdatesAsync();
+        }
+        catch (Exception)
+        {
+            return;
+        }
+
+        if (info.Status != UpdateStatus.UpdateAvailable || info.Updates.Count == 0)
+        {
+            return;
+        }
+
+        Update.Show(info.Updates[0], LoadNewestChangelogBody());
+        IsUpdateAvailableOverlayOpen = true;
+    }
+
+    private static string? LoadNewestChangelogBody()
+    {
+        string path = Path.Combine(AppContext.BaseDirectory, "CHANGELOG.md");
+        if (!File.Exists(path))
+        {
+            return null;
+        }
+
+        var entries = ChangelogParser.Parse(File.ReadAllText(path));
+        return entries.Count > 0 ? entries[0].Body : null;
+    }
+
+    private void CloseUpdateAvailableOverlay() => IsUpdateAvailableOverlayOpen = false;
+
+    /// <summary>
+    /// Download+apply flow, started from <see cref="Update"/>'s Download button. Reuses
+    /// <see cref="ToastProgressViewModel"/> for the download itself (its Done/Total fit a 0-100
+    /// percent callback cleanly - a legitimate reuse, unlike the ready-state toast below, which needs
+    /// action buttons the progress toast was never shaped for). On completion, fires the
+    /// <see cref="UpdateReadyToastRequested"/> toast; <c>ApplyUpdatesAndRestart</c> only ever runs
+    /// from that toast's own explicit Restart-now action - never automatically here.
+    /// </summary>
+    private async Task DownloadUpdateAsync(AppCastItem item)
+    {
+        var progressToast = new ToastProgressViewModel("Downloading update") { Total = 100 };
+        ShowProgressToast(progressToast);
+
+        string downloadPath = await _updateService.DownloadUpdatesAsync(item, pct => progressToast.Done = pct);
+
+        CloseProgressToast(progressToast);
+
+        UpdateReadyToastViewModel? readyToast = null;
+        readyToast = new UpdateReadyToastViewModel(
+            item,
+            downloadPath,
+            _updateService,
+            onClose: () => UpdateReadyToastCloseRequested?.Invoke(readyToast!),
+            onWhatsNew: () =>
+            {
+                GoPreferencesCommand.Execute(null);
+                Preferences.GoAboutCommand.Execute(null);
+            });
+        UpdateReadyToastRequested?.Invoke(readyToast);
     }
 
     /// <summary>Where <see cref="NavigateBack"/>/<see cref="NavigateToBreadcrumbIndex"/> land when the

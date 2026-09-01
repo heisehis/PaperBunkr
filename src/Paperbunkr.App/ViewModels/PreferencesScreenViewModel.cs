@@ -4,10 +4,12 @@ using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.EntityFrameworkCore;
+using NetSparkleUpdater.Enums;
 using Paperbunkr.App.Models;
 using Paperbunkr.App.Services;
 using Paperbunkr.Data;
@@ -37,6 +39,7 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     private readonly FileAssociationService _fileAssociationService;
     private readonly BackupService _backupService;
     private readonly KeyBindingService _keyBindingService;
+    private readonly UpdateService _updateService;
     private readonly Action<string, string> _showToast;
     private readonly Action _openMigration;
     private readonly Action _openDesignShowcase;
@@ -67,8 +70,9 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         Action<ToastProgressViewModel> showProgressToast,
         Action<ToastProgressViewModel> closeProgressToast,
         Action reloadFolderWatch,
-        Action openDesignShowcase)
-        : this(skinService, filePicker, libraryScanner, fileAssociationService, backupService, keyBindingService, showToast, migration, plugin, openMigration, showProgressToast, closeProgressToast, reloadFolderWatch, openDesignShowcase, PaperbunkrDb.CreateContext)
+        Action openDesignShowcase,
+        UpdateService updateService)
+        : this(skinService, filePicker, libraryScanner, fileAssociationService, backupService, keyBindingService, showToast, migration, plugin, openMigration, showProgressToast, closeProgressToast, reloadFolderWatch, openDesignShowcase, updateService, PaperbunkrDb.CreateContext)
     {
     }
 
@@ -88,6 +92,7 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         Action<ToastProgressViewModel> closeProgressToast,
         Action reloadFolderWatch,
         Action openDesignShowcase,
+        UpdateService updateService,
         Func<PaperbunkrDbContext> contextFactory)
     {
         _openDesignShowcase = openDesignShowcase;
@@ -97,6 +102,7 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         _fileAssociationService = fileAssociationService;
         _backupService = backupService;
         _keyBindingService = keyBindingService;
+        _updateService = updateService;
         _showToast = showToast;
         Migration = migration;
         Plugin = plugin;
@@ -115,6 +121,7 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         NavigationKeyBindings = new ObservableCollection<KeyBindingRowViewModel>();
         ZoomFitKeyBindings = new ObservableCollection<KeyBindingRowViewModel>();
         DisplayKeyBindings = new ObservableCollection<KeyBindingRowViewModel>();
+        ChangelogEntries = new ObservableCollection<ChangelogEntry>();
     }
 
     private static Issue SampleIssue() => new()
@@ -144,6 +151,39 @@ public partial class PreferencesScreenViewModel : ViewModelBase
 
     /// <summary>docs/superpowers/specs/2026-08-27-hardware-accelerated-rendering-design.md §10.</summary>
     public static readonly RenderBackend[] RenderBackendOptions = Enum.GetValues<RenderBackend>();
+
+    /// <summary>docs/superpowers/specs/2026-09-01-auto-update-and-changelog-design.md - newest first, parsed from the bundled CHANGELOG.md.</summary>
+    public ObservableCollection<ChangelogEntry> ChangelogEntries { get; }
+
+    /// <summary>Assembly version, formatted for display on the About section.</summary>
+    public string CurrentVersion => Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "unknown";
+
+    [ObservableProperty]
+    private string? _updateCheckResultText;
+
+    /// <summary>
+    /// Manual re-check from the About section - unlike the startup check, this always sets
+    /// <see cref="UpdateCheckResultText"/> (hit or "up to date"), matching CE's own alwaysCheck
+    /// branch (_reference/ComicRackCE/ComicRack/MainForm.cs:4522-4526). No install-state gate here
+    /// (unlike the earlier Velopack version) - NetSparkle's appcast check works regardless of how the
+    /// app was launched, so a network/appcast failure is the only real failure mode to guard.
+    /// </summary>
+    [RelayCommand]
+    private async Task CheckForUpdatesAsync()
+    {
+        UpdateCheckResultText = "Checking...";
+        try
+        {
+            var info = await _updateService.CheckForUpdatesAsync();
+            UpdateCheckResultText = info.Status == UpdateStatus.UpdateAvailable
+                ? $"Update available: v{info.Updates[0].Version}"
+                : "You're up to date.";
+        }
+        catch (Exception ex)
+        {
+            UpdateCheckResultText = $"Check failed: {ex.Message}";
+        }
+    }
 
     public ObservableCollection<VirtualTagSummary> VirtualTags { get; }
 
@@ -193,6 +233,7 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     public bool IsConnectionsSection => ActiveSection == PreferencesSection.Connections;
     public bool IsPluginsSection => ActiveSection == PreferencesSection.Plugins;
     public bool IsAdvancedSection => ActiveSection == PreferencesSection.Advanced;
+    public bool IsAboutSection => ActiveSection == PreferencesSection.About;
 
     /// <summary>Sidebar order for the shell (docs/superpowers/specs/2026-08-28-preferences-rework-design.md).</summary>
     public static IReadOnlyList<PreferencesSection> Sections => PreferencesSectionMeta.Order;
@@ -284,6 +325,10 @@ public partial class PreferencesScreenViewModel : ViewModelBase
 
     [ObservableProperty]
     private bool _reverseRtlNavigation;
+
+    /// <summary>docs/superpowers/specs/2026-09-01-auto-update-and-changelog-design.md - persisted opt-out, also settable from the update-available overlay's own checkbox.</summary>
+    [ObservableProperty]
+    private bool _checkForUpdatesOnStartup;
 
     /// <summary>
     /// Advanced tab toggle (docs/superpowers/specs/2026-08-23-app-chrome-crash-reporter-and-tray-
@@ -410,6 +455,7 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         OnPropertyChanged(nameof(IsConnectionsSection));
         OnPropertyChanged(nameof(IsPluginsSection));
         OnPropertyChanged(nameof(IsAdvancedSection));
+        OnPropertyChanged(nameof(IsAboutSection));
     }
 
     [RelayCommand]
@@ -436,6 +482,9 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     [RelayCommand]
     private void GoAdvanced() => ActiveSection = PreferencesSection.Advanced;
 
+    [RelayCommand]
+    private void GoAbout() => ActiveSection = PreferencesSection.About;
+
     /// <summary>Lazily loads skins/fonts the first time the screen is navigated to, same pattern as SmartScreenViewModel/ReadingScreenViewModel's EnsureListLoaded.</summary>
     public void EnsureLoaded()
     {
@@ -450,6 +499,7 @@ public partial class PreferencesScreenViewModel : ViewModelBase
 
     private void Reload()
     {
+        RefreshChangelog();
         RefreshSkins();
 
         FontFamilies.Clear();
@@ -472,6 +522,7 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         OpenLastPage = settings.OpenLastPage;
         AutoNavigateComics = settings.AutoNavigateComics;
         ReverseRtlNavigation = settings.ReverseRtlNavigation;
+        CheckForUpdatesOnStartup = settings.CheckForUpdatesOnStartup;
         MinimizeToTray = settings.MinimizeToTray;
         HighQualityPageDisplay = settings.HighQualityPageDisplay;
         ResetZoomOnPageChange = settings.ResetZoomOnPageChange;
@@ -619,6 +670,27 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         KeyBindingConflictError = null;
     }
 
+    /// <summary>
+    /// Parses the bundled CHANGELOG.md (copied to output next to the exe - see the csproj's
+    /// CopyToOutputDirectory item) via <see cref="ChangelogParser"/>. Missing file (e.g. a dev build
+    /// run before the csproj copy step) just leaves the list empty rather than throwing - the About
+    /// section still shows the current version either way.
+    /// </summary>
+    private void RefreshChangelog()
+    {
+        ChangelogEntries.Clear();
+        string path = Path.Combine(AppContext.BaseDirectory, "CHANGELOG.md");
+        if (!File.Exists(path))
+        {
+            return;
+        }
+
+        foreach (var entry in ChangelogParser.Parse(File.ReadAllText(path)))
+        {
+            ChangelogEntries.Add(entry);
+        }
+    }
+
     private void RefreshSkins()
     {
         Skins.Clear();
@@ -660,6 +732,8 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     partial void OnAutoNavigateComicsChanged(bool value) => PersistBehaviorSetting(s => s.AutoNavigateComics = value);
 
     partial void OnReverseRtlNavigationChanged(bool value) => PersistBehaviorSetting(s => s.ReverseRtlNavigation = value);
+
+    partial void OnCheckForUpdatesOnStartupChanged(bool value) => PersistBehaviorSetting(s => s.CheckForUpdatesOnStartup = value);
 
     partial void OnMinimizeToTrayChanged(bool value) => PersistBehaviorSetting(s => s.MinimizeToTray = value);
 

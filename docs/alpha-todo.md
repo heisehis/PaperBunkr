@@ -43,6 +43,26 @@ this file itself already did once (see the note below).
 > smoke-launched OK. Still uncommitted on branch `books/browse-chrome`; on-screen GUI pass on the
 > new surfaces still outstanding.
 
+> **Manual session note (2026-09-01, Auto-update and changelog):** adds an in-app `UpdateService`
+> (checks for new releases, downloads/applies updates) and a hand-authored `CHANGELOG.md` (repo
+> root, Keep a Changelog format) rendered via a new Preferences → About section. Went through two
+> engine choices in one session: first built on Velopack (which would have retired the P7 Inno Setup
+> installer — `installer/Installer.iss` + `installer/BuildInstaller.ps1`), then reverted after a real
+> `NotInstalledException` crash and user-surfaced evidence of rough Velopack installer UX prompted an
+> actual library survey. Landed on **NetSparkleUpdater.SparkleUpdater** instead — installer-agnostic,
+> so **the P7 Inno Setup installer is unchanged and stays exactly as it was**; NetSparkle just
+> downloads and runs it. New `.github/workflows/release.yml` (tag-triggered): builds via
+> `installer/BuildInstaller.ps1` as before, then generates and Ed25519-signs an `appcast.xml` via
+> `netsparkle-generate-appcast`, uploaded alongside the installer to the GitHub Release. No install-
+> location change, no per-machine-vs-per-user migration concern (a real one under Velopack, moot now).
+> Design/plan, including the mid-session revision note:
+> [`2026-09-01-auto-update-and-changelog-design.md`](superpowers/specs/2026-09-01-auto-update-and-changelog-design.md).
+> P0–P7 status unchanged (still all done) — this is Beta-backlog infrastructure work, not an Alpha
+> gap. Not yet verified via a real tagged release (the CI pipeline can't be tested any other way);
+> full solution build clean, `dotnet test` on `Paperbunkr.App.Tests` green (1436/1436 relevant — one
+> unrelated pre-existing timing-flaky `LiveFolderWatchServiceTests` test, confirmed flaky by rerunning
+> in isolation, not reproducible at a fixed spot).
+
 > This section drifted before: it was last hand-written at `7e2d3d3` and had already fallen behind
 > five real commits by the time anyone reopened it. That's the whole reason for the live tracker —
 > see [Live tracker](#live-tracker) below. It drifted a second, smaller way too: `d86cac7` (same

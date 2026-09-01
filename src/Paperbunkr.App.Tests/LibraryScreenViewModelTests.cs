@@ -1846,6 +1846,81 @@ public class LibraryScreenViewModelTests : IDisposable
         Assert.Single(verifyContext.Issues);
     }
 
+    /// <summary>
+    /// Ctrl+A/Delete keyboard entry points (docs/superpowers/specs/2026-08-31-app-wide-and-library-
+    /// keyboard-shortcuts-design.md) - both dispatch by <see cref="LibraryScreenViewModel.IsSeriesGranularity"/>
+    /// to the same commands the context menu/action bar already use, so these tests only cover the
+    /// new "does the gesture reach the right grain" wiring, not re-verify the underlying select-all/
+    /// delete logic those existing tests already cover.
+    /// </summary>
+    [Fact]
+    public void SelectAllVisible_IssueGranularity_SelectsAllIssuesNotSeries()
+    {
+        CreateSeriesWithIssue("Alpha One");
+        CreateSeriesWithIssue("Bravo Two");
+        var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { }, goToNewIssueProperties: (_, _, _) => { });
+
+        vm.SelectAllVisibleCommand.Execute(null);
+
+        Assert.Equal(vm.IssueList.Rows.Count, vm.SelectionCount);
+        Assert.Equal(0, vm.SeriesSelectionCount);
+    }
+
+    [Fact]
+    public void SelectAllVisible_SeriesGranularity_SelectsAllSeriesNotIssues()
+    {
+        CreateSeriesWithIssue("Alpha One");
+        CreateSeriesWithIssue("Bravo Two");
+        var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { }, goToNewIssueProperties: (_, _, _) => { });
+        vm.Granularity = LibraryContentGranularity.Series;
+
+        vm.SelectAllVisibleCommand.Execute(null);
+
+        Assert.Equal(vm.Covers.Count, vm.SeriesSelectionCount);
+        Assert.Equal(0, vm.SelectionCount);
+    }
+
+    [Fact]
+    public void DeleteCurrentSelection_IssueGranularity_DeletesSelectedIssues()
+    {
+        CreateSeriesWithIssue("Alpha One");
+        CreateSeriesWithIssue("Bravo Two");
+        var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { }, goToNewIssueProperties: (_, _, _) => { });
+        vm.ToggleIssueSelection(vm.IssueList.Rows[0], isShiftHeld: false);
+
+        vm.DeleteCurrentSelectionCommand.Execute(null);
+
+        using var verifyContext = PaperbunkrDb.CreateContext();
+        Assert.Single(verifyContext.Issues);
+    }
+
+    [Fact]
+    public void DeleteCurrentSelection_SeriesGranularity_DeletesSelectedSeries()
+    {
+        CreateSeriesWithIssue("Alpha One");
+        CreateSeriesWithIssue("Bravo Two");
+        var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { }, goToNewIssueProperties: (_, _, _) => { });
+        vm.Granularity = LibraryContentGranularity.Series;
+        vm.ToggleSeriesSelection(vm.Covers[0], isShiftHeld: false);
+
+        vm.DeleteCurrentSelectionCommand.Execute(null);
+
+        using var context = PaperbunkrDb.CreateContext();
+        Assert.Single(context.Series);
+    }
+
+    [Fact]
+    public void DeleteCurrentSelection_NoSelection_NoOps()
+    {
+        CreateSeriesWithIssue("Alpha One");
+        var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { }, goToNewIssueProperties: (_, _, _) => { });
+
+        vm.DeleteCurrentSelectionCommand.Execute(null);
+
+        using var context = PaperbunkrDb.CreateContext();
+        Assert.Single(context.Issues);
+    }
+
     [Fact]
     public void BulkEditSelection_OpensBulkEditorForTheWholeSelection()
     {

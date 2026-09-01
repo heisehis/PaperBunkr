@@ -33,6 +33,15 @@
              "Backspace" crashed KeyGesture.Parse at startup (ArgumentException, Key enum has no
              member by that name). -->
         <KeyBinding Gesture="Back" Command="{Binding NavigateBackCommand}" />
+        <!-- docs/superpowers/specs/2026-08-31-app-wide-and-library-keyboard-shortcuts-design.md -
+             app-wide hotkeys, same hardcoded-Window.KeyBindings mechanism as Escape/Back above
+             (not KeyboardCommandRegistry, which is deliberately Reader-scoped). OemComma is
+             Avalonia.Input.Key's actual enum name for the physical comma key - confirmed via
+             reflection against the installed Avalonia.Base.dll, same verification approach already
+             used for "Back" above. -->
+        <KeyBinding Gesture="Ctrl+OemComma" Command="{Binding GoPreferencesCommand}" />
+        <KeyBinding Gesture="Ctrl+Tab" Command="{Binding CycleScreenForwardCommand}" />
+        <KeyBinding Gesture="Ctrl+Shift+Tab" Command="{Binding CycleScreenBackCommand}" />
     </Window.KeyBindings>
 
     <Window.Styles>
@@ -277,7 +286,8 @@
         <!-- ============ Contextual sidebar (236px) ============ -->
         <Border DockPanel.Dock="Left" Width="236" Background="{DynamicResource PbChromeBrush}"
                 BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,0,1,0"
-                IsVisible="{Binding ShowContextualSidebar}">
+                IsVisible="{Binding ShowContextualSidebar}"
+                KeyDown="OnSidebarKeyDown">
             <ScrollViewer Padding="12,18">
                 <StackPanel Spacing="2">
 
@@ -1075,6 +1085,22 @@
                     Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
                     Command="{Binding Welcome.SkipCommand}" ToolTip.Tip="Close"
                     AutomationProperties.AutomationId="WelcomeOverlayCloseButton">
+                <fi:SymbolIcon Symbol="DismissCircle" FontSize="13" />
+            </Button>
+        </Grid>
+    </Border>
+
+    <!-- ============ Auto-update: update-available prompt (docs/superpowers/specs/
+         2026-09-01-auto-update-and-changelog-design.md) - same backdrop-popup pattern as Welcome
+         above ============ -->
+    <Border IsVisible="{Binding IsUpdateAvailableOverlayOpen}" Background="#B0000000">
+        <Grid HorizontalAlignment="Center" VerticalAlignment="Center">
+            <views:UpdateAvailableOverlay DataContext="{Binding Update}" />
+            <Button Classes="rail" Width="28" Height="28"
+                    HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-14,-14,0"
+                    Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
+                    Command="{Binding Update.NotNowCommand}" ToolTip.Tip="Close"
+                    AutomationProperties.AutomationId="UpdateAvailableOverlayCloseButton">
                 <fi:SymbolIcon Symbol="DismissCircle" FontSize="13" />
             </Button>
         </Grid>

@@ -15,9 +15,28 @@ sealed class Program
     [STAThread]
     public static void Main(string[] args)
     {
-        // First statement, before Avalonia touches anything: a startup failure inside Avalonia's
-        // own bootstrap (BuildAvaloniaApp/StartWithClassicDesktopLifetime) needs to be caught too.
+        // First statement, before Avalonia touches anything: a startup failure inside Avalonia's own bootstrap
+        // (BuildAvaloniaApp/StartWithClassicDesktopLifetime) needs to be caught too.
         DiagnosticsService.Install();
+
+        // Headless file-association (un)registration, invoked by installer\Installer.iss's optional
+        // "associate" task/uninstall step. Deliberately reuses FileAssociationService - the exact
+        // same live registry-write path Preferences > Advanced uses - instead of the installer
+        // hand-writing ProgID keys itself, so there is only ever one place that knows the current
+        // extension list and one owner of those registry keys (see Installer.iss's own file-header
+        // note). Must run before Avalonia touches anything, and must exit without ever building a
+        // window.
+        if (args.Length > 0 && (args[0] == "--register-file-associations" || args[0] == "--unregister-file-associations"))
+        {
+            bool associate = args[0] == "--register-file-associations";
+            var associationService = new FileAssociationService();
+            foreach (var format in associationService.GetAvailableFormats())
+            {
+                associationService.SetAssociated(format.Name, associate);
+            }
+
+            return;
+        }
 
         // Icon-font providers for Optris.Icons.Avalonia (the maintained Avalonia 12 fork of
         // Projektanker.Icons.Avalonia) - must be registered before the first <i:Icon> is realized.

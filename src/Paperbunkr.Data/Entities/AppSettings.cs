@@ -383,4 +383,13 @@ public class AppSettings
     /// comma (an enum name never can).
     /// </summary>
     public string? LibraryRecentSearches { get; set; }
+
+    /// <summary>
+    /// Whether the app checks GitHub Releases for a newer version on startup (docs/superpowers/specs/
+    /// 2026-09-01-auto-update-and-changelog-design.md). Default true. Persisted from either the
+    /// update-available dialog's own opt-out checkbox or the Preferences → About toggle - same
+    /// setting, two entry points, matching CE's own "never check for updates on startup" flag
+    /// (MainForm.cs HiddenMessageBoxes.DoNotCheckForUpdate).
+    /// </summary>
+    public bool CheckForUpdatesOnStartup { get; set; } = true;
 }

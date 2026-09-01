@@ -127,12 +127,23 @@ public partial class App : Application
                 mainViewModel.RestoreLastScreen();
             }
 
+            bool welcomeOverlayOpened;
             using (var welcomeSettingsContext = PaperbunkrDb.CreateContext())
             {
-                if (!welcomeSettingsContext.GetOrCreateAppSettings().WelcomeScreenShown)
+                welcomeOverlayOpened = !welcomeSettingsContext.GetOrCreateAppSettings().WelcomeScreenShown;
+                if (welcomeOverlayOpened)
                 {
                     mainViewModel.OpenWelcomeOverlayCommand.Execute(ceInstallDetected);
                 }
+            }
+
+            // Auto-update (docs/superpowers/specs/2026-09-01-auto-update-and-changelog-design.md) -
+            // skipped the same launch the welcome overlay opens, so the two first-look modals never
+            // stack. Fire-and-forget: this only ever opens the ask-before-download prompt: no download
+            // happens without the user clicking Download in it.
+            if (!welcomeOverlayOpened)
+            {
+                _ = mainViewModel.CheckForUpdatesOnStartupAsync();
             }
 
             // App chrome (docs/superpowers/specs/2026-08-23-app-chrome-crash-reporter-and-tray-

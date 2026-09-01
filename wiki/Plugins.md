@@ -26,6 +26,13 @@ Drop the folder in, restart PaperBunkr, and open **Preferences → Plugins** (or
 **Plugins** screen). Each command is compiled on startup; a broken script is listed with
 its **compile error** rather than silently dropped, and never blocks other plugins.
 
+### Installing from a package (.zip)
+
+If a plugin is distributed as a `.zip` package, you don't need to unzip it by hand: on the
+**Plugins** screen, use **Install Package…**, pick the `.zip` file, and it's installed and
+discovered immediately — no restart needed. The same screen lists your installed packages and
+lets you remove one.
+
 ## Running a plugin
 
 On the **Plugins** screen, commands are grouped by **hook** (the event or menu they attach

@@ -1,10 +1,32 @@
 # Keyboard Shortcuts
 
+PaperBunkr is fully keyboard-navigable — arrow keys move through every grid and sidebar, `Tab`
+reaches every control in order, and context menus open with the `Menu` key or `Shift+F10`.
+
+## App-wide
+
+| Action | Shortcut |
+|---|---|
+| Open Preferences | `Ctrl+,` |
+| Cycle screens forward / back | `Ctrl+Tab` / `Ctrl+Shift+Tab` |
+| Move up/down in the sidebar | `↑` `↓`, `Home`, `End` |
+
+## Library grid
+
+| Action | Shortcut |
+|---|---|
+| Select all visible | `Ctrl+A` |
+| Remove selected item(s) | `Delete` |
+| Jump to search box | `/` |
+| Clear search and return to grid | `Esc` (while the search box has text) |
+
+## Reader
+
 Every reader shortcut below is **remappable** in **Preferences → Reader → Keyboard
 Shortcuts**. Defaults mirror ComicRack CE's keymap (with two deliberate exceptions —
 page-turn is Left/Right instead of CE's PageUp/Alt+Left).
 
-## Navigation
+### Navigation
 
 | Action | Default | Where it applies |
 |---|---|---|
@@ -18,7 +40,7 @@ page-turn is Left/Right instead of CE's PageUp/Alt+Left).
 | Previous bookmark | `Ctrl+PageUp` | always |
 | Next bookmark | `Ctrl+PageDown` | always |
 
-## Zoom & Fit
+### Zoom & Fit
 
 | Action | Default |
 |---|---|
@@ -30,7 +52,7 @@ page-turn is Left/Right instead of CE's PageUp/Alt+Left).
 | Fit: Fit height | `4` |
 | Fit: Best fit | `5` |
 
-## Display
+### Display
 
 | Action | Default |
 |---|---|
@@ -38,13 +60,7 @@ page-turn is Left/Right instead of CE's PageUp/Alt+Left).
 | Rotate clockwise | `R` |
 | Rotate counter-clockwise | `Shift+R` |
 
-## Everywhere
-
-- **Tab / Shift+Tab** — move focus between controls
-- **Enter / Space** — activate the focused control
-- **Esc** — cancel or close the current editor / overlay
-
-## Remapping
+### Remapping
 
 1. **Preferences → Reader → Keyboard Shortcuts**.
 2. Click a command's key field and press the new combination.

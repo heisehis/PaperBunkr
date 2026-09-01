@@ -1,6 +1,7 @@
 ---
 title: App-Wide & Library Keyboard Shortcuts — Design Spec
-status: draft
+status: shipped 2026-08-31 (see docs/alpha-roadmap.md's own entry for what changed during
+  implementation, notably the Left/Right-degenerates-to-Up/Down finding in the sidebar section)
 related: docs/superpowers/specs/2026-08-31-keyboard-operability-design.md (context-menu keyboard
   trigger + grid-nav rollout, landed 56df3a2), docs/superpowers/specs/2026-08-16-remappable-reader-
   shortcuts-design.md, src/Paperbunkr.App/Models/KeyboardCommandRegistry.cs

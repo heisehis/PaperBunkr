@@ -2376,6 +2376,46 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
     [RelayCommand]
     private void DeleteSeriesSelection() => DeleteSeriesList(SeriesSelection.SelectedIds.ToList());
 
+    /// <summary>
+    /// <c>Ctrl+A</c> keyboard entry point (docs/superpowers/specs/2026-08-31-app-wide-and-library-
+    /// keyboard-shortcuts-design.md) - dispatches to whichever grain's "Select All" the grid is
+    /// currently showing, same <see cref="IsSeriesGranularity"/> check <c>LibraryContextMenuBuilder</c>
+    /// already uses for its own "Select All" entry. No new selection logic, just a gesture pointed at
+    /// the two existing commands.
+    /// </summary>
+    [RelayCommand]
+    private void SelectAllVisible()
+    {
+        if (IsSeriesGranularity)
+        {
+            SelectAllVisibleSeries();
+        }
+        else
+        {
+            SelectAllVisibleIssues();
+        }
+    }
+
+    /// <summary>
+    /// <c>Delete</c> keyboard entry point, same design doc as <see cref="SelectAllVisible"/> - mirrors
+    /// the action bar's own Delete button for whichever grain is active. Safe to fire with an empty
+    /// selection (both underlying commands loop over an empty id list and no-op); deletion itself
+    /// moves files to the Recycle Bin, not a permanent delete, matching <see cref="DeleteIssue"/>'s
+    /// own doc comment.
+    /// </summary>
+    [RelayCommand]
+    private void DeleteCurrentSelection()
+    {
+        if (IsSeriesGranularity)
+        {
+            DeleteSeriesSelection();
+        }
+        else
+        {
+            DeleteSelection();
+        }
+    }
+
     /// <summary>Series-tile equivalent of <see cref="DeleteIssueCommand"/> - deletes every issue in the series (each one's file recycled, same as <see cref="DeleteIssueCommand"/>) and the series itself. Extended to the selection union in docs/superpowers/specs/2026-08-24-library-multiselect-slice3-design.md, same union-then-loop shape Slice 1 used for <see cref="DeleteIssueCommand"/>.</summary>
     [RelayCommand]
     private void DeleteSeries(int seriesId) => DeleteSeriesList(SeriesSelection.UnionForAction(seriesId));

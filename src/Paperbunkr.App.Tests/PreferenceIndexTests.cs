@@ -29,6 +29,7 @@ public class PreferenceIndexTests
             [PreferencesSection.Connections] = "ConnectionsSection.axaml",
             [PreferencesSection.Plugins] = "PluginsSection.axaml",
             [PreferencesSection.Advanced] = "AdvancedSection.axaml",
+            [PreferencesSection.About] = "AboutSection.axaml",
         };
 
     private static string PreferencesViewDir([CallerFilePath] string thisFile = "")

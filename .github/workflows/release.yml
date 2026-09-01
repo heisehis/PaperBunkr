@@ -1,0 +1,116 @@
+name: Release
+
+# Auto-update pipeline (docs/superpowers/specs/2026-09-01-auto-update-and-changelog-design.md).
+# Triggered by pushing a version tag; the version itself comes from Paperbunkr.App.csproj's
+# <Version>, not from the tag - this job's first step fails loudly if the two disagree, so drift
+# between the two can't silently ship a mislabeled release.
+on:
+  push:
+    tags:
+      - 'v*-beta'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      # <Version> in the csproj is a four-part .NET assembly version (e.g. 0.2.0.0); the release
+      # tag/appcast format wants three parts plus a prerelease suffix. Derivation rule (see the design doc): drop the
+      # trailing revision segment, append "-beta". This is the single source of truth the pushed tag
+      # must match - not a second place version is hand-maintained.
+      - name: Derive release version and verify it matches the pushed tag
+        id: version
+        shell: pwsh
+        run: |
+          [xml]$csproj = Get-Content src/Paperbunkr.App/Paperbunkr.App.csproj
+          $assemblyVersion = ($csproj.Project.PropertyGroup.Version | Where-Object { $_ } | Select-Object -First 1)
+          if (-not $assemblyVersion) {
+            Write-Error "No <Version> found in Paperbunkr.App.csproj"
+            exit 1
+          }
+
+          $parts = $assemblyVersion -split '\.'
+          if ($parts.Count -lt 3) {
+            Write-Error "Unexpected <Version> format: '$assemblyVersion' (expected at least major.minor.patch)"
+            exit 1
+          }
+          $releaseVersion = "$($parts[0]).$($parts[1]).$($parts[2])-beta"
+          $expectedTag = "v$releaseVersion"
+
+          if ($env:GITHUB_REF_NAME -ne $expectedTag) {
+            Write-Error "Pushed tag '$($env:GITHUB_REF_NAME)' does not match the version derived from the csproj ('$expectedTag', from <Version>$assemblyVersion</Version>). Fix the csproj or the tag before releasing."
+            exit 1
+          }
+
+          "version=$releaseVersion" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+
+      # A release cannot ship without a changelog entry - this step fails the build if the derived
+      # version has no matching "## [x.y.z-beta]" section in CHANGELOG.md.
+      - name: Extract this version's changelog section
+        shell: pwsh
+        run: |
+          $version = "${{ steps.version.outputs.version }}"
+          $content = Get-Content -Raw CHANGELOG.md
+          $pattern = "(?ms)^##\s*\[$([regex]::Escape($version))\].*?(?=^## \[|\z)"
+          $match = [regex]::Match($content, $pattern)
+          if (-not $match.Success) {
+            Write-Error "No CHANGELOG.md section found for version '$version' - add a '## [$version] - <date>' entry before tagging a release."
+            exit 1
+          }
+          $match.Value.Trim() | Out-File -FilePath release-notes.md -Encoding utf8
+
+      # Inno Setup builds the installer itself; windows-latest images stopped shipping it once the
+      # underlying OS moved past Windows Server 2022 (github/actions runner-images#11644), so this
+      # can't be assumed present - install it explicitly rather than finding that out on a broken run.
+      - name: Install Inno Setup
+        run: choco install innosetup --no-progress -y
+
+      # Publishes self-contained win-x64 AND compiles the installer in one step (installer/
+      # BuildInstaller.ps1) - unchanged from before the Velopack detour; Inno Setup was never actually
+      # retired, see the design doc's revision note.
+      - name: Build installer
+        run: pwsh installer/BuildInstaller.ps1 -Version "${{ steps.version.outputs.version }}"
+
+      - name: Install NetSparkle appcast generator
+        run: dotnet tool install --global NetSparkleUpdater.Tools.AppCastGenerator
+
+      # Signs with the Ed25519 private key via the SPARKLE_PRIVATE_KEY env var (netsparkle-generate-
+      # appcast's own documented mechanism - no key file written to disk, nothing to clean up).
+      # -u points at this tag's own GitHub Release download URL so the generated <enclosure> resolves
+      # correctly once the release below actually exists. --file-version pins the version explicitly
+      # rather than relying on the tool's own filename-based detection, since installer/Output/ only
+      # ever holds this run's one freshly-built .exe on a fresh runner.
+      - name: Generate signed appcast
+        env:
+          SPARKLE_PRIVATE_KEY: ${{ secrets.NETSPARKLE_PRIVATE_KEY }}
+        run: >
+          netsparkle-generate-appcast
+          -b installer/Output
+          -e exe
+          -a .
+          -o windows
+          -n "Paperbunkr"
+          -u "https://github.com/heisehis/PaperBunkr/releases/download/${{ github.ref_name }}"
+          --file-version ${{ steps.version.outputs.version }}
+
+      # Not marked pre-release - single update stream, "beta" is just what the version string says
+      # right now, not a separate channel (see the design doc's Scope section). Both the installer and
+      # the signed appcast.xml go up as release assets; UpdateService.cs points at this tag's "latest"
+      # release download URL for appcast.xml, which only resolves once a non-prerelease exists.
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "Paperbunkr ${{ steps.version.outputs.version }}"
+          body_path: release-notes.md
+          prerelease: false
+          files: |
+            installer/Output/PaperbunkrSetup-${{ steps.version.outputs.version }}.exe
+            appcast.xml

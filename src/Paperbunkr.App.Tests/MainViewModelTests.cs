@@ -759,4 +759,67 @@ public class MainViewModelTests : IDisposable
 
         Assert.False(vm.IsWelcomeTourOverlayOpen);
     }
+
+    /// <summary>
+    /// Ctrl+Tab/Ctrl+Shift+Tab (docs/superpowers/specs/2026-08-31-app-wide-and-library-keyboard-
+    /// shortcuts-design.md) - forward/back through the same 7-screen RailOrder that already drives
+    /// the rail nav's slide direction, including wraparound at both ends.
+    /// </summary>
+    [Fact]
+    public void CycleScreenForward_FromHome_GoesToLibrary()
+    {
+        var vm = new MainViewModel();
+
+        vm.CycleScreenForwardCommand.Execute(null);
+
+        Assert.True(vm.IsLibrary);
+    }
+
+    [Fact]
+    public void CycleScreenForward_FromLastScreen_WrapsToFirst()
+    {
+        var vm = new MainViewModel();
+        vm.GoPreferencesCommand.Execute(null);
+
+        vm.CycleScreenForwardCommand.Execute(null);
+
+        Assert.True(vm.IsHome);
+    }
+
+    [Fact]
+    public void CycleScreenBack_FromHome_WrapsToLastScreen()
+    {
+        var vm = new MainViewModel();
+
+        vm.CycleScreenBackCommand.Execute(null);
+
+        Assert.True(vm.IsPreferences);
+    }
+
+    [Fact]
+    public void CycleScreenBack_FromLibrary_ReturnsToHome()
+    {
+        var vm = new MainViewModel();
+        vm.GoLibraryCommand.Execute(null);
+
+        vm.CycleScreenBackCommand.Execute(null);
+
+        Assert.True(vm.IsHome);
+    }
+
+    [Fact]
+    public void CycleScreenForward_OnDrillDownScreen_NoOps()
+    {
+        var (seriesId, _) = SeedSeriesWithIssue("Series A");
+        var vm = new MainViewModel();
+        vm.GoLibraryCommand.Execute(null);
+        vm.Library.GoToSeriesCommand.Execute(seriesId);
+        Assert.True(vm.IsDetail);
+
+        vm.CycleScreenForwardCommand.Execute(null);
+
+        // Detail isn't in RailOrder - cycling top-level views doesn't mean anything from a
+        // drill-down screen, so it should stay put rather than guessing a target.
+        Assert.True(vm.IsDetail);
+    }
 }

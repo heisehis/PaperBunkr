@@ -5,6 +5,10 @@
     <Nullable>enable</Nullable>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>Assets\paperbunkr.ico</ApplicationIcon>
+    <!-- Single source of truth for the release version (docs/superpowers/specs/
+         2026-09-01-auto-update-and-changelog-design.md). CI derives the SemVer release tag/appcast
+         version from this by dropping the trailing revision segment and appending "-beta". -->
+    <Version>0.2.0.0</Version>
   </PropertyGroup>
 
   <ItemGroup>
@@ -24,6 +28,10 @@
          via NativeInterop.ResolveNativeAssetPath's {baseDir}/x64/ search
          (docs/superpowers/specs/2026-08-06-reader-canvas-alpha-design.md §1). -->
     <Content Include="x64\7z.dll" CopyToOutputDirectory="PreserveNewest" />
+    <!-- Changelog source of truth (docs/superpowers/specs/2026-09-01-auto-update-and-changelog-
+         design.md) - bundled so the About section can render full update history offline; only the
+         "is there a newer version" check itself needs a network call. -->
+    <None Include="..\..\CHANGELOG.md" CopyToOutputDirectory="PreserveNewest" Link="CHANGELOG.md" />
   </ItemGroup>
 
   <ItemGroup>
@@ -48,6 +56,14 @@
          own SkiaSharp/HarfBuzzSharp (5.2.x jumps to SkiaSharp 4.x and conflicts). Used to rasterise
          the bundled brand/flag SVGs into cached Bitmaps (Services/SvgMarkRenderer.cs). -->
     <PackageReference Include="Svg.Skia" Version="5.1.0" />
+    <!-- Auto-update (docs/superpowers/specs/2026-09-01-auto-update-and-changelog-design.md) -
+         SparkleUpdater checks/downloads/runs whatever installer the appcast points at; unlike
+         Velopack (the original pick, reverted - see the design doc's revision note) this is
+         installer-agnostic, so the existing Inno Setup installer stays as-is. No Avalonia UI
+         package - NetSparkleUpdater.UI.Avalonia 3.1.0 targets Avalonia 11.3.9 (a major-version gap
+         against this project's 12.1.1, confirmed via its own nuspec, not assumed) with no stable
+         12.x-compatible release yet, so the hand-rolled overlay/toast UI is used instead. -->
+    <PackageReference Include="NetSparkleUpdater.SparkleUpdater" Version="3.1.0" />
   </ItemGroup>
 
   <ItemGroup>

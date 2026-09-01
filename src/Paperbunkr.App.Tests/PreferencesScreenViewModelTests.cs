@@ -110,6 +110,7 @@ public class PreferencesScreenViewModelTests : IDisposable
             closeProgressToast ?? (_ => { }),
             reloadFolderWatch ?? (() => { }),
             () => { },
+            new UpdateService(),
             () => new PaperbunkrDbContext(_dbOptions));
     }
 
@@ -339,6 +340,45 @@ public class PreferencesScreenViewModelTests : IDisposable
 
         using var context = new PaperbunkrDbContext(_dbOptions);
         Assert.False(context.GetOrCreateAppSettings().ReverseRtlNavigation);
+    }
+
+    // Auto-update (docs/superpowers/specs/2026-09-01-auto-update-and-changelog-design.md)
+    [Fact]
+    public void EnsureLoaded_PopulatesCheckForUpdatesOnStartupFromAppSettings()
+    {
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            context.GetOrCreateAppSettings().CheckForUpdatesOnStartup = false;
+            context.SaveChanges();
+        }
+
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+
+        Assert.False(vm.CheckForUpdatesOnStartup);
+    }
+
+    [Fact]
+    public void TogglingCheckForUpdatesOnStartup_PersistsToAppSettings()
+    {
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+
+        vm.CheckForUpdatesOnStartup = false;
+
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        Assert.False(context.GetOrCreateAppSettings().CheckForUpdatesOnStartup);
+    }
+
+    [Fact]
+    public void GoAbout_SetsActiveSectionFlag()
+    {
+        var vm = CreateViewModel();
+
+        vm.GoAboutCommand.Execute(null);
+
+        Assert.True(vm.IsAboutSection);
+        Assert.Equal(PreferencesSection.About, vm.ActiveSection);
     }
 
     // App chrome (docs/superpowers/specs/2026-08-23-app-chrome-crash-reporter-and-tray-design.md §4)

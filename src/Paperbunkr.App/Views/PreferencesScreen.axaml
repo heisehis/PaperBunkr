@@ -158,6 +158,8 @@
                                     Command="{Binding GoPluginsCommand}" Content="Plugins" />
                             <Button Classes="prefNavItem" Classes.active="{Binding IsAdvancedSection}"
                                     Command="{Binding GoAdvancedCommand}" Content="Advanced" />
+                            <Button Classes="prefNavItem" Classes.active="{Binding IsAboutSection}"
+                                    Command="{Binding GoAboutCommand}" Content="About" />
                         </StackPanel>
                     </ScrollViewer>
 
@@ -195,6 +197,7 @@
                 <pref:ConnectionsSection IsVisible="{Binding IsConnectionsSection}" />
                 <pref:PluginsSection IsVisible="{Binding IsPluginsSection}" />
                 <pref:AdvancedSection IsVisible="{Binding IsAdvancedSection}" />
+                <pref:AboutSection IsVisible="{Binding IsAboutSection}" />
             </Panel>
         </Grid>
     </Grid>

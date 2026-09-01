@@ -18,6 +18,7 @@ public enum PreferencesSection
     Connections,
     Plugins,
     Advanced,
+    About,
 }
 
 /// <summary>Sidebar ordering + display labels for <see cref="PreferencesSection"/>.</summary>

@@ -1,3 +1,4 @@
+using System;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Paperbunkr.App.ViewModels;
@@ -17,6 +18,18 @@ public partial class LibraryToolbar : UserControl
     {
         InitializeComponent();
     }
+
+    /// <summary>
+    /// Raised by <see cref="OnSearchBoxKeyDown"/>'s Escape case when it clears a non-empty query -
+    /// this control has no reference to the grid (a sibling in <see cref="LibraryScreen"/>, not a
+    /// descendant of this one), so returning focus there is <see cref="LibraryScreen"/>'s job, not
+    /// this control's (docs/superpowers/specs/2026-08-31-app-wide-and-library-keyboard-shortcuts-
+    /// design.md).
+    /// </summary>
+    public event EventHandler? FocusGridRequested;
+
+    /// <summary>"/" from anywhere in the grid focuses this - see <see cref="LibraryScreen.OnLibraryScreenKeyDown"/>.</summary>
+    public void FocusSearchBox() => SearchBox.Focus();
 
     /// <summary>Search suggestions popup (docs/superpowers/specs/2026-08-31-library-search-
     /// suggestions-design.md) - focus is a UI-side event with no XAML command equivalent, so this
@@ -53,7 +66,19 @@ public partial class LibraryToolbar : UserControl
                 e.Handled = true;
                 break;
             case Key.Escape:
-                vm.CloseSuggestionsCommand.Execute(null);
+                // docs/superpowers/specs/2026-08-31-app-wide-and-library-keyboard-shortcuts-design.md
+                // - only clear+return-focus while there's actually a query to clear; an empty box
+                // keeps today's "just close suggestions" behavior unchanged.
+                if (vm.SearchQuery.Length > 0)
+                {
+                    vm.SearchQuery = string.Empty;
+                    FocusGridRequested?.Invoke(this, EventArgs.Empty);
+                }
+                else
+                {
+                    vm.CloseSuggestionsCommand.Execute(null);
+                }
+
                 e.Handled = true;
                 break;
         }

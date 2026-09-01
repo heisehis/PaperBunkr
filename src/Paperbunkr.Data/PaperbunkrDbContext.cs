@@ -857,6 +857,12 @@ public class PaperbunkrDbContext : DbContext
             builder.Property(a => a.PageMarginEnabled).HasDefaultValue(false);
             builder.Property(a => a.PageMarginPercentWidth).HasDefaultValue(0.05);
             builder.Property(a => a.ShowScrubberOverlay).HasDefaultValue(true);
+            // Same reasoning as ShowScrubberOverlay/OpenLastPage above: desired default (true)
+            // diverges from the CLR/SQLite implicit zero-value (false), so the existing singleton
+            // row's backfill on this ALTER TABLE needs an explicit DB-level default or it lands on
+            // false instead - the exact class of bug documented in the DefaultPageFitMode comment
+            // above, just for a bool column instead of an enum-as-string one.
+            builder.Property(a => a.CheckForUpdatesOnStartup).HasDefaultValue(true);
 
             // Same HasSentinel gotcha as DefaultPageFitMode/ImageBackgroundMode above - Name (0) is
             // the CLR default, but the actual desired default is DateAdded, so without the sentinel

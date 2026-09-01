@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
@@ -19,6 +20,7 @@ public partial class LibraryScreen : UserControl
         // Tunnel so Escape closes the Add-issue overlay even while a field inside it has focus
         // (an AutoCompleteBox otherwise swallows Escape for its own dropdown).
         AddHandler(KeyDownEvent, OnLibraryScreenKeyDown, RoutingStrategies.Tunnel);
+        Toolbar.FocusGridRequested += (_, _) => FocusFirstGridItem();
     }
 
     private void OnLibraryScreenKeyDown(object? sender, KeyEventArgs e)
@@ -27,6 +29,36 @@ public partial class LibraryScreen : UserControl
         {
             vm.CloseAddIssueCommand.Execute(null);
             e.Handled = true;
+            return;
+        }
+
+        // docs/superpowers/specs/2026-08-31-app-wide-and-library-keyboard-shortcuts-design.md - "/"
+        // focuses the search box from anywhere in the grid. e.Source (not sender - this fires on the
+        // Tunnel pass, before the target's own handlers) is checked so typing "/" inside some other
+        // TextBox still types a literal "/" instead of stealing focus.
+        if (e.Key == Key.OemQuestion && e.KeyModifiers == KeyModifiers.None && e.Source is not TextBox)
+        {
+            Toolbar.FocusSearchBox();
+            e.Handled = true;
+        }
+    }
+
+    /// <summary>
+    /// Return-focus target for <see cref="LibraryToolbar.FocusGridRequested"/> (Esc-with-text in the
+    /// search box, see <see cref="LibraryToolbar.axaml.cs"/>'s own doc comment). Finds whichever of
+    /// the 4 grid-family <see cref="ItemsControl"/>s is actually visible right now - same "only one
+    /// is ever real at a time" fact <see cref="OnCardKeyDown"/> above already documents - and focuses
+    /// its first realized item, rather than assuming a specific named control.
+    /// </summary>
+    private void FocusFirstGridItem()
+    {
+        var itemsControl = this.GetVisualDescendants()
+            .OfType<ItemsControl>()
+            .FirstOrDefault(ic => ic.IsEffectivelyVisible && ic.ItemCount > 0);
+
+        if (itemsControl?.ContainerFromIndex(0) is Control container)
+        {
+            container.Focus();
         }
     }
 

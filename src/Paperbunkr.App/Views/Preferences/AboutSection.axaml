@@ -1,0 +1,69 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:fi="using:FluentIcons.Avalonia"
+             xmlns:vm="using:Paperbunkr.App.ViewModels"
+             xmlns:services="using:Paperbunkr.App.Services"
+             xmlns:conv="using:Avalonia.Data.Converters"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="640" d:DesignHeight="900"
+             x:Class="Paperbunkr.App.Views.Preferences.AboutSection"
+             x:DataType="vm:PreferencesScreenViewModel">
+
+    <ScrollViewer>
+        <StackPanel Margin="28,20,28,40" Spacing="20">
+            <TextBlock Classes="pbTextHeading" Text="About" />
+
+            <!-- Updates (docs/superpowers/specs/2026-09-01-auto-update-and-changelog-design.md) -->
+            <Border Classes="groupBox" Tag="about.updates">
+                <StackPanel>
+                    <Border Classes="groupHeader">
+                        <TextBlock Text="Updates" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
+                    </Border>
+                    <StackPanel Margin="14" Spacing="10">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <TextBlock Text="Version" FontSize="13" Foreground="{DynamicResource PbTextFaintBrush}" />
+                            <TextBlock Text="{Binding CurrentVersion}" FontSize="13" FontFamily="Consolas,monospace"
+                                       Foreground="{DynamicResource PbTextBrush}" />
+                        </StackPanel>
+
+                        <Button Classes="headerAction primary" Command="{Binding CheckForUpdatesCommand}"
+                                HorizontalAlignment="Left">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <fi:SymbolIcon Symbol="ArrowSync" Foreground="{DynamicResource PbBadgeTextBrush}" />
+                                <TextBlock Text="Check for Updates" />
+                            </StackPanel>
+                        </Button>
+                        <TextBlock Text="{Binding UpdateCheckResultText}" FontSize="12" Foreground="{DynamicResource PbTextFaintBrush}"
+                                   IsVisible="{Binding UpdateCheckResultText, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
+
+                        <CheckBox Content="Check for updates on startup" IsChecked="{Binding CheckForUpdatesOnStartup}" Margin="0,6,0,0" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
+            <!-- Changelog -->
+            <Border Classes="groupBox" Tag="about.changelog">
+                <StackPanel>
+                    <Border Classes="groupHeader">
+                        <TextBlock Text="Changelog" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
+                    </Border>
+                    <ItemsControl ItemsSource="{Binding ChangelogEntries}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="services:ChangelogEntry">
+                                <StackPanel Margin="14,10" Spacing="4">
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <TextBlock Text="{Binding Version}" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
+                                        <TextBlock Text="{Binding Date}" FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" />
+                                    </StackPanel>
+                                    <TextBlock Text="{Binding Body}" FontSize="12.5" TextWrapping="Wrap"
+                                               Foreground="{DynamicResource PbTextFaintBrush}" />
+                                </StackPanel>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </Border>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

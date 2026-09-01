@@ -1,10 +1,12 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Controls.Notifications;
 using Avalonia.Input;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using Paperbunkr.App.Services;
 using Paperbunkr.App.ViewModels;
 
@@ -18,6 +20,9 @@ public partial class MainWindow : Window
     // this maps each live ToastProgressViewModel back to the ToastProgressView control instance
     // actually shown for it, so ProgressToastCloseRequested can close the right one.
     private readonly Dictionary<ToastProgressViewModel, ToastProgressView> _progressToasts = new();
+
+    /// <summary>Same purpose as <see cref="_progressToasts"/>, for the update-ready toast (docs/superpowers/specs/2026-09-01-auto-update-and-changelog-design.md).</summary>
+    private readonly Dictionary<UpdateReadyToastViewModel, UpdateReadyToastView> _updateReadyToasts = new();
 
     /// <summary>
     /// Minimize-to-tray (docs/superpowers/specs/2026-08-23-app-chrome-crash-reporter-and-tray-
@@ -179,6 +184,63 @@ public partial class MainWindow : Window
         _railCollapseTimer.Start();
     }
 
+    /// <summary>
+    /// Up/Down/Home/End movement within the contextual sidebar's item rows (docs/superpowers/specs/
+    /// 2026-08-31-app-wide-and-library-keyboard-shortcuts-design.md) - a real gap the P5 baseline and
+    /// the sibling keyboard-operability spec both left alone (Tab already reaches every row, but
+    /// doesn't move *between* them the way arrow keys already do on the card grids). One handler on
+    /// the sidebar's outer Border, not per-screen, since <see cref="GridKeyboardNavigation.Navigate{T}"/>'s
+    /// pure core doesn't care which of the four <c>IsLibrary</c>/<c>IsSmart</c>/<c>IsReading</c>/
+    /// <c>IsEvents</c> blocks is currently visible - only the live button collection below does, by
+    /// construction (a hidden block's buttons report <see cref="Layoutable.IsEffectivelyVisible"/>
+    /// false, so they're never in the collected list).
+    ///
+    /// Left/Right are deliberately NOT wired here, unlike the card grids: <see cref="GridKeyboardNavigation.Navigate{T}"/>'s
+    /// Left/Right case is plain previous/next-in-list index math (not spatial column math the way
+    /// Up/Down's row search is) - for a single-column list that's identical to what Up/Down already
+    /// do, which would make Left/Right silently move focus too. That's real navigation behavior a
+    /// linear sidebar list shouldn't have (found by reading <c>Navigate</c>'s actual implementation
+    /// while building this, not assumed from the card-grid case where Left/Right and Up/Down clearly
+    /// differ).
+    ///
+    /// e.Source (the control that actually raised the key press, preserved through bubbling) rather
+    /// than <paramref name="sender"/> (always this Border) is checked against
+    /// <c>Classes.Contains("sideItemButton")</c> - this also naturally excludes Library's inline
+    /// collection-rename TextBox: focus there means e.Source is a TextBox, not a sideItemButton, so
+    /// the handler no-ops instead of yanking focus out of an active edit.
+    /// </summary>
+    private void OnSidebarKeyDown(object? sender, KeyEventArgs e)
+    {
+        GridNavigationDirection? direction = e.Key switch
+        {
+            Key.Up => GridNavigationDirection.Up,
+            Key.Down => GridNavigationDirection.Down,
+            Key.Home => GridNavigationDirection.Home,
+            Key.End => GridNavigationDirection.End,
+            _ => null,
+        };
+
+        if (direction is null || sender is not Border sidebarBorder ||
+            e.Source is not Button { Classes: var classes } focusedButton || !classes.Contains("sideItemButton"))
+        {
+            return;
+        }
+
+        var rows = sidebarBorder.GetVisualDescendants()
+            .OfType<Button>()
+            .Where(b => b.Classes.Contains("sideItemButton") && b.IsEffectivelyVisible && b.IsEffectivelyEnabled)
+            .Select(b => new GridKeyboardNavigation.GridItem<Button>(b, b.Bounds))
+            .ToList();
+
+        if (rows.Count == 0)
+        {
+            return;
+        }
+
+        GridKeyboardNavigation.Navigate(rows, focusedButton, direction.Value).Focus();
+        e.Handled = true;
+    }
+
     private void OnRailCollapseTimerTick(object? sender, EventArgs e)
     {
         _railCollapseTimer.Stop();
@@ -252,6 +314,27 @@ public partial class MainWindow : Window
         viewModel.ProgressToastCloseRequested += toastVm =>
         {
             if (_progressToasts.Remove(toastVm, out var view))
+            {
+                _notificationManager.Close(view);
+            }
+        };
+
+        // Update-ready toast (docs/superpowers/specs/2026-09-01-auto-update-and-changelog-design.md) -
+        // same host, same map-back-to-view-instance pattern as the progress toast above, distinct
+        // dictionary/type since this toast carries action buttons instead of a progress bar. No
+        // TimeSpan.Zero expiration override needed here - unlike the progress toast, this one has no
+        // live-updating state to protect from an auto-close, but it stays until Later/Restart/What's
+        // New close it explicitly (same UpdateReadyToastCloseRequested plumbing) rather than timing out
+        // mid-decision.
+        viewModel.UpdateReadyToastRequested += toastVm =>
+        {
+            var view = new UpdateReadyToastView { DataContext = toastVm };
+            _updateReadyToasts[toastVm] = view;
+            _notificationManager.Show(view, NotificationType.Information, expiration: System.TimeSpan.Zero);
+        };
+        viewModel.UpdateReadyToastCloseRequested += toastVm =>
+        {
+            if (_updateReadyToasts.Remove(toastVm, out var view))
             {
                 _notificationManager.Close(view);
             }

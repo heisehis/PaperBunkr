@@ -106,5 +106,12 @@ public static class PreferenceIndex
         new(PreferencesSection.Advanced, "Backup Manager", "Backup Manager",
             new[] { "backup", "restore", "backup location", "backups to keep" },
             "advanced.backup"),
+
+        new(PreferencesSection.About, "Updates", "Updates",
+            new[] { "update", "check for updates", "auto update", "version", "new version" },
+            "about.updates"),
+        new(PreferencesSection.About, "Changelog", "Changelog",
+            new[] { "changelog", "what's new", "whats new", "release notes", "history" },
+            "about.changelog"),
     };
 }

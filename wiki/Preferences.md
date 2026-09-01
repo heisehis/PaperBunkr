@@ -1,6 +1,7 @@
 # Preferences
 
-Open **Preferences** from the bottom of the navigation rail. Six tabs.
+Open **Preferences** from the bottom of the navigation rail (or press `Ctrl+,` from anywhere).
+Seven tabs.
 
 ## Appearance
 
@@ -62,3 +63,8 @@ Open **Preferences** from the bottom of the navigation rail. Six tabs.
 ## Plugins
 
 Manage installed plugins — see [Plugins](Plugins).
+
+## About
+
+- **Updates** — current version, **Check for Updates**, and a toggle for checking on startup.
+- **Changelog** — every release's notes, right in the app.

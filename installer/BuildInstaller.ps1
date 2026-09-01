@@ -52,6 +52,39 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 
+# Generate the installer's pre-install "what's new" page (Installer.iss's InfoBeforeFile) from
+# CHANGELOG.md's latest entry. Plain text, not raw markdown - Inno's info-file viewer doesn't render
+# markdown, so this strips the "## [x.y.z] - date" heading down to just the version/date and the
+# "### Added" style subheadings down to plain lines. Always writes a file (falls back to a
+# placeholder) so Installer.iss's InfoBeforeFile never points at something missing.
+$changelogPath = Join-Path $repoRoot "CHANGELOG.md"
+$whatsNewPath = Join-Path $publishDir "..\WhatsNew.txt"
+$whatsNewText = $null
+if (Test-Path $changelogPath) {
+    $lines = Get-Content $changelogPath
+    $headingIndexes = @()
+    for ($i = 0; $i -lt $lines.Count; $i++) {
+        if ($lines[$i] -match '^## \[') { $headingIndexes += $i }
+    }
+    if ($headingIndexes.Count -gt 0) {
+        $start = $headingIndexes[0]
+        $end = if ($headingIndexes.Count -gt 1) { $headingIndexes[1] - 1 } else { $lines.Count - 1 }
+        $section = $lines[$start..$end] | Where-Object { $_ -ne "" }
+        $heading = $section[0] -replace '^## \[(.+?)\](.*)$', 'Paperbunkr $1$2'
+        $body = $section[1..($section.Count - 1)] -replace '^### (.+)$', '$1:' -replace '^- ', '  - '
+        # Strip inline markdown Inno's plain-text info-file viewer won't render: **bold**/`code`
+        # markers down to their bare text, and [label](url) links down to "label (url)" so the URL
+        # isn't silently dropped.
+        $body = $body -replace '\*\*(.+?)\*\*', '$1' -replace '`(.+?)`', '$1' -replace '\[(.+?)\]\((.+?)\)', '$1 ($2)'
+        $whatsNewText = @($heading, "") + $body
+    }
+}
+if (-not $whatsNewText) {
+    $whatsNewText = @("See CHANGELOG.md in the installation folder for release notes.")
+}
+Set-Content -Path $whatsNewPath -Value $whatsNewText -Encoding UTF8
+Write-Output "Wrote $whatsNewPath"
+
 # Compile the installer.
 $setupFileParam = "PaperbunkrSetup-$Version"
 Write-Output "Running Inno Setup..."

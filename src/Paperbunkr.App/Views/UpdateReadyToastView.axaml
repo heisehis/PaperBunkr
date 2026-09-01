@@ -1,0 +1,19 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Paperbunkr.App.ViewModels"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="280"
+             x:Class="Paperbunkr.App.Views.UpdateReadyToastView"
+             x:DataType="vm:UpdateReadyToastViewModel">
+
+    <StackPanel Spacing="8" Width="260">
+        <TextBlock Text="{Binding Title}" FontWeight="SemiBold" FontSize="13"
+                   Foreground="{DynamicResource PbTextBrush}" TextWrapping="Wrap" />
+        <StackPanel Orientation="Horizontal" Spacing="8">
+            <Button Classes="headerAction ghost" Content="Later" Command="{Binding LaterCommand}" />
+            <Button Classes="headerAction ghost" Content="What's New" Command="{Binding WhatsNewCommand}" />
+            <Button Classes="headerAction primary" Content="Restart Now" Command="{Binding RestartNowCommand}" />
+        </StackPanel>
+    </StackPanel>
+</UserControl>

@@ -1,3 +1,4 @@
+using System.Linq;
 using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
@@ -73,6 +74,34 @@ public class FilePickerService : IFilePickerService
             SuggestedFileName = suggestedFileName,
             DefaultExtension = extension,
             FileTypeChoices = new[] { new FilePickerFileType(extensionLabel) { Patterns = new[] { $"*.{extension}" } } },
+        });
+
+        return file?.TryGetLocalPath();
+    }
+
+    /// <summary>
+    /// Annotation-export's "format dropdown in the save-file dialog" (docs/superpowers/specs/
+    /// 2026-09-01-books-reader-ergonomics-and-annotations-design.md §"Export") - the OS save dialog's
+    /// own "Save as type" combo already does this once <see cref="FilePickerSaveOptions.FileTypeChoices"/>
+    /// has more than one entry, so no in-app dropdown control is needed. Not on
+    /// <see cref="IFilePickerService"/>, same rationale as <see cref="PickImageFileAsync"/>'s own doc
+    /// comment - a multi-format signature doesn't fit that interface's single-pattern shape, and
+    /// adding it there would force every existing test fake to implement a method they don't need.
+    /// </summary>
+    public async Task<string?> PickSaveFileWithFormatAsync(string title, string suggestedFileName, params (string Extension, string Label)[] formats)
+    {
+        var topLevel = GetTopLevel();
+        if (topLevel is null || formats.Length == 0)
+        {
+            return null;
+        }
+
+        var file = await topLevel.StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+        {
+            Title = title,
+            SuggestedFileName = suggestedFileName,
+            DefaultExtension = formats[0].Extension,
+            FileTypeChoices = formats.Select(f => new FilePickerFileType(f.Label) { Patterns = new[] { $"*.{f.Extension}" } }).ToArray(),
         });
 
         return file?.TryGetLocalPath();

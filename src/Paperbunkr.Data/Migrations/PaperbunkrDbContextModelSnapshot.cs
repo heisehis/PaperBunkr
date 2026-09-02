@@ -58,6 +58,57 @@ namespace Paperbunkr.Data.Migrations
                         .HasColumnType("INTEGER")
                         .HasDefaultValue(5);
 
+                    b.Property<bool>("BookReaderAutoHideChrome")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasDefaultValue(true);
+
+                    b.Property<double>("BookReaderCharacterSpacing")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("REAL")
+                        .HasDefaultValue(0.0);
+
+                    b.Property<string>("BookReaderFontFamily")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT")
+                        .HasDefaultValue("Serif");
+
+                    b.Property<double>("BookReaderFontSize")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("REAL")
+                        .HasDefaultValue(17.0);
+
+                    b.Property<string>("BookReaderLineSpacing")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT")
+                        .HasDefaultValue("Normal");
+
+                    b.Property<double>("BookReaderPageMargin")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("REAL")
+                        .HasDefaultValue(40.0);
+
+                    b.Property<double>("BookReaderParagraphSpacing")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("REAL")
+                        .HasDefaultValue(10.0);
+
+                    b.Property<string>("BookReaderTheme")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT")
+                        .HasDefaultValue("MatchAppSkin");
+
+                    b.Property<double>("BookReaderWordSpacing")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("REAL")
+                        .HasDefaultValue(0.0);
+
                     b.Property<string>("BooksGroupField")
                         .IsRequired()
                         .ValueGeneratedOnAdd()
@@ -397,6 +448,9 @@ namespace Paperbunkr.Data.Migrations
                         .HasColumnType("INTEGER")
                         .HasDefaultValue(0);
 
+                    b.Property<double?>("CharacterSpacingOverride")
+                        .HasColumnType("REAL");
+
                     b.Property<string>("CoverImagePath")
                         .HasColumnType("TEXT");
 
@@ -408,6 +462,13 @@ namespace Paperbunkr.Data.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER")
                         .HasDefaultValue(false);
+
+                    b.Property<string>("FontFamilyOverride")
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT");
+
+                    b.Property<double?>("FontSizeOverride")
+                        .HasColumnType("REAL");
 
                     b.Property<string>("Format")
                         .IsRequired()
@@ -423,15 +484,32 @@ namespace Paperbunkr.Data.Migrations
                     b.Property<DateTime?>("LastOpenedTime")
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("LineSpacingOverride")
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT");
+
+                    b.Property<double?>("PageMarginOverride")
+                        .HasColumnType("REAL");
+
+                    b.Property<double?>("ParagraphSpacingOverride")
+                        .HasColumnType("REAL");
+
                     b.Property<DateTime?>("PublishedDate")
                         .HasColumnType("TEXT");
 
                     b.Property<string>("Summary")
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("ThemeOverride")
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("Title")
                         .IsRequired()
                         .HasColumnType("TEXT");
+
+                    b.Property<double?>("WordSpacingOverride")
+                        .HasColumnType("REAL");
 
                     b.HasKey("Id");
 
@@ -440,6 +518,47 @@ namespace Paperbunkr.Data.Migrations
                     b.HasIndex("FilePath");
 
                     b.ToTable("Books");
+                });
+
+            modelBuilder.Entity("Paperbunkr.Data.Entities.BookAnnotationImage", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("BookId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("CreatedTime")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ImagePath")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Note")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("PageIndex")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<double>("RectHeight")
+                        .HasColumnType("REAL");
+
+                    b.Property<double>("RectWidth")
+                        .HasColumnType("REAL");
+
+                    b.Property<double>("RectX")
+                        .HasColumnType("REAL");
+
+                    b.Property<double>("RectY")
+                        .HasColumnType("REAL");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BookId");
+
+                    b.ToTable("BookAnnotationImages");
                 });
 
             modelBuilder.Entity("Paperbunkr.Data.Entities.BookBookmark", b =>
@@ -487,6 +606,48 @@ namespace Paperbunkr.Data.Migrations
                         .IsUnique();
 
                     b.ToTable("BookFolders");
+                });
+
+            modelBuilder.Entity("Paperbunkr.Data.Entities.BookHighlight", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("BookId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("ChapterIndex")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Color")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT")
+                        .HasDefaultValue("Yellow");
+
+                    b.Property<DateTime>("CreatedTime")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("EndOffset")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Excerpt")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Note")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("StartOffset")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("BookId");
+
+                    b.ToTable("BookHighlights");
                 });
 
             modelBuilder.Entity("Paperbunkr.Data.Entities.BookSeries", b =>
@@ -2012,10 +2173,32 @@ namespace Paperbunkr.Data.Migrations
                     b.Navigation("BookSeries");
                 });
 
+            modelBuilder.Entity("Paperbunkr.Data.Entities.BookAnnotationImage", b =>
+                {
+                    b.HasOne("Paperbunkr.Data.Entities.Book", "Book")
+                        .WithMany("AnnotationImages")
+                        .HasForeignKey("BookId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Book");
+                });
+
             modelBuilder.Entity("Paperbunkr.Data.Entities.BookBookmark", b =>
                 {
                     b.HasOne("Paperbunkr.Data.Entities.Book", "Book")
                         .WithMany("Bookmarks")
+                        .HasForeignKey("BookId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Book");
+                });
+
+            modelBuilder.Entity("Paperbunkr.Data.Entities.BookHighlight", b =>
+                {
+                    b.HasOne("Paperbunkr.Data.Entities.Book", "Book")
+                        .WithMany("Highlights")
                         .HasForeignKey("BookId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
@@ -2477,9 +2660,13 @@ namespace Paperbunkr.Data.Migrations
 
             modelBuilder.Entity("Paperbunkr.Data.Entities.Book", b =>
                 {
+                    b.Navigation("AnnotationImages");
+
                     b.Navigation("Bookmarks");
 
                     b.Navigation("CollectionItems");
+
+                    b.Navigation("Highlights");
                 });
 
             modelBuilder.Entity("Paperbunkr.Data.Entities.BookSeries", b =>

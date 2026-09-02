@@ -118,3 +118,26 @@ dotnet build src/Paperbunkr.App/Paperbunkr.App.csproj
 `obj/.../Avalonia/` does **not** help — that's not what gates the skip. Treat "0 Errors" alone as
 insufficient proof the weave ran; verify by launching the exe (or grepping a `-v:diag` log for
 `CompileAvaloniaXaml` actually executing, not `"skipped... previously built successfully"`).
+
+## Runtime gotcha: `TextLayout`'s `maxHeight: 0` is a zero-height clip, not "unconstrained"
+
+Found 2026-09-02 building `ParagraphView` (docs/superpowers/specs/2026-09-01-books-reader-
+ergonomics-and-annotations-design.md) — cost a full debugging session because it fails **silently**,
+with no exception and no crash log entry: every paragraph rendered as exactly one line tall
+regardless of actual text length, so the reflow reader's whole reading pane looked blank (chrome/
+title still rendered fine, since nothing there depended on this).
+
+If you construct `Avalonia.Media.TextFormatting.TextLayout` via the `(ITextSource textSource,
+TextParagraphProperties paragraphProperties, TextTrimming textTrimming, Double maxWidth, Double
+maxHeight, Int32 maxLines)` constructor (or its `TextRunCache`-taking sibling), passing `maxHeight:
+0` does **not** mean "no height constraint" the way `maxWidth`'s own "0 = let it grow" convention
+might lead you to assume. It's a literal zero-height clip, floored at one line — the layout reports
+exactly one line's height and refuses to add more, no matter how long the text or how the
+`TextWrapping`/`maxWidth`/`maxLines` values are set. Confirmed directly: same text, same width, same
+wrapping settings, only `maxHeight` changed — `0` → 1 line; `5000` → 5 correctly-wrapped lines.
+
+**Use `double.PositiveInfinity` for "let the layout take whatever height its content needs."** This
+also means `TextLines.Count`/`Height` alone don't prove wrapping works in a test — assert that height
+*increases* for longer text at the *same* width (a single short/narrow smoke-test measurement can
+pass even when wrapping is completely broken, since one clipped line still reports a positive,
+plausible-looking height).

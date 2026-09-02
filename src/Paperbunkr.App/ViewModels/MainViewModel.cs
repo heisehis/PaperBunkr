@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Paperbunkr.App.ContextMenus;
@@ -1280,6 +1281,15 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
     /// NetSparkle's appcast check works regardless of how the app was launched; wrapped in try/catch
     /// since a startup check silently failing on a network hiccup should never surface an error to
     /// the user, just skip quietly (same instinct as CE's own try/catch in GithubAPI.GetResponse).
+    ///
+    /// Called via <c>Task.Run</c> from <c>App.axaml.cs</c> (see that call site's own doc comment for
+    /// why - a real UI-thread-freeze bug this fixes), so this method's body, including everything
+    /// after the <c>await</c> below, runs on a threadpool thread with no UI SynchronizationContext to
+    /// resume on. <see cref="Update"/>/<see cref="IsUpdateAvailableOverlayOpen"/> are bound into the
+    /// overlay's UI, so setting them off the UI thread would be a cross-thread violation (the same
+    /// class of bug the WindowNotificationManager.Show crash logs already on file for
+    /// LiveFolderWatchService caught) - <see cref="Dispatcher.UIThread"/>.Post marshals just that
+    /// tail back, matching this codebase's established pattern (e.g. AsyncCoverImage.cs).
     /// </summary>
     public async Task CheckForUpdatesOnStartupAsync()
     {
@@ -1309,8 +1319,12 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
             return;
         }
 
-        Update.Show(info.Updates[0], LoadNewestChangelogBody());
-        IsUpdateAvailableOverlayOpen = true;
+        string? changelogBody = LoadNewestChangelogBody();
+        Dispatcher.UIThread.Post(() =>
+        {
+            Update.Show(info.Updates[0], changelogBody);
+            IsUpdateAvailableOverlayOpen = true;
+        });
     }
 
     private static string? LoadNewestChangelogBody()
@@ -1719,6 +1733,19 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         else if (IsBulkSeriesProperties)
         {
             BulkSeriesProperties.CancelCommand.Execute(null);
+        }
+        // Real bug, found via manual testing: MainWindow's Escape KeyDown handler (docs/superpowers/
+        // specs/2026-08-31-app-wide-and-library-keyboard-shortcuts-design.md) always calls this
+        // command and marks the key event Handled regardless of whether any branch above actually
+        // matched - which silently blocked LibraryScreenViewModel's own Add-issue overlay from ever
+        // seeing Escape (its close handler lived in LibraryScreen's own KeyDown handler, downstream
+        // of MainWindow's in the Tunnel routing order, so it never got a chance to run once this
+        // method had already consumed the key). Centralizing that case here instead, matching every
+        // other overlay this method already owns, rather than leaving two uncoordinated Escape
+        // handlers to fight over precedence.
+        else if (Library.IsAddIssueOpen)
+        {
+            Library.CloseAddIssueCommand.Execute(null);
         }
     }
 }

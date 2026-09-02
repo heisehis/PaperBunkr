@@ -1,8 +1,12 @@
 using System;
+using System.Collections.ObjectModel;
+using System.IO;
 using System.Linq;
+using Avalonia;
 using Avalonia.Media.Imaging;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Microsoft.EntityFrameworkCore;
 using Paperbunkr.App.Models;
 using Paperbunkr.App.Services;
 using Paperbunkr.Data.Entities;
@@ -29,10 +33,20 @@ public partial class PdfPageReaderScreenViewModel : ViewModelBase
     private readonly Action _goBack;
     private IPageImageDecoder? _decoder;
 
+    private int _bookId;
+
     public PdfPageReaderScreenViewModel(Action goBack)
     {
         _goBack = goBack;
     }
+
+    public ObservableCollection<BookAnnotationImageSummary> AnnotationImages { get; } = new();
+
+    [ObservableProperty]
+    private bool _isCaptureMode;
+
+    [ObservableProperty]
+    private bool _isCapturesOpen;
 
     [ObservableProperty]
     private string _bookTitle = string.Empty;
@@ -94,17 +108,26 @@ public partial class PdfPageReaderScreenViewModel : ViewModelBase
     public void LoadBook(int bookId, BookPosition? startAt = null)
     {
         _ = startAt;
+        _bookId = bookId;
         _decoder?.Dispose();
         _decoder = null;
+        IsCaptureMode = false;
+        IsCapturesOpen = false;
 
         using var context = PaperbunkrDb.CreateContext();
-        var book = context.Books.Single(b => b.Id == bookId);
+        var book = context.Books.Include(b => b.AnnotationImages).Single(b => b.Id == bookId);
 
         BookTitle = book.Title;
         HighQualityPageDisplay = context.GetOrCreateAppSettings().HighQualityPageDisplay;
         ErrorMessage = null;
         ZoomLevel = 1.0;
         PageIndex = 0;
+
+        AnnotationImages.Clear();
+        foreach (var image in book.AnnotationImages.OrderByDescending(a => a.CreatedTime))
+        {
+            AnnotationImages.Add(ToSummary(image));
+        }
 
         _decoder = PageImageDecoder.TryOpen(book.FilePath);
         if (_decoder is null)
@@ -127,6 +150,87 @@ public partial class PdfPageReaderScreenViewModel : ViewModelBase
 
     [RelayCommand]
     private void Close() => _goBack();
+
+    [RelayCommand]
+    private void ToggleCaptureMode() => IsCaptureMode = !IsCaptureMode;
+
+    [RelayCommand]
+    private void OpenCaptures() => IsCapturesOpen = true;
+
+    [RelayCommand]
+    private void CloseCaptures() => IsCapturesOpen = false;
+
+    [RelayCommand]
+    private void DeleteCapture(BookAnnotationImageSummary? capture)
+    {
+        if (capture is null)
+        {
+            return;
+        }
+
+        using var context = PaperbunkrDb.CreateContext();
+        var entity = context.BookAnnotationImages.FirstOrDefault(a => a.Id == capture.Id);
+        if (entity is not null)
+        {
+            context.BookAnnotationImages.Remove(entity);
+            context.SaveChanges();
+        }
+
+        try
+        {
+            File.Delete(capture.ImagePath);
+        }
+        catch (IOException)
+        {
+        }
+
+        AnnotationImages.Remove(capture);
+    }
+
+    /// <summary>
+    /// A capture-rectangle drag just completed (design spec §"PDF area capture"). <paramref name="rect"/>
+    /// is already fractional (0-1 of the page's own width/height) - <c>PdfPageReaderScreen.axaml.cs</c>
+    /// is the one place with the visual-tree access (<c>PageCanvas.GetCurrentImageBounds()</c>) needed
+    /// to convert the overlay's raw screen-space drag rect into that fractional form.
+    /// </summary>
+    public void CaptureRegion(Rect fractionalRect)
+    {
+        if (CurrentPage is null)
+        {
+            return;
+        }
+
+        string destinationDirectory = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Paperbunkr", "annotations");
+        string imagePath = BookAnnotationCaptureService.CropAndSave(
+            CurrentPage, fractionalRect.X, fractionalRect.Y, fractionalRect.Width, fractionalRect.Height, destinationDirectory);
+
+        using var context = PaperbunkrDb.CreateContext();
+        var entity = new BookAnnotationImage
+        {
+            BookId = _bookId,
+            PageIndex = PageIndex,
+            RectX = fractionalRect.X,
+            RectY = fractionalRect.Y,
+            RectWidth = fractionalRect.Width,
+            RectHeight = fractionalRect.Height,
+            ImagePath = imagePath,
+            CreatedTime = DateTime.UtcNow,
+        };
+        context.BookAnnotationImages.Add(entity);
+        context.SaveChanges();
+
+        AnnotationImages.Insert(0, ToSummary(entity));
+    }
+
+    private static BookAnnotationImageSummary ToSummary(BookAnnotationImage image) => new()
+    {
+        Id = image.Id,
+        PageIndex = image.PageIndex,
+        ImagePath = image.ImagePath,
+        Note = image.Note,
+        CreatedTime = image.CreatedTime,
+    };
 
     private void ChangePage(int delta)
     {

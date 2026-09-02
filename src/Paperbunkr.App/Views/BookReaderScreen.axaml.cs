@@ -2,6 +2,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Paperbunkr.App.Models;
 using Paperbunkr.App.ViewModels;
 
 namespace Paperbunkr.App.Views;
@@ -24,7 +25,31 @@ public partial class BookReaderScreen : UserControl
         Loaded += OnLoaded;
     }
 
-    private void OnLoaded(object? sender, RoutedEventArgs e) => PushViewportSize();
+    /// <summary>Pixels from the top within which a pointer move is treated as "near the top edge" for chrome auto-hide reveal (docs/superpowers/specs/2026-09-01-books-reader-ergonomics-and-annotations-design.md) - roughly the height of the top chrome bar itself.</summary>
+    private const double AutoHideRevealZonePixels = 60;
+
+    private void OnLoaded(object? sender, RoutedEventArgs e)
+    {
+        PushViewportSize();
+        RootGrid.Focus();
+    }
+
+    private void OnRootPointerMoved(object? sender, PointerEventArgs e)
+    {
+        if (DataContext is BookReaderScreenViewModel vm)
+        {
+            bool nearTopEdge = e.GetPosition(RootGrid).Y < AutoHideRevealZonePixels;
+            vm.NotifyPointerActivity(nearTopEdge);
+        }
+    }
+
+    private void OnRootKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (DataContext is BookReaderScreenViewModel vm)
+        {
+            vm.NotifyKeyActivity();
+        }
+    }
 
     private void OnSizeChanged(object? sender, SizeChangedEventArgs e) => PushViewportSize();
 
@@ -52,9 +77,46 @@ public partial class BookReaderScreen : UserControl
             vm.CloseTocCommand.Execute(null);
             vm.CloseFontSheetCommand.Execute(null);
             vm.CloseBookmarksCommand.Execute(null);
+            vm.CloseHighlightsCommand.Execute(null);
             vm.CloseSearchCommand.Execute(null);
         }
 
         e.Handled = true;
+    }
+
+    /// <summary>
+    /// A <see cref="ParagraphView"/> drag-selection completed (docs/superpowers/specs/2026-09-01-
+    /// books-reader-ergonomics-and-annotations-design.md §"Highlight selection UX"). Translates the
+    /// event's paragraph-local bounds into <c>RootGrid</c>'s coordinate space - the one piece of
+    /// visual-tree-specific work the view model itself can't do - then hands off the rest to
+    /// <see cref="BookReaderScreenViewModel.OnParagraphSelectionCompleted"/>.
+    /// </summary>
+    private void OnParagraphSelectionCompleted(object? sender, ParagraphSelectionEventArgs e)
+    {
+        if (DataContext is not BookReaderScreenViewModel vm || e.Source is not ParagraphView source
+            || source.DataContext is not BookParagraphDisplay paragraph)
+        {
+            return;
+        }
+
+        var anchor = TranslateToRootGrid(source, e.Bounds);
+        vm.OnParagraphSelectionCompleted(paragraph, e.Start, e.End, anchor);
+    }
+
+    private void OnParagraphHighlightTapped(object? sender, ParagraphHighlightTappedEventArgs e)
+    {
+        if (DataContext is not BookReaderScreenViewModel vm || e.Source is not ParagraphView source)
+        {
+            return;
+        }
+
+        var anchor = TranslateToRootGrid(source, e.Bounds);
+        vm.OnParagraphHighlightTapped(e.Highlight, anchor);
+    }
+
+    private Rect TranslateToRootGrid(Visual source, Rect boundsInSource)
+    {
+        var topLeft = source.TranslatePoint(boundsInSource.TopLeft, RootGrid) ?? boundsInSource.TopLeft;
+        return new Rect(topLeft, boundsInSource.Size);
     }
 }

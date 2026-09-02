@@ -5,17 +5,18 @@ using System.Threading;
 using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Media.Imaging;
-using cYo.Projects.ComicRack.Engine.IO.Provider.Books;
 using Paperbunkr.Data;
+using Paperbunkr.Data.Books;
 using Paperbunkr.Data.Entities;
 
 namespace Paperbunkr.App.Services;
 
 /// <summary>
 /// Generates cover thumbnails for Books (docs/superpowers/specs/
-/// 2026-08-09-novels-epub-pdf-support-design.md §3), mirroring <see cref="CoverThumbnailService"/>
-/// for comics. EPUB covers come straight from the book's own embedded cover image
-/// (<see cref="EpubBookSource"/>); PDF has no equivalent embedded-cover concept, so its cover
+/// 2026-08-09-novels-epub-pdf-support-design.md §3, extended for FB2/MOBI by docs/superpowers/specs/
+/// 2026-09-01-books-format-ingestion-fb2-mobi-design.md), mirroring <see cref="CoverThumbnailService"/>
+/// for comics. Reflowable-format covers come straight from the book's own embedded cover image (via
+/// <see cref="BookTextSourceFactory"/>); PDF has no equivalent embedded-cover concept, so its cover
 /// reuses the same <see cref="PageImageDecoder"/> pipeline the comic library already uses for PDF
 /// page rendering - PDF is already a supported comic archive format there, just decoding page 0.
 /// </summary>
@@ -50,17 +51,17 @@ public class BookCoverThumbnailService
             return true;
         }
 
-        return format == BookFormat.Epub
-            ? TryGenerateFromEpubCover(filePath, destPath)
-            : TryGenerateFromPdfFirstPage(filePath, destPath);
+        return format == BookFormat.Pdf
+            ? TryGenerateFromPdfFirstPage(filePath, destPath)
+            : TryGenerateFromReflowSourceCover(format, filePath, destPath);
     }
 
-    private static bool TryGenerateFromEpubCover(string filePath, string destPath)
+    private static bool TryGenerateFromReflowSourceCover(BookFormat format, string filePath, string destPath)
     {
         try
         {
-            using var epub = new EpubBookSource(filePath);
-            byte[]? coverBytes = epub.Metadata.CoverImageBytes;
+            using var source = BookTextSourceFactory.Create(format, filePath);
+            byte[]? coverBytes = source.Metadata.CoverImageBytes;
             if (coverBytes is null || coverBytes.Length == 0)
             {
                 return false;

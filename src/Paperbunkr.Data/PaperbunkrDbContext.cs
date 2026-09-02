@@ -94,6 +94,10 @@ public class PaperbunkrDbContext : DbContext
 
     public DbSet<BookBookmark> BookBookmarks => Set<BookBookmark>();
 
+    public DbSet<BookHighlight> BookHighlights => Set<BookHighlight>();
+
+    public DbSet<BookAnnotationImage> BookAnnotationImages => Set<BookAnnotationImage>();
+
     public DbSet<BookFolder> BookFolders => Set<BookFolder>();
 
     public DbSet<PluginCommandState> PluginCommandStates => Set<PluginCommandState>();
@@ -946,6 +950,25 @@ public class PaperbunkrDbContext : DbContext
                 .HasDefaultValue(RenderBackend.Auto)
                 .HasSentinel(RenderBackend.Auto);
             builder.Property(a => a.PreferNativeOpenGl).HasDefaultValue(false);
+
+            // Books reader ergonomics global defaults (docs/superpowers/specs/2026-09-01-books-
+            // reader-ergonomics-and-annotations-design.md) - same enum-as-string HasSentinel
+            // treatment as BooksSortField etc. above.
+            builder.Property(a => a.BookReaderFontSize).HasDefaultValue(17.0);
+            builder.Property(a => a.BookReaderFontFamily).HasConversion<string>().HasMaxLength(32)
+                .HasDefaultValue(BookFontFamilyOption.Serif)
+                .HasSentinel(BookFontFamilyOption.Serif);
+            builder.Property(a => a.BookReaderLineSpacing).HasConversion<string>().HasMaxLength(32)
+                .HasDefaultValue(BookLineSpacingOption.Normal)
+                .HasSentinel(BookLineSpacingOption.Normal);
+            builder.Property(a => a.BookReaderCharacterSpacing).HasDefaultValue(0.0);
+            builder.Property(a => a.BookReaderWordSpacing).HasDefaultValue(0.0);
+            builder.Property(a => a.BookReaderParagraphSpacing).HasDefaultValue(10.0);
+            builder.Property(a => a.BookReaderPageMargin).HasDefaultValue(40.0);
+            builder.Property(a => a.BookReaderTheme).HasConversion<string>().HasMaxLength(32)
+                .HasDefaultValue(BookTheme.MatchAppSkin)
+                .HasSentinel(BookTheme.MatchAppSkin);
+            builder.Property(a => a.BookReaderAutoHideChrome).HasDefaultValue(true);
         });
 
         modelBuilder.Entity<VirtualTagDefinition>(builder =>
@@ -993,9 +1016,27 @@ public class PaperbunkrDbContext : DbContext
             builder.Property(b => b.ChapterCount).HasDefaultValue(0);
             builder.HasIndex(b => b.FilePath);
 
+            // Per-book reader-ergonomics overrides (docs/superpowers/specs/2026-09-01-books-reader-
+            // ergonomics-and-annotations-design.md) - nullable, no HasDefaultValue/HasSentinel needed,
+            // same treatment as Issue.PageFitModeOverride/LibraryActiveContentType above (null is an
+            // unambiguous "no override", not a value needing a backfill default).
+            builder.Property(b => b.FontFamilyOverride).HasConversion<string>().HasMaxLength(32);
+            builder.Property(b => b.LineSpacingOverride).HasConversion<string>().HasMaxLength(32);
+            builder.Property(b => b.ThemeOverride).HasConversion<string>().HasMaxLength(32);
+
             builder.HasMany(b => b.Bookmarks)
                 .WithOne(bm => bm.Book)
                 .HasForeignKey(bm => bm.BookId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            builder.HasMany(b => b.Highlights)
+                .WithOne(h => h.Book)
+                .HasForeignKey(h => h.BookId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            builder.HasMany(b => b.AnnotationImages)
+                .WithOne(a => a.Book)
+                .HasForeignKey(a => a.BookId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
@@ -1003,6 +1044,21 @@ public class PaperbunkrDbContext : DbContext
         {
             builder.HasKey(bm => bm.Id);
             builder.HasIndex(bm => bm.BookId);
+        });
+
+        modelBuilder.Entity<BookHighlight>(builder =>
+        {
+            builder.HasKey(h => h.Id);
+            builder.HasIndex(h => h.BookId);
+            builder.Property(h => h.Color).HasConversion<string>().HasMaxLength(32)
+                .HasDefaultValue(BookHighlightColor.Yellow)
+                .HasSentinel(BookHighlightColor.Yellow);
+        });
+
+        modelBuilder.Entity<BookAnnotationImage>(builder =>
+        {
+            builder.HasKey(a => a.Id);
+            builder.HasIndex(a => a.BookId);
         });
 
         modelBuilder.Entity<BookFolder>(builder =>

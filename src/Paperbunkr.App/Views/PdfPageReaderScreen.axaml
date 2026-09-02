@@ -2,6 +2,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Paperbunkr.App.ViewModels"
              xmlns:views="using:Paperbunkr.App.Views"
+             xmlns:models="using:Paperbunkr.App.Models"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d" d:DesignWidth="1000" d:DesignHeight="700"
@@ -22,7 +23,7 @@
         <!-- ============ Top toolbar - same always-visible shape as the comic Reader's, not the Novels reflow reader's tap-to-hide chrome ============ -->
         <Border Grid.Row="0" Background="{StaticResource ReaderChromeBrush}" BorderBrush="{StaticResource ReaderBorderBrush}"
                 BorderThickness="0,0,0,1" Padding="18,10">
-            <Grid ColumnDefinitions="*,Auto">
+            <Grid ColumnDefinitions="*,Auto,Auto,Auto">
                 <Button Grid.Column="0" Command="{Binding CloseCommand}" Background="Transparent" BorderThickness="0"
                         Padding="0" Cursor="Hand" HorizontalAlignment="Left">
                     <StackPanel Orientation="Horizontal" Spacing="4">
@@ -30,7 +31,16 @@
                         <TextBlock Text="Books" FontSize="13" Foreground="{StaticResource ReaderTextMutedBrush}" />
                     </StackPanel>
                 </Button>
-                <TextBlock Grid.Column="1" Text="{Binding BookTitle}" FontSize="13" FontWeight="SemiBold"
+                <Button Grid.Column="1" Command="{Binding OpenCapturesCommand}" Background="Transparent" BorderThickness="0"
+                        Padding="8,0" Cursor="Hand" ToolTip.Tip="Captures" AutomationProperties.Name="Captures">
+                    <TextBlock Text="🖼" FontSize="14" Foreground="{StaticResource ReaderTextMutedBrush}" />
+                </Button>
+                <ToggleButton Grid.Column="2" IsChecked="{Binding IsCaptureMode}" Background="Transparent" BorderThickness="0"
+                              Padding="8,0" Cursor="Hand" ToolTip.Tip="Capture a region of this page" Margin="4,0,10,0"
+                              AutomationProperties.Name="Capture region">
+                    <TextBlock Text="✂" FontSize="14" Foreground="{StaticResource ReaderTextMutedBrush}" />
+                </ToggleButton>
+                <TextBlock Grid.Column="3" Text="{Binding BookTitle}" FontSize="13" FontWeight="SemiBold"
                            Foreground="{StaticResource ReaderTextBrush}" HorizontalAlignment="Right" TextTrimming="CharacterEllipsis" />
             </Grid>
         </Border>
@@ -47,12 +57,50 @@
                               PanOffsetY="{Binding PanOffsetY}"
                               IsVisible="{Binding !HasError}" />
 
+            <views:CaptureOverlay x:Name="CaptureOverlayControl" IsCaptureMode="{Binding IsCaptureMode}"
+                                   IsVisible="{Binding !HasError}" RegionCaptured="OnRegionCaptured" />
+
             <Border IsVisible="{Binding HasError}" Width="400" CornerRadius="8"
                     Background="{StaticResource ReaderChromeBrush}" BorderBrush="{StaticResource ReaderBorderBrush}"
                     BorderThickness="1" Padding="20" HorizontalAlignment="Center" VerticalAlignment="Center">
                 <TextBlock Text="{Binding ErrorMessage}" FontSize="13" Foreground="{StaticResource ReaderTextMutedBrush}"
                            TextWrapping="Wrap" HorizontalAlignment="Center" TextAlignment="Center" />
             </Border>
+
+            <!-- Captures drawer overlay -->
+            <Grid IsVisible="{Binding IsCapturesOpen}">
+                <Border Background="#B0000000" PointerPressed="OnCapturesScrimPointerPressed" />
+                <Border Width="300" HorizontalAlignment="Right" Background="{StaticResource ReaderChromeBrush}"
+                        BorderBrush="{StaticResource ReaderBorderBrush}" BorderThickness="1,0,0,0">
+                    <DockPanel>
+                        <TextBlock DockPanel.Dock="Top" Text="Captures" FontSize="15" FontWeight="Bold"
+                                   Foreground="{StaticResource ReaderTextBrush}" Margin="16,18,16,10" />
+                        <ScrollViewer>
+                            <ItemsControl ItemsSource="{Binding AnnotationImages}" Margin="12,0,12,16">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="models:BookAnnotationImageSummary">
+                                        <Border Margin="0,0,0,10" CornerRadius="6" ClipToBounds="True"
+                                                BorderBrush="{StaticResource ReaderBorderBrush}" BorderThickness="1">
+                                            <Grid RowDefinitions="Auto,Auto">
+                                                <Image Grid.Row="0" Source="{Binding ImagePath, Converter={x:Static views:FilePathImageConverter.Instance}}"
+                                                       Stretch="UniformToFill" MaxHeight="140" />
+                                                <Grid Grid.Row="1" ColumnDefinitions="*,Auto" Margin="8,6">
+                                                    <TextBlock Grid.Column="0" Text="{Binding CreatedTime, StringFormat={}{0:d}}" FontSize="11"
+                                                               Foreground="{StaticResource ReaderTextMutedBrush}" VerticalAlignment="Center" />
+                                                    <Button Grid.Column="1" Content="✕" FontSize="11" Background="Transparent" BorderThickness="0"
+                                                            Foreground="{StaticResource ReaderTextMutedBrush}" Cursor="Hand"
+                                                            Command="{Binding $parent[UserControl].((vm:PdfPageReaderScreenViewModel)DataContext).DeleteCaptureCommand}"
+                                                            CommandParameter="{Binding}" ToolTip.Tip="Remove capture" />
+                                                </Grid>
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+                    </DockPanel>
+                </Border>
+            </Grid>
         </Grid>
 
         <!-- ============ Bottom scrubber ============ -->

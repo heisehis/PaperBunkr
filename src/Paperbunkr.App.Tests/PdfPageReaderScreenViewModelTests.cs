@@ -108,4 +108,79 @@ public class PdfPageReaderScreenViewModelTests : IDisposable
 
         Assert.Equal(1.0, vm.ZoomLevel);
     }
+
+    // --- PDF area capture (docs/superpowers/specs/2026-09-01-books-reader-ergonomics-and-
+    // annotations-design.md §"PDF area capture"). CaptureRegion writes a real file under the actual
+    // %AppData%\Paperbunkr\annotations\ folder (not a test-isolated temp path, by design - that's the
+    // real production location), so these tests explicitly delete whatever they create. ---
+
+    [Fact]
+    public void CaptureRegion_SavesAnImageFileAndAPersistedRow()
+    {
+        int bookId = AddBook(pageCount: 1);
+        var vm = CreateViewModel(bookId);
+        string? savedPath = null;
+
+        try
+        {
+            vm.CaptureRegion(new Avalonia.Rect(0.1, 0.1, 0.3, 0.3));
+
+            Assert.Single(vm.AnnotationImages);
+            savedPath = vm.AnnotationImages[0].ImagePath;
+            Assert.True(File.Exists(savedPath));
+
+            using var context = new PaperbunkrDbContext(_dbOptions);
+            var entity = context.BookAnnotationImages.Single();
+            Assert.Equal(0, entity.PageIndex);
+            Assert.Equal(0.1, entity.RectX, 3);
+            Assert.Equal(0.3, entity.RectWidth, 3);
+        }
+        finally
+        {
+            if (savedPath is not null && File.Exists(savedPath))
+            {
+                File.Delete(savedPath);
+            }
+        }
+    }
+
+    [Fact]
+    public void DeleteCapture_RemovesTheFileAndTheRow()
+    {
+        int bookId = AddBook(pageCount: 1);
+        var vm = CreateViewModel(bookId);
+        vm.CaptureRegion(new Avalonia.Rect(0.1, 0.1, 0.3, 0.3));
+        string savedPath = vm.AnnotationImages[0].ImagePath;
+
+        vm.DeleteCaptureCommand.Execute(vm.AnnotationImages[0]);
+
+        Assert.Empty(vm.AnnotationImages);
+        Assert.False(File.Exists(savedPath));
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        Assert.Empty(context.BookAnnotationImages);
+    }
+
+    [Fact]
+    public void LoadBook_ReloadsPersistedCaptures()
+    {
+        int bookId = AddBook(pageCount: 1);
+        var firstVm = CreateViewModel(bookId);
+        firstVm.CaptureRegion(new Avalonia.Rect(0.1, 0.1, 0.3, 0.3));
+        string savedPath = firstVm.AnnotationImages[0].ImagePath;
+
+        try
+        {
+            var reopened = CreateViewModel(bookId);
+
+            Assert.Single(reopened.AnnotationImages);
+            Assert.Equal(savedPath, reopened.AnnotationImages[0].ImagePath);
+        }
+        finally
+        {
+            if (File.Exists(savedPath))
+            {
+                File.Delete(savedPath);
+            }
+        }
+    }
 }

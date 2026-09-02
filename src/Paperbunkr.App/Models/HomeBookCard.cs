@@ -6,8 +6,9 @@ namespace Paperbunkr.App.Models;
 /// <summary>
 /// Home screen's "Continue Reading — Books" row card (docs/superpowers/specs/2026-08-27-books-
 /// screen-chrome-and-home-strip-design.md) - the book counterpart of
-/// <see cref="HomeContinueReadingCard"/>. Progress is a rough chapter fraction (EPUB only; the PDF
-/// page reader has no chapters, so <see cref="ShowProgress"/> is false there).
+/// <see cref="HomeContinueReadingCard"/>. Progress is a rough chapter fraction (reflowable formats
+/// only - EPUB/FB2/MOBI; the PDF page reader has no chapters, so <see cref="ShowProgress"/> is false
+/// there).
 /// </summary>
 public sealed class HomeBookCard
 {
@@ -26,7 +27,7 @@ public sealed class HomeBookCard
 
     public static HomeBookCard FromBook(Book book)
     {
-        bool showProgress = book.Format == BookFormat.Epub && book.ChapterCount > 1;
+        bool showProgress = book.Format != BookFormat.Pdf && book.ChapterCount > 1;
         return new HomeBookCard
         {
             BookId = book.Id,

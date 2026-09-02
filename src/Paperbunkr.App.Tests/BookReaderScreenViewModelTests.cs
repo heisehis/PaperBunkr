@@ -2,6 +2,7 @@ using Avalonia;
 using Microsoft.EntityFrameworkCore;
 using Paperbunkr.App.Services;
 using Paperbunkr.App.ViewModels;
+using Paperbunkr.App.Views;
 using Paperbunkr.Data;
 using Paperbunkr.Data.Entities;
 
@@ -86,6 +87,46 @@ public class BookReaderScreenViewModelTests : IDisposable
         // (index 1, "The End" - EpubFixture's second chapter), which has real content.
         Assert.NotEmpty(vm.CurrentPageParagraphs);
         Assert.Equal("The End", vm.ChapterTitle);
+    }
+
+    /// <summary>
+    /// docs/superpowers/specs/2026-09-01-books-reader-screen-reader-accessibility-design.md -
+    /// <see cref="BookReaderScreenViewModel.ReadingPositionAnnouncement"/> is the live-region string
+    /// BookReaderScreen.axaml's hidden LiveSetting="Polite" TextBlock renders.
+    /// </summary>
+    [Fact]
+    public void RecomputeCurrentPage_OnLoad_SetsReadingPositionAnnouncementToChapterTitle()
+    {
+        int bookId = AddBook(firstChapterEmpty: false);
+
+        var vm = CreateViewModel(bookId);
+
+        Assert.Equal("The Beginning", vm.ReadingPositionAnnouncement);
+    }
+
+    [Fact]
+    public void GoToChapter_UpdatesReadingPositionAnnouncement()
+    {
+        int bookId = AddBook(firstChapterEmpty: false);
+        var vm = CreateViewModel(bookId);
+
+        vm.GoToChapterCommand.Execute(vm.TableOfContents[1]);
+
+        Assert.Equal("The End", vm.ReadingPositionAnnouncement);
+    }
+
+    [Fact]
+    public void AnnounceReadingPositionCommand_BuildsChapterOfTotalString()
+    {
+        int bookId = AddBook(firstChapterEmpty: false);
+        var vm = CreateViewModel(bookId);
+
+        vm.AnnounceReadingPositionCommand.Execute(null);
+        Assert.Equal("Chapter 1 of 2: The Beginning", vm.ReadingPositionAnnouncement);
+
+        vm.GoToChapterCommand.Execute(vm.TableOfContents[1]);
+        vm.AnnounceReadingPositionCommand.Execute(null);
+        Assert.Equal("Chapter 2 of 2: The End", vm.ReadingPositionAnnouncement);
     }
 
     [Fact]
@@ -323,5 +364,234 @@ public class BookReaderScreenViewModelTests : IDisposable
         }
 
         Assert.True(ReadBook(bookId).Finished);
+    }
+
+    // --- Reader ergonomics settings persistence (docs/superpowers/specs/2026-09-01-books-reader-
+    // ergonomics-and-annotations-design.md) ---
+
+    [Fact]
+    public void LoadBook_WithNoOverride_SeedsSettingsFromGlobalAppSettingsDefaults()
+    {
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            var settings = context.GetOrCreateAppSettings();
+            settings.BookReaderFontSize = 22;
+            settings.BookReaderTheme = BookTheme.Sepia;
+            context.SaveChanges();
+        }
+
+        int bookId = AddBook(firstChapterEmpty: false);
+        var vm = CreateViewModel(bookId);
+
+        Assert.Equal(22, vm.Settings.FontSize);
+        Assert.Equal(BookTheme.Sepia, vm.Settings.Theme);
+    }
+
+    [Fact]
+    public void CloseFontSheet_PersistsCurrentSettingsAsBookOverride()
+    {
+        int bookId = AddBook(firstChapterEmpty: false);
+        var vm = CreateViewModel(bookId);
+
+        vm.OpenFontSheetCommand.Execute(null);
+        vm.Settings.FontSize = 24;
+        vm.Settings.Theme = BookTheme.OledBlack;
+        vm.CloseFontSheetCommand.Execute(null);
+
+        var book = ReadBook(bookId);
+        Assert.Equal(24, book.FontSizeOverride);
+        Assert.Equal(BookTheme.OledBlack, book.ThemeOverride);
+    }
+
+    [Fact]
+    public void LoadBook_WithAnOverride_TakesPriorityOverTheGlobalDefault()
+    {
+        int bookId = AddBook(firstChapterEmpty: false);
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            context.GetOrCreateAppSettings().BookReaderFontSize = 17;
+            var book = context.Books.Single(b => b.Id == bookId);
+            book.FontSizeOverride = 20;
+            context.SaveChanges();
+        }
+
+        var vm = CreateViewModel(bookId);
+
+        Assert.Equal(20, vm.Settings.FontSize);
+    }
+
+    [Fact]
+    public void SwitchingBooksInTheSameReader_DoesNotLeakOneBooksOverrideIntoAnother()
+    {
+        int firstBookId = AddBook(firstChapterEmpty: false);
+        var vm = CreateViewModel(firstBookId);
+        vm.OpenFontSheetCommand.Execute(null);
+        vm.Settings.FontSize = 26;
+        vm.CloseFontSheetCommand.Execute(null);
+
+        string secondEpubPath = Path.Combine(Path.GetTempPath(), $"paperbunkr_reader_vm_test_{Guid.NewGuid():N}.epub");
+        EpubFixture.Create(secondEpubPath);
+        int secondBookId;
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            var second = new Book { Title = "Second", FilePath = secondEpubPath, Format = BookFormat.Epub, AddedTime = DateTime.UtcNow };
+            context.Books.Add(second);
+            context.SaveChanges();
+            secondBookId = second.Id;
+        }
+
+        try
+        {
+            vm.LoadBook(secondBookId);
+
+            // Second book has no override of its own - should resolve to the (unchanged) global
+            // default, not the 26 the first book's override picked up.
+            Assert.NotEqual(26, vm.Settings.FontSize);
+            Assert.Null(ReadBook(secondBookId).FontSizeOverride);
+            Assert.Equal(26, ReadBook(firstBookId).FontSizeOverride);
+        }
+        finally
+        {
+            File.Delete(secondEpubPath);
+        }
+    }
+
+    /// <summary>
+    /// Real bug found via manual testing 2026-09-02 (books-reader-ergonomics-and-annotations): the
+    /// reflow reader rendered a permanently blank text area, with the toolbar/chrome still showing
+    /// correct data, on any book load after the first one in a given reader-screen instance. Root
+    /// cause - LoadBook's Settings-resolution block (8 property assignments) fired the constructor's
+    /// Settings.PropertyChanged -&gt; RecomputeCurrentPage subscription, and _source?.Dispose() never
+    /// nulled the field, so on a second LoadBook call RecomputeCurrentPage's own "_source is null"
+    /// guard didn't actually stop it from running against a disposed source while _viewportSize was
+    /// already valid (this app's screens attach eagerly at startup). Fixed via _isSeedingSettings
+    /// (suppresses the recompute during that block) and explicitly nulling _source after Dispose.
+    /// This test exercises the exact reused-VM, viewport-already-set, switch-books shape that
+    /// triggered it, and asserts on the actually-visible symptom (CurrentPageParagraphs content),
+    /// not just the override-resolution behavior the older sibling test above already covers.
+    /// </summary>
+    [Fact]
+    public void SwitchingBooksInTheSameReader_PopulatesTheSecondBooksParagraphs_NotStaleOrEmpty()
+    {
+        int firstBookId = AddBook(firstChapterEmpty: false);
+        var vm = CreateViewModel(firstBookId);
+        string firstBookFirstParagraphText = vm.CurrentPageParagraphs[0].Paragraph.Text;
+
+        string secondEpubPath = Path.Combine(Path.GetTempPath(), $"paperbunkr_reader_vm_test_{Guid.NewGuid():N}.epub");
+        EpubFixture.Create(secondEpubPath, title: "Second Book");
+        int secondBookId;
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            var second = new Book { Title = "Second Book", FilePath = secondEpubPath, Format = BookFormat.Epub, AddedTime = DateTime.UtcNow };
+            context.Books.Add(second);
+            context.SaveChanges();
+            secondBookId = second.Id;
+        }
+
+        try
+        {
+            vm.LoadBook(secondBookId);
+
+            Assert.NotEmpty(vm.CurrentPageParagraphs);
+            Assert.Equal("The Beginning", vm.ChapterTitle); // EpubFixture's default first-chapter title - proves this is book 2's real content, not book 1's stale state
+            Assert.False(string.IsNullOrWhiteSpace(vm.CurrentPageParagraphs[0].Paragraph.Text));
+        }
+        finally
+        {
+            File.Delete(secondEpubPath);
+        }
+    }
+
+    [Fact]
+    public void AutoHideChromeToggle_WritesThroughToGlobalAppSettings_Immediately()
+    {
+        int bookId = AddBook(firstChapterEmpty: false);
+        var vm = CreateViewModel(bookId);
+
+        vm.AutoHideChromeToggle = false;
+
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        Assert.False(context.GetOrCreateAppSettings().BookReaderAutoHideChrome);
+    }
+
+    // --- Highlights (docs/superpowers/specs/2026-09-01-books-reader-ergonomics-and-annotations-
+    // design.md §"Highlight selection UX") ---
+
+    [Fact]
+    public void PickHighlightColor_AfterASelection_CreatesAPersistedHighlight()
+    {
+        int bookId = AddBook(firstChapterEmpty: false);
+        var vm = CreateViewModel(bookId);
+        var paragraph = vm.CurrentPageParagraphs[0];
+
+        vm.OnParagraphSelectionCompleted(paragraph, 0, 5, new Avalonia.Rect(0, 0, 40, 20));
+        vm.PickHighlightColorCommand.Execute(BookHighlightColor.Green);
+
+        Assert.Single(vm.Highlights);
+        Assert.Equal(BookHighlightColor.Green, vm.Highlights[0].Color);
+        Assert.False(vm.IsHighlightPopupOpen);
+
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        var entity = context.BookHighlights.Single();
+        Assert.Equal(paragraph.GlobalOffset, entity.StartOffset);
+        Assert.Equal(paragraph.GlobalOffset + 5, entity.EndOffset);
+        Assert.Equal(BookHighlightColor.Green, entity.Color);
+    }
+
+    [Fact]
+    public void DeleteHighlight_RemovesItFromCollectionAndDatabase()
+    {
+        int bookId = AddBook(firstChapterEmpty: false);
+        var vm = CreateViewModel(bookId);
+        var paragraph = vm.CurrentPageParagraphs[0];
+        vm.OnParagraphSelectionCompleted(paragraph, 0, 5, new Avalonia.Rect());
+        vm.PickHighlightColorCommand.Execute(BookHighlightColor.Yellow);
+        var highlight = vm.Highlights[0];
+
+        vm.DeleteHighlightCommand.Execute(highlight);
+
+        Assert.Empty(vm.Highlights);
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        Assert.Empty(context.BookHighlights);
+    }
+
+    [Fact]
+    public void PickHighlightColor_WhileEditingAnExistingHighlight_UpdatesItInPlace()
+    {
+        int bookId = AddBook(firstChapterEmpty: false);
+        var vm = CreateViewModel(bookId);
+        var paragraph = vm.CurrentPageParagraphs[0];
+        vm.OnParagraphSelectionCompleted(paragraph, 0, 5, new Avalonia.Rect());
+        vm.PickHighlightColorCommand.Execute(BookHighlightColor.Yellow);
+        var created = vm.Highlights[0];
+
+        var localHighlight = new ParagraphHighlight(0, 5, BookHighlightColor.Yellow);
+        vm.OnParagraphHighlightTapped(localHighlight, new Avalonia.Rect());
+        Assert.True(vm.IsEditingExistingHighlight);
+
+        vm.PickHighlightColorCommand.Execute(BookHighlightColor.Blue);
+
+        Assert.Single(vm.Highlights);
+        Assert.Equal(created.Id, vm.Highlights[0].Id);
+        Assert.Equal(BookHighlightColor.Blue, vm.Highlights[0].Color);
+    }
+
+    [Fact]
+    public void LoadBook_ReflectsPersistedHighlightsInParagraphViewData()
+    {
+        int bookId = AddBook(firstChapterEmpty: false);
+        var firstVm = CreateViewModel(bookId);
+        var paragraph = firstVm.CurrentPageParagraphs[0];
+        firstVm.OnParagraphSelectionCompleted(paragraph, 0, 5, new Avalonia.Rect());
+        firstVm.PickHighlightColorCommand.Execute(BookHighlightColor.Pink);
+
+        var reopened = CreateViewModel(bookId);
+
+        Assert.Single(reopened.Highlights);
+        var reopenedParagraph = reopened.CurrentPageParagraphs[0];
+        Assert.Single(reopenedParagraph.Highlights);
+        Assert.Equal(0, reopenedParagraph.Highlights[0].Start);
+        Assert.Equal(5, reopenedParagraph.Highlights[0].End);
+        Assert.Equal(BookHighlightColor.Pink, reopenedParagraph.Highlights[0].Color);
     }
 }

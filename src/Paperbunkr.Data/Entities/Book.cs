@@ -51,6 +51,32 @@ public class Book
 
     public List<BookBookmark> Bookmarks { get; set; } = new();
 
+    // --- Reader ergonomics per-book overrides (docs/superpowers/specs/2026-09-01-books-reader-
+    // ergonomics-and-annotations-design.md) — null falls back to the matching AppSettings.BookReader*
+    // global default, same resolution chain as Issue.PageFitModeOverride ?? AppSettings.DefaultPageFitMode.
+    // Written the first time a setting is changed while this book is open (BookReaderScreenViewModel);
+    // there's no "reset to global" UI in v1 per the design's own explicit deferral.
+
+    public double? FontSizeOverride { get; set; }
+
+    public BookFontFamilyOption? FontFamilyOverride { get; set; }
+
+    public BookLineSpacingOption? LineSpacingOverride { get; set; }
+
+    public double? CharacterSpacingOverride { get; set; }
+
+    public double? WordSpacingOverride { get; set; }
+
+    public double? ParagraphSpacingOverride { get; set; }
+
+    public double? PageMarginOverride { get; set; }
+
+    public BookTheme? ThemeOverride { get; set; }
+
+    public List<BookHighlight> Highlights { get; set; } = new();
+
+    public List<BookAnnotationImage> AnnotationImages { get; set; } = new();
+
     /// <summary>Collections this book belongs to, via the polymorphic <see cref="CollectionItem"/> join (docs/superpowers/specs/2026-08-27-collections-design.md). First FK crossing from the library-org layer into the Book schema — see <see cref="CollectionItem"/>.</summary>
     public List<CollectionItem> CollectionItems { get; set; } = new();
 }

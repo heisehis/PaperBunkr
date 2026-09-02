@@ -921,6 +921,31 @@ public class PageCanvas : Control
     }
 
     /// <summary>
+    /// The currently-rendered <see cref="Page"/>'s on-screen bounds, in this control's own
+    /// coordinate space - added for the PDF area-capture tool (docs/superpowers/specs/2026-09-01-
+    /// books-reader-ergonomics-and-annotations-design.md §"PDF area capture"). A read-only accessor
+    /// only, deliberately not touching any existing rendering/gesture code in this large, shared
+    /// (also used by the comic reader) control - the underlying fit/pan formula is byte-for-byte the
+    /// same one <see cref="ReaderPageVisualHandler"/>'s own <c>ComputeDrawPlan</c> already uses to
+    /// actually draw the page (verified against that method's source, not re-derived from scratch),
+    /// duplicated here rather than shared via a new cross-file dependency to keep this addition to a
+    /// single new method with no risk to the existing render path.
+    /// </summary>
+    public Rect GetCurrentImageBounds()
+    {
+        var effectivePixelSize = EffectivePixelSize();
+        double scale = ZoomPanMath.ComputeBaseScale(Bounds.Size, effectivePixelSize, FitMode, FitOnlyIfOversized) * ZoomLevel;
+        var (panX, panY) = ZoomPanMath.ClampPan(Bounds.Size, effectivePixelSize, ZoomLevel, PanOffsetX, PanOffsetY, FitMode, FitOnlyIfOversized);
+
+        double centerX = Bounds.X + (Bounds.Width / 2) + panX;
+        double centerY = Bounds.Y + (Bounds.Height / 2) + panY;
+        double width = effectivePixelSize.Width * scale;
+        double height = effectivePixelSize.Height * scale;
+
+        return new Rect(centerX - (width / 2), centerY - (height / 2), width, height);
+    }
+
+    /// <summary>
     /// Real pan-enable gate (docs/superpowers/specs/2026-08-10-reader-polish-core-viewing-controls-
     /// design.md follow-up fix) - <c>ZoomLevel &gt; MinZoom</c> alone used to be sufficient before
     /// fit modes existed (the only base scale was always contain-within-bounds), but

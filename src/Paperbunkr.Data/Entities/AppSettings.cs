@@ -392,4 +392,31 @@ public class AppSettings
     /// (MainForm.cs HiddenMessageBoxes.DoNotCheckForUpdate).
     /// </summary>
     public bool CheckForUpdatesOnStartup { get; set; } = true;
+
+    // --- Books reader ergonomics global defaults (docs/superpowers/specs/2026-09-01-books-reader-
+    // ergonomics-and-annotations-design.md) - falls back for any Book with no per-book override
+    // column set (see Book.FontSizeOverride etc.). Defaults match BookReaderSettings' own pre-
+    // existing in-code constructor defaults, so an existing settings row reproduces prior
+    // session-only behavior exactly.
+
+    public double BookReaderFontSize { get; set; } = 17;
+
+    public BookFontFamilyOption BookReaderFontFamily { get; set; } = BookFontFamilyOption.Serif;
+
+    public BookLineSpacingOption BookReaderLineSpacing { get; set; } = BookLineSpacingOption.Normal;
+
+    public double BookReaderCharacterSpacing { get; set; }
+
+    public double BookReaderWordSpacing { get; set; }
+
+    /// <summary>Matches the fixed value this replaces (BookReaderScreen.axaml's old hardcoded paragraph <c>Margin="0,0,0,10"</c>).</summary>
+    public double BookReaderParagraphSpacing { get; set; } = 10;
+
+    /// <summary>Matches the fixed value this replaces (BookReaderScreen.axaml's old hardcoded <c>ScrollViewer Padding="40,70,40,60"</c>).</summary>
+    public double BookReaderPageMargin { get; set; } = 40;
+
+    public BookTheme BookReaderTheme { get; set; } = BookTheme.MatchAppSkin;
+
+    /// <summary>Whether the reader's chrome (toolbar/progress bar) auto-fades after ~2.5s of no pointer movement while visible. Default true.</summary>
+    public bool BookReaderAutoHideChrome { get; set; } = true;
 }

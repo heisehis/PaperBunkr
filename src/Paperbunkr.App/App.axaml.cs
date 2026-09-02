@@ -83,6 +83,12 @@ public partial class App : Application
             // AutoBackupEnabled and the min-interval de-dupe guard, and swallows its own failures.
             System.Threading.Tasks.Task.Run(() => new BackupService().RunAutoBackupIfDue());
 
+            // Publisher content-type sweep (docs/superpowers/specs/2026-08-30-publisher-content-
+            // type-classification-design.md) - same fire-and-forget, non-blocking shape as the
+            // auto-backup trigger above. RunContentTypeSweepIfDue() is itself gated by the 7-day
+            // interval check and swallows its own failures.
+            System.Threading.Tasks.Task.Run(() => new LibraryFolderScanner().RunContentTypeSweepIfDue());
+
             DiagnosticsService.LogMilestone("Database ready. Applying skin/theme...");
             new SkinService().ApplyPersistedSettings();
 

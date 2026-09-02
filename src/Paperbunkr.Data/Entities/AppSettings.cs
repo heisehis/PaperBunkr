@@ -393,6 +393,17 @@ public class AppSettings
     /// </summary>
     public bool CheckForUpdatesOnStartup { get; set; } = true;
 
+    /// <summary>
+    /// Gates the periodic background sweep that retroactively classifies series still at
+    /// <see cref="ContentType.Unknown"/> via <see cref="Metadata.PublisherContentTypeClassifier"/>
+    /// (docs/superpowers/specs/2026-08-30-publisher-content-type-classification-design.md),
+    /// mirroring <see cref="AutoBackupEnabled"/>'s startup-trigger shape
+    /// (<c>BackupService.RunAutoBackupIfDue</c>). Null means "never run" - the sweep fires on a
+    /// 7-day interval and only advances this on full completion, so an interrupted pass retries
+    /// next launch.
+    /// </summary>
+    public DateTime? LastContentTypeSweepUtc { get; set; }
+
     // --- Books reader ergonomics global defaults (docs/superpowers/specs/2026-09-01-books-reader-
     // ergonomics-and-annotations-design.md) - falls back for any Book with no per-book override
     // column set (see Book.FontSizeOverride etc.). Defaults match BookReaderSettings' own pre-

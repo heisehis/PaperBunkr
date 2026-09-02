@@ -697,6 +697,119 @@ public class LibraryFolderScannerTests : IDisposable
         Assert.Equal(ReadingMode.LeftToRight, series.ReadingMode);
     }
 
+    // ===================== Publisher content-type heuristic (docs/superpowers/specs/
+    // 2026-08-30-publisher-content-type-classification-design.md) =====================
+
+    [Fact]
+    public async Task ScanAllAsync_PublisherMatch_NoEmbeddedManga_NewSeries_SetsContentTypeAndReadingMode()
+    {
+        var embedded = new cYo.Projects.ComicRack.Engine.ComicInfo
+        {
+            Series = "One Piece",
+            Publisher = "Viz Media",
+        };
+        CbzFixture.Create(Path.Combine(_scanRoot, "One Piece 001.cbz"), pageCount: 1, embedded);
+        AddWatchedFolder(_scanRoot);
+
+        await CreateScanner().ScanAllAsync(new Progress<(int, int)>());
+
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        var series = Assert.Single(context.Series);
+        Assert.Equal(ContentType.Manga, series.ContentType);
+        Assert.Equal(ReadingMode.RightToLeft, series.ReadingMode);
+    }
+
+    [Fact]
+    public async Task ScanAllAsync_PublisherMatch_ExistingSeries_NeverOverwritesItsContentType()
+    {
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            context.Series.Add(new Series { Name = "One Piece", ContentType = ContentType.Comic, ReadingMode = ReadingMode.LeftToRight });
+            context.SaveChanges();
+        }
+
+        var embedded = new cYo.Projects.ComicRack.Engine.ComicInfo
+        {
+            Series = "One Piece",
+            Publisher = "Viz Media",
+        };
+        CbzFixture.Create(Path.Combine(_scanRoot, "One Piece 001.cbz"), pageCount: 1, embedded);
+        AddWatchedFolder(_scanRoot);
+
+        await CreateScanner().ScanAllAsync(new Progress<(int, int)>());
+
+        using var verify = new PaperbunkrDbContext(_dbOptions);
+        var series = Assert.Single(verify.Series);
+        Assert.Equal(ContentType.Comic, series.ContentType);
+        Assert.Equal(ReadingMode.LeftToRight, series.ReadingMode);
+    }
+
+    /// <summary>The embedded Manga field is a deliberate classification; Publisher is only an
+    /// inference. Confirms the field wins even when it disagrees with what Publisher would imply.</summary>
+    [Fact]
+    public async Task ScanAllAsync_EmbeddedMangaFieldPresent_PublisherIgnored()
+    {
+        var embedded = new cYo.Projects.ComicRack.Engine.ComicInfo
+        {
+            Series = "One Piece",
+            Manga = cYo.Projects.ComicRack.Engine.MangaYesNo.No,
+            Publisher = "Viz Media",
+        };
+        CbzFixture.Create(Path.Combine(_scanRoot, "One Piece 001.cbz"), pageCount: 1, embedded);
+        AddWatchedFolder(_scanRoot);
+
+        await CreateScanner().ScanAllAsync(new Progress<(int, int)>());
+
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        var series = Assert.Single(context.Series);
+        Assert.Equal(ContentType.Comic, series.ContentType);
+        Assert.Equal(ReadingMode.LeftToRight, series.ReadingMode);
+    }
+
+    /// <summary>Publisher is checked before LanguageISO in the fallback chain - confirms it wins
+    /// even when LanguageISO is also present and would imply something different.</summary>
+    [Fact]
+    public async Task ScanAllAsync_PublisherMatch_LanguageIsoAlsoPresentButDisagrees_PublisherWins()
+    {
+        var embedded = new cYo.Projects.ComicRack.Engine.ComicInfo
+        {
+            Series = "Real Comic",
+            Publisher = "Marvel",
+            LanguageISO = "ja",
+        };
+        CbzFixture.Create(Path.Combine(_scanRoot, "Real Comic 001.cbz"), pageCount: 1, embedded);
+        AddWatchedFolder(_scanRoot);
+
+        await CreateScanner().ScanAllAsync(new Progress<(int, int)>());
+
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        var series = Assert.Single(context.Series);
+        Assert.Equal(ContentType.Comic, series.ContentType);
+        Assert.Equal(ReadingMode.LeftToRight, series.ReadingMode);
+    }
+
+    /// <summary>No Manga field, no Publisher match - falls through to LanguageISO exactly as before
+    /// Publisher classification existed.</summary>
+    [Fact]
+    public async Task ScanAllAsync_NoPublisherMatch_FallsThroughToLanguageIso()
+    {
+        var embedded = new cYo.Projects.ComicRack.Engine.ComicInfo
+        {
+            Series = "One Piece",
+            Publisher = "Some Indie Publisher",
+            LanguageISO = "ja",
+        };
+        CbzFixture.Create(Path.Combine(_scanRoot, "One Piece 001.cbz"), pageCount: 1, embedded);
+        AddWatchedFolder(_scanRoot);
+
+        await CreateScanner().ScanAllAsync(new Progress<(int, int)>());
+
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        var series = Assert.Single(context.Series);
+        Assert.Equal(ContentType.Manga, series.ContentType);
+        Assert.Equal(ReadingMode.RightToLeft, series.ReadingMode);
+    }
+
     // --- Series-reassignment proposals (docs/superpowers/specs/2026-08-17-metadata-model-phase2b-
     // series-reassignment-design.md) ---
 
@@ -775,5 +888,77 @@ public class LibraryFolderScannerTests : IDisposable
         using var context = new PaperbunkrDbContext(_dbOptions);
         var issue = Assert.Single(context.Issues.Include(i => i.MetadataProposals));
         Assert.DoesNotContain(issue.MetadataProposals, p => p.Field == MetadataProposalField.Series);
+    }
+
+    // ===================== Publisher content-type periodic sweep (docs/superpowers/specs/
+    // 2026-08-30-publisher-content-type-classification-design.md) =====================
+
+    [Theory]
+    [InlineData(null, true)]
+    [InlineData(2, false)]
+    [InlineData(8, true)]
+    public void ShouldRunContentTypeSweep_GatesOnSevenDayInterval(int? daysAgo, bool expected)
+    {
+        DateTime nowUtc = new(2026, 9, 2, 0, 0, 0, DateTimeKind.Utc);
+        DateTime? lastRunUtc = daysAgo is null ? null : nowUtc.AddDays(-daysAgo.Value);
+
+        Assert.Equal(expected, LibraryFolderScanner.ShouldRunContentTypeSweep(lastRunUtc, nowUtc));
+    }
+
+    [Fact]
+    public void RunContentTypeSweepIfDue_ClassifiesUnknownSeriesWithMatchingPublisher()
+    {
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            var series = new Series { Name = "One Piece", ContentType = ContentType.Unknown };
+            context.Series.Add(series);
+            context.Issues.Add(new Issue { Series = series, Publisher = "Viz Media" });
+            context.SaveChanges();
+        }
+
+        CreateScanner().RunContentTypeSweepIfDue();
+
+        using var verify = new PaperbunkrDbContext(_dbOptions);
+        var updated = Assert.Single(verify.Series);
+        Assert.Equal(ContentType.Manga, updated.ContentType);
+        Assert.Equal(ReadingMode.RightToLeft, updated.ReadingMode);
+        Assert.NotNull(verify.GetOrCreateAppSettings().LastContentTypeSweepUtc);
+    }
+
+    [Fact]
+    public void RunContentTypeSweepIfDue_NoMatchingPublisher_LeavesSeriesUnknown()
+    {
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            var series = new Series { Name = "Some Series", ContentType = ContentType.Unknown };
+            context.Series.Add(series);
+            context.Issues.Add(new Issue { Series = series, Publisher = "Some Indie Publisher" });
+            context.SaveChanges();
+        }
+
+        CreateScanner().RunContentTypeSweepIfDue();
+
+        using var verify = new PaperbunkrDbContext(_dbOptions);
+        var updated = Assert.Single(verify.Series);
+        Assert.Equal(ContentType.Unknown, updated.ContentType);
+    }
+
+    [Fact]
+    public void RunContentTypeSweepIfDue_NotYetDue_DoesNothing()
+    {
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            var series = new Series { Name = "One Piece", ContentType = ContentType.Unknown };
+            context.Series.Add(series);
+            context.Issues.Add(new Issue { Series = series, Publisher = "Viz Media" });
+            context.GetOrCreateAppSettings().LastContentTypeSweepUtc = DateTime.UtcNow.AddDays(-1);
+            context.SaveChanges();
+        }
+
+        CreateScanner().RunContentTypeSweepIfDue();
+
+        using var verify = new PaperbunkrDbContext(_dbOptions);
+        var updated = Assert.Single(verify.Series);
+        Assert.Equal(ContentType.Unknown, updated.ContentType); // untouched - not due yet
     }
 }

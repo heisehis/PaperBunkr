@@ -228,7 +228,18 @@ public class LibraryFolderScanner
                         series.ContentType = contentType;
                         series.ReadingMode = readingMode;
                     }
-                    // Falls back to LanguageISO when the Manga field itself is absent/Unknown
+                    // Falls back to Publisher when the Manga field itself is absent/Unknown
+                    // (docs/superpowers/specs/2026-08-30-publisher-content-type-classification-
+                    // design.md) - checked before LanguageISO since a publisher match (Marvel, Viz,
+                    // etc.) is at least as confident a signal and this codebase already treats the
+                    // Manga field as strictly more authoritative than either. Same isNewSeries guard
+                    // and rationale as above.
+                    else if (isNewSeries && PublisherContentTypeClassifier.TryClassify(issue.Publisher, out var publisherContentType, out var publisherReadingMode))
+                    {
+                        series.ContentType = publisherContentType;
+                        series.ReadingMode = publisherReadingMode;
+                    }
+                    // Falls back to LanguageISO when neither the Manga field nor Publisher matched
                     // (docs/superpowers/specs/2026-08-23-language-iso-content-type-heuristic-design.md)
                     // - the embedded Manga field always wins when present since it's a deliberate
                     // classification, not an inference. Same isNewSeries guard and rationale as above.
@@ -423,6 +434,61 @@ public class LibraryFolderScanner
 
         return new LibrarySeriesResyncResult(reassigned);
     }
+
+    /// <summary>
+    /// Periodic background sweep (docs/superpowers/specs/2026-08-30-publisher-content-type-
+    /// classification-design.md) - retroactively classifies series still at
+    /// <see cref="ContentType.Unknown"/> via <see cref="PublisherContentTypeClassifier"/>, catching
+    /// libraries scanned before this feature existed or files whose <see cref="Issue.Publisher"/>
+    /// was only filled in by a later <see cref="SyncMetadataAsync"/> run - the scan-time hook in
+    /// <see cref="ImportFiles"/> only ever helps issues discovered after this shipped. Mirrors
+    /// <c>BackupService.RunAutoBackupIfDue</c>'s shape exactly: best-effort, silent, swallows its
+    /// own failures, called fire-and-forget from <c>App.axaml.cs</c> startup. Gated by
+    /// <see cref="ShouldRunContentTypeSweep"/> against <see cref="AppSettings.LastContentTypeSweepUtc"/>,
+    /// which only advances on full completion so an interrupted pass retries next launch.
+    /// </summary>
+    public void RunContentTypeSweepIfDue()
+    {
+        try
+        {
+            using var context = _contextFactory();
+            var appSettings = context.GetOrCreateAppSettings();
+
+            if (!ShouldRunContentTypeSweep(appSettings.LastContentTypeSweepUtc, DateTime.UtcNow))
+            {
+                return;
+            }
+
+            var unclassifiedSeries = context.Series
+                .Where(s => s.ContentType == ContentType.Unknown)
+                .Include(s => s.Issues)
+                .ToList();
+
+            foreach (var series in unclassifiedSeries)
+            {
+                foreach (var issue in series.Issues)
+                {
+                    if (PublisherContentTypeClassifier.TryClassify(issue.Publisher, out var contentType, out var readingMode))
+                    {
+                        series.ContentType = contentType;
+                        series.ReadingMode = readingMode;
+                        break;
+                    }
+                }
+            }
+
+            appSettings.LastContentTypeSweepUtc = DateTime.UtcNow;
+            context.SaveChanges();
+        }
+        catch (Exception)
+        {
+        }
+    }
+
+    /// <summary>Pure gate for <see cref="RunContentTypeSweepIfDue"/> - 7-day interval, unit-testable
+    /// without waiting on real elapsed time.</summary>
+    public static bool ShouldRunContentTypeSweep(DateTime? lastRunUtc, DateTime nowUtc) =>
+        lastRunUtc is null || (nowUtc - lastRunUtc.Value).TotalDays >= 7;
 
     /// <summary>Mirrors <c>Assets/Marks/format-aliases.tsv</c>'s "Trade Paper Back" row (canonical
     /// "TPB", aliases "trade paperback"/"tpb"/"trade") - a small, self-contained check rather than

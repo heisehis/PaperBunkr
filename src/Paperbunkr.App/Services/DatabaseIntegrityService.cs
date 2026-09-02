@@ -18,6 +18,16 @@ public static class DatabaseIntegrityService
     /// genuine structural problem, with the raw pragma result (never just "ok") in
     /// <paramref name="detail"/>.
     /// </summary>
+    /// <remarks>
+    /// Corruption severe enough to break the schema b-tree itself (page 1) can make SQLite throw
+    /// <see cref="Microsoft.Data.Sqlite.SqliteException"/> (SQLITE_CORRUPT) straight out of
+    /// <c>ExecuteScalar</c> instead of letting <c>integrity_check</c> return a descriptive string -
+    /// confirmed via a deliberately-corrupted page 1 fixture. That's still corruption, just a
+    /// louder flavor of it, and must be caught here rather than propagate: this method exists
+    /// specifically so a corrupt file gets the recovery dialog (design doc §3) instead of
+    /// bubbling up to <c>DiagnosticsService.LogCrash(isTerminating: true)</c>'s one-way crash
+    /// dialog - the exact failure mode this whole feature was built to replace.
+    /// </remarks>
     public static bool CheckIntegrity(out string? detail)
     {
         string dbPath = PaperbunkrDbContext.GetDefaultDatabasePath();
@@ -27,12 +37,20 @@ public static class DatabaseIntegrityService
             return true;
         }
 
-        using var conn = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={dbPath}");
-        conn.Open();
-        using var cmd = conn.CreateCommand();
-        cmd.CommandText = "PRAGMA integrity_check;";
-        string result = (string)cmd.ExecuteScalar()!;
-        detail = result;
-        return result == "ok";
+        try
+        {
+            using var conn = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={dbPath}");
+            conn.Open();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = "PRAGMA integrity_check;";
+            string result = (string)cmd.ExecuteScalar()!;
+            detail = result;
+            return result == "ok";
+        }
+        catch (Microsoft.Data.Sqlite.SqliteException ex)
+        {
+            detail = ex.Message;
+            return false;
+        }
     }
 }

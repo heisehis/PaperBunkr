@@ -67,11 +67,19 @@ public class DatabaseIntegrityServiceTests : IDisposable
         }
         Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
 
-        // Overwrite a chunk in the middle of the file with garbage bytes, past the header, to
-        // simulate real page-level corruption rather than an unreadable/truncated file.
+        // Overwrite the cell-content area of page 1 (the sqlite_master b-tree root, which every
+        // SQLite file has) with garbage bytes, past the 100-byte file header, to simulate real
+        // page-level corruption rather than an unreadable/truncated file. Deliberately NOT
+        // "bytes.Length / 2" - that midpoint's page depends on however many pages the current
+        // schema happens to occupy, so as the model grows/shrinks the corruption can silently
+        // drift into a freelist/unallocated page that integrity_check doesn't flag, making this
+        // test flake without any bug in the production code. Page 1 always holds real btree
+        // content, so corrupting it is schema-size-independent.
         byte[] bytes = File.ReadAllBytes(_dbPath);
-        int start = bytes.Length / 2;
-        int length = Math.Min(512, bytes.Length - start);
+        int pageSize = (bytes[16] << 8) | bytes[17];
+        if (pageSize == 1) pageSize = 65536; // header encodes 65536 as 0x0001 (can't fit in u16)
+        int start = 100;
+        int length = Math.Min(pageSize - start, bytes.Length - start);
         for (int i = 0; i < length; i++)
         {
             bytes[start + i] = 0xFF;

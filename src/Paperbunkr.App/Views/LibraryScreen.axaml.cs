@@ -25,12 +25,15 @@ public partial class LibraryScreen : UserControl
 
     private void OnLibraryScreenKeyDown(object? sender, KeyEventArgs e)
     {
-        if (e.Key == Key.Escape && DataContext is LibraryScreenViewModel { IsAddIssueOpen: true } vm)
+        if (DataContext is not LibraryScreenViewModel vm)
         {
-            vm.CloseAddIssueCommand.Execute(null);
-            e.Handled = true;
             return;
         }
+
+        // Escape for the Add-issue overlay is now handled centrally in MainViewModel.Escape()
+        // (docs/superpowers/specs/2026-08-31-app-wide-and-library-keyboard-shortcuts-design.md's own
+        // investigation) - MainWindow's Tunnel KeyDown handler runs before this one and always
+        // consumes Escape, so a duplicate check here would never actually be reached.
 
         // docs/superpowers/specs/2026-08-31-app-wide-and-library-keyboard-shortcuts-design.md - "/"
         // focuses the search box from anywhere in the grid. e.Source (not sender - this fires on the
@@ -39,6 +42,38 @@ public partial class LibraryScreen : UserControl
         if (e.Key == Key.OemQuestion && e.KeyModifiers == KeyModifiers.None && e.Source is not TextBox)
         {
             Toolbar.FocusSearchBox();
+            e.Handled = true;
+            return;
+        }
+
+        // Real accelerator for the context menu's "Edit Properties… (Ctrl+I)" hint (CE parity -
+        // miProperties.ShortcutKeys), plus Select All / Delete (docs/superpowers/specs/2026-08-31-
+        // app-wide-and-library-keyboard-shortcuts-design.md). Wired here as a plain KeyDown handler,
+        // not <UserControl.KeyBindings>, matching PageCanvas's/this file's own already-proven Escape/
+        // "/" pattern above. Ctrl+I dispatches through BulkEditCurrentSelectionCommand, not
+        // BulkEditSelectionCommand directly - the latter only ever reads issue-granularity
+        // Selection.SelectedIds, so pressing Ctrl+I with a real series selected (SeriesSelection)
+        // silently no-opped, a genuine pre-existing bug found via live diagnostic logging this
+        // session, unrelated to key routing itself. e.Source, not sender, so typing into a TextBox
+        // (e.g. the search box) never steals these.
+        if (e.Source is TextBox)
+        {
+            return;
+        }
+
+        if (e.Key == Key.I && e.KeyModifiers == KeyModifiers.Control)
+        {
+            vm.BulkEditCurrentSelectionCommand.Execute(null);
+            e.Handled = true;
+        }
+        else if (e.Key == Key.A && e.KeyModifiers == KeyModifiers.Control)
+        {
+            vm.SelectAllVisibleCommand.Execute(null);
+            e.Handled = true;
+        }
+        else if (e.Key == Key.Delete && e.KeyModifiers == KeyModifiers.None)
+        {
+            vm.DeleteCurrentSelectionCommand.Execute(null);
             e.Handled = true;
         }
     }
@@ -88,32 +123,78 @@ public partial class LibraryScreen : UserControl
             return;
         }
 
+        // Single click now only focuses a card (real user direction: it used to navigate
+        // immediately on plain click, which made keyboard-driven grid navigation impossible to
+        // use - you'd leave the grid the moment you clicked anything). Double-click opens it (see
+        // OnCardDoubleTapped); Enter/Space is the keyboard equivalent, matching what Button's own
+        // default Click-on-Enter behavior did before Command was removed from these templates.
+        if ((item is IssueListRow or SeriesCardSample) && (e.Key == Key.Enter || e.Key == Key.Space))
+        {
+            OpenCard(item);
+            e.Handled = true;
+            return;
+        }
+
         // Two independent card types can occupy this same handler depending on Granularity - see
         // this file's own top doc comment and docs/superpowers/specs/2026-08-18-library-book-
         // centric-redesign-design.md Slice 3's follow-up.
-        if ((item is IssueListRow or SeriesCardSample) && GridKeyboardNavigation.TryHandleArrowKey(itemsControl, item, e.Key))
+        if ((item is IssueListRow or SeriesCardSample) && GridKeyboardNavigation.TryHandleArrowKey(itemsControl, button, e.Key))
         {
             e.Handled = true;
         }
     }
 
-    /// <summary>
-    /// Ctrl/shift-click multi-selection (docs/superpowers/specs/2026-08-24-library-multiselect-
-    /// slice1-design.md §3) - plain click is completely untouched (the tile Button's own Command
-    /// binding keeps navigating exactly as it always has); this handler only acts, and only
-    /// consumes the press (<c>e.Handled = true</c>, preventing the Button's own click from also
-    /// firing), when Ctrl or Shift is actually held. Mirrors <c>DetailTabs.axaml.cs</c>'s own
-    /// PointerPressed-based selection handler, adapted for a Button root instead of a Border.
-    /// </summary>
-    private void OnTilePointerPressed(object? sender, PointerPressedEventArgs e)
+    /// <summary>Double-click opens the card (see <see cref="OnCardKeyDown"/>'s own doc comment for
+    /// why plain single-click no longer does). Shared by both the issue and series poster
+    /// templates, same "which type is it" dispatch <see cref="OnCardKeyDown"/> already needs.</summary>
+    private void OnCardDoubleTapped(object? sender, TappedEventArgs e)
     {
-        if (sender is not Button { DataContext: IssueListRow row } || DataContext is not LibraryScreenViewModel viewModel)
+        if (sender is Button { DataContext: { } item } && item is IssueListRow or SeriesCardSample)
+        {
+            OpenCard(item);
+        }
+    }
+
+    private void OpenCard(object item)
+    {
+        if (DataContext is not LibraryScreenViewModel vm)
         {
             return;
         }
 
-        bool ctrlOrShift = e.KeyModifiers.HasFlag(KeyModifiers.Control) || e.KeyModifiers.HasFlag(KeyModifiers.Shift);
-        if (!ctrlOrShift)
+        switch (item)
+        {
+            case IssueListRow row:
+                vm.IssueList.OpenIssueCommand.Execute(row);
+                break;
+            case SeriesCardSample card:
+                vm.SelectCardCommand.Execute(card);
+                break;
+        }
+    }
+
+    /// <summary>
+    /// Ctrl/shift-click multi-selection (docs/superpowers/specs/2026-08-24-library-multiselect-
+    /// slice1-design.md §3), plus explicit <c>Focus()</c> on every plain click - real user
+    /// direction: single click used to also navigate (the tile's own bound <c>Command</c>), which
+    /// made keyboard-driven grid navigation unusable (you'd leave the grid the instant you clicked
+    /// anything). <c>Command</c> was removed from the template entirely (double-click/Enter/Space
+    /// open it instead - see <see cref="OnCardDoubleTapped"/>/<see cref="OnCardKeyDown"/>), and
+    /// without a bound Command a plain Button's own default focus-on-press behavior turned out not
+    /// to reliably show the <c>:focus-within</c> glow style either (found via manual testing) - so
+    /// focus is now set here explicitly rather than assumed. Mirrors <c>DetailTabs.axaml.cs</c>'s
+    /// own PointerPressed-based selection handler, adapted for a Button root instead of a Border.
+    /// </summary>
+    private void OnTilePointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (sender is not Button { DataContext: IssueListRow row } button || DataContext is not LibraryScreenViewModel viewModel)
+        {
+            return;
+        }
+
+        button.Focus();
+
+        if (!e.KeyModifiers.HasFlag(KeyModifiers.Control) && !e.KeyModifiers.HasFlag(KeyModifiers.Shift))
         {
             return;
         }
@@ -123,17 +204,18 @@ public partial class LibraryScreen : UserControl
     }
 
     /// <summary>Series-granularity counterpart to <see cref="OnTilePointerPressed"/> (docs/superpowers/
-    /// specs/2026-08-24-library-multiselect-slice3-design.md) - same ctrl/shift-only gating, plain
-    /// click still navigates untouched.</summary>
+    /// specs/2026-08-24-library-multiselect-slice3-design.md) - same explicit-focus-on-click and
+    /// ctrl/shift-only selection-toggle gating.</summary>
     private void OnSeriesTilePointerPressed(object? sender, PointerPressedEventArgs e)
     {
-        if (sender is not Button { DataContext: SeriesCardSample card } || DataContext is not LibraryScreenViewModel viewModel)
+        if (sender is not Button { DataContext: SeriesCardSample card } button || DataContext is not LibraryScreenViewModel viewModel)
         {
             return;
         }
 
-        bool ctrlOrShift = e.KeyModifiers.HasFlag(KeyModifiers.Control) || e.KeyModifiers.HasFlag(KeyModifiers.Shift);
-        if (!ctrlOrShift)
+        button.Focus();
+
+        if (!e.KeyModifiers.HasFlag(KeyModifiers.Control) && !e.KeyModifiers.HasFlag(KeyModifiers.Shift))
         {
             return;
         }

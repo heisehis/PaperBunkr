@@ -1,8 +1,10 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.VisualTree;
 
 namespace Paperbunkr.App.Views;
 
@@ -110,15 +112,39 @@ public static class GridKeyboardNavigation
     }
 
     /// <summary>
-    /// Thin live-control wrapper - the only part touching Avalonia controls. Walks
-    /// <paramref name="itemsControl"/>'s realized containers, calls <see cref="Navigate{T}"/>, and
-    /// focuses the resolved target container. Returns <see langword="false"/> only for keys other
-    /// than Left/Right/Up/Down/Home/End (so Tab/Enter/Space/everything else stays untouched) or an
-    /// empty/unrealized list; returns <see langword="true"/> even on a clamped no-op, so arrow keys
-    /// never bubble to scroll a parent <see cref="ScrollViewer"/>.
+    /// Thin live-control wrapper - the only part touching Avalonia controls. Handles BOTH
+    /// non-virtualized panels (plain <see cref="WrapPanel"/>, via <see cref="Navigate{T}"/> over
+    /// every item's realized container) and virtualized panels (<c>VirtualizingWrapPanel</c>, via
+    /// Avalonia's own <see cref="INavigableContainer"/>.GetControl extension point) automatically,
+    /// detected from whether <paramref name="itemsControl"/>'s realized
+    /// <see cref="ItemsControl.ItemsPanelRoot"/> implements <see cref="INavigableContainer"/>.
+    /// Returns <see langword="false"/> only for keys other than Left/Right/Up/Down/Home/End (so
+    /// Tab/Enter/Space/everything else stays untouched) or an empty/unrealized non-virtualized
+    /// list; returns <see langword="true"/> even on a clamped no-op, so arrow keys never bubble to
+    /// scroll a parent <see cref="ScrollViewer"/>.
+    ///
+    /// Real bug, found via manual testing 2026-09-02: the original version of this method only
+    /// implemented the non-virtualized path (<c>ContainerFromIndex</c>/<c>ContainerFromItem</c>,
+    /// which only find realized/on-screen containers) and unconditionally returned
+    /// <see langword="true"/> regardless of whether a target container was actually found - so for
+    /// any screen whose grid had switched to <c>VirtualizingWrapPanel</c> (Library's own main card
+    /// grid did, for cover-memory virtualization, without this navigation path being updated to
+    /// match), arrow keys silently no-opped outside the visible viewport while still reporting
+    /// "handled." <c>SmartScreen.axaml.cs</c>'s own <c>OnResultCardKeyDown</c> already had the
+    /// correct virtualized-path logic (confirmed via reflection against the installed
+    /// <c>Avalonia.Controls.dll</c> - <c>VirtualizingPanel</c> explicitly implements
+    /// <c>INavigableContainer.GetControl</c>, forwarding to the protected virtual method
+    /// <c>VirtualizingWrapPanel</c> overrides with real index math and its own
+    /// <c>ScrollIntoView</c> to realize the target) - generalized here into the one shared entry
+    /// point every grid-nav call site now uses, instead of Smart Lists carrying its own duplicate.
     /// </summary>
-    public static bool TryHandleArrowKey(ItemsControl itemsControl, object currentItem, Key key)
+    public static bool TryHandleArrowKey(ItemsControl itemsControl, Control fromControl, Key key)
     {
+        if (itemsControl.ItemsPanelRoot is INavigableContainer navigable)
+        {
+            return TryHandleArrowKeyVirtualized(navigable, fromControl, key);
+        }
+
         GridNavigationDirection? direction = key switch
         {
             Key.Left => GridNavigationDirection.Left,
@@ -130,7 +156,7 @@ public static class GridKeyboardNavigation
             _ => null,
         };
 
-        if (direction is null)
+        if (direction is null || fromControl.DataContext is not { } currentItem)
         {
             return false;
         }
@@ -154,6 +180,41 @@ public static class GridKeyboardNavigation
         if (itemsControl.ContainerFromItem(target) is Control targetContainer)
         {
             targetContainer.Focus();
+        }
+
+        return true;
+    }
+
+    private static bool TryHandleArrowKeyVirtualized(INavigableContainer navigable, Control fromControl, Key key)
+    {
+        NavigationDirection? direction = key switch
+        {
+            Key.Left => NavigationDirection.Left,
+            Key.Right => NavigationDirection.Right,
+            Key.Up => NavigationDirection.Up,
+            Key.Down => NavigationDirection.Down,
+            Key.Home => NavigationDirection.First,
+            Key.End => NavigationDirection.Last,
+            _ => null,
+        };
+
+        if (direction is null)
+        {
+            return false;
+        }
+
+        // Real bug, found via manual testing 2026-09-02: VirtualizingWrapPanel.GetControl (via
+        // INavigableContainer, see this method's own group doc comment above) returns the realized
+        // *container* for the target item - for an ItemsControl using a DataTemplate, that's the
+        // ContentPresenter hosting the template's root element, not the actually-focusable control
+        // inside it (e.g. the card's own Button). ContentPresenter itself isn't Focusable, so
+        // .Focus() on it silently no-ops (confirmed: Control.IsFocused stayed false immediately
+        // after calling it) - navigation always reported "handled" but visibly never moved focus at
+        // all. Walk into the returned container to find the real focusable element instead.
+        if (navigable.GetControl(direction.Value, fromControl, wrap: false) is Control target)
+        {
+            var focusable = target.Focusable ? target : target.GetVisualDescendants().OfType<InputElement>().FirstOrDefault(c => c.Focusable);
+            focusable?.Focus();
         }
 
         return true;

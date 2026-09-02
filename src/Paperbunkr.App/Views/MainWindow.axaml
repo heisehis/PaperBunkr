@@ -19,31 +19,6 @@
         <vm:MainViewModel />
     </Design.DataContext>
 
-    <!-- P5 (docs/alpha-roadmap.md) - single app-wide Esc-to-close/cancel binding, routed through
-         MainViewModel.EscapeCommand rather than per-screen handlers since none of Migration/Issue
-         Properties/Bulk Editing are real Windows/Popups with native dialog-Escape behavior. -->
-    <Window.KeyBindings>
-        <KeyBinding Gesture="Escape" Command="{Binding EscapeCommand}" />
-        <!-- docs/superpowers/specs/2026-08-30-app-shell-navigation-history-design.md - back only,
-             no keyboard binding for forward by design (breadcrumb click / trackpad swipe only). Not
-             a KeyboardCommandRegistry entry - that registry is Reader-scoped (its ConflictContext is
-             defined purely in terms of PageCanvas's paged/continuous states), this is a shell-wide
-             binding, same mechanism as Escape above. Gesture name is "Back" (Avalonia.Input.Key.Back),
-             not "Backspace" - confirmed via reflection against the installed Avalonia.Base.dll after
-             "Backspace" crashed KeyGesture.Parse at startup (ArgumentException, Key enum has no
-             member by that name). -->
-        <KeyBinding Gesture="Back" Command="{Binding NavigateBackCommand}" />
-        <!-- docs/superpowers/specs/2026-08-31-app-wide-and-library-keyboard-shortcuts-design.md -
-             app-wide hotkeys, same hardcoded-Window.KeyBindings mechanism as Escape/Back above
-             (not KeyboardCommandRegistry, which is deliberately Reader-scoped). OemComma is
-             Avalonia.Input.Key's actual enum name for the physical comma key - confirmed via
-             reflection against the installed Avalonia.Base.dll, same verification approach already
-             used for "Back" above. -->
-        <KeyBinding Gesture="Ctrl+OemComma" Command="{Binding GoPreferencesCommand}" />
-        <KeyBinding Gesture="Ctrl+Tab" Command="{Binding CycleScreenForwardCommand}" />
-        <KeyBinding Gesture="Ctrl+Shift+Tab" Command="{Binding CycleScreenBackCommand}" />
-    </Window.KeyBindings>
-
     <Window.Styles>
         <!-- Rail nav button: 44x44, rounded, active state = accent-soft fill + accent text
              (docs/superpowers/specs/2026-08-24-navigation-shell-motion-system-design.md - rail
@@ -118,6 +93,16 @@
         </Style>
         <Style Selector="Button.sideItemButton.active /template/ ContentPresenter">
             <Setter Property="Background" Value="{DynamicResource PbAccentSoftBrush}" />
+        </Style>
+        <!-- Real bug found 2026-09-03: unlike Button.card (LibraryScreen.axaml's own :focus-within
+             glow ring), sideItemButton had no focus-visible style at all - keyboard focus genuinely
+             moves between rows (confirmed via an isolated FlaUI test reading translated Bounds from
+             OnSidebarKeyDown's own diagnostic log), but with only :pointerover/.active (a
+             ViewModel-bound selection state, not focus) styled, arrow-key navigation looked
+             completely inert since nothing ever rendered differently. -->
+        <Style Selector="Button.sideItemButton:focus-within /template/ ContentPresenter">
+            <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
         </Style>
         <Style Selector="Button.sideItemButton.active TextBlock.sideItemLabel">
             <Setter Property="FontWeight" Value="Bold" />

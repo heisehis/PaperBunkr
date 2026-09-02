@@ -19,13 +19,13 @@ public partial class BookDetailScreen : UserControl
     /// <c>LibraryScreen.axaml.cs</c>'s own <c>OnCardKeyDown</c>.</summary>
     private void OnCardKeyDown(object? sender, KeyEventArgs e)
     {
-        if (sender is not Button { DataContext: { } item } button ||
+        if (sender is not Button { DataContext: not null } button ||
             button.FindAncestorOfType<ItemsControl>() is not { } itemsControl)
         {
             return;
         }
 
-        if (GridKeyboardNavigation.TryHandleArrowKey(itemsControl, item, e.Key))
+        if (GridKeyboardNavigation.TryHandleArrowKey(itemsControl, button, e.Key))
         {
             e.Handled = true;
         }

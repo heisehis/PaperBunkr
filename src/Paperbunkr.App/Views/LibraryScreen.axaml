@@ -14,18 +14,6 @@
              x:DataType="vm:LibraryScreenViewModel"
              controls:ContextMenuHost.Provider="{Binding}">
 
-    <!-- Real accelerator for the context menu's "Edit Properties… (Ctrl+I)" hint (CE parity -
-         miProperties.ShortcutKeys). Acts on the current selection; no-ops when nothing is selected
-         (BulkEditSelection -> OpenIssueEditor returns early on an empty list). -->
-    <UserControl.KeyBindings>
-        <KeyBinding Gesture="Ctrl+I" Command="{Binding BulkEditSelectionCommand}" />
-        <!-- docs/superpowers/specs/2026-08-31-app-wide-and-library-keyboard-shortcuts-design.md -
-             Select All / Delete, dispatched by granularity inside the ViewModel commands themselves
-             so this stays a plain gesture-to-command binding like Ctrl+I above. -->
-        <KeyBinding Gesture="Ctrl+A" Command="{Binding SelectAllVisibleCommand}" />
-        <KeyBinding Gesture="Delete" Command="{Binding DeleteCurrentSelectionCommand}" />
-    </UserControl.KeyBindings>
-
     <UserControl.Styles>
         <!-- Toolbar-only styles (Button.toolbarPill / Border.dropdown / TextBlock.dropdownRow /
              Button.modeOption) moved to Views/LibraryToolbar.axaml alongside the toolbar markup
@@ -50,17 +38,47 @@
              here on the inner cover Border of a Button.card since the card root stays a Button. -->
         <Style Selector="Border.posterCover">
             <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusSm}" />
-            <Setter Property="Transitions">
-                <Transitions>
-                    <BoxShadowsTransition Property="BoxShadow" Duration="{DynamicResource PbMotionFast}" Easing="{StaticResource PbMotionEase}" />
-                </Transitions>
-            </Setter>
+            <!-- Real bug, found via manual testing 2026-09-02: even after fixing ClipToBounds (see
+                 the note below), the glow was only ever visible as a tiny sliver at the card's
+                 bottom edge - this Border shares its exact bounds with the Grid.RowDefinitions="*,Auto"
+                 cell above the title/subtitle text row right below it (Grid.Row="1" in the templates
+                 below), with zero gap reserved for a shadow to spread into on that side, and every
+                 sibling card in the WrapPanel sitting immediately at the ItemSpacing boundary on the
+                 other three. A permanent 5px margin (not conditional on the glow states - that would
+                 make the cover visibly resize/jump every time you hover or focus a card) reserves a
+                 consistent gutter on all four sides so PbGlowRing's 4px spread always has room,
+                 whether it's currently showing or not.-->
+            <Setter Property="Margin" Value="5,10,5,5" />
+            <!-- Real bug found 2026-09-03 via a headless Skia render diagnostic (forced/withheld
+                 render-timer ticks to isolate mid-animation frames): animating BoxShadow via
+                 BoxShadowsTransition made the ring render incomplete (missing edges, most visibly
+                 the top) on every intermediate frame while the spread interpolates from 0 to 4px -
+                 the compositor's per-frame invalidated/dirty region doesn't reliably keep up with
+                 the shadow's growing overflow beyond this Border's own layout bounds during the
+                 transition, so a torn-looking ring shows for the ~150ms of PbMotionFast, self-
+                 healing only once the transition settles - which reads as "always broken" if focus
+                 moves quickly enough to keep re-triggering it. Confirmed via the same diagnostic
+                 that forcing enough render-timer ticks for the transition to finish always produces
+                 a complete ring, on any card, regardless of focus order - so removing the animation
+                 (instant BoxShadow application, like every other pseudo-class-driven Setter on this
+                 Border) is the fix, not a margin/clip/ancestor change.-->
         </Style>
+        <!-- Real bug, found via manual testing 2026-09-02: this Border also carries the "cover"
+             class (Classes="cover posterCover" in the templates below), whose own style sets
+             ClipToBounds="True" (so the cover Image's corners get clipped to the rounded shape).
+             PbGlowRing is a spread-only BoxShadow (0 0 0 2 - no blur/offset, just a 2px expansion
+             beyond the element's own bounds), which ClipToBounds clips away entirely - the glow was
+             never actually invisible-only-on-focus, it never rendered at all, on hover either,
+             confirmed by checking both states. Disabling clipping only while the glow itself is
+             showing is the standard tradeoff (the cover Image's corners can peek very slightly
+             square during hover/focus) rather than losing the glow ring completely. -->
         <Style Selector="Button.card:pointerover Border.posterCover">
             <Setter Property="BoxShadow" Value="{StaticResource PbGlowRing}" />
+            <Setter Property="ClipToBounds" Value="False" />
         </Style>
         <Style Selector="Button.card:focus-within Border.posterCover">
             <Setter Property="BoxShadow" Value="{StaticResource PbGlowRing}" />
+            <Setter Property="ClipToBounds" Value="False" />
         </Style>
 
         <!-- Poster-grid group section header (UI rework Phase 4a) - Bebas display type + count + rule. -->
@@ -485,8 +503,7 @@
         <DataTemplate x:Key="PosterGridIssueTemplate" x:DataType="models:IssueListRow">
             <Button Classes="card" Margin="0"
                     Width="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PosterCardWidth}"
-                    Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).IssueList.OpenIssueCommand}"
-                    CommandParameter="{Binding}" KeyDown="OnCardKeyDown" PointerPressed="OnTilePointerPressed">
+                    KeyDown="OnCardKeyDown" PointerPressed="OnTilePointerPressed" DoubleTapped="OnCardDoubleTapped">
                 <Grid RowDefinitions="*,Auto">
                     <Border Grid.Row="0" Classes="cover posterCover" Background="{Binding CoverBrush}"
                             Height="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PosterCoverHeight}">
@@ -532,8 +549,7 @@
         <DataTemplate x:Key="PosterGridSeriesTemplate" x:DataType="models:SeriesCardSample">
             <Button Classes="card" Margin="0"
                     Width="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PosterCardWidth}"
-                    Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SelectCardCommand}"
-                    CommandParameter="{Binding}" KeyDown="OnCardKeyDown" PointerPressed="OnSeriesTilePointerPressed">
+                    KeyDown="OnCardKeyDown" PointerPressed="OnSeriesTilePointerPressed" DoubleTapped="OnCardDoubleTapped">
                 <Grid RowDefinitions="*,Auto">
                     <Border Grid.Row="0" Classes="cover posterCover" Background="{Binding CoverBrush}"
                             Height="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PosterCoverHeight}">

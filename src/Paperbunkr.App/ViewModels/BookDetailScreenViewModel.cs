@@ -1,18 +1,20 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using cYo.Projects.ComicRack.Engine.IO.Provider.Books;
 using Microsoft.EntityFrameworkCore;
 using Paperbunkr.App.ContextMenus;
 using Paperbunkr.App.Models;
 using Paperbunkr.App.Services;
 using Paperbunkr.Data;
+using Paperbunkr.Data.Books;
 using Paperbunkr.Data.Entities;
 
 namespace Paperbunkr.App.ViewModels;
@@ -97,6 +99,7 @@ public partial class BookDetailScreenViewModel : ViewModelBase, IDetailHeaderSou
             new DetailHeroAction(ContinueLabel, ContinueCommand, IsPrimary: true),
             new DetailHeroAction("Edit", EditCommand),
             new DetailHeroAction("Reveal in Explorer", RevealInExplorerCommand),
+            new DetailHeroAction("Export Annotations", ExportAnnotationsCommand),
         };
 
     private void RaiseHeaderChanged()
@@ -257,7 +260,13 @@ public partial class BookDetailScreenViewModel : ViewModelBase, IDetailHeaderSou
 
         Title = book.Title;
         Author = book.Author ?? string.Empty;
-        FormatBadge = book.Format == BookFormat.Epub ? "EPUB" : "PDF";
+        FormatBadge = book.Format switch
+        {
+            BookFormat.Epub => "EPUB",
+            BookFormat.Fb2 => "FB2",
+            BookFormat.Mobi => "MOBI", // AZW3 shares this format tag - see BookFormat.Mobi's own doc comment.
+            _ => "PDF",
+        };
         CoverBrush = SeriesCardSample.CoverBrushFor(book.Title);
         CoverImage = BookCoverImageCache.Get(bookId);
         BackdropImage = CoverImage is not null ? BackdropBlurRenderer.Render(CoverImage, new PixelSize(1600, 680)) : null;
@@ -276,7 +285,7 @@ public partial class BookDetailScreenViewModel : ViewModelBase, IDetailHeaderSou
             ? $"Last opened {opened.ToLocalTime():MMM d, yyyy}"
             : "Not started";
 
-        HasChapterProgress = book.Format == BookFormat.Epub && book.ChapterCount > 0;
+        HasChapterProgress = book.Format != BookFormat.Pdf && book.ChapterCount > 0;
         if (HasChapterProgress)
         {
             ProgressFraction = Math.Clamp((double)book.LastChapterIndex / Math.Max(1, book.ChapterCount - 1), 0, 1);
@@ -322,10 +331,10 @@ public partial class BookDetailScreenViewModel : ViewModelBase, IDetailHeaderSou
         Mode = BookDetailMode.Book;
     }
 
-    /// <summary>EPUB only: parse the file once for the TOC + bookmark chapter titles, then dispose.
-    /// PDF has neither concept (both sections stay hidden). A parse failure leaves the chapter list
-    /// empty with <see cref="ChaptersUnavailable"/> set; bookmarks still render off their stored
-    /// excerpts with a "Chapter N" title fallback.</summary>
+    /// <summary>Reflowable formats only (EPUB/FB2/MOBI): parse the file once for the TOC + bookmark
+    /// chapter titles, then dispose. PDF has neither concept (both sections stay hidden). A parse
+    /// failure leaves the chapter list empty with <see cref="ChaptersUnavailable"/> set; bookmarks
+    /// still render off their stored excerpts with a "Chapter N" title fallback.</summary>
     private void LoadChaptersAndBookmarks(Book book)
     {
         Chapters.Clear();
@@ -334,11 +343,11 @@ public partial class BookDetailScreenViewModel : ViewModelBase, IDetailHeaderSou
 
         string[] chapterTitles = Array.Empty<string>();
 
-        if (book.Format == BookFormat.Epub)
+        if (book.Format != BookFormat.Pdf)
         {
             try
             {
-                using var source = new EpubBookSource(book.FilePath);
+                using var source = BookTextSourceFactory.Create(book.Format, book.FilePath);
                 chapterTitles = source.Chapters.Select(c => c.Title).ToArray();
 
                 if (chapterTitles.Length > 1)
@@ -563,6 +572,42 @@ public partial class BookDetailScreenViewModel : ViewModelBase, IDetailHeaderSou
         if (book is not null)
         {
             RevealInExplorerHelper.RevealBook(book);
+        }
+    }
+
+    /// <summary>
+    /// Per-book export (docs/superpowers/specs/2026-09-01-books-reader-ergonomics-and-annotations-
+    /// design.md §"Export"). The OS save dialog's own "Save as type" combo is the "format dropdown"
+    /// the design calls for - <see cref="FilePickerService.PickSaveFileWithFormatAsync"/> offers all
+    /// three, and the returned path's own extension picks which <see cref="AnnotationExportService"/>
+    /// method runs. <see cref="FilePickerService"/> constructed fresh here rather than injected - this
+    /// VM has no DI container wiring for it, same "no DI container" precedent
+    /// <see cref="FilePickerService.PickImageFileAsync"/>'s own doc comment already established.
+    /// </summary>
+    [RelayCommand]
+    private async Task ExportAnnotations()
+    {
+        var filePicker = new FilePickerService();
+        string? path = await filePicker.PickSaveFileWithFormatAsync(
+            "Export Annotations", $"{Title}.md",
+            ("md", "Markdown"), ("csv", "CSV"), ("json", "JSON"));
+        if (path is null)
+        {
+            return;
+        }
+
+        using var context = PaperbunkrDb.CreateContext();
+        switch (Path.GetExtension(path).ToLowerInvariant())
+        {
+            case ".csv":
+                AnnotationExportService.ExportCsv(context, _bookId, path);
+                break;
+            case ".json":
+                AnnotationExportService.ExportJson(context, _bookId, path);
+                break;
+            default:
+                AnnotationExportService.ExportMarkdown(context, _bookId, path);
+                break;
         }
     }
 

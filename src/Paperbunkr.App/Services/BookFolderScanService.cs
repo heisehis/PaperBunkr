@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using cYo.Projects.ComicRack.Engine.IO.Provider.Books;
 using Paperbunkr.Data;
+using Paperbunkr.Data.Books;
 using Paperbunkr.Data.Entities;
 
 namespace Paperbunkr.App.Services;
@@ -63,13 +64,30 @@ public class BookFolderScanService
                 }
 
                 string extension = Path.GetExtension(file);
-                if (string.Equals(extension, ".epub", StringComparison.OrdinalIgnoreCase))
+                // ".fb2.zip" (a common FB2 distribution convention) has a ".zip" extension per
+                // Path.GetExtension, so it's checked against the full lowercased path, not just the
+                // last extension segment, before falling through to the single-extension cases.
+                if (file.EndsWith(".fb2.zip", StringComparison.OrdinalIgnoreCase))
+                {
+                    candidateFiles.Add((file, BookFormat.Fb2));
+                }
+                else if (string.Equals(extension, ".epub", StringComparison.OrdinalIgnoreCase))
                 {
                     candidateFiles.Add((file, BookFormat.Epub));
                 }
                 else if (string.Equals(extension, ".pdf", StringComparison.OrdinalIgnoreCase))
                 {
                     candidateFiles.Add((file, BookFormat.Pdf));
+                }
+                else if (string.Equals(extension, ".fb2", StringComparison.OrdinalIgnoreCase))
+                {
+                    candidateFiles.Add((file, BookFormat.Fb2));
+                }
+                else if (string.Equals(extension, ".mobi", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(extension, ".azw3", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(extension, ".azw", StringComparison.OrdinalIgnoreCase))
+                {
+                    candidateFiles.Add((file, BookFormat.Mobi));
                 }
             }
         }
@@ -90,9 +108,7 @@ public class BookFolderScanService
 
             try
             {
-                using IBookTextSource source = format == BookFormat.Epub
-                    ? new EpubBookSource(filePath)
-                    : new PdfBookSource(filePath);
+                using IBookTextSource source = BookTextSourceFactory.Create(format, filePath);
 
                 var book = new Book
                 {

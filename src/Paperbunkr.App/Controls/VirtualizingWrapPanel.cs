@@ -6,6 +6,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Layout;
+using Avalonia.VisualTree;
 
 namespace Paperbunkr.App.Controls;
 
@@ -224,8 +225,39 @@ public class VirtualizingWrapPanel : VirtualizingPanel
     protected override Control? ContainerFromIndex(int index) =>
         _realizedByIndex.TryGetValue(index, out var element) ? element : null;
 
-    protected override int IndexFromContainer(Control container) =>
-        container.GetValue(ItemIndexProperty);
+    /// <summary>
+    /// Real bug found 2026-09-03 via manual testing (Library grid Left/Right/Up/Down landing on the
+    /// wrong card or not moving at all): <see cref="ItemIndexProperty"/> is only ever set on the
+    /// realized <b>container</b> <see cref="GetOrCreateElement"/> creates via
+    /// <c>ItemContainerGenerator.CreateContainer</c> (a <see cref="ContentPresenter"/>, added
+    /// directly as this panel's child) - never on the focusable control the item's DataTemplate
+    /// renders inside it (e.g. the card's own <c>Button</c>), which is what
+    /// <see cref="GridKeyboardNavigation"/>'s live-control callers actually pass in as the "from"
+    /// control, since that's what has real keyboard focus. Reading the attached property directly
+    /// off that descendant returned its registered default of <c>-1</c> unconditionally, regardless
+    /// of which card was actually focused - which explains the exact failure pattern seen: Right
+    /// (-1+1=0) and Down (-1+itemsPerRow, whenever &gt;1 column) computed small positive indices and
+    /// jumped to a fixed wrong card, while Left (-1-1) and Up (-1-itemsPerRow) always went negative
+    /// and silently no-opped. Fixed by walking up from whatever control is passed to the real
+    /// realized container that actually carries the property.
+    /// </summary>
+    protected override int IndexFromContainer(Control container)
+    {
+        for (Control? current = container; current is not null; current = current.GetVisualParent() as Control)
+        {
+            if (current.IsSet(ItemIndexProperty))
+            {
+                return current.GetValue(ItemIndexProperty);
+            }
+
+            if (ReferenceEquals(current, this))
+            {
+                break;
+            }
+        }
+
+        return -1;
+    }
 
     protected override Control? ScrollIntoView(int index)
     {

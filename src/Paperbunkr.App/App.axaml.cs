@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
@@ -141,9 +142,22 @@ public partial class App : Application
             // skipped the same launch the welcome overlay opens, so the two first-look modals never
             // stack. Fire-and-forget: this only ever opens the ask-before-download prompt: no download
             // happens without the user clicking Download in it.
+            //
+            // Real bug, found via manual testing + FreezeWatchdog crash logs (%AppData%\Paperbunkr\
+            // logs\): calling this directly here let its first `await` capture Avalonia's UI-thread
+            // SynchronizationContext, so anything NetSparkle's SparkleUpdater.CheckForUpdatesQuietly()
+            // does synchronously under the hood before yielding (DNS/HTTP setup, etc.) ran ON the UI
+            // thread and could stall it past the watchdog's 10s threshold - reproduced consistently,
+            // freeze landing within ~1s of "Startup complete." every launch. Task.Run moves the entire
+            // call (including its first synchronous slice) onto a threadpool thread with no captured
+            // UI SynchronizationContext, so nothing NetSparkle does internally can block the UI thread
+            // regardless of how well-behaved its own async plumbing is. See
+            // CheckForUpdatesOnStartupAsync's own doc comment for the matching fix on its UI-touching
+            // tail (Update.Show/IsUpdateAvailableOverlayOpen), needed now that this method may run
+            // entirely off the UI thread.
             if (!welcomeOverlayOpened)
             {
-                _ = mainViewModel.CheckForUpdatesOnStartupAsync();
+                _ = Task.Run(mainViewModel.CheckForUpdatesOnStartupAsync);
             }
 
             // App chrome (docs/superpowers/specs/2026-08-23-app-chrome-crash-reporter-and-tray-

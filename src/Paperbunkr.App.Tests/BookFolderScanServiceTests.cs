@@ -152,4 +152,71 @@ public class BookFolderScanServiceTests : IDisposable
         var book = Assert.Single(context.Books);
         Assert.Equal("Valid Book", book.Title);
     }
+
+    [Fact]
+    public async Task ScanAllAsync_ImportsFb2_WithTitleAuthorAndSeries()
+    {
+        Fb2Fixture.Create(Path.Combine(_scanRoot, "novel.fb2"), title: "The Long Way Home", author: "Ada Author", seriesName: "The Chronicles");
+        AddBookFolder(_scanRoot);
+
+        var result = await CreateScanner().ScanAllAsync(new Progress<(int, int)>());
+
+        Assert.Equal(1, result.BooksAdded);
+        Assert.Equal(1, result.SeriesTouched);
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        var series = Assert.Single(context.BookSeries);
+        Assert.Equal("The Chronicles", series.Name);
+        var book = Assert.Single(context.Books);
+        Assert.Equal("The Long Way Home", book.Title);
+        Assert.Equal("Ada Author", book.Author);
+        Assert.Equal(BookFormat.Fb2, book.Format);
+        Assert.Equal(series.Id, book.BookSeriesId);
+    }
+
+    [Fact]
+    public async Task ScanAllAsync_ImportsZipWrappedFb2()
+    {
+        Fb2Fixture.Create(Path.Combine(_scanRoot, "novel.fb2.zip"), title: "Zipped Novel", zipWrapped: true);
+        AddBookFolder(_scanRoot);
+
+        var result = await CreateScanner().ScanAllAsync(new Progress<(int, int)>());
+
+        Assert.Equal(1, result.BooksAdded);
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        var book = Assert.Single(context.Books);
+        Assert.Equal("Zipped Novel", book.Title);
+        Assert.Equal(BookFormat.Fb2, book.Format);
+    }
+
+    [Fact]
+    public async Task ScanAllAsync_ImportsMobi_WithTitleAndAuthor()
+    {
+        MobiFixture.Create(Path.Combine(_scanRoot, "novel.mobi"), title: "The Long Way Home", author: "Ada Author");
+        AddBookFolder(_scanRoot);
+
+        var result = await CreateScanner().ScanAllAsync(new Progress<(int, int)>());
+
+        Assert.Equal(1, result.BooksAdded);
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        var book = Assert.Single(context.Books);
+        Assert.Equal("The Long Way Home", book.Title);
+        Assert.Equal("Ada Author", book.Author);
+        Assert.Equal(BookFormat.Mobi, book.Format);
+    }
+
+    [Theory]
+    [InlineData("novel.azw3")]
+    [InlineData("novel.azw")]
+    public async Task ScanAllAsync_ImportsAzwVariants_AsMobiFormat(string fileName)
+    {
+        MobiFixture.Create(Path.Combine(_scanRoot, fileName), title: "AZW Book");
+        AddBookFolder(_scanRoot);
+
+        var result = await CreateScanner().ScanAllAsync(new Progress<(int, int)>());
+
+        Assert.Equal(1, result.BooksAdded);
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        var book = Assert.Single(context.Books);
+        Assert.Equal(BookFormat.Mobi, book.Format);
+    }
 }

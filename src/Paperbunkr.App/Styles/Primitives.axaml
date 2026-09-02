@@ -108,7 +108,12 @@
              string and doesn't support markup extensions inside it, so this won't live-update on
              skin switch (an accepted implementation-time limitation for this phase; alternate
              skins beyond "default" aren't this phase's focus). Matches default skin's PbGlowColor. -->
-        <BoxShadows x:Key="PbGlowRing">0 0 0 2 #66E0995A</BoxShadows>
+        <!-- Spread bumped 2->4px, alpha 0x66->0x99 - real user feedback: once ClipToBounds was fixed
+             so this actually rendered at all (see LibraryScreen.axaml's own doc comment - the
+             2px/0x66 version had been effectively invisible everywhere this resource is used, not
+             just Library), the ring was still too faint to read clearly against a card's own
+             drop shadow at typical viewing distance. -->
+        <BoxShadows x:Key="PbGlowRing">0 0 0 4 #99E0995A</BoxShadows>
     </Styles.Resources>
 
     <!-- PosterTile - see Views/PosterTile.axaml. Root there is a Border (not Button) specifically
@@ -120,13 +125,18 @@
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="Cursor" Value="Hand" />
     </Style>
+    <!-- Real bug found 2026-09-03 (see LibraryScreen.axaml's own Border.posterCover style for the
+         full diagnosis): this class-scoped style matches LibraryScreen.axaml's cards too (same
+         "posterCover" class, reused across screens), so removing the equivalent BoxShadowsTransition
+         there alone didn't fix anything - this global copy was still animating the exact same
+         property on the exact same elements. Animating BoxShadow raced the compositor's per-frame
+         invalidation of the shadow's growing overflow beyond this Border's own bounds, showing a
+         torn/incomplete ring for the ~150ms of PbMotionFast on every focus/hover change - self-
+         healing only once the transition settled, which reads as permanently broken under fast
+         keyboard navigation. Removed here too so PosterTile (Home) doesn't carry the same latent
+         defect even though it wasn't the one reported. -->
     <Style Selector="Border.posterCover">
         <Setter Property="BoxShadow" Value="0 6 18 -4 #80000000" />
-        <Setter Property="Transitions">
-            <Transitions>
-                <BoxShadowsTransition Property="BoxShadow" Duration="{DynamicResource PbMotionFast}" Easing="{StaticResource PbMotionEase}" />
-            </Transitions>
-        </Setter>
     </Style>
     <Style Selector="Border.posterTile:pointerover Border.posterCover">
         <Setter Property="BoxShadow" Value="0 6 18 -4 #80000000, 0 0 0 2 #66E0995A" />

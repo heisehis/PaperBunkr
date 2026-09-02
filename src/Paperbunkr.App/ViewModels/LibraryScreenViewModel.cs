@@ -2240,9 +2240,33 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
     [RelayCommand]
     private void EditIssueProperties(int issueId) => OpenIssueEditor(Selection.UnionForAction(issueId));
 
-    /// <summary>Action bar's "Bulk Edit" button - edits the whole current selection.</summary>
+    /// <summary>Action bar's "Bulk Edit" button (issue granularity) - edits the whole current selection.</summary>
     [RelayCommand]
     private void BulkEditSelection() => OpenIssueEditor(Selection.SelectedIds.ToList());
+
+    /// <summary>
+    /// Real bug, found via manual testing: <c>Ctrl+I</c> (docs/superpowers/specs/2026-08-31-app-wide-
+    /// and-library-keyboard-shortcuts-design.md) was wired directly to <see cref="BulkEditSelection"/>,
+    /// which only ever reads issue-granularity <see cref="Selection"/> - selecting a series (series
+    /// granularity, <see cref="SeriesSelection"/>) and pressing Ctrl+I silently no-opped, since
+    /// <see cref="Selection"/>.SelectedIds was genuinely empty even with a real series selected and
+    /// the action bar visibly showing "1 series selected." <see cref="SelectAllVisible"/> and
+    /// <see cref="DeleteCurrentSelection"/> already dispatch by <see cref="IsSeriesGranularity"/> -
+    /// this is the same fix for the one command that was missing it, now the actual Ctrl+I keyboard
+    /// entry point instead of <see cref="BulkEditSelection"/> directly.
+    /// </summary>
+    [RelayCommand]
+    private void BulkEditCurrentSelection()
+    {
+        if (IsSeriesGranularity)
+        {
+            BulkEditSeriesSelection();
+        }
+        else
+        {
+            BulkEditSelection();
+        }
+    }
 
     private void OpenIssueEditor(IReadOnlyList<int> issueIds)
     {

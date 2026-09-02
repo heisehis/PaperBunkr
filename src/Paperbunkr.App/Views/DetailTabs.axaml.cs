@@ -55,7 +55,7 @@ public partial class DetailTabs : UserControl
             return;
         }
 
-        if (control.FindAncestorOfType<ItemsControl>() is { } list && GridKeyboardNavigation.TryHandleArrowKey(list, issue, e.Key))
+        if (control.FindAncestorOfType<ItemsControl>() is { } list && GridKeyboardNavigation.TryHandleArrowKey(list, control, e.Key))
         {
             e.Handled = true;
         }

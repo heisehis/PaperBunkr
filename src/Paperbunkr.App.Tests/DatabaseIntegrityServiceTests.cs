@@ -1,5 +1,6 @@
 using Paperbunkr.App.Services;
 using Paperbunkr.Data;
+using Paperbunkr.Data.Entities;
 
 namespace Paperbunkr.App.Tests;
 
@@ -64,6 +65,19 @@ public class DatabaseIntegrityServiceTests : IDisposable
         using (var context = PaperbunkrDb.CreateContext())
         {
             context.Database.EnsureCreated();
+
+            // EnsureCreated() alone produces a schema-only file: every table's root page is an
+            // empty leaf page, so most of the file is unallocated free space rather than real
+            // b-tree content. PRAGMA integrity_check only walks bytes that are actually in use
+            // (cell pointers/payloads); a byte flip landing in that free space is invisible to it
+            // regardless of where in the file it lands. Seed real rows so the corrupted region is
+            // very likely to hit genuine page structure (confirmed empirically: the exact same
+            // midpoint flip against a schema-only file leaves integrity_check reporting "ok").
+            for (int i = 0; i < 500; i++)
+            {
+                context.Series.Add(new Series { Name = $"Series {i}", Summary = new string('x', 2000) });
+            }
+            context.SaveChanges();
         }
         Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
 

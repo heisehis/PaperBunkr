@@ -47,6 +47,24 @@ not just implementation:
   polish pass for a worked example: it caught hardcoded hex colors that silently don't react to the
   app's own runtime skin system — a real defect, not a style nit).
 
+**How to actually load a subskill (verified 2026-08-30 after it kept failing):** Claude Code only
+registers a skill for a *top-level* directory under `~/.claude/skills/` that has its own `SKILL.md`
+directly inside it — that's `avalonia` itself. The 19 "subskills" this router table names
+(`avalonia-xaml`, `avalonia-mvvm`, every `avalonia-pro-max/*` entry, etc.) are nested *inside*
+`avalonia`'s own folder and are **not** separately registered, no matter how the routing table
+reads. Two things that look plausible both fail silently or loudly:
+- `Skill(skill: "avalonia-xaml")` (or any subskill name) → hard error, `Unknown skill: ...`.
+- `Skill(skill: "avalonia", args: "avalonia-pro-max/review-checklist")` → no error, but does
+  nothing useful either — it just reprints the top-level router's own `SKILL.md` with the args
+  tacked on as inert text; nothing reads `args` to pick a different file.
+
+The only thing that actually works: after the router names the subskill you need, `Read` (or
+`Glob` then `Read`) its `SKILL.md` directly off disk —
+`~/.claude/skills/avalonia/<subskill-path>/SKILL.md`, e.g.
+`~/.claude/skills/avalonia/avalonia-pro-max/review-checklist/SKILL.md`. That's how every subskill
+load in this project has actually happened so far; treat "invoke it like a skill" as never an
+option for anything below the router.
+
 The `avalonia-docs` MCP server (`https://docs-mcp.avaloniaui.net/mcp`, added 2026-08-30 via
 `claude mcp add`) is available for live API lookups when a subskill doesn't cover something —
 prefer it over guessing.

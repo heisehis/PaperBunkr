@@ -41,11 +41,11 @@ public sealed partial class BookReaderSettings : ObservableObject
     [NotifyPropertyChangedFor(nameof(Foreground))]
     private BookTheme _theme = BookTheme.MatchAppSkin;
 
-    /// <summary>Extra tracking applied per character, in pixels - drives <c>ParagraphView</c>'s <c>TextLayout</c> directly (design spec Component 2).</summary>
+    /// <summary>Extra tracking applied per character, in pixels - maps to the reading pane's CSS <c>letter-spacing</c> custom property (<c>BookReaderScreen.axaml.cs</c>'s <c>BuildTypographyCss</c>).</summary>
     [ObservableProperty]
     private double _characterSpacing;
 
-    /// <summary>Extra advance-width inserted after each space character, in pixels - see the design spec's Risks section for why this needs <c>ParagraphView</c> rather than a <c>TextBlock</c> property.</summary>
+    /// <summary>Extra advance-width inserted after each space character, in pixels - maps to the reading pane's CSS <c>word-spacing</c> custom property (<c>BookReaderScreen.axaml.cs</c>'s <c>BuildTypographyCss</c>).</summary>
     [ObservableProperty]
     private double _wordSpacing;
 
@@ -79,24 +79,10 @@ public sealed partial class BookReaderSettings : ObservableObject
     // Same #14161B/#ECE7DB pair App.axaml defines for PbBgColor/PbTextColor - MatchAppSkin uses a
     // concrete value rather than a live DynamicResource lookup, since Background/Foreground need
     // to be plain IBrush values usable identically across all four theme options, not a XAML-only
-    // binding path for one of them.
-    public IBrush Background => Theme switch
-    {
-        BookTheme.Light => Brushes.White,
-        BookTheme.Dark => new SolidColorBrush(Color.Parse("#1C1C1C")),
-        BookTheme.Sepia => new SolidColorBrush(Color.Parse("#F2E6CE")),
-        BookTheme.OledBlack => Brushes.Black,
-        BookTheme.HighContrast => Brushes.Black,
-        _ => new SolidColorBrush(Color.Parse("#14161B")),
-    };
+    // binding path for one of them. Mapping itself lives in BookThemeBrushes (docs/superpowers/specs/
+    // 2026-09-03-books-reader-hud-redesign-design.md) - the reader chrome's translucent tint needs
+    // the identical per-theme table, so it's one shared switch rather than two that could drift apart.
+    public IBrush Background => BookThemeBrushes.ContentBackground(Theme);
 
-    public IBrush Foreground => Theme switch
-    {
-        BookTheme.Light => new SolidColorBrush(Color.Parse("#1A1A1A")),
-        BookTheme.Dark => new SolidColorBrush(Color.Parse("#E0E0E0")),
-        BookTheme.Sepia => new SolidColorBrush(Color.Parse("#3A2F22")),
-        BookTheme.OledBlack => new SolidColorBrush(Color.Parse("#E0E0E0")),
-        BookTheme.HighContrast => Brushes.White,
-        _ => new SolidColorBrush(Color.Parse("#ECE7DB")),
-    };
+    public IBrush Foreground => BookThemeBrushes.ContentForeground(Theme);
 }

@@ -1,6 +1,34 @@
 # Books Reader HUD Redesign — Implementation Plan
 *Implements: docs/superpowers/specs/2026-09-03-books-reader-hud-redesign-design.md*
 
+## Status (updated 2026-09-03)
+
+Steps 1–8 **implemented and verified green**, uncommitted in the working tree:
+- New shared controls built: `Views/ReaderChrome.axaml`(+`.cs`), `Views/ReaderListDrawer.axaml`(+`.cs`),
+  `Views/ReaderSettingsSheet.axaml`(+`.cs`), `Views/ReaderChromeTint.cs`,
+  `Views/BookThemeSwatchConverter.cs`, `Models/BookThemeBrushes.cs`, `Models/BookTocGroup.cs`,
+  `Styles/ReaderChrome.axaml`.
+- `BookReaderScreen.axaml` (EPUB) fully rewired onto `ReaderChrome` + four `ReaderListDrawer`s + one
+  `ReaderSettingsSheet`; `PdfPageReaderScreen.axaml` rewired onto `ReaderChrome` +
+  `ReaderListDrawer` (Captures) + `ReaderSettingsSheet` (Theme-only).
+- PDF gained its first-ever theme setting (`PdfPageReaderScreenViewModel.Theme`/`SetThemeCommand`/
+  `OpenFontThemeCommand`/`CloseFontThemeCommand`/`CanvasBackground`), reusing
+  `Book.ThemeOverride`/`AppSettings.BookReaderTheme` — no schema change.
+- New tests green: `ReaderChromeTintTests`, `ReaderChromeTests`, 4 new
+  `PdfPageReaderScreenViewModelTests` theme round-trip tests.
+- Full non-UI suite: App.Tests 1524/1524, Data.Tests 710/710, Plugins.Tests 20/20 — all green
+  2026-09-03. `dotnet build Paperbunkr.sln` — 0 errors (verified after a forced
+  `CoreCompile`/XAML-weave rebuild per CLAUDE.md's AVLN2000 gotcha). The compiled exe launches to
+  "Startup complete" with all three new views loading (no `XamlLoadException`).
+- Step 9 verification: `BookReaderAccessibilityTests` passes — reader still reachable via clicks and
+  chapter prose still discoverable in the UIA tree after the full button/control rewiring.
+  (`AppFixture`'s window-appear timeout bumped 20s→120s along the way: on this machine a
+  fresh-database migration replay routinely exceeds 20s before the window shows, matching the 120s
+  `KeyboardShortcutDiagnosticTests` already allows.)
+
+**Not done:** side-by-side on-screen visual comparison of the two readers (the spec's actual goal) —
+needs a human at the screen; not blocking. Nothing committed yet.
+
 ## Survey notes (grounding for the steps below)
 
 - **FluentIcons.Avalonia symbols confirmed** (reflected directly off the installed

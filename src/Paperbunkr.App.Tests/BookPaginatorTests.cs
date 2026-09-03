@@ -4,10 +4,11 @@ using Paperbunkr.App.Views;
 namespace Paperbunkr.App.Tests;
 
 /// <summary>
-/// Exercises <see cref="BookPaginator"/>'s pure paragraph-fitting geometry (docs/superpowers/specs/
-/// 2026-08-09-novels-epub-pdf-support-design.md §5), same "pure math, fake measurer injected"
-/// shape as <see cref="ZoomPanMathTests"/> - real Avalonia text measurement is
-/// <see cref="Paperbunkr.App.ViewModels.BookReaderScreenViewModel"/>'s own concern, not this.
+/// Exercises <see cref="BookPaginator"/>'s remaining character-offset math (docs/superpowers/specs/
+/// 2026-08-09-novels-epub-pdf-support-design.md §5) - still real, load-bearing coverage for
+/// <c>BookReaderScreenViewModel</c>'s bookmark-excerpt and in-book search features, per
+/// <see cref="BookPaginator"/>'s own updated class doc comment (its page-layout half, <c>FillPage</c>,
+/// was removed in the books-reflow-reader-webview-redesign's Step 10 cleanup along with its tests).
 /// </summary>
 public class BookPaginatorTests
 {
@@ -58,62 +59,5 @@ public class BookPaginatorTests
     public void FindParagraphIndex_EmptyChapter_ReturnsZero()
     {
         Assert.Equal(0, BookPaginator.FindParagraphIndex(System.Array.Empty<BookParagraph>(), 0));
-    }
-
-    [Fact]
-    public void FillPage_AllParagraphsFit_ReturnsWholeChapter()
-    {
-        var paragraphs = new[] { P("a"), P("b"), P("c") };
-
-        var (start, end) = BookPaginator.FillPage(paragraphs, 0, maxHeight: 1000, paragraphSpacing: 5, measureHeight: _ => 50);
-
-        Assert.Equal(0, start);
-        Assert.Equal(3, end);
-    }
-
-    [Fact]
-    public void FillPage_OnlySomeParagraphsFit_StopsBeforeOverflow()
-    {
-        var paragraphs = new[] { P("a"), P("b"), P("c"), P("d") };
-        // Each paragraph is 100 tall + 10 spacing between = 110 per paragraph after the first.
-        // maxHeight 250 fits: 100 (p0) + 110 (p1) = 210, then +110 (p2) = 320 > 250 -> stop at p2.
-
-        var (start, end) = BookPaginator.FillPage(paragraphs, 0, maxHeight: 250, paragraphSpacing: 10, measureHeight: _ => 100);
-
-        Assert.Equal(0, start);
-        Assert.Equal(2, end);
-    }
-
-    [Fact]
-    public void FillPage_SingleOversizedParagraph_StillIncludedAlone()
-    {
-        var paragraphs = new[] { P("a really long paragraph"), P("b") };
-
-        var (start, end) = BookPaginator.FillPage(paragraphs, 0, maxHeight: 50, paragraphSpacing: 5, measureHeight: _ => 500);
-
-        // Can't split below paragraph granularity - the first paragraph alone overflows maxHeight
-        // but must still be included, and the second paragraph must not be (page can't be empty
-        // but also shouldn't silently absorb more than the budget once already over).
-        Assert.Equal(0, start);
-        Assert.Equal(1, end);
-    }
-
-    [Fact]
-    public void FillPage_ContinuingFromMidChapter_StartsAtGivenIndex()
-    {
-        var paragraphs = new[] { P("a"), P("b"), P("c"), P("d") };
-
-        var (start, end) = BookPaginator.FillPage(paragraphs, startParagraphIndex: 2, maxHeight: 1000, paragraphSpacing: 5, measureHeight: _ => 50);
-
-        Assert.Equal(2, start);
-        Assert.Equal(4, end);
-    }
-
-    [Fact]
-    public void FillPage_EmptyChapter_ReturnsEmptyRange()
-    {
-        var (start, end) = BookPaginator.FillPage(System.Array.Empty<BookParagraph>(), 0, maxHeight: 1000, paragraphSpacing: 5, measureHeight: _ => 50);
-
-        Assert.Equal(start, end);
     }
 }

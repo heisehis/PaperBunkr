@@ -124,7 +124,7 @@ public static class AnnotationExportService
             Bookmarks = book.Bookmarks.Select(b => new { b.ChapterIndex, b.CharacterOffset, b.Excerpt, b.CreatedTime }),
             Highlights = book.Highlights.Select(h => new
             {
-                h.ChapterIndex, h.StartOffset, h.EndOffset, Color = h.Color.ToString(), h.Note, h.Excerpt, h.CreatedTime,
+                h.ChapterIndex, h.BlockId, h.StartOffset, h.Length, Color = h.Color.ToString(), h.Note, h.Excerpt, h.CreatedTime,
             }),
             AnnotationImages = book.AnnotationImages.Select(a => new
             {

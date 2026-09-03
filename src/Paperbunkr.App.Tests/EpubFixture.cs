@@ -11,7 +11,7 @@ namespace Paperbunkr.App.Tests;
 /// </summary>
 internal static class EpubFixture
 {
-    public static string Create(string path, string title = "Test Novel", string author = "Ada Author", string? seriesName = null, bool firstChapterEmpty = false)
+    public static string Create(string path, string title = "Test Novel", string author = "Ada Author", string? seriesName = null, bool firstChapterEmpty = false, bool firstChapterCoverImageOnly = false, bool withParts = false)
     {
         using var zip = ZipFile.Open(path, ZipArchiveMode.Create);
 
@@ -37,6 +37,17 @@ internal static class EpubFixture
 
             """;
 
+        string coverManifestItem = firstChapterCoverImageOnly
+            ? "    <item id=\"cover\" href=\"cover.jpg\" media-type=\"image/jpeg\"/>\n"
+            : string.Empty;
+
+        // withParts: a 3rd chapter + a nested nav <ol> (chap1 standalone, chap2/chap3 grouped under
+        // "Part One") - real EPUB3 nav structure, exercising EpubBookSource.FlattenNavigationParts
+        // (docs/superpowers/specs/2026-09-03-books-reader-hud-redesign-design.md, TOC grouping)
+        // against an actual archive rather than a synthetic EpubNavigationItem tree.
+        string chap3ManifestItem = withParts ? "    <item id=\"chap3\" href=\"chap3.xhtml\" media-type=\"application/xhtml+xml\"/>\n" : string.Empty;
+        string chap3SpineItem = withParts ? "    <itemref idref=\"chap3\"/>\n" : string.Empty;
+
         WriteEntry(zip, "OEBPS/content.opf", $"""
             <?xml version="1.0" encoding="UTF-8"?>
             <package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="bookid">
@@ -50,15 +61,33 @@ internal static class EpubFixture
                 <item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>
                 <item id="chap1" href="chap1.xhtml" media-type="application/xhtml+xml"/>
                 <item id="chap2" href="chap2.xhtml" media-type="application/xhtml+xml"/>
-              </manifest>
+            {chap3ManifestItem}{coverManifestItem}  </manifest>
               <spine>
                 <itemref idref="chap1"/>
                 <itemref idref="chap2"/>
-              </spine>
+            {chap3SpineItem}  </spine>
             </package>
             """);
 
-        WriteEntry(zip, "OEBPS/nav.xhtml", """
+        WriteEntry(zip, "OEBPS/nav.xhtml", withParts ? """
+            <?xml version="1.0" encoding="UTF-8"?>
+            <html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">
+            <head><title>Table of Contents</title></head>
+            <body>
+              <nav epub:type="toc">
+                <ol>
+                  <li><a href="chap1.xhtml">The Beginning</a></li>
+                  <li><span>Part One</span>
+                    <ol>
+                      <li><a href="chap2.xhtml">The End</a></li>
+                      <li><a href="chap3.xhtml">The Real End</a></li>
+                    </ol>
+                  </li>
+                </ol>
+              </nav>
+            </body>
+            </html>
+            """ : """
             <?xml version="1.0" encoding="UTF-8"?>
             <html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">
             <head><title>Table of Contents</title></head>
@@ -76,7 +105,7 @@ internal static class EpubFixture
         // Real EPUBs commonly lead with a cover/title-page spine item with no <p>/<h1>/etc at all
         // (image-only) - firstChapterEmpty simulates that for testing the reader's chapter-skip
         // behavior, since HtmlProseExtractor correctly yields zero paragraphs for markup like this.
-        WriteEntry(zip, "OEBPS/chap1.xhtml", firstChapterEmpty
+        WriteEntry(zip, "OEBPS/chap1.xhtml", firstChapterEmpty || firstChapterCoverImageOnly
             ? """
             <?xml version="1.0" encoding="UTF-8"?>
             <html xmlns="http://www.w3.org/1999/xhtml">
@@ -108,6 +137,36 @@ internal static class EpubFixture
             </body>
             </html>
             """);
+
+        if (withParts)
+        {
+            WriteEntry(zip, "OEBPS/chap3.xhtml", """
+                <?xml version="1.0" encoding="UTF-8"?>
+                <html xmlns="http://www.w3.org/1999/xhtml">
+                <head><title>The Real End</title></head>
+                <body>
+                  <h1>The Real End</h1>
+                  <p>No, really, it ended here.</p>
+                </body>
+                </html>
+                """);
+        }
+
+        // Unlike firstChapterEmpty's cover.jpg (a deliberately *unresolved* reference - no matching
+        // manifest item or binary entry - EpubBookSource.InlineImages correctly leaves an unresolved
+        // src untouched, never inventing a broken data URI), this one is real: a manifest item plus an
+        // actual embedded binary, so the resulting chapter Html genuinely contains a "data:image" URI.
+        // Tests BookReaderScreenViewModel's chapter-skip logic distinguishing "no text and nothing to
+        // show" (still skipped) from "no text but a real image" (must NOT be skipped) - a real
+        // regression: a cover page whose only content was its now-working image still got skipped
+        // because the skip check only ever looked at Paragraphs.
+        if (firstChapterCoverImageOnly)
+        {
+            byte[] jpegBytes = { 0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0x4A, 0x46 };
+            var coverEntry = zip.CreateEntry("OEBPS/cover.jpg", CompressionLevel.Fastest);
+            using var coverStream = coverEntry.Open();
+            coverStream.Write(jpegBytes, 0, jpegBytes.Length);
+        }
 
         return path;
     }

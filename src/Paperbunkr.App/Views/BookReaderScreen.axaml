@@ -5,6 +5,7 @@
              xmlns:entities="using:Paperbunkr.Data.Entities"
              xmlns:views="using:Paperbunkr.App.Views"
              xmlns:books="using:cYo.Projects.ComicRack.Engine.IO.Provider.Books"
+             xmlns:fi="using:FluentIcons.Avalonia"
              xmlns:conv="using:Avalonia.Data.Converters"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -20,150 +21,63 @@
         <KeyBinding Gesture="Ctrl+Shift+W" Command="{Binding AnnounceReadingPositionCommand}" />
     </UserControl.KeyBindings>
 
-    <UserControl.Styles>
-        <Style Selector="Button.chromeIcon">
-            <Setter Property="Width" Value="36" />
-            <Setter Property="Height" Value="36" />
-            <Setter Property="CornerRadius" Value="18" />
-            <Setter Property="Background" Value="Transparent" />
-            <Setter Property="BorderThickness" Value="0" />
-            <Setter Property="FontSize" Value="15" />
-            <Setter Property="Cursor" Value="Hand" />
-            <Setter Property="HorizontalContentAlignment" Value="Center" />
-            <Setter Property="VerticalContentAlignment" Value="Center" />
-        </Style>
-        <Style Selector="Button.chromeIcon:pointerover /template/ ContentPresenter">
-            <Setter Property="Background" Value="#22FFFFFF" />
-        </Style>
-        <Style Selector="Button.chromeIcon.active">
-            <Setter Property="Foreground" Value="{DynamicResource PbAccentBrush}" />
-        </Style>
-
-        <Style Selector="Button.tocRow">
-            <Setter Property="Background" Value="Transparent" />
-            <Setter Property="BorderThickness" Value="0" />
-            <Setter Property="Padding" Value="14,10" />
-            <Setter Property="HorizontalAlignment" Value="Stretch" />
-            <Setter Property="HorizontalContentAlignment" Value="Left" />
-            <Setter Property="FontSize" Value="13.5" />
-            <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
-            <Setter Property="Cursor" Value="Hand" />
-        </Style>
-        <Style Selector="Button.tocRow.active">
-            <Setter Property="Background" Value="{DynamicResource PbAccentSoftBrush}" />
-            <Setter Property="Foreground" Value="{DynamicResource PbAccentTextBrush}" />
-            <Setter Property="FontWeight" Value="Bold" />
-        </Style>
-
-        <Style Selector="Button.resultRow">
-            <Setter Property="Background" Value="Transparent" />
-            <Setter Property="BorderThickness" Value="0" />
-            <Setter Property="Padding" Value="14,10" />
-            <Setter Property="HorizontalAlignment" Value="Stretch" />
-            <Setter Property="HorizontalContentAlignment" Value="Left" />
-            <Setter Property="Cursor" Value="Hand" />
-        </Style>
-        <Style Selector="Button.resultRow:pointerover /template/ ContentPresenter">
-            <Setter Property="Background" Value="{DynamicResource PbAccentSoftBrush}" />
-        </Style>
-        <Style Selector="Button.deleteRow">
-            <Setter Property="Width" Value="28" />
-            <Setter Property="Height" Value="28" />
-            <Setter Property="CornerRadius" Value="14" />
-            <Setter Property="Background" Value="Transparent" />
-            <Setter Property="BorderThickness" Value="0" />
-            <Setter Property="FontSize" Value="11" />
-            <Setter Property="Foreground" Value="{DynamicResource PbTextFaintBrush}" />
-            <Setter Property="Cursor" Value="Hand" />
-        </Style>
-        <Style Selector="Button.deleteRow:pointerover /template/ ContentPresenter">
-            <Setter Property="Background" Value="#22FFFFFF" />
-        </Style>
-
-        <Style Selector="Button.sheetOption">
-            <Setter Property="Padding" Value="12,7" />
-            <Setter Property="CornerRadius" Value="6" />
-            <Setter Property="Background" Value="{DynamicResource PbChromeBrush}" />
-            <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
-            <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
-            <Setter Property="FontSize" Value="12.5" />
-            <Setter Property="Cursor" Value="Hand" />
-        </Style>
-        <Style Selector="Button.sheetOption.active">
-            <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
-            <Setter Property="Background" Value="{DynamicResource PbAccentSoftBrush}" />
-            <Setter Property="Foreground" Value="{DynamicResource PbAccentTextBrush}" />
-        </Style>
-
-        <Style Selector="Border.themeSwatch">
-            <Setter Property="Width" Value="40" />
-            <Setter Property="Height" Value="40" />
-            <Setter Property="CornerRadius" Value="8" />
-            <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
-        </Style>
-        <Style Selector="Border.themeSwatch.active">
-            <Setter Property="BorderThickness" Value="2" />
-            <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
-        </Style>
-    </UserControl.Styles>
+    <!-- chromeIcon/tocRow/resultRow/deleteRow/sheetOption/themeSwatch styles moved to
+         Styles/ReaderChrome.axaml (docs/superpowers/specs/2026-09-03-books-reader-hud-redesign-
+         design.md), merged app-wide via App.axaml so PdfPageReaderScreen.axaml shares them too. -->
 
     <Grid x:Name="RootGrid" Background="{Binding Settings.Background}" Focusable="True"
           PointerMoved="OnRootPointerMoved" KeyDown="OnRootKeyDown">
 
-        <!-- Full-bleed reading pane - tap anywhere to toggle chrome (or close an open drawer/sheet) -->
-        <Border Background="Transparent" PointerPressed="OnContentPointerPressed">
-            <ScrollViewer Padding="{Binding Settings.PageMargin, Converter={x:Static views:PageMarginConverter.Instance}}">
-                <ItemsControl ItemsSource="{Binding CurrentPageParagraphs}" MaxWidth="640" HorizontalAlignment="Center">
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate x:DataType="models:BookParagraphDisplay">
-                            <views:ParagraphView Text="{Binding Paragraph.Text}"
-                                                  Highlights="{Binding Highlights}"
-                                                  Margin="{Binding $parent[UserControl].((vm:BookReaderScreenViewModel)DataContext).Settings.ParagraphSpacing, Converter={x:Static views:ParagraphBottomMarginConverter.Instance}}"
-                                                  Settings="{Binding $parent[UserControl].((vm:BookReaderScreenViewModel)DataContext).Settings}"
-                                                  SelectionCompleted="OnParagraphSelectionCompleted"
-                                                  HighlightTapped="OnParagraphHighlightTapped" />
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
-            </ScrollViewer>
-        </Border>
+        <!-- Reading pane - real markup rendered via NativeWebView (docs/superpowers/specs/2026-09-02-
+             books-reflow-reader-webview-redesign-design.md), replacing the old ParagraphView/
+             TextLayout renderer. Tap-to-toggle-chrome, page-turn, selection, and highlight-tap are all
+             driven by the JS bridge (BookReaderScreen.axaml.cs's HighlightScript +
+             OnReaderWebMessageReceived) rather than Avalonia routed pointer/key events, since a native
+             embedded control doesn't reliably bubble those the way a normal control would.
 
-        <!-- Top bar: hidden until tapped -->
-        <Border VerticalAlignment="Top" IsVisible="{Binding IsChromeVisible}" Background="#CC14161B" Padding="10,8">
-            <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto,Auto,Auto,Auto">
-                <Button Grid.Column="0" Classes="chromeIcon" Content="☰" Command="{Binding OpenTocCommand}" ToolTip.Tip="Table of contents"
-                        AutomationProperties.Name="Table of contents" AutomationProperties.AutomationId="TocToggleButton" />
-                <TextBlock Grid.Column="1" Text="{Binding ChapterTitle}" HorizontalAlignment="Center" VerticalAlignment="Center"
-                           FontSize="12.5" Foreground="{DynamicResource PbTextMutedBrush}" TextTrimming="CharacterEllipsis" />
-                <Button Grid.Column="2" Classes="chromeIcon" Content="🔍" Command="{Binding OpenSearchCommand}" ToolTip.Tip="Search this book" Margin="0,0,4,0"
-                        AutomationProperties.Name="Search this book" AutomationProperties.AutomationId="SearchToggleButton" />
-                <Button Grid.Column="3" Classes="chromeIcon" Classes.active="{Binding IsCurrentPositionBookmarked}" Content="🔖"
-                        Command="{Binding OpenBookmarksCommand}" ToolTip.Tip="Bookmarks" Margin="0,0,4,0"
-                        AutomationProperties.Name="Bookmarks" AutomationProperties.AutomationId="BookmarksToggleButton" />
-                <Button Grid.Column="4" Classes="chromeIcon" Content="✎" Command="{Binding OpenHighlightsCommand}" ToolTip.Tip="Highlights" Margin="0,0,4,0"
-                        AutomationProperties.Name="Highlights" AutomationProperties.AutomationId="HighlightsToggleButton" />
-                <Button Grid.Column="5" Classes="chromeIcon" Content="⇩" Command="{Binding ExportAnnotationsCommand}" ToolTip.Tip="Export annotations" Margin="0,0,4,0"
-                        AutomationProperties.Name="Export annotations" AutomationProperties.AutomationId="ExportAnnotationsButton" />
-                <Button Grid.Column="6" Classes="chromeIcon" Content="Aa" Command="{Binding OpenFontSheetCommand}" ToolTip.Tip="Font and theme" Margin="0,0,4,0"
-                        AutomationProperties.Name="Font and theme" AutomationProperties.AutomationId="FontSheetToggleButton" />
-                <Button Grid.Column="7" Classes="chromeIcon" Content="✕" Command="{Binding CloseCommand}" ToolTip.Tip="Close"
-                        AutomationProperties.Name="Close" AutomationProperties.AutomationId="CloseReaderButton" />
-            </Grid>
-        </Border>
+             Margin="0,56,0,56" reserves dedicated, never-overlapped strips at top/bottom for the
+             chrome bars below - the "airspace" problem: a native windowed control (which is what
+             NativeWebView is in this package version - no public render-mode switch exists yet to
+             opt into Avalonia-composited hosting instead, confirmed by inspecting the installed
+             12.0.0 assembly directly, not assumed from docs describing a newer version) always
+             composites *above* every Avalonia-drawn element regardless of XAML z-order, so the old
+             full-bleed layout made the chrome Borders below permanently invisible no matter what
+             IsChromeVisible did - not a bug in the visibility logic itself, a structural one. 56px
+             (not the originally-guessed 44/40px) exactly clears each bar's real rendered height -
+             Border Padding="10,8" (8px top+bottom) around a 36px chromeIcon button = 52px, plus a
+             4px buffer - an under-reservation here would let the WebView's own airspace claim a
+             sliver of the button's own clickable area, which is exactly the kind of thing that reads
+             as "the button doesn't work" without an obvious visual cue why. The TOC/Bookmarks/
+             Highlights/Search/font-sheet overlays now use the same fix as the highlight color-picker
+             popup (Popup + ShouldUseOverlayLayer="False") instead of a reserved margin, since they
+             need to cover more of the screen than a thin strip. -->
+        <NativeWebView x:Name="ReaderWebView" Margin="0,56,0,56"
+                       NavigationCompleted="OnReaderNavigationCompleted" WebMessageReceived="OnReaderWebMessageReceived"
+                       AutomationProperties.AutomationId="BookReaderWebView" />
 
-        <!-- Bottom progress bar: hidden until tapped -->
-        <Border VerticalAlignment="Bottom" IsVisible="{Binding IsChromeVisible}" Background="#CC14161B" Padding="10,8">
-            <Grid ColumnDefinitions="Auto,*,Auto">
-                <Button Grid.Column="0" Classes="chromeIcon" Content="‹" Command="{Binding PreviousPageCommand}" IsEnabled="{Binding CanGoPrevious}" ToolTip.Tip="Previous page"
-                        AutomationProperties.Name="Previous page" AutomationProperties.AutomationId="PreviousPageButton" />
-                <TextBlock Grid.Column="1" Text="{Binding ProgressPercent, StringFormat={}{0:F0}%}" HorizontalAlignment="Center" VerticalAlignment="Center"
-                           FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" />
-                <Button Grid.Column="2" Classes="chromeIcon" Content="›" Command="{Binding NextPageCommand}" ToolTip.Tip="Next page"
-                        AutomationProperties.Name="Next page" AutomationProperties.AutomationId="NextPageButton" />
-            </Grid>
-        </Border>
+        <!-- Chrome (docs/superpowers/specs/2026-09-03-books-reader-hud-redesign-design.md) - shared
+             top/bottom bar control, replacing the two hand-rolled Border bars this screen used to
+             declare itself. Mode="TapToHide": no internal behavior difference from PDF's chrome today
+             (see ReaderChrome.axaml.cs's own doc comment), IsChromeVisible is still this screen's own
+             BookReaderScreenViewModel-driven auto-hide state, just rebound. Previous/Next stay
+             Click-driven (OnPreviousButtonClick/OnNextButtonClick raise PreviousRequested/
+             NextRequested, handled below the same way the old Click handlers were) since page-turn
+             needs the WebView-scroll-first, VM-command-fallback logic that lives in this screen's own
+             code-behind, not a pure command. -->
+        <views:ReaderChrome Mode="TapToHide" IsChromeVisible="{Binding IsChromeVisible}"
+                             Title="{Binding ChapterTitle}"
+                             ChromeBackground="{Binding Settings.Theme, Converter={x:Static views:ReaderChromeBackgroundConverter.Instance}}"
+                             ChromeForeground="{Binding Settings.Theme, Converter={x:Static views:ReaderChromeForegroundConverter.Instance}}"
+                             TocCommand="{Binding OpenTocCommand}"
+                             SearchCommand="{Binding OpenSearchCommand}"
+                             BookmarksCommand="{Binding OpenBookmarksCommand}" IsBookmarked="{Binding IsCurrentPositionBookmarked}"
+                             HighlightsCommand="{Binding OpenHighlightsCommand}"
+                             ExportCommand="{Binding ExportAnnotationsCommand}"
+                             FontThemeCommand="{Binding OpenFontSheetCommand}"
+                             CloseCommand="{Binding CloseCommand}"
+                             ProgressFraction="{Binding ProgressFraction}" ProgressLabel="{Binding ProgressLabel}"
+                             IsPreviousEnabled="{Binding CanGoPrevious}"
+                             PreviousRequested="OnPreviousButtonClick" NextRequested="OnNextButtonClick" />
 
         <!-- Screen-reader-only live region (docs/superpowers/specs/2026-09-01-books-reader-screen-
              reader-accessibility-design.md) - always in the visual/automation tree (never
@@ -174,41 +88,58 @@
                    AutomationProperties.LiveSetting="Polite" AutomationProperties.Name="Reading position"
                    AutomationProperties.AutomationId="ReadingPositionLiveRegion" />
 
-        <!-- TOC drawer overlay -->
-        <Grid IsVisible="{Binding IsTocOpen}">
-            <Border Background="#B0000000" PointerPressed="OnScrimPointerPressed" />
-            <Border Width="300" HorizontalAlignment="Left" Background="{DynamicResource PbChromeBrush}"
-                    BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,0,1,0">
-                <DockPanel>
-                    <TextBlock x:Name="ChaptersHeader" DockPanel.Dock="Top" Text="Chapters" FontSize="15" FontWeight="Bold"
-                               Foreground="{DynamicResource PbTextBrush}" Margin="16,18,16,10" />
-                    <ScrollViewer>
-                        <ItemsControl ItemsSource="{Binding TableOfContents}" Margin="8,0,8,16"
-                                      AutomationProperties.LabeledBy="{Binding #ChaptersHeader}"
-                                      AutomationProperties.AutomationId="BookReaderTocList">
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate x:DataType="models:BookChapterSummary">
-                                    <Button Classes="tocRow" Classes.active="{Binding IsActive}" Content="{Binding Title}"
-                                            Command="{Binding $parent[UserControl].((vm:BookReaderScreenViewModel)DataContext).GoToChapterCommand}"
-                                            CommandParameter="{Binding}" />
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-                    </ScrollViewer>
-                </DockPanel>
-            </Border>
-        </Grid>
+        <!-- TOC/Bookmarks/Highlights drawers (docs/superpowers/specs/2026-09-03-books-reader-hud-
+             redesign-design.md) - ReaderListDrawer owns the scrim/Popup/header/airspace-safe
+             positioning now; each screen just supplies its own list as DrawerContent, unchanged from
+             what used to sit directly under each Popup. -->
+        <!-- Grouped/collapsible TOC (docs/superpowers/specs/2026-09-03-books-reader-hud-redesign-
+             design.md) - TocGroups (built by BookReaderScreenViewModel.RebuildTocGroups from each
+             chapter's EPUB-nav-derived PartTitle) renders a group header only when PartTitle is
+             non-null; an ungrouped chapter is still its own single-item group with no visible header,
+             so this is one template, not two parallel grouped/ungrouped paths. FB2/MOBI/PDF chapters
+             have no PartTitle (that format-specific limitation is disclosed in IBookTextSource.cs) and
+             so render exactly as a flat list, same as before this feature. -->
+        <views:ReaderListDrawer IsOpen="{Binding IsTocOpen}" HeaderText="Chapters" ScrimPressed="OnScrimPointerPressed">
+            <views:ReaderListDrawer.DrawerContent>
+                <ScrollViewer>
+                    <ItemsControl ItemsSource="{Binding TocGroups}" Margin="8,0,8,16"
+                                  AutomationProperties.AutomationId="BookReaderTocList">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="models:BookTocGroup">
+                                <StackPanel Margin="0,0,0,2">
+                                    <Button Classes="tocGroupHeader" Command="{Binding ToggleExpandedCommand}"
+                                            IsVisible="{Binding PartTitle, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}"
+                                            AutomationProperties.Name="{Binding PartTitle}">
+                                        <Grid ColumnDefinitions="Auto,*">
+                                            <fi:SymbolIcon Grid.Column="0" Symbol="ChevronDown" FontSize="11" Margin="0,0,6,0"
+                                                           IsVisible="{Binding IsExpanded}" />
+                                            <fi:SymbolIcon Grid.Column="0" Symbol="ChevronRight" FontSize="11" Margin="0,0,6,0"
+                                                           IsVisible="{Binding !IsExpanded}" />
+                                            <TextBlock Grid.Column="1" Text="{Binding PartTitle}" TextTrimming="CharacterEllipsis" />
+                                        </Grid>
+                                    </Button>
+                                    <ItemsControl ItemsSource="{Binding Chapters}" IsVisible="{Binding IsExpanded}" Margin="12,2,0,4">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate x:DataType="models:BookChapterSummary">
+                                                <Button Classes="tocRow" Classes.active="{Binding IsActive}" Content="{Binding Title}"
+                                                        Command="{Binding $parent[UserControl].((vm:BookReaderScreenViewModel)DataContext).GoToChapterCommand}"
+                                                        CommandParameter="{Binding}" />
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </StackPanel>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+            </views:ReaderListDrawer.DrawerContent>
+        </views:ReaderListDrawer>
 
-        <!-- Bookmarks drawer overlay -->
-        <Grid IsVisible="{Binding IsBookmarksOpen}">
-            <Border Background="#B0000000" PointerPressed="OnScrimPointerPressed" />
-            <Border Width="320" HorizontalAlignment="Left" Background="{DynamicResource PbChromeBrush}"
-                    BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,0,1,0">
+        <views:ReaderListDrawer IsOpen="{Binding IsBookmarksOpen}" HeaderText="Bookmarks" DrawerWidth="320" ScrimPressed="OnScrimPointerPressed">
+            <views:ReaderListDrawer.DrawerContent>
                 <DockPanel>
-                    <TextBlock x:Name="BookmarksHeader" DockPanel.Dock="Top" Text="Bookmarks" FontSize="15" FontWeight="Bold"
-                               Foreground="{DynamicResource PbTextBrush}" Margin="16,18,16,10" />
                     <Button DockPanel.Dock="Top" Classes="sheetOption" Classes.active="{Binding IsCurrentPositionBookmarked}"
-                            Command="{Binding ToggleBookmarkCommand}" Margin="16,0,16,14" HorizontalAlignment="Stretch"
+                            Command="{Binding ToggleBookmarkCommand}" Margin="8,0,8,14" HorizontalAlignment="Stretch"
                             HorizontalContentAlignment="Center"
                             AutomationProperties.Name="Bookmark this page" AutomationProperties.AutomationId="ToggleBookmarkButton">
                         <StackPanel Orientation="Horizontal" Spacing="0">
@@ -218,7 +149,6 @@
                     </Button>
                     <ScrollViewer>
                         <ItemsControl ItemsSource="{Binding Bookmarks}" Margin="8,0,8,16"
-                                      AutomationProperties.LabeledBy="{Binding #BookmarksHeader}"
                                       AutomationProperties.AutomationId="BookReaderBookmarksList">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate x:DataType="models:BookBookmarkSummary">
@@ -233,32 +163,28 @@
                                                            Foreground="{DynamicResource PbTextMutedBrush}" Margin="0,2,0,0" />
                                             </StackPanel>
                                         </Button>
-                                        <Button Grid.Column="1" Classes="deleteRow" Content="✕" VerticalAlignment="Center"
+                                        <Button Grid.Column="1" Classes="deleteRow" VerticalAlignment="Center"
                                                 Command="{Binding $parent[UserControl].((vm:BookReaderScreenViewModel)DataContext).DeleteBookmarkCommand}"
                                                 CommandParameter="{Binding}" ToolTip.Tip="Remove bookmark"
-                                                AutomationProperties.Name="Remove bookmark" />
+                                                AutomationProperties.Name="Remove bookmark">
+                                            <fi:SymbolIcon Symbol="Dismiss" FontSize="11" />
+                                        </Button>
                                     </Grid>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
                     </ScrollViewer>
                 </DockPanel>
-            </Border>
-        </Grid>
+            </views:ReaderListDrawer.DrawerContent>
+        </views:ReaderListDrawer>
 
-        <!-- Highlights drawer overlay -->
-        <Grid IsVisible="{Binding IsHighlightsOpen}">
-            <Border Background="#B0000000" PointerPressed="OnScrimPointerPressed" />
-            <Border Width="320" HorizontalAlignment="Left" Background="{DynamicResource PbChromeBrush}"
-                    BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,0,1,0">
+        <views:ReaderListDrawer IsOpen="{Binding IsHighlightsOpen}" HeaderText="Highlights" DrawerWidth="320" ScrimPressed="OnScrimPointerPressed">
+            <views:ReaderListDrawer.DrawerContent>
                 <DockPanel>
-                    <TextBlock x:Name="HighlightsHeader" DockPanel.Dock="Top" Text="Highlights" FontSize="15" FontWeight="Bold"
-                               Foreground="{DynamicResource PbTextBrush}" Margin="16,18,16,10" />
                     <TextBlock DockPanel.Dock="Top" Text="Drag across text in the reading pane to highlight it." FontSize="11.5"
-                               Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" Margin="16,0,16,14" />
+                               Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" Margin="8,0,8,14" />
                     <ScrollViewer>
                         <ItemsControl ItemsSource="{Binding Highlights}" Margin="8,0,8,16"
-                                      AutomationProperties.LabeledBy="{Binding #HighlightsHeader}"
                                       AutomationProperties.AutomationId="BookReaderHighlightsList">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate x:DataType="models:BookHighlightSummary">
@@ -278,23 +204,31 @@
                                                            IsVisible="{Binding Note, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
                                             </StackPanel>
                                         </Button>
-                                        <Button Grid.Column="2" Classes="deleteRow" Content="✕" VerticalAlignment="Center"
+                                        <Button Grid.Column="2" Classes="deleteRow" VerticalAlignment="Center"
                                                 Command="{Binding $parent[UserControl].((vm:BookReaderScreenViewModel)DataContext).DeleteHighlightCommand}"
                                                 CommandParameter="{Binding}" ToolTip.Tip="Remove highlight"
-                                                AutomationProperties.Name="Remove highlight" />
+                                                AutomationProperties.Name="Remove highlight">
+                                            <fi:SymbolIcon Symbol="Dismiss" FontSize="11" />
+                                        </Button>
                                     </Grid>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
                     </ScrollViewer>
                 </DockPanel>
-            </Border>
-        </Grid>
+            </views:ReaderListDrawer.DrawerContent>
+        </views:ReaderListDrawer>
 
-        <!-- Highlight color/note popup - anchored to the just-completed selection or tapped highlight -->
+        <!-- Highlight color/note popup - anchored to the just-completed selection or tapped highlight.
+             ShouldUseOverlayLayer="False" forces a real separate OS popup window rather than
+             Avalonia's in-process overlay layer, which - like every other in-tree overlay in this
+             file - would render beneath the native WebView (see the airspace note above the
+             NativeWebView element). Explicit, not relying on whatever the platform default happens
+             to resolve to. -->
         <Popup IsOpen="{Binding IsHighlightPopupOpen}" PlacementTarget="{Binding #RootGrid}"
                Placement="AnchorAndGravity" PlacementAnchor="Bottom" PlacementGravity="Bottom"
-               PlacementRect="{Binding HighlightPopupAnchorRect}" IsLightDismissEnabled="True">
+               PlacementRect="{Binding HighlightPopupAnchorRect}" IsLightDismissEnabled="True"
+               ShouldUseOverlayLayer="False">
             <Border Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}"
                     BorderThickness="1" CornerRadius="8" Padding="14" Margin="0,6,0,0">
                 <StackPanel Spacing="10" Width="220">
@@ -332,21 +266,21 @@
             </Border>
         </Popup>
 
-        <!-- Search overlay -->
-        <Grid IsVisible="{Binding IsSearchOpen}">
-            <Border Background="#B0000000" PointerPressed="OnScrimPointerPressed" />
-            <Border VerticalAlignment="Top" Background="{DynamicResource PbChromeBrush}"
-                    BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,0,0,1"
-                    Padding="20,18" MaxHeight="480">
-                <DockPanel MaxWidth="480" HorizontalAlignment="Center">
-                    <TextBox DockPanel.Dock="Top" Name="SearchBox" Watermark="Search this book"
-                             Text="{Binding SearchQuery, Mode=TwoWay}" Margin="0,0,0,10"
-                             AutomationProperties.Name="Search this book" />
-                    <TextBlock DockPanel.Dock="Top" Text="No matches" FontSize="12.5" Margin="4,0,0,6"
+        <!-- Search drawer - a left drawer now (docs/superpowers/specs/2026-09-03-books-reader-hud-
+             redesign-design.md), not a centered top dropdown: it's a list of results, same family as
+             TOC/Bookmarks/Highlights above, and the design's overlay-direction decision is "lists
+             open left." HasSearchBox="True" pins the search TextBox above the results instead of a
+             plain static header. -->
+        <views:ReaderListDrawer IsOpen="{Binding IsSearchOpen}" DrawerWidth="320" ScrimPressed="OnScrimPointerPressed"
+                                 HasSearchBox="True" SearchBoxWatermark="Search this book"
+                                 SearchBoxText="{Binding SearchQuery, Mode=TwoWay}">
+            <views:ReaderListDrawer.DrawerContent>
+                <DockPanel>
+                    <TextBlock DockPanel.Dock="Top" Text="No matches" FontSize="12.5" Margin="8,0,0,6"
                                Foreground="{DynamicResource PbTextFaintBrush}"
                                IsVisible="{Binding HasNoSearchResults}" />
-                    <ScrollViewer MaxHeight="380">
-                        <ItemsControl ItemsSource="{Binding SearchResults}">
+                    <ScrollViewer>
+                        <ItemsControl ItemsSource="{Binding SearchResults}" Margin="8,0,8,16">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate x:DataType="models:BookSearchResult">
                                     <Button Classes="resultRow" HorizontalContentAlignment="Left"
@@ -364,112 +298,22 @@
                         </ItemsControl>
                     </ScrollViewer>
                 </DockPanel>
-            </Border>
-        </Grid>
+            </views:ReaderListDrawer.DrawerContent>
+        </views:ReaderListDrawer>
 
-        <!-- Font/theme sheet overlay -->
-        <Grid IsVisible="{Binding IsFontSheetOpen}">
-            <Border Background="#B0000000" PointerPressed="OnScrimPointerPressed" />
-            <Border VerticalAlignment="Bottom" Background="{DynamicResource PbChromeBrush}"
-                    BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,1,0,0"
-                    Padding="20,18">
-                <StackPanel Spacing="16" MaxWidth="440" HorizontalAlignment="Center">
-
-                    <StackPanel Spacing="8">
-                        <TextBlock Text="TEXT SIZE" FontSize="10.5" FontWeight="Bold" LetterSpacing="1"
-                                   Foreground="{DynamicResource PbTextFaintBrush}" />
-                        <Grid ColumnDefinitions="Auto,*,Auto">
-                            <TextBlock Grid.Column="0" Text="A" FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" Margin="0,0,10,0" />
-                            <Slider Grid.Column="1" Minimum="12" Maximum="28" Value="{Binding Settings.FontSize}" />
-                            <TextBlock Grid.Column="2" Text="A" FontSize="20" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" Margin="10,0,0,0" />
-                        </Grid>
-                    </StackPanel>
-
-                    <StackPanel Spacing="8">
-                        <TextBlock Text="CHARACTER SPACING" FontSize="10.5" FontWeight="Bold" LetterSpacing="1" Foreground="{DynamicResource PbTextFaintBrush}" />
-                        <Slider Minimum="0" Maximum="4" Value="{Binding Settings.CharacterSpacing}" />
-                    </StackPanel>
-
-                    <StackPanel Spacing="8">
-                        <TextBlock Text="WORD SPACING" FontSize="10.5" FontWeight="Bold" LetterSpacing="1" Foreground="{DynamicResource PbTextFaintBrush}" />
-                        <Slider Minimum="0" Maximum="20" Value="{Binding Settings.WordSpacing}" />
-                    </StackPanel>
-
-                    <StackPanel Spacing="8">
-                        <TextBlock Text="PARAGRAPH SPACING" FontSize="10.5" FontWeight="Bold" LetterSpacing="1" Foreground="{DynamicResource PbTextFaintBrush}" />
-                        <Slider Minimum="0" Maximum="30" Value="{Binding Settings.ParagraphSpacing}" />
-                    </StackPanel>
-
-                    <StackPanel Spacing="8">
-                        <TextBlock Text="PAGE MARGIN" FontSize="10.5" FontWeight="Bold" LetterSpacing="1" Foreground="{DynamicResource PbTextFaintBrush}" />
-                        <Slider Minimum="16" Maximum="100" Value="{Binding Settings.PageMargin}" />
-                    </StackPanel>
-
-                    <StackPanel Spacing="8">
-                        <TextBlock Text="FONT" FontSize="10.5" FontWeight="Bold" LetterSpacing="1" Foreground="{DynamicResource PbTextFaintBrush}" />
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <Button Classes="sheetOption" Classes.active="{Binding Settings.FontFamilyOption, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:BookFontFamilyOption.Serif}}"
-                                    Content="Serif" FontFamily="Georgia,Cambria,serif"
-                                    Command="{Binding SetFontFamilyCommand}" CommandParameter="{x:Static entities:BookFontFamilyOption.Serif}" />
-                            <Button Classes="sheetOption" Classes.active="{Binding Settings.FontFamilyOption, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:BookFontFamilyOption.Sans}}"
-                                    Content="Sans" FontFamily="Segoe UI,Arial,sans-serif"
-                                    Command="{Binding SetFontFamilyCommand}" CommandParameter="{x:Static entities:BookFontFamilyOption.Sans}" />
-                            <Button Classes="sheetOption" Classes.active="{Binding Settings.FontFamilyOption, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:BookFontFamilyOption.Mono}}"
-                                    Content="Mono" FontFamily="Consolas,monospace"
-                                    Command="{Binding SetFontFamilyCommand}" CommandParameter="{x:Static entities:BookFontFamilyOption.Mono}" />
-                            <Button Classes="sheetOption" Classes.active="{Binding Settings.FontFamilyOption, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:BookFontFamilyOption.OpenDyslexic}}"
-                                    Content="OpenDyslexic" FontFamily="OpenDyslexic,Georgia,Cambria,serif"
-                                    Command="{Binding SetFontFamilyCommand}" CommandParameter="{x:Static entities:BookFontFamilyOption.OpenDyslexic}" />
-                        </StackPanel>
-                    </StackPanel>
-
-                    <StackPanel Spacing="8">
-                        <TextBlock Text="LINE SPACING" FontSize="10.5" FontWeight="Bold" LetterSpacing="1" Foreground="{DynamicResource PbTextFaintBrush}" />
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <Button Classes="sheetOption" Classes.active="{Binding Settings.LineSpacing, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:BookLineSpacingOption.Compact}}"
-                                    Content="Compact" Command="{Binding SetLineSpacingCommand}" CommandParameter="{x:Static entities:BookLineSpacingOption.Compact}" />
-                            <Button Classes="sheetOption" Classes.active="{Binding Settings.LineSpacing, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:BookLineSpacingOption.Normal}}"
-                                    Content="Normal" Command="{Binding SetLineSpacingCommand}" CommandParameter="{x:Static entities:BookLineSpacingOption.Normal}" />
-                            <Button Classes="sheetOption" Classes.active="{Binding Settings.LineSpacing, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:BookLineSpacingOption.Relaxed}}"
-                                    Content="Relaxed" Command="{Binding SetLineSpacingCommand}" CommandParameter="{x:Static entities:BookLineSpacingOption.Relaxed}" />
-                        </StackPanel>
-                    </StackPanel>
-
-                    <StackPanel Spacing="8">
-                        <TextBlock Text="THEME" FontSize="10.5" FontWeight="Bold" LetterSpacing="1" Foreground="{DynamicResource PbTextFaintBrush}" />
-                        <StackPanel Orientation="Horizontal" Spacing="10">
-                            <Button Classes="chromeIcon" Command="{Binding SetThemeCommand}" CommandParameter="{x:Static entities:BookTheme.Light}"
-                                    Width="44" Height="44" Padding="0" AutomationProperties.Name="Light theme">
-                                <Border Classes="themeSwatch" Classes.active="{Binding Settings.Theme, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:BookTheme.Light}}" Background="White" />
-                            </Button>
-                            <Button Classes="chromeIcon" Command="{Binding SetThemeCommand}" CommandParameter="{x:Static entities:BookTheme.Dark}"
-                                    Width="44" Height="44" Padding="0" AutomationProperties.Name="Dark theme">
-                                <Border Classes="themeSwatch" Classes.active="{Binding Settings.Theme, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:BookTheme.Dark}}" Background="#1C1C1C" />
-                            </Button>
-                            <Button Classes="chromeIcon" Command="{Binding SetThemeCommand}" CommandParameter="{x:Static entities:BookTheme.Sepia}"
-                                    Width="44" Height="44" Padding="0" AutomationProperties.Name="Sepia theme">
-                                <Border Classes="themeSwatch" Classes.active="{Binding Settings.Theme, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:BookTheme.Sepia}}" Background="#F2E6CE" />
-                            </Button>
-                            <Button Classes="chromeIcon" Command="{Binding SetThemeCommand}" CommandParameter="{x:Static entities:BookTheme.MatchAppSkin}"
-                                    Width="44" Height="44" Padding="0" ToolTip.Tip="Match app skin" AutomationProperties.Name="Match app skin theme">
-                                <Border Classes="themeSwatch" Classes.active="{Binding Settings.Theme, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:BookTheme.MatchAppSkin}}" Background="#14161B" />
-                            </Button>
-                            <Button Classes="chromeIcon" Command="{Binding SetThemeCommand}" CommandParameter="{x:Static entities:BookTheme.OledBlack}"
-                                    Width="44" Height="44" Padding="0" ToolTip.Tip="OLED black" AutomationProperties.Name="OLED black theme">
-                                <Border Classes="themeSwatch" Classes.active="{Binding Settings.Theme, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:BookTheme.OledBlack}}" Background="Black" />
-                            </Button>
-                            <Button Classes="chromeIcon" Command="{Binding SetThemeCommand}" CommandParameter="{x:Static entities:BookTheme.HighContrast}"
-                                    Width="44" Height="44" Padding="0" ToolTip.Tip="High contrast" AutomationProperties.Name="High contrast theme">
-                                <Border Classes="themeSwatch" Classes.active="{Binding Settings.Theme, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:BookTheme.HighContrast}}" Background="Black" BorderBrush="White" BorderThickness="2" />
-                            </Button>
-                        </StackPanel>
-                    </StackPanel>
-
-                    <CheckBox Content="Auto-hide toolbar when idle" IsChecked="{Binding AutoHideChromeToggle}" />
-
-                </StackPanel>
-            </Border>
-        </Grid>
+        <!-- Font & Theme sheet (docs/superpowers/specs/2026-09-03-books-reader-hud-redesign-design.md)
+             - shared ReaderSettingsSheet control, grouped into mini-cards instead of 8 flat sections.
+             HasTypographyControls="True": EPUB gets the full Typography/Spacing/Theme card set. -->
+        <views:ReaderSettingsSheet IsOpen="{Binding IsFontSheetOpen}" HasTypographyControls="True"
+                                    Settings="{Binding Settings}"
+                                    SheetBackground="{Binding Settings.Theme, Converter={x:Static views:ReaderChromeBackgroundConverter.Instance}}"
+                                    SheetForeground="{Binding Settings.Theme, Converter={x:Static views:ReaderChromeForegroundConverter.Instance}}"
+                                    SetFontFamilyCommand="{Binding SetFontFamilyCommand}"
+                                    SetLineSpacingCommand="{Binding SetLineSpacingCommand}"
+                                    SetThemeCommand="{Binding SetThemeCommand}"
+                                    HasAutoHideToggle="True" AutoHideToggle="{Binding AutoHideChromeToggle}"
+                                    ThemeOptions="{x:Static views:ReaderSettingsSheet.AllThemes}"
+                                    ScrimPressed="OnScrimPointerPressed" />
 
     </Grid>
 </UserControl>

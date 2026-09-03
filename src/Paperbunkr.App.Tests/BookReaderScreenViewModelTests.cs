@@ -1,5 +1,6 @@
 using Avalonia;
 using Microsoft.EntityFrameworkCore;
+using Paperbunkr.App.Models;
 using Paperbunkr.App.Services;
 using Paperbunkr.App.ViewModels;
 using Paperbunkr.App.Views;
@@ -46,9 +47,9 @@ public class BookReaderScreenViewModelTests : IDisposable
         }
     }
 
-    private int AddBook(bool firstChapterEmpty)
+    private int AddBook(bool firstChapterEmpty, bool firstChapterCoverImageOnly = false, bool withParts = false)
     {
-        EpubFixture.Create(_epubPath, firstChapterEmpty: firstChapterEmpty);
+        EpubFixture.Create(_epubPath, firstChapterEmpty: firstChapterEmpty, firstChapterCoverImageOnly: firstChapterCoverImageOnly, withParts: withParts);
         using var context = new PaperbunkrDbContext(_dbOptions);
         var book = new Book { Title = "Test", FilePath = _epubPath, Format = BookFormat.Epub, AddedTime = DateTime.UtcNow };
         context.Books.Add(book);
@@ -66,13 +67,13 @@ public class BookReaderScreenViewModelTests : IDisposable
     }
 
     [Fact]
-    public void LoadBook_NormalFirstChapter_ShowsItsParagraphs()
+    public void LoadBook_NormalFirstChapter_ShowsItsHtml()
     {
         int bookId = AddBook(firstChapterEmpty: false);
 
         var vm = CreateViewModel(bookId);
 
-        Assert.NotEmpty(vm.CurrentPageParagraphs);
+        Assert.False(string.IsNullOrWhiteSpace(vm.CurrentChapterHtml));
         Assert.Equal("The Beginning", vm.ChapterTitle);
     }
 
@@ -85,8 +86,27 @@ public class BookReaderScreenViewModelTests : IDisposable
 
         // Chapter 1 (index 0, the empty cover page) is skipped in favor of chapter 2
         // (index 1, "The End" - EpubFixture's second chapter), which has real content.
-        Assert.NotEmpty(vm.CurrentPageParagraphs);
+        Assert.False(string.IsNullOrWhiteSpace(vm.CurrentChapterHtml));
         Assert.Equal("The End", vm.ChapterTitle);
+    }
+
+    /// <summary>
+    /// Real regression found 2026-09-02: a cover chapter whose only content is a genuinely
+    /// resolved image (not the unresolved-reference case above) must NOT be skipped - the skip
+    /// check used to look only at Paragraphs, so a real cover image the user should actually see
+    /// was being bounced past on every single navigation, including an explicit TOC click on it.
+    /// </summary>
+    [Fact]
+    public void LoadBook_CoverChapterHasResolvedImage_DoesNotSkipIt()
+    {
+        int bookId = AddBook(firstChapterEmpty: false, firstChapterCoverImageOnly: true);
+
+        var vm = CreateViewModel(bookId);
+
+        // Title comes from EpubFixture's nav.xhtml entry for chap1.xhtml ("The Beginning"), not the
+        // chapter document's own internal <title> - EpubBookSource always prefers navigation titles.
+        Assert.Equal("The Beginning", vm.ChapterTitle);
+        Assert.Contains("data:image", vm.CurrentChapterHtml);
     }
 
     /// <summary>
@@ -467,15 +487,16 @@ public class BookReaderScreenViewModelTests : IDisposable
     /// already valid (this app's screens attach eagerly at startup). Fixed via _isSeedingSettings
     /// (suppresses the recompute during that block) and explicitly nulling _source after Dispose.
     /// This test exercises the exact reused-VM, viewport-already-set, switch-books shape that
-    /// triggered it, and asserts on the actually-visible symptom (CurrentPageParagraphs content),
-    /// not just the override-resolution behavior the older sibling test above already covers.
+    /// triggered it, and asserts on the actually-visible symptom (CurrentChapterHtml content, the
+    /// real signal the WebView renders from since the books-reflow-reader-webview-redesign - this
+    /// test used to check CurrentPageParagraphs, removed in that redesign's Step 10 cleanup), not
+    /// just the override-resolution behavior the older sibling test above already covers.
     /// </summary>
     [Fact]
-    public void SwitchingBooksInTheSameReader_PopulatesTheSecondBooksParagraphs_NotStaleOrEmpty()
+    public void SwitchingBooksInTheSameReader_PopulatesTheSecondBooksHtml_NotStaleOrEmpty()
     {
         int firstBookId = AddBook(firstChapterEmpty: false);
         var vm = CreateViewModel(firstBookId);
-        string firstBookFirstParagraphText = vm.CurrentPageParagraphs[0].Paragraph.Text;
 
         string secondEpubPath = Path.Combine(Path.GetTempPath(), $"paperbunkr_reader_vm_test_{Guid.NewGuid():N}.epub");
         EpubFixture.Create(secondEpubPath, title: "Second Book");
@@ -492,9 +513,8 @@ public class BookReaderScreenViewModelTests : IDisposable
         {
             vm.LoadBook(secondBookId);
 
-            Assert.NotEmpty(vm.CurrentPageParagraphs);
             Assert.Equal("The Beginning", vm.ChapterTitle); // EpubFixture's default first-chapter title - proves this is book 2's real content, not book 1's stale state
-            Assert.False(string.IsNullOrWhiteSpace(vm.CurrentPageParagraphs[0].Paragraph.Text));
+            Assert.False(string.IsNullOrWhiteSpace(vm.CurrentChapterHtml));
         }
         finally
         {
@@ -522,9 +542,8 @@ public class BookReaderScreenViewModelTests : IDisposable
     {
         int bookId = AddBook(firstChapterEmpty: false);
         var vm = CreateViewModel(bookId);
-        var paragraph = vm.CurrentPageParagraphs[0];
 
-        vm.OnParagraphSelectionCompleted(paragraph, 0, 5, new Avalonia.Rect(0, 0, 40, 20));
+        vm.OnWebViewSelectionCompleted("pb-p1", 0, 5, "Hello", new Avalonia.Rect(0, 0, 40, 20));
         vm.PickHighlightColorCommand.Execute(BookHighlightColor.Green);
 
         Assert.Single(vm.Highlights);
@@ -533,8 +552,9 @@ public class BookReaderScreenViewModelTests : IDisposable
 
         using var context = new PaperbunkrDbContext(_dbOptions);
         var entity = context.BookHighlights.Single();
-        Assert.Equal(paragraph.GlobalOffset, entity.StartOffset);
-        Assert.Equal(paragraph.GlobalOffset + 5, entity.EndOffset);
+        Assert.Equal("pb-p1", entity.BlockId);
+        Assert.Equal(0, entity.StartOffset);
+        Assert.Equal(5, entity.Length);
         Assert.Equal(BookHighlightColor.Green, entity.Color);
     }
 
@@ -543,8 +563,7 @@ public class BookReaderScreenViewModelTests : IDisposable
     {
         int bookId = AddBook(firstChapterEmpty: false);
         var vm = CreateViewModel(bookId);
-        var paragraph = vm.CurrentPageParagraphs[0];
-        vm.OnParagraphSelectionCompleted(paragraph, 0, 5, new Avalonia.Rect());
+        vm.OnWebViewSelectionCompleted("pb-p1", 0, 5, "Hello", new Avalonia.Rect());
         vm.PickHighlightColorCommand.Execute(BookHighlightColor.Yellow);
         var highlight = vm.Highlights[0];
 
@@ -560,13 +579,11 @@ public class BookReaderScreenViewModelTests : IDisposable
     {
         int bookId = AddBook(firstChapterEmpty: false);
         var vm = CreateViewModel(bookId);
-        var paragraph = vm.CurrentPageParagraphs[0];
-        vm.OnParagraphSelectionCompleted(paragraph, 0, 5, new Avalonia.Rect());
+        vm.OnWebViewSelectionCompleted("pb-p1", 0, 5, "Hello", new Avalonia.Rect());
         vm.PickHighlightColorCommand.Execute(BookHighlightColor.Yellow);
         var created = vm.Highlights[0];
 
-        var localHighlight = new ParagraphHighlight(0, 5, BookHighlightColor.Yellow);
-        vm.OnParagraphHighlightTapped(localHighlight, new Avalonia.Rect());
+        vm.OnWebViewHighlightTapped(created.Id, new Avalonia.Rect());
         Assert.True(vm.IsEditingExistingHighlight);
 
         vm.PickHighlightColorCommand.Execute(BookHighlightColor.Blue);
@@ -577,21 +594,68 @@ public class BookReaderScreenViewModelTests : IDisposable
     }
 
     [Fact]
-    public void LoadBook_ReflectsPersistedHighlightsInParagraphViewData()
+    public void LoadBook_ReflectsPersistedHighlights_AfterReopening()
     {
         int bookId = AddBook(firstChapterEmpty: false);
         var firstVm = CreateViewModel(bookId);
-        var paragraph = firstVm.CurrentPageParagraphs[0];
-        firstVm.OnParagraphSelectionCompleted(paragraph, 0, 5, new Avalonia.Rect());
+        firstVm.OnWebViewSelectionCompleted("pb-p1", 0, 5, "Hello", new Avalonia.Rect());
         firstVm.PickHighlightColorCommand.Execute(BookHighlightColor.Pink);
 
         var reopened = CreateViewModel(bookId);
 
-        Assert.Single(reopened.Highlights);
-        var reopenedParagraph = reopened.CurrentPageParagraphs[0];
-        Assert.Single(reopenedParagraph.Highlights);
-        Assert.Equal(0, reopenedParagraph.Highlights[0].Start);
-        Assert.Equal(5, reopenedParagraph.Highlights[0].End);
-        Assert.Equal(BookHighlightColor.Pink, reopenedParagraph.Highlights[0].Color);
+        var highlight = Assert.Single(reopened.Highlights);
+        Assert.Equal("pb-p1", highlight.BlockId);
+        Assert.Equal(0, highlight.StartOffset);
+        Assert.Equal(5, highlight.Length);
+        Assert.Equal(BookHighlightColor.Pink, highlight.Color);
+    }
+
+    // --- TOC grouping (docs/superpowers/specs/2026-09-03-books-reader-hud-redesign-design.md) ---
+
+    [Fact]
+    public void TocGroups_NoPartTitles_EachChapterIsItsOwnUngroupedEntry()
+    {
+        int bookId = AddBook(firstChapterEmpty: false); // flat nav, no parts
+        var vm = CreateViewModel(bookId);
+
+        Assert.Equal(vm.TableOfContents.Count, vm.TocGroups.Count);
+        Assert.All(vm.TocGroups, g =>
+        {
+            Assert.Null(g.PartTitle);
+            Assert.Single(g.Chapters);
+        });
+    }
+
+    [Fact]
+    public void TocGroups_ChaptersUnderAPart_AreGroupedTogether()
+    {
+        int bookId = AddBook(firstChapterEmpty: false, withParts: true); // chap1 standalone, chap2+chap3 under "Part One"
+        var vm = CreateViewModel(bookId);
+
+        Assert.Equal(2, vm.TocGroups.Count);
+        Assert.Null(vm.TocGroups[0].PartTitle);
+        Assert.Single(vm.TocGroups[0].Chapters);
+        Assert.Equal("Part One", vm.TocGroups[1].PartTitle);
+        Assert.Equal(2, vm.TocGroups[1].Chapters.Count);
+    }
+
+    [Fact]
+    public void TocGroups_CollapsingAGroup_PersistsAcrossChapterNavigation()
+    {
+        int bookId = AddBook(firstChapterEmpty: false, withParts: true);
+        var vm = CreateViewModel(bookId);
+        var partGroup = vm.TocGroups.Single(g => g.PartTitle == "Part One");
+
+        partGroup.ToggleExpandedCommand.Execute(null);
+        Assert.False(partGroup.IsExpanded);
+
+        // Any navigation rebuilds TableOfContents (to refresh IsActive) and therefore TocGroups too -
+        // this is the real regression risk RebuildTocGroups' "reuse existing IsExpanded" logic guards
+        // against (a naive rebuild would silently re-expand every group on every page turn).
+        vm.GoToChapterCommand.Execute(vm.TableOfContents[0]);
+
+        var rebuiltPartGroup = vm.TocGroups.Single(g => g.PartTitle == "Part One");
+        Assert.False(rebuiltPartGroup.IsExpanded);
+        Assert.Equal(2, rebuiltPartGroup.Chapters.Count);
     }
 }

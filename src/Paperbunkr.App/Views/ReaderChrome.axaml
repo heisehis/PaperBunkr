@@ -1,0 +1,121 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:fi="using:FluentIcons.Avalonia"
+             xmlns:conv="using:Avalonia.Data.Converters"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="700" d:DesignHeight="120"
+             x:Class="Paperbunkr.App.Views.ReaderChrome"
+             x:Name="Root">
+
+    <!-- Shared top/bottom chrome for both Books readers (docs/superpowers/specs/2026-09-03-books-
+         reader-hud-redesign-design.md). No DataContext of its own is assumed - every binding below
+         targets this control's own StyledProperties via #Root, not an inherited ViewModel, since the
+         same control is embedded in two screens with two different ViewModel types. -->
+    <!-- Single cell, not RowDefinitions="Auto,Auto" - two Auto rows stack directly under each other
+         at the TOP of whatever space this control is given, they don't split top/bottom of it (a real
+         bug found on-screen: the bottom bar rendered immediately below the top bar instead of pinned
+         to the reading pane's bottom edge). Each Border's own VerticalAlignment="Top"/"Bottom" is what
+         actually pins it to its edge of this control's full stretched bounds. -->
+    <Grid IsHitTestVisible="{Binding #Root.IsChromeVisible}">
+
+        <!-- Top bar -->
+        <Border VerticalAlignment="Top" IsVisible="{Binding #Root.IsChromeVisible}"
+                Background="{Binding #Root.ChromeBackground}" Padding="10,8">
+            <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+                <Button Grid.Column="0" Classes="chromeIcon" Command="{Binding #Root.TocCommand}"
+                        IsVisible="{Binding #Root.TocCommand, Converter={x:Static conv:ObjectConverters.IsNotNull}}"
+                        ToolTip.Tip="Table of contents" AutomationProperties.Name="Table of contents"
+                        AutomationProperties.AutomationId="TocToggleButton">
+                    <fi:SymbolIcon Symbol="List" Foreground="{Binding #Root.ChromeForeground}" />
+                </Button>
+
+                <TextBlock Grid.Column="1" Text="{Binding #Root.Title}" HorizontalAlignment="Center" VerticalAlignment="Center"
+                           FontSize="12.5" Foreground="{Binding #Root.ChromeForeground}" TextTrimming="CharacterEllipsis" />
+
+                <Button Grid.Column="2" Classes="chromeIcon" Command="{Binding #Root.SearchCommand}" Margin="0,0,4,0"
+                        IsVisible="{Binding #Root.SearchCommand, Converter={x:Static conv:ObjectConverters.IsNotNull}}"
+                        ToolTip.Tip="Search this book" AutomationProperties.Name="Search this book"
+                        AutomationProperties.AutomationId="SearchToggleButton">
+                    <fi:SymbolIcon Symbol="Search" Foreground="{Binding #Root.ChromeForeground}" />
+                </Button>
+
+                <Button Grid.Column="3" Classes="chromeIcon" Classes.active="{Binding #Root.IsBookmarked}"
+                        Command="{Binding #Root.BookmarksCommand}" Margin="0,0,4,0"
+                        IsVisible="{Binding #Root.BookmarksCommand, Converter={x:Static conv:ObjectConverters.IsNotNull}}"
+                        ToolTip.Tip="Bookmarks" AutomationProperties.Name="Bookmarks"
+                        AutomationProperties.AutomationId="BookmarksToggleButton">
+                    <fi:SymbolIcon Symbol="Bookmark" Foreground="{Binding #Root.ChromeForeground}" />
+                </Button>
+
+                <Button Grid.Column="4" Classes="chromeIcon" Command="{Binding #Root.HighlightsCommand}" Margin="0,0,4,0"
+                        IsVisible="{Binding #Root.HighlightsCommand, Converter={x:Static conv:ObjectConverters.IsNotNull}}"
+                        ToolTip.Tip="Highlights" AutomationProperties.Name="Highlights"
+                        AutomationProperties.AutomationId="HighlightsToggleButton">
+                    <fi:SymbolIcon Symbol="Highlight" Foreground="{Binding #Root.ChromeForeground}" />
+                </Button>
+
+                <Button Grid.Column="5" Classes="chromeIcon" Command="{Binding #Root.ExportCommand}" Margin="0,0,4,0"
+                        IsVisible="{Binding #Root.ExportCommand, Converter={x:Static conv:ObjectConverters.IsNotNull}}"
+                        ToolTip.Tip="Export annotations" AutomationProperties.Name="Export annotations"
+                        AutomationProperties.AutomationId="ExportAnnotationsButton">
+                    <fi:SymbolIcon Symbol="ArrowExport" Foreground="{Binding #Root.ChromeForeground}" />
+                </Button>
+
+                <Button Grid.Column="6" Classes="chromeIcon" Command="{Binding #Root.CapturesCommand}" Margin="0,0,4,0"
+                        IsVisible="{Binding #Root.CapturesCommand, Converter={x:Static conv:ObjectConverters.IsNotNull}}"
+                        ToolTip.Tip="Captures" AutomationProperties.Name="Captures"
+                        AutomationProperties.AutomationId="CapturesToggleButton">
+                    <fi:SymbolIcon Symbol="Image" Foreground="{Binding #Root.ChromeForeground}" />
+                </Button>
+
+                <Button Grid.Column="7" Classes="chromeIcon" Classes.active="{Binding #Root.IsCaptureMode}"
+                        Command="{Binding #Root.CaptureToggleCommand}" Margin="0,0,4,0"
+                        IsVisible="{Binding #Root.CaptureToggleCommand, Converter={x:Static conv:ObjectConverters.IsNotNull}}"
+                        ToolTip.Tip="Capture a region of this page" AutomationProperties.Name="Capture region"
+                        AutomationProperties.AutomationId="CaptureRegionToggleButton">
+                    <fi:SymbolIcon Symbol="Crop" Foreground="{Binding #Root.ChromeForeground}" />
+                </Button>
+
+                <Button Grid.Column="8" Classes="chromeIcon" Command="{Binding #Root.FontThemeCommand}" Margin="0,0,4,0"
+                        IsVisible="{Binding #Root.FontThemeCommand, Converter={x:Static conv:ObjectConverters.IsNotNull}}"
+                        ToolTip.Tip="Font and theme" AutomationProperties.Name="Font and theme"
+                        AutomationProperties.AutomationId="FontSheetToggleButton">
+                    <fi:SymbolIcon Symbol="TextFont" Foreground="{Binding #Root.ChromeForeground}" />
+                </Button>
+
+                <Button Grid.Column="9" Classes="chromeIcon" Command="{Binding #Root.CloseCommand}"
+                        IsVisible="{Binding #Root.CloseCommand, Converter={x:Static conv:ObjectConverters.IsNotNull}}"
+                        ToolTip.Tip="Close" AutomationProperties.Name="Close"
+                        AutomationProperties.AutomationId="CloseReaderButton">
+                    <fi:SymbolIcon Symbol="Dismiss" Foreground="{Binding #Root.ChromeForeground}" />
+                </Button>
+            </Grid>
+        </Border>
+
+        <!-- Bottom bar -->
+        <Border VerticalAlignment="Bottom" IsVisible="{Binding #Root.IsChromeVisible}"
+                Background="{Binding #Root.ChromeBackground}" Padding="10,8">
+            <Grid ColumnDefinitions="Auto,*,Auto">
+                <Button Grid.Column="0" Classes="chromeIcon" Click="OnPreviousButtonClick" IsEnabled="{Binding #Root.IsPreviousEnabled}" ToolTip.Tip="Previous page"
+                        AutomationProperties.Name="Previous page" AutomationProperties.AutomationId="PreviousPageButton">
+                    <fi:SymbolIcon Symbol="ChevronLeft" Foreground="{Binding #Root.ChromeForeground}" />
+                </Button>
+
+                <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="4" Margin="14,0">
+                    <ProgressBar Height="4" CornerRadius="2" Minimum="0" Maximum="1"
+                                 Value="{Binding #Root.ProgressFraction}" Background="{DynamicResource PbSurface3Brush}"
+                                 Foreground="{DynamicResource PbAccentBrush}" />
+                    <TextBlock Text="{Binding #Root.ProgressLabel}" HorizontalAlignment="Center" FontSize="11"
+                               Foreground="{Binding #Root.ChromeForeground}" Opacity="0.75" />
+                </StackPanel>
+
+                <Button Grid.Column="2" Classes="chromeIcon" Click="OnNextButtonClick" ToolTip.Tip="Next page"
+                        AutomationProperties.Name="Next page" AutomationProperties.AutomationId="NextPageButton">
+                    <fi:SymbolIcon Symbol="ChevronRight" Foreground="{Binding #Root.ChromeForeground}" />
+                </Button>
+            </Grid>
+        </Border>
+
+    </Grid>
+</UserControl>

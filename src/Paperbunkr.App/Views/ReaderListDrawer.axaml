@@ -1,0 +1,43 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:conv="using:Avalonia.Data.Converters"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="700" d:DesignHeight="500"
+             x:Class="Paperbunkr.App.Views.ReaderListDrawer"
+             x:Name="Root">
+
+    <!-- Shared left-drawer scaffold (docs/superpowers/specs/2026-09-03-books-reader-hud-redesign-
+         design.md). Popup + ShouldUseOverlayLayer="False", same airspace-safe pattern
+         BookReaderScreen.axaml's own overlays already established: a native embedded WebView always
+         composites above ordinary Avalonia content regardless of z-order, so a plain in-tree overlay
+         would render beneath it. Scrim/panel sized from OverlayReference (each host screen passes its
+         own real, always-correctly-sized root Grid in) - a real bug found on-screen: sizing from this
+         control's own Bounds instead (#Root.Bounds) rendered the scrim oversized whenever the window
+         wasn't maximized, visibly extending past the window's own edges into the desktop. #Root's only
+         content is this Popup, which doesn't participate in normal layout sizing the way a Border/Grid
+         does, so #Root.Bounds wasn't a reliable window-size source - OverlayReference reuses the exact
+         binding path (a real, content-bearing Grid's own Bounds) that already worked correctly before
+         this control existed. -->
+    <Popup IsOpen="{Binding #Root.IsOpen}" PlacementTarget="{Binding #Root}"
+           Placement="AnchorAndGravity" PlacementAnchor="TopLeft" PlacementGravity="BottomRight"
+           ShouldUseOverlayLayer="False" IsLightDismissEnabled="False">
+        <Grid Width="{Binding #Root.OverlayReference.Bounds.Width}" Height="{Binding #Root.OverlayReference.Bounds.Height}">
+            <Border Background="#B0000000" PointerPressed="OnScrimPointerPressed" />
+            <Border Width="{Binding #Root.DrawerWidth}" HorizontalAlignment="Left" Background="{DynamicResource PbChromeBrush}"
+                    BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,0,1,0">
+                <DockPanel>
+                    <TextBlock DockPanel.Dock="Top" Text="{Binding #Root.HeaderText}" FontSize="15" FontWeight="Bold"
+                               Foreground="{DynamicResource PbTextBrush}" Margin="16,18,16,10"
+                               IsVisible="{Binding #Root.HasSearchBox, Converter={x:Static conv:BoolConverters.Not}}" />
+                    <TextBox DockPanel.Dock="Top" Watermark="{Binding #Root.SearchBoxWatermark}"
+                             Text="{Binding #Root.SearchBoxText, Mode=TwoWay}" Margin="16,16,16,10"
+                             AutomationProperties.Name="{Binding #Root.SearchBoxWatermark}"
+                             IsVisible="{Binding #Root.HasSearchBox}" />
+                    <ContentPresenter Content="{Binding #Root.DrawerContent}"
+                                      AutomationProperties.Name="{Binding #Root.HeaderText}" />
+                </DockPanel>
+            </Border>
+        </Grid>
+    </Popup>
+</UserControl>

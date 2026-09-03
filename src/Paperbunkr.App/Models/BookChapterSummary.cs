@@ -8,4 +8,7 @@ public sealed class BookChapterSummary
     public string Title { get; init; } = string.Empty;
 
     public bool IsActive { get; init; }
+
+    /// <summary>Nearest ancestor part/section title from the source format's own navigation hierarchy (docs/superpowers/specs/2026-09-03-books-reader-hud-redesign-design.md, TOC grouping) - null for a chapter that isn't grouped under anything (EPUB's own nav had no parent with children for it, or the source format doesn't carry this structure at all).</summary>
+    public string? PartTitle { get; init; }
 }

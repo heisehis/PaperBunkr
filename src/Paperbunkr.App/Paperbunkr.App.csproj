@@ -40,6 +40,18 @@
     <PackageReference Include="Avalonia.Desktop" Version="12.1.1" />
     <PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.1" />
     <PackageReference Include="Avalonia.Fonts.Inter" Version="12.1.1" />
+    <!-- Books reflow reader WebView redesign (docs/superpowers/specs/2026-09-02-books-reflow-reader-
+         webview-redesign-design.md) - first-party AvaloniaUI package, Windows uses WebView2
+         automatically (matches this app's WinExe/Windows-only build already). 12.0.0 has a fatal
+         bug (confirmed via the upstream repo, not guessed): WM_ACTIVATE fires synchronously before
+         the async WebView2 controller finishes initializing, so ICoreWebView2Controller.MoveFocus()
+         returns E_INVALIDARG and NativeWebView.OnGotFocus lets the resulting ArgumentException
+         escape a native WndProc callback - unrecoverable, kills the whole process (AppDomain.
+         UnhandledException, Terminating: True), reproduced 2026-09-02 on first window activation
+         after opening a book. Fixed upstream in 12.0.1 (github.com/AvaloniaUI/Avalonia.Controls.
+         WebView PR #41, "Fix WebView2 MoveFocus crash on window activation"); pinned to the latest
+         12.1.0 here rather than the minimum-fix 12.0.1, since it also has a WebView2 memory-leak fix. -->
+    <PackageReference Include="Avalonia.Controls.WebView" Version="12.1.0" />
     <PackageReference Include="AvaloniaUI.DiagnosticsSupport" Version="2.2.3">
       <IncludeAssets Condition="'$(Configuration)' != 'Debug'">None</IncludeAssets>
       <PrivateAssets Condition="'$(Configuration)' != 'Debug'">All</PrivateAssets>

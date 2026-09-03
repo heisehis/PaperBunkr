@@ -66,9 +66,15 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
 
     public MainViewModel()
     {
+        // Seed the read-only starter workspaces before the two screen VMs first list them
+        // (docs/superpowers/specs/2026-09-03-library-saved-workspaces-design.md). Idempotent.
+        new WorkspaceService().EnsureBuiltInsSeeded();
+        WorkspaceName = new WorkspaceNameViewModel(CloseWorkspaceNameOverlay);
+        QuickOpen = new QuickOpenViewModel(ActivateQuickOpenEntry, CloseQuickOpenOverlay);
+
         Home = new HomeScreenViewModel(GoDetailForSeries, GoReaderForIssue, GoLibraryWithSearch, GoReaderForIssueInReadingList, GoBookReaderForBook, GoLibraryWithCollection);
-        Library = new LibraryScreenViewModel(GoDetailForSeries, GoReaderForIssue, GoNewIssuePropertiesForPlaceholder, OpenQuickRateOverlay, GoIssuePropertiesForIssue, GoBulkIssuePropertiesForIssues, ShowToast, GoBulkSeriesPropertiesForSeries, GoLibraryFoldersPreferences, OpenCollectionPropertiesOverlay, GoBookDetailForBook);
-        Books = new BooksScreenViewModel(GoBookDetailForBook, GoBookSeriesDetailForSeries, GoBookPropertiesForBook, GoBulkBookPropertiesForBooks, GoBookSeriesPropertiesForSeries, GoLibraryFoldersPreferences, ShowToast);
+        Library = new LibraryScreenViewModel(GoDetailForSeries, GoReaderForIssue, GoNewIssuePropertiesForPlaceholder, OpenQuickRateOverlay, GoIssuePropertiesForIssue, GoBulkIssuePropertiesForIssues, ShowToast, GoBulkSeriesPropertiesForSeries, GoLibraryFoldersPreferences, OpenCollectionPropertiesOverlay, GoBookDetailForBook, promptForName: PromptWorkspaceName);
+        Books = new BooksScreenViewModel(GoBookDetailForBook, GoBookSeriesDetailForSeries, GoBookPropertiesForBook, GoBulkBookPropertiesForBooks, GoBookSeriesPropertiesForSeries, GoLibraryFoldersPreferences, ShowToast, promptForName: PromptWorkspaceName);
         BookDetail = new BookDetailScreenViewModel(NavigateBack, GoBookReaderForBook, GoBookPropertiesForBook, GoBulkBookPropertiesForBooks, GoBookSeriesPropertiesForSeries);
         BookProperties = new BookPropertiesScreenViewModel(CloseBookPropertiesOverlay, ShowToast);
         BulkBookProperties = new BulkBookPropertiesScreenViewModel(CloseBulkBookPropertiesOverlay, ShowToast);
@@ -226,6 +232,8 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
     public NewReadingListViewModel NewReadingList { get; }
     public NewEventOrContinuityViewModel NewEventOrContinuity { get; }
     public QuickRateScreenViewModel QuickRate { get; }
+    public WorkspaceNameViewModel WorkspaceName { get; }
+    public QuickOpenViewModel QuickOpen { get; }
 
     public DesignShowcaseScreenViewModel DesignShowcase { get; }
     public LiveFolderWatchService LiveFolderWatch { get; }
@@ -274,6 +282,12 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
 
     [ObservableProperty]
     private bool _isNewReadingListDialogOpen;
+
+    [ObservableProperty]
+    private bool _isWorkspaceNameOverlayOpen;
+
+    [ObservableProperty]
+    private bool _isQuickOpenOverlayOpen;
 
     [ObservableProperty]
     private bool _isNewEventDialogOpen;
@@ -661,6 +675,117 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
 
     [RelayCommand]
     private void CloseNewReadingListDialog() => IsNewReadingListDialogOpen = false;
+
+    /// <summary>The Library/Books workspace switchers' "Save current view as…" / "Rename" prompt
+    /// (docs/superpowers/specs/2026-09-03-library-saved-workspaces-design.md) - opens the shared
+    /// naming overlay, hands the entered name back to whichever screen asked, and closes.</summary>
+    private void PromptWorkspaceName(string? initial, Action<string> onName)
+    {
+        WorkspaceName.Begin(initial, name =>
+        {
+            onName(name);
+            IsWorkspaceNameOverlayOpen = false;
+        });
+        IsWorkspaceNameOverlayOpen = true;
+    }
+
+    [RelayCommand]
+    private void CloseWorkspaceNameOverlay() => IsWorkspaceNameOverlayOpen = false;
+
+    /// <summary>Any editor / dialog overlay that owns focus - Ctrl+P must not open the palette on top of one.</summary>
+    private bool IsEditorOverlayOpen =>
+        IsIssuePropertiesOverlayOpen || IsBulkIssuePropertiesOverlayOpen || IsBulkSeriesPropertiesOverlayOpen
+        || IsBookPropertiesOverlayOpen || IsBulkBookPropertiesOverlayOpen || IsBookSeriesPropertiesOverlayOpen
+        || IsReadingListPropertiesOverlayOpen || IsCollectionPropertiesOverlayOpen || IsWorkspaceNameOverlayOpen
+        || IsNewReadingListDialogOpen || IsNewEventDialogOpen || IsMigrationOverlayOpen || IsQuickRateOverlayOpen
+        || IsWelcomeOverlayOpen || IsWelcomeTourOverlayOpen;
+
+    /// <summary>Ctrl+P (docs/superpowers/specs/2026-09-03-quick-open-command-palette-design.md) - opens
+    /// the command palette. No-op while an editor overlay is up, or if it's already open. The
+    /// reader carve-out is in <c>MainWindow.axaml.cs</c>'s key handler, not here.</summary>
+    [RelayCommand]
+    private void OpenQuickOpen()
+    {
+        if (IsEditorOverlayOpen || IsQuickOpenOverlayOpen)
+        {
+            return;
+        }
+
+        QuickOpen.Open();
+        IsQuickOpenOverlayOpen = true;
+    }
+
+    [RelayCommand]
+    private void CloseQuickOpenOverlay() => IsQuickOpenOverlayOpen = false;
+
+    private void ActivateQuickOpenEntry(Paperbunkr.App.Models.QuickOpenEntry entry)
+    {
+        switch (entry.Kind)
+        {
+            case Paperbunkr.App.Models.QuickOpenKind.Series:
+                GoDetailForSeries(entry.EntityId!.Value);
+                break;
+            case Paperbunkr.App.Models.QuickOpenKind.Issue:
+                GoReaderForIssue(entry.EntityId!.Value);
+                break;
+            case Paperbunkr.App.Models.QuickOpenKind.Book:
+                GoBookDetailForBook(entry.EntityId!.Value);
+                break;
+            case Paperbunkr.App.Models.QuickOpenKind.Collection:
+                GoLibraryWithCollection(entry.EntityId!.Value);
+                break;
+            case Paperbunkr.App.Models.QuickOpenKind.ReadingList:
+                GoReadingWithList(entry.EntityId!.Value);
+                break;
+            case Paperbunkr.App.Models.QuickOpenKind.SmartList:
+                GoSmartCommand.Execute(null);
+                Smart.LoadSmartList(entry.EntityId!.Value);
+                break;
+            case Paperbunkr.App.Models.QuickOpenKind.StoryEvent:
+                GoEventsCommand.Execute(null);
+                Events.LoadEvent(entry.EntityId!.Value);
+                break;
+            case Paperbunkr.App.Models.QuickOpenKind.Continuity:
+                GoEventsCommand.Execute(null);
+                Events.LoadContinuity(entry.EntityId!.Value);
+                break;
+            case Paperbunkr.App.Models.QuickOpenKind.Screen:
+                (entry.Key switch
+                {
+                    "library" => GoLibraryCommand,
+                    "books" => GoBooksCommand,
+                    "smart" => GoSmartCommand,
+                    "reading" => GoReadingCommand,
+                    "events" => GoEventsCommand,
+                    "preferences" => GoPreferencesCommand,
+                    _ => GoHomeCommand,
+                }).Execute(null);
+                break;
+            case Paperbunkr.App.Models.QuickOpenKind.Action:
+                RunQuickOpenAction(entry.Key!);
+                break;
+        }
+    }
+
+    private void RunQuickOpenAction(string key)
+    {
+        switch (key)
+        {
+            case "addFolder":
+                GoLibraryFoldersPreferences();
+                break;
+            case "addIssue":
+                GoLibraryCommand.Execute(null);
+                Library.OpenAddIssueCommand.Execute(null);
+                break;
+            case "newReadingList":
+                OpenNewReadingListDialog();
+                break;
+            case "importCe":
+                OpenMigrationOverlay();
+                break;
+        }
+    }
 
     private void OnNewReadingListCreated(int listId)
     {
@@ -1670,7 +1795,11 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
     [RelayCommand]
     private void Escape()
     {
-        if (IsMigrationOverlayOpen)
+        if (IsQuickOpenOverlayOpen)
+        {
+            CloseQuickOpenOverlay();
+        }
+        else if (IsMigrationOverlayOpen)
         {
             CloseMigrationOverlay();
         }

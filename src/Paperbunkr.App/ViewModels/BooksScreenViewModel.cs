@@ -51,7 +51,9 @@ public partial class BooksScreenViewModel : ViewModelBase, IContextMenuProvider
 
     public BooksScreenViewModel(Action<int> goBookDetail, Action<int> goBookSeriesDetail, Action<int> goEditBook,
         Action<IReadOnlyList<int>> goBulkEdit, Action<int> goEditSeries, Action goLibrarySettings,
-        Action<string, string>? showToast = null)
+        Action<string, string>? showToast = null,
+        Action<string?, Action<string>>? promptForName = null,
+        WorkspaceService? workspaceService = null)
     {
         _goBookDetail = goBookDetail;
         _goBookSeriesDetail = goBookSeriesDetail;
@@ -60,12 +62,16 @@ public partial class BooksScreenViewModel : ViewModelBase, IContextMenuProvider
         _goEditSeries = goEditSeries;
         _goLibrarySettings = goLibrarySettings;
         _showToast = showToast ?? ((_, _) => { });
+        _promptForName = promptForName ?? ((_, _) => { });
+        _workspaceService = workspaceService ?? new WorkspaceService();
+        Workspaces = new ObservableCollection<WorkspaceRow>();
         Books = new ObservableCollection<BookCardSample>();
         Groups = new ObservableCollection<BookCardGroup>();
         Collections = new ObservableCollection<CollectionSummary>();
 
         LoadBooksSettings();
         LoadFromDatabase();
+        RefreshWorkspaces();
     }
 
     // --- multi-select (B3, mirrors LibraryScreenViewModel.Selection) ---
@@ -217,6 +223,7 @@ public partial class BooksScreenViewModel : ViewModelBase, IContextMenuProvider
     {
         OnPropertyChanged(nameof(IsSortOpen));
         OnPropertyChanged(nameof(IsGroupOpen));
+        OnPropertyChanged(nameof(IsWorkspaceOpen));
     }
 
     [RelayCommand] private void ToggleSort() => ActiveDropdown = ActiveDropdown == "sort" ? null : "sort";
@@ -226,6 +233,176 @@ public partial class BooksScreenViewModel : ViewModelBase, IContextMenuProvider
     [RelayCommand] private void ToggleSortDirection() =>
         SortDirection = SortDirection == SortDirection.Ascending ? SortDirection.Descending : SortDirection.Ascending;
     [RelayCommand] private void ClearSearch() => SearchQuery = string.Empty;
+
+    // --- Saved Workspaces (docs/superpowers/specs/2026-09-03-library-saved-workspaces-design.md) ---
+    // Books' own independent list, parallel to LibraryScreenViewModel's. Three-field snapshots
+    // (sort field + direction + group); search text is never captured, matching LoadBooksSettings.
+
+    private readonly WorkspaceService _workspaceService;
+    private readonly Action<string?, Action<string>> _promptForName;
+    private int? _activeWorkspaceId;
+    private bool _suppressWorkspaceTracking;
+
+    public ObservableCollection<WorkspaceRow> Workspaces { get; }
+
+    public bool IsWorkspaceOpen => ActiveDropdown == "workspace";
+
+    public string ActiveWorkspaceLabel =>
+        Workspaces.FirstOrDefault(w => w.Id == _activeWorkspaceId)?.Name ?? "Workspace";
+
+    public bool HasReorderableWorkspaces => Workspaces.Count(w => !w.IsBuiltIn) > 1;
+
+    [RelayCommand] private void ToggleWorkspace() => ActiveDropdown = ActiveDropdown == "workspace" ? null : "workspace";
+
+    private void RefreshWorkspaces()
+    {
+        Workspaces.Clear();
+        foreach (var w in _workspaceService.List(WorkspaceScreen.Books))
+        {
+            Workspaces.Add(new WorkspaceRow(w.Id, w.Name, w.IsBuiltIn, w.Id == _activeWorkspaceId));
+        }
+
+        OnPropertyChanged(nameof(ActiveWorkspaceLabel));
+        OnPropertyChanged(nameof(HasReorderableWorkspaces));
+    }
+
+    private BooksWorkspaceState CaptureBooksState() => new(SortField, SortDirection, GroupField);
+
+    [RelayCommand]
+    private void ApplyWorkspace(int id)
+    {
+        var row = _workspaceService.List(WorkspaceScreen.Books).FirstOrDefault(w => w.Id == id);
+        if (row is null)
+        {
+            RefreshWorkspaces();
+            return;
+        }
+
+        var s = WorkspaceStateJson.DeserializeBooks(row.StateJson);
+        _suppressWorkspaceTracking = true;
+        try
+        {
+#pragma warning disable MVVMTK0034
+            _sortField = s.SortField;
+            _sortDirection = s.SortDirection;
+            _groupField = s.GroupField;
+#pragma warning restore MVVMTK0034
+            _activeWorkspaceId = id;
+            SaveBooksSettings();
+            Rebuild();
+
+            foreach (var name in new[]
+            {
+                nameof(SortField), nameof(SortDirection), nameof(GroupField),
+                nameof(SortLabel), nameof(GroupLabel), nameof(SortDirectionGlyph), nameof(IsGrouped),
+                nameof(ActiveWorkspaceLabel),
+            })
+            {
+                OnPropertyChanged(name);
+            }
+        }
+        finally
+        {
+            _suppressWorkspaceTracking = false;
+        }
+
+        RefreshWorkspaces();
+        ActiveDropdown = null;
+    }
+
+    [RelayCommand]
+    private void SaveWorkspaceAs() => _promptForName(null, name =>
+    {
+        string json = WorkspaceStateJson.Serialize(CaptureBooksState());
+        var existing = _workspaceService.List(WorkspaceScreen.Books)
+            .FirstOrDefault(w => !w.IsBuiltIn && string.Equals(w.Name, name, StringComparison.OrdinalIgnoreCase));
+
+        int id;
+        if (existing is not null)
+        {
+            _workspaceService.UpdateState(existing.Id, json);
+            id = existing.Id;
+        }
+        else
+        {
+            id = _workspaceService.Create(WorkspaceScreen.Books, name, json).Id;
+        }
+
+        _activeWorkspaceId = id;
+        RefreshWorkspaces();
+        PersistActiveWorkspaceId();
+    });
+
+    [RelayCommand]
+    private void RenameWorkspace(int id)
+    {
+        var row = Workspaces.FirstOrDefault(w => w.Id == id);
+        if (row is null || row.IsBuiltIn)
+        {
+            return;
+        }
+
+        _promptForName(row.Name, name =>
+        {
+            _workspaceService.Rename(id, name);
+            RefreshWorkspaces();
+        });
+    }
+
+    [RelayCommand]
+    private void DeleteWorkspace(int id)
+    {
+        var row = Workspaces.FirstOrDefault(w => w.Id == id);
+        if (row is null || row.IsBuiltIn)
+        {
+            return;
+        }
+
+        _workspaceService.Delete(id);
+        if (_activeWorkspaceId == id)
+        {
+            _activeWorkspaceId = null;
+            PersistActiveWorkspaceId();
+        }
+
+        RefreshWorkspaces();
+    }
+
+    [RelayCommand] private void MoveWorkspaceUp(int id) => MoveWorkspace(id, -1);
+    [RelayCommand] private void MoveWorkspaceDown(int id) => MoveWorkspace(id, +1);
+
+    private void MoveWorkspace(int id, int delta)
+    {
+        var user = Workspaces.Where(w => !w.IsBuiltIn).Select(w => w.Id).ToList();
+        int index = user.IndexOf(id);
+        int target = index + delta;
+        if (index < 0 || target < 0 || target >= user.Count)
+        {
+            return;
+        }
+
+        (user[index], user[target]) = (user[target], user[index]);
+        _workspaceService.Reorder(WorkspaceScreen.Books, user);
+        RefreshWorkspaces();
+    }
+
+    [RelayCommand]
+    private void ResetToDefaultView()
+    {
+        var allBooks = _workspaceService.List(WorkspaceScreen.Books).FirstOrDefault(w => w.IsBuiltIn && w.Name == "All books");
+        if (allBooks is not null)
+        {
+            ApplyWorkspace(allBooks.Id);
+        }
+    }
+
+    private void PersistActiveWorkspaceId()
+    {
+        using var context = PaperbunkrDb.CreateContext();
+        var settings = context.GetOrCreateAppSettings();
+        settings.BooksActiveWorkspaceId = _activeWorkspaceId;
+        context.SaveChanges();
+    }
 
     // --- data ---
 
@@ -399,13 +576,30 @@ public partial class BooksScreenViewModel : ViewModelBase, IContextMenuProvider
         _sortField = settings.BooksSortField;
         _sortDirection = settings.BooksSortDirection;
         _groupField = settings.BooksGroupField;
+        _activeWorkspaceId = settings.BooksActiveWorkspaceId;
 #pragma warning restore MVVMTK0034
     }
 
     private void SaveBooksSettings()
     {
+        // See LibraryScreenViewModel.SaveLibrarySettings - any governed-field change that isn't an
+        // apply drops the toolbar workspace label back to "Workspace".
+        if (!_suppressWorkspaceTracking && _activeWorkspaceId is not null)
+        {
+            _activeWorkspaceId = null;
+            OnPropertyChanged(nameof(ActiveWorkspaceLabel));
+            for (int i = 0; i < Workspaces.Count; i++)
+            {
+                if (Workspaces[i].IsActive)
+                {
+                    Workspaces[i] = Workspaces[i] with { IsActive = false };
+                }
+            }
+        }
+
         using var context = PaperbunkrDb.CreateContext();
         var settings = context.GetOrCreateAppSettings();
+        settings.BooksActiveWorkspaceId = _activeWorkspaceId;
         settings.BooksSortField = SortField;
         settings.BooksSortDirection = SortDirection;
         settings.BooksGroupField = GroupField;

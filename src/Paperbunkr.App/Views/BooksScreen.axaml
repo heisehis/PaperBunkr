@@ -118,7 +118,8 @@
         <DataTemplate x:Key="BookCardTemplate" x:DataType="models:BookCardSample">
             <Button Classes="card" Width="150" Margin="0,0,20,20"
                     Command="{Binding $parent[UserControl].((vm:BooksScreenViewModel)DataContext).CardClickCommand}"
-                    CommandParameter="{Binding}" KeyDown="OnCardKeyDown">
+                    CommandParameter="{Binding}" KeyDown="OnCardKeyDown"
+                    AutomationProperties.AutomationId="BookCard" AutomationProperties.Name="{Binding Title}">
                 <StackPanel Spacing="8">
                     <Border Classes="bookCover" Background="{Binding CoverBrush}" Height="216">
                         <Grid>
@@ -168,7 +169,7 @@
                         AutomationProperties.AutomationId="BooksSelectionClear" />
             </Grid>
 
-            <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="10" IsVisible="{Binding !HasSelection}">
+            <Grid ColumnDefinitions="*,Auto,Auto,Auto" ColumnSpacing="10" IsVisible="{Binding !HasSelection}">
                 <Border Grid.Column="0" Background="{DynamicResource PbSurface1Brush}" CornerRadius="{DynamicResource PbRadius}"
                         BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1" Padding="10,0" MaxWidth="360" HorizontalAlignment="Left">
                     <DockPanel LastChildFill="True">
@@ -179,14 +180,54 @@
                     </DockPanel>
                 </Border>
 
-                <Button Grid.Column="1" x:Name="GroupButton" Classes="toolbarPill" Classes.open="{Binding IsGroupOpen}"
+                <Button Grid.Column="1" x:Name="WorkspaceButton" Classes="toolbarPill" Classes.open="{Binding IsWorkspaceOpen}"
+                        Command="{Binding ToggleWorkspaceCommand}" VerticalAlignment="Center"
+                        Content="{Binding ActiveWorkspaceLabel, StringFormat='Workspace: {0}'}"
+                        AutomationProperties.AutomationId="BooksWorkspaceButton" />
+                <Button Grid.Column="2" x:Name="GroupButton" Classes="toolbarPill" Classes.open="{Binding IsGroupOpen}"
                         Command="{Binding ToggleGroupCommand}" VerticalAlignment="Center"
                         Content="{Binding GroupLabel, StringFormat='Group: {0}'}"
                         AutomationProperties.AutomationId="BooksGroupButton" />
-                <Button Grid.Column="2" x:Name="SortButton" Classes="toolbarPill" Classes.open="{Binding IsSortOpen}"
+                <Button Grid.Column="3" x:Name="SortButton" Classes="toolbarPill" Classes.open="{Binding IsSortOpen}"
                         Command="{Binding ToggleSortCommand}" VerticalAlignment="Center"
                         Content="{Binding SortLabel, StringFormat='Sort: {0}'}"
                         AutomationProperties.AutomationId="BooksSortButton" />
+
+                <Popup PlacementTarget="{Binding #WorkspaceButton}" Placement="BottomEdgeAlignedLeft" VerticalOffset="6"
+                       IsOpen="{Binding IsWorkspaceOpen}" IsLightDismissEnabled="True">
+                    <Border Classes="dropdown" Width="270">
+                        <StackPanel Spacing="1">
+                            <ItemsControl ItemsSource="{Binding Workspaces}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="models:WorkspaceRow">
+                                        <Grid ColumnDefinitions="*,Auto">
+                                            <Button Grid.Column="0" Classes="modeOption" Classes.active="{Binding IsActive}"
+                                                    Content="{Binding Name}"
+                                                    Command="{Binding $parent[UserControl].((vm:BooksScreenViewModel)DataContext).ApplyWorkspaceCommand}"
+                                                    CommandParameter="{Binding Id}"
+                                                    AutomationProperties.AutomationId="{Binding Name, StringFormat='BooksWorkspaceRow_{0}'}" />
+                                            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" IsVisible="{Binding !IsBuiltIn}">
+                                                <Button Content="▲" FontSize="10" Padding="4,2" Background="Transparent" BorderThickness="0" Cursor="Hand"
+                                                        Command="{Binding $parent[UserControl].((vm:BooksScreenViewModel)DataContext).MoveWorkspaceUpCommand}" CommandParameter="{Binding Id}" />
+                                                <Button Content="▼" FontSize="10" Padding="4,2" Background="Transparent" BorderThickness="0" Cursor="Hand"
+                                                        Command="{Binding $parent[UserControl].((vm:BooksScreenViewModel)DataContext).MoveWorkspaceDownCommand}" CommandParameter="{Binding Id}" />
+                                                <Button Content="✎" Padding="4,2" Background="Transparent" BorderThickness="0" Cursor="Hand"
+                                                        Command="{Binding $parent[UserControl].((vm:BooksScreenViewModel)DataContext).RenameWorkspaceCommand}" CommandParameter="{Binding Id}" />
+                                                <Button Content="✕" Padding="4,2" Background="Transparent" BorderThickness="0" Cursor="Hand"
+                                                        Command="{Binding $parent[UserControl].((vm:BooksScreenViewModel)DataContext).DeleteWorkspaceCommand}" CommandParameter="{Binding Id}" />
+                                            </StackPanel>
+                                        </Grid>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <Border Height="1" Background="{DynamicResource PbBorderBrush}" Margin="0,6" />
+                            <Button Classes="modeOption" Content="Save current view as…" Command="{Binding SaveWorkspaceAsCommand}"
+                                    AutomationProperties.AutomationId="BooksWorkspaceSaveAs" />
+                            <Button Classes="modeOption" Content="Reset to default view" Command="{Binding ResetToDefaultViewCommand}"
+                                    AutomationProperties.AutomationId="BooksWorkspaceReset" />
+                        </StackPanel>
+                    </Border>
+                </Popup>
 
                 <Popup PlacementTarget="{Binding #GroupButton}" Placement="BottomEdgeAlignedRight" VerticalOffset="6"
                        IsOpen="{Binding IsGroupOpen}" IsLightDismissEnabled="True">

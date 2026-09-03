@@ -264,6 +264,9 @@ public class AppSettings
     /// <summary>See <see cref="BooksSortField"/>.</summary>
     public BooksGroupField BooksGroupField { get; set; } = BooksGroupField.None;
 
+    /// <summary>Books-screen counterpart to <see cref="LibraryActiveWorkspaceId"/> - same cosmetic-label-only role.</summary>
+    public int? BooksActiveWorkspaceId { get; set; }
+
     /// <summary>
     /// Global policy governing newly-created <see cref="MetadataProposal"/> rows (docs/superpowers/
     /// specs/2026-08-17-metadata-model-phase2a-metadata-proposals-design.md) - one setting for the
@@ -369,6 +372,16 @@ public class AppSettings
     /// comma (an enum name never can).
     /// </summary>
     public string? LibraryRecentSearches { get; set; }
+
+    /// <summary>
+    /// The Library workspace last applied from the toolbar switcher (docs/superpowers/specs/
+    /// 2026-09-03-library-saved-workspaces-design.md). Purely cosmetic - drives the dropdown's
+    /// label. Set on apply, cleared to null the moment any governed field changes for a reason
+    /// other than an apply. Nothing branches on it; a stale id (workspace deleted) just falls the
+    /// label back to the neutral "Workspace" text. Nullable, no HasDefaultValue/HasSentinel - same
+    /// treatment as <see cref="LibraryActiveCollectionId"/>.
+    /// </summary>
+    public int? LibraryActiveWorkspaceId { get; set; }
 
     /// <summary>
     /// Whether the app checks GitHub Releases for a newer version on startup (docs/superpowers/specs/

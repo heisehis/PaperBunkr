@@ -3,6 +3,7 @@ using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
 using Avalonia;
+using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -75,7 +76,16 @@ public partial class PdfPageReaderScreenViewModel : ViewModelBase
     /// <summary>1-based, for display only - <see cref="PageIndex"/> itself stays 0-based to match <see cref="IPageImageDecoder.GetPage"/>.</summary>
     public int PageNumber => PageIndex + 1;
 
-    partial void OnPageIndexChanged(int value) => OnPropertyChanged(nameof(PageNumber));
+    /// <summary>Bottom-bar label for <c>ReaderChrome</c> (docs/superpowers/specs/2026-09-03-books-reader-hud-redesign-design.md) - "{page} / {count}", the exact text this screen's own scrubber already showed.</summary>
+    public string ProgressLabel => $"{PageNumber} / {PageCount}";
+
+    partial void OnPageIndexChanged(int value)
+    {
+        OnPropertyChanged(nameof(PageNumber));
+        OnPropertyChanged(nameof(ProgressLabel));
+    }
+
+    partial void OnPageCountChanged(int value) => OnPropertyChanged(nameof(ProgressLabel));
 
     private double _zoomLevel = 1.0;
 
@@ -100,6 +110,24 @@ public partial class PdfPageReaderScreenViewModel : ViewModelBase
     [ObservableProperty]
     private double _panOffsetY;
 
+    /// <summary>
+    /// PDF's first-ever theme setting (docs/superpowers/specs/2026-09-03-books-reader-hud-redesign-
+    /// design.md) - reuses the same <see cref="BookTheme"/> enum and <see cref="Book.ThemeOverride"/>/
+    /// <see cref="AppSettings.BookReaderTheme"/> storage EPUB's reader already uses (both are already
+    /// format-agnostic columns, not EPUB-specific, so no schema change was needed). The Font & Theme
+    /// sheet only ever offers Light/Dark/Sepia for PDF (<see cref="Views.ReaderSettingsSheet.PdfThemes"/>),
+    /// but the stored/bindable type stays the full shared enum.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanvasBackground))]
+    private BookTheme _theme = BookTheme.MatchAppSkin;
+
+    /// <summary>Tint for the backdrop behind the page image - the same per-theme table the EPUB reader's chrome uses, so a Light/Dark/Sepia choice here looks consistent with the rest of the redesigned HUD. Only tints the canvas/backdrop, never the rasterized PDF page pixels themselves (a real, separate image-processing feature, not in scope here).</summary>
+    public IBrush CanvasBackground => BookThemeBrushes.ContentBackground(Theme);
+
+    [ObservableProperty]
+    private bool _isFontThemeOpen;
+
     /// <param name="startAt">Accepted for call-site parity with
     /// <see cref="BookReaderScreenViewModel.LoadBook(int, BookPosition?)"/> and ignored - the
     /// fixed-layout page reader has no chapter/offset position model (it always opens at page 0,
@@ -118,7 +146,13 @@ public partial class PdfPageReaderScreenViewModel : ViewModelBase
         var book = context.Books.Include(b => b.AnnotationImages).Single(b => b.Id == bookId);
 
         BookTitle = book.Title;
-        HighQualityPageDisplay = context.GetOrCreateAppSettings().HighQualityPageDisplay;
+        var appSettings = context.GetOrCreateAppSettings();
+        HighQualityPageDisplay = appSettings.HighQualityPageDisplay;
+        // Same null-coalescing per-book-override-then-global-default chain BookReaderScreenViewModel.
+        // LoadBook already uses for Settings.Theme - Book.ThemeOverride/AppSettings.BookReaderTheme are
+        // already format-agnostic columns, so PDF simply starts reading/writing them too.
+        Theme = book.ThemeOverride ?? appSettings.BookReaderTheme;
+        IsFontThemeOpen = false;
         ErrorMessage = null;
         ZoomLevel = 1.0;
         PageIndex = 0;
@@ -159,6 +193,31 @@ public partial class PdfPageReaderScreenViewModel : ViewModelBase
 
     [RelayCommand]
     private void CloseCaptures() => IsCapturesOpen = false;
+
+    [RelayCommand]
+    private void OpenFontTheme() => IsFontThemeOpen = true;
+
+    /// <summary>Persists on close, not per-tick - same "explicit action, not every intermediate change" shape <see cref="BookReaderScreenViewModel.PersistSettingsOverride"/> already uses for EPUB's own theme.</summary>
+    [RelayCommand]
+    private void CloseFontTheme()
+    {
+        IsFontThemeOpen = false;
+        if (_bookId == 0)
+        {
+            return;
+        }
+
+        using var context = PaperbunkrDb.CreateContext();
+        var book = context.Books.FirstOrDefault(b => b.Id == _bookId);
+        if (book is not null)
+        {
+            book.ThemeOverride = Theme;
+            context.SaveChanges();
+        }
+    }
+
+    [RelayCommand]
+    private void SetTheme(BookTheme theme) => Theme = theme;
 
     [RelayCommand]
     private void DeleteCapture(BookAnnotationImageSummary? capture)

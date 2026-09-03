@@ -170,7 +170,9 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         Action? goLibraryFolders = null,
         Action<int>? openCollectionProperties = null,
         Action<int>? goBookDetailForBook = null,
-        LibraryFolderScanner? libraryScanner = null)
+        LibraryFolderScanner? libraryScanner = null,
+        Action<string?, Action<string>>? promptForName = null,
+        WorkspaceService? workspaceService = null)
     {
         _goDetail = goDetail;
         _goReaderForIssue = goReaderForIssue;
@@ -184,6 +186,9 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         _openCollectionProperties = openCollectionProperties ?? (_ => { });
         _goBookDetailForBook = goBookDetailForBook ?? (_ => { });
         _libraryScanner = libraryScanner ?? new LibraryFolderScanner();
+        _promptForName = promptForName ?? ((_, _) => { });
+        _workspaceService = workspaceService ?? new WorkspaceService();
+        Workspaces = new ObservableCollection<WorkspaceRow>();
         Covers = new ObservableCollection<SeriesCardSample>();
         Groups = new ObservableCollection<SeriesCardGroup>();
         FlatCovers = new ObservableCollection<object>();
@@ -254,7 +259,9 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
                 }
             }
         };
+        _suppressWorkspaceTracking = true;
         LoadLibrarySettings();
+        _suppressWorkspaceTracking = false;
         InitializeDetailsColumns();
 
         // Seeds history entry #1 with the just-loaded state, matching CE's own behavior of the
@@ -264,6 +271,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         _browseHistory.AddAtCursor(CurrentBrowseState());
 
         LoadFromDatabase();
+        RefreshWorkspaces();
         _constructed = true;
     }
 
@@ -395,6 +403,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         _filterMissingIssues = settings.LibraryFilterMissingIssues;
         _filterTrackedOnly = settings.LibraryFilterTrackedOnly;
         _detailsColumnsSetting = settings.LibraryDetailsColumns;
+        _activeWorkspaceId = settings.LibraryActiveWorkspaceId;
 #pragma warning restore MVVMTK0034
 
         _recentSearches = DeserializeRecentSearches(settings.LibraryRecentSearches);
@@ -422,9 +431,27 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
     /// <summary>Immediate write-back for every field <see cref="LoadLibrarySettings"/> seeds, called from each field's own change hook - no debounce, matching this ViewModel's existing no-debounce philosophy (see <see cref="SearchQuery"/>'s doc comment) and <see cref="Paperbunkr.App.ViewModels.ReaderScreenViewModel"/>'s equivalent immediate-write precedent for <c>AppSettings</c>.</summary>
     private void SaveLibrarySettings()
     {
+        // One-shot workspace model (docs/superpowers/specs/2026-09-03-library-saved-workspaces-
+        // design.md): any governed-field change that isn't itself an apply drops the toolbar label
+        // back to the neutral "Workspace" text. Suppressed during construction-seeding and during
+        // an apply (both go through this method via the IssueList relay).
+        if (!_suppressWorkspaceTracking && _activeWorkspaceId is not null)
+        {
+            _activeWorkspaceId = null;
+            OnPropertyChanged(nameof(ActiveWorkspaceLabel));
+            for (int i = 0; i < Workspaces.Count; i++)
+            {
+                if (Workspaces[i].IsActive)
+                {
+                    Workspaces[i] = Workspaces[i] with { IsActive = false };
+                }
+            }
+        }
+
         using var context = PaperbunkrDb.CreateContext();
         var settings = context.GetOrCreateAppSettings();
 
+        settings.LibraryActiveWorkspaceId = _activeWorkspaceId;
         settings.LibraryGranularity = Granularity;
         settings.LibraryIssueListSortField = IssueList.SortField;
         settings.LibraryIssueListSortDirection = IssueList.SortDirection;
@@ -1643,6 +1670,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         OnPropertyChanged(nameof(IsSearchModeOpen));
         OnPropertyChanged(nameof(IsAddFilterOpen));
         OnPropertyChanged(nameof(IsAddToListOpen));
+        OnPropertyChanged(nameof(IsWorkspaceOpen));
     }
 
     [ObservableProperty]
@@ -1679,6 +1707,282 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
 
     [RelayCommand]
     private void ToggleAddToList() => ActiveDropdown = ActiveDropdown == "addToList" ? null : "addToList";
+
+    // --- Saved Workspaces (docs/superpowers/specs/2026-09-03-library-saved-workspaces-design.md) ---
+    // Named, switchable snapshots of the whole persisted view-state above. One-shot apply: picking
+    // one writes its fields into the live view (which keeps auto-persisting as normal), then you're
+    // editing live state again. The label tracks the last-applied workspace only until the next
+    // governed change (see SaveLibrarySettings' clear).
+
+    private readonly WorkspaceService _workspaceService;
+    private readonly Action<string?, Action<string>> _promptForName;
+    private int? _activeWorkspaceId;
+
+    /// <summary>Suppresses the label-clear in <see cref="SaveLibrarySettings"/> during construction-seeding and during an apply.</summary>
+    private bool _suppressWorkspaceTracking;
+
+    public ObservableCollection<WorkspaceRow> Workspaces { get; }
+
+    public bool IsWorkspaceOpen => ActiveDropdown == "workspace";
+
+    /// <summary>The last-applied workspace's name while the view still matches it exactly; the
+    /// moment any governed field changes this reverts to the neutral "Workspace" (see
+    /// <see cref="SaveLibrarySettings"/>'s clear). Purely cosmetic.</summary>
+    public string ActiveWorkspaceLabel =>
+        Workspaces.FirstOrDefault(w => w.Id == _activeWorkspaceId)?.Name ?? "Workspace";
+
+    /// <summary>Gates the "Reorder…" row - only meaningful with more than one user workspace.</summary>
+    public bool HasReorderableWorkspaces => Workspaces.Count(w => !w.IsBuiltIn) > 1;
+
+    [RelayCommand]
+    private void ToggleWorkspace() => ActiveDropdown = ActiveDropdown == "workspace" ? null : "workspace";
+
+    private void RefreshWorkspaces()
+    {
+        Workspaces.Clear();
+        foreach (var w in _workspaceService.List(WorkspaceScreen.Library))
+        {
+            Workspaces.Add(new WorkspaceRow(w.Id, w.Name, w.IsBuiltIn, w.Id == _activeWorkspaceId));
+        }
+
+        OnPropertyChanged(nameof(ActiveWorkspaceLabel));
+        OnPropertyChanged(nameof(HasReorderableWorkspaces));
+    }
+
+    /// <summary>
+    /// Re-raises every toolbar/chrome binding after <see cref="ApplyLibraryState"/>'s direct-field
+    /// writes (which bypass the <c>On*Changed</c> partials). Deliberately targeted rather than
+    /// <c>OnPropertyChanged(string.Empty)</c> - a blanket "all changed" on this screen also forces
+    /// re-evaluation of the (unvirtualized) Details/List row bindings, spiking CPU/memory on a large
+    /// library. Nothing here touches <c>IssueList.Rows</c>.
+    /// </summary>
+    private void RaiseAllToolbarBindings()
+    {
+        foreach (var name in new[]
+        {
+            nameof(Granularity), nameof(IsSeriesGranularity), nameof(IsIssueGranularity),
+            nameof(ViewMode), nameof(DisplayModeLabel),
+            nameof(IsGrouped), nameof(ActiveSortLabel), nameof(ActiveGroupLabel),
+            nameof(ShowAlphabetIndex),
+            nameof(GridDensity), nameof(ShowTileTitles),
+            nameof(ShowUnreadBadge), nameof(ShowPublisherBadge), nameof(ShowLanguageBadge),
+            nameof(UseLanguageIcon), nameof(ShowContinueReadingButton),
+            nameof(SearchQuery), nameof(SearchMode), nameof(SearchModeLabel),
+            nameof(FilterUnreadOnly), nameof(FilterMissingIssues), nameof(FilterTrackedOnly),
+            nameof(IsAllSeriesActive),
+        })
+        {
+            OnPropertyChanged(name);
+        }
+
+        RaiseCollectionViewChanged();
+        RaiseChipAndEmptyState();
+    }
+
+    private LibraryWorkspaceState CaptureLibraryState() => new(
+        Granularity,
+        IssueList.SortField, IssueList.SortDirection, IssueList.GroupField,
+        ViewMode, GridDensity, ShowTileTitles,
+        ShowUnreadBadge, ShowPublisherBadge, ShowLanguageBadge, UseLanguageIcon, ShowContinueReadingButton,
+        string.IsNullOrEmpty(SearchQuery) ? null : SearchQuery, SearchMode,
+        _activeContentType, _activeCollectionId,
+        FilterUnreadOnly, FilterMissingIssues, FilterTrackedOnly,
+        DetailsColumns.Count == 0 ? _detailsColumnsSetting : SerializeDetailsColumns());
+
+    [RelayCommand]
+    private void ApplyWorkspace(int id)
+    {
+        var row = _workspaceService.List(WorkspaceScreen.Library).FirstOrDefault(w => w.Id == id);
+        if (row is null)
+        {
+            RefreshWorkspaces();
+            return;
+        }
+
+        ApplyLibraryState(WorkspaceStateJson.DeserializeLibrary(row.StateJson), id);
+        ActiveDropdown = null;
+    }
+
+    private void ApplyLibraryState(LibraryWorkspaceState s, int workspaceId)
+    {
+        _suppressWorkspaceTracking = true;
+        try
+        {
+#pragma warning disable MVVMTK0034
+            _granularity = s.Granularity;
+            _viewMode = s.ViewMode;
+            _gridDensity = s.GridDensity;
+            _showTileTitles = s.ShowTileTitles;
+            _showUnreadBadge = s.ShowUnreadBadge;
+            _showPublisherBadge = s.ShowPublisherBadge;
+            _showLanguageBadge = s.ShowLanguageBadge;
+            _useLanguageIcon = s.UseLanguageIcon;
+            _showContinueReadingButton = s.ShowContinueReadingButton;
+            _searchQuery = s.SearchQuery ?? string.Empty;
+            _searchMode = s.SearchMode;
+            _filterUnreadOnly = s.FilterUnreadOnly;
+            _filterMissingIssues = s.FilterMissingIssues;
+            _filterTrackedOnly = s.FilterTrackedOnly;
+#pragma warning restore MVVMTK0034
+
+            // Sidebar selection - the exact stale-collection fallback LoadLibrarySettings uses.
+            _activeCollectionMembers = new List<CollectionMember>();
+            using (var context = PaperbunkrDb.CreateContext())
+            {
+                if (s.ActiveCollectionId is int cid && context.Collections.Any(c => c.Id == cid))
+                {
+                    _activeCollectionId = cid;
+                    _activeContentType = null;
+                    _activeCollectionMembers = new List<CollectionMember>(CollectionResolver.GetMembers(context, cid));
+                }
+                else
+                {
+                    _activeCollectionId = null;
+                    _activeContentType = s.ActiveContentType;
+                }
+            }
+
+            // Rebuild the Details-table column set only if it actually changed - InitializeDetailsColumns
+            // appends ~20 DetailsColumn rows, and each Add churns the Details table's header + every
+            // realized data row, so a no-op rebuild on a 2000-row Details view is very expensive.
+            if (!string.Equals(_detailsColumnsSetting, s.DetailsColumns, StringComparison.Ordinal))
+            {
+                foreach (var column in DetailsColumns)
+                {
+                    column.PropertyChanged -= OnDetailsColumnChanged;
+                }
+
+                DetailsColumns.Clear();
+                _detailsColumnsSetting = s.DetailsColumns;
+                InitializeDetailsColumns();
+            }
+
+            // One batched set, no render - the single LoadFromDatabase below (via RebuildView →
+            // IssueList.SetRows) is the only render. Setting the three properties individually would
+            // re-render the whole issue list three times before that.
+            IssueList.ConfigureSortGroup(s.IssueListSortField, s.IssueListSortDirection, s.IssueListGroupField);
+
+            _activeWorkspaceId = workspaceId;
+
+            SaveLibrarySettings();
+            LoadFromDatabase();
+
+            RaiseAllToolbarBindings();
+        }
+        finally
+        {
+            _suppressWorkspaceTracking = false;
+        }
+
+        RefreshWorkspaces();
+        _browseHistory.AddAtCursor(CurrentBrowseState());
+        RaiseBrowseHistoryChanged();
+    }
+
+    /// <summary>
+    /// "Save current view as…" - prompts for a name. Reusing the name of an existing *user*
+    /// workspace overwrites its captured state in place (CE's <c>SaveWorkspaceDialog</c> does the
+    /// same); any other name creates a new one. Either way that workspace becomes the active one.
+    /// </summary>
+    [RelayCommand]
+    private void SaveWorkspaceAs() => _promptForName(null, name =>
+    {
+        string json = WorkspaceStateJson.Serialize(CaptureLibraryState());
+        var existing = _workspaceService.List(WorkspaceScreen.Library)
+            .FirstOrDefault(w => !w.IsBuiltIn && string.Equals(w.Name, name, StringComparison.OrdinalIgnoreCase));
+
+        int id;
+        if (existing is not null)
+        {
+            _workspaceService.UpdateState(existing.Id, json);
+            id = existing.Id;
+        }
+        else
+        {
+            id = _workspaceService.Create(WorkspaceScreen.Library, name, json).Id;
+        }
+
+        _activeWorkspaceId = id;
+        RefreshWorkspaces();
+        PersistActiveWorkspaceId();
+    });
+
+    [RelayCommand]
+    private void RenameWorkspace(int id)
+    {
+        var row = Workspaces.FirstOrDefault(w => w.Id == id);
+        if (row is null || row.IsBuiltIn)
+        {
+            return;
+        }
+
+        _promptForName(row.Name, name =>
+        {
+            _workspaceService.Rename(id, name);
+            RefreshWorkspaces();
+        });
+    }
+
+    [RelayCommand]
+    private void DeleteWorkspace(int id)
+    {
+        var row = Workspaces.FirstOrDefault(w => w.Id == id);
+        if (row is null || row.IsBuiltIn)
+        {
+            return;
+        }
+
+        _workspaceService.Delete(id);
+        if (_activeWorkspaceId == id)
+        {
+            _activeWorkspaceId = null;
+            PersistActiveWorkspaceId();
+        }
+
+        RefreshWorkspaces();
+    }
+
+    [RelayCommand]
+    private void MoveWorkspaceUp(int id) => MoveWorkspace(id, -1);
+
+    [RelayCommand]
+    private void MoveWorkspaceDown(int id) => MoveWorkspace(id, +1);
+
+    private void MoveWorkspace(int id, int delta)
+    {
+        var user = Workspaces.Where(w => !w.IsBuiltIn).Select(w => w.Id).ToList();
+        int index = user.IndexOf(id);
+        int target = index + delta;
+        if (index < 0 || target < 0 || target >= user.Count)
+        {
+            return;
+        }
+
+        (user[index], user[target]) = (user[target], user[index]);
+        _workspaceService.Reorder(WorkspaceScreen.Library, user);
+        RefreshWorkspaces();
+    }
+
+    /// <summary>The dropdown's "Reset to default view" row - applies the "All comics" built-in.</summary>
+    [RelayCommand]
+    private void ResetToDefaultView()
+    {
+        var allComics = _workspaceService.List(WorkspaceScreen.Library).FirstOrDefault(w => w.IsBuiltIn && w.Name == "All comics");
+        if (allComics is not null)
+        {
+            ApplyWorkspace(allComics.Id);
+        }
+    }
+
+    /// <summary>Writes just <see cref="Paperbunkr.Data.Entities.AppSettings.LibraryActiveWorkspaceId"/>,
+    /// without the label-clear side effect a full <see cref="SaveLibrarySettings"/> would have.</summary>
+    private void PersistActiveWorkspaceId()
+    {
+        using var context = PaperbunkrDb.CreateContext();
+        var settings = context.GetOrCreateAppSettings();
+        settings.LibraryActiveWorkspaceId = _activeWorkspaceId;
+        context.SaveChanges();
+    }
 
     /// <summary>The "+" button - opens the centered Add-issue overlay (design §6), a full
     /// FloatingPanel rather than the old light-dismiss popup.</summary>

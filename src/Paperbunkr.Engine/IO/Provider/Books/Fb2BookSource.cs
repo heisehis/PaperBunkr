@@ -41,7 +41,7 @@ namespace cYo.Projects.ComicRack.Engine.IO.Provider.Books
 
 			XElement? descriptionElement = null;
 			XElement? bodyElement = null;
-			var binaries = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+			var binaries = new Dictionary<string, (string Base64, string ContentType)>(StringComparer.OrdinalIgnoreCase);
 
 			reader.MoveToContent();
 			if (!string.Equals(reader.LocalName, "FictionBook", StringComparison.Ordinal))
@@ -74,10 +74,11 @@ namespace cYo.Projects.ComicRack.Engine.IO.Provider.Books
 
 					case "binary":
 						string? id = reader.GetAttribute("id");
+						string? contentType = reader.GetAttribute("content-type");
 						var binaryElement = (XElement)XNode.ReadFrom(reader);
 						if (!string.IsNullOrEmpty(id))
 						{
-							binaries[id] = binaryElement.Value;
+							binaries[id] = (binaryElement.Value, string.IsNullOrWhiteSpace(contentType) ? "image/jpeg" : contentType);
 						}
 
 						break;
@@ -99,7 +100,7 @@ namespace cYo.Projects.ComicRack.Engine.IO.Provider.Books
 			Metadata = BuildMetadata(descriptionElement, binaries, filePath);
 			Chapters = bodyElement is null
 				? Array.Empty<BookChapter>()
-				: BuildChapters(bodyElement);
+				: BuildChapters(bodyElement, binaries);
 		}
 
 		/// <summary>Second pass, only reached when the first pass found no unnamed &lt;body&gt; at all - takes whichever &lt;body&gt; exists (even a named one) rather than leaving the book unreadable.</summary>
@@ -171,7 +172,7 @@ namespace cYo.Projects.ComicRack.Engine.IO.Provider.Books
 			return buffer;
 		}
 
-		private static BookMetadata BuildMetadata(XElement? description, Dictionary<string, string> binaries, string filePath)
+		private static BookMetadata BuildMetadata(XElement? description, Dictionary<string, (string Base64, string ContentType)> binaries, string filePath)
 		{
 			XElement? titleInfo = description?.Elements().FirstOrDefault(e => e.Name.LocalName == "title-info");
 
@@ -193,11 +194,11 @@ namespace cYo.Projects.ComicRack.Engine.IO.Provider.Books
 			if (!string.IsNullOrEmpty(coverRef))
 			{
 				string coverId = coverRef.TrimStart('#');
-				if (binaries.TryGetValue(coverId, out string? base64))
+				if (binaries.TryGetValue(coverId, out var coverBinary))
 				{
 					try
 					{
-						coverBytes = Convert.FromBase64String(base64.Trim());
+						coverBytes = Convert.FromBase64String(coverBinary.Base64.Trim());
 					}
 					catch (FormatException)
 					{
@@ -233,7 +234,7 @@ namespace cYo.Projects.ComicRack.Engine.IO.Provider.Books
 			return string.IsNullOrWhiteSpace(nickname) ? null : nickname;
 		}
 
-		private static List<BookChapter> BuildChapters(XElement body)
+		private static List<BookChapter> BuildChapters(XElement body, Dictionary<string, (string Base64, string ContentType)> binaries)
 		{
 			var chapters = new List<BookChapter>();
 			var topLevelSections = body.Elements().Where(e => e.Name.LocalName == "section").ToList();
@@ -246,7 +247,7 @@ namespace cYo.Projects.ComicRack.Engine.IO.Provider.Books
 				var paragraphs = new List<BookParagraph>();
 				CollectParagraphs(body, paragraphs, includeOwnTitle: false);
 				return paragraphs.Count > 0
-					? new List<BookChapter> { new BookChapter { Title = "Chapter 1", Paragraphs = paragraphs } }
+					? new List<BookChapter> { new BookChapter { Title = "Chapter 1", Paragraphs = paragraphs, Html = BuildHtml(body, binaries, includeOwnTitle: false) } }
 					: chapters;
 			}
 
@@ -259,10 +260,66 @@ namespace cYo.Projects.ComicRack.Engine.IO.Provider.Books
 				var paragraphs = new List<BookParagraph>();
 				CollectParagraphs(section, paragraphs, includeOwnTitle: false);
 
-				chapters.Add(new BookChapter { Title = title, Paragraphs = paragraphs });
+				chapters.Add(new BookChapter { Title = title, Paragraphs = paragraphs, Html = BuildHtml(section, binaries, includeOwnTitle: false) });
 			}
 
 			return chapters;
+		}
+
+		/// <summary>
+		/// Real-markup counterpart to <see cref="CollectParagraphs"/> (docs/superpowers/specs/
+		/// 2026-09-02-books-reflow-reader-webview-redesign-design.md) - same traversal shape (direct
+		/// &lt;p&gt; children emitted, nested &lt;section&gt;s flattened in with their own &lt;title&gt;
+		/// kept), but building an HTML string instead of a <see cref="BookParagraph"/> list, and
+		/// additionally resolving standalone &lt;image&gt; elements (a sibling of &lt;p&gt; in real FB2
+		/// files, not just the cover) against <paramref name="binaries"/> as inline data URIs - the one
+		/// piece of real content the old paragraph-only model had no way to carry at all.
+		/// </summary>
+		private static string BuildHtml(XElement section, Dictionary<string, (string Base64, string ContentType)> binaries, bool includeOwnTitle)
+		{
+			var html = new StringBuilder();
+
+			if (includeOwnTitle && ExtractSectionTitle(section) is { } title)
+			{
+				html.Append("<h2>").Append(System.Net.WebUtility.HtmlEncode(title)).Append("</h2>");
+			}
+
+			foreach (var child in section.Elements())
+			{
+				switch (child.Name.LocalName)
+				{
+					case "p":
+						html.Append("<p>").Append(BuildParagraphHtml(child)).Append("</p>");
+						break;
+
+					case "image":
+						AppendImageTag(html, child, binaries);
+						break;
+
+					case "section":
+						html.Append(BuildHtml(child, binaries, includeOwnTitle: true));
+						break;
+				}
+			}
+
+			return html.ToString();
+		}
+
+		private static void AppendImageTag(StringBuilder html, XElement imageElement, Dictionary<string, (string Base64, string ContentType)> binaries)
+		{
+			string? href = imageElement.Attributes().FirstOrDefault(a => a.Name.LocalName == "href")?.Value;
+			if (string.IsNullOrEmpty(href))
+			{
+				return;
+			}
+
+			string id = href.TrimStart('#');
+			if (!binaries.TryGetValue(id, out var binary))
+			{
+				return;
+			}
+
+			html.Append("<img src=\"data:").Append(binary.ContentType).Append(";base64,").Append(binary.Base64.Trim()).Append("\" />");
 		}
 
 		/// <summary>A section's &lt;title&gt; is itself a sequence of &lt;p&gt; lines - joined with a space for a single-line chapter title.</summary>
@@ -355,6 +412,39 @@ namespace cYo.Projects.ComicRack.Engine.IO.Provider.Books
 			Walk(p);
 
 			return new BookParagraph { Text = text.ToString().Trim(), Spans = spans };
+		}
+
+		/// <summary>HTML counterpart to <see cref="ExtractParagraph"/> - same recursive walk, emitting HTML-encoded text with real &lt;em&gt;/&lt;strong&gt; tags instead of computing <see cref="BookTextSpan"/> offsets.</summary>
+		private static string BuildParagraphHtml(XElement p)
+		{
+			var html = new StringBuilder();
+
+			void Walk(XElement element)
+			{
+				bool isItalic = element.Name.LocalName == "emphasis";
+				bool isBold = element.Name.LocalName == "strong";
+
+				if (isItalic) html.Append("<em>");
+				if (isBold) html.Append("<strong>");
+
+				foreach (var node in element.Nodes())
+				{
+					if (node is XText textNode)
+					{
+						html.Append(System.Net.WebUtility.HtmlEncode(CollapseWhitespace(textNode.Value)));
+					}
+					else if (node is XElement nested)
+					{
+						Walk(nested);
+					}
+				}
+
+				if (isBold) html.Append("</strong>");
+				if (isItalic) html.Append("</em>");
+			}
+
+			Walk(p);
+			return html.ToString();
 		}
 
 		private static string CollapseWhitespace(string value) =>

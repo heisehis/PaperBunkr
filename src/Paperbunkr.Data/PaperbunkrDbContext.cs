@@ -88,6 +88,8 @@ public class PaperbunkrDbContext : DbContext
 
     public DbSet<KeyBinding> KeyBindings => Set<KeyBinding>();
 
+    public DbSet<Workspace> Workspaces => Set<Workspace>();
+
     public DbSet<BookSeries> BookSeries => Set<BookSeries>();
 
     public DbSet<Book> Books => Set<Book>();
@@ -977,6 +979,19 @@ public class PaperbunkrDbContext : DbContext
             builder.HasIndex(k => k.CommandId).IsUnique();
         });
 
+        // Saved Workspaces (docs/superpowers/specs/2026-09-03-library-saved-workspaces-design.md) -
+        // a growable per-screen list, same plain-table shape as KeyBinding. Screen is enum-as-string
+        // (this codebase's convention) with no HasSentinel: every row gets an explicit Screen on
+        // insert (WorkspaceService.Create / seeding), never a backfill - same as Book.Format.
+        modelBuilder.Entity<Workspace>(builder =>
+        {
+            builder.HasKey(w => w.Id);
+            builder.Property(w => w.Screen).HasConversion<string>().HasMaxLength(16);
+            builder.Property(w => w.Name).IsRequired();
+            builder.Property(w => w.StateJson).IsRequired();
+            builder.HasIndex(w => new { w.Screen, w.SortOrder });
+        });
+
         // Novels (docs/superpowers/specs/2026-08-09-novels-epub-pdf-support-design.md §2) -
         // independent of the comic Series/Issue tables above, no FK crossing between the two.
         modelBuilder.Entity<BookSeries>(builder =>
@@ -1035,6 +1050,10 @@ public class PaperbunkrDbContext : DbContext
         {
             builder.HasKey(h => h.Id);
             builder.HasIndex(h => h.BookId);
+            // BlockId (docs/superpowers/specs/2026-09-02-books-reflow-reader-webview-redesign-
+            // design.md) - a BlockIdInjector-assigned "pb-p<n>" id, comfortably under 64 chars for
+            // any realistic chapter length.
+            builder.Property(h => h.BlockId).IsRequired().HasMaxLength(64);
             builder.Property(h => h.Color).HasConversion<string>().HasMaxLength(32)
                 .HasDefaultValue(BookHighlightColor.Yellow)
                 .HasSentinel(BookHighlightColor.Yellow);

@@ -114,6 +114,21 @@ public partial class MainWindow : Window
             return;
         }
 
+        // Ctrl+P command palette (docs/superpowers/specs/2026-09-03-quick-open-command-palette-
+        // design.md) - before the TextBox early-return so it fires with the Library/Books search
+        // box focused, same as Escape/BrowserBack above. Inert inside the reader, which keeps its
+        // own dense keymap.
+        if (e.Key == Key.P && e.KeyModifiers == KeyModifiers.Control)
+        {
+            if (viewModel.CurrentScreen is not ("reader" or "bookReader" or "pdfReader"))
+            {
+                viewModel.OpenQuickOpenCommand.Execute(null);
+                e.Handled = true;
+            }
+
+            return;
+        }
+
         if (e.Source is TextBox)
         {
             return;

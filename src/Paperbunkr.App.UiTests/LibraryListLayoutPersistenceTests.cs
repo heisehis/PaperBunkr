@@ -24,7 +24,7 @@ public class LibraryListLayoutPersistenceTests : IDisposable
 
         // Default sort is "Date Added" desc. Change it to File Size - unambiguous evidence the
         // click landed and re-persisted (a non-default sort shows the "Sorted: …" chip).
-        LibraryToolbarDriver.SelectSort(window, "ComicListSortOption_FileSize");
+        LibraryToolbarDriver.SelectSort(window, "LibrarySortOption_FileSize");
         Assert.Contains("File Size", LibraryToolbarDriver.SortChipText(window));
 
         _fixture.Restart();

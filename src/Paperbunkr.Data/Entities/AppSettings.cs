@@ -166,25 +166,11 @@ public class AppSettings
     /// persistence existed, so an existing settings row reproduces prior startup behavior exactly.
     /// </summary>
     /// <remarks>
-    /// Real again as of the same-session follow-up to Slice 3 above: the user asked for the
-    /// series-card view back as a real, switchable option (<see cref="LibraryContentGranularity"/>),
-    /// not permanently replaced by per-issue tiles. This is the series-card Sort field, used when
-    /// <see cref="LibraryGranularity"/> is <see cref="LibraryContentGranularity.Series"/>; see
-    /// <see cref="LibraryIssueListSortField"/> for the per-issue equivalent, used otherwise.
+    /// 2026-09-03: Library has a single sort/group pool for both card granularities. This one
+    /// column now drives per-series <b>and</b> per-issue cards; the old series-only
+    /// <c>LibrarySortField</c> / <c>LibrarySortDirection</c> / <c>LibraryGroupField</c> columns
+    /// were dropped (migration <c>UnifyLibrarySortGroupFields</c>).
     /// </remarks>
-    public LibrarySortField LibrarySortField { get; set; } = LibrarySortField.DateAdded;
-
-    /// <summary>See <see cref="LibrarySortField"/>.</summary>
-    public SortDirection LibrarySortDirection { get; set; } = SortDirection.Descending;
-
-    /// <summary>See <see cref="LibrarySortField"/>.</summary>
-    public LibraryGroupField LibraryGroupField { get; set; } = LibraryGroupField.None;
-
-    /// <summary>
-    /// Per-issue Sort field, used when <see cref="LibraryGranularity"/> is
-    /// <see cref="LibraryContentGranularity.Issue"/> - see <see cref="LibrarySortField"/> for the
-    /// series-card equivalent, used otherwise.
-    /// </summary>
     public IssueListSortField LibraryIssueListSortField { get; set; } = IssueListSortField.Added;
 
     /// <summary>See <see cref="LibraryIssueListSortField"/>.</summary>
@@ -199,10 +185,10 @@ public class AppSettings
     /// </summary>
     public LibraryContentGranularity LibraryGranularity { get; set; } = LibraryContentGranularity.Issue;
 
-    /// <summary>See <see cref="LibrarySortField"/>.</summary>
+    /// <summary>See <see cref="LibraryIssueListSortField"/>.</summary>
     public LibraryViewMode LibraryViewMode { get; set; } = LibraryViewMode.PosterGrid;
 
-    /// <summary>See <see cref="LibrarySortField"/>.</summary>
+    /// <summary>See <see cref="LibraryIssueListSortField"/>.</summary>
     public double LibraryGridDensity { get; set; } = 1.0;
 
     /// <summary>
@@ -212,29 +198,29 @@ public class AppSettings
     /// </summary>
     public bool LibraryShowTileTitles { get; set; } = true;
 
-    /// <summary>See <see cref="LibrarySortField"/>.</summary>
+    /// <summary>See <see cref="LibraryIssueListSortField"/>.</summary>
     public bool LibraryShowUnreadBadge { get; set; } = true;
 
-    /// <summary>See <see cref="LibrarySortField"/>.</summary>
+    /// <summary>See <see cref="LibraryIssueListSortField"/>.</summary>
     public bool LibraryShowPublisherBadge { get; set; }
 
-    /// <summary>See <see cref="LibrarySortField"/>.</summary>
+    /// <summary>See <see cref="LibraryIssueListSortField"/>.</summary>
     public bool LibraryShowLanguageBadge { get; set; }
 
-    /// <summary>See <see cref="LibrarySortField"/>.</summary>
+    /// <summary>See <see cref="LibraryIssueListSortField"/>.</summary>
     public bool LibraryUseLanguageIcon { get; set; }
 
-    /// <summary>See <see cref="LibrarySortField"/>.</summary>
+    /// <summary>See <see cref="LibraryIssueListSortField"/>.</summary>
     public bool LibraryShowContinueReadingButton { get; set; }
 
-    /// <summary>See <see cref="LibrarySortField"/>.</summary>
+    /// <summary>See <see cref="LibraryIssueListSortField"/>.</summary>
     public string? LibrarySearchQuery { get; set; }
 
     /// <summary>Field scope for <see cref="LibrarySearchQuery"/> - see <see cref="SearchMode"/>.</summary>
     public SearchMode LibrarySearchMode { get; set; } = SearchMode.All;
 
     /// <summary>
-    /// See <see cref="LibrarySortField"/>. Mutually exclusive with <see cref="LibraryActiveCollectionId"/>
+    /// See <see cref="LibraryIssueListSortField"/>. Mutually exclusive with <see cref="LibraryActiveCollectionId"/>
     /// - null means "All Series" (both null) or this content type is the active sidebar filter.
     /// </summary>
     public ContentType? LibraryActiveContentType { get; set; }
@@ -246,13 +232,13 @@ public class AppSettings
     /// </summary>
     public int? LibraryActiveCollectionId { get; set; }
 
-    /// <summary>See <see cref="LibrarySortField"/>.</summary>
+    /// <summary>See <see cref="LibraryIssueListSortField"/>.</summary>
     public bool LibraryFilterUnreadOnly { get; set; }
 
-    /// <summary>See <see cref="LibrarySortField"/>.</summary>
+    /// <summary>See <see cref="LibraryIssueListSortField"/>.</summary>
     public bool LibraryFilterMissingIssues { get; set; }
 
-    /// <summary>See <see cref="LibrarySortField"/>.</summary>
+    /// <summary>See <see cref="LibraryIssueListSortField"/>.</summary>
     public bool LibraryFilterTrackedOnly { get; set; }
 
     /// <summary>
@@ -268,7 +254,7 @@ public class AppSettings
     /// <summary>
     /// Books screen's persisted sort/group state (docs/superpowers/specs/2026-08-27-books-screen-
     /// chrome-and-home-strip-design.md). Search text is deliberately not persisted. Enum-as-string
-    /// with the same HasDefaultValue/HasSentinel treatment as <see cref="LibrarySortField"/>.
+    /// with the same HasDefaultValue/HasSentinel treatment as <see cref="LibraryIssueListSortField"/>.
     /// </summary>
     public BooksSortField BooksSortField { get; set; } = BooksSortField.Title;
 

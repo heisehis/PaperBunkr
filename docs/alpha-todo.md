@@ -63,6 +63,57 @@ this file itself already did once (see the note below).
 > unrelated pre-existing timing-flaky `LiveFolderWatchServiceTests` test, confirmed flaky by rerunning
 > in isolation, not reproducible at a fixed spot).
 
+> **Manual session note (2026-09-03, Library view-mode virtualization + Comic List removal):**
+> On a 2000+ issue library, only PosterGrid (ungrouped) was virtualized; switching to Details /
+> List / Tiles / Panorama (or any grouped mode) realized one visual container per row up front —
+> a multi-GB memory spike and long stall (surfaced while testing Saved Workspaces, where a preset
+> that selected Details was repointed to PosterGrid as a stopgap). This pass: (1) **removed the
+> "Comic List" view mode entirely** (`LibraryViewMode.IssueList`) — a redundant flat per-issue
+> list that Details already covers; `IssueListScreen.axaml`/`.cs` deleted, `IssueListScreenViewModel`
+> kept as the shared sort/group engine, migration `RemoveComicListViewMode` remaps a persisted
+> `'IssueList'` to `'Details'`. (2) **List + Details → a single `ListBox`** (`VirtualizingStackPanel`)
+> per granularity, bound to a new flat `FlatRows`/`FlatCovers` projection that interleaves
+> `GridSectionHeader` rows so grouped and ungrouped share one virtualized control; `ListBoxItem`
+> retemplated to a bare non-focusable `ContentPresenter` (inner `Button.card` stays the only tab
+> stop). (3) **Tiles + Panorama ungrouped → `VirtualizingWrapPanel`**. (4) **Grouped Poster +
+> Tiles + Panorama** → outer `VirtualizingStackPanel` over groups + inner `VirtualizingWrapPanel`
+> per group. Panorama uses `PanoramaTileWidth` (~110, the exact clamped value its tiles already
+> rendered at since the 2026-08-22 cover-memory change — a first attempt with 215 looked wrong and
+> was reverted, then redone right when the user asked for "virtualize everything"). A-Z jump
+> indexer uses real `ListBox.ScrollIntoView` for List/Details. **User-confirmed on their 2000+
+> library 2026-09-03**: List / Tiles / Details / grouped stay ~500 MB–1.2 GB (was 3.2 GB), no
+> spike. Full solution build clean; `Paperbunkr.Data.Tests` 727/727, `Paperbunkr.App.Tests`
+> 1484/1486 (2 unrelated pre-existing flakes, pass in isolation). New `FlatRows`/`FlatCovers` +
+> migration tests added. Remaining manual checks: `ListBoxItem` chrome neutral in both themes,
+> group headers render, arrow-key nav on Poster. P0–P7 status unchanged — Beta-backlog perf work.
+>
+> **Follow-up same day — unified sort/group field pool:** the user asked for per-series and
+> per-issue cards to share one sort/group field list instead of the two disjoint sets
+> (`LibrarySortField` 7 / `LibraryGroupField` 4 vs `IssueListSortField` ~55 / `IssueListGroupField`
+> ~40). Done: `LibrarySortField` / `LibraryGroupField` / `LibraryFieldCatalog` **deleted**;
+> `IssueListScreenViewModel` (`IssueList.SortField` / `SortDirection` / `GroupField` +
+> `IssueListFieldCatalog`) is now the single pool for **both** granularities. Per-series cards
+> sort/group by delegating to that catalog through a new `SeriesCardSample.RepresentativeRow` (an
+> `IssueListRow` built from the cover issue — so "sort series by Writer" = by cover-issue writer);
+> `IssueListRow.SeriesIssueCount` / `SeriesUnreadCount` and new `IssueListSortField.SeriesIssueCount`
+> / `SeriesUnreadCount` + `IssueListGroupField.ContentType` / `Alphabetical` / `SeriesIssueCount`
+> carry the old series-only fields into the union. Toolbar Sort/Group tabs collapsed to one list
+> each (no more `IsIssueGranularity`/`IsSeriesGranularity` branch). Migration
+> `UnifyLibrarySortGroupFields`: best-effort carries a user's series selection into
+> `LibraryIssueListSort*/GroupField` (only when untouched); the 3 now-unmapped columns are left as
+> orphans (not dropped) so an older Paperbunkr build opening the shared dev DB still starts. Full
+> build clean; `Paperbunkr.Data.Tests` 727/727, `Paperbunkr.App.Tests` 1484/1486 (2 unrelated
+> pre-existing flakes, both pass in isolation). Same on-screen verification still pending. P0–P7
+> unchanged.
+>
+> **Also fixed (2026-09-03): DB-recovery flow crashed instead of showing `DatabaseRecoveryWindow`.**
+> `App.HandleDatabaseRecovery` → `BackupService.GetAvailableBackups` → `GetBackupLocation` opened
+> the database to read the optional `AppSettings.BackupLocation` override - which throws
+> `SqliteException: database disk image is malformed` on the exact code path that only runs when the
+> DB is corrupt, so the recovery window never appeared (real incident: a corrupt `paperbunkr.db`,
+> recovered from an auto-backup by hand). `GetBackupLocation` now try/catches that DB read and falls
+> back to the default backups folder. Regression test in `BackupServiceTests`.
+
 > This section drifted before: it was last hand-written at `7e2d3d3` and had already fallen behind
 > five real commits by the time anyone reopened it. That's the whole reason for the live tracker —
 > see [Live tracker](#live-tracker) below. It drifted a second, smaller way too: `d86cac7` (same

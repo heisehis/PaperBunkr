@@ -644,7 +644,7 @@ public class LibraryScreenViewModelTests : IDisposable
         vm.SetViewModeCommand.Execute(LibraryViewMode.Tiles);
         Assert.Equal(2, vm.IssueList.Rows.Count);
 
-        vm.SetViewModeCommand.Execute(LibraryViewMode.IssueList);
+        vm.SetViewModeCommand.Execute(LibraryViewMode.Details);
         Assert.Equal(2, vm.IssueList.Rows.Count);
     }
 
@@ -996,29 +996,91 @@ public class LibraryScreenViewModelTests : IDisposable
     }
 
     [Fact]
-    public void SeriesSortField_Name_OrdersAlphabetically()
+    public void SeriesCards_SortViaSharedPool_ByRepresentativeRow()
     {
+        // 2026-09-03: one sort/group pool for both granularities - series cards sort via
+        // IssueListFieldCatalog against SeriesCardSample.RepresentativeRow.
         CreateSeriesWithIssue("Zebra");
         CreateSeriesWithIssue("Apple");
         var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { }, goToNewIssueProperties: (_, _, _) => { });
 
-        vm.SortField = LibrarySortField.Name;
-        vm.SortDirection = SortDirection.Ascending;
+        vm.IssueList.SortField = IssueListSortField.Series;
+        vm.IssueList.SortDirection = SortDirection.Ascending;
 
         Assert.Equal(new[] { "Apple", "Zebra" }, vm.Covers.Select(c => c.Name));
     }
 
     [Fact]
-    public void SeriesGroupField_Publisher_PartitionsIntoGroups()
+    public void SeriesCards_SortViaSharedPool_ByAPerIssueField()
+    {
+        // A per-issue field (Publisher) applied to series cards resolves against the cover issue.
+        CreateSeriesWithIssue("Zed's Series", publisher: "Zebra");
+        CreateSeriesWithIssue("Abe's Series", publisher: "Apple");
+        var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { }, goToNewIssueProperties: (_, _, _) => { });
+
+        vm.IssueList.SortField = IssueListSortField.Publisher;
+        vm.IssueList.SortDirection = SortDirection.Ascending;
+
+        Assert.Equal(new[] { "Abe's Series", "Zed's Series" }, vm.Covers.Select(c => c.Name));
+    }
+
+    [Fact]
+    public void SeriesCards_GroupViaSharedPool_ByPublisher()
     {
         CreateSeriesWithIssue("Marvel Book", publisher: "Marvel");
         CreateSeriesWithIssue("DC Book", publisher: "DC");
         var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { }, goToNewIssueProperties: (_, _, _) => { });
 
-        vm.GroupField = LibraryGroupField.Publisher;
+        vm.IssueList.GroupField = IssueListGroupField.Publisher;
 
         Assert.Equal(new[] { "DC", "Marvel" }, vm.Groups.Select(g => g.Header));
-        Assert.Empty(vm.Covers); // grouped mode populates Groups, not Covers - same as IssueList's own
+        Assert.Empty(vm.Covers); // grouped mode populates Groups, not Covers
+    }
+
+    [Fact]
+    public void SeriesCards_GroupViaSharedPool_ByContentType_CarriedOverField()
+    {
+        CreateSeries("A Manga", ContentType.Manga);
+        CreateSeries("A Comic", ContentType.Comic);
+        using (var context = PaperbunkrDb.CreateContext())
+        {
+            context.Issues.Add(new Issue { SeriesId = context.Series.Single(s => s.Name == "A Manga").Id, Number = "1" });
+            context.Issues.Add(new Issue { SeriesId = context.Series.Single(s => s.Name == "A Comic").Id, Number = "1" });
+            context.SaveChanges();
+        }
+        var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { }, goToNewIssueProperties: (_, _, _) => { });
+
+        vm.IssueList.GroupField = IssueListGroupField.ContentType;
+
+        // Enum-declaration order (Comic before Manga), not alphabetical.
+        Assert.Equal(new[] { "Comic", "Manga" }, vm.Groups.Select(g => g.Header));
+    }
+
+    [Fact]
+    public void FlatCovers_Ungrouped_IsExactlyTheCovers()
+    {
+        CreateSeriesWithIssue("Apple");
+        CreateSeriesWithIssue("Zebra");
+        var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { }, goToNewIssueProperties: (_, _, _) => { });
+
+        Assert.Equal(vm.Covers, vm.FlatCovers.Cast<SeriesCardSample>());
+        Assert.DoesNotContain(vm.FlatCovers, x => x is GridSectionHeader);
+    }
+
+    [Fact]
+    public void FlatCovers_Grouped_InterleavesHeadersBeforeEachSection()
+    {
+        CreateSeriesWithIssue("Marvel Book", publisher: "Marvel");
+        CreateSeriesWithIssue("DC Book", publisher: "DC");
+        var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { }, goToNewIssueProperties: (_, _, _) => { });
+
+        vm.IssueList.GroupField = IssueListGroupField.Publisher;
+
+        var headers = vm.FlatCovers.OfType<GridSectionHeader>().ToList();
+        Assert.Equal(vm.Groups.Select(g => g.Header), headers.Select(h => h.Header));
+        Assert.Equal(vm.Groups.Select(g => g.Items.Count), headers.Select(h => h.Count));
+        Assert.Equal(vm.Groups.Sum(g => g.Items.Count) + headers.Count, vm.FlatCovers.Count);
+        Assert.IsType<GridSectionHeader>(vm.FlatCovers[0]);
     }
 
     [Fact]
@@ -1048,7 +1110,7 @@ public class LibraryScreenViewModelTests : IDisposable
         var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { }, goToNewIssueProperties: (_, _, _) => { });
         vm.Granularity = LibraryContentGranularity.Series;
 
-        vm.GroupField = LibraryGroupField.Publisher;
+        vm.IssueList.GroupField = IssueListGroupField.Publisher;
 
         Assert.Empty(vm.Covers);
         Assert.True(vm.HasAnyResults);
@@ -1400,43 +1462,24 @@ public class LibraryScreenViewModelTests : IDisposable
     }
 
     [Fact]
-    public void SeriesSortAndGroupAndGranularityAndShowContinueReadingButton_Changed_PersistToAppSettings()
+    public void SeriesGranularity_SortGroupChange_PersistsToTheSharedIssueListColumns()
     {
+        // 2026-09-03: one pool - a sort/group change while in Series granularity writes the same
+        // LibraryIssueListSort*/GroupField columns the per-issue side uses.
         var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { }, goToNewIssueProperties: (_, _, _) => { });
-
-        vm.SortField = LibrarySortField.Publisher;
-        vm.SortDirection = SortDirection.Ascending;
-        vm.GroupField = LibraryGroupField.Publisher;
         vm.Granularity = LibraryContentGranularity.Series;
+
+        vm.IssueList.SortField = IssueListSortField.SeriesIssueCount;
+        vm.IssueList.SortDirection = SortDirection.Ascending;
+        vm.IssueList.GroupField = IssueListGroupField.ContentType;
         vm.ShowContinueReadingButton = true;
 
         var settings = ReadAppSettings();
-        Assert.Equal(LibrarySortField.Publisher, settings.LibrarySortField);
-        Assert.Equal(SortDirection.Ascending, settings.LibrarySortDirection);
-        Assert.Equal(LibraryGroupField.Publisher, settings.LibraryGroupField);
+        Assert.Equal(IssueListSortField.SeriesIssueCount, settings.LibraryIssueListSortField);
+        Assert.Equal(SortDirection.Ascending, settings.LibraryIssueListSortDirection);
+        Assert.Equal(IssueListGroupField.ContentType, settings.LibraryIssueListGroupField);
         Assert.Equal(LibraryContentGranularity.Series, settings.LibraryGranularity);
         Assert.True(settings.LibraryShowContinueReadingButton);
-    }
-
-    [Fact]
-    public void Construct_ReflectsNonDefaultSeriesSortAndGroupAndGranularity_FromAppSettings()
-    {
-        SeedAppSettings(settings =>
-        {
-            settings.LibrarySortField = LibrarySortField.Publisher;
-            settings.LibrarySortDirection = SortDirection.Ascending;
-            settings.LibraryGroupField = LibraryGroupField.Publisher;
-            settings.LibraryGranularity = LibraryContentGranularity.Series;
-            settings.LibraryShowContinueReadingButton = true;
-        });
-
-        var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { }, goToNewIssueProperties: (_, _, _) => { });
-
-        Assert.Equal(LibrarySortField.Publisher, vm.SortField);
-        Assert.Equal(SortDirection.Ascending, vm.SortDirection);
-        Assert.Equal(LibraryGroupField.Publisher, vm.GroupField);
-        Assert.Equal(LibraryContentGranularity.Series, vm.Granularity);
-        Assert.True(vm.ShowContinueReadingButton);
     }
 
     [Fact]

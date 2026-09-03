@@ -6,7 +6,7 @@ namespace Paperbunkr.App.Models;
 /// Reusable sort/group comparison-logic helpers (docs/superpowers/specs/2026-08-18-issue-list-
 /// pluggable-sort-group-design.md) - the "pluggable strategies" the source doc's §39-42 calls for,
 /// backing <see cref="Comparison{T}"/>/group-key delegates (the load-bearing per-field shape
-/// <c>LibraryFieldCatalog</c> already established and deliberately kept, per this spec's own
+/// <c>IssueListFieldCatalog</c> established and deliberately kept, per this spec's own
 /// precedent-conflict resolution) rather than a generic strategy-kind indirection layer.
 /// </summary>
 public static class SortStrategies

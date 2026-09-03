@@ -32,11 +32,31 @@ public class BackupService
         _contextFactory = contextFactory;
     }
 
+    /// <summary>
+    /// The folder backups live in - the user's <see cref="Data.Entities.AppSettings.BackupLocation"/>
+    /// override, else <see cref="DefaultBackupLocation"/>.
+    /// </summary>
+    /// <remarks>
+    /// Must never throw. This is on the database-recovery path (<c>App.HandleDatabaseRecovery</c> →
+    /// <see cref="GetAvailableBackups"/> → here), which runs <b>precisely when the database is
+    /// unreadable</b> - so opening it to read the override can fail with
+    /// <c>SqliteException: database disk image is malformed</c>. Before this guard that crashed the
+    /// process before <c>DatabaseRecoveryWindow</c> could even appear, making the built-in
+    /// backup-restore recovery flow unreachable exactly when it's needed (real incident 2026-09-03).
+    /// A corrupt DB falls back to the default backups folder.
+    /// </remarks>
     public string GetBackupLocation()
     {
-        using var context = _contextFactory();
-        string? configured = context.GetOrCreateAppSettings().BackupLocation;
-        return string.IsNullOrWhiteSpace(configured) ? DefaultBackupLocation() : configured;
+        try
+        {
+            using var context = _contextFactory();
+            string? configured = context.GetOrCreateAppSettings().BackupLocation;
+            return string.IsNullOrWhiteSpace(configured) ? DefaultBackupLocation() : configured;
+        }
+        catch (Exception)
+        {
+            return DefaultBackupLocation();
+        }
     }
 
     public void SetBackupLocation(string location)

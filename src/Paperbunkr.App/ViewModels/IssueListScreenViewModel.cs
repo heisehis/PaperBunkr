@@ -44,10 +44,21 @@ public partial class IssueListScreenViewModel : ViewModelBase
         _isSelected = isSelected ?? (_ => false);
         Rows = new ObservableCollection<IssueListRow>();
         Groups = new ObservableCollection<IssueListRowGroup>();
+        FlatRows = new ObservableCollection<object>();
     }
 
     public ObservableCollection<IssueListRow> Rows { get; }
     public ObservableCollection<IssueListRowGroup> Groups { get; }
+
+    /// <summary>
+    /// Flattened view adapter over <see cref="Rows"/> / <see cref="Groups"/> for the virtualized
+    /// List / Details modes: ungrouped it is just the rows; grouped it interleaves a
+    /// <see cref="GridSectionHeader"/> before each section's <see cref="IssueListRow"/>s. One
+    /// <c>ListBox</c> + <c>VirtualizingStackPanel</c> binds here for both cases. Rebuilt every
+    /// <see cref="Render"/>; holds the same row instances as <see cref="Rows"/>/<see cref="Groups"/>
+    /// so selection re-stamping already applies.
+    /// </summary>
+    public ObservableCollection<object> FlatRows { get; }
 
     public static IReadOnlyList<IssueListSortFieldDescriptor> SortFieldOptions => IssueListFieldCatalog.SortFields.Values.ToList();
     public static IReadOnlyList<IssueListGroupFieldDescriptor> GroupFieldOptions => IssueListFieldCatalog.GroupFields.Values.ToList();
@@ -91,11 +102,17 @@ public partial class IssueListScreenViewModel : ViewModelBase
 
         Rows.Clear();
         Groups.Clear();
+        FlatRows.Clear();
         if (IsGrouped)
         {
             foreach (var group in GroupRows(rows))
             {
                 Groups.Add(group);
+                FlatRows.Add(new GridSectionHeader(group.Header, group.Items.Count));
+                foreach (var row in group.Items)
+                {
+                    FlatRows.Add(row);
+                }
             }
         }
         else
@@ -103,91 +120,18 @@ public partial class IssueListScreenViewModel : ViewModelBase
             foreach (var row in rows)
             {
                 Rows.Add(row);
+                FlatRows.Add(row);
             }
         }
 
         OnPropertyChanged(nameof(HasAnyResults));
     }
 
-    private IssueListRow ToRow(Issue issue)
-    {
-        // Cover is resolved lazily via CoverImageConverter, keyed on Id, only when this row's
-        // container is actually realized by VirtualizingWrapPanel - not decoded here regardless of
-        // visibility (docs/superpowers/specs/2026-08-22-cover-memory-virtualization-design.md).
-        // PanoramaWidth uses the default aspect ratio uniformly for the same reason - the real
-        // ratio isn't known without decoding, which is exactly what stays deferred.
-        return new IssueListRow
-        {
-        Id = issue.Id,
-        SeriesId = issue.SeriesId,
-        SeriesName = issue.Series!.Name,
-        Number = issue.EffectiveNumber(),
-        NumberSortKey = issue.NumberSortKey(),
-        Title = issue.EffectiveTitle() ?? $"#{issue.EffectiveNumber()}",
-        Writer = issue.Writer,
-        Publisher = issue.Publisher,
-        Genre = issue.JoinedGenre(),
-        Format = issue.EffectiveFormat(),
-        Tags = issue.JoinedTags(),
-        AddedTime = issue.AddedTime,
-        OpenedTime = issue.OpenedTime,
-        ReleasedTime = issue.ReleasedTime,
-        Year = issue.EffectiveYear(),
-        PageCount = issue.PageCount,
-        FileSize = issue.FileSize,
-        Rating = issue.Rating,
-        CommunityRating = issue.CommunityRating,
-        ReadPercentage = issue.ReadPercentage(),
-        OpenCount = issue.OpenCount,
-        IsMissing = issue.FileIsMissing,
-        CoverBrush = SeriesCardSample.CoverBrushFor(issue.Series!.Name),
-        Volume = issue.EffectiveVolume(),
-        VolumeSortKey = issue.VolumeSortKey(),
-        Penciller = issue.Penciller,
-        Inker = issue.Inker,
-        Colorist = issue.Colorist,
-        Letterer = issue.Letterer,
-        CoverArtist = issue.CoverArtist,
-        Editor = issue.Editor,
-        Translator = issue.Translator,
-        Characters = issue.MainCharacterOrTeam,
-        Teams = issue.Teams,
-        Locations = issue.Locations,
-        BookPrice = issue.BookPrice,
-        BookAge = issue.BookAge,
-        BookStore = issue.BookStore,
-        BookOwner = issue.BookOwner,
-        BookCondition = issue.BookCondition,
-        BookCollectionStatus = issue.BookCollectionStatus,
-        BookLocation = issue.BookLocation,
-        ISBN = issue.ISBN,
-        IsRead = issue.HasBeenRead(),
-        Imprint = issue.Imprint,
-        LanguageIso = issue.LanguageISO,
-        AgeRating = issue.AgeRating,
-        StoryArc = issue.StoryArc,
-        SeriesGroup = issue.SeriesGroup,
-        FilePath = issue.FilePath,
-        FileName = issue.FileName(),
-        FileDirectory = issue.FileDirectory(),
-        FileModifiedTime = issue.FileModifiedTime,
-        FileCreationTime = issue.FileCreationTime,
-        FileFormat = issue.FileFormat(),
-        Count = issue.EffectiveCount(),
-        AlternateSeries = issue.AlternateSeries,
-        AlternateNumber = issue.AlternateNumber,
-        Month = issue.Month,
-        Day = issue.Day,
-        ScanInformation = issue.ScanInformation,
-        BookmarkCount = issue.Bookmarks.Count,
-        ContentTypeLabel = issue.Series!.ContentType.ToString(),
-        SeriesStatusLabel = issue.Series!.Status.ToString(),
-        ReadingStatusLabel = issue.Series!.ReadingStatus.ToString(),
-        ReadingDirectionLabel = issue.Series!.ReadingMode.ToString(),
-        PanoramaWidth = SeriesCardSample.ComputePanoramaWidth(SeriesCardSample.DefaultCoverAspectRatio),
-        IsSelected = _isSelected(issue.Id),
-        };
-    }
+    // Cover is resolved lazily via CoverImageConverter, keyed on Id, only when this row's container
+    // is actually realized - not decoded here regardless of visibility (docs/superpowers/specs/
+    // 2026-08-22-cover-memory-virtualization-design.md). The projection itself lives on
+    // IssueListRow.FromIssue so per-series cards' representative rows build from the same code.
+    private IssueListRow ToRow(Issue issue) => IssueListRow.FromIssue(issue, issue.Series!, _isSelected);
 
     private List<IssueListRow> SortRows(List<IssueListRow> rows)
     {

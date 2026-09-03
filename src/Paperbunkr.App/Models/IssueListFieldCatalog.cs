@@ -22,10 +22,12 @@ public sealed record IssueListSortFieldDescriptor(IssueListSortField Field, stri
 public sealed record IssueListGroupFieldDescriptor(IssueListGroupField Field, string DisplayName, Func<IssueListRow, string> GroupKey, Comparison<string> GroupOrder);
 
 /// <summary>
-/// Data-driven field catalog for the Comic List screen's sort/group logic (docs/superpowers/specs/
-/// 2026-08-18-issue-list-pluggable-sort-group-design.md) - same shape as <c>LibraryFieldCatalog</c>/
-/// <c>SmartListCatalog</c>/<c>BulkFieldRegistry</c>, built on <see cref="SortStrategies"/>/
-/// <see cref="GroupStrategies"/>'s reusable comparison-logic helpers.
+/// Data-driven field catalog for <b>all</b> of Library's sort/group logic - per-issue cards
+/// directly, per-series cards via <c>SeriesCardSample.RepresentativeRow</c> (2026-09-03: this
+/// replaced the separate <c>LibraryFieldCatalog</c>). Same shape as <c>SmartListCatalog</c>/
+/// <c>BulkFieldRegistry</c>, built on <see cref="SortStrategies"/>/<see cref="GroupStrategies"/>'s
+/// reusable comparison-logic helpers. Design: docs/superpowers/specs/2026-08-18-issue-list-
+/// pluggable-sort-group-design.md.
 /// </summary>
 public static class IssueListFieldCatalog
 {
@@ -107,6 +109,11 @@ public static class IssueListFieldCatalog
         [IssueListSortField.Month] = new(IssueListSortField.Month, "Month", SortStrategies.Numeric(r => r.Month)),
         [IssueListSortField.Day] = new(IssueListSortField.Day, "Day", SortStrategies.Numeric(r => r.Day)),
         [IssueListSortField.ScanInformation] = new(IssueListSortField.ScanInformation, "Scan Information", SortStrategies.CaseInsensitiveString(r => r.ScanInformation)),
+
+        // --- Series-level aggregates, carried over from the retired LibrarySortField when the
+        // sort/group pool was unified across per-issue and per-series cards (2026-09-03). ---
+        [IssueListSortField.SeriesIssueCount] = new(IssueListSortField.SeriesIssueCount, "Issue Count", (a, b) => a.SeriesIssueCount.CompareTo(b.SeriesIssueCount)),
+        [IssueListSortField.SeriesUnreadCount] = new(IssueListSortField.SeriesUnreadCount, "Unread Count", (a, b) => a.SeriesUnreadCount.CompareTo(b.SeriesUnreadCount)),
     };
 
         // Per-field cell-text projection for the configurable Details table (design §8). Everything
@@ -170,6 +177,8 @@ public static class IssueListFieldCatalog
         Col(IssueListSortField.Month, r => r.Month?.ToString(CultureInfo.InvariantCulture));
         Col(IssueListSortField.Day, r => r.Day?.ToString(CultureInfo.InvariantCulture));
         Col(IssueListSortField.ScanInformation, r => r.ScanInformation);
+        Col(IssueListSortField.SeriesIssueCount, r => r.SeriesIssueCount.ToString(CultureInfo.InvariantCulture));
+        Col(IssueListSortField.SeriesUnreadCount, r => r.SeriesUnreadCount.ToString(CultureInfo.InvariantCulture));
 
         return d;
     }
@@ -273,6 +282,19 @@ public static class IssueListFieldCatalog
         [IssueListGroupField.Month] = MakeGroup(IssueListGroupField.Month, "Month", GroupStrategies.NumericBucket(r => r.Month)),
         [IssueListGroupField.Day] = MakeGroup(IssueListGroupField.Day, "Day", GroupStrategies.NumericBucket(r => r.Day)),
         [IssueListGroupField.ScanInformation] = MakeGroup(IssueListGroupField.ScanInformation, "Scan Information", GroupStrategies.Alphabetical(r => r.ScanInformation)),
+
+        // --- Carried over from the retired LibraryGroupField (2026-09-03 sort/group pool
+        // unification). ContentType keeps its enum-declaration group ordering; Alphabetical buckets
+        // the series name's first letter, verbatim from the old LibraryFieldCatalog. ---
+        [IssueListGroupField.ContentType] = new(IssueListGroupField.ContentType, "Content Type",
+            r => string.IsNullOrWhiteSpace(r.ContentTypeLabel) ? "Unknown" : r.ContentTypeLabel,
+            (a, b) => Enum.TryParse<ContentType>(a, out var ea) && Enum.TryParse<ContentType>(b, out var eb)
+                ? ea.CompareTo(eb)
+                : string.Compare(a, b, StringComparison.OrdinalIgnoreCase)),
+        [IssueListGroupField.Alphabetical] = new(IssueListGroupField.Alphabetical, "Alphabetical",
+            r => r.SeriesName.Length > 0 && char.IsAsciiLetter(r.SeriesName[0]) ? char.ToUpperInvariant(r.SeriesName[0]).ToString() : "#",
+            (a, b) => string.Compare(a, b, StringComparison.OrdinalIgnoreCase)),
+        [IssueListGroupField.SeriesIssueCount] = MakeGroup(IssueListGroupField.SeriesIssueCount, "Issue Count", GroupStrategies.NumericBucket(r => r.SeriesIssueCount)),
     };
 
     private static IssueListGroupFieldDescriptor MakeGroup(IssueListGroupField field, string displayName, (Func<IssueListRow, string> Key, Comparison<string> Order) strategy) =>

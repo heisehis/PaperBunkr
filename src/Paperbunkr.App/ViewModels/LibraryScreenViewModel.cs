@@ -186,6 +186,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         _libraryScanner = libraryScanner ?? new LibraryFolderScanner();
         Covers = new ObservableCollection<SeriesCardSample>();
         Groups = new ObservableCollection<SeriesCardGroup>();
+        FlatCovers = new ObservableCollection<object>();
         ContentTypes = new ObservableCollection<ContentTypeSummary>();
         Collections = new ObservableCollection<CollectionSummary>();
         CollectionTiles = new ObservableCollection<LibraryTile>();
@@ -234,13 +235,23 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
                 RaiseChipAndEmptyState();
             }
 
-            // IssueList's own sort/group persists on every change, same as every other Library
-            // field's own On*Changed hook already does - see AppSettings.LibraryIssueListSortField.
             if (e.PropertyName is nameof(IssueListScreenViewModel.SortField)
                 or nameof(IssueListScreenViewModel.SortDirection)
                 or nameof(IssueListScreenViewModel.GroupField))
             {
-                SaveLibrarySettings();
+                OnPropertyChanged(nameof(IsGrouped));
+                OnPropertyChanged(nameof(ActiveSortLabel));
+                OnPropertyChanged(nameof(ActiveGroupLabel));
+                // IssueList is the single sort/group pool for both granularities now (2026-09-03) -
+                // persist it, and re-run RebuildView so the per-series grid (Covers/FlatCovers,
+                // which sort/group via SeriesCardSample.RepresentativeRow through the same
+                // IssueListFieldCatalog) re-sorts too. Guarded against the constructor's own seed
+                // assignments in LoadLibrarySettings, before _allSeries is loaded.
+                if (_constructed)
+                {
+                    SaveLibrarySettings();
+                    RebuildView();
+                }
             }
         };
         LoadLibrarySettings();
@@ -253,7 +264,14 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         _browseHistory.AddAtCursor(CurrentBrowseState());
 
         LoadFromDatabase();
+        _constructed = true;
     }
+
+    /// <summary>False until the constructor finishes - gates the <c>IssueList.PropertyChanged</c>
+    /// relay's <see cref="RebuildView"/>/<see cref="SaveLibrarySettings"/> so the seed assignments in
+    /// <see cref="LoadLibrarySettings"/> (which run before <see cref="_allSeries"/> is loaded) don't
+    /// fire a rebuild or a write-back.</summary>
+    private bool _constructed;
 
     private LibraryBrowseState CurrentBrowseState() => new(_activeContentType, _activeCollectionId, SearchQuery);
 
@@ -363,9 +381,6 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         // On*Changed's own LoadFromDatabase/SaveLibrarySettings) - see this method's doc comment.
 #pragma warning disable MVVMTK0034
         _granularity = settings.LibraryGranularity;
-        _sortField = settings.LibrarySortField;
-        _sortDirection = settings.LibrarySortDirection;
-        _groupField = settings.LibraryGroupField;
         _viewMode = settings.LibraryViewMode;
         _gridDensity = settings.LibraryGridDensity;
         _showTileTitles = settings.LibraryShowTileTitles;
@@ -396,12 +411,9 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
             _activeContentType = settings.LibraryActiveContentType;
         }
 
-        // Seeded last, deliberately: IssueList has no direct-field seeding backdoor (private
-        // fields on a different class), so these go through its normal property setters, which
-        // raise PropertyChanged and trigger this constructor's relay straight back into
-        // SaveLibrarySettings() below - harmless only because every other field above is already
-        // seeded to its correct just-loaded value by this point, so that redundant write-back is a
-        // no-op rather than corrupting anything with defaults.
+        // The single sort/group pool (2026-09-03). IssueList has no direct-field seeding backdoor,
+        // so these go through its property setters and fire the constructor's PropertyChanged
+        // relay - which no-ops here because _constructed is still false (see that guard).
         IssueList.SortField = settings.LibraryIssueListSortField;
         IssueList.SortDirection = settings.LibraryIssueListSortDirection;
         IssueList.GroupField = settings.LibraryIssueListGroupField;
@@ -414,9 +426,6 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         var settings = context.GetOrCreateAppSettings();
 
         settings.LibraryGranularity = Granularity;
-        settings.LibrarySortField = SortField;
-        settings.LibrarySortDirection = SortDirection;
-        settings.LibraryGroupField = GroupField;
         settings.LibraryIssueListSortField = IssueList.SortField;
         settings.LibraryIssueListSortDirection = IssueList.SortDirection;
         settings.LibraryIssueListGroupField = IssueList.GroupField;
@@ -659,66 +668,26 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
     /// <summary>Populated instead of <see cref="Covers"/> when <see cref="IsGrouped"/>.</summary>
     public ObservableCollection<SeriesCardGroup> Groups { get; }
 
-    /// <summary>Series-card Sort field - only meaningful when <see cref="IsSeriesGranularity"/>; see
-    /// <see cref="IssueList"/>'s own <c>SortField</c> for the per-issue equivalent.</summary>
-    [ObservableProperty]
-    private LibrarySortField _sortField = LibrarySortField.DateAdded;
+    /// <summary>
+    /// Flattened view adapter over <see cref="Covers"/> / <see cref="Groups"/> for the virtualized
+    /// series-granularity List / Details modes: ungrouped it is just the cards; grouped it
+    /// interleaves a <see cref="GridSectionHeader"/> before each section's
+    /// <see cref="SeriesCardSample"/>s. Series-granularity counterpart of
+    /// <see cref="IssueListScreenViewModel.FlatRows"/>; rebuilt every <see cref="RebuildView"/>.
+    /// </summary>
+    public ObservableCollection<object> FlatCovers { get; }
 
-    partial void OnSortFieldChanged(LibrarySortField value)
-    {
-        OnPropertyChanged(nameof(ShowAlphabetIndex));
-        OnPropertyChanged(nameof(SortLabel));
-        OnPropertyChanged(nameof(ActiveSortLabel));
-        RaiseChipAndEmptyState();
-        SaveLibrarySettings();
-        RebuildView();
-    }
-
-    [ObservableProperty]
-    private SortDirection _sortDirection = SortDirection.Descending;
-
-    partial void OnSortDirectionChanged(SortDirection value)
-    {
-        OnPropertyChanged(nameof(SortLabel));
-        OnPropertyChanged(nameof(ActiveSortLabel));
-        RaiseChipAndEmptyState();
-        SaveLibrarySettings();
-        RebuildView();
-    }
-
-    [RelayCommand]
-    private void ToggleSortDirection() =>
-        SortDirection = SortDirection == SortDirection.Ascending ? SortDirection.Descending : SortDirection.Ascending;
-
-    public string SortLabel =>
-        (LibraryFieldCatalog.SortFields.TryGetValue(SortField, out var sortDescriptor) ? sortDescriptor.DisplayName : "Sort")
-        + (SortDirection == SortDirection.Ascending ? " ↑" : " ↓");
-
-    [ObservableProperty]
-    private LibraryGroupField _groupField = LibraryGroupField.None;
-
-    public bool IsGrouped => GroupField != LibraryGroupField.None;
-
-    public string GroupLabel => GroupField == LibraryGroupField.None
-        ? "None"
-        : LibraryFieldCatalog.GroupFields[GroupField].DisplayName;
-
-    partial void OnGroupFieldChanged(LibraryGroupField value)
-    {
-        OnPropertyChanged(nameof(IsGrouped));
-        OnPropertyChanged(nameof(GroupLabel));
-        OnPropertyChanged(nameof(ActiveGroupLabel));
-        OnPropertyChanged(nameof(ShowAlphabetIndex));
-        RaiseChipAndEmptyState();
-        SaveLibrarySettings();
-        RebuildView();
-    }
-
-    [RelayCommand]
-    private void SetSortField(LibrarySortField field) => SortField = field;
-
-    [RelayCommand]
-    private void SetGroupField(LibraryGroupField field) => GroupField = field;
+    /// <summary>
+    /// Library has a <b>single</b> sort/group field pool since 2026-09-03 - <see cref="IssueList"/>
+    /// owns it (<c>IssueList.SortField</c> / <c>SortDirection</c> / <c>GroupField</c>, backed by
+    /// <see cref="IssueListFieldCatalog"/>) for <b>both</b> granularities. Per-issue cards sort/group
+    /// their own rows; per-series cards (<see cref="Covers"/> / <see cref="Groups"/>) delegate to
+    /// the same catalog via each card's <see cref="SeriesCardSample.RepresentativeRow"/> - see
+    /// <see cref="SortCards"/> / <see cref="GroupCards"/>. The <c>IssueList.PropertyChanged</c>
+    /// subscription in the constructor calls <see cref="RebuildView"/> so the series grid re-sorts
+    /// on a field change too.
+    /// </summary>
+    public bool IsGrouped => IssueList.IsGrouped;
 
     [ObservableProperty]
     private LibraryContentGranularity _granularity = LibraryContentGranularity.Issue;
@@ -730,10 +699,6 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
     {
         OnPropertyChanged(nameof(IsSeriesGranularity));
         OnPropertyChanged(nameof(IsIssueGranularity));
-        OnPropertyChanged(nameof(SortLabel));
-        OnPropertyChanged(nameof(GroupLabel));
-        OnPropertyChanged(nameof(ActiveSortLabel));
-        OnPropertyChanged(nameof(ActiveGroupLabel));
         OnPropertyChanged(nameof(HasAnyResults));
         OnPropertyChanged(nameof(ShowAlphabetIndex));
         RaiseChipAndEmptyState();
@@ -747,11 +712,12 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
     /// empty state; delegates to whichever granularity is active.</summary>
     public bool HasAnyResults => IsCollectionView ? CollectionTiles.Count > 0 : IsSeriesGranularity ? (Covers.Count > 0 || Groups.Count > 0) : IssueList.HasAnyResults;
 
-    /// <summary>Sort/Group toolbar pills show whichever granularity's own label is currently active -
-    /// lets the XAML toolbar bind one pair of pills instead of branching per granularity itself.</summary>
-    public string ActiveSortLabel => IsSeriesGranularity ? SortLabel : IssueList.SortLabelWithDirection;
+    /// <summary>Sort/Group toolbar pill text - one shared pool now, so these are straight aliases of
+    /// <see cref="IssueList"/>'s labels (the constructor's <c>IssueList.PropertyChanged</c> hook
+    /// re-raises them).</summary>
+    public string ActiveSortLabel => IssueList.SortLabelWithDirection;
 
-    public string ActiveGroupLabel => IsSeriesGranularity ? GroupLabel : IssueList.GroupFieldLabel;
+    public string ActiveGroupLabel => IssueList.GroupFieldLabel;
 
     /// <summary>
     /// Re-reads the library into the <see cref="_allSeries"/>/<see cref="_allCollections"/> snapshot
@@ -1003,11 +969,17 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         var cards = SortCards(seriesForCards.Select(SeriesCardSample.FromSeries).ToList());
         Covers.Clear();
         Groups.Clear();
+        FlatCovers.Clear();
         if (IsGrouped)
         {
             foreach (var group in GroupCards(cards))
             {
                 Groups.Add(group);
+                FlatCovers.Add(new GridSectionHeader(group.Header, group.Items.Count));
+                foreach (var card in group.Items)
+                {
+                    FlatCovers.Add(card);
+                }
             }
         }
         else
@@ -1015,6 +987,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
             foreach (var card in cards)
             {
                 Covers.Add(card);
+                FlatCovers.Add(card);
             }
         }
 
@@ -1046,20 +1019,20 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
     }
 
     /// <summary>
-    /// Sorts by <see cref="SortField"/>/<see cref="SortDirection"/> - Series-level aggregates
-    /// already computed on each <see cref="SeriesCardSample"/>, not re-derived from the Issue
-    /// entities here. Comparison logic itself lives in <see cref="LibraryFieldCatalog"/> (docs/
-    /// superpowers/specs/2026-08-17-metadata-model-phase2c-library-field-descriptors-design.md).
+    /// Sorts per-series cards by the <b>single shared pool</b> (2026-09-03): the same
+    /// <see cref="IssueListFieldCatalog"/> comparer the per-issue list uses, applied to each card's
+    /// <see cref="SeriesCardSample.RepresentativeRow"/>. Keyed on <c>IssueList.SortField</c> /
+    /// <c>SortDirection</c> so one toolbar control drives both granularities.
     /// </summary>
     private List<SeriesCardSample> SortCards(List<SeriesCardSample> cards)
     {
-        var descriptor = LibraryFieldCatalog.SortFields.TryGetValue(SortField, out var found)
+        var descriptor = IssueListFieldCatalog.SortFields.TryGetValue(IssueList.SortField, out var found)
             ? found
-            : LibraryFieldCatalog.SortFields[LibrarySortField.Name];
+            : IssueListFieldCatalog.SortFields[IssueListSortField.Series];
 
         var result = cards.ToList();
-        result.Sort(descriptor.Compare);
-        if (SortDirection == SortDirection.Descending)
+        result.Sort((a, b) => descriptor.Compare(a.RepresentativeRow, b.RepresentativeRow));
+        if (IssueList.SortDirection == SortDirection.Descending)
         {
             result.Reverse();
         }
@@ -1068,21 +1041,21 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
     }
 
     /// <summary>
-    /// Partitions already-sorted <paramref name="cards"/> into <see cref="SeriesCardGroup"/>s -
-    /// LINQ's GroupBy preserves each group's internal element order, so Sort's order survives
-    /// intact within every group without any extra work here. Bucketing/ordering logic itself lives
-    /// in <see cref="LibraryFieldCatalog"/>; <see cref="LibraryGroupField.None"/> (and any future
-    /// gap) falls through to the same empty result the old switch's default branch returned.
+    /// Partitions already-sorted <paramref name="cards"/> into <see cref="SeriesCardGroup"/>s via
+    /// the shared <see cref="IssueListFieldCatalog"/> grouper against each card's
+    /// <see cref="SeriesCardSample.RepresentativeRow"/>. GroupBy preserves each group's internal
+    /// element order, so Sort's order survives. <see cref="IssueListGroupField.None"/> (and any
+    /// gap) yields an empty result, same as before.
     /// </summary>
     private IEnumerable<SeriesCardGroup> GroupCards(List<SeriesCardSample> cards)
     {
-        if (!LibraryFieldCatalog.GroupFields.TryGetValue(GroupField, out var descriptor))
+        if (!IssueListFieldCatalog.GroupFields.TryGetValue(IssueList.GroupField, out var descriptor))
         {
             return Enumerable.Empty<SeriesCardGroup>();
         }
 
         return cards
-            .GroupBy(descriptor.GroupKey)
+            .GroupBy(c => descriptor.GroupKey(c.RepresentativeRow))
             .OrderBy(g => g.Key, Comparer<string>.Create(descriptor.GroupOrder))
             .Select(g => new SeriesCardGroup { Header = g.Key, Items = new ObservableCollection<SeriesCardSample>(g) });
     }
@@ -1644,9 +1617,8 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
     /// list (docs/superpowers/specs/2026-08-09-library-toolbar-design.md Phase C) - now reads
     /// <see cref="IssueList"/>'s sort/group state directly since that's the only one left (see the
     /// constructor's relay for how this stays live).</summary>
-    public bool ShowAlphabetIndex => IsSeriesGranularity
-        ? SortField == LibrarySortField.Name && !IsGrouped
-        : IssueList.SortField == IssueListSortField.Series && !IssueList.IsGrouped;
+    public bool ShowAlphabetIndex =>
+        IssueList.SortField == IssueListSortField.Series && !IssueList.IsGrouped;
 
     // --- Toolbar chrome (docs/superpowers/specs/2026-08-27-library-browsing-4b-toolbar-rework-
     // design.md §2-§5) - one "View & Sort" tabbed popup replacing the old Filter/Sort/Group/Display
@@ -1768,11 +1740,10 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
     public bool HasActiveFilters =>
         FilterUnreadOnly || FilterMissingIssues || FilterTrackedOnly || SearchMode != SearchMode.All;
 
-    private bool SeriesSortIsDefault => SortField == LibrarySortField.DateAdded && SortDirection == SortDirection.Descending;
-    private bool IssueSortIsDefault => IssueList.SortField == IssueListSortField.Added && IssueList.SortDirection == SortDirection.Descending;
+    public bool IsSortNonDefault =>
+        !(IssueList.SortField == IssueListSortField.Added && IssueList.SortDirection == SortDirection.Descending);
 
-    public bool IsSortNonDefault => IsSeriesGranularity ? !SeriesSortIsDefault : !IssueSortIsDefault;
-    public bool IsGroupNonDefault => IsSeriesGranularity ? IsGrouped : IssueList.IsGrouped;
+    public bool IsGroupNonDefault => IssueList.IsGrouped;
 
     public bool HasVisibleChips => HasActiveFilters || IsSortNonDefault || IsGroupNonDefault;
 
@@ -2624,7 +2595,6 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
     public bool IsListView => ViewMode == LibraryViewMode.List && !IsCollectionView;
     public bool IsDetailsView => ViewMode == LibraryViewMode.Details && !IsCollectionView;
     public bool IsTilesView => ViewMode == LibraryViewMode.Tiles && !IsCollectionView;
-    public bool IsIssueListView => ViewMode == LibraryViewMode.IssueList && !IsCollectionView;
 
     partial void OnViewModeChanged(LibraryViewMode value)
     {
@@ -2633,7 +2603,6 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         OnPropertyChanged(nameof(IsListView));
         OnPropertyChanged(nameof(IsDetailsView));
         OnPropertyChanged(nameof(IsTilesView));
-        OnPropertyChanged(nameof(IsIssueListView));
         OnPropertyChanged(nameof(DisplayModeLabel));
         SaveLibrarySettings();
     }
@@ -2647,7 +2616,6 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         OnPropertyChanged(nameof(IsListView));
         OnPropertyChanged(nameof(IsDetailsView));
         OnPropertyChanged(nameof(IsTilesView));
-        OnPropertyChanged(nameof(IsIssueListView));
     }
 
     /// <summary>Every Display mode now renders the exact same <see cref="IssueList"/> rows/groups
@@ -2663,7 +2631,6 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         LibraryViewMode.List => "List",
         LibraryViewMode.Details => "Details",
         LibraryViewMode.Tiles => "Tiles",
-        LibraryViewMode.IssueList => "Comic List",
         _ => "Display",
     };
 
@@ -2693,6 +2660,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
                 OnPropertyChanged(nameof(TilesThumbWidth));
                 OnPropertyChanged(nameof(TilesThumbHeight));
                 OnPropertyChanged(nameof(TilesCardWidth));
+                OnPropertyChanged(nameof(TilesCardHeight));
                 SaveLibrarySettings();
             }
         }
@@ -2721,6 +2689,12 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
     public double TilesThumbHeight => 68 * GridDensity;
     public double TilesCardWidth => 260 * GridDensity;
 
+    /// <summary>Fixed Tiles card height for the <c>VirtualizingWrapPanel</c>'s <c>ItemHeight</c>.
+    /// The card is <c>Border.libRow</c> (padding 8 + 1px border, both sides) wrapped around a row
+    /// whose height is driven by the thumbnail (always taller than the 2-line text block at every
+    /// density) - so thumb + 18 covers it.</summary>
+    public double TilesCardHeight => TilesThumbHeight + 18;
+
     /// <summary>Phase 4a: poster tile title row on/off. Persisted via
     /// <c>AppSettings.LibraryShowTileTitles</c>; see <see cref="EffectiveShowTileTitles"/> for the
     /// density-gated value the grid actually binds.</summary>
@@ -2736,8 +2710,20 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
 
     public bool EffectiveShowTileTitles => ShowTileTitles && PosterCardWidth >= PosterTitleHideThreshold;
 
-    /// <summary>Panorama grid's fixed tile height - XAML binds here rather than a hardcoded literal, so this and <see cref="SeriesCardSample.PanoramaWidth"/>'s own height math can't drift apart.</summary>
+    /// <summary>Panorama grid's fixed cover-box height - XAML binds here rather than a hardcoded literal, so this and <see cref="SeriesCardSample.PanoramaWidth"/>'s own math can't drift apart.</summary>
     public double PanoramaCardHeight => SeriesCardSample.PanoramaHeight;
+
+    /// <summary>Panorama's uniform tile width for the <c>VirtualizingWrapPanel</c>'s <c>ItemWidth</c>
+    /// - the exact clamped value <see cref="SeriesCardSample.PanoramaWidth"/> /
+    /// <see cref="IssueListRow.PanoramaWidth"/> already resolve to (uniform since the 2026-08-22
+    /// cover-memory-virtualization change dropped the per-cover aspect-ratio widths). Kept as one
+    /// value so the panel's grid math and each tile's own <c>Width</c> can't disagree.</summary>
+    public double PanoramaTileWidth => SeriesCardSample.ComputePanoramaWidth(SeriesCardSample.DefaultCoverAspectRatio);
+
+    /// <summary>Panorama tile's full height for the <c>VirtualizingWrapPanel</c>'s <c>ItemHeight</c>
+    /// - the <see cref="PanoramaCardHeight"/> cover box plus the series-name + number text lines
+    /// the tile stacks below it.</summary>
+    public double PanoramaGridItemHeight => PanoramaCardHeight + 42;
 
     /// <summary>Overlay toggles (docs/superpowers/specs/2026-08-09-library-toolbar-design.md Phase D), persisted per docs/superpowers/specs/2026-08-17-library-saved-list-layouts-design.md.
     /// See <see cref="ShowContinueReadingButton"/> below for why that one toggle is scoped to

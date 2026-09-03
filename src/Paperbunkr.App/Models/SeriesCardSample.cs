@@ -120,6 +120,16 @@ public sealed partial class SeriesCardSample : ObservableObject, ISelectableCard
     /// </summary>
     public int? CoverIssueId { get; init; }
 
+    /// <summary>
+    /// A flat <see cref="IssueListRow"/> standing in for this series when Library's <b>single</b>
+    /// sort/group field pool (2026-09-03 unification - <c>IssueListFieldCatalog</c>) is applied to
+    /// series cards. Built from the cover issue (else the first by number), so "sort series by
+    /// Writer" means "by the cover issue's Writer"; <c>SeriesIssueCount</c>/<c>SeriesUnreadCount</c>
+    /// on it carry the whole-series aggregates. Never null - an issue-less series gets a minimal
+    /// row carrying just the series-level fields.
+    /// </summary>
+    public required IssueListRow RepresentativeRow { get; init; }
+
     public static IBrush Gradient(string fromHex, string toHex) => new LinearGradientBrush
     {
         StartPoint = new RelativePoint(0, 0, RelativeUnit.Relative),
@@ -196,6 +206,21 @@ public sealed partial class SeriesCardSample : ObservableObject, ISelectableCard
             SeriesId = series.Id,
             Title = series.Name.ToUpperInvariant(),
             Name = series.Name,
+            RepresentativeRow = coverIssue is not null
+                ? IssueListRow.FromIssue(coverIssue, series)
+                : new IssueListRow
+                {
+                    SeriesId = series.Id,
+                    SeriesName = series.Name,
+                    Title = series.Name,
+                    CoverBrush = CoverBrushFor(series.Name),
+                    ContentTypeLabel = series.ContentType.ToString(),
+                    SeriesStatusLabel = series.Status.ToString(),
+                    ReadingStatusLabel = series.ReadingStatus.ToString(),
+                    ReadingDirectionLabel = series.ReadingMode.ToString(),
+                    Publisher = series.Publisher,
+                    PanoramaWidth = ComputePanoramaWidth(aspectRatio),
+                },
             Sub = $"{series.ContentType} · {series.Issues.Count} issues",
             Publisher = series.Publisher,
             ContentTypeLabel = series.ContentType.ToString(),

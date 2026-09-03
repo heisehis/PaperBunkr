@@ -75,4 +75,21 @@ internal static class LibraryToolbarDriver
     /// <summary>The View &amp; Sort button's accessible name carries the active display mode (the
     /// visible label stays "View &amp; Sort"; the chips carry sort/group state).</summary>
     public static string ViewSortButtonName(Window window) => Find(window, "LibraryViewSortButton").Name;
+
+    // --- Saved Workspaces (docs/superpowers/specs/2026-09-03-library-saved-workspaces-design.md) ---
+
+    /// <summary>The workspace switcher pill's accessible name, e.g. "Workspace: Manga" or "Workspace: Workspace".</summary>
+    public static string WorkspaceButtonName(Window window) => Find(window, "LibraryWorkspaceButton").Name;
+
+    /// <summary>Opens the workspace dropdown (if closed) and applies the built-in workspace with the given name.</summary>
+    public static void ApplyWorkspace(Window window, string name)
+    {
+        string rowId = $"LibraryWorkspaceRow_{name}";
+        if (TryFind(window, rowId) is null)
+        {
+            Invoke(window, "LibraryWorkspaceButton");
+        }
+
+        Invoke(window, rowId);
+    }
 }

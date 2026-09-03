@@ -88,6 +88,8 @@ public class PaperbunkrDbContext : DbContext
 
     public DbSet<KeyBinding> KeyBindings => Set<KeyBinding>();
 
+    public DbSet<Workspace> Workspaces => Set<Workspace>();
+
     public DbSet<BookSeries> BookSeries => Set<BookSeries>();
 
     public DbSet<Book> Books => Set<Book>();
@@ -990,6 +992,19 @@ public class PaperbunkrDbContext : DbContext
             builder.Property(k => k.CommandId).IsRequired();
             builder.Property(k => k.Key).IsRequired();
             builder.HasIndex(k => k.CommandId).IsUnique();
+        });
+
+        // Saved Workspaces (docs/superpowers/specs/2026-09-03-library-saved-workspaces-design.md) -
+        // a growable per-screen list, same plain-table shape as KeyBinding. Screen is enum-as-string
+        // (this codebase's convention) with no HasSentinel: every row gets an explicit Screen on
+        // insert (WorkspaceService.Create / seeding), never a backfill - same as Book.Format.
+        modelBuilder.Entity<Workspace>(builder =>
+        {
+            builder.HasKey(w => w.Id);
+            builder.Property(w => w.Screen).HasConversion<string>().HasMaxLength(16);
+            builder.Property(w => w.Name).IsRequired();
+            builder.Property(w => w.StateJson).IsRequired();
+            builder.HasIndex(w => new { w.Screen, w.SortOrder });
         });
 
         // Novels (docs/superpowers/specs/2026-08-09-novels-epub-pdf-support-design.md §2) -

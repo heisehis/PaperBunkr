@@ -148,13 +148,13 @@ being shipped.**
 |---|---|
 | Grid view with real cover art | ✅ shipped |
 | List/detail row view | ✅ shipped |
-| Filesystem folder browsing mode (not just library-backed) | 📋 confirmed still not started |
+| Filesystem folder browsing mode (not just library-backed) | ❌ **won't do** — dropped 2026-09-03 by decision. Paperbunkr already covers "comics not yet in the library" through drag-and-drop import, live folder-watch, and fileless entries; a second persistent browse surface wasn't worth the weight. |
 | Browse history (back/forward through views) | ✅ shipped — `LibraryBrowseState`/`_browseHistory` (`CursorList<T>`) (docs/superpowers/specs/2026-08-19-library-browse-history-design.md); search query tracked as a history step, sort/group/display deliberately excluded |
-| Saved "Workspaces" (display-setting presets) | 📋 confirmed still not started — explicitly scoped as a separate future sub-project in the List Layouts spec below, distinct from what shipped there |
+| Saved "Workspaces" (display-setting presets) | ✅ shipped 2026-09-03 — `Workspace` entity + `WorkspaceService`, a toolbar switcher on both the Library and Books screens (docs/superpowers/specs/2026-09-03-library-saved-workspaces-design.md). **Deviations from CE:** per-screen lists, not one global list; "Views setup" group only (no window-layout / reader-display capture); ships 3+3 read-only starter workspaces (CE ships none). One-shot apply, reuse-a-name-to-overwrite (CE's own Save dialog model). |
 | Saved "List Layouts" (grid column/sort/group presets) | ✅ shipped — persists sort/group/view mode/grid density/overlay toggles/filters/sidebar selection (docs/superpowers/specs/2026-08-17-library-saved-list-layouts-design.md). This is persistence of the existing session-only UI, not named/multiple presets — that's "Workspaces" above, still open |
 | Pluggable sort/group strategies (by rating, community rating, read %, custom/virtual tags) | ⚠️ partial — `IssueListSortField` covers 60+ CE-parity fields including Rating/Community Rating/Read % (docs/superpowers/specs/2026-08-18-issue-list-pluggable-sort-group-design.md); Virtual Tags are **not** a sort/group axis despite being named in this row — real, specific remaining gap |
 | Drag-and-drop (files/folders/reading-list files onto the app) | 📋 confirmed still not started |
-| Recent/MRU file list, Quick Open (recents+favorites overlay) | 📋 confirmed still not started |
+| Recent/MRU file list, Quick Open (recents+favorites overlay) | 📋 not started — design done (docs/superpowers/specs/2026-09-03-quick-open-command-palette-design.md): a `Ctrl+P` fuzzy command palette over content + navigation + actions, seeded with recently-opened items. Deliberately not CE's recency cover-wall (Home already covers that) or its `File ▸ Open Recent` menu. |
 | Reveal-in-Explorer / copy-file-path | ✅ shipped — `Services/RevealInExplorerHelper.cs` (docs/superpowers/specs/2026-08-16-reveal-in-explorer-and-fileless-entries-design.md §1) |
 | Folder-watch continuous scanning (independent of one-time CE migration) | ✅ shipped — `Services/LiveFolderWatchService.cs` |
 | File metadata write-back (save edits into ComicInfo.xml/tags) | ✅ shipped — `Services/ComicInfoWriteBackService.cs`, wired into both the single-book and bulk editors (currently scoped to Genre/Tags) |
@@ -239,9 +239,9 @@ stale sequencing plan):
 - **Reader (§B):** magnifier/loupe, sharpen/AutoContrast/WhitePoint image adjustment, paper/texture
   background, clock/battery overlay, type-to-jump-to-page, a per-page manual Near/Far double-page
   override.
-- **Library (§C):** filesystem folder browsing mode, saved "Workspaces" (named/multiple presets,
-  distinct from the already-shipped List Layouts persistence), drag-and-drop, Recent/MRU + Quick
-  Open, Virtual Tags as a sort/group axis.
+- **Library (§C):** drag-and-drop import (design done), Recent/MRU + Quick Open command palette
+  (design done), Virtual Tags as a sort/group axis. (Saved "Workspaces" shipped 2026-09-03;
+  filesystem folder browsing mode dropped by decision.)
 - **Remote/server (§F):** the entire App-layer feature — Engine-layer CE classes are ported and
   dormant, but nothing in `Paperbunkr.App` calls them yet. Needs its own design spec before any
   App-side code.

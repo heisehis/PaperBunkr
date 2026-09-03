@@ -9,6 +9,7 @@ using Avalonia.Input;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Rendering.Composition;
+using Avalonia.Threading;
 using Paperbunkr.App.Services;
 using Paperbunkr.Data.Entities;
 
@@ -368,6 +369,12 @@ public class PageCanvas : Control
     private DateTime _touchPressTime;
     private CompositionCustomVisual? _visual;
 
+    /// <summary>Set while a coalesced continuous-mode render push is already queued for the next animation frame (see <see cref="RequestContinuousPush"/>).</summary>
+    private bool _continuousPushQueued;
+
+    /// <summary>Reused across <see cref="PushContinuousVisualData"/> calls so a drag scroll doesn't allocate a fresh <c>PageCount</c>-sized array on every pointer-move event - regrown only when <see cref="PageCount"/> changes.</summary>
+    private Size[] _estimatedSizesBuffer = Array.Empty<Size>();
+
     /// <summary>
     /// Accumulated wheel-scroll pull past the continuous-mode scroll clamp, signed (positive =
     /// pulled past the end wanting to go forward, negative = past the start wanting to go
@@ -390,6 +397,12 @@ public class PageCanvas : Control
 
     /// <summary>Wall-clock start of the most recently *animated* transition (spec §3.3) - a new turn only animates if this is far enough in the past, otherwise it falls back to an instant swap, same principle as CE's own rapid-paging throttle.</summary>
     private DateTime? _lastTransitionStartUtc;
+
+    /// <summary>Debounces plain-wheel page turns so one precision-touchpad two-finger swipe turns
+    /// roughly one page instead of a dozen (see the class doc). Only consulted on the paged-mode
+    /// page-turn branch of <see cref="OnPointerWheelChanged"/>; continuous mode scrolls proportionally
+    /// and needs no debounce.</summary>
+    private readonly WheelPageTurnAccumulator _wheelPageTurns = new();
 
     /// <summary>
     /// What was last actually pushed to the visual via <see cref="PushPagedVisualData"/> (docs/
@@ -956,16 +969,28 @@ public class PageCanvas : Control
     /// </summary>
     private bool CanPan() => ZoomLevel > ZoomPanMath.MinZoom || ZoomPanMath.HasOverflow(Bounds.Size, EffectivePixelSize(), ZoomLevel, FitMode, FitOnlyIfOversized);
 
-    /// <summary>Same estimate-then-correct array <see cref="PushContinuousVisualData"/> builds for layout - shared by scroll-input clamping so both use identical (known-or-estimated) page sizes.</summary>
+    /// <summary>
+    /// Known-or-estimated size of every page - shared by continuous-mode layout
+    /// (<see cref="PushContinuousVisualData"/>) and scroll-input clamping so both reason about the
+    /// same numbers. Returns a reused buffer (<see cref="_estimatedSizesBuffer"/>), not a fresh
+    /// array: a drag scroll calls this several times per pointer-move (via
+    /// <see cref="ClampScrollOffset"/> and friends) and every caller consumes it synchronously
+    /// through a pure <see cref="ReaderLayoutModel"/> function before the next rebuild, so there's
+    /// no aliasing hazard and no reason to allocate a <see cref="PageCount"/>-sized array each time.
+    /// </summary>
     private Size[] EstimatedPageSizes()
     {
-        var sizes = new Size[PageCount];
-        for (int i = 0; i < PageCount; i++)
+        if (_estimatedSizesBuffer.Length != PageCount)
         {
-            sizes[i] = _knownPageSizes.TryGetValue(i, out var known) ? known : DefaultEstimatedPageSize;
+            _estimatedSizesBuffer = new Size[PageCount];
         }
 
-        return sizes;
+        for (int i = 0; i < PageCount; i++)
+        {
+            _estimatedSizesBuffer[i] = _knownPageSizes.TryGetValue(i, out var known) ? known : DefaultEstimatedPageSize;
+        }
+
+        return _estimatedSizesBuffer;
     }
 
     /// <summary>
@@ -1094,6 +1119,16 @@ public class PageCanvas : Control
         ElementComposition.SetElementChildVisual(this, _visual);
         _visual.Size = new Vector(Bounds.Width, Bounds.Height);
         _visual.ClipToBounds = true;
+
+        // Re-arm the background-decode subscription: the screen switcher toggles visibility (detach/
+        // re-attach) without a DecoderProperty change, so OnPropertyChanged wouldn't re-subscribe
+        // after OnDetachedFromVisualTree dropped it. Idempotent (-= then +=).
+        if (Decoder is PageDecodeService decodeService)
+        {
+            decodeService.BackgroundDecodeCompleted -= OnBackgroundDecodeCompleted;
+            decodeService.BackgroundDecodeCompleted += OnBackgroundDecodeCompleted;
+        }
+
         PushRenderData();
         PushAdjustmentData();
     }
@@ -1103,6 +1138,26 @@ public class PageCanvas : Control
         base.OnDetachedFromVisualTree(e);
         ElementComposition.SetElementChildVisual(this, null);
         _visual = null;
+
+        if (Decoder is PageDecodeService decodeService)
+        {
+            decodeService.BackgroundDecodeCompleted -= OnBackgroundDecodeCompleted;
+        }
+    }
+
+    /// <summary>
+    /// A background page decode landed (fires on the decode thread). Hop to the UI thread and fold
+    /// it into the next frame's coalesced push - a burst of completions collapses to one re-push.
+    /// </summary>
+    private void OnBackgroundDecodeCompleted(int pageIndex)
+    {
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (IsContinuous)
+            {
+                RequestContinuousPush();
+            }
+        });
     }
 
     /// <summary>
@@ -1118,6 +1173,19 @@ public class PageCanvas : Control
 
         if (change.Property == DecoderProperty)
         {
+            // Move the background-decode-completed subscription to the new decoder. Continuous mode
+            // draws not-yet-decoded pages as gaps (see PushContinuousVisualData) and relies on this
+            // to re-push once the background loop fills one in.
+            if (change.OldValue is PageDecodeService oldDecodeService)
+            {
+                oldDecodeService.BackgroundDecodeCompleted -= OnBackgroundDecodeCompleted;
+            }
+
+            if (change.NewValue is PageDecodeService newDecodeService)
+            {
+                newDecodeService.BackgroundDecodeCompleted += OnBackgroundDecodeCompleted;
+            }
+
             // A new issue was opened (or continuous mode's decoder was swapped) - yesterday's page
             // sizes don't apply to today's book.
             _knownPageSizes.Clear();
@@ -1135,6 +1203,10 @@ public class PageCanvas : Control
             // A new issue just loaded (e.g. via the chapter-boundary overscroll this pull itself
             // triggered) - yesterday's pull has no meaning against today's book's own boundaries.
             _overscrollPull = 0;
+
+            // Likewise a half-completed touchpad swipe from the previous book shouldn't finish
+            // against the new one.
+            _wheelPageTurns.Reset();
         }
 
         // Real page-turn animation trigger (spec §3.1/§3.3): only PageProperty changes in paged mode
@@ -1219,7 +1291,22 @@ public class PageCanvas : Control
 
         if (Array.IndexOf(RenderAffectingProperties, change.Property) >= 0)
         {
-            PushRenderData();
+            // Scroll/pan change on every pointer-move during a drag - coalesce those to one push
+            // per frame (see RequestContinuousPush). Every other render-affecting property (page,
+            // zoom, fit mode, reading mode, decoder swap...) is low-frequency and pushes
+            // synchronously, so mode entry / page load paints on the same frame with no blank gap.
+            bool isContinuousScrollOrPan = IsContinuous && (change.Property == ScrollOffsetProperty
+                || change.Property == PanOffsetXProperty
+                || change.Property == PanOffsetYProperty);
+
+            if (isContinuousScrollOrPan)
+            {
+                RequestContinuousPush();
+            }
+            else
+            {
+                PushRenderData();
+            }
         }
 
         if (Array.IndexOf(AdjustmentProperties, change.Property) >= 0)
@@ -1238,6 +1325,45 @@ public class PageCanvas : Control
         {
             PushPagedVisualData();
         }
+    }
+
+    /// <summary>
+    /// Coalesces continuous-mode scroll/pan render pushes to at most one per animation frame. A
+    /// trackpad or click-drag scroll writes <see cref="ScrollOffset"/> (and usually
+    /// <see cref="PanOffsetX"/>/<see cref="PanOffsetY"/> as well, for any cross-axis wobble) on every
+    /// pointer-move event - 60-125+ a second - and each write used to run a full
+    /// <see cref="PushContinuousVisualData"/> synchronously: a <see cref="PageCount"/>-sized layout
+    /// sweep and a decoder pass, often twice per event. Most of those rebuilds landed between two
+    /// compose passes and were never shown. Deferring to <see cref="TopLevel.RequestAnimationFrame"/>
+    /// collapses them to one push per frame with no added latency - the content still updates every
+    /// frame, it just stops rebuilding two or three times per frame. Only scroll/pan goes through
+    /// here; every other render-affecting change still pushes synchronously.
+    /// </summary>
+    private void RequestContinuousPush()
+    {
+        if (_continuousPushQueued)
+        {
+            return;
+        }
+
+        var topLevel = TopLevel.GetTopLevel(this);
+        if (topLevel is null)
+        {
+            // Not in a window yet (or already detached) - nothing is compositing this visual, so
+            // there's no frame to defer to; push directly.
+            PushContinuousVisualData();
+            return;
+        }
+
+        _continuousPushQueued = true;
+        topLevel.RequestAnimationFrame(_ =>
+        {
+            _continuousPushQueued = false;
+            if (IsContinuous)
+            {
+                PushContinuousVisualData();
+            }
+        });
     }
 
     private void PushAdjustmentData() =>
@@ -1355,11 +1481,7 @@ public class PageCanvas : Control
             return;
         }
 
-        var estimatedSizes = new Size[PageCount];
-        for (int i = 0; i < PageCount; i++)
-        {
-            estimatedSizes[i] = _knownPageSizes.TryGetValue(i, out var known) ? known : DefaultEstimatedPageSize;
-        }
+        var estimatedSizes = EstimatedPageSizes();
 
         double crossAxisPan = ContinuousAxis == ReaderLayoutModel.Axis.Vertical ? PanOffsetX : PanOffsetY;
 
@@ -1387,12 +1509,27 @@ public class PageCanvas : Control
             CurrentContinuousPageIndex = nearest;
         }
 
-        if (Decoder is PageDecodeService decodeService)
+        var decodeService = Decoder as PageDecodeService;
+        if (decodeService is not null)
         {
             int viewportCrossSize = (int)(ContinuousAxis == ReaderLayoutModel.Axis.Vertical ? Bounds.Width : Bounds.Height);
             decodeService.SetViewportWidth(Math.Max(1, viewportCrossSize));
             decodeService.SetVirtualizationWindow(layout[0].Index, layout[^1].Index);
         }
+
+        // PageDecodeService decodes on a background loop; peek its cache without blocking rather than
+        // calling GetPage, which does a full synchronous decode on a cache miss - on the UI thread,
+        // inside this per-frame push. That synchronous decode right as a fresh page scrolled into
+        // view was the "choppy going page to page" hitch. A page the loop hasn't reached yet is
+        // drawn as a gap for a frame or two; BackgroundDecodeCompleted (wired in OnPropertyChanged)
+        // re-pushes the moment it lands. SetVirtualizationWindow above already enqueued the whole
+        // visible range at high priority, so the decode is already in flight.
+        //
+        // Exception: on the first push for a freshly-opened decoder the cache is empty and every
+        // page would draw as a gap, so decode just the centre page synchronously - the reader opens
+        // on content, not a blank frame. Every later push (cache non-empty) is pure non-blocking;
+        // mid-scroll the cache is never empty, so this never brings the per-boundary hitch back.
+        bool primeCentrePage = decodeService is not null && decodeService.DecodedPageCount == 0;
 
         var entries = new List<ContinuousPageEntry>(layout.Count);
         foreach (var page in layout)
@@ -1400,8 +1537,12 @@ public class PageCanvas : Control
             Bitmap? bitmap;
             try
             {
-                bitmap = Decoder.GetPage(page.Index);
-                _knownPageSizes[page.Index] = new Size(bitmap.PixelSize.Width, bitmap.PixelSize.Height);
+                bool blockDecode = decodeService is null || (primeCentrePage && page.Index == nearest);
+                bitmap = blockDecode ? Decoder.GetPage(page.Index) : decodeService!.TryGetCachedPage(page.Index);
+                if (bitmap is not null)
+                {
+                    _knownPageSizes[page.Index] = new Size(bitmap.PixelSize.Width, bitmap.PixelSize.Height);
+                }
             }
             catch
             {
@@ -1585,14 +1726,22 @@ public class PageCanvas : Control
                 PanOffsetX - (e.Delta.X * WheelPanStep), PanOffsetY + (e.Delta.Y * WheelPanStep), FitMode, FitOnlyIfOversized);
             PanOffsetX = x;
             PanOffsetY = y;
+            _wheelPageTurns.Reset();
         }
-        else if (e.Delta.Y < 0 || e.Delta.X > 0)
+        else
         {
-            ExecuteTurn(forward: true);
-        }
-        else if (e.Delta.Y > 0 || e.Delta.X < 0)
-        {
-            ExecuteTurn(forward: false);
+            // Debounced so one precision-touchpad swipe (a stream of sub-detent deltas) turns ~one
+            // page, not a dozen - a real mouse-wheel detent still passes straight through. See
+            // WheelPageTurnAccumulator.
+            int turn = _wheelPageTurns.Accumulate(WheelPageTurnAccumulator.ForwardScalar(e.Delta.X, e.Delta.Y));
+            if (turn > 0)
+            {
+                ExecuteTurn(forward: true);
+            }
+            else if (turn < 0)
+            {
+                ExecuteTurn(forward: false);
+            }
         }
 
         e.Handled = true;

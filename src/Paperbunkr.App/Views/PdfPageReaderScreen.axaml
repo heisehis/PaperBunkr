@@ -3,6 +3,7 @@
              xmlns:vm="using:Paperbunkr.App.ViewModels"
              xmlns:views="using:Paperbunkr.App.Views"
              xmlns:models="using:Paperbunkr.App.Models"
+             xmlns:fi="using:FluentIcons.Avalonia"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d" d:DesignWidth="1000" d:DesignHeight="700"
@@ -10,43 +11,23 @@
              x:DataType="vm:PdfPageReaderScreenViewModel">
 
     <UserControl.Resources>
-        <SolidColorBrush x:Key="ReaderBgBrush" Color="#0B0C0F" />
+        <!-- Kept only for the error-state box below - the chrome bars/toolbar themselves moved onto
+             ReaderChrome's theme-tinted brushes (docs/superpowers/specs/2026-09-03-books-reader-hud-
+             redesign-design.md); an error state has no book theme to tint against, so it keeps its
+             own fixed dark styling. -->
         <SolidColorBrush x:Key="ReaderChromeBrush" Color="#15171C" />
         <SolidColorBrush x:Key="ReaderBorderBrush" Color="#24272E" />
-        <SolidColorBrush x:Key="ReaderTextBrush" Color="#E7E2D6" />
         <SolidColorBrush x:Key="ReaderTextMutedBrush" Color="#8B8779" />
-        <SolidColorBrush x:Key="ReaderTrackBrush" Color="#2A2D34" />
     </UserControl.Resources>
 
-    <Grid RowDefinitions="Auto,*,Auto" Background="{StaticResource ReaderBgBrush}">
+    <!-- Full-bleed page + overlaid chrome (docs/superpowers/specs/2026-09-03-books-reader-hud-
+         redesign-design.md), matching EPUB's reading pane now instead of the old fixed Auto/*/Auto
+         row layout with permanently-docked toolbar/scrubber bars. No WebView-airspace problem here
+         (PageCanvas is an ordinary Avalonia-drawn control, not a native windowed one), so ReaderChrome
+         can simply overlay it via normal z-order - no reserved-margin trick needed. -->
+    <Grid Background="{Binding CanvasBackground}">
 
-        <!-- ============ Top toolbar - same always-visible shape as the comic Reader's, not the Novels reflow reader's tap-to-hide chrome ============ -->
-        <Border Grid.Row="0" Background="{StaticResource ReaderChromeBrush}" BorderBrush="{StaticResource ReaderBorderBrush}"
-                BorderThickness="0,0,0,1" Padding="18,10">
-            <Grid ColumnDefinitions="*,Auto,Auto,Auto">
-                <Button Grid.Column="0" Command="{Binding CloseCommand}" Background="Transparent" BorderThickness="0"
-                        Padding="0" Cursor="Hand" HorizontalAlignment="Left">
-                    <StackPanel Orientation="Horizontal" Spacing="4">
-                        <TextBlock Text="←" FontSize="14" Foreground="{StaticResource ReaderTextMutedBrush}" />
-                        <TextBlock Text="Books" FontSize="13" Foreground="{StaticResource ReaderTextMutedBrush}" />
-                    </StackPanel>
-                </Button>
-                <Button Grid.Column="1" Command="{Binding OpenCapturesCommand}" Background="Transparent" BorderThickness="0"
-                        Padding="8,0" Cursor="Hand" ToolTip.Tip="Captures" AutomationProperties.Name="Captures">
-                    <TextBlock Text="🖼" FontSize="14" Foreground="{StaticResource ReaderTextMutedBrush}" />
-                </Button>
-                <ToggleButton Grid.Column="2" IsChecked="{Binding IsCaptureMode}" Background="Transparent" BorderThickness="0"
-                              Padding="8,0" Cursor="Hand" ToolTip.Tip="Capture a region of this page" Margin="4,0,10,0"
-                              AutomationProperties.Name="Capture region">
-                    <TextBlock Text="✂" FontSize="14" Foreground="{StaticResource ReaderTextMutedBrush}" />
-                </ToggleButton>
-                <TextBlock Grid.Column="3" Text="{Binding BookTitle}" FontSize="13" FontWeight="SemiBold"
-                           Foreground="{StaticResource ReaderTextBrush}" HorizontalAlignment="Right" TextTrimming="CharacterEllipsis" />
-            </Grid>
-        </Border>
-
-        <!-- ============ Page ============ -->
-        <Grid Grid.Row="1">
+        <Grid>
             <views:PageCanvas x:Name="PageCanvasControl"
                               Page="{Binding CurrentPage}"
                               LeftCommand="{Binding GoLeftCommand}"
@@ -66,62 +47,64 @@
                 <TextBlock Text="{Binding ErrorMessage}" FontSize="13" Foreground="{StaticResource ReaderTextMutedBrush}"
                            TextWrapping="Wrap" HorizontalAlignment="Center" TextAlignment="Center" />
             </Border>
-
-            <!-- Captures drawer overlay -->
-            <Grid IsVisible="{Binding IsCapturesOpen}">
-                <Border Background="#B0000000" PointerPressed="OnCapturesScrimPointerPressed" />
-                <Border Width="300" HorizontalAlignment="Right" Background="{StaticResource ReaderChromeBrush}"
-                        BorderBrush="{StaticResource ReaderBorderBrush}" BorderThickness="1,0,0,0">
-                    <DockPanel>
-                        <TextBlock DockPanel.Dock="Top" Text="Captures" FontSize="15" FontWeight="Bold"
-                                   Foreground="{StaticResource ReaderTextBrush}" Margin="16,18,16,10" />
-                        <ScrollViewer>
-                            <ItemsControl ItemsSource="{Binding AnnotationImages}" Margin="12,0,12,16">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate x:DataType="models:BookAnnotationImageSummary">
-                                        <Border Margin="0,0,0,10" CornerRadius="6" ClipToBounds="True"
-                                                BorderBrush="{StaticResource ReaderBorderBrush}" BorderThickness="1">
-                                            <Grid RowDefinitions="Auto,Auto">
-                                                <Image Grid.Row="0" Source="{Binding ImagePath, Converter={x:Static views:FilePathImageConverter.Instance}}"
-                                                       Stretch="UniformToFill" MaxHeight="140" />
-                                                <Grid Grid.Row="1" ColumnDefinitions="*,Auto" Margin="8,6">
-                                                    <TextBlock Grid.Column="0" Text="{Binding CreatedTime, StringFormat={}{0:d}}" FontSize="11"
-                                                               Foreground="{StaticResource ReaderTextMutedBrush}" VerticalAlignment="Center" />
-                                                    <Button Grid.Column="1" Content="✕" FontSize="11" Background="Transparent" BorderThickness="0"
-                                                            Foreground="{StaticResource ReaderTextMutedBrush}" Cursor="Hand"
-                                                            Command="{Binding $parent[UserControl].((vm:PdfPageReaderScreenViewModel)DataContext).DeleteCaptureCommand}"
-                                                            CommandParameter="{Binding}" ToolTip.Tip="Remove capture" />
-                                                </Grid>
-                                            </Grid>
-                                        </Border>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-                        </ScrollViewer>
-                    </DockPanel>
-                </Border>
-            </Grid>
         </Grid>
 
-        <!-- ============ Bottom scrubber ============ -->
-        <Border Grid.Row="2" Background="{StaticResource ReaderChromeBrush}" BorderBrush="{StaticResource ReaderBorderBrush}"
-                BorderThickness="0,1,0,0" Padding="22,12">
-            <Grid ColumnDefinitions="Auto,*,Auto">
-                <Button Grid.Column="0" Content="◀" Command="{Binding GoLeftCommand}" Background="Transparent"
-                        BorderThickness="0" Padding="0" Cursor="Hand" Foreground="{StaticResource ReaderTextBrush}"
-                        VerticalAlignment="Center" Margin="0,0,14,0" />
-                <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="4">
-                    <ProgressBar Height="4" CornerRadius="2" Minimum="0" Maximum="1"
-                                 Value="{Binding ProgressFraction}" Background="{StaticResource ReaderTrackBrush}"
-                                 Foreground="{DynamicResource PbAccentBrush}" />
-                    <TextBlock HorizontalAlignment="Center" FontSize="11" Foreground="{StaticResource ReaderTextMutedBrush}">
-                        <Run Text="{Binding PageNumber}" /><Run Text=" / " /><Run Text="{Binding PageCount}" />
-                    </TextBlock>
-                </StackPanel>
-                <Button Grid.Column="2" Content="▶" Command="{Binding GoRightCommand}" Background="Transparent"
-                        BorderThickness="0" Padding="0" Cursor="Hand" Foreground="{StaticResource ReaderTextBrush}"
-                        VerticalAlignment="Center" Margin="14,0,0,0" />
-            </Grid>
-        </Border>
+        <!-- Chrome (docs/superpowers/specs/2026-09-03-books-reader-hud-redesign-design.md) -
+             Mode="AlwaysVisible": PDF's chrome never hides (page number/zoom/theme are reference info
+             glanced at continuously, per the design's show/hide decision), unlike EPUB's tap-to-hide.
+             Previous/Next bind straight to GoLeft/GoRightCommand - no WebView-scroll-first indirection
+             needed here, so PreviousRequested/NextRequested aren't used for this screen. -->
+        <views:ReaderChrome Mode="AlwaysVisible" Title="{Binding BookTitle}"
+                             ChromeBackground="{Binding Theme, Converter={x:Static views:ReaderChromeBackgroundConverter.Instance}}"
+                             ChromeForeground="{Binding Theme, Converter={x:Static views:ReaderChromeForegroundConverter.Instance}}"
+                             CapturesCommand="{Binding OpenCapturesCommand}"
+                             CaptureToggleCommand="{Binding ToggleCaptureModeCommand}" IsCaptureMode="{Binding IsCaptureMode}"
+                             FontThemeCommand="{Binding OpenFontThemeCommand}"
+                             CloseCommand="{Binding CloseCommand}"
+                             PreviousCommand="{Binding GoLeftCommand}" NextCommand="{Binding GoRightCommand}"
+                             ProgressFraction="{Binding ProgressFraction}" ProgressLabel="{Binding ProgressLabel}" />
+
+        <!-- Captures drawer - ReaderListDrawer (left, matching every other list drawer in both
+             readers now - it used to open from the right, an inconsistency this redesign resolves). -->
+        <views:ReaderListDrawer IsOpen="{Binding IsCapturesOpen}" HeaderText="Captures" ScrimPressed="OnCapturesScrimPointerPressed">
+            <views:ReaderListDrawer.DrawerContent>
+                <ScrollViewer>
+                    <ItemsControl ItemsSource="{Binding AnnotationImages}" Margin="8,0,8,16">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="models:BookAnnotationImageSummary">
+                                <Border Margin="0,0,0,10" CornerRadius="6" ClipToBounds="True"
+                                        BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1">
+                                    <Grid RowDefinitions="Auto,Auto">
+                                        <Image Grid.Row="0" Source="{Binding ImagePath, Converter={x:Static views:FilePathImageConverter.Instance}}"
+                                               Stretch="UniformToFill" MaxHeight="140" />
+                                        <Grid Grid.Row="1" ColumnDefinitions="*,Auto" Margin="8,6">
+                                            <TextBlock Grid.Column="0" Text="{Binding CreatedTime, StringFormat={}{0:d}}" FontSize="11"
+                                                       Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
+                                            <Button Grid.Column="1" Background="Transparent" BorderThickness="0"
+                                                    Foreground="{DynamicResource PbTextMutedBrush}" Cursor="Hand"
+                                                    Command="{Binding $parent[UserControl].((vm:PdfPageReaderScreenViewModel)DataContext).DeleteCaptureCommand}"
+                                                    CommandParameter="{Binding}" ToolTip.Tip="Remove capture" AutomationProperties.Name="Remove capture">
+                                                <fi:SymbolIcon Symbol="Dismiss" FontSize="11" />
+                                            </Button>
+                                        </Grid>
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+            </views:ReaderListDrawer.DrawerContent>
+        </views:ReaderListDrawer>
+
+        <!-- Font & Theme sheet - PDF's first-ever theme setting (Step 7). HasTypographyControls="False":
+             just the Theme mini-card (Light/Dark/Sepia), no font/spacing sliders since there's no
+             reflowable text to restyle, and no auto-hide toggle since this chrome never hides. -->
+        <views:ReaderSettingsSheet IsOpen="{Binding IsFontThemeOpen}" HasTypographyControls="False"
+                                    SheetBackground="{Binding Theme, Converter={x:Static views:ReaderChromeBackgroundConverter.Instance}}"
+                                    SheetForeground="{Binding Theme, Converter={x:Static views:ReaderChromeForegroundConverter.Instance}}"
+                                    SetThemeCommand="{Binding SetThemeCommand}"
+                                    ThemeOptions="{x:Static views:ReaderSettingsSheet.PdfThemes}"
+                                    ScrimPressed="OnFontThemeScrimPointerPressed" />
+
     </Grid>
 </UserControl>

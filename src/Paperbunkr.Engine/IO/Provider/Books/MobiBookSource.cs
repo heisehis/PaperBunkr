@@ -23,6 +23,14 @@ namespace cYo.Projects.ComicRack.Engine.IO.Provider.Books
 	/// <c>calibre:series</c> meta convention, there's no equally solid, independently-verified EXTH
 	/// tag for series in the general MOBI ecosystem to build on. Documented gap, not a guessed tag
 	/// number presented as verified.
+	///
+	/// <see cref="BookChapter.Html"/> (docs/superpowers/specs/2026-09-02-books-reflow-reader-webview-
+	/// redesign-design.md) is the raw decompressed text stream per chapter chunk, passed through as-is.
+	/// Real-world classic MOBI6 in-body images use <c>&lt;img recindex="00001"&gt;</c> (a PDB record
+	/// index, not a <c>src</c> URL) - this source does not yet resolve those against the PDB's image
+	/// records the way <see cref="MobiHeaderReader.CoverRecordIndex"/> resolves the single cover image,
+	/// so in-body MOBI images won't render in the new WebView reader yet. Documented, known gap - not
+	/// silently claimed as working without a real recindex-bearing fixture to verify against.
 	/// </summary>
 	public sealed class MobiBookSource : IBookTextSource
 	{
@@ -107,7 +115,7 @@ namespace cYo.Projects.ComicRack.Engine.IO.Provider.Books
 
 				index++;
 				string title = ExtractHeadingText(chunk) ?? $"Chapter {index}";
-				chapters.Add(new BookChapter { Title = title, Paragraphs = paragraphs });
+				chapters.Add(new BookChapter { Title = title, Paragraphs = paragraphs, Html = chunk });
 			}
 
 			// Neither marker was present anywhere (a short story or a file with no heading tags at
@@ -118,7 +126,7 @@ namespace cYo.Projects.ComicRack.Engine.IO.Provider.Books
 				var paragraphs = HtmlProseExtractor.ExtractParagraphs(html);
 				if (paragraphs.Count > 0)
 				{
-					chapters.Add(new BookChapter { Title = "Chapter 1", Paragraphs = paragraphs });
+					chapters.Add(new BookChapter { Title = "Chapter 1", Paragraphs = paragraphs, Html = html });
 				}
 			}
 

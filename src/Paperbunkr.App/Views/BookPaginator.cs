@@ -5,15 +5,17 @@ using cYo.Projects.ComicRack.Engine.IO.Provider.Books;
 namespace Paperbunkr.App.Views;
 
 /// <summary>
-/// Pure pagination geometry for the Novels reader (docs/superpowers/specs/
-/// 2026-08-09-novels-epub-pdf-support-design.md §5), same "pure math, real measurement injected"
-/// shape as <see cref="ZoomPanMath"/> - the actual text-height measurement is Avalonia's
-/// <c>TextLayout</c> (real UI dependency), injected here as a delegate so the paragraph-fitting
-/// algorithm itself stays testable with a fake measurer.
-///
-/// Pages only ever break at paragraph boundaries - not word/character granularity - matching the
-/// design spec's own accepted simplification (§4) that word-wrap within a paragraph is Avalonia's
-/// own TextBlock behavior, not something this reader repaginates around.
+/// Character-offset math for the Novels reader's <see cref="BookParagraph"/> collections
+/// (docs/superpowers/specs/2026-08-09-novels-epub-pdf-support-design.md §5). Originally paired with
+/// a paragraph-fitting page-layout algorithm too (<c>FillPage</c>), removed in the books-reflow-
+/// reader-webview-redesign's Step 10 cleanup (docs/superpowers/specs/2026-09-02-books-reflow-reader-
+/// webview-redesign-design.md) once the reading pane itself moved to a real HTML-rendering WebView
+/// and stopped doing its own text layout entirely. What's left here is still load-bearing, not
+/// vestigial: <see cref="BookReaderScreenViewModel.ToggleBookmark"/> uses
+/// <see cref="FindParagraphIndex"/> to build a bookmark's excerpt text, and
+/// <see cref="BookReaderScreenViewModel.RunSearch"/> uses <see cref="ComputeParagraphOffsets"/> to
+/// report a search result's character offset - both real, currently-shipping features, independent
+/// of how the reading pane itself renders.
 /// </summary>
 public static class BookPaginator
 {
@@ -51,41 +53,5 @@ public static class BookPaginator
 
         int insertionPoint = ~index;
         return Math.Clamp(insertionPoint - 1, 0, paragraphs.Count - 1);
-    }
-
-    /// <summary>
-    /// Greedily fills a page starting at <paramref name="startParagraphIndex"/>: accumulates
-    /// paragraphs until the next one would overflow <paramref name="maxHeight"/>. Always includes
-    /// at least one paragraph, even one that alone overflows <paramref name="maxHeight"/> - can't
-    /// split below paragraph granularity, so an oversized paragraph just renders taller than the
-    /// viewport rather than vanishing.
-    /// </summary>
-    public static (int Start, int EndExclusive) FillPage(
-        IReadOnlyList<BookParagraph> paragraphs,
-        int startParagraphIndex,
-        double maxHeight,
-        double paragraphSpacing,
-        Func<BookParagraph, double> measureHeight)
-    {
-        if (paragraphs.Count == 0 || startParagraphIndex >= paragraphs.Count)
-        {
-            return (startParagraphIndex, startParagraphIndex);
-        }
-
-        double used = 0;
-        int end = startParagraphIndex;
-        for (int i = startParagraphIndex; i < paragraphs.Count; i++)
-        {
-            double height = measureHeight(paragraphs[i]) + (i > startParagraphIndex ? paragraphSpacing : 0);
-            if (used + height > maxHeight && i > startParagraphIndex)
-            {
-                break;
-            }
-
-            used += height;
-            end = i + 1;
-        }
-
-        return (startParagraphIndex, end);
     }
 }

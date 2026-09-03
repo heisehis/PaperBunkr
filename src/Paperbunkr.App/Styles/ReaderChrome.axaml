@@ -1,0 +1,118 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!--
+        Shared chrome for the Books readers (docs/superpowers/specs/2026-09-03-books-reader-hud-
+        redesign-design.md) - promoted out of BookReaderScreen.axaml's own <UserControl.Styles> (where
+        these were originally EPUB-only) so PdfPageReaderScreen.axaml can use the identical button/
+        overlay visual language instead of its own separate hardcoded styling. App-wide StyleInclude
+        (App.axaml), same pattern as ScreenChrome.axaml, rather than a per-screen merge, since both
+        readers - and the new ReaderChrome/ReaderListDrawer/ReaderSettingsSheet controls that consume
+        these classes - need them.
+    -->
+
+    <Style Selector="Button.chromeIcon">
+        <Setter Property="Width" Value="36" />
+        <Setter Property="Height" Value="36" />
+        <Setter Property="CornerRadius" Value="18" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="FontSize" Value="15" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="HorizontalContentAlignment" Value="Center" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Button.chromeIcon:pointerover /template/ ContentPresenter">
+        <Setter Property="Background" Value="#22FFFFFF" />
+    </Style>
+    <Style Selector="Button.chromeIcon.active">
+        <Setter Property="Foreground" Value="{DynamicResource PbAccentBrush}" />
+    </Style>
+
+    <Style Selector="Button.tocRow">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Padding" Value="14,10" />
+        <Setter Property="HorizontalAlignment" Value="Stretch" />
+        <Setter Property="HorizontalContentAlignment" Value="Left" />
+        <Setter Property="FontSize" Value="13.5" />
+        <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
+        <Setter Property="Cursor" Value="Hand" />
+    </Style>
+    <Style Selector="Button.tocRow.active">
+        <Setter Property="Background" Value="{DynamicResource PbAccentSoftBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource PbAccentTextBrush}" />
+        <Setter Property="FontWeight" Value="Bold" />
+    </Style>
+
+    <!-- Collapsible TOC group header (docs/superpowers/specs/2026-09-03-books-reader-hud-redesign-
+         design.md, TOC grouping) - deliberately plainer than tocRow (no active/selected state of its
+         own, it's a section toggle, not a navigable destination). -->
+    <Style Selector="Button.tocGroupHeader">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Padding" Value="14,8" />
+        <Setter Property="HorizontalAlignment" Value="Stretch" />
+        <Setter Property="HorizontalContentAlignment" Value="Left" />
+        <Setter Property="FontSize" Value="11" />
+        <Setter Property="FontWeight" Value="Bold" />
+        <Setter Property="LetterSpacing" Value="0.5" />
+        <Setter Property="Foreground" Value="{DynamicResource PbTextFaintBrush}" />
+        <Setter Property="Cursor" Value="Hand" />
+    </Style>
+    <Style Selector="Button.tocGroupHeader:pointerover /template/ ContentPresenter">
+        <Setter Property="Background" Value="#14FFFFFF" />
+    </Style>
+
+    <Style Selector="Button.resultRow">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Padding" Value="14,10" />
+        <Setter Property="HorizontalAlignment" Value="Stretch" />
+        <Setter Property="HorizontalContentAlignment" Value="Left" />
+        <Setter Property="Cursor" Value="Hand" />
+    </Style>
+    <Style Selector="Button.resultRow:pointerover /template/ ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource PbAccentSoftBrush}" />
+    </Style>
+    <Style Selector="Button.deleteRow">
+        <Setter Property="Width" Value="28" />
+        <Setter Property="Height" Value="28" />
+        <Setter Property="CornerRadius" Value="14" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="FontSize" Value="11" />
+        <Setter Property="Foreground" Value="{DynamicResource PbTextFaintBrush}" />
+        <Setter Property="Cursor" Value="Hand" />
+    </Style>
+    <Style Selector="Button.deleteRow:pointerover /template/ ContentPresenter">
+        <Setter Property="Background" Value="#22FFFFFF" />
+    </Style>
+
+    <Style Selector="Button.sheetOption">
+        <Setter Property="Padding" Value="12,7" />
+        <Setter Property="CornerRadius" Value="6" />
+        <Setter Property="Background" Value="{DynamicResource PbChromeBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
+        <Setter Property="FontSize" Value="12.5" />
+        <Setter Property="Cursor" Value="Hand" />
+    </Style>
+    <Style Selector="Button.sheetOption.active">
+        <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
+        <Setter Property="Background" Value="{DynamicResource PbAccentSoftBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource PbAccentTextBrush}" />
+    </Style>
+
+    <Style Selector="Border.themeSwatch">
+        <Setter Property="Width" Value="40" />
+        <Setter Property="Height" Value="40" />
+        <Setter Property="CornerRadius" Value="8" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
+    </Style>
+    <Style Selector="Border.themeSwatch.active">
+        <Setter Property="BorderThickness" Value="2" />
+        <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
+    </Style>
+</Styles>

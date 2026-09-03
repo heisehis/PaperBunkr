@@ -75,6 +75,18 @@ public class MobiBookSourceTests : IDisposable
     }
 
     [Fact]
+    public void Html_IsPopulated_WithTheChapterHeadingAndBodyMarkup()
+    {
+        MobiFixture.Create(_mobiPath);
+
+        using var source = new MobiBookSource(_mobiPath);
+
+        string html = source.Chapters[0].Html ?? string.Empty;
+        Assert.Contains("<h1>The Beginning</h1>", html);
+        Assert.Contains("It was a dark and stormy night.", html);
+    }
+
+    [Fact]
     public void UncompressedText_ReadsCorrectly_WhenCompressionTypeIsNone()
     {
         MobiFixture.Create(_mobiPath, compressed: false, htmlBody: "<html><body><h1>Only Chapter</h1><p>Plain uncompressed text.</p></body></html>");

@@ -51,4 +51,15 @@ public partial class PdfPageReaderScreen : UserControl
 
         e.Handled = true;
     }
+
+    /// <summary>Tapping the dimmed backdrop behind the Font &amp; Theme sheet closes it - same pattern <see cref="OnCapturesScrimPointerPressed"/> already used, extended for the new PDF theme sheet (docs/superpowers/specs/2026-09-03-books-reader-hud-redesign-design.md, Step 7/8).</summary>
+    private void OnFontThemeScrimPointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (DataContext is PdfPageReaderScreenViewModel vm)
+        {
+            vm.CloseFontThemeCommand.Execute(null);
+        }
+
+        e.Handled = true;
+    }
 }

@@ -5,8 +5,6 @@ using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using Avalonia;
-using Avalonia.Media;
-using Avalonia.Media.TextFormatting;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -22,16 +20,16 @@ namespace Paperbunkr.App.ViewModels;
 
 /// <summary>
 /// The Novels reflowable reader (docs/superpowers/specs/2026-08-09-novels-epub-pdf-support-design.md
-/// §5, Phase 2) - immersive chrome, TOC navigation, font/theme controls. Pagination is computed at
-/// render time via <see cref="BookPaginator"/> against the current viewport size and
-/// <see cref="Settings"/>, not stored - <see cref="_position"/> (a <see cref="BookPosition"/>,
-/// paragraph-boundary character offset) is what survives a resize or font-size change, not a page
-/// number.
-///
-/// Deliberate v1 simplification, called out rather than silently dropped: paragraph bold/italic
-/// spans (<see cref="BookParagraph.Spans"/>, already correctly parsed and tested in Phase 1) are
-/// not yet rendered - <see cref="CurrentPageParagraphs"/> shows plain text only. Wiring real
-/// <c>TextBlock.Inlines</c> per span is a rendering follow-up, not a data gap.
+/// §5, Phase 2; rebuilt on a WebView per docs/superpowers/specs/2026-09-02-books-reflow-reader-
+/// webview-redesign-design.md) - immersive chrome, TOC navigation, font/theme controls. Reading
+/// content itself is a real HTML document (<see cref="CurrentChapterHtml"/>, from the chapter's own
+/// <c>Html</c>) rendered by <c>BookReaderScreen.axaml.cs</c>'s <c>NativeWebView</c> - this ViewModel
+/// no longer paginates or measures text itself; pagination is chapter-granular
+/// (<see cref="_position"/>, a <see cref="BookPosition"/>) with within-chapter page-turns and
+/// progress handled by the WebView's own scroll (see <c>OnNextPageButtonClick</c>/
+/// <c>ApplyScrollResult</c> in the code-behind). <see cref="BookPaginator"/>'s character-offset math
+/// (<c>ComputeParagraphOffsets</c>/<c>FindParagraphIndex</c>) is still used here, but only for
+/// bookmark excerpts and in-book search - not for rendering.
 ///
 /// "Previous page" is a navigation-history stack, not true backward pagination - reverses whatever
 /// this session's own forward navigation did. Simpler and more robust than exact backward-fill
@@ -84,13 +82,12 @@ public partial class BookReaderScreenViewModel : ViewModelBase
     {
         _goBack = goBack;
 
-        // Font size/family/line spacing all feed MeasureParagraphHeight - a change means the
-        // current page's paragraph range may no longer be correct for the new layout. Theme
-        // doesn't affect measurement but recomputing on it too is harmless and simpler than
-        // filtering which property changed. Skipped entirely while LoadBook is seeding Settings from
-        // the AppSettings/Book-override chain (see _isSeedingSettings) - that's not a real page-range
-        // change to react to, and recomputing then can hit a disposed _source (see that field's doc
-        // comment).
+        // Any settings change re-runs RecomputeCurrentPage (cheap - it no longer measures text, just
+        // re-derives chapter title/progress/bookmark state; the WebView's own typography CSS
+        // re-injection is a separate PropertyChanged subscription in BookReaderScreen.axaml.cs).
+        // Skipped entirely while LoadBook is seeding Settings from the AppSettings/Book-override
+        // chain (see _isSeedingSettings) - that's not a real navigation to react to, and recomputing
+        // then can hit a disposed _source (see that field's doc comment).
         Settings.PropertyChanged += (_, _) =>
         {
             if (!_isSeedingSettings)
@@ -161,13 +158,57 @@ public partial class BookReaderScreenViewModel : ViewModelBase
 
     public BookReaderSettings Settings { get; } = new();
 
-    public ObservableCollection<BookParagraphDisplay> CurrentPageParagraphs { get; } = new();
-
     public ObservableCollection<BookChapterSummary> TableOfContents { get; } = new();
+
+    /// <summary>TOC drawer's grouped view of <see cref="TableOfContents"/> (docs/superpowers/specs/2026-09-03-books-reader-hud-redesign-design.md) - rebuilt alongside it by <see cref="RebuildTocGroups"/>, never mutated directly.</summary>
+    public ObservableCollection<BookTocGroup> TocGroups { get; } = new();
+
+    /// <summary>
+    /// Groups <see cref="TableOfContents"/> into consecutive runs sharing the same
+    /// <see cref="BookChapterSummary.PartTitle"/> - a chapter with a null PartTitle still gets its own
+    /// single-chapter group (see <see cref="BookTocGroup"/>'s own doc comment for why), always expanded
+    /// (there's no header to toggle it from, so it must never end up collapsed-and-hidden). Reuses each
+    /// *grouped* part's existing <see cref="BookTocGroup.IsExpanded"/> before rebuilding, keyed by its
+    /// first chapter's <see cref="BookChapterSummary.Index"/> (not the part title string - two
+    /// different parts could share a title, e.g. two "Appendix" sections, which would collide as a
+    /// dictionary key; a chapter index never collides) - a user-collapsed group doesn't silently
+    /// re-expand every time this runs (on every page/chapter change, since <see cref="TableOfContents"/>
+    /// items are replaced wholesale each time to refresh their <c>IsActive</c> flag).
+    /// </summary>
+    private void RebuildTocGroups()
+    {
+        var previousExpandedByFirstChapterIndex = TocGroups
+            .Where(g => g.PartTitle is not null && g.Chapters.Count > 0)
+            .ToDictionary(g => g.Chapters[0].Index, g => g.IsExpanded);
+        TocGroups.Clear();
+
+        BookTocGroup? current = null;
+        foreach (var chapter in TableOfContents)
+        {
+            bool startsNewGroup = chapter.PartTitle is null || current is null || current.PartTitle != chapter.PartTitle;
+            if (startsNewGroup)
+            {
+                current = new BookTocGroup
+                {
+                    PartTitle = chapter.PartTitle,
+                    IsExpanded = chapter.PartTitle is null
+                        || !previousExpandedByFirstChapterIndex.TryGetValue(chapter.Index, out bool wasExpanded)
+                        || wasExpanded,
+                };
+                TocGroups.Add(current);
+            }
+
+            current!.Chapters.Add(chapter);
+        }
+    }
 
     public ObservableCollection<BookBookmarkSummary> Bookmarks { get; } = new();
 
     public ObservableCollection<BookHighlightSummary> Highlights { get; } = new();
+
+    /// <summary>Highlights belonging to whichever chapter is currently displayed - <c>BookReaderScreen.axaml.cs</c> re-renders these into the WebView (docs/superpowers/specs/2026-09-02-books-reflow-reader-webview-redesign-design.md) after every chapter load and whenever <see cref="Highlights"/> changes.</summary>
+    public IReadOnlyList<BookHighlightSummary> GetCurrentChapterHighlights() =>
+        Highlights.Where(h => h.ChapterIndex == _position.ChapterIndex).ToList();
 
     public ObservableCollection<BookSearchResult> SearchResults { get; } = new();
 
@@ -175,7 +216,14 @@ public partial class BookReaderScreenViewModel : ViewModelBase
     private string _bookTitle = string.Empty;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ProgressLabel))]
     private string _chapterTitle = string.Empty;
+
+    /// <summary>Current chapter's real markup (docs/superpowers/specs/2026-09-02-books-reflow-reader-
+    /// webview-redesign-design.md) - <see cref="Views.BookReaderScreen.axaml.cs"/> pushes this into
+    /// the <c>NativeWebView</c> via <c>NavigateToString</c> whenever it changes. Null for PDF.</summary>
+    [ObservableProperty]
+    private string? _currentChapterHtml;
 
     [ObservableProperty]
     private bool _isChromeVisible;
@@ -214,13 +262,12 @@ public partial class BookReaderScreenViewModel : ViewModelBase
     [ObservableProperty]
     private string _highlightPopupNote = string.Empty;
 
-    /// <summary>Anchor rect for the popup's <c>PlacementRect</c>, in <c>RootGrid</c>'s coordinate space - set by <c>BookReaderScreen.axaml.cs</c>'s event handler, which is the one place with the visual-tree access needed to translate a <see cref="Views.ParagraphView"/>-local rect into it.</summary>
+    /// <summary>Anchor rect for the popup's <c>PlacementRect</c>, in <c>RootGrid</c>'s coordinate space - set by <c>BookReaderScreen.axaml.cs</c>'s <c>OnReaderWebMessageReceived</c>, which is the one place with the visual-tree access needed to translate a WebView-local rect (via <c>ReaderWebView.TranslatePoint</c>) into it.</summary>
     [ObservableProperty]
     private Rect _highlightPopupAnchorRect;
 
-    private BookParagraphDisplay? _pendingHighlightParagraph;
-    private int _pendingHighlightLocalStart;
-    private int _pendingHighlightLocalEnd;
+    /// <summary>A just-completed WebView text selection awaiting a color pick (docs/superpowers/specs/2026-09-02-books-reflow-reader-webview-redesign-design.md) - null when the popup is instead editing an existing highlight (see <see cref="_editingHighlightId"/>).</summary>
+    private (string BlockId, int StartOffset, int Length, string Excerpt)? _pendingHighlightSelection;
     private int? _editingHighlightId;
 
     [ObservableProperty]
@@ -230,7 +277,15 @@ public partial class BookReaderScreenViewModel : ViewModelBase
     private bool _isCurrentPositionBookmarked;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ProgressFraction))]
+    [NotifyPropertyChangedFor(nameof(ProgressLabel))]
     private double _progressPercent;
+
+    /// <summary>0-1 view of <see cref="ProgressPercent"/> - <c>ReaderChrome</c>'s <c>ProgressFraction</c> (docs/superpowers/specs/2026-09-03-books-reader-hud-redesign-design.md) takes a fraction, matching the PDF reader's own <c>ProgressFraction</c> shape, while this VM's own math (chapter-start fraction, WebView scroll reporting) stayed percent-based from the WebView redesign - this is just the display-unit conversion between the two.</summary>
+    public double ProgressFraction => ProgressPercent / 100.0;
+
+    /// <summary>Bottom-bar label for <c>ReaderChrome</c> - "{Chapter title} · {percent}%".</summary>
+    public string ProgressLabel => $"{ChapterTitle} · {ProgressPercent:F0}%";
 
     [ObservableProperty]
     private bool _canGoPrevious;
@@ -322,8 +377,16 @@ public partial class BookReaderScreenViewModel : ViewModelBase
         TableOfContents.Clear();
         for (int i = 0; i < _source.Chapters.Count; i++)
         {
-            TableOfContents.Add(new BookChapterSummary { Index = i, Title = _source.Chapters[i].Title, IsActive = i == 0 });
+            TableOfContents.Add(new BookChapterSummary
+            {
+                Index = i,
+                Title = _source.Chapters[i].Title,
+                IsActive = i == 0,
+                PartTitle = _source.Chapters[i].PartTitle,
+            });
         }
+
+        RebuildTocGroups();
 
         Bookmarks.Clear();
         foreach (var bookmark in _book.Bookmarks.OrderByDescending(b => b.CreatedTime))
@@ -545,7 +608,11 @@ public partial class BookReaderScreenViewModel : ViewModelBase
         }
 
         _history.Push(_position);
-        _position = new BookPosition(highlight.ChapterIndex, highlight.StartOffset);
+        // Jumps to the chapter start, not the precise highlight position - BookPosition's
+        // CharacterOffset is still the pre-redesign global-flattened-text scheme (Step 8 replaces it
+        // with the same BlockId-based locator BookHighlight now uses); a real known simplification
+        // until that lands, not a silently-wrong value.
+        _position = new BookPosition(highlight.ChapterIndex, 0);
         IsHighlightsOpen = false;
         RecomputeCurrentPage();
         PersistPosition();
@@ -572,17 +639,17 @@ public partial class BookReaderScreenViewModel : ViewModelBase
     }
 
     /// <summary>
-    /// A drag-selection just completed inside one displayed paragraph's <see cref="Views.ParagraphView"/>
-    /// (design spec §"Highlight selection UX") - opens the color-palette popup for a brand-new
-    /// highlight. <paramref name="anchorRectInRootGrid"/> is already translated to <c>RootGrid</c>'s
-    /// coordinate space by the caller (<c>BookReaderScreen.axaml.cs</c>), the one place with the
-    /// visual-tree access needed to do that translation.
+    /// A WebView text selection just completed (docs/superpowers/specs/2026-09-02-books-reflow-
+    /// reader-webview-redesign-design.md) - opens the color-palette popup for a brand-new highlight.
+    /// <paramref name="anchorRectInRootGrid"/> is already translated to <c>RootGrid</c>'s coordinate
+    /// space by the caller (<c>BookReaderScreen.axaml.cs</c>'s <c>WebMessageReceived</c> handler),
+    /// the one place with the visual-tree access needed to do that translation. Single-block
+    /// selections only - a selection spanning multiple <c>BlockIdInjector</c> blocks is a real,
+    /// documented limitation of the JS selection-capture script, not silently mishandled here.
     /// </summary>
-    public void OnParagraphSelectionCompleted(BookParagraphDisplay paragraph, int localStart, int localEnd, Rect anchorRectInRootGrid)
+    public void OnWebViewSelectionCompleted(string blockId, int startOffset, int length, string excerpt, Rect anchorRectInRootGrid)
     {
-        _pendingHighlightParagraph = paragraph;
-        _pendingHighlightLocalStart = localStart;
-        _pendingHighlightLocalEnd = localEnd;
+        _pendingHighlightSelection = (blockId, startOffset, length, Truncate(excerpt, 140));
         _editingHighlightId = null;
 
         IsEditingExistingHighlight = false;
@@ -591,17 +658,16 @@ public partial class BookReaderScreenViewModel : ViewModelBase
         IsHighlightPopupOpen = true;
     }
 
-    /// <summary>Tapping an existing highlight (no drag) reopens the same popup pre-filled, for edit/delete instead of a new selection.</summary>
-    public void OnParagraphHighlightTapped(ParagraphHighlight highlight, Rect anchorRectInRootGrid)
+    /// <summary>Tapping an existing highlight span in the WebView reopens the same popup pre-filled, for edit/delete instead of a new selection.</summary>
+    public void OnWebViewHighlightTapped(int highlightId, Rect anchorRectInRootGrid)
     {
-        var summary = Highlights.FirstOrDefault(h => h.ChapterIndex == _position.ChapterIndex
-            && h.StartOffset <= highlight.Start && h.EndOffset >= highlight.End);
+        var summary = Highlights.FirstOrDefault(h => h.Id == highlightId);
         if (summary is null)
         {
             return;
         }
 
-        _pendingHighlightParagraph = null;
+        _pendingHighlightSelection = null;
         _editingHighlightId = summary.Id;
 
         IsEditingExistingHighlight = true;
@@ -631,21 +697,18 @@ public partial class BookReaderScreenViewModel : ViewModelBase
                 }
             }
         }
-        else if (_pendingHighlightParagraph is { } paragraph)
+        else if (_pendingHighlightSelection is { } selection)
         {
-            int globalStart = paragraph.GlobalOffset + _pendingHighlightLocalStart;
-            int globalEnd = paragraph.GlobalOffset + _pendingHighlightLocalEnd;
-            string excerpt = Truncate(paragraph.Paragraph.Text[_pendingHighlightLocalStart.._pendingHighlightLocalEnd], 140);
-
             var entity = new BookHighlight
             {
                 BookId = _bookId,
                 ChapterIndex = _position.ChapterIndex,
-                StartOffset = globalStart,
-                EndOffset = globalEnd,
+                BlockId = selection.BlockId,
+                StartOffset = selection.StartOffset,
+                Length = selection.Length,
                 Color = color,
                 Note = string.IsNullOrWhiteSpace(HighlightPopupNote) ? null : HighlightPopupNote,
-                Excerpt = excerpt,
+                Excerpt = selection.Excerpt,
                 CreatedTime = DateTime.UtcNow,
             };
             context.BookHighlights.Add(entity);
@@ -655,9 +718,8 @@ public partial class BookReaderScreenViewModel : ViewModelBase
         }
 
         IsHighlightPopupOpen = false;
-        _pendingHighlightParagraph = null;
+        _pendingHighlightSelection = null;
         _editingHighlightId = null;
-        RecomputeCurrentPage();
     }
 
     [RelayCommand]
@@ -680,7 +742,7 @@ public partial class BookReaderScreenViewModel : ViewModelBase
     private void CancelHighlightPopup()
     {
         IsHighlightPopupOpen = false;
-        _pendingHighlightParagraph = null;
+        _pendingHighlightSelection = null;
         _editingHighlightId = null;
     }
 
@@ -713,6 +775,16 @@ public partial class BookReaderScreenViewModel : ViewModelBase
         PersistPosition();
     }
 
+    /// <summary>
+    /// Advances one whole chapter (docs/superpowers/specs/2026-09-02-books-reflow-reader-webview-
+    /// redesign-design.md, Step 5) - "page" no longer means a paragraph-fitted screenful the way it
+    /// did under the old <c>BookPaginator</c> pipeline, since CSS multi-column layout inside the
+    /// WebView now owns within-chapter pagination entirely (<c>BookReaderScreen.axaml.cs</c>'s
+    /// <c>OnNextPageButtonClick</c> scrolls the WebView directly and only falls back to this command
+    /// once it reports there's no further column to scroll to). Kept as a real command (not folded
+    /// entirely into code-behind) so it stays independently callable - keyboard shortcuts, tests -
+    /// without needing a live WebView.
+    /// </summary>
     [RelayCommand]
     private void NextPage()
     {
@@ -721,16 +793,9 @@ public partial class BookReaderScreenViewModel : ViewModelBase
             return;
         }
 
-        var paragraphs = _source.Chapters[_position.ChapterIndex].Paragraphs;
-        var (_, endExclusive) = CurrentPageRange(paragraphs);
-
         _history.Push(_position);
 
-        if (endExclusive < paragraphs.Count)
-        {
-            _position = new BookPosition(_position.ChapterIndex, BookPaginator.ComputeParagraphOffsets(paragraphs)[endExclusive]);
-        }
-        else if (_position.ChapterIndex + 1 < _source.Chapters.Count)
+        if (_position.ChapterIndex + 1 < _source.Chapters.Count)
         {
             _position = new BookPosition(_position.ChapterIndex + 1, 0);
         }
@@ -747,6 +812,7 @@ public partial class BookReaderScreenViewModel : ViewModelBase
         PersistPosition();
     }
 
+    /// <summary>Retreats one whole chapter - see <see cref="NextPage"/>'s doc comment for why this is chapter-, not column-, granularity at the ViewModel level now.</summary>
     [RelayCommand]
     private void PreviousPage()
     {
@@ -773,10 +839,14 @@ public partial class BookReaderScreenViewModel : ViewModelBase
     private void SetTheme(BookTheme theme) => Settings.Theme = theme;
 
     /// <summary>
-    /// Toggles a bookmark at the paragraph the current page starts on. Matches by
-    /// (ChapterIndex, CharacterOffset) - both are paragraph-boundary values (design spec §5), so
-    /// this is a stable identity across font/theme changes and window resizes, same as resume
-    /// position.
+    /// Toggles a bookmark for the current chapter. Matches (and creates) by <c>ChapterIndex</c> alone
+    /// now - a real, disclosed granularity narrowing from the WebView redesign (docs/superpowers/
+    /// specs/2026-09-02-books-reflow-reader-webview-redesign-design.md): <see cref="BookPosition.CharacterOffset"/>
+    /// no longer tracks a real within-chapter position (Step 5 made page-turn chapter-granular; the
+    /// design's own precise block-anchored locator - the same one <c>BookHighlight</c> now uses - is
+    /// a deferred follow-up for bookmarks/resume-position specifically, not yet wired here). One
+    /// bookmark per chapter is an honest reflection of what's actually trackable right now, not a
+    /// silently-narrower version of the old per-paragraph behavior.
     /// </summary>
     [RelayCommand]
     private void ToggleBookmark()
@@ -786,7 +856,7 @@ public partial class BookReaderScreenViewModel : ViewModelBase
             return;
         }
 
-        var existing = Bookmarks.FirstOrDefault(b => b.ChapterIndex == _position.ChapterIndex && b.CharacterOffset == _position.CharacterOffset);
+        var existing = Bookmarks.FirstOrDefault(b => b.ChapterIndex == _position.ChapterIndex);
         if (existing is not null)
         {
             DeleteBookmark(existing);
@@ -951,8 +1021,9 @@ public partial class BookReaderScreenViewModel : ViewModelBase
         {
             Id = highlight.Id,
             ChapterIndex = highlight.ChapterIndex,
+            BlockId = highlight.BlockId,
             StartOffset = highlight.StartOffset,
-            EndOffset = highlight.EndOffset,
+            Length = highlight.Length,
             Color = highlight.Color,
             Note = highlight.Note,
             ChapterTitle = chapterTitle,
@@ -987,15 +1058,6 @@ public partial class BookReaderScreenViewModel : ViewModelBase
         context.SaveChanges();
     }
 
-    private (int Start, int EndExclusive) CurrentPageRange(IReadOnlyList<BookParagraph> paragraphs)
-    {
-        int startIndex = BookPaginator.FindParagraphIndex(paragraphs, _position.CharacterOffset);
-        double availableHeight = Math.Max(0, _viewportSize.Height - 120); // rough allowance for top/bottom chrome margins
-        double paragraphSpacing = Settings.FontSize * 0.8;
-
-        return BookPaginator.FillPage(paragraphs, startIndex, availableHeight, paragraphSpacing, MeasureParagraphHeight);
-    }
-
     private void RecomputeCurrentPage()
     {
         if (_source is null || _viewportSize.Width <= 0 || _viewportSize.Height <= 0)
@@ -1007,12 +1069,32 @@ public partial class BookReaderScreenViewModel : ViewModelBase
         // (confirmed against a real file: its own <guide> metadata tags that exact spine entry as
         // "cover") - landing there and stopping left the reader permanently blank. Skip forward to
         // the first chapter that actually has paragraphs, same as most e-readers already do for a
-        // blank cover page. If literally nothing in the book has text, stay put - CurrentPageParagraphs
-        // ends up empty, which is the honest state for a book with no readable content anywhere.
-        if (_source.Chapters[_position.ChapterIndex].Paragraphs.Count == 0)
+        // blank cover page. If literally nothing in the book has text, stay put - CurrentChapterHtml
+        // ends up whatever that chapter's (empty) markup is, which is the honest state for a book
+        // with no readable content anywhere.
+        //
+        // Real regression found 2026-09-02, after EpubBookSource started correctly inlining SVG-
+        // wrapped cover images (Dune/Ender's Game/Red Queen from a real user library, all confirmed):
+        // this check only looked at Paragraphs, so a cover page whose only content is that now-working
+        // image still had zero paragraphs and got skipped anyway - on every RecomputeCurrentPage call,
+        // not just the initial load, so even an explicit TOC click on "Chapter 1" bounced straight back
+        // off it. The image pipeline was never broken; the user just could never reach a page that had
+        // one. Now only true dead weight (no text AND no *resolved* image) gets skipped - checking for
+        // "data:image" rather than a bare "<img"/"<image" tag deliberately, since a chapter can carry
+        // an unresolved reference to a file that was never actually embedded (EpubBookSource leaves
+        // that src untouched rather than inventing a broken data URI) - that's still nothing real to
+        // show, same as no image reference at all.
+        bool CurrentChapterHasNothingToShow(int index)
+        {
+            var chapter = _source.Chapters[index];
+            return chapter.Paragraphs.Count == 0
+                && (chapter.Html is null || !chapter.Html.Contains("data:image", StringComparison.OrdinalIgnoreCase));
+        }
+
+        if (CurrentChapterHasNothingToShow(_position.ChapterIndex))
         {
             int firstWithContent = Enumerable.Range(0, _source.Chapters.Count)
-                .FirstOrDefault(i => _source.Chapters[i].Paragraphs.Count > 0, -1);
+                .FirstOrDefault(i => !CurrentChapterHasNothingToShow(i), -1);
             if (firstWithContent >= 0 && firstWithContent != _position.ChapterIndex)
             {
                 _position = new BookPosition(firstWithContent, 0);
@@ -1020,35 +1102,15 @@ public partial class BookReaderScreenViewModel : ViewModelBase
         }
 
         var chapter = _source.Chapters[_position.ChapterIndex];
-        var (start, endExclusive) = CurrentPageRange(chapter.Paragraphs);
-        int[] paragraphOffsets = BookPaginator.ComputeParagraphOffsets(chapter.Paragraphs);
-
-        CurrentPageParagraphs.Clear();
-        for (int i = start; i < endExclusive; i++)
-        {
-            var paragraph = chapter.Paragraphs[i];
-            int globalOffset = paragraphOffsets[i];
-            int globalEnd = globalOffset + paragraph.Text.Length;
-
-            var localHighlights = Highlights
-                .Where(h => h.ChapterIndex == _position.ChapterIndex && h.StartOffset < globalEnd && h.EndOffset > globalOffset)
-                .Select(h => new ParagraphHighlight(
-                    Math.Max(0, h.StartOffset - globalOffset),
-                    Math.Min(paragraph.Text.Length, h.EndOffset - globalOffset),
-                    h.Color))
-                .ToList();
-
-            CurrentPageParagraphs.Add(new BookParagraphDisplay
-            {
-                Paragraph = paragraph,
-                GlobalOffset = globalOffset,
-                Highlights = localHighlights,
-            });
-        }
 
         ChapterTitle = chapter.Title;
         ReadingPositionAnnouncement = chapter.Title;
         CanGoPrevious = _history.Count > 0;
+        // Books reflow reader WebView redesign (docs/superpowers/specs/2026-09-02-books-reflow-
+        // reader-webview-redesign-design.md, Step 4) - drives BookReaderScreen.axaml.cs's
+        // NativeWebView.NavigateToString via a PropertyChanged subscription. Null for PDF (which has
+        // no Html) or a source that hasn't populated it yet.
+        CurrentChapterHtml = chapter.Html;
 
         for (int i = 0; i < TableOfContents.Count; i++)
         {
@@ -1057,34 +1119,21 @@ public partial class BookReaderScreenViewModel : ViewModelBase
                 Index = TableOfContents[i].Index,
                 Title = TableOfContents[i].Title,
                 IsActive = TableOfContents[i].Index == _position.ChapterIndex,
+                PartTitle = TableOfContents[i].PartTitle,
             };
         }
 
-        double chapterFraction = chapter.Paragraphs.Count > 0 ? (double)start / chapter.Paragraphs.Count : 0;
+        RebuildTocGroups();
+
+        // Chapter-start fraction only - within-chapter progress is the WebView's own concern now
+        // (BookReaderScreen.axaml.cs's ApplyScrollResult overwrites this from real scrollTop/
+        // scrollHeight once the page has actually rendered and the user starts scrolling/paging).
         ProgressPercent = _source.Chapters.Count > 0
-            ? (_position.ChapterIndex + chapterFraction) / _source.Chapters.Count * 100
+            ? (double)_position.ChapterIndex / _source.Chapters.Count * 100
             : 0;
 
-        IsCurrentPositionBookmarked = Bookmarks.Any(b => b.ChapterIndex == _position.ChapterIndex && b.CharacterOffset == _position.CharacterOffset);
-    }
-
-    /// <summary>
-    /// Real Avalonia text-height measurement - the one part of pagination that genuinely needs the
-    /// UI platform, injected into <see cref="BookPaginator.FillPage"/> as a delegate so the
-    /// paragraph-fitting algorithm itself stays testable with a fake measurer.
-    /// </summary>
-    private double MeasureParagraphHeight(BookParagraph paragraph)
-    {
-        var typeface = new Typeface(Settings.ResolvedFontFamily);
-        var layout = new TextLayout(
-            paragraph.Text,
-            typeface,
-            Settings.FontSize,
-            Settings.Foreground,
-            textWrapping: TextWrapping.Wrap,
-            maxWidth: Math.Max(1, _viewportSize.Width - 80),
-            lineHeight: Settings.FontSize * Settings.LineHeightMultiplier);
-
-        return layout.Height;
+        // Chapter-only match - see ToggleBookmark's doc comment for why CharacterOffset no longer
+        // meaningfully distinguishes positions within a chapter.
+        IsCurrentPositionBookmarked = Bookmarks.Any(b => b.ChapterIndex == _position.ChapterIndex);
     }
 }

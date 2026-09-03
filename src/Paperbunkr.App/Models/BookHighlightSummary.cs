@@ -10,9 +10,11 @@ public sealed class BookHighlightSummary
 
     public int ChapterIndex { get; init; }
 
+    public string BlockId { get; init; } = string.Empty;
+
     public int StartOffset { get; init; }
 
-    public int EndOffset { get; init; }
+    public int Length { get; init; }
 
     public BookHighlightColor Color { get; init; }
 

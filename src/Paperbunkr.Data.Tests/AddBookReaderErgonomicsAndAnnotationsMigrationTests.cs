@@ -81,7 +81,7 @@ public class AddBookReaderErgonomicsAndAnnotationsMigrationTests : IDisposable
 
             context.BookHighlights.Add(new BookHighlight
             {
-                BookId = book.Id, ChapterIndex = 0, StartOffset = 0, EndOffset = 10,
+                BookId = book.Id, ChapterIndex = 0, BlockId = "pb-p1", StartOffset = 0, Length = 10,
                 Color = BookHighlightColor.Green, Excerpt = "hi", CreatedTime = DateTime.UtcNow,
             });
             context.BookAnnotationImages.Add(new BookAnnotationImage

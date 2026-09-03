@@ -98,4 +98,32 @@ public class EpubBookSourceTests : IDisposable
         var italicSpan = Assert.Single(slowlyParagraph.Spans, s => s.Italic);
         Assert.Equal("slowly", slowlyParagraph.Text.Substring(italicSpan.Start, italicSpan.Length));
     }
+
+    // --- TOC grouping (docs/superpowers/specs/2026-09-03-books-reader-hud-redesign-design.md) -
+    // PartTitle comes from EPUB nav's own real hierarchy (EpubNavigationItem.NestedItems), not
+    // invented parsing - EpubFixture(withParts: true) builds chap1 as a standalone top-level nav
+    // item and chap2/chap3 nested under a "Part One" heading, matching real EPUB3 nav structure. ---
+
+    [Fact]
+    public void Chapters_WithoutNestedNavItems_HaveNullPartTitle()
+    {
+        EpubFixture.Create(_epubPath); // flat 2-chapter nav, no nesting
+
+        using var source = new EpubBookSource(_epubPath);
+
+        Assert.All(source.Chapters, c => Assert.Null(c.PartTitle));
+    }
+
+    [Fact]
+    public void Chapters_NestedUnderAPartHeading_GetThatPartsTitle()
+    {
+        EpubFixture.Create(_epubPath, withParts: true);
+
+        using var source = new EpubBookSource(_epubPath);
+
+        Assert.Equal(3, source.Chapters.Count);
+        Assert.Null(source.Chapters[0].PartTitle); // chap1: top-level, no nesting
+        Assert.Equal("Part One", source.Chapters[1].PartTitle); // chap2: nested under Part One
+        Assert.Equal("Part One", source.Chapters[2].PartTitle); // chap3: nested under Part One
+    }
 }

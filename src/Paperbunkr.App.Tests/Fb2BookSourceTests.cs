@@ -121,6 +121,47 @@ public class Fb2BookSourceTests : IDisposable
     }
 
     [Fact]
+    public void Html_ContainsRealMarkup_WithBoldItalicAndFlattenedNestedSection()
+    {
+        Fb2Fixture.Create(_fb2Path);
+
+        using var source = new Fb2BookSource(_fb2Path);
+
+        string html = source.Chapters[0].Html ?? string.Empty;
+        Assert.Contains("<p>It was a <strong>dark</strong> and stormy night.</p>", html);
+        Assert.Contains("<p>She walked <em>slowly</em> into the fog.</p>", html);
+        // The nested sub-section's title becomes a heading, flattened into the same chapter's HTML
+        // rather than a separate chapter - same rule Paragraphs already follows.
+        Assert.Contains("A Sub Heading", html);
+        Assert.Contains("Nested content that should flatten into the parent chapter.", html);
+    }
+
+    [Fact]
+    public void Html_ResolvesInlineImage_AgainstBinaryBlock_UsingItsRealContentType()
+    {
+        byte[] pngBytes = { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A };
+        string base64 = Convert.ToBase64String(pngBytes);
+        File.WriteAllText(_fb2Path, $"""
+            <?xml version="1.0" encoding="UTF-8"?>
+            <FictionBook xmlns="http://www.gribuser.ru/xml/fictionbook/2.0" xmlns:l="http://www.w3.org/1999/xlink">
+              <body>
+                <section>
+                  <p>Before the illustration.</p>
+                  <image l:href="#illustration.png"/>
+                  <p>After the illustration.</p>
+                </section>
+              </body>
+              <binary id="illustration.png" content-type="image/png">{base64}</binary>
+            </FictionBook>
+            """);
+
+        using var source = new Fb2BookSource(_fb2Path);
+
+        string html = Assert.Single(source.Chapters).Html ?? string.Empty;
+        Assert.Contains($"<img src=\"data:image/png;base64,{base64}\" />", html);
+    }
+
+    [Fact]
     public void Title_FallsBackToFileName_WhenBookTitleMissing()
     {
         File.WriteAllText(_fb2Path, """

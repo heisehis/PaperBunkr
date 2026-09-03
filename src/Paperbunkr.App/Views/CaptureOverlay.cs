@@ -9,11 +9,11 @@ namespace Paperbunkr.App.Views;
 /// <summary>
 /// Transparent click-drag selection-rectangle overlay for the PDF reader's "Capture Region" tool
 /// (docs/superpowers/specs/2026-09-01-books-reader-ergonomics-and-annotations-design.md §"PDF area
-/// capture"). Deliberately simple compared to <see cref="ParagraphView"/> - this is plain rectangle
-/// drawing over a <see cref="Media.Imaging.Bitmap"/>, not text layout, so it needs none of that
-/// control's <c>TextLayout</c>/hit-testing machinery. Stacked directly on top of <c>PageCanvas</c> at
-/// the same size/position in <c>PdfPageReaderScreen.axaml</c>, so <see cref="RegionCaptured"/>'s rect
-/// is already in the same coordinate space <c>PageCanvas.GetCurrentImageBounds()</c> returns.
+/// capture"). Deliberately simple - this is plain rectangle drawing over a
+/// <see cref="Media.Imaging.Bitmap"/>, not text layout, so it needs no text-measurement/hit-testing
+/// machinery of its own. Stacked directly on top of <c>PageCanvas</c> at the same size/position in
+/// <c>PdfPageReaderScreen.axaml</c>, so <see cref="RegionCaptured"/>'s rect is already in the same
+/// coordinate space <c>PageCanvas.GetCurrentImageBounds()</c> returns.
 /// </summary>
 public sealed class CaptureOverlay : Control
 {

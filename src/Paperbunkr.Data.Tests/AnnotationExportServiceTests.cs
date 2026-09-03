@@ -48,7 +48,7 @@ public class AnnotationExportServiceTests : IDisposable
         });
         context.BookHighlights.Add(new BookHighlight
         {
-            BookId = _bookId, ChapterIndex = 0, StartOffset = 0, EndOffset = 5, Color = BookHighlightColor.Green,
+            BookId = _bookId, ChapterIndex = 0, BlockId = "pb-p1", StartOffset = 0, Length = 5, Color = BookHighlightColor.Green,
             Note = "worth remembering", Excerpt = "Hello", CreatedTime = DateTime.UtcNow,
         });
         context.BookAnnotationImages.Add(new BookAnnotationImage

@@ -6,7 +6,7 @@ using Paperbunkr.Data.Entities;
 
 namespace Paperbunkr.App.Views;
 
-/// <summary>Solid (non-translucent) swatch color per <see cref="BookHighlightColor"/>, for the Highlights drawer's list rows and the color-palette popup - a different (opaque) rendering than <see cref="ParagraphView"/>'s own translucent in-text fills, which need to sit under readable text.</summary>
+/// <summary>Solid (non-translucent) swatch color per <see cref="BookHighlightColor"/>, for the Highlights drawer's list rows and the color-palette popup - a different (opaque) rendering than the reading pane's own translucent in-text highlight fills (<c>BookReaderScreen.axaml.cs</c>'s <c>HighlightScript</c>, CSS classes <c>pb-color-*</c>), which need to sit under readable text.</summary>
 public sealed class HighlightColorConverter : IValueConverter
 {
     public static readonly HighlightColorConverter Instance = new();

@@ -1065,6 +1065,10 @@ public class PaperbunkrDbContext : DbContext
         {
             builder.HasKey(h => h.Id);
             builder.HasIndex(h => h.BookId);
+            // BlockId (docs/superpowers/specs/2026-09-02-books-reflow-reader-webview-redesign-
+            // design.md) - a BlockIdInjector-assigned "pb-p<n>" id, comfortably under 64 chars for
+            // any realistic chapter length.
+            builder.Property(h => h.BlockId).IsRequired().HasMaxLength(64);
             builder.Property(h => h.Color).HasConversion<string>().HasMaxLength(32)
                 .HasDefaultValue(BookHighlightColor.Yellow)
                 .HasSentinel(BookHighlightColor.Yellow);

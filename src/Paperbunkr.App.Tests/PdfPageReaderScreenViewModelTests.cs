@@ -183,4 +183,66 @@ public class PdfPageReaderScreenViewModelTests : IDisposable
             }
         }
     }
+
+    // --- PDF theme (docs/superpowers/specs/2026-09-03-books-reader-hud-redesign-design.md) - reuses
+    // Book.ThemeOverride/AppSettings.BookReaderTheme, the exact same columns BookReaderScreenViewModel's
+    // own Settings.Theme resolution already uses (both already format-agnostic, no schema change). ---
+
+    [Fact]
+    public void Theme_NoOverride_FallsBackToAppSettingsDefault()
+    {
+        int bookId = AddBook(pageCount: 1);
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            context.GetOrCreateAppSettings().BookReaderTheme = BookTheme.Sepia;
+            context.SaveChanges();
+        }
+
+        var vm = CreateViewModel(bookId);
+
+        Assert.Equal(BookTheme.Sepia, vm.Theme);
+    }
+
+    [Fact]
+    public void Theme_BookHasOverride_UsesOverrideNotAppSettingsDefault()
+    {
+        int bookId = AddBook(pageCount: 1);
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            context.GetOrCreateAppSettings().BookReaderTheme = BookTheme.Light;
+            context.Books.First(b => b.Id == bookId).ThemeOverride = BookTheme.OledBlack;
+            context.SaveChanges();
+        }
+
+        var vm = CreateViewModel(bookId);
+
+        Assert.Equal(BookTheme.OledBlack, vm.Theme);
+    }
+
+    [Fact]
+    public void CloseFontTheme_PersistsTheChosenThemeAsBookOverride()
+    {
+        int bookId = AddBook(pageCount: 1);
+        var vm = CreateViewModel(bookId);
+
+        vm.SetThemeCommand.Execute(BookTheme.Dark);
+        vm.CloseFontThemeCommand.Execute(null);
+
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        Assert.Equal(BookTheme.Dark, context.Books.First(b => b.Id == bookId).ThemeOverride);
+    }
+
+    [Fact]
+    public void SetTheme_UpdatesCanvasBackground()
+    {
+        int bookId = AddBook(pageCount: 1);
+        var vm = CreateViewModel(bookId);
+
+        vm.SetThemeCommand.Execute(BookTheme.Light);
+
+        var expected = Assert.IsAssignableFrom<Avalonia.Media.ISolidColorBrush>(
+            Paperbunkr.App.Models.BookThemeBrushes.ContentBackground(BookTheme.Light));
+        var actual = Assert.IsAssignableFrom<Avalonia.Media.ISolidColorBrush>(vm.CanvasBackground);
+        Assert.Equal(expected.Color, actual.Color);
+    }
 }

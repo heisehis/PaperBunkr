@@ -47,8 +47,12 @@ public sealed class AppFixture : IDisposable
 
         _app = Application.Launch(psi);
         _automation = new UIA3Automation();
-        Window = _app.GetMainWindow(_automation, TimeSpan.FromSeconds(20))
-            ?? throw new InvalidOperationException("Paperbunkr main window did not appear within 20s.");
+        // 120s, not 20s: on a fresh throwaway database the exe replays the entire EF migration chain
+        // before the window shows, and on slower/contended machines that alone can exceed 20s (the
+        // real app's own startup.log routinely logs 20-28s just for "Building main window" here).
+        // KeyboardShortcutDiagnosticTests already uses the same 120s allowance for the same reason.
+        Window = _app.GetMainWindow(_automation, TimeSpan.FromSeconds(120))
+            ?? throw new InvalidOperationException("Paperbunkr main window did not appear within 120s.");
 
         DismissMigrationOverlayIfPresent();
     }

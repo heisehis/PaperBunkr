@@ -66,7 +66,8 @@
                         <ItemsControl.ItemTemplate>
                             <DataTemplate x:DataType="models:DetailHeroAction">
                                 <Button Classes="detailAction" Classes.primary="{Binding IsPrimary}" Classes.ghost="{Binding !IsPrimary}"
-                                        Content="{Binding Label}" Command="{Binding Command}" IsEnabled="{Binding IsEnabled}" />
+                                        Content="{Binding Label}" Command="{Binding Command}" IsEnabled="{Binding IsEnabled}"
+                                        AutomationProperties.AutomationId="{Binding Label}" />
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>

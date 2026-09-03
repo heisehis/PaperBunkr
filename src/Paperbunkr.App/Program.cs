@@ -50,7 +50,9 @@ sealed class Program
         // (mirror of AppSettings) + the PAPERBUNKR_RENDER override.
         var (graphics, source) = GraphicsBootstrap.Resolve();
         DiagnosticsService.LogMilestone(
-            $"Render backend requested: {graphics.Backend} preferNativeOpenGl={graphics.PreferNativeOpenGl} (source: {source})");
+            $"Render backend requested: {graphics.Backend} preferNativeOpenGl={graphics.PreferNativeOpenGl} (source: {source}); "
+            + $"rendering-mode chain [{string.Join(", ", GraphicsBootstrap.ToRenderingModes(graphics))}]; "
+            + "composition [WinUIComposition, DirectComposition, RedirectionSurface]");
 
         try
         {
@@ -88,6 +90,22 @@ sealed class Program
             .With(new Win32PlatformOptions
             {
                 RenderingMode = GraphicsBootstrap.ToRenderingModes(graphics),
+                // Prefer the GPU-composited, vsync-locked present paths and keep RedirectionSurface -
+                // which can tear, and which is what Avalonia's default [WinUIComposition,
+                // RedirectionSurface] drops straight to when WinUI composition isn't available - only
+                // as the last resort. WinUIComposition needs the WinRT Windows.UI.Composition APIs,
+                // which some Windows editions (Server, and certain LTSC/IoT images - this app has
+                // shipped on "IoT Enterprise LTSC") don't include; DirectComposition is the rawer
+                // DComp path present on Win8+ regardless, so it sits between them. All three
+                // composited modes require RenderingMode to resolve to AngleEgl - on a Wgl/Software
+                // fallback they're ignored and RedirectionSurface is used anyway (docs/superpowers/
+                // specs/2026-08-27-hardware-accelerated-rendering-design.md §4).
+                CompositionMode = new[]
+                {
+                    Win32CompositionMode.WinUIComposition,
+                    Win32CompositionMode.DirectComposition,
+                    Win32CompositionMode.RedirectionSurface,
+                },
             })
             .LogToTrace();
 }

@@ -171,6 +171,33 @@ public sealed class ReaderPageVisualHandler : CompositionCustomVisualHandler
     private AdjustmentVisualData? _cachedFor;
 
     /// <summary>
+    /// Real perf bug, found while chasing continuous-scroll tearing: <see cref="RenderContinuous"/>'s
+    /// original body called <see cref="Bitmap.CreateScaledBitmap"/> for every visible page on every
+    /// single <see cref="OnRender"/> pass - a full-resolution Skia resample plus a fresh bitmap
+    /// allocation per page per compose frame, sustained for the whole duration of a scroll. On a
+    /// high-refresh display that blew the render-thread frame budget and showed up as tearing/judder.
+    /// A scroll changes each page's on-screen <see cref="ContinuousPageEntry.Rect"/> *position* every
+    /// frame but not its *size* (that only moves on zoom / viewport resize), so caching the
+    /// downscaled bitmap keyed by the source <see cref="Bitmap"/> means a pure scroll re-resamples
+    /// nothing - every still-visible page is a cache hit. Keyed by source-bitmap reference rather
+    /// than page index so it needs nothing added to <see cref="ContinuousPageEntry"/>; entries whose
+    /// source is no longer in the visible set are disposed at the end of each render pass. Only
+    /// populated for a genuine downscale - an at-or-above-native draw (the default fit-width zoom)
+    /// skips the intermediate bitmap entirely and lets the compositor scale on the GPU.
+    /// </summary>
+    private readonly Dictionary<Bitmap, (PixelSize Size, Bitmap Scaled)> _continuousScaledCache = new();
+
+    private void DisposeContinuousScaledCache()
+    {
+        foreach (var cached in _continuousScaledCache.Values)
+        {
+            cached.Scaled.Dispose();
+        }
+
+        _continuousScaledCache.Clear();
+    }
+
+    /// <summary>
     /// Runs on the compositor thread (confirmed via reflection against the actual Avalonia 12.1.1
     /// assembly this project targets, not assumed - <see cref="CompositionCustomVisual.SendHandlerMessage"/>
     /// marshals across the UI-thread/compositor-thread boundary, landing here). Stores whichever
@@ -190,6 +217,7 @@ public sealed class ReaderPageVisualHandler : CompositionCustomVisualHandler
                 _transitionData = null;
                 _transitionStart = null;
                 DisposeTransitionImages();
+                DisposeContinuousScaledCache();
                 Invalidate();
                 break;
             case ReaderContinuousVisualData continuous:
@@ -202,6 +230,7 @@ public sealed class ReaderPageVisualHandler : CompositionCustomVisualHandler
                 break;
             case ReaderPageTransitionData transition:
                 DisposeTransitionImages();
+                DisposeContinuousScaledCache();
                 _transitionData = transition;
                 _continuousData = null;
                 // CompositionNow, not a UI-thread clock - this handler and OnAnimationFrameUpdate
@@ -592,7 +621,7 @@ public sealed class ReaderPageVisualHandler : CompositionCustomVisualHandler
     /// doc comment for why the <paramref name="lease"/>/<paramref name="colorFilter"/> branch can't
     /// just wrap the existing <c>context.DrawBitmap</c> path.
     /// </summary>
-    private static void RenderContinuous(ImmediateDrawingContext context, ReaderContinuousVisualData data, ISkiaSharpApiLease? lease, SKColorFilter? colorFilter)
+    private void RenderContinuous(ImmediateDrawingContext context, ReaderContinuousVisualData data, ISkiaSharpApiLease? lease, SKColorFilter? colorFilter)
     {
         var mode = data.HighQuality ? BitmapInterpolationMode.HighQuality : BitmapInterpolationMode.LowQuality;
         foreach (var entry in data.Pages)
@@ -620,9 +649,99 @@ public sealed class ReaderPageVisualHandler : CompositionCustomVisualHandler
                 continue;
             }
 
-            var targetSize = new PixelSize(Math.Max(1, (int)Math.Round(entry.Rect.Width)), Math.Max(1, (int)Math.Round(entry.Rect.Height)));
-            using var scaled = entry.Bitmap.CreateScaledBitmap(targetSize, mode);
-            context.DrawBitmap(scaled, new Rect(0, 0, targetSize.Width, targetSize.Height), entry.Rect);
+            // Was: CreateScaledBitmap(entry.Rect size) + DrawBitmap every compose pass - a full Skia
+            // resample and a fresh bitmap allocation per visible page per frame, sustained through
+            // every scroll, which is what starved the render thread and showed as tearing/judder.
+            // Now: hand the compositor the source bitmap for a 1:1 / upscale draw (the default
+            // fit-width zoom), or a cached downscale that survives across frames (see
+            // _continuousScaledCache).
+            var drawBitmap = ResolveContinuousDrawBitmap(entry.Bitmap, entry.Rect, mode);
+            context.DrawBitmap(drawBitmap, new Rect(drawBitmap.Size), entry.Rect);
+        }
+
+        EvictStaleContinuousScales(data.Pages);
+    }
+
+    /// <summary>
+    /// The bitmap to draw for one continuous-mode page: the source bitmap itself whenever the
+    /// on-screen rect is at or above its native size (a 1:1 blit or a GPU upscale - nothing a CPU
+    /// pre-pass would improve), or a cached CPU downscale when the page is drawn smaller than native
+    /// so a held zoomed-out view keeps the same <see cref="BitmapInterpolationMode.HighQuality"/>
+    /// resample it had before without re-running it every compose frame. See
+    /// <see cref="_continuousScaledCache"/>.
+    /// </summary>
+    private Bitmap ResolveContinuousDrawBitmap(Bitmap source, Rect destRect, BitmapInterpolationMode mode)
+    {
+        var native = source.PixelSize;
+        int targetWidth = Math.Max(1, (int)Math.Round(destRect.Width));
+        int targetHeight = Math.Max(1, (int)Math.Round(destRect.Height));
+
+        // 1px rounding slack so the default fit-width zoom (target == native) always takes the
+        // zero-copy path rather than resampling to a near-identical size.
+        if (targetWidth >= native.Width - 1 || targetHeight >= native.Height - 1)
+        {
+            if (_continuousScaledCache.Count != 0 && _continuousScaledCache.Remove(source, out var obsolete))
+            {
+                obsolete.Scaled.Dispose();
+            }
+
+            return source;
+        }
+
+        var target = new PixelSize(targetWidth, targetHeight);
+        if (_continuousScaledCache.TryGetValue(source, out var cached))
+        {
+            if (cached.Size == target)
+            {
+                return cached.Scaled;
+            }
+
+            cached.Scaled.Dispose();
+        }
+
+        var scaled = source.CreateScaledBitmap(target, mode);
+        _continuousScaledCache[source] = (target, scaled);
+        return scaled;
+    }
+
+    /// <summary>Drops (and disposes) any cached downscale whose source page has left the visible set - the counterpart to <see cref="ResolveContinuousDrawBitmap"/> populating it, so the cache tracks the virtualization window rather than growing without bound.</summary>
+    private void EvictStaleContinuousScales(IReadOnlyList<ContinuousPageEntry> pages)
+    {
+        if (_continuousScaledCache.Count == 0)
+        {
+            return;
+        }
+
+        List<Bitmap>? stale = null;
+        foreach (var key in _continuousScaledCache.Keys)
+        {
+            bool live = false;
+            foreach (var entry in pages)
+            {
+                if (ReferenceEquals(entry.Bitmap, key))
+                {
+                    live = true;
+                    break;
+                }
+            }
+
+            if (!live)
+            {
+                (stale ??= new List<Bitmap>()).Add(key);
+            }
+        }
+
+        if (stale is null)
+        {
+            return;
+        }
+
+        foreach (var key in stale)
+        {
+            if (_continuousScaledCache.Remove(key, out var removed))
+            {
+                removed.Scaled.Dispose();
+            }
         }
     }
 }

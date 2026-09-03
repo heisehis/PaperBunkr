@@ -1,0 +1,153 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:models="using:Paperbunkr.App.Models"
+             xmlns:entities="using:Paperbunkr.Data.Entities"
+             xmlns:views="using:Paperbunkr.App.Views"
+             xmlns:conv="using:Avalonia.Data.Converters"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="500" d:DesignHeight="600"
+             x:Class="Paperbunkr.App.Views.ReaderSettingsSheet"
+             x:Name="Root">
+
+    <!-- Font & Theme sheet, redesigned into grouped mini-cards rather than 8 flat stacked sections
+         (docs/superpowers/specs/2026-09-03-books-reader-hud-redesign-design.md). Right-side drawer -
+         the approved design's original "controls stay a bottom sheet" call didn't hold up once seen
+         on-screen (real user feedback after the first on-screen pass); deliberately opposite side from
+         ReaderListDrawer's left (TOC/Bookmarks/Highlights/Search/Captures) so settings reads as a
+         distinct kind of panel from the list drawers, not just another one of them. -->
+    <UserControl.Styles>
+        <Style Selector="Border.miniCard">
+            <Setter Property="Background" Value="{DynamicResource PbSurface3Brush}" />
+            <Setter Property="CornerRadius" Value="{DynamicResource PbRadius}" />
+            <Setter Property="Padding" Value="16" />
+        </Style>
+        <Style Selector="TextBlock.cardTitle">
+            <Setter Property="FontSize" Value="11.5" />
+            <Setter Property="FontWeight" Value="Bold" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextBrush}" />
+            <Setter Property="Margin" Value="0,0,0,12" />
+        </Style>
+        <Style Selector="TextBlock.fieldLabel">
+            <Setter Property="FontSize" Value="10.5" />
+            <Setter Property="FontWeight" Value="Bold" />
+            <Setter Property="LetterSpacing" Value="1" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextFaintBrush}" />
+        </Style>
+    </UserControl.Styles>
+
+    <Popup IsOpen="{Binding #Root.IsOpen}" PlacementTarget="{Binding #Root}"
+           Placement="AnchorAndGravity" PlacementAnchor="TopLeft" PlacementGravity="BottomRight"
+           ShouldUseOverlayLayer="False" IsLightDismissEnabled="False">
+        <Grid Width="{Binding #Root.Bounds.Width}" Height="{Binding #Root.Bounds.Height}">
+            <Border Background="#B0000000" PointerPressed="OnScrimPointerPressed" />
+            <Border HorizontalAlignment="Right" Width="340" Background="{Binding #Root.SheetBackground}"
+                    BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1,0,0,0"
+                    Padding="16,18">
+                <ScrollViewer>
+                <StackPanel Spacing="14">
+
+                    <Border Classes="miniCard" IsVisible="{Binding #Root.HasTypographyControls}">
+                        <StackPanel Spacing="14">
+                            <TextBlock Classes="cardTitle" Text="TYPOGRAPHY" Foreground="{Binding #Root.SheetForeground}" />
+
+                            <StackPanel Spacing="8">
+                                <TextBlock Classes="fieldLabel" Text="Text size" Foreground="{Binding #Root.SheetForeground}" />
+                                <Grid ColumnDefinitions="Auto,*,Auto">
+                                    <TextBlock Grid.Column="0" Text="A" FontSize="12" Foreground="{Binding #Root.SheetForeground}" VerticalAlignment="Center" Margin="0,0,10,0" />
+                                    <Slider Grid.Column="1" Minimum="{x:Static models:BookReaderSettings.MinFontSize}" Maximum="{x:Static models:BookReaderSettings.MaxFontSize}"
+                                            Value="{Binding #Root.Settings.FontSize}" />
+                                    <TextBlock Grid.Column="2" Text="A" FontSize="20" Foreground="{Binding #Root.SheetForeground}" VerticalAlignment="Center" Margin="10,0,0,0" />
+                                </Grid>
+                            </StackPanel>
+
+                            <StackPanel Spacing="8">
+                                <TextBlock Classes="fieldLabel" Text="Font" Foreground="{Binding #Root.SheetForeground}" />
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <Button Classes="sheetOption" Classes.active="{Binding #Root.Settings.FontFamilyOption, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:BookFontFamilyOption.Serif}}"
+                                            Content="Serif" FontFamily="Georgia,Cambria,serif"
+                                            Command="{Binding #Root.SetFontFamilyCommand}" CommandParameter="{x:Static entities:BookFontFamilyOption.Serif}" />
+                                    <Button Classes="sheetOption" Classes.active="{Binding #Root.Settings.FontFamilyOption, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:BookFontFamilyOption.Sans}}"
+                                            Content="Sans" FontFamily="Segoe UI,Arial,sans-serif"
+                                            Command="{Binding #Root.SetFontFamilyCommand}" CommandParameter="{x:Static entities:BookFontFamilyOption.Sans}" />
+                                    <Button Classes="sheetOption" Classes.active="{Binding #Root.Settings.FontFamilyOption, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:BookFontFamilyOption.Mono}}"
+                                            Content="Mono" FontFamily="Consolas,monospace"
+                                            Command="{Binding #Root.SetFontFamilyCommand}" CommandParameter="{x:Static entities:BookFontFamilyOption.Mono}" />
+                                    <Button Classes="sheetOption" Classes.active="{Binding #Root.Settings.FontFamilyOption, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:BookFontFamilyOption.OpenDyslexic}}"
+                                            Content="OpenDyslexic" FontFamily="OpenDyslexic,Georgia,Cambria,serif"
+                                            Command="{Binding #Root.SetFontFamilyCommand}" CommandParameter="{x:Static entities:BookFontFamilyOption.OpenDyslexic}" />
+                                </StackPanel>
+                            </StackPanel>
+
+                            <StackPanel Spacing="8">
+                                <TextBlock Classes="fieldLabel" Text="Line spacing" Foreground="{Binding #Root.SheetForeground}" />
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <Button Classes="sheetOption" Classes.active="{Binding #Root.Settings.LineSpacing, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:BookLineSpacingOption.Compact}}"
+                                            Content="Compact" Command="{Binding #Root.SetLineSpacingCommand}" CommandParameter="{x:Static entities:BookLineSpacingOption.Compact}" />
+                                    <Button Classes="sheetOption" Classes.active="{Binding #Root.Settings.LineSpacing, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:BookLineSpacingOption.Normal}}"
+                                            Content="Normal" Command="{Binding #Root.SetLineSpacingCommand}" CommandParameter="{x:Static entities:BookLineSpacingOption.Normal}" />
+                                    <Button Classes="sheetOption" Classes.active="{Binding #Root.Settings.LineSpacing, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:BookLineSpacingOption.Relaxed}}"
+                                            Content="Relaxed" Command="{Binding #Root.SetLineSpacingCommand}" CommandParameter="{x:Static entities:BookLineSpacingOption.Relaxed}" />
+                                </StackPanel>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Classes="miniCard" IsVisible="{Binding #Root.HasTypographyControls}">
+                        <StackPanel Spacing="14">
+                            <TextBlock Classes="cardTitle" Text="SPACING &amp; MARGINS" Foreground="{Binding #Root.SheetForeground}" />
+                            <StackPanel Spacing="8">
+                                <TextBlock Classes="fieldLabel" Text="Character spacing" Foreground="{Binding #Root.SheetForeground}" />
+                                <Slider Minimum="0" Maximum="4" Value="{Binding #Root.Settings.CharacterSpacing}" />
+                            </StackPanel>
+                            <StackPanel Spacing="8">
+                                <TextBlock Classes="fieldLabel" Text="Word spacing" Foreground="{Binding #Root.SheetForeground}" />
+                                <Slider Minimum="0" Maximum="20" Value="{Binding #Root.Settings.WordSpacing}" />
+                            </StackPanel>
+                            <StackPanel Spacing="8">
+                                <TextBlock Classes="fieldLabel" Text="Paragraph spacing" Foreground="{Binding #Root.SheetForeground}" />
+                                <Slider Minimum="0" Maximum="30" Value="{Binding #Root.Settings.ParagraphSpacing}" />
+                            </StackPanel>
+                            <StackPanel Spacing="8">
+                                <TextBlock Classes="fieldLabel" Text="Page margin" Foreground="{Binding #Root.SheetForeground}" />
+                                <Slider Minimum="16" Maximum="100" Value="{Binding #Root.Settings.PageMargin}" />
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Classes="miniCard">
+                        <StackPanel Spacing="14">
+                            <TextBlock Classes="cardTitle" Text="THEME" Foreground="{Binding #Root.SheetForeground}" />
+                            <!-- Active-swatch ring omitted here (a real, disclosed simplification): a
+                                 generic ItemsControl over ThemeOptions can't cleanly compare each item
+                                 against #Root.Settings.Theme without a MultiBinding/converter pair this
+                                 pass didn't add - clicking still sets the theme via SetThemeCommand,
+                                 only the "which one is active" ring is missing. -->
+                            <ItemsControl ItemsSource="{Binding #Root.ThemeOptions}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <StackPanel Orientation="Horizontal" Spacing="10" />
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="entities:BookTheme">
+                                        <Button Classes="chromeIcon" Width="44" Height="44" Padding="0"
+                                                Command="{Binding #Root.SetThemeCommand}" CommandParameter="{Binding}"
+                                                AutomationProperties.Name="{Binding}">
+                                            <Border Classes="themeSwatch" Background="{Binding Converter={x:Static views:BookThemeSwatchConverter.Instance}}" />
+                                        </Button>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+
+                            <CheckBox Content="Auto-hide toolbar when idle" IsChecked="{Binding #Root.AutoHideToggle}"
+                                      IsVisible="{Binding #Root.HasAutoHideToggle}" Foreground="{Binding #Root.SheetForeground}" />
+                        </StackPanel>
+                    </Border>
+
+                </StackPanel>
+                </ScrollViewer>
+            </Border>
+        </Grid>
+    </Popup>
+</UserControl>

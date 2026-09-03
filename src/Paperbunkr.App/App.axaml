@@ -161,6 +161,7 @@
         <StyleInclude Source="avares://Paperbunkr.App/Styles/DetailChrome.axaml" />
         <StyleInclude Source="avares://Paperbunkr.App/Styles/ScreenChrome.axaml" />
         <StyleInclude Source="avares://Paperbunkr.App/Styles/Menu.axaml" />
+        <StyleInclude Source="avares://Paperbunkr.App/Styles/ReaderChrome.axaml" />
 
         <!-- Preferences > Appearance > Font override (docs/superpowers/specs/
              2026-08-07-preferences-skin-system-design.md §3) - a genuine global override via

@@ -73,6 +73,15 @@ public sealed class PageDecodeService : IPageImageDecoder
     /// </summary>
     internal Action<int>? OnBeforeBackgroundDecode { get; set; }
 
+    /// <summary>
+    /// Raised (on the background consumer loop) each time a queued page finishes decoding and lands
+    /// in the display cache. Lets the continuous-scroll renderer, which peeks the cache non-blocking
+    /// via <see cref="TryGetCachedPage"/> rather than stalling the UI thread on a cold-page decode,
+    /// know a page it drew as a gap is now available and it should re-push. Subscribers must marshal
+    /// to the UI thread themselves.
+    /// </summary>
+    public event Action<int>? BackgroundDecodeCompleted;
+
     private PageDecodeService(ImageProvider provider)
     {
         _provider = provider;
@@ -96,6 +105,21 @@ public sealed class PageDecodeService : IPageImageDecoder
 
     /// <summary>Target width for future display-tier decodes. Doesn't retroactively rescale already-cached pages - a resize mid-session just means the next decode (post-eviction) uses the new width.</summary>
     public void SetViewportWidth(int width) => _viewportWidth = Math.Max(1, width);
+
+    /// <summary>
+    /// Non-blocking display-tier cache lookup: returns the page if it's already decoded, or
+    /// <see langword="null"/> without decoding anything. For the continuous-scroll render path,
+    /// which would rather show a one-frame gap for a page the background loop hasn't reached yet
+    /// than block the UI thread inside a compose pass on a full decode (the "choppy at page
+    /// boundaries" hitch). Pair with <see cref="BackgroundDecodeCompleted"/> to know when to re-query.
+    /// </summary>
+    public AvaloniaBitmap? TryGetCachedPage(int pageIndex)
+    {
+        lock (_sync)
+        {
+            return _displayCache.TryGetValue(pageIndex, out var cached) ? cached : null;
+        }
+    }
 
     public AvaloniaBitmap GetPage(int pageIndex)
     {
@@ -297,6 +321,10 @@ public sealed class PageDecodeService : IPageImageDecoder
 
             _displayCache[pageIndex] = decoded;
         }
+
+        // Outside the lock - a subscriber (PageCanvas) re-pushes continuous-mode render data so this
+        // page, previously drawn as a gap by the non-blocking TryGetCachedPage path, now appears.
+        BackgroundDecodeCompleted?.Invoke(pageIndex);
     }
 
     /// <summary>

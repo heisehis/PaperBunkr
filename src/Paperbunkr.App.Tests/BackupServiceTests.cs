@@ -133,6 +133,26 @@ public class BackupServiceTests : IDisposable
     }
 
     /// <summary>
+    /// Regression: when the database can't be opened - the exact situation the recovery flow runs in
+    /// (App.HandleDatabaseRecovery → GetAvailableBackups → GetBackupLocation) - this must fall back to
+    /// the default backups folder, not throw. A throwing SqliteException here previously crashed the
+    /// process before DatabaseRecoveryWindow could appear (real incident 2026-09-03).
+    /// </summary>
+    [Fact]
+    public void GetBackupLocation_And_GetAvailableBackups_FallBackToDefault_WhenTheDatabaseIsUnreadable()
+    {
+        var service = new BackupService(() => throw new Microsoft.Data.Sqlite.SqliteException("database disk image is malformed", 11));
+
+        string location = service.GetBackupLocation();
+        Assert.Contains("Paperbunkr", location);
+        Assert.Contains("backups", location);
+
+        // GetAvailableBackups goes through GetBackupLocation - must also not throw.
+        var backups = service.GetAvailableBackups();
+        Assert.NotNull(backups);
+    }
+
+    /// <summary>
     /// Proves the checkpoint-before-copy fix (docs/superpowers/specs/2026-08-29-db-corruption-
     /// safeguards-design.md §2) actually closes the WAL gap, not just the happy path where nothing
     /// was pending: puts the live db into WAL mode, writes a row via a second connection that stays

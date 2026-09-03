@@ -91,10 +91,17 @@ public partial class LibraryScreen : UserControl
             .OfType<ItemsControl>()
             .FirstOrDefault(ic => ic.IsEffectivelyVisible && ic.ItemCount > 0);
 
-        if (itemsControl?.ContainerFromIndex(0) is Control container)
+        if (itemsControl?.ContainerFromIndex(0) is not Control container)
         {
-            container.Focus();
+            return;
         }
+
+        // The List/Details ListBox strips its ListBoxItem to a non-focusable ContentPresenter (so
+        // the inner Button.card is the only tab stop) - focus that inner control, not the container.
+        var target = container.Focusable
+            ? container
+            : container.GetVisualDescendants().OfType<InputElement>().FirstOrDefault(c => c.Focusable);
+        target?.Focus();
     }
 
     private void OnAddIssueBackdropPressed(object? sender, PointerPressedEventArgs e)
@@ -226,11 +233,11 @@ public partial class LibraryScreen : UserControl
 
     /// <summary>
     /// A-Z jump indexer (docs/superpowers/specs/2026-08-09-library-toolbar-design.md Phase B).
-    /// Estimates a scroll offset rather than a real ScrollIntoView - none of the 7 display modes
-    /// are backed by a virtualized ListBox, so there's no per-item realized container to scroll to
-    /// precisely. For wrapping (grid-family) modes, estimates items-per-row from the active
-    /// ScrollViewer's current width; for List/Details (single column), the index maps directly to
-    /// a row.
+    /// List/Details are virtualized ListBoxes now, so those get a real
+    /// <see cref="ListBox.ScrollIntoView(int)"/>; the wrapping grid modes
+    /// (Poster/Panorama/Tiles) still estimate a scroll offset from items-per-row against the
+    /// active ScrollViewer's width. <c>ShowAlphabetIndex</c> only lights up when ungrouped, so the
+    /// flat FlatRows/FlatCovers index equals the plain Rows/Covers index (no interleaved headers).
     /// </summary>
     private void OnAlphabetIndexLetterClick(object? sender, RoutedEventArgs e)
     {
@@ -250,19 +257,28 @@ public partial class LibraryScreen : UserControl
             return;
         }
 
-        var (scrollViewer, cardWidth, cardHeight, margin, wraps) = vm.ViewMode switch
+        if (vm.ViewMode is LibraryViewMode.List or LibraryViewMode.Details)
         {
-            LibraryViewMode.PosterGrid => (PosterGridScrollViewer, vm.PosterCardWidth, vm.PosterCardHeight, 20.0, true),
-            // Panorama's per-item width varies with each cover's own aspect ratio - averaged
-            // estimate for items-per-row purposes only, not used for rendering.
-            LibraryViewMode.PanoramaGrid => (PanoramaScrollViewer, 215.0, vm.PanoramaCardHeight, 20.0, true),
-            LibraryViewMode.Tiles => (TilesScrollViewer, vm.TilesCardWidth, vm.TilesThumbHeight + 20, 14.0, true),
-            LibraryViewMode.List => (ListScrollViewer, 0.0, 95.0, 0.0, false),
-            LibraryViewMode.Details => (DetailsScrollViewer, 0.0, 64.0, 0.0, false),
-            _ => (PosterGridScrollViewer, vm.PosterCardWidth, vm.PosterCardHeight, 20.0, true),
+            var box = (vm.ViewMode, vm.IsSeriesGranularity) switch
+            {
+                (LibraryViewMode.List, false) => ListModeIssueBox,
+                (LibraryViewMode.List, true) => ListModeSeriesBox,
+                (LibraryViewMode.Details, false) => DetailsModeIssueBox,
+                (LibraryViewMode.Details, true) => DetailsModeSeriesBox,
+                _ => null,
+            };
+            box?.ScrollIntoView(index);
+            return;
+        }
+
+        var (scrollViewer, cardWidth, cardHeight, margin) = vm.ViewMode switch
+        {
+            LibraryViewMode.PanoramaGrid => (PanoramaScrollViewer, vm.PanoramaTileWidth, vm.PanoramaGridItemHeight, 20.0),
+            LibraryViewMode.Tiles => (TilesScrollViewer, vm.TilesCardWidth, vm.TilesCardHeight, 14.0),
+            _ => (PosterGridScrollViewer, vm.PosterCardWidth, vm.PosterCardHeight, 20.0),
         };
 
-        int itemsPerRow = wraps ? Math.Max(1, (int)(scrollViewer.Bounds.Width / (cardWidth + margin))) : 1;
+        int itemsPerRow = Math.Max(1, (int)(scrollViewer.Bounds.Width / (cardWidth + margin)));
         int targetRow = index / itemsPerRow;
         double offsetY = targetRow * (cardHeight + margin);
 

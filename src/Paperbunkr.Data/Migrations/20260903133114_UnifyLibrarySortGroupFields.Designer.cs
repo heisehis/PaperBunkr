@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Paperbunkr.Data;
 
@@ -10,9 +11,11 @@ using Paperbunkr.Data;
 namespace Paperbunkr.Data.Migrations
 {
     [DbContext(typeof(PaperbunkrDbContext))]
-    partial class PaperbunkrDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260903133114_UnifyLibrarySortGroupFields")]
+    partial class UnifyLibrarySortGroupFields
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.11");
@@ -109,9 +112,6 @@ namespace Paperbunkr.Data.Migrations
                         .HasColumnType("REAL")
                         .HasDefaultValue(0.0);
 
-                    b.Property<int?>("BooksActiveWorkspaceId")
-                        .HasColumnType("INTEGER");
-
                     b.Property<string>("BooksGroupField")
                         .IsRequired()
                         .ValueGeneratedOnAdd()
@@ -204,9 +204,6 @@ namespace Paperbunkr.Data.Migrations
                     b.Property<string>("LibraryActiveContentType")
                         .HasMaxLength(32)
                         .HasColumnType("TEXT");
-
-                    b.Property<int?>("LibraryActiveWorkspaceId")
-                        .HasColumnType("INTEGER");
 
                     b.Property<string>("LibraryDetailsColumns")
                         .HasColumnType("TEXT");
@@ -602,11 +599,6 @@ namespace Paperbunkr.Data.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER");
 
-                    b.Property<string>("BlockId")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("TEXT");
-
                     b.Property<int>("BookId")
                         .HasColumnType("INTEGER");
 
@@ -623,12 +615,12 @@ namespace Paperbunkr.Data.Migrations
                     b.Property<DateTime>("CreatedTime")
                         .HasColumnType("TEXT");
 
+                    b.Property<int>("EndOffset")
+                        .HasColumnType("INTEGER");
+
                     b.Property<string>("Excerpt")
                         .IsRequired()
                         .HasColumnType("TEXT");
-
-                    b.Property<int>("Length")
-                        .HasColumnType("INTEGER");
 
                     b.Property<string>("Note")
                         .HasColumnType("TEXT");
@@ -2154,38 +2146,6 @@ namespace Paperbunkr.Data.Migrations
                         .IsUnique();
 
                     b.ToTable("WatchedFolders");
-                });
-
-            modelBuilder.Entity("Paperbunkr.Data.Entities.Workspace", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
-
-                    b.Property<bool>("IsBuiltIn")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Screen")
-                        .IsRequired()
-                        .HasMaxLength(16)
-                        .HasColumnType("TEXT");
-
-                    b.Property<int>("SortOrder")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("StateJson")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("Screen", "SortOrder");
-
-                    b.ToTable("Workspaces");
                 });
 
             modelBuilder.Entity("Paperbunkr.Data.Entities.Book", b =>

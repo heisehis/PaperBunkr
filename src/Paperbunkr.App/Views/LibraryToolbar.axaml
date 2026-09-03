@@ -398,9 +398,11 @@
                                     Command="{Binding SetViewModeCommand}" CommandParameter="{x:Static entities:LibraryViewMode.Details}" AutomationProperties.AutomationId="LibraryViewModeOption_Details" />
                             <Button Classes="modeOption" Classes.active="{Binding IsTilesView}" Content="Tiles"
                                     Command="{Binding SetViewModeCommand}" CommandParameter="{x:Static entities:LibraryViewMode.Tiles}" AutomationProperties.AutomationId="LibraryViewModeOption_Tiles" />
-                            <!-- "Comic List" (LibraryViewMode.IssueList) removed from the picker 2026-09-03 - it
-                                 duplicated the Details view without adding anything. The enum value + its rendering
-                                 path stay so an older persisted setting / workspace still deserializes and displays. -->
+                            <!-- "Comic List" (LibraryViewMode.IssueList) fully removed 2026-09-03 - it
+                                 duplicated the Details view. The enum value, IssueListScreen and the
+                                 series-only LibrarySortField/GroupField columns are all gone; migrations
+                                 RemoveComicListViewMode / UnifyLibrarySortGroupFields remap any persisted
+                                 value to a survivor, and workspace JSON falls back to defaults. -->
 
                             <Border Height="1" Background="{DynamicResource PbBorderBrush}" Margin="0,10" />
 
@@ -429,78 +431,45 @@
                                       IsVisible="{Binding IsSeriesGranularity}" />
                         </StackPanel>
 
-                        <!-- Sort tab -->
+                        <!-- Sort tab - one shared field pool for both granularities (2026-09-03);
+                             series cards sort via SeriesCardSample.RepresentativeRow through the
+                             same IssueListFieldCatalog. -->
                         <StackPanel Spacing="1" IsVisible="{Binding IsSortTabActive}">
-                            <StackPanel Spacing="1" IsVisible="{Binding IsIssueGranularity}">
-                                <ItemsControl ItemsSource="{Binding IssueList.SortFieldOptions}">
-                                    <ItemsControl.ItemTemplate>
-                                        <DataTemplate x:DataType="models:IssueListSortFieldDescriptor">
-                                            <Button Classes="modeOption"
-                                                    Classes.active="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).IssueList.SortField, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={Binding Field}}"
-                                                    Content="{Binding DisplayName}"
-                                                    Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).IssueList.SetSortFieldCommand}"
-                                                    CommandParameter="{Binding Field}"
-                                                    AutomationProperties.AutomationId="{Binding Field, StringFormat='ComicListSortOption_{0}'}" />
-                                        </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
-                                <Border Height="1" Background="{DynamicResource PbBorderBrush}" Margin="0,8" />
-                                <Button Classes="modeOption" Classes.active="{Binding IssueList.SortDirection, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:SortDirection.Ascending}}"
-                                        Content="↑ Ascending" Command="{Binding IssueList.ToggleSortDirectionCommand}" AutomationProperties.AutomationId="ComicListSortAscending" />
-                                <Button Classes="modeOption" Classes.active="{Binding IssueList.SortDirection, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:SortDirection.Descending}}"
-                                        Content="↓ Descending" Command="{Binding IssueList.ToggleSortDirectionCommand}" AutomationProperties.AutomationId="ComicListSortDescending" />
-                            </StackPanel>
-                            <StackPanel Spacing="1" IsVisible="{Binding IsSeriesGranularity}">
-                                <Button Classes="modeOption" Classes.active="{Binding SortField, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:LibrarySortField.Name}}"
-                                        Content="Name" Command="{Binding SetSortFieldCommand}" CommandParameter="{x:Static entities:LibrarySortField.Name}" AutomationProperties.AutomationId="LibrarySortOption_Name" />
-                                <Button Classes="modeOption" Classes.active="{Binding SortField, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:LibrarySortField.DateAdded}}"
-                                        Content="Date Added" Command="{Binding SetSortFieldCommand}" CommandParameter="{x:Static entities:LibrarySortField.DateAdded}" AutomationProperties.AutomationId="LibrarySortOption_DateAdded" />
-                                <Button Classes="modeOption" Classes.active="{Binding SortField, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:LibrarySortField.LastRead}}"
-                                        Content="Last Read" Command="{Binding SetSortFieldCommand}" CommandParameter="{x:Static entities:LibrarySortField.LastRead}" AutomationProperties.AutomationId="LibrarySortOption_LastRead" />
-                                <Button Classes="modeOption" Classes.active="{Binding SortField, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:LibrarySortField.Size}}"
-                                        Content="Size" Command="{Binding SetSortFieldCommand}" CommandParameter="{x:Static entities:LibrarySortField.Size}" AutomationProperties.AutomationId="LibrarySortOption_Size" />
-                                <Button Classes="modeOption" Classes.active="{Binding SortField, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:LibrarySortField.IssueCount}}"
-                                        Content="Issue Count" Command="{Binding SetSortFieldCommand}" CommandParameter="{x:Static entities:LibrarySortField.IssueCount}" AutomationProperties.AutomationId="LibrarySortOption_IssueCount" />
-                                <Button Classes="modeOption" Classes.active="{Binding SortField, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:LibrarySortField.UnreadCount}}"
-                                        Content="Unread Count" Command="{Binding SetSortFieldCommand}" CommandParameter="{x:Static entities:LibrarySortField.UnreadCount}" AutomationProperties.AutomationId="LibrarySortOption_UnreadCount" />
-                                <Button Classes="modeOption" Classes.active="{Binding SortField, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:LibrarySortField.Publisher}}"
-                                        Content="Publisher" Command="{Binding SetSortFieldCommand}" CommandParameter="{x:Static entities:LibrarySortField.Publisher}" AutomationProperties.AutomationId="LibrarySortOption_Publisher" />
-                                <Border Height="1" Background="{DynamicResource PbBorderBrush}" Margin="0,8" />
-                                <Button Classes="modeOption" Classes.active="{Binding SortDirection, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:SortDirection.Ascending}}"
-                                        Content="↑ Ascending" Command="{Binding ToggleSortDirectionCommand}" AutomationProperties.AutomationId="LibrarySortAscending" />
-                                <Button Classes="modeOption" Classes.active="{Binding SortDirection, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:SortDirection.Descending}}"
-                                        Content="↓ Descending" Command="{Binding ToggleSortDirectionCommand}" AutomationProperties.AutomationId="LibrarySortDescending" />
-                            </StackPanel>
+                            <ItemsControl ItemsSource="{Binding IssueList.SortFieldOptions}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="models:IssueListSortFieldDescriptor">
+                                        <Button Classes="modeOption"
+                                                Classes.active="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).IssueList.SortField, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={Binding Field}}"
+                                                Content="{Binding DisplayName}"
+                                                Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).IssueList.SetSortFieldCommand}"
+                                                CommandParameter="{Binding Field}"
+                                                AutomationProperties.AutomationId="{Binding Field, StringFormat='LibrarySortOption_{0}'}" />
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <Border Height="1" Background="{DynamicResource PbBorderBrush}" Margin="0,8" />
+                            <Button Classes="modeOption" Classes.active="{Binding IssueList.SortDirection, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:SortDirection.Ascending}}"
+                                    Content="↑ Ascending" Command="{Binding IssueList.ToggleSortDirectionCommand}" AutomationProperties.AutomationId="LibrarySortAscending" />
+                            <Button Classes="modeOption" Classes.active="{Binding IssueList.SortDirection, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:SortDirection.Descending}}"
+                                    Content="↓ Descending" Command="{Binding IssueList.ToggleSortDirectionCommand}" AutomationProperties.AutomationId="LibrarySortDescending" />
                         </StackPanel>
 
-                        <!-- Group tab -->
+                        <!-- Group tab - same shared pool. -->
                         <StackPanel Spacing="1" IsVisible="{Binding IsGroupTabActive}">
-                            <StackPanel Spacing="1" IsVisible="{Binding IsIssueGranularity}">
-                                <Button Classes="modeOption" Classes.active="{Binding IssueList.GroupField, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:IssueListGroupField.None}}"
-                                        Content="None" Command="{Binding IssueList.SetGroupFieldCommand}" CommandParameter="{x:Static entities:IssueListGroupField.None}" AutomationProperties.AutomationId="ComicListGroupOption_None" />
-                                <ItemsControl ItemsSource="{Binding IssueList.GroupFieldOptions}">
-                                    <ItemsControl.ItemTemplate>
-                                        <DataTemplate x:DataType="models:IssueListGroupFieldDescriptor">
-                                            <Button Classes="modeOption"
-                                                    Classes.active="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).IssueList.GroupField, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={Binding Field}}"
-                                                    Content="{Binding DisplayName}"
-                                                    Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).IssueList.SetGroupFieldCommand}"
-                                                    CommandParameter="{Binding Field}"
-                                                    AutomationProperties.AutomationId="{Binding Field, StringFormat='ComicListGroupOption_{0}'}" />
-                                        </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
-                            </StackPanel>
-                            <StackPanel Spacing="1" IsVisible="{Binding IsSeriesGranularity}">
-                                <Button Classes="modeOption" Classes.active="{Binding GroupField, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:LibraryGroupField.None}}"
-                                        Content="None" Command="{Binding SetGroupFieldCommand}" CommandParameter="{x:Static entities:LibraryGroupField.None}" AutomationProperties.AutomationId="LibraryGroupOption_None" />
-                                <Button Classes="modeOption" Classes.active="{Binding GroupField, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:LibraryGroupField.ContentType}}"
-                                        Content="Content Type" Command="{Binding SetGroupFieldCommand}" CommandParameter="{x:Static entities:LibraryGroupField.ContentType}" AutomationProperties.AutomationId="LibraryGroupOption_ContentType" />
-                                <Button Classes="modeOption" Classes.active="{Binding GroupField, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:LibraryGroupField.Publisher}}"
-                                        Content="Publisher" Command="{Binding SetGroupFieldCommand}" CommandParameter="{x:Static entities:LibraryGroupField.Publisher}" AutomationProperties.AutomationId="LibraryGroupOption_Publisher" />
-                                <Button Classes="modeOption" Classes.active="{Binding GroupField, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:LibraryGroupField.Alphabetical}}"
-                                        Content="Alphabetical" Command="{Binding SetGroupFieldCommand}" CommandParameter="{x:Static entities:LibraryGroupField.Alphabetical}" AutomationProperties.AutomationId="LibraryGroupOption_Alphabetical" />
-                            </StackPanel>
+                            <Button Classes="modeOption" Classes.active="{Binding IssueList.GroupField, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:IssueListGroupField.None}}"
+                                    Content="None" Command="{Binding IssueList.SetGroupFieldCommand}" CommandParameter="{x:Static entities:IssueListGroupField.None}" AutomationProperties.AutomationId="LibraryGroupOption_None" />
+                            <ItemsControl ItemsSource="{Binding IssueList.GroupFieldOptions}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="models:IssueListGroupFieldDescriptor">
+                                        <Button Classes="modeOption"
+                                                Classes.active="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).IssueList.GroupField, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={Binding Field}}"
+                                                Content="{Binding DisplayName}"
+                                                Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).IssueList.SetGroupFieldCommand}"
+                                                CommandParameter="{Binding Field}"
+                                                AutomationProperties.AutomationId="{Binding Field, StringFormat='LibraryGroupOption_{0}'}" />
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
                         </StackPanel>
                       </Panel>
                     </ScrollViewer>

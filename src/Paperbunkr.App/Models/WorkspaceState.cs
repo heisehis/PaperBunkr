@@ -15,9 +15,10 @@ namespace Paperbunkr.App.Models;
 /// </summary>
 public sealed record LibraryWorkspaceState(
     LibraryContentGranularity Granularity = LibraryContentGranularity.Issue,
-    LibrarySortField SortField = LibrarySortField.DateAdded,
-    SortDirection SortDirection = SortDirection.Descending,
-    LibraryGroupField GroupField = LibraryGroupField.None,
+    // One shared sort/group pool for both granularities since 2026-09-03 - the old series-only
+    // LibrarySortField/GroupField state is gone. JSON key kept as "IssueListSortField" etc. so a
+    // workspace blob that already stored the per-issue selection round-trips; a stale "SortField"
+    // (series) key just falls through as an unknown.
     IssueListSortField IssueListSortField = IssueListSortField.Added,
     SortDirection IssueListSortDirection = SortDirection.Descending,
     IssueListGroupField IssueListGroupField = IssueListGroupField.None,

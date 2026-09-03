@@ -1,3 +1,5 @@
+using System.Linq;
+using Paperbunkr.App.Models;
 using Paperbunkr.App.ViewModels;
 using Paperbunkr.Data.Entities;
 
@@ -113,6 +115,65 @@ public class IssueListScreenViewModelTests
         Assert.Equal(2, vm.Groups.Count);
         Assert.Contains(vm.Groups, g => g.Header == "Marvel");
         Assert.Contains(vm.Groups, g => g.Header == "DC");
+    }
+
+    [Fact]
+    public void FlatRows_Ungrouped_IsExactlyTheRows()
+    {
+        var vm = new IssueListScreenViewModel(goReaderForIssue: _ => { });
+        vm.SetRows(new[] { MakeIssue("Series A", "A1"), MakeIssue("Series B", "B1") });
+
+        Assert.Equal(vm.Rows, vm.FlatRows.Cast<IssueListRow>());
+        Assert.DoesNotContain(vm.FlatRows, x => x is GridSectionHeader);
+    }
+
+    [Fact]
+    public void FlatRows_Grouped_InterleavesHeadersBeforeEachSection()
+    {
+        var vm = new IssueListScreenViewModel(goReaderForIssue: _ => { });
+        vm.SetRows(new[]
+        {
+            MakeIssue("Series A", "One", publisher: "Marvel"),
+            MakeIssue("Series A", "Two", publisher: "Marvel"),
+            MakeIssue("Series A", "Three", publisher: "DC"),
+        });
+
+        vm.GroupField = IssueListGroupField.Publisher;
+
+        // Two sections => two headers, each immediately followed by its own rows; header Count
+        // matches the section size, and every non-header entry is an IssueListRow.
+        var headers = vm.FlatRows.OfType<GridSectionHeader>().ToList();
+        Assert.Equal(vm.Groups.Count, headers.Count);
+        Assert.Equal(vm.Groups.Select(g => g.Items.Count), headers.Select(h => h.Count));
+        Assert.Equal(vm.Groups.Sum(g => g.Items.Count) + headers.Count, vm.FlatRows.Count);
+        Assert.IsType<GridSectionHeader>(vm.FlatRows[0]);
+
+        foreach (var group in vm.Groups)
+        {
+            int headerIdx = vm.FlatRows.ToList().FindIndex(x => x is GridSectionHeader h && h.Header == group.Header);
+            for (int i = 0; i < group.Items.Count; i++)
+            {
+                Assert.Same(group.Items[i], vm.FlatRows[headerIdx + 1 + i]);
+            }
+        }
+    }
+
+    [Fact]
+    public void FlatRows_SelectionSurvivesSortFieldChange()
+    {
+        var a = MakeIssue("Series A", "Apple");
+        a.Id = 1;
+        var z = MakeIssue("Series A", "Zebra");
+        z.Id = 2;
+        var vm = new IssueListScreenViewModel(goReaderForIssue: _ => { }, isSelected: id => id == 2);
+        vm.SetRows(new[] { a, z });
+
+        Assert.True(vm.FlatRows.OfType<IssueListRow>().Single(r => r.Title == "Zebra").IsSelected);
+
+        vm.SortField = IssueListSortField.Title;
+
+        Assert.True(vm.FlatRows.OfType<IssueListRow>().Single(r => r.Title == "Zebra").IsSelected);
+        Assert.False(vm.FlatRows.OfType<IssueListRow>().Single(r => r.Title == "Apple").IsSelected);
     }
 
     [Fact]

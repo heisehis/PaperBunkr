@@ -174,11 +174,58 @@
         <Style Selector="CheckBox.tileSelect.forceVisible">
             <Setter Property="Opacity" Value="1" />
         </Style>
+
+        <!-- Virtualized row list (docs/superpowers/specs — Library issue view-mode virtualization,
+             2026-09-03). List / Details modes are a single ListBox over a flat FlatRows/FlatCovers
+             collection so one VirtualizingStackPanel virtualizes header + row alike. The ListBox is
+             purely a virtualizing host: multi-select stays the app's own checkbox/PointerPressed
+             mechanism (SelectedItem is never bound), and ListBoxItem is retemplated to a bare,
+             non-focusable ContentPresenter - no selection/hover visual of its own, not a tab stop -
+             so the inner Button.card stays the only focus target and its own :pointerover hover
+             (Border.libRow) is the only row highlight, matching the old ItemsControl exactly.
+             (SelectionMode has no "None" value in Avalonia; the bare non-focusable item template
+             makes residual internal selection state inert instead.) -->
+        <Style Selector="ListBox.virtualRows">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="CornerRadius" Value="0" />
+            <Setter Property="Padding" Value="0" />
+        </Style>
+        <Style Selector="ListBox.virtualRows > ListBoxItem">
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Margin" Value="0" />
+            <Setter Property="MinHeight" Value="0" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Focusable" Value="False" />
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <ContentPresenter Name="PART_ContentPresenter"
+                                      Content="{TemplateBinding Content}"
+                                      ContentTemplate="{TemplateBinding ContentTemplate}"
+                                      HorizontalContentAlignment="Stretch"
+                                      VerticalContentAlignment="Stretch"
+                                      Padding="0" />
+                </ControlTemplate>
+            </Setter>
+        </Style>
     </UserControl.Styles>
+
+    <UserControl.DataTemplates>
+        <!-- Section-header row for the flattened grouped List / Details lists - lifted from the
+             per-group DockPanel headers the old nested ItemsControls used (Bebas pbTextHeading +
+             count + rule). Resolved by runtime type; only GridSectionHeader items ever hit it. -->
+        <DataTemplate DataType="models:GridSectionHeader">
+            <DockPanel Margin="0,16,0,10">
+                <TextBlock DockPanel.Dock="Left" Text="{Binding Header}" Classes="pbTextHeading" VerticalAlignment="Center" />
+                <TextBlock DockPanel.Dock="Left" Text="{Binding Count}" Classes="pbTextCaption" Margin="8,0,0,0" VerticalAlignment="Center" />
+                <Border Height="1" VerticalAlignment="Center" Margin="14,0,0,0" Background="{DynamicResource PbBorderBrush}" />
+            </DockPanel>
+        </DataTemplate>
+    </UserControl.DataTemplates>
 
     <UserControl.Resources>
         <DataTemplate x:Key="PanoramaGridItemTemplate" x:DataType="models:IssueListRow">
-            <Button Classes="card" Margin="0,0,20,20" Width="{Binding PanoramaWidth}"
+            <Button Classes="card" Margin="0" Width="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PanoramaTileWidth}"
                     Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).IssueList.OpenIssueCommand}"
                     CommandParameter="{Binding}" KeyDown="OnCardKeyDown" PointerPressed="OnTilePointerPressed">
                 <StackPanel>
@@ -304,7 +351,7 @@
         </DataTemplate>
 
         <DataTemplate x:Key="TilesItemTemplate" x:DataType="models:IssueListRow">
-            <Button Classes="card" Margin="0,0,14,10"
+            <Button Classes="card" Margin="0"
                     Width="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).TilesCardWidth}"
                     Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).IssueList.OpenIssueCommand}"
                     CommandParameter="{Binding}" PointerPressed="OnTilePointerPressed">
@@ -338,7 +385,7 @@
              superpowers/specs/2026-08-18-library-book-centric-redesign-design.md). Phase 4a's
              PosterGridSeriesTemplate lives further down with its issue counterpart. -->
         <DataTemplate x:Key="SeriesPanoramaGridItemTemplate" x:DataType="models:SeriesCardSample">
-            <Button Classes="card" Margin="0,0,20,20" Width="{Binding PanoramaWidth}"
+            <Button Classes="card" Margin="0" Width="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PanoramaTileWidth}"
                     Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SelectCardCommand}"
                     CommandParameter="{Binding}" KeyDown="OnCardKeyDown" PointerPressed="OnSeriesTilePointerPressed">
                 <StackPanel>
@@ -464,7 +511,7 @@
         </DataTemplate>
 
         <DataTemplate x:Key="SeriesTilesItemTemplate" x:DataType="models:SeriesCardSample">
-            <Button Classes="card" Margin="0,0,14,10"
+            <Button Classes="card" Margin="0"
                     Width="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).TilesCardWidth}"
                     Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SelectCardCommand}"
                     CommandParameter="{Binding}" PointerPressed="OnSeriesTilePointerPressed">
@@ -655,6 +702,9 @@
                         </ItemsControl.ItemsPanel>
                     </ItemsControl>
                     <ItemsControl IsVisible="{Binding IssueList.IsGrouped}" ItemsSource="{Binding IssueList.Groups}" Margin="24,22,24,40">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate><VirtualizingStackPanel /></ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
                         <ItemsControl.ItemTemplate>
                             <DataTemplate x:DataType="models:IssueListRowGroup">
                                 <StackPanel Classes="posterGroup" Margin="0,0,0,22">
@@ -681,6 +731,9 @@
                         </ItemsControl.ItemsPanel>
                     </ItemsControl>
                     <ItemsControl IsVisible="{Binding IsGrouped}" ItemsSource="{Binding Groups}" Margin="24,22,24,40">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate><VirtualizingStackPanel /></ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
                         <ItemsControl.ItemTemplate>
                             <DataTemplate x:DataType="models:SeriesCardGroup">
                                 <StackPanel Classes="posterGroup" Margin="0,0,0,22">
@@ -703,23 +756,29 @@
         </ScrollViewer>
 
         <!-- ============ Panorama comfortable grid ============ -->
+        <!-- Uniform tile width (PanoramaTileWidth, ~110 - unchanged from the plain-WrapPanel version
+             it replaced; the per-cover aspect-ratio widths were dropped back in the 2026-08-22
+             cover-memory work) so it can ride the same VirtualizingWrapPanel as the other grids. -->
         <ScrollViewer x:Name="PanoramaScrollViewer" Grid.Row="1" IsVisible="{Binding IsPanoramaGrid}">
             <Grid>
                 <Panel IsVisible="{Binding IsIssueGranularity}">
                     <ItemsControl IsVisible="{Binding !IssueList.IsGrouped}" ItemsSource="{Binding IssueList.Rows}"
                                   ItemTemplate="{StaticResource PanoramaGridItemTemplate}" Margin="24,22,24,40">
                         <ItemsControl.ItemsPanel>
-                            <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
+                            <ItemsPanelTemplate><controls:VirtualizingWrapPanel ItemWidth="{Binding PanoramaTileWidth}" ItemHeight="{Binding PanoramaGridItemHeight}" ItemSpacing="20" LineSpacing="20" /></ItemsPanelTemplate>
                         </ItemsControl.ItemsPanel>
                     </ItemsControl>
                     <ItemsControl IsVisible="{Binding IssueList.IsGrouped}" ItemsSource="{Binding IssueList.Groups}" Margin="24,22,24,40">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate><VirtualizingStackPanel /></ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
                         <ItemsControl.ItemTemplate>
                             <DataTemplate x:DataType="models:IssueListRowGroup">
                                 <StackPanel Margin="0,0,0,18">
                                     <DockPanel Margin="0,0,0,10"><TextBlock DockPanel.Dock="Left" Text="{Binding Header}" Classes="pbTextHeading" VerticalAlignment="Center" /><TextBlock DockPanel.Dock="Left" Text="{Binding Items.Count}" Classes="pbTextCaption" Margin="8,0,0,0" VerticalAlignment="Center" /><Border Height="1" VerticalAlignment="Center" Margin="14,0,0,0" Background="{DynamicResource PbBorderBrush}" /></DockPanel>
                                     <ItemsControl ItemsSource="{Binding Items}" ItemTemplate="{StaticResource PanoramaGridItemTemplate}">
                                         <ItemsControl.ItemsPanel>
-                                            <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
+                                            <ItemsPanelTemplate><controls:VirtualizingWrapPanel ItemWidth="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PanoramaTileWidth}" ItemHeight="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PanoramaGridItemHeight}" ItemSpacing="20" LineSpacing="20" /></ItemsPanelTemplate>
                                         </ItemsControl.ItemsPanel>
                                     </ItemsControl>
                                 </StackPanel>
@@ -731,17 +790,20 @@
                     <ItemsControl IsVisible="{Binding !IsGrouped}" ItemsSource="{Binding Covers}"
                                   ItemTemplate="{StaticResource SeriesPanoramaGridItemTemplate}" Margin="24,22,24,40">
                         <ItemsControl.ItemsPanel>
-                            <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
+                            <ItemsPanelTemplate><controls:VirtualizingWrapPanel ItemWidth="{Binding PanoramaTileWidth}" ItemHeight="{Binding PanoramaGridItemHeight}" ItemSpacing="20" LineSpacing="20" /></ItemsPanelTemplate>
                         </ItemsControl.ItemsPanel>
                     </ItemsControl>
                     <ItemsControl IsVisible="{Binding IsGrouped}" ItemsSource="{Binding Groups}" Margin="24,22,24,40">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate><VirtualizingStackPanel /></ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
                         <ItemsControl.ItemTemplate>
                             <DataTemplate x:DataType="models:SeriesCardGroup">
                                 <StackPanel Margin="0,0,0,18">
                                     <DockPanel Margin="0,0,0,10"><TextBlock DockPanel.Dock="Left" Text="{Binding Header}" Classes="pbTextHeading" VerticalAlignment="Center" /><TextBlock DockPanel.Dock="Left" Text="{Binding Items.Count}" Classes="pbTextCaption" Margin="8,0,0,0" VerticalAlignment="Center" /><Border Height="1" VerticalAlignment="Center" Margin="14,0,0,0" Background="{DynamicResource PbBorderBrush}" /></DockPanel>
                                     <ItemsControl ItemsSource="{Binding Items}" ItemTemplate="{StaticResource SeriesPanoramaGridItemTemplate}">
                                         <ItemsControl.ItemsPanel>
-                                            <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
+                                            <ItemsPanelTemplate><controls:VirtualizingWrapPanel ItemWidth="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PanoramaTileWidth}" ItemHeight="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PanoramaGridItemHeight}" ItemSpacing="20" LineSpacing="20" /></ItemsPanelTemplate>
                                         </ItemsControl.ItemsPanel>
                                     </ItemsControl>
                                 </StackPanel>
@@ -753,38 +815,30 @@
         </ScrollViewer>
 
         <!-- ============ List ============ -->
-        <ScrollViewer x:Name="ListScrollViewer" Grid.Row="1" IsVisible="{Binding IsListView}">
-            <Grid>
-                <Panel IsVisible="{Binding IsIssueGranularity}">
-                    <ItemsControl IsVisible="{Binding !IssueList.IsGrouped}" ItemsSource="{Binding IssueList.Rows}"
-                                  ItemTemplate="{StaticResource ListItemTemplate}" Margin="24,18,24,40" />
-                    <ItemsControl IsVisible="{Binding IssueList.IsGrouped}" ItemsSource="{Binding IssueList.Groups}" Margin="24,18,24,40">
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate x:DataType="models:IssueListRowGroup">
-                                <StackPanel Margin="0,0,0,18">
-                                    <DockPanel Margin="0,0,0,10"><TextBlock DockPanel.Dock="Left" Text="{Binding Header}" Classes="pbTextHeading" VerticalAlignment="Center" /><TextBlock DockPanel.Dock="Left" Text="{Binding Items.Count}" Classes="pbTextCaption" Margin="8,0,0,0" VerticalAlignment="Center" /><Border Height="1" VerticalAlignment="Center" Margin="14,0,0,0" Background="{DynamicResource PbBorderBrush}" /></DockPanel>
-                                    <ItemsControl ItemsSource="{Binding Items}" ItemTemplate="{StaticResource ListItemTemplate}" />
-                                </StackPanel>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                </Panel>
-                <Panel IsVisible="{Binding IsSeriesGranularity}">
-                    <ItemsControl IsVisible="{Binding !IsGrouped}" ItemsSource="{Binding Covers}"
-                                  ItemTemplate="{StaticResource SeriesListItemTemplate}" Margin="24,18,24,40" />
-                    <ItemsControl IsVisible="{Binding IsGrouped}" ItemsSource="{Binding Groups}" Margin="24,18,24,40">
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate x:DataType="models:SeriesCardGroup">
-                                <StackPanel Margin="0,0,0,18">
-                                    <DockPanel Margin="0,0,0,10"><TextBlock DockPanel.Dock="Left" Text="{Binding Header}" Classes="pbTextHeading" VerticalAlignment="Center" /><TextBlock DockPanel.Dock="Left" Text="{Binding Items.Count}" Classes="pbTextCaption" Margin="8,0,0,0" VerticalAlignment="Center" /><Border Height="1" VerticalAlignment="Center" Margin="14,0,0,0" Background="{DynamicResource PbBorderBrush}" /></DockPanel>
-                                    <ItemsControl ItemsSource="{Binding Items}" ItemTemplate="{StaticResource SeriesListItemTemplate}" />
-                                </StackPanel>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                </Panel>
-            </Grid>
-        </ScrollViewer>
+        <!-- One virtualized ListBox per granularity over the flat FlatRows/FlatCovers projection
+             (grouped => GridSectionHeader rows interleaved). See the ListBox.virtualRows style. -->
+        <Panel Grid.Row="1" IsVisible="{Binding IsListView}">
+            <ListBox x:Name="ListModeIssueBox" Classes="virtualRows" IsVisible="{Binding IsIssueGranularity}"
+                     ItemsSource="{Binding IssueList.FlatRows}"
+                     Padding="24,18,24,40" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                <ListBox.ItemsPanel><ItemsPanelTemplate><VirtualizingStackPanel /></ItemsPanelTemplate></ListBox.ItemsPanel>
+                <ListBox.DataTemplates>
+                    <DataTemplate DataType="models:IssueListRow">
+                        <ContentControl Content="{Binding}" ContentTemplate="{StaticResource ListItemTemplate}" />
+                    </DataTemplate>
+                </ListBox.DataTemplates>
+            </ListBox>
+            <ListBox x:Name="ListModeSeriesBox" Classes="virtualRows" IsVisible="{Binding IsSeriesGranularity}"
+                     ItemsSource="{Binding FlatCovers}"
+                     Padding="24,18,24,40" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                <ListBox.ItemsPanel><ItemsPanelTemplate><VirtualizingStackPanel /></ItemsPanelTemplate></ListBox.ItemsPanel>
+                <ListBox.DataTemplates>
+                    <DataTemplate DataType="models:SeriesCardSample">
+                        <ContentControl Content="{Binding}" ContentTemplate="{StaticResource SeriesListItemTemplate}" />
+                    </DataTemplate>
+                </ListBox.DataTemplates>
+            </ListBox>
+        </Panel>
 
         <!-- ============ Details ============ -->
         <DockPanel Grid.Row="1" IsVisible="{Binding IsDetailsView}" Margin="24,18,24,0">
@@ -827,38 +881,28 @@
                 <TextBlock Grid.Column="4" Text="Unread" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource PbTextFaintBrush}" />
                 <TextBlock Grid.Column="5" Text="Publisher" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource PbTextFaintBrush}" />
             </Grid>
-            <ScrollViewer x:Name="DetailsScrollViewer">
-                <Grid>
-                    <Panel IsVisible="{Binding IsIssueGranularity}">
-                        <ItemsControl IsVisible="{Binding !IssueList.IsGrouped}" ItemsSource="{Binding IssueList.Rows}"
-                                      ItemTemplate="{StaticResource DetailsItemTemplate}" Margin="0,0,0,40" />
-                        <ItemsControl IsVisible="{Binding IssueList.IsGrouped}" ItemsSource="{Binding IssueList.Groups}" Margin="0,0,0,40">
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate x:DataType="models:IssueListRowGroup">
-                                    <StackPanel Margin="0,0,0,14">
-                                        <DockPanel Margin="0,0,0,10"><TextBlock DockPanel.Dock="Left" Text="{Binding Header}" Classes="pbTextHeading" VerticalAlignment="Center" /><TextBlock DockPanel.Dock="Left" Text="{Binding Items.Count}" Classes="pbTextCaption" Margin="8,0,0,0" VerticalAlignment="Center" /><Border Height="1" VerticalAlignment="Center" Margin="14,0,0,0" Background="{DynamicResource PbBorderBrush}" /></DockPanel>
-                                        <ItemsControl ItemsSource="{Binding Items}" ItemTemplate="{StaticResource DetailsItemTemplate}" />
-                                    </StackPanel>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-                    </Panel>
-                    <Panel IsVisible="{Binding IsSeriesGranularity}">
-                        <ItemsControl IsVisible="{Binding !IsGrouped}" ItemsSource="{Binding Covers}"
-                                      ItemTemplate="{StaticResource SeriesDetailsItemTemplate}" Margin="0,0,0,40" />
-                        <ItemsControl IsVisible="{Binding IsGrouped}" ItemsSource="{Binding Groups}" Margin="0,0,0,40">
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate x:DataType="models:SeriesCardGroup">
-                                    <StackPanel Margin="0,0,0,14">
-                                        <DockPanel Margin="0,0,0,10"><TextBlock DockPanel.Dock="Left" Text="{Binding Header}" Classes="pbTextHeading" VerticalAlignment="Center" /><TextBlock DockPanel.Dock="Left" Text="{Binding Items.Count}" Classes="pbTextCaption" Margin="8,0,0,0" VerticalAlignment="Center" /><Border Height="1" VerticalAlignment="Center" Margin="14,0,0,0" Background="{DynamicResource PbBorderBrush}" /></DockPanel>
-                                        <ItemsControl ItemsSource="{Binding Items}" ItemTemplate="{StaticResource SeriesDetailsItemTemplate}" />
-                                    </StackPanel>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-                    </Panel>
-                </Grid>
-            </ScrollViewer>
+            <Panel>
+                <ListBox x:Name="DetailsModeIssueBox" Classes="virtualRows" IsVisible="{Binding IsIssueGranularity}"
+                         ItemsSource="{Binding IssueList.FlatRows}"
+                         Padding="0,0,16,40" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                    <ListBox.ItemsPanel><ItemsPanelTemplate><VirtualizingStackPanel /></ItemsPanelTemplate></ListBox.ItemsPanel>
+                    <ListBox.DataTemplates>
+                        <DataTemplate DataType="models:IssueListRow">
+                            <ContentControl Content="{Binding}" ContentTemplate="{StaticResource DetailsItemTemplate}" />
+                        </DataTemplate>
+                    </ListBox.DataTemplates>
+                </ListBox>
+                <ListBox x:Name="DetailsModeSeriesBox" Classes="virtualRows" IsVisible="{Binding IsSeriesGranularity}"
+                         ItemsSource="{Binding FlatCovers}"
+                         Padding="0,0,16,40" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                    <ListBox.ItemsPanel><ItemsPanelTemplate><VirtualizingStackPanel /></ItemsPanelTemplate></ListBox.ItemsPanel>
+                    <ListBox.DataTemplates>
+                        <DataTemplate DataType="models:SeriesCardSample">
+                            <ContentControl Content="{Binding}" ContentTemplate="{StaticResource SeriesDetailsItemTemplate}" />
+                        </DataTemplate>
+                    </ListBox.DataTemplates>
+                </ListBox>
+            </Panel>
         </DockPanel>
 
         <!-- ============ Tiles ============ -->
@@ -868,17 +912,20 @@
                     <ItemsControl IsVisible="{Binding !IssueList.IsGrouped}" ItemsSource="{Binding IssueList.Rows}"
                                   ItemTemplate="{StaticResource TilesItemTemplate}" Margin="24,18,24,40">
                         <ItemsControl.ItemsPanel>
-                            <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
+                            <ItemsPanelTemplate><controls:VirtualizingWrapPanel ItemWidth="{Binding TilesCardWidth}" ItemHeight="{Binding TilesCardHeight}" ItemSpacing="14" LineSpacing="10" /></ItemsPanelTemplate>
                         </ItemsControl.ItemsPanel>
                     </ItemsControl>
                     <ItemsControl IsVisible="{Binding IssueList.IsGrouped}" ItemsSource="{Binding IssueList.Groups}" Margin="24,18,24,40">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate><VirtualizingStackPanel /></ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
                         <ItemsControl.ItemTemplate>
                             <DataTemplate x:DataType="models:IssueListRowGroup">
                                 <StackPanel Margin="0,0,0,18">
                                     <DockPanel Margin="0,0,0,10"><TextBlock DockPanel.Dock="Left" Text="{Binding Header}" Classes="pbTextHeading" VerticalAlignment="Center" /><TextBlock DockPanel.Dock="Left" Text="{Binding Items.Count}" Classes="pbTextCaption" Margin="8,0,0,0" VerticalAlignment="Center" /><Border Height="1" VerticalAlignment="Center" Margin="14,0,0,0" Background="{DynamicResource PbBorderBrush}" /></DockPanel>
                                     <ItemsControl ItemsSource="{Binding Items}" ItemTemplate="{StaticResource TilesItemTemplate}">
                                         <ItemsControl.ItemsPanel>
-                                            <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
+                                            <ItemsPanelTemplate><controls:VirtualizingWrapPanel ItemWidth="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).TilesCardWidth}" ItemHeight="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).TilesCardHeight}" ItemSpacing="14" LineSpacing="10" /></ItemsPanelTemplate>
                                         </ItemsControl.ItemsPanel>
                                     </ItemsControl>
                                 </StackPanel>
@@ -890,17 +937,20 @@
                     <ItemsControl IsVisible="{Binding !IsGrouped}" ItemsSource="{Binding Covers}"
                                   ItemTemplate="{StaticResource SeriesTilesItemTemplate}" Margin="24,18,24,40">
                         <ItemsControl.ItemsPanel>
-                            <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
+                            <ItemsPanelTemplate><controls:VirtualizingWrapPanel ItemWidth="{Binding TilesCardWidth}" ItemHeight="{Binding TilesCardHeight}" ItemSpacing="14" LineSpacing="10" /></ItemsPanelTemplate>
                         </ItemsControl.ItemsPanel>
                     </ItemsControl>
                     <ItemsControl IsVisible="{Binding IsGrouped}" ItemsSource="{Binding Groups}" Margin="24,18,24,40">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate><VirtualizingStackPanel /></ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
                         <ItemsControl.ItemTemplate>
                             <DataTemplate x:DataType="models:SeriesCardGroup">
                                 <StackPanel Margin="0,0,0,18">
                                     <DockPanel Margin="0,0,0,10"><TextBlock DockPanel.Dock="Left" Text="{Binding Header}" Classes="pbTextHeading" VerticalAlignment="Center" /><TextBlock DockPanel.Dock="Left" Text="{Binding Items.Count}" Classes="pbTextCaption" Margin="8,0,0,0" VerticalAlignment="Center" /><Border Height="1" VerticalAlignment="Center" Margin="14,0,0,0" Background="{DynamicResource PbBorderBrush}" /></DockPanel>
                                     <ItemsControl ItemsSource="{Binding Items}" ItemTemplate="{StaticResource SeriesTilesItemTemplate}">
                                         <ItemsControl.ItemsPanel>
-                                            <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
+                                            <ItemsPanelTemplate><controls:VirtualizingWrapPanel ItemWidth="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).TilesCardWidth}" ItemHeight="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).TilesCardHeight}" ItemSpacing="14" LineSpacing="10" /></ItemsPanelTemplate>
                                         </ItemsControl.ItemsPanel>
                                     </ItemsControl>
                                 </StackPanel>
@@ -922,15 +972,6 @@
                 </ItemsControl.ItemsPanel>
             </ItemsControl>
         </ScrollViewer>
-
-        <!-- ============ Comic List ============ -->
-        <ContentControl Grid.Row="1" IsVisible="{Binding IsIssueListView}" Content="{Binding IssueList}">
-            <ContentControl.ContentTemplate>
-                <DataTemplate x:DataType="vm:IssueListScreenViewModel">
-                    <views:IssueListScreen />
-                </DataTemplate>
-            </ContentControl.ContentTemplate>
-        </ContentControl>
 
         <!-- ============ A-Z jump indexer ============ -->
         <!-- Approximate scroll-to-letter (docs/superpowers/specs/2026-08-09-library-toolbar-design.md

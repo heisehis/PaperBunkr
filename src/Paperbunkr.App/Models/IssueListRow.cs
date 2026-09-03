@@ -1,6 +1,9 @@
 using System;
+using System.Linq;
 using Avalonia.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
+using Paperbunkr.Data.Entities;
+using Paperbunkr.Data.Metadata;
 
 namespace Paperbunkr.App.Models;
 
@@ -115,6 +118,94 @@ public sealed partial class IssueListRow : ObservableObject, ISelectableCard
     /// series' chosen "cover issue".</summary>
     public double PanoramaWidth { get; init; }
 
+    // --- Series-level aggregates (2026-09-03 sort/group pool unification) - the issue's own
+    // series' totals, so IssueListSortField.SeriesIssueCount / SeriesUnreadCount resolve on a
+    // per-issue row too, and so a per-series card's RepresentativeRow carries them. ---
+    public int SeriesIssueCount { get; init; }
+    public int SeriesUnreadCount { get; init; }
+
     [ObservableProperty]
     private bool _isSelected;
+
+    /// <summary>
+    /// Pure projection of one <see cref="Issue"/> into a flat, non-EF-tracked row. Extracted from
+    /// <c>IssueListScreenViewModel.ToRow</c> so <see cref="SeriesCardSample.FromSeries"/> can build
+    /// a series' representative row from the same code (2026-09-03 sort/group pool unification).
+    /// <paramref name="series"/> is passed explicitly rather than read off <c><paramref name="issue"/>.Series</c>
+    /// - a cover issue reached through a series' <c>Issues</c> collection may have its back-ref
+    /// navigation unset.
+    /// </summary>
+    public static IssueListRow FromIssue(Issue issue, Series series, Func<int, bool>? isSelected = null) => new()
+    {
+        Id = issue.Id,
+        SeriesId = issue.SeriesId,
+        SeriesName = series.Name,
+        Number = issue.EffectiveNumber(),
+        NumberSortKey = issue.NumberSortKey(),
+        Title = issue.EffectiveTitle() ?? $"#{issue.EffectiveNumber()}",
+        Writer = issue.Writer,
+        Publisher = issue.Publisher,
+        Genre = issue.JoinedGenre(),
+        Format = issue.EffectiveFormat(),
+        Tags = issue.JoinedTags(),
+        AddedTime = issue.AddedTime,
+        OpenedTime = issue.OpenedTime,
+        ReleasedTime = issue.ReleasedTime,
+        Year = issue.EffectiveYear(),
+        PageCount = issue.PageCount,
+        FileSize = issue.FileSize,
+        Rating = issue.Rating,
+        CommunityRating = issue.CommunityRating,
+        ReadPercentage = issue.ReadPercentage(),
+        OpenCount = issue.OpenCount,
+        IsMissing = issue.FileIsMissing,
+        CoverBrush = SeriesCardSample.CoverBrushFor(series.Name),
+        Volume = issue.EffectiveVolume(),
+        VolumeSortKey = issue.VolumeSortKey(),
+        Penciller = issue.Penciller,
+        Inker = issue.Inker,
+        Colorist = issue.Colorist,
+        Letterer = issue.Letterer,
+        CoverArtist = issue.CoverArtist,
+        Editor = issue.Editor,
+        Translator = issue.Translator,
+        Characters = issue.MainCharacterOrTeam,
+        Teams = issue.Teams,
+        Locations = issue.Locations,
+        BookPrice = issue.BookPrice,
+        BookAge = issue.BookAge,
+        BookStore = issue.BookStore,
+        BookOwner = issue.BookOwner,
+        BookCondition = issue.BookCondition,
+        BookCollectionStatus = issue.BookCollectionStatus,
+        BookLocation = issue.BookLocation,
+        ISBN = issue.ISBN,
+        IsRead = issue.HasBeenRead(),
+        Imprint = issue.Imprint,
+        LanguageIso = issue.LanguageISO,
+        AgeRating = issue.AgeRating,
+        StoryArc = issue.StoryArc,
+        SeriesGroup = issue.SeriesGroup,
+        FilePath = issue.FilePath,
+        FileName = issue.FileName(),
+        FileDirectory = issue.FileDirectory(),
+        FileModifiedTime = issue.FileModifiedTime,
+        FileCreationTime = issue.FileCreationTime,
+        FileFormat = issue.FileFormat(),
+        Count = issue.EffectiveCount(),
+        AlternateSeries = issue.AlternateSeries,
+        AlternateNumber = issue.AlternateNumber,
+        Month = issue.Month,
+        Day = issue.Day,
+        ScanInformation = issue.ScanInformation,
+        BookmarkCount = issue.Bookmarks.Count,
+        ContentTypeLabel = series.ContentType.ToString(),
+        SeriesStatusLabel = series.Status.ToString(),
+        ReadingStatusLabel = series.ReadingStatus.ToString(),
+        ReadingDirectionLabel = series.ReadingMode.ToString(),
+        PanoramaWidth = SeriesCardSample.ComputePanoramaWidth(SeriesCardSample.DefaultCoverAspectRatio),
+        SeriesIssueCount = series.Issues.Count,
+        SeriesUnreadCount = series.Issues.Count(i => i.LastPageRead is null or 0),
+        IsSelected = isSelected?.Invoke(issue.Id) ?? false,
+    };
 }

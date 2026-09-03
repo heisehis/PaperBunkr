@@ -90,9 +90,11 @@ public class LibraryPosterGridMigrationTests : IDisposable
     [Fact]
     public void Migration_NonGridMode_IsUnchanged()
     {
-        var (viewMode, showTitles) = MigrateWithSeededViewMode("IssueList");
+        // "List" survives every later migration untouched (unlike "IssueList", which a still-later
+        // migration remaps to "Details" - see RemoveComicListViewModeMigrationTests).
+        var (viewMode, showTitles) = MigrateWithSeededViewMode("List");
 
-        Assert.Equal("IssueList", viewMode);
+        Assert.Equal("List", viewMode);
         Assert.Equal(1, showTitles);
     }
 }

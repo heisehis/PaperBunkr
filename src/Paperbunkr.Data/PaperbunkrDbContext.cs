@@ -870,24 +870,9 @@ public class PaperbunkrDbContext : DbContext
             // above, just for a bool column instead of an enum-as-string one.
             builder.Property(a => a.CheckForUpdatesOnStartup).HasDefaultValue(true);
 
-            // Same HasSentinel gotcha as DefaultPageFitMode/ImageBackgroundMode above - Name (0) is
-            // the CLR default, but the actual desired default is DateAdded, so without the sentinel
-            // EF can't distinguish "explicitly Name" from "unset" on the singleton row's backfill.
-            builder.Property(a => a.LibrarySortField).HasConversion<string>().HasMaxLength(32)
-                .HasDefaultValue(LibrarySortField.DateAdded)
-                .HasSentinel(LibrarySortField.Name);
-            // Same treatment - Ascending (0) is the CLR default, desired default is Descending.
-            builder.Property(a => a.LibrarySortDirection).HasConversion<string>().HasMaxLength(32)
-                .HasDefaultValue(SortDirection.Descending)
-                .HasSentinel(SortDirection.Ascending);
-            // Same enum-as-string HasSentinel treatment as PageTransitionStyle above, even though
-            // None is both the CLR default and the desired default here.
-            builder.Property(a => a.LibraryGroupField).HasConversion<string>().HasMaxLength(32)
-                .HasDefaultValue(LibraryGroupField.None)
-                .HasSentinel(LibraryGroupField.None);
             // PosterGrid (0) is both the CLR default and the desired default here (Phase 4a
             // collapsed Compact/Comfortable/CoverOnly into it) - same coincide-and-still-set-it-for-
-            // consistency case as LibraryGroupField.None / PageTransitionStyle.None above.
+            // consistency case as LibraryIssueListGroupField.None / PageTransitionStyle.None above.
             builder.Property(a => a.LibraryViewMode).HasConversion<string>().HasMaxLength(32)
                 .HasDefaultValue(LibraryViewMode.PosterGrid)
                 .HasSentinel(LibraryViewMode.PosterGrid);
@@ -906,7 +891,7 @@ public class PaperbunkrDbContext : DbContext
             builder.Property(a => a.LibraryGranularity).HasConversion<string>().HasMaxLength(32)
                 .HasDefaultValue(LibraryContentGranularity.Issue)
                 .HasSentinel(LibraryContentGranularity.Issue);
-            // Same enum-as-string HasSentinel treatment as LibraryGroupField above, even though
+            // Same enum-as-string HasSentinel treatment as LibraryIssueListGroupField above, even though
             // All is both the CLR default and the desired default here.
             builder.Property(a => a.LibrarySearchMode).HasConversion<string>().HasMaxLength(32)
                 .HasDefaultValue(SearchMode.All)
@@ -926,7 +911,7 @@ public class PaperbunkrDbContext : DbContext
             builder.Property(a => a.LibraryFilterMissingIssues).HasDefaultValue(false);
             builder.Property(a => a.LibraryFilterTrackedOnly).HasDefaultValue(false);
 
-            // Books screen sort/group - same enum-as-string HasSentinel treatment as LibrarySortField
+            // Books screen sort/group - same enum-as-string HasSentinel treatment as LibraryIssueListSortField
             // above (the singleton AppSettings row needs a parseable value backfilled into the new
             // NOT NULL columns).
             builder.Property(a => a.BooksSortField).HasConversion<string>().HasMaxLength(32)
@@ -939,7 +924,7 @@ public class PaperbunkrDbContext : DbContext
                 .HasDefaultValue(BooksGroupField.None)
                 .HasSentinel(BooksGroupField.None);
 
-            // Same enum-as-string HasSentinel treatment as PageTransitionStyle/LibraryGroupField
+            // Same enum-as-string HasSentinel treatment as PageTransitionStyle/LibraryIssueListGroupField
             // above, even though Automatic is both the CLR default and the desired default here.
             builder.Property(a => a.MetadataResolutionPolicy).HasConversion<string>().HasMaxLength(32)
                 .HasDefaultValue(MetadataResolutionPolicy.Automatic)

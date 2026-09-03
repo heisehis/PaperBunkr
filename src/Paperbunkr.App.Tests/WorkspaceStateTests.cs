@@ -15,9 +15,6 @@ public class WorkspaceStateTests
     {
         var original = new LibraryWorkspaceState(
             Granularity: LibraryContentGranularity.Series,
-            SortField: LibrarySortField.Publisher,
-            SortDirection: SortDirection.Ascending,
-            GroupField: LibraryGroupField.ContentType,
             IssueListSortField: IssueListSortField.Opened,
             IssueListSortDirection: SortDirection.Ascending,
             IssueListGroupField: IssueListGroupField.Series,
@@ -66,7 +63,7 @@ public class WorkspaceStateTests
 
         Assert.Equal(LibraryViewMode.Tiles, state.ViewMode);
         Assert.Equal(LibraryContentGranularity.Issue, state.Granularity);
-        Assert.Equal(LibrarySortField.DateAdded, state.SortField);
+        Assert.Equal(IssueListSortField.Added, state.IssueListSortField);
         Assert.Equal(SearchMode.All, state.SearchMode);
         Assert.Null(state.SearchQuery);
         Assert.False(state.FilterUnreadOnly);

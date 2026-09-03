@@ -138,10 +138,8 @@ public class WorkspaceService
         int order;
 
         // --- Library ---
-        // All PosterGrid: it's the only view mode with a virtualizing panel, so it's the only one
-        // that stays responsive on a multi-thousand-issue library. (A "Recently added" preset was
-        // dropped - PosterGrid already sorts by date-added-descending by default, so it was
-        // identical to "All comics"; a Details-view variant spiked memory on large libraries.)
+        // (Every view mode virtualizes as of 2026-09-03, so these are free to pick any of them;
+        // sort/group is one shared pool now - IssueListSortField/GroupField for both granularities.)
         var library = new (string Name, LibraryWorkspaceState State)[]
         {
             ("All comics", new LibraryWorkspaceState()),
@@ -151,8 +149,8 @@ public class WorkspaceService
                 FilterUnreadOnly: true)),
             ("Manga", new LibraryWorkspaceState(
                 Granularity: LibraryContentGranularity.Series,
-                SortField: LibrarySortField.Name,
-                SortDirection: SortDirection.Ascending,
+                IssueListSortField: IssueListSortField.Series,
+                IssueListSortDirection: SortDirection.Ascending,
                 ActiveContentType: ContentType.Manga)),
         };
 

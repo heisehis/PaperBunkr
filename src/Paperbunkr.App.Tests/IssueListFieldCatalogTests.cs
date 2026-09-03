@@ -13,12 +13,54 @@ public class IssueListFieldCatalogTests
     private static IssueListRow Row(
         string seriesName = "S", string title = "T", string? writer = null, string? publisher = null,
         string? genre = null, int? year = null, bool isMissing = false, float? numberSortKey = null,
-        float? volumeSortKey = null, string? penciller = null, bool isRead = false, float? bookPrice = null) => new()
+        float? volumeSortKey = null, string? penciller = null, bool isRead = false, float? bookPrice = null,
+        string? contentTypeLabel = null, int seriesIssueCount = 0, int seriesUnreadCount = 0) => new()
     {
         SeriesName = seriesName, Title = title, Writer = writer, Publisher = publisher, Genre = genre,
         Year = year, IsMissing = isMissing, NumberSortKey = numberSortKey, CoverBrush = Brush,
         VolumeSortKey = volumeSortKey, Penciller = penciller, IsRead = isRead, BookPrice = bookPrice,
+        ContentTypeLabel = contentTypeLabel, SeriesIssueCount = seriesIssueCount, SeriesUnreadCount = seriesUnreadCount,
     };
+
+    // --- Union members carried over from the retired LibraryFieldCatalog (2026-09-03) ---
+
+    [Fact]
+    public void SeriesIssueCount_And_SeriesUnreadCount_SortNumerically()
+    {
+        var s = IssueListFieldCatalog.SortFields[IssueListSortField.SeriesIssueCount];
+        Assert.True(s.Compare(Row(seriesIssueCount: 2), Row(seriesIssueCount: 10)) < 0);
+        var u = IssueListFieldCatalog.SortFields[IssueListSortField.SeriesUnreadCount];
+        Assert.True(u.Compare(Row(seriesUnreadCount: 0), Row(seriesUnreadCount: 3)) < 0);
+    }
+
+    [Fact]
+    public void ContentTypeGroup_UsesEnumDeclarationOrder_NotAlphabetical()
+    {
+        var d = IssueListFieldCatalog.GroupFields[IssueListGroupField.ContentType];
+        Assert.Equal("Manga", d.GroupKey(Row(contentTypeLabel: "Manga")));
+        Assert.Equal("Unknown", d.GroupKey(Row(contentTypeLabel: null)));
+        // Declaration order: Comic before Manga (alphabetically the reverse).
+        Assert.True(d.GroupOrder(nameof(ContentType.Comic), nameof(ContentType.Manga)) < 0);
+    }
+
+    [Theory]
+    [InlineData("batman", "B")]
+    [InlineData("100 Bullets", "#")]
+    [InlineData("!Ultimate", "#")]
+    [InlineData("", "#")]
+    public void AlphabeticalGroup_BucketsSeriesNameFirstLetter(string name, string expected)
+    {
+        var d = IssueListFieldCatalog.GroupFields[IssueListGroupField.Alphabetical];
+        Assert.Equal(expected, d.GroupKey(Row(seriesName: name)));
+    }
+
+    [Fact]
+    public void SeriesIssueCountGroup_BucketsNumerically()
+    {
+        var d = IssueListFieldCatalog.GroupFields[IssueListGroupField.SeriesIssueCount];
+        Assert.Equal("5", d.GroupKey(Row(seriesIssueCount: 5)));
+        Assert.True(d.GroupOrder("2", "10") < 0);
+    }
 
     [Fact]
     public void EverySortField_HasACatalogEntry()

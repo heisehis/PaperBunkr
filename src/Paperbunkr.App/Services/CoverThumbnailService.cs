@@ -46,9 +46,34 @@ public class CoverThumbnailService
     /// </summary>
     public bool TryGenerateThumbnail(int issueId, string filePath)
     {
+        bool ok = TryGenerateThumbnail(issueId, filePath, out double? aspectRatio);
+        if (ok && aspectRatio is double ratio)
+        {
+            // In-memory only here - a single generation (ResetCover, the plugin API, a first scan
+            // of one file) reports to the store, whose debounced write-back persists it. The bulk
+            // paths (GenerateAllAsync / BackfillAspectRatios) batch straight to the DB instead.
+            CoverAspectRatioStore.ReportRatio(issueId, ratio);
+        }
+
+        return ok;
+    }
+
+    /// <summary>
+    /// Generation core. <paramref name="aspectRatio"/> is the source cover's width/height when a
+    /// thumbnail was produced (or was already present and can be re-measured from its JPEG header),
+    /// else null. Callers decide how to persist it.
+    /// </summary>
+    internal bool TryGenerateThumbnail(int issueId, string filePath, out double? aspectRatio)
+    {
+        aspectRatio = null;
         string destPath = CoverThumbnailPaths.GetCachePath(issueId);
         if (File.Exists(destPath))
         {
+            if (CoverImageDimensions.TryRead(destPath, out int w, out int h))
+            {
+                aspectRatio = w / (double)h;
+            }
+
             return true;
         }
 
@@ -75,6 +100,7 @@ public class CoverThumbnailService
 
             using Bitmap scaled = page.CreateScaledBitmap(target, BitmapInterpolationMode.HighQuality);
             scaled.Save(destPath, new JpegBitmapEncoderOptions { Quality = JpegQuality });
+            aspectRatio = size.Width / (double)size.Height;
             return true;
         }
         catch
@@ -114,6 +140,7 @@ public class CoverThumbnailService
             using Bitmap scaled = source.CreateScaledBitmap(target, BitmapInterpolationMode.HighQuality);
             scaled.Save(destPath, new JpegBitmapEncoderOptions { Quality = JpegQuality });
             CoverImageCache.InvalidateMemoryOnly(issueId);
+            CoverAspectRatioStore.ReportRatio(issueId, size.Width / (double)size.Height);
             return true;
         }
         catch
@@ -159,13 +186,17 @@ public class CoverThumbnailService
                 int done = 0;
                 progress.Report((0, total));
 
+                var learned = new List<(int IssueId, double Ratio)>();
                 foreach (var candidate in candidates)
                 {
                     ct.ThrowIfCancellationRequested();
 
                     try
                     {
-                        TryGenerateThumbnail(candidate.Id, candidate.FilePath!);
+                        if (TryGenerateThumbnail(candidate.Id, candidate.FilePath!, out double? ratio) && ratio is double r)
+                        {
+                            learned.Add((candidate.Id, r));
+                        }
                     }
                     catch
                     {
@@ -174,7 +205,81 @@ public class CoverThumbnailService
 
                     progress.Report((++done, total));
                 }
+
+                PersistAspectRatios(learned);
+
+                // Whether or not any new thumbnail was generated above, sweep every issue whose
+                // cover exists on disk but has no stored aspect ratio yet - the upgrade case, where
+                // covers were all generated before Issue.CoverAspectRatio existed. Panorama needs
+                // this to render real cover shapes without re-decoding every cover on screen.
+                BackfillAspectRatiosCore(ct);
             },
             ct);
+    }
+
+    /// <summary>
+    /// Fills <c>Issue.CoverAspectRatio</c> for every issue that has a cached cover file but no
+    /// stored ratio, by reading each JPEG's dimensions from its header (no full decode). Safe to
+    /// call directly; <see cref="GenerateAllAsync"/> already runs it. One unreadable file doesn't
+    /// stop the sweep.
+    /// </summary>
+    public Task BackfillAspectRatios(CancellationToken ct = default) =>
+        Task.Run(() => BackfillAspectRatiosCore(ct), ct);
+
+    private void BackfillAspectRatiosCore(CancellationToken ct)
+    {
+        using var context = _contextFactory();
+        var pendingIds = context.Issues
+            .Where(i => i.CoverAspectRatio == null)
+            .Select(i => i.Id)
+            .ToList();
+
+        var learned = new List<(int IssueId, double Ratio)>();
+        foreach (int id in pendingIds)
+        {
+            ct.ThrowIfCancellationRequested();
+            string path = CoverThumbnailPaths.GetCachePath(id);
+            if (File.Exists(path) && CoverImageDimensions.TryRead(path, out int w, out int h) && w > 0 && h > 0)
+            {
+                learned.Add((id, w / (double)h));
+            }
+        }
+
+        PersistAspectRatios(learned);
+    }
+
+    /// <summary>
+    /// Writes learned <c>(issueId, ratio)</c> pairs to <c>Issue.CoverAspectRatio</c> in one batch
+    /// and primes <see cref="CoverAspectRatioStore"/> so a running session picks them up without a
+    /// reload. Best-effort - a write failure just means the value is re-learned later.
+    /// </summary>
+    private void PersistAspectRatios(IReadOnlyCollection<(int IssueId, double Ratio)> learned)
+    {
+        if (learned.Count == 0)
+        {
+            return;
+        }
+
+        try
+        {
+            var byId = learned
+                .Where(x => x.Ratio > 0 && !double.IsNaN(x.Ratio) && !double.IsInfinity(x.Ratio))
+                .GroupBy(x => x.IssueId)
+                .ToDictionary(g => g.Key, g => g.Last().Ratio);
+
+            using var context = _contextFactory();
+            var ids = byId.Keys.ToList();
+            foreach (var row in context.Issues.Where(i => ids.Contains(i.Id)))
+            {
+                row.CoverAspectRatio = byId[row.Id];
+            }
+
+            context.SaveChanges();
+            CoverAspectRatioStore.Prime(byId.Select(kv => (kv.Key, kv.Value)));
+        }
+        catch (Exception)
+        {
+            // Best-effort persistence - cover generation itself already succeeded.
+        }
     }
 }

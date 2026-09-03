@@ -113,6 +113,25 @@ this file itself already did once (see the note below).
 > DB is corrupt, so the recovery window never appeared (real incident: a corrupt `paperbunkr.db`,
 > recovered from an auto-backup by hand). `GetBackupLocation` now try/catches that DB read and falls
 > back to the default backups folder. Regression test in `BackupServiceTests`.
+>
+> **Follow-up (2026-09-03) — Panorama variable cover widths, while virtualized:** the previous
+> pass put Panorama on the uniform-cell `VirtualizingWrapPanel` (every tile ~110px), which killed
+> the whole reason Panorama exists — showing each cover at its real orientation. Fixed without
+> reintroducing the eager decode-every-cover cost: new `Issue.CoverAspectRatio` (nullable, migration
+> `AddCoverAspectRatio`) written at thumbnail generation (`CoverThumbnailService`) and by a
+> header-only JPEG sweep (`CoverThumbnailService.BackfillAspectRatios`, folded into
+> `GenerateAllAsync` so every scan / Generate Covers fills it); also learned progressively in-session
+> as covers decode on screen (`CoverAspectRatioStore`, an in-memory dict + debounced write-back).
+> New `VirtualizingVariableWrapPanel` (+ pure `VirtualizingVariableWrapMath`) — a sibling of
+> `VirtualizingWrapPanel` that packs rows from each item's own `PreferredWidth`
+> (`IVariableWidthTile` on `IssueListRow` / `SeriesCardSample`), same realize/recycle + arrow-nav
+> machinery, layout cached and only re-packed on width/items change. Panorama's 4 ItemsControls
+> switched to it; templates bind `Width="{Binding PanoramaWidth}"` (real per-cover). Library
+> re-packs Panorama (debounced) when the store learns new ratios mid-session; after a backfill
+> every ratio is persisted and that never fires. `VirtualizingWrapPanel` / Poster / Tiles / List /
+> Details unchanged. Build clean, `has-pending-model-changes` none; `Paperbunkr.Data.Tests`
+> 731/731, `Paperbunkr.App.Tests` 1625/1625. Manual on-screen check of real cover orientations +
+> scroll memory still pending (no computer-use). P0–P7 unchanged — Beta-backlog perf/polish.
 
 > This section drifted before: it was last hand-written at `7e2d3d3` and had already fallen behind
 > five real commits by the time anyone reopened it. That's the whole reason for the live tracker —

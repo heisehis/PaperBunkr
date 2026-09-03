@@ -77,6 +77,11 @@ public partial class App : Application
                 throw;
             }
 
+            // Panorama's cover aspect-ratio store persists progressively-learned ratios via a
+            // debounced write-back - wire its DB access now that migrations have run. Left unset
+            // under test so a stray Report can never reach the real per-user database.
+            CoverAspectRatioStore.ContextFactory = PaperbunkrDb.CreateContext;
+
             // Auto-backup startup trigger (spec §2) - fire-and-forget on a background thread so a
             // checkpoint+file-copy never adds to startup latency. This is the fallback trigger; the
             // primary one fires on clean shutdown below. RunAutoBackupIfDue() is itself gated by

@@ -273,4 +273,96 @@ public class CoverThumbnailServiceTests : IDisposable
             }
         }
     }
+
+    // --- Cover aspect ratio (docs/superpowers/specs/2026-09-03-panorama-variable-width-design.md) ---
+
+    [Fact]
+    public async Task GenerateAllAsync_PersistsCoverAspectRatio_FromTheSourcePage()
+    {
+        string dbPath = Path.Combine(Path.GetTempPath(), $"paperbunkr_aspect_db_{Guid.NewGuid():N}.db");
+        CbzFixture.Create(_cbzPath, pageCount: 1, pageSize: _ => new System.Drawing.Size(400, 600));
+
+        try
+        {
+            var options = new DbContextOptionsBuilder<PaperbunkrDbContext>().UseSqlite($"Data Source={dbPath}").Options;
+            int issueId;
+            using (var context = new PaperbunkrDbContext(options))
+            {
+                context.Database.EnsureCreated();
+                var series = new Series { Name = "S" };
+                context.Series.Add(series);
+                context.SaveChanges();
+                var issue = new Issue { SeriesId = series.Id, Number = "1", FilePath = _cbzPath };
+                context.Issues.Add(issue);
+                context.SaveChanges();
+                issueId = issue.Id;
+            }
+
+            await new CoverThumbnailService(() => new PaperbunkrDbContext(options))
+                .GenerateAllAsync(new Progress<(int Done, int Total)>());
+
+            using (var context = new PaperbunkrDbContext(options))
+            {
+                double? ratio = context.Issues.Find(issueId)!.CoverAspectRatio;
+                Assert.NotNull(ratio);
+                Assert.Equal(400.0 / 600.0, ratio!.Value, precision: 2);
+            }
+        }
+        finally
+        {
+            Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
+            try { if (File.Exists(dbPath)) File.Delete(dbPath); } catch (IOException) { }
+        }
+    }
+
+    [Fact]
+    public async Task BackfillAspectRatios_FillsRowsWithACachedCoverButNoStoredRatio()
+    {
+        string dbPath = Path.Combine(Path.GetTempPath(), $"paperbunkr_aspect_backfill_{Guid.NewGuid():N}.db");
+        CbzFixture.Create(_cbzPath, pageCount: 1, pageSize: _ => new System.Drawing.Size(500, 300));
+
+        try
+        {
+            var options = new DbContextOptionsBuilder<PaperbunkrDbContext>().UseSqlite($"Data Source={dbPath}").Options;
+            int withCover;
+            int withoutCover;
+            using (var context = new PaperbunkrDbContext(options))
+            {
+                context.Database.EnsureCreated();
+                var series = new Series { Name = "S" };
+                context.Series.Add(series);
+                context.SaveChanges();
+                var a = new Issue { SeriesId = series.Id, Number = "1", FilePath = _cbzPath };
+                var b = new Issue { SeriesId = series.Id, Number = "2" };
+                context.Issues.AddRange(a, b);
+                context.SaveChanges();
+                withCover = a.Id;
+                withoutCover = b.Id;
+            }
+
+            // The upgrade case: a cached cover file exists but nothing recorded its ratio. Generate
+            // the JPEG, then clear the ratio the generation path just persisted.
+            var service = new CoverThumbnailService(() => new PaperbunkrDbContext(options));
+            service.TryGenerateThumbnail(withCover, _cbzPath);
+            using (var context = new PaperbunkrDbContext(options))
+            {
+                context.Issues.Find(withCover)!.CoverAspectRatio = null;
+                context.SaveChanges();
+            }
+
+            await service.BackfillAspectRatios();
+
+            using (var context = new PaperbunkrDbContext(options))
+            {
+                Assert.NotNull(context.Issues.Find(withCover)!.CoverAspectRatio);
+                Assert.Equal(500.0 / 300.0, context.Issues.Find(withCover)!.CoverAspectRatio!.Value, precision: 1);
+                Assert.Null(context.Issues.Find(withoutCover)!.CoverAspectRatio); // no cover file -> left alone
+            }
+        }
+        finally
+        {
+            Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
+            try { if (File.Exists(dbPath)) File.Delete(dbPath); } catch (IOException) { }
+        }
+    }
 }

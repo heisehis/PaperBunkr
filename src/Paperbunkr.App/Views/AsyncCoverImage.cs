@@ -71,6 +71,11 @@ public sealed class AsyncCoverImage
         if (CoverImageCache.TryGetCached(issueId, out var cached))
         {
             image.Source = cached;
+            if (cached is not null)
+            {
+                CoverAspectRatioStore.Report(issueId, cached.PixelSize.Width, cached.PixelSize.Height);
+            }
+
             return;
         }
 
@@ -99,5 +104,6 @@ public sealed class AsyncCoverImage
         }
 
         image.Source = CoverImageCache.StoreIfAbsent(issueId, decoded);
+        CoverAspectRatioStore.Report(issueId, decoded.PixelSize.Width, decoded.PixelSize.Height);
     }
 }

@@ -225,7 +225,7 @@
 
     <UserControl.Resources>
         <DataTemplate x:Key="PanoramaGridItemTemplate" x:DataType="models:IssueListRow">
-            <Button Classes="card" Margin="0" Width="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PanoramaTileWidth}"
+            <Button Classes="card" Margin="0" Width="{Binding PanoramaWidth}"
                     Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).IssueList.OpenIssueCommand}"
                     CommandParameter="{Binding}" KeyDown="OnCardKeyDown" PointerPressed="OnTilePointerPressed">
                 <StackPanel>
@@ -385,7 +385,7 @@
              superpowers/specs/2026-08-18-library-book-centric-redesign-design.md). Phase 4a's
              PosterGridSeriesTemplate lives further down with its issue counterpart. -->
         <DataTemplate x:Key="SeriesPanoramaGridItemTemplate" x:DataType="models:SeriesCardSample">
-            <Button Classes="card" Margin="0" Width="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PanoramaTileWidth}"
+            <Button Classes="card" Margin="0" Width="{Binding PanoramaWidth}"
                     Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SelectCardCommand}"
                     CommandParameter="{Binding}" KeyDown="OnCardKeyDown" PointerPressed="OnSeriesTilePointerPressed">
                 <StackPanel>
@@ -756,16 +756,18 @@
         </ScrollViewer>
 
         <!-- ============ Panorama comfortable grid ============ -->
-        <!-- Uniform tile width (PanoramaTileWidth, ~110 - unchanged from the plain-WrapPanel version
-             it replaced; the per-cover aspect-ratio widths were dropped back in the 2026-08-22
-             cover-memory work) so it can ride the same VirtualizingWrapPanel as the other grids. -->
+        <!-- Variable per-cover tile width (each card binds its own IssueListRow/SeriesCardSample
+             .PanoramaWidth, derived from the real cover aspect ratio) on a virtualizing panel that
+             packs rows from those widths without decoding every cover - VirtualizingVariableWrapPanel,
+             not the uniform-cell VirtualizingWrapPanel the other grids ride. Landscape covers wide,
+             portrait covers narrow, side by side - the reason Panorama exists. -->
         <ScrollViewer x:Name="PanoramaScrollViewer" Grid.Row="1" IsVisible="{Binding IsPanoramaGrid}">
             <Grid>
                 <Panel IsVisible="{Binding IsIssueGranularity}">
                     <ItemsControl IsVisible="{Binding !IssueList.IsGrouped}" ItemsSource="{Binding IssueList.Rows}"
                                   ItemTemplate="{StaticResource PanoramaGridItemTemplate}" Margin="24,22,24,40">
                         <ItemsControl.ItemsPanel>
-                            <ItemsPanelTemplate><controls:VirtualizingWrapPanel ItemWidth="{Binding PanoramaTileWidth}" ItemHeight="{Binding PanoramaGridItemHeight}" ItemSpacing="20" LineSpacing="20" /></ItemsPanelTemplate>
+                            <ItemsPanelTemplate><controls:VirtualizingVariableWrapPanel ItemHeight="{Binding PanoramaGridItemHeight}" ItemSpacing="20" LineSpacing="20" /></ItemsPanelTemplate>
                         </ItemsControl.ItemsPanel>
                     </ItemsControl>
                     <ItemsControl IsVisible="{Binding IssueList.IsGrouped}" ItemsSource="{Binding IssueList.Groups}" Margin="24,22,24,40">
@@ -778,7 +780,7 @@
                                     <DockPanel Margin="0,0,0,10"><TextBlock DockPanel.Dock="Left" Text="{Binding Header}" Classes="pbTextHeading" VerticalAlignment="Center" /><TextBlock DockPanel.Dock="Left" Text="{Binding Items.Count}" Classes="pbTextCaption" Margin="8,0,0,0" VerticalAlignment="Center" /><Border Height="1" VerticalAlignment="Center" Margin="14,0,0,0" Background="{DynamicResource PbBorderBrush}" /></DockPanel>
                                     <ItemsControl ItemsSource="{Binding Items}" ItemTemplate="{StaticResource PanoramaGridItemTemplate}">
                                         <ItemsControl.ItemsPanel>
-                                            <ItemsPanelTemplate><controls:VirtualizingWrapPanel ItemWidth="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PanoramaTileWidth}" ItemHeight="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PanoramaGridItemHeight}" ItemSpacing="20" LineSpacing="20" /></ItemsPanelTemplate>
+                                            <ItemsPanelTemplate><controls:VirtualizingVariableWrapPanel ItemHeight="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PanoramaGridItemHeight}" ItemSpacing="20" LineSpacing="20" /></ItemsPanelTemplate>
                                         </ItemsControl.ItemsPanel>
                                     </ItemsControl>
                                 </StackPanel>
@@ -790,7 +792,7 @@
                     <ItemsControl IsVisible="{Binding !IsGrouped}" ItemsSource="{Binding Covers}"
                                   ItemTemplate="{StaticResource SeriesPanoramaGridItemTemplate}" Margin="24,22,24,40">
                         <ItemsControl.ItemsPanel>
-                            <ItemsPanelTemplate><controls:VirtualizingWrapPanel ItemWidth="{Binding PanoramaTileWidth}" ItemHeight="{Binding PanoramaGridItemHeight}" ItemSpacing="20" LineSpacing="20" /></ItemsPanelTemplate>
+                            <ItemsPanelTemplate><controls:VirtualizingVariableWrapPanel ItemHeight="{Binding PanoramaGridItemHeight}" ItemSpacing="20" LineSpacing="20" /></ItemsPanelTemplate>
                         </ItemsControl.ItemsPanel>
                     </ItemsControl>
                     <ItemsControl IsVisible="{Binding IsGrouped}" ItemsSource="{Binding Groups}" Margin="24,22,24,40">
@@ -803,7 +805,7 @@
                                     <DockPanel Margin="0,0,0,10"><TextBlock DockPanel.Dock="Left" Text="{Binding Header}" Classes="pbTextHeading" VerticalAlignment="Center" /><TextBlock DockPanel.Dock="Left" Text="{Binding Items.Count}" Classes="pbTextCaption" Margin="8,0,0,0" VerticalAlignment="Center" /><Border Height="1" VerticalAlignment="Center" Margin="14,0,0,0" Background="{DynamicResource PbBorderBrush}" /></DockPanel>
                                     <ItemsControl ItemsSource="{Binding Items}" ItemTemplate="{StaticResource SeriesPanoramaGridItemTemplate}">
                                         <ItemsControl.ItemsPanel>
-                                            <ItemsPanelTemplate><controls:VirtualizingWrapPanel ItemWidth="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PanoramaTileWidth}" ItemHeight="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PanoramaGridItemHeight}" ItemSpacing="20" LineSpacing="20" /></ItemsPanelTemplate>
+                                            <ItemsPanelTemplate><controls:VirtualizingVariableWrapPanel ItemHeight="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PanoramaGridItemHeight}" ItemSpacing="20" LineSpacing="20" /></ItemsPanelTemplate>
                                         </ItemsControl.ItemsPanel>
                                     </ItemsControl>
                                 </StackPanel>

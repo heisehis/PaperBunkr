@@ -189,6 +189,18 @@ public class Issue
 
     public string? CustomThumbnailKey { get; set; }
 
+    /// <summary>
+    /// Width/height of this issue's cover image, captured when the thumbnail is generated
+    /// (<c>CoverThumbnailService</c>) or learned lazily as a cover decodes on screen
+    /// (<c>CoverAspectRatioStore</c>). Backs Panorama grid's per-cover variable tile width
+    /// (docs/superpowers/specs/2026-08-09-library-toolbar-design.md Phase A) without the panel
+    /// having to eagerly decode every cover just to measure it - the exact eager-decode this
+    /// column exists to avoid, per the 2026-08-22 cover-memory virtualization work.
+    /// <see langword="null"/> until a real cover has been seen; consumers fall back to
+    /// <c>SeriesCardSample.DefaultCoverAspectRatio</c> (a standard portrait ratio).
+    /// </summary>
+    public double? CoverAspectRatio { get; set; }
+
     // --- fields added for Smart Lists CE-parity (docs/superpowers/specs/2026-08-06-smart-lists-design.md) ---
 
     /// <summary>CE: <c>ComicBook.Checked</c> — arbitrary user-toggleable mark, unrelated to read state.</summary>

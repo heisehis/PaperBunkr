@@ -49,14 +49,18 @@ public class SmartListEngineV2MigrationTests : IDisposable
             var migrator = context.GetService<IMigrator>();
             migrator.Migrate(PriorMigration);
 
-            // Series/Issues are unchanged between the prior migration and v2, so EF can insert them
-            // against the current model. SmartLists/SmartListConditions change shape, so those go in
-            // via raw SQL at the pre-v2 schema (SmartListConditions carries SmartListId directly).
+            // Series is unchanged between the prior migration and v2, so EF can insert it against
+            // the current model. Issues has gained nullable columns since (e.g. CoverAspectRatio),
+            // so those go in via raw SQL at the pre-v2 schema - as SmartLists/SmartListConditions
+            // already do because their shape changes in v2 (SmartListConditions carries SmartListId
+            // directly pre-v2).
             var series = new Entities.Series { Id = 1, Name = "Alpha", ContentType = Entities.ContentType.Comic, Status = Entities.SeriesStatus.Completed };
             context.Series.Add(series);
-            context.Issues.Add(new Entities.Issue { Id = 1, SeriesId = 1, Number = "1", Publisher = "Acme" });
-            context.Issues.Add(new Entities.Issue { Id = 2, SeriesId = 1, Number = "2", Publisher = "Zenith" });
             context.SaveChanges();
+
+            context.Database.ExecuteSqlRaw(
+                "INSERT INTO Issues (Id, SeriesId, Number, Publisher, ColorMode, FileIsMissing, Checked, IsPlaceholder, MissingAcknowledged, OpenCount, IsFinalIssue) " +
+                "VALUES (1, 1, '1', 'Acme', 'Unknown', 0, 0, 0, 0, 0, 0), (2, 1, '2', 'Zenith', 'Unknown', 0, 0, 0, 0, 0, 0);");
 
             context.Database.ExecuteSqlRaw("INSERT INTO SmartLists (Id, Name, IsSystem, SortOrder) VALUES (10, 'Acme books', 0, 0);");
             context.Database.ExecuteSqlRaw("INSERT INTO SmartLists (Id, Name, IsSystem, SortOrder) VALUES (20, 'Two rules', 0, 1);");

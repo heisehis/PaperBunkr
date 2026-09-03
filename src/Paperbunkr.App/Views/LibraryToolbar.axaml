@@ -147,7 +147,7 @@
         <!-- ============ Row 1: two-zone bar ============ -->
         <Border Padding="24,12" Background="{DynamicResource PbSurface1Brush}"
                 BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,0,0,1">
-            <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto,Auto" ColumnSpacing="10">
+            <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto,Auto,Auto" ColumnSpacing="10">
                 <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="2" VerticalAlignment="Center">
                     <Button Classes="browseBtn" Command="{Binding BrowsePreviousCommand}" IsEnabled="{Binding CanBrowsePrevious}"
                             ToolTip.Tip="Back" AutomationProperties.AutomationId="LibraryBrowsePreviousButton">
@@ -159,7 +159,18 @@
                     </Button>
                 </StackPanel>
 
-                <Border Grid.Column="1" x:Name="LibrarySearchBoxContainer" Background="{DynamicResource PbSurface3Brush}" CornerRadius="{DynamicResource PbRadius}"
+                <Button Grid.Column="1" x:Name="WorkspaceButton" Classes="toolbarPill" Classes.open="{Binding IsWorkspaceOpen}"
+                        Command="{Binding ToggleWorkspaceCommand}" VerticalAlignment="Center"
+                        AutomationProperties.AutomationId="LibraryWorkspaceButton"
+                        AutomationProperties.Name="{Binding ActiveWorkspaceLabel, StringFormat='Workspace: {0}'}">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <fi:SymbolIcon Symbol="Apps" />
+                        <TextBlock Text="{Binding ActiveWorkspaceLabel}" />
+                        <fi:SymbolIcon Symbol="ChevronDown" />
+                    </StackPanel>
+                </Button>
+
+                <Border Grid.Column="2" x:Name="LibrarySearchBoxContainer" Background="{DynamicResource PbSurface3Brush}" CornerRadius="{DynamicResource PbRadius}"
                         BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1" Padding="10,0" MaxWidth="560" HorizontalAlignment="Stretch">
                     <DockPanel LastChildFill="True">
                         <fi:SymbolIcon DockPanel.Dock="Left" Symbol="Search" VerticalAlignment="Center" Margin="0,0,8,0" />
@@ -177,7 +188,7 @@
                     </DockPanel>
                 </Border>
 
-                <Button Grid.Column="2" x:Name="FilterButton" Classes="toolbarPill" Classes.open="{Binding IsAddFilterOpen}"
+                <Button Grid.Column="3" x:Name="FilterButton" Classes="toolbarPill" Classes.open="{Binding IsAddFilterOpen}"
                         Command="{Binding ToggleAddFilterCommand}" VerticalAlignment="Center"
                         AutomationProperties.AutomationId="LibraryFilterButton" AutomationProperties.Name="Filter">
                     <StackPanel Orientation="Horizontal" Spacing="6">
@@ -186,7 +197,7 @@
                     </StackPanel>
                 </Button>
 
-                <Button Grid.Column="3" x:Name="ViewSortButton" Classes="toolbarPill" Classes.open="{Binding IsViewSortOpen}"
+                <Button Grid.Column="4" x:Name="ViewSortButton" Classes="toolbarPill" Classes.open="{Binding IsViewSortOpen}"
                         Command="{Binding ToggleViewSortCommand}" VerticalAlignment="Center"
                         AutomationProperties.AutomationId="LibraryViewSortButton"
                         AutomationProperties.Name="{Binding DisplayModeLabel, StringFormat='View and Sort: {0}'}">
@@ -196,14 +207,14 @@
                     </StackPanel>
                 </Button>
 
-                <Button Grid.Column="4" Classes="browseBtn" Command="{Binding ResyncSeriesFromFileCommand}"
+                <Button Grid.Column="5" Classes="browseBtn" Command="{Binding ResyncSeriesFromFileCommand}"
                         IsEnabled="{Binding !IsResyncingSeries}" VerticalAlignment="Center"
                         ToolTip.Tip="Resync each issue's series from its file's embedded metadata"
                         AutomationProperties.AutomationId="LibraryResyncSeriesButton" AutomationProperties.Name="Resync series from file">
                     <fi:SymbolIcon Symbol="ArrowClockwise" />
                 </Button>
 
-                <Button Grid.Column="5" Classes="addBtn" Command="{Binding OpenAddIssueCommand}" VerticalAlignment="Center"
+                <Button Grid.Column="6" Classes="addBtn" Command="{Binding OpenAddIssueCommand}" VerticalAlignment="Center"
                         ToolTip.Tip="Add issue to library" AutomationProperties.AutomationId="LibraryAddIssueButton" AutomationProperties.Name="Add issue">
                     <fi:SymbolIcon Symbol="Add" />
                 </Button>
@@ -312,6 +323,49 @@
             </Border>
         </Popup>
 
+        <!-- Saved Workspaces (docs/superpowers/specs/2026-09-03-library-saved-workspaces-design.md) -->
+        <Popup PlacementTarget="{Binding #WorkspaceButton}" Placement="BottomEdgeAlignedLeft" VerticalOffset="6"
+               IsOpen="{Binding IsWorkspaceOpen}" IsLightDismissEnabled="True">
+            <Border Classes="dropdown" Width="280">
+                <StackPanel Spacing="1">
+                    <TextBlock Classes="dropdownRow" Text="Workspaces" Foreground="{DynamicResource PbTextBrush}" Margin="0,0,0,4" />
+                    <ItemsControl ItemsSource="{Binding Workspaces}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="models:WorkspaceRow">
+                                <Grid ColumnDefinitions="*,Auto">
+                                    <Button Grid.Column="0" Classes="modeOption" Classes.active="{Binding IsActive}"
+                                            Content="{Binding Name}"
+                                            Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ApplyWorkspaceCommand}"
+                                            CommandParameter="{Binding Id}"
+                                            AutomationProperties.AutomationId="{Binding Name, StringFormat='LibraryWorkspaceRow_{0}'}" />
+                                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="0" VerticalAlignment="Center"
+                                                IsVisible="{Binding !IsBuiltIn}">
+                                        <Button Classes="chipClose" Content="▲" FontSize="10"
+                                                Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).MoveWorkspaceUpCommand}"
+                                                CommandParameter="{Binding Id}" ToolTip.Tip="Move up" />
+                                        <Button Classes="chipClose" Content="▼" FontSize="10"
+                                                Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).MoveWorkspaceDownCommand}"
+                                                CommandParameter="{Binding Id}" ToolTip.Tip="Move down" />
+                                        <Button Classes="chipClose" Content="✎"
+                                                Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).RenameWorkspaceCommand}"
+                                                CommandParameter="{Binding Id}" ToolTip.Tip="Rename" />
+                                        <Button Classes="chipClose" Content="✕"
+                                                Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).DeleteWorkspaceCommand}"
+                                                CommandParameter="{Binding Id}" ToolTip.Tip="Delete" />
+                                    </StackPanel>
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <Border Height="1" Background="{DynamicResource PbBorderBrush}" Margin="0,6" />
+                    <Button Classes="modeOption" Content="Save current view as…" Command="{Binding SaveWorkspaceAsCommand}"
+                            AutomationProperties.AutomationId="LibraryWorkspaceSaveAs" />
+                    <Button Classes="modeOption" Content="Reset to default view" Command="{Binding ResetToDefaultViewCommand}"
+                            AutomationProperties.AutomationId="LibraryWorkspaceReset" />
+                </StackPanel>
+            </Border>
+        </Popup>
+
         <!-- View & Sort tabbed popup (design §4) -->
         <Popup PlacementTarget="{Binding #ViewSortButton}" Placement="BottomEdgeAlignedRight" VerticalOffset="6"
                IsOpen="{Binding IsViewSortOpen}" IsLightDismissEnabled="True">
@@ -344,8 +398,9 @@
                                     Command="{Binding SetViewModeCommand}" CommandParameter="{x:Static entities:LibraryViewMode.Details}" AutomationProperties.AutomationId="LibraryViewModeOption_Details" />
                             <Button Classes="modeOption" Classes.active="{Binding IsTilesView}" Content="Tiles"
                                     Command="{Binding SetViewModeCommand}" CommandParameter="{x:Static entities:LibraryViewMode.Tiles}" AutomationProperties.AutomationId="LibraryViewModeOption_Tiles" />
-                            <Button Classes="modeOption" Classes.active="{Binding IsIssueListView}" Content="Comic List"
-                                    Command="{Binding SetViewModeCommand}" CommandParameter="{x:Static entities:LibraryViewMode.IssueList}" AutomationProperties.AutomationId="LibraryViewModeOption_IssueList" />
+                            <!-- "Comic List" (LibraryViewMode.IssueList) removed from the picker 2026-09-03 - it
+                                 duplicated the Details view without adding anything. The enum value + its rendering
+                                 path stay so an older persisted setting / workspace still deserializes and displays. -->
 
                             <Border Height="1" Background="{DynamicResource PbBorderBrush}" Margin="0,10" />
 

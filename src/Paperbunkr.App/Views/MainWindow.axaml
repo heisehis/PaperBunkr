@@ -901,6 +901,21 @@
         </Grid>
     </Border>
 
+    <!-- ============ Name-this-workspace dialog (docs/superpowers/specs/2026-09-03-library-saved-
+         workspaces-design.md) - shared by the Library and Books workspace switchers ============ -->
+    <Border IsVisible="{Binding IsWorkspaceNameOverlayOpen}" Background="#B0000000">
+        <Grid HorizontalAlignment="Center" VerticalAlignment="Center">
+            <views:WorkspaceNameOverlay DataContext="{Binding WorkspaceName}" />
+            <Button Classes="rail" Width="28" Height="28"
+                    HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-14,-14,0"
+                    Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
+                    Command="{Binding CloseWorkspaceNameOverlayCommand}" ToolTip.Tip="Close"
+                    AutomationProperties.AutomationId="WorkspaceNameOverlayCloseButton">
+                <fi:SymbolIcon Symbol="DismissCircle" FontSize="13" />
+            </Button>
+        </Grid>
+    </Border>
+
     <!-- ============ New Event / New Continuity dialog (docs/superpowers/specs/2026-08-28-events-
          continuity-screen-redesign-design.md) ============ -->
     <Border IsVisible="{Binding IsNewEventDialogOpen}" Background="#B0000000">

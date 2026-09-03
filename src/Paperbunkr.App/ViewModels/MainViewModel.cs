@@ -66,9 +66,14 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
 
     public MainViewModel()
     {
+        // Seed the read-only starter workspaces before the two screen VMs first list them
+        // (docs/superpowers/specs/2026-09-03-library-saved-workspaces-design.md). Idempotent.
+        new WorkspaceService().EnsureBuiltInsSeeded();
+        WorkspaceName = new WorkspaceNameViewModel(CloseWorkspaceNameOverlay);
+
         Home = new HomeScreenViewModel(GoDetailForSeries, GoReaderForIssue, GoLibraryWithSearch, GoReaderForIssueInReadingList, GoBookReaderForBook, GoLibraryWithCollection);
-        Library = new LibraryScreenViewModel(GoDetailForSeries, GoReaderForIssue, GoNewIssuePropertiesForPlaceholder, OpenQuickRateOverlay, GoIssuePropertiesForIssue, GoBulkIssuePropertiesForIssues, ShowToast, GoBulkSeriesPropertiesForSeries, GoLibraryFoldersPreferences, OpenCollectionPropertiesOverlay, GoBookDetailForBook);
-        Books = new BooksScreenViewModel(GoBookDetailForBook, GoBookSeriesDetailForSeries, GoBookPropertiesForBook, GoBulkBookPropertiesForBooks, GoBookSeriesPropertiesForSeries, GoLibraryFoldersPreferences, ShowToast);
+        Library = new LibraryScreenViewModel(GoDetailForSeries, GoReaderForIssue, GoNewIssuePropertiesForPlaceholder, OpenQuickRateOverlay, GoIssuePropertiesForIssue, GoBulkIssuePropertiesForIssues, ShowToast, GoBulkSeriesPropertiesForSeries, GoLibraryFoldersPreferences, OpenCollectionPropertiesOverlay, GoBookDetailForBook, promptForName: PromptWorkspaceName);
+        Books = new BooksScreenViewModel(GoBookDetailForBook, GoBookSeriesDetailForSeries, GoBookPropertiesForBook, GoBulkBookPropertiesForBooks, GoBookSeriesPropertiesForSeries, GoLibraryFoldersPreferences, ShowToast, promptForName: PromptWorkspaceName);
         BookDetail = new BookDetailScreenViewModel(NavigateBack, GoBookReaderForBook, GoBookPropertiesForBook, GoBulkBookPropertiesForBooks, GoBookSeriesPropertiesForSeries);
         BookProperties = new BookPropertiesScreenViewModel(CloseBookPropertiesOverlay, ShowToast);
         BulkBookProperties = new BulkBookPropertiesScreenViewModel(CloseBulkBookPropertiesOverlay, ShowToast);
@@ -226,6 +231,7 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
     public NewReadingListViewModel NewReadingList { get; }
     public NewEventOrContinuityViewModel NewEventOrContinuity { get; }
     public QuickRateScreenViewModel QuickRate { get; }
+    public WorkspaceNameViewModel WorkspaceName { get; }
 
     public DesignShowcaseScreenViewModel DesignShowcase { get; }
     public LiveFolderWatchService LiveFolderWatch { get; }
@@ -274,6 +280,9 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
 
     [ObservableProperty]
     private bool _isNewReadingListDialogOpen;
+
+    [ObservableProperty]
+    private bool _isWorkspaceNameOverlayOpen;
 
     [ObservableProperty]
     private bool _isNewEventDialogOpen;
@@ -661,6 +670,22 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
 
     [RelayCommand]
     private void CloseNewReadingListDialog() => IsNewReadingListDialogOpen = false;
+
+    /// <summary>The Library/Books workspace switchers' "Save current view as…" / "Rename" prompt
+    /// (docs/superpowers/specs/2026-09-03-library-saved-workspaces-design.md) - opens the shared
+    /// naming overlay, hands the entered name back to whichever screen asked, and closes.</summary>
+    private void PromptWorkspaceName(string? initial, Action<string> onName)
+    {
+        WorkspaceName.Begin(initial, name =>
+        {
+            onName(name);
+            IsWorkspaceNameOverlayOpen = false;
+        });
+        IsWorkspaceNameOverlayOpen = true;
+    }
+
+    [RelayCommand]
+    private void CloseWorkspaceNameOverlay() => IsWorkspaceNameOverlayOpen = false;
 
     private void OnNewReadingListCreated(int listId)
     {

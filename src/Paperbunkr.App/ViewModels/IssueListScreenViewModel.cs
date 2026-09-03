@@ -85,8 +85,37 @@ public partial class IssueListScreenViewModel : ViewModelBase
         Render();
     }
 
+    /// <summary>
+    /// Sets sort field + direction + group in one shot <b>without rendering</b> - the caller is
+    /// expected to trigger a single render immediately afterwards (e.g. via <see cref="SetRows"/>).
+    /// Used by workspace apply (docs/superpowers/specs/2026-09-03-library-saved-workspaces-design.md)
+    /// so switching a preset doesn't re-render a large list three times back to back before the
+    /// real reload.
+    /// </summary>
+    public void ConfigureSortGroup(IssueListSortField sortField, SortDirection sortDirection, IssueListGroupField groupField)
+    {
+        _suppressRender = true;
+        try
+        {
+            SortField = sortField;
+            SortDirection = sortDirection;
+            GroupField = groupField;
+        }
+        finally
+        {
+            _suppressRender = false;
+        }
+    }
+
+    private bool _suppressRender;
+
     private void Render()
     {
+        if (_suppressRender)
+        {
+            return;
+        }
+
         var rows = SortRows(_sourceIssues.Select(ToRow).ToList());
 
         Rows.Clear();

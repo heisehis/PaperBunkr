@@ -1,0 +1,33 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Paperbunkr.App.ViewModels"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="380" d:DesignHeight="180"
+             x:Class="Paperbunkr.App.Views.WorkspaceNameOverlay"
+             x:DataType="vm:WorkspaceNameViewModel">
+
+    <Border Classes="floatingPanel" Width="380">
+        <Grid RowDefinitions="Auto,Auto,Auto">
+
+            <Border Grid.Row="0" Padding="18,15" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,0,0,1">
+                <TextBlock Classes="pbTextHeading" Text="NAME THIS WORKSPACE" />
+            </Border>
+
+            <StackPanel Grid.Row="1" Margin="18,16" Spacing="6">
+                <TextBox Text="{Binding Name}" PlaceholderText="Weekly pull" FontSize="13"
+                         AutomationProperties.AutomationId="WorkspaceNameBox" />
+                <TextBlock Text="Reusing an existing name overwrites that workspace." FontSize="10.5"
+                           Foreground="{DynamicResource PbTextFaintBrush}" />
+            </StackPanel>
+
+            <Border Grid.Row="2" Padding="18,13" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,1,0,0">
+                <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+                    <Button Classes="ghost" Content="Cancel" Command="{Binding CancelCommand}" />
+                    <Button Classes="primary" Content="Save" Command="{Binding SaveCommand}"
+                            AutomationProperties.AutomationId="WorkspaceNameSave" />
+                </StackPanel>
+            </Border>
+        </Grid>
+    </Border>
+</UserControl>

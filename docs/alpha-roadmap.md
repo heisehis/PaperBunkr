@@ -260,13 +260,28 @@ but unrunnable in this environment (same UIA barrier as every other UI test here
 reaches "comics not yet in the library" through drag-and-drop import, live folder-watch, and
 fileless entries; a second persistent browse surface wasn't worth the weight.
 
+**Recent/MRU + Quick Open shipped 2026-09-03** (design + plan: `docs/superpowers/specs/2026-09-03-
+quick-open-command-palette-{design,plan}.md`) — a **`Ctrl+P` fuzzy command palette**, not CE's
+`File ▸ Open Recent` path-MRU menu nor its `QuickOpenView` recency cover-wall (Home already covers
+that). A modal overlay over a scrim: type to subsequence-match any series / issue / book / reading
+list / smart list / collection / event / continuity / shell screen, or run an action verb
+(`Add folder…`, `Add issue…`, `New reading list…`, `Import from ComicRack…`); `↑`/`↓` to move,
+`Enter` to activate, `Esc` to close. Before you type it shows your recently-opened comics + books
+(so it also *is* the "recent" list — no separate surface). `QuickOpenService.BuildIndex` runs one
+projected `AsNoTracking` query per entity type (single-digit-ms even on a big library, no covers);
+`QuickOpenMatcher` is a ~40-line hand-rolled subsequence scorer (score → recency boost → kind
+priority, capped at 50). `MainViewModel.ActivateQuickOpenEntry` dispatches on kind, mirroring the
+existing `OpenDeepLink`. Bound in `MainWindow`'s tunnel key handler (before the TextBox
+early-return, so it fires with a search box focused), inert inside the reader. Scan / Backup /
+Check-for-updates were left out of the v1 action set — they're `PreferencesScreenViewModel`
+commands, not reachable from `MainViewModel` without lifting them. 25 matcher/service/VM unit tests
++ 6 `MainViewModel` dispatch tests green (full `Paperbunkr.App.Tests` 1550 green); the FlaUI
+on-screen test is written but unrunnable here (same UIA barrier).
+
 Still open, in rough sequence: **drag-and-drop import** (design done —
-`docs/superpowers/specs/2026-08-31-drag-and-drop-import-design.md`); **Recent/MRU + Quick Open**
-(design done — `docs/superpowers/specs/2026-09-03-quick-open-command-palette-design.md`, a `Ctrl+P`
-fuzzy command palette over content + navigation + actions, seeded with recently-opened items;
-deliberately *not* CE's recency cover-wall, which Home already covers, nor its `File ▸ Open Recent`
-menu); **file metadata write-back** deliberately sequenced last (CE itself gates it behind explicit
-opt-in settings — real risk surface, mutates user files). A tracker/manga-UI research doc
+`docs/superpowers/specs/2026-08-31-drag-and-drop-import-design.md`); **file metadata write-back**
+deliberately sequenced last (CE itself gates it behind explicit opt-in settings — real risk
+surface, mutates user files). A tracker/manga-UI research doc
 (Beta-scoped, see its own backlog entry) surfaced during this work — its Stage 6 "manga-specific
 detail view, selected by ContentType" depends on ContentType actually being real/editable/populated,
 which the Manga/ContentType entry above now provides.

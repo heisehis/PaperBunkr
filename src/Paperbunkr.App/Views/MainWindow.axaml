@@ -916,6 +916,14 @@
         </Grid>
     </Border>
 
+    <!-- ============ Quick Open command palette (docs/superpowers/specs/2026-09-03-quick-open-
+         command-palette-design.md) - Ctrl+P from any shell screen ============ -->
+    <Border IsVisible="{Binding IsQuickOpenOverlayOpen}" Background="#B0000000">
+        <Grid HorizontalAlignment="Center" VerticalAlignment="Stretch">
+            <views:QuickOpenOverlay DataContext="{Binding QuickOpen}" />
+        </Grid>
+    </Border>
+
     <!-- ============ New Event / New Continuity dialog (docs/superpowers/specs/2026-08-28-events-
          continuity-screen-redesign-design.md) ============ -->
     <Border IsVisible="{Binding IsNewEventDialogOpen}" Background="#B0000000">

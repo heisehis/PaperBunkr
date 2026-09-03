@@ -822,4 +822,86 @@ public class MainViewModelTests : IDisposable
         // drill-down screen, so it should stay put rather than guessing a target.
         Assert.True(vm.IsDetail);
     }
+
+    // --- Quick Open command palette (docs/superpowers/specs/2026-09-03-quick-open-command-palette-design.md) ---
+
+    [Fact]
+    public void OpenQuickOpen_ShowsTheOverlay_AndPopulatesResults()
+    {
+        SeedSeriesWithIssue("Palette Series");
+        var vm = new MainViewModel();
+
+        vm.OpenQuickOpenCommand.Execute(null);
+
+        Assert.True(vm.IsQuickOpenOverlayOpen);
+        Assert.NotEmpty(vm.QuickOpen.Results);
+    }
+
+    [Fact]
+    public void OpenQuickOpen_NoOps_WhileAnEditorOverlayIsUp()
+    {
+        var vm = new MainViewModel();
+        vm.OpenNewReadingListDialogCommand.Execute(null);
+        Assert.True(vm.IsNewReadingListDialogOpen);
+
+        vm.OpenQuickOpenCommand.Execute(null);
+
+        Assert.False(vm.IsQuickOpenOverlayOpen);
+    }
+
+    [Fact]
+    public void QuickOpen_ActivatingASeries_NavigatesToItsDetailScreen_AndClosesTheOverlay()
+    {
+        var (seriesId, _) = SeedSeriesWithIssue("Batman Beyond");
+        var vm = new MainViewModel();
+        vm.OpenQuickOpenCommand.Execute(null);
+        vm.QuickOpen.Query = "batman beyond";
+
+        var seriesRow = vm.QuickOpen.Results.First(r => r.Kind == Paperbunkr.App.Models.QuickOpenKind.Series);
+        vm.QuickOpen.SelectedIndex = vm.QuickOpen.Results.IndexOf(seriesRow);
+        vm.QuickOpen.ActivateSelected();
+
+        Assert.True(vm.IsDetail);
+        Assert.False(vm.IsQuickOpenOverlayOpen);
+    }
+
+    [Fact]
+    public void QuickOpen_ActivatingAScreenRow_NavigatesThere()
+    {
+        var vm = new MainViewModel();
+        vm.OpenQuickOpenCommand.Execute(null);
+        vm.QuickOpen.Query = "preferences";
+
+        var row = vm.QuickOpen.Results.First(r => r.Kind == Paperbunkr.App.Models.QuickOpenKind.Screen);
+        vm.QuickOpen.SelectedIndex = vm.QuickOpen.Results.IndexOf(row);
+        vm.QuickOpen.ActivateSelected();
+
+        Assert.True(vm.IsPreferences);
+    }
+
+    [Fact]
+    public void QuickOpen_ActivatingAnActionRow_RunsIt()
+    {
+        var vm = new MainViewModel();
+        vm.OpenQuickOpenCommand.Execute(null);
+        vm.QuickOpen.Query = "new reading list";
+
+        var row = vm.QuickOpen.Results.First(r => r.Kind == Paperbunkr.App.Models.QuickOpenKind.Action);
+        vm.QuickOpen.SelectedIndex = vm.QuickOpen.Results.IndexOf(row);
+        vm.QuickOpen.ActivateSelected();
+
+        Assert.True(vm.IsNewReadingListDialogOpen);
+    }
+
+    [Fact]
+    public void Escape_ClosesQuickOpen()
+    {
+        var vm = new MainViewModel();
+        vm.OpenQuickOpenCommand.Execute(null);
+        Assert.True(vm.IsQuickOpenOverlayOpen);
+
+        vm.EscapeCommand.Execute(null);
+
+        Assert.False(vm.IsQuickOpenOverlayOpen);
+    }
 }

@@ -8,8 +8,12 @@ after the perf pass) — one unrelated parallel-load flake
 (`LiveFolderWatchServiceTests.Created_FileLockedThenReleased…`, passes in isolation, area untouched).
 App smoke-launches clean (~116 MB). UiTests written + compile but **cannot execute in this
 environment** — `AppFixture` launch hits a UIA-timeout that the pre-existing
-`LibraryListLayoutPersistenceTests` also hits here, i.e. no interactive desktop. Step 10
-(roadmap/inventory docs) deferred to landing.
+`LibraryListLayoutPersistenceTests` also hits here, i.e. no interactive desktop.
+
+Committed to branch `claude/library-saved-workspaces` (`65e2a22` feature, `37281e4` docs),
+surgically split from the uncommitted Books-reader WebView work sharing this tree; verified in a
+clean detached worktree. Step 10 done: `alpha-roadmap.md` + `ce-feature-inventory.md` §C updated
+(Workspaces shipped, filesystem folder browsing dropped, Quick Open design-done).
 
 **Deviations from the design (both reflected back into the design doc):**
 1. No separate "Update &lt;name&gt;" row — "Save current view as…" overwrites when you reuse a user

@@ -235,14 +235,41 @@ existing precedent from `BookReaderScreen.axaml`'s own prev/next buttons), gated
 15 `Paperbunkr.App.UiTests` all passing (one new live on-screen case: buttons start disabled, a
 sidebar click enables Back, clicking Back actually returns to the prior selection).
 
-Still open, in rough sequence: saved Workspaces (CE's `DisplayWorkspace` — named/multiple presets,
-depends on List Layouts, now available); then independently, drag-and-drop import, Recent/MRU +
-Quick Open overlay (CE's own version is recency-grouped, not fuzzy-search — a deliberate deviation
-to decide on, not CE parity), filesystem folder browsing mode; file metadata write-back deliberately
-sequenced last (CE itself gates it behind explicit opt-in settings — real risk surface, mutates user
-files). A tracker/manga-UI research doc (Beta-scoped, see its own backlog entry) surfaced during
-this work — its Stage 6 "manga-specific detail view, selected by ContentType" depends on ContentType
-actually being real/editable/populated, which the Manga/ContentType entry above now provides.
+**Saved Workspaces shipped 2026-09-03** (design + plan: `docs/superpowers/specs/2026-09-03-library-
+saved-workspaces-{design,plan}.md`; committed on branch `claude/library-saved-workspaces`, commit
+`65e2a22`, not yet merged). Named, switchable snapshots of everything a browsing screen already
+auto-persists — the CE `DisplayWorkspace` equivalent. New `Workspace` entity (`Screen` / `Name` /
+`SortOrder` / `IsBuiltIn` / a JSON `StateJson` blob) + `WorkspaceService`, a `▦ Workspace ▾`
+switcher pill on **both** the Library and Books toolbars, and a shared naming overlay.
+**Deviations from CE, all confirmed with the user:** the lists are **per-screen**, not one global
+list; only CE's "Views setup" group is captured (no window-layout or reader-display snapshot —
+Paperbunkr already drives reading direction/layout from per-series/per-issue overrides +
+`ContentType`); it ships **3 Library + 3 Books read-only starter workspaces** (CE ships none). Apply
+is one-shot (CE model) and re-saving is "Save current view as…" with an existing name (overwrites,
+exactly like CE's `SaveWorkspaceDialog`) — there is no separate "Update" affordance. Every Library
+starter is PosterGrid because it's the only virtualized view mode; a Details-view "Recently added"
+starter was cut after it spiked memory on a 2000+ issue library, and `ApplyLibraryState` was
+tightened to render the issue list once instead of up to four times. "Comic List" was removed from
+the Library view-mode picker in the same change (it duplicated Details; the enum + rendering path
+stay for older persisted state). `dotnet-ef` was bumped 8.0.10 → 10.0.11 (the pin mismatched EF
+Core 10 and silently mis-scaffolded the enum column). Verified in a clean worktree: builds, 32
+workspace ViewModel/service tests + 2 migration tests green; the FlaUI on-screen test is written
+but unrunnable in this environment (same UIA barrier as every other UI test here).
+
+**Filesystem folder browsing mode: dropped 2026-09-03** by the user's decision. Paperbunkr already
+reaches "comics not yet in the library" through drag-and-drop import, live folder-watch, and
+fileless entries; a second persistent browse surface wasn't worth the weight.
+
+Still open, in rough sequence: **drag-and-drop import** (design done —
+`docs/superpowers/specs/2026-08-31-drag-and-drop-import-design.md`); **Recent/MRU + Quick Open**
+(design done — `docs/superpowers/specs/2026-09-03-quick-open-command-palette-design.md`, a `Ctrl+P`
+fuzzy command palette over content + navigation + actions, seeded with recently-opened items;
+deliberately *not* CE's recency cover-wall, which Home already covers, nor its `File ▸ Open Recent`
+menu); **file metadata write-back** deliberately sequenced last (CE itself gates it behind explicit
+opt-in settings — real risk surface, mutates user files). A tracker/manga-UI research doc
+(Beta-scoped, see its own backlog entry) surfaced during this work — its Stage 6 "manga-specific
+detail view, selected by ContentType" depends on ContentType actually being real/editable/populated,
+which the Manga/ContentType entry above now provides.
 
 **Live folder-watch scanning shipped 2026-08-23** (design spec `2026-08-23-live-folder-watch-
 scanning-design.md`) — checked CE's own `FileSystemWatcher` usage first rather than assuming: it's

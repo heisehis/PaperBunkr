@@ -2,6 +2,7 @@ using System;
 using System.Linq;
 using Avalonia.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
+using Paperbunkr.App.Services;
 using Paperbunkr.Data.Entities;
 using Paperbunkr.Data.Metadata;
 
@@ -25,8 +26,12 @@ namespace Paperbunkr.App.Models;
 /// wipe the visible selection.
 /// </para>
 /// </summary>
-public sealed partial class IssueListRow : ObservableObject, ISelectableCard
+public sealed partial class IssueListRow : ObservableObject, ISelectableCard, IVariableWidthTile
 {
+    /// <summary>Panorama's variable-width virtualizing panel packs rows against this - the same
+    /// value the tile's DataTemplate binds its own <c>Width</c> to.</summary>
+    double IVariableWidthTile.PreferredWidth => PanoramaWidth;
+
     public int Id { get; init; }
     public int SeriesId { get; init; }
     public required string SeriesName { get; init; }
@@ -203,7 +208,8 @@ public sealed partial class IssueListRow : ObservableObject, ISelectableCard
         SeriesStatusLabel = series.Status.ToString(),
         ReadingStatusLabel = series.ReadingStatus.ToString(),
         ReadingDirectionLabel = series.ReadingMode.ToString(),
-        PanoramaWidth = SeriesCardSample.ComputePanoramaWidth(SeriesCardSample.DefaultCoverAspectRatio),
+        PanoramaWidth = SeriesCardSample.ComputePanoramaWidth(
+            issue.CoverAspectRatio ?? CoverAspectRatioStore.Get(issue.Id) ?? SeriesCardSample.DefaultCoverAspectRatio),
         SeriesIssueCount = series.Issues.Count,
         SeriesUnreadCount = series.Issues.Count(i => i.LastPageRead is null or 0),
         IsSelected = isSelected?.Invoke(issue.Id) ?? false,

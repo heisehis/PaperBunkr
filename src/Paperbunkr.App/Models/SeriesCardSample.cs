@@ -4,6 +4,7 @@ using Avalonia;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using CommunityToolkit.Mvvm.ComponentModel;
+using Paperbunkr.App.Services;
 using Paperbunkr.Data.Entities;
 
 namespace Paperbunkr.App.Models;
@@ -16,8 +17,12 @@ namespace Paperbunkr.App.Models;
 /// multiselect-slice3-design.md) - same "was a plain init-only POCO, converted for live-notifying
 /// IsSelected" treatment <see cref="IssueListRow"/> got in Slice 1.
 /// </summary>
-public sealed partial class SeriesCardSample : ObservableObject, ISelectableCard
+public sealed partial class SeriesCardSample : ObservableObject, ISelectableCard, IVariableWidthTile
 {
+    /// <summary>Panorama's variable-width virtualizing panel packs rows against this - the same
+    /// value the card's DataTemplate binds its own <c>Width</c> to.</summary>
+    double IVariableWidthTile.PreferredWidth => PanoramaWidth;
+
     /// <summary>Explicit implementation - <see cref="SeriesId"/> is this model's real, long-established
     /// public name for the same value; <see cref="ISelectableCard"/> only needs an <c>Id</c> accessor
     /// reachable through the interface, not a second public property duplicating it.</summary>
@@ -194,12 +199,16 @@ public sealed partial class SeriesCardSample : ObservableObject, ISelectableCard
         var coverIssue = series.Issues.FirstOrDefault(i => i.Id == series.CoverIssueId)
             ?? series.Issues.OrderByNumber().FirstOrDefault();
 
-        // Always the default ratio, never a real decoded aspect ratio - Panorama's per-cover
-        // variable width relied on eagerly decoding every card's cover just to measure it, which is
-        // exactly the eager-decode-regardless-of-visibility behavior this lazy CoverIssueId design
-        // exists to eliminate. Traded off deliberately (confirmed with the user): Panorama cards
-        // render at a uniform default width now instead of shape-adapting per cover.
-        double aspectRatio = DefaultCoverAspectRatio;
+        // Real cover aspect ratio, resolved without decoding anything: the value persisted on the
+        // Issue (written at thumbnail generation / by the backfill sweep) or, failing that, one
+        // learned this session as the cover decoded on screen (CoverAspectRatioStore). Falls back
+        // to a standard portrait ratio until a real cover has been seen - Panorama then re-packs
+        // once the store fills in (LibraryScreenViewModel listens for that). This keeps the lazy
+        // CoverIssueId design intact: a card that never scrolls into view still never triggers a
+        // decode.
+        double aspectRatio = coverIssue?.CoverAspectRatio
+            ?? (coverIssue is not null ? CoverAspectRatioStore.Get(coverIssue.Id) : null)
+            ?? DefaultCoverAspectRatio;
 
         return new SeriesCardSample
         {

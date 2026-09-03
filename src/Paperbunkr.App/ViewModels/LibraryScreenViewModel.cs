@@ -273,7 +273,37 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         LoadFromDatabase();
         RefreshWorkspaces();
         _constructed = true;
+
+        // Panorama shows each cover at its real aspect ratio. Ratios are learned progressively as
+        // covers decode on screen (CoverAspectRatioStore) on a library whose covers were generated
+        // before Issue.CoverAspectRatio existed and hasn't been re-scanned since; when a batch of
+        // them settles, re-pack Panorama so the tiles take their true shapes. Debounced so a fast
+        // scroll-through doesn't rebuild the view on every decode, and a no-op unless Panorama is
+        // the active mode. Once the backfill sweep has run (any scan / Generate Covers) every ratio
+        // is persisted and this never fires again.
+        _panoramaReflowTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(600) };
+        _panoramaReflowTimer.Tick += (_, _) =>
+        {
+            _panoramaReflowTimer!.Stop();
+            if (IsPanoramaGrid)
+            {
+                RebuildView();
+            }
+        };
+        CoverAspectRatioStore.RatiosLearned += (_, _) =>
+            Dispatcher.UIThread.Post(() =>
+            {
+                if (IsPanoramaGrid)
+                {
+                    _panoramaReflowTimer!.Stop();
+                    _panoramaReflowTimer!.Start();
+                }
+            });
     }
+
+    /// <summary>Debounces Panorama re-pack when <see cref="CoverAspectRatioStore"/> learns new
+    /// cover ratios mid-session - see where it's wired in the constructor.</summary>
+    private readonly DispatcherTimer? _panoramaReflowTimer;
 
     /// <summary>False until the constructor finishes - gates the <c>IssueList.PropertyChanged</c>
     /// relay's <see cref="RebuildView"/>/<see cref="SaveLibrarySettings"/> so the seed assignments in
@@ -775,6 +805,14 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
             .AsSplitQuery()
             .OrderBy(s => s.SortName ?? s.Name)
             .ToList();
+
+        // Warm the aspect-ratio store from what's already persisted, so Panorama renders correct
+        // cover shapes on the very first frame (no progressive-learning reflow) once a library has
+        // been scanned. Issues still missing a ratio fall back to a default until learned.
+        CoverAspectRatioStore.Prime(
+            _allSeries.SelectMany(s => s.Issues)
+                .Where(i => i.CoverAspectRatio is double r && r > 0)
+                .Select(i => (i.Id, i.CoverAspectRatio!.Value)));
 
         _allCollections = context.Collections.Include(c => c.Items).AsNoTracking().AsSplitQuery().OrderBy(c => c.SortOrder).ToList();
 
@@ -3017,11 +3055,10 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
     /// <summary>Panorama grid's fixed cover-box height - XAML binds here rather than a hardcoded literal, so this and <see cref="SeriesCardSample.PanoramaWidth"/>'s own math can't drift apart.</summary>
     public double PanoramaCardHeight => SeriesCardSample.PanoramaHeight;
 
-    /// <summary>Panorama's uniform tile width for the <c>VirtualizingWrapPanel</c>'s <c>ItemWidth</c>
-    /// - the exact clamped value <see cref="SeriesCardSample.PanoramaWidth"/> /
-    /// <see cref="IssueListRow.PanoramaWidth"/> already resolve to (uniform since the 2026-08-22
-    /// cover-memory-virtualization change dropped the per-cover aspect-ratio widths). Kept as one
-    /// value so the panel's grid math and each tile's own <c>Width</c> can't disagree.</summary>
+    /// <summary>A single representative Panorama tile width - the panel itself now packs rows from
+    /// each tile's own <see cref="SeriesCardSample.PanoramaWidth"/> (real per-cover aspect ratio),
+    /// so this is only used by the A-Z jump indexer as a rough items-per-row estimate for a scroll
+    /// offset. A default-portrait cover's clamped width.</summary>
     public double PanoramaTileWidth => SeriesCardSample.ComputePanoramaWidth(SeriesCardSample.DefaultCoverAspectRatio);
 
     /// <summary>Panorama tile's full height for the <c>VirtualizingWrapPanel</c>'s <c>ItemHeight</c>

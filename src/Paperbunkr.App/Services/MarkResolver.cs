@@ -156,8 +156,9 @@ public sealed class MarkResolver
                 : new string(row.Canonical.ToLowerInvariant().Where(char.IsLetterOrDigit).ToArray());
             if (_formatAssets.Contains(stem))
             {
-                return new MarkSpec(MarkKind.SvgAsset, AssetPath: Root + "Formats/" + stem + ".svg",
-                    Foreground: ThemeTint);
+                // Format pictograms carry their own colour (a category-hued palette, see
+                // Assets/Marks/SOURCES.md) - rendered as-is, like the age-rating boxes, not tinted.
+                return new MarkSpec(MarkKind.SvgAsset, AssetPath: Root + "Formats/" + stem + ".svg");
             }
         }
 
@@ -259,6 +260,35 @@ public sealed class MarkResolver
 
         return marks;
     }
+
+    // ---- Reading status / scanlation group (docs/superpowers/specs/2026-09-04-detail-screen-
+    //      icons-and-glyphs-design.md §8) - pure glyph marks, no assets/alias tables. ------------
+
+    /// <summary>
+    /// A <see cref="ReadingStatus"/> value (its enum name, as every call site produces via
+    /// <c>series.ReadingStatus.ToString()</c>) → a colour-coded FluentIcons glyph + friendly
+    /// label. <see cref="ReadingStatus.Unknown"/> and anything unparseable → <see cref="MarkSpec.None"/>
+    /// (renders nothing). Hex colours mirror the app's semantic tokens - kept as literals here for
+    /// the same reason the age-rating chip colours live as hex in <c>age-rating-aliases.tsv</c>:
+    /// this resolver is deliberately Avalonia-resource-free.
+    /// </summary>
+    public MarkSpec ResolveReadingStatus(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value) || !Enum.TryParse<ReadingStatus>(value.Trim(), ignoreCase: true, out var status))
+        {
+            return MarkSpec.None;
+        }
+
+        var p = ReadingStatusPresentation.For(status);
+        return p.HasGlyph ? new MarkSpec(MarkKind.Glyph, Glyph: p.Glyph, Text: p.Label, Foreground: p.Hex) : MarkSpec.None;
+    }
+
+    /// <summary>A manga chapter's scanlation-group string → a "people" glyph beside the name.
+    /// Blank → <see cref="MarkSpec.None"/>. No colour override (inherits <c>Foreground</c>).</summary>
+    public MarkSpec ResolveScanGroup(string? value) =>
+        string.IsNullOrWhiteSpace(value)
+            ? MarkSpec.None
+            : new MarkSpec(MarkKind.Glyph, Glyph: Symbol.PeopleTeam, Text: value.Trim());
 
     // ---- helpers ------------------------------------------------------------------------------------
 

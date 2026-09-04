@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Giant: four arrows pointing outward. Category-hued (#D9A521); rendered as-is by BrandMark. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="#D9A521">
+  <path d="M6 6 H26 L19 13 L27 21 L21 27 L13 19 L6 26 Z"/>
+  <path d="M58 6 H38 L45 13 L37 21 L43 27 L51 19 L58 26 Z"/>
+  <path d="M6 58 H26 L19 51 L27 43 L21 37 L13 45 L6 38 Z"/>
+  <path d="M58 58 H38 L45 51 L37 43 L43 37 L51 45 L58 38 Z"/>
+</svg>

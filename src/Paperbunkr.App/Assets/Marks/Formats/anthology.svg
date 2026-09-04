@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Anthology: several books fanned at angles. Category-hued (#C77F1A); rendered as-is by BrandMark. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="#C77F1A">
+  <rect x="8" y="18" width="11" height="34" transform="rotate(-14 13 35)"/>
+  <rect x="22" y="13" width="11" height="40"/>
+  <rect x="37" y="18" width="11" height="34" transform="rotate(14 43 35)"/>
+</svg>

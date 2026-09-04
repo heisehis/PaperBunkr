@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Year One: a bold launch/up arrow (v2 - the v1 pennant+numeral cutout was invisible below ~24px). Category-hued (#8257E0); rendered as-is by BrandMark. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="#8257E0">
+  <path d="M32 6 L54 30 H42 V58 H22 V30 H10 Z"/>
+</svg>

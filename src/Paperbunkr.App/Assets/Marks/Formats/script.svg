@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Script: a page of lines with a rolled top edge. Category-hued (#1F9E9E); rendered as-is by BrandMark. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="#1F9E9E">
+  <path fill-rule="evenodd" d="M14 12 H50 V56 H14 Z M20 22 H44 V27 H20 Z M20 33 H44 V38 H20 Z M20 44 H36 V49 H20 Z"/>
+  <rect x="10" y="6" width="44" height="9" rx="4"/>
+</svg>

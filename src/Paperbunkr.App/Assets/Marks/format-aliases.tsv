@@ -8,44 +8,51 @@
 #   label       short chip text; blank = uppercased canonical
 #   bg          hex chip background; blank = default surface
 #   asset       filename stem under Assets/Marks/Formats/ (<stem>.svg); non-blank -> render that
-#               SVG instead of the symbol/label (CE had only two true pictograms - see SOURCES.md)
+#               SVG pictogram (theme-tinted) instead of the symbol/label. Every comic-format row
+#               now ships a hand-drawn glyph; the six book/container rows below stay glyph + chip.
 #
 # canonical	aliases	symbol	label	bg	asset
-1/2	1_2|one half|half issue		½
-.1	point 1|point one		.1
--1	minus 1|minus one		−1
-Annotation	annotations		NOTE
-Annual			ANNUAL
-Anthology		Book	ANTH
-Black & White	b&w|b/w|b_w|bw|black and white		B/W
-Box Set	box-set|boxset|box	BoxMultiple	BOX
+1/2	1_2|one half|half issue		½		half
+.1	point 1|point one		.1		point-one
+-1	minus 1|minus one		−1		minus-one
+Annotation	annotations		NOTE		annotation
+Annual			ANNUAL		annual
+Anthology		Book	ANTH		anthology
+Black & White	b&w|b/w|b_w|bw|black and white		B/W		black-and-white
+Box Set	box-set|boxset|box	BoxMultiple	BOX		box-set
 Crossover		ArrowSwap	X-OVER		crossover
-Director's Cut	directors cut|director s cut	Video	DC
-Epilogue			EPILOGUE
-Event		Flash	EVENT
-FCBD	free comic book day	Gift	FCBD
-Fan Made	fanmade|fan-made	People	FAN
-Flyer		DocumentText	FLYER
-Giant	giant-size|giant size|giant sized	ArrowMaximize	GIANT
-Graphic Novel	gn	Book	GN
-Hardcover	hard cover|hc	Book	HC
-King	king-size|king size	Crown	KING
-Limited Series	limited	Ribbon	LTD
-Magazine		News	MAG
-Main	main series		MAIN
+Director's Cut	directors cut|director s cut	Video	DC		directors-cut
+Epilogue			EPILOGUE		epilogue
+Event		Flash	EVENT		event
+FCBD	free comic book day	Gift	FCBD		fcbd
+Fan Made	fanmade|fan-made	People	FAN		fan-made
+Flyer		DocumentText	FLYER		flyer
+Giant	giant-size|giant size|giant sized	ArrowMaximize	GIANT		giant
+Graphic Novel	gn	Book	GN		graphic-novel
+Hardcover	hard cover|hc	Book	HC		hardcover
+King	king-size|king size	Crown	KING		king
+Limited Series	limited	Ribbon	LTD		limited-series
+Magazine		News	MAG		magazine
+Main	main series		MAIN		main
 NSFW	not safe for work	EyeOff	NSFW	#7A1F1F	nsfw
-Omnibus	omni	Book	OMNI
-One Shot	one-shot|1 shot|1-shot|oneshot		1-SHOT
-Preview	prev	Eye	PREVIEW
-Prologue			PROLOGUE
-Reference	ref	Info	REF
-Reviewed	review	CheckmarkCircle	REVIEW
-Scanlation	scanlated	Scan	SCAN
-Script		DocumentText	SCRIPT
-Series			SERIES
-Sketch	sketchbook	Edit	SKETCH
-Special	spec	Sparkle	SPECIAL
-Trade Paper Back	trade paperback|tpb|trade	Book	TPB
-Web Comic	webcomic|web	Globe	WEB
-Year One	year 1	Bookmark	YEAR ONE
-Year Zero	year 0	Bookmark	YEAR ZERO
+Omnibus	omni	Book	OMNI		omnibus
+One Shot	one-shot|1 shot|1-shot|oneshot		1-SHOT		one-shot
+Preview	prev	Eye	PREVIEW		preview
+Prologue			PROLOGUE		prologue
+Reference	ref	Info	REF		reference
+Reviewed	review	CheckmarkCircle	REVIEW		reviewed
+Scanlation	scanlated	Scan	SCAN		scanlation
+Script		DocumentText	SCRIPT		script
+Series			SERIES		series
+Sketch	sketchbook	Edit	SKETCH		sketch
+Special	spec	Sparkle	SPECIAL		special
+Trade Paper Back	trade paperback|tpb|trade	Book	TPB		trade-paperback
+Web Comic	webcomic|web	Globe	WEB		web-comic
+Year One	year 1	Bookmark	YEAR ONE		year-one
+Year Zero	year 0	Bookmark	YEAR ZERO		year-zero
+EPUB	epub	BookOpen	EPUB
+PDF	pdf	DocumentPdf	PDF
+FB2	fb2	BookOpen	FB2
+MOBI	mobi|azw|azw3|kf8	BookOpen	MOBI
+CBZ	cbz	Album	CBZ
+CBR	cbr	Album	CBR

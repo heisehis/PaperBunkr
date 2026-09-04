@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Black and White: a ring with the right half filled. Category-hued (#9A9A9A); rendered as-is by BrandMark. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="#9A9A9A">
+  <path fill-rule="evenodd" d="M32 5 A27 27 0 1 0 32 59 A27 27 0 1 0 32 5 Z M32 13 A19 19 0 1 0 32 51 A19 19 0 1 0 32 13 Z"/>
+  <path d="M32 13 A19 19 0 0 1 32 51 Z"/>
+</svg>

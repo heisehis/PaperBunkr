@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Fan Made: a reader figure with a star. Category-hued (#5866D6); rendered as-is by BrandMark. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="#5866D6">
+  <circle cx="24" cy="20" r="10"/>
+  <path d="M6 52 C6 38 42 38 42 52 V56 H6 Z"/>
+  <path d="M50 10 L53 18 L61 18 L55 23 L57 31 L50 26 L43 31 L45 23 L39 18 L47 18 Z"/>
+</svg>

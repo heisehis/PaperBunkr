@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Web Comic: a globe. Category-hued (#5866D6); rendered as-is by BrandMark. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="#5866D6">
+  <path fill-rule="evenodd" d="M32 4 A28 28 0 1 0 32 60 A28 28 0 1 0 32 4 Z M32 11 A21 21 0 1 0 32 53 A21 21 0 1 0 32 11 Z"/>
+  <rect x="7" y="29" width="50" height="5"/>
+  <path fill-rule="evenodd" d="M32 5 C15 18 15 46 32 59 C49 46 49 18 32 5 Z M32 16 C23 25 23 39 32 48 C41 39 41 25 32 16 Z"/>
+</svg>

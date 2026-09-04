@@ -158,6 +158,40 @@ namespace cYo.Common.Win32
 					registryKey?.SetValue(null, string.Empty);
 				}
 			}
+
+			// Deliberate deviation from ComicRackCE (whose UnregisterFileOpen only blanks the
+			// extension's default value): also drop the now-orphaned ProgID class key so a
+			// full unregister leaves no residue under HKCU\Software\Classes. A single typeId can
+			// be shared by several extensions of one FileFormat - FileFormat.UnregisterShell calls
+			// this once per extension with the same typeId - so only delete the ProgID key once no
+			// remaining extension still points at it, otherwise unregistering one extension of a
+			// multi-extension format would break the others.
+			if (!IsTypeIdInUse(typeId))
+			{
+				ClassesRootWritable.DeleteSubKeyTree(WritablePath(typeId), throwOnMissingSubKey: false);
+			}
+		}
+
+		private static bool IsTypeIdInUse(string typeId)
+		{
+			using RegistryKey classesKey = ClassesRootWritable.OpenSubKey(@"Software\Classes");
+			if (classesKey == null)
+			{
+				return false;
+			}
+			foreach (string subKeyName in classesKey.GetSubKeyNames())
+			{
+				if (!subKeyName.StartsWith(".", StringComparison.Ordinal))
+				{
+					continue;
+				}
+				using RegistryKey extensionKey = classesKey.OpenSubKey(subKeyName);
+				if (typeId == (string)extensionKey?.GetValue(null))
+				{
+					return true;
+				}
+			}
+			return false;
 		}
 
 		public static bool IsFileOpenRegistered(string typeId, string docExtension)

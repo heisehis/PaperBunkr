@@ -22,6 +22,20 @@ this file itself already did once (see the note below).
 
 ## What's left (as of 2026-08-12, HEAD `85fb681`)
 
+> **Manual session note (2026-09-04):** P0–P7 remain all done. Two things worth recording here since
+> this is the doc a human opens first:
+> 1. **The project is now `0.2.0-beta`** (`v0.2.0-beta` tag, `CHANGELOG.md`, README/wiki updated).
+>    In-app auto-update via NetSparkle + a tag-triggered GitHub Release/appcast pipeline shipped
+>    `32d82bf`. These `alpha-*.md` filenames are historical now; the Beta backlog itself is still
+>    live in [`alpha-roadmap.md`](alpha-roadmap.md).
+> 2. **On-screen verification debt largely cleared.** The user personally clicked through and
+>    confirmed on 2026-09-04: Activity Center, Panorama variable widths, drag-and-drop import, file
+>    metadata write-back, Library view-mode virtualization, manga detail / cover-art override /
+>    MangaBaka picker, Saved Workspaces, Quick Open palette, double-page spread / remappable reader
+>    shortcuts / auto-scroll, comprehensive keyboard operability, Smart Collections, MediaRelation
+>    collection nodes, SmartList Engine v2, Plugin API v3, Specials tab. Full list + remaining
+>    unverified edge cases in `alpha-roadmap.md`'s "On-screen verification" section.
+
 > **Manual session note (2026-08-27, Metadata Model Phases 4d-4g):** net-new metadata-platform work
 > landed this session — Event Relations (4d, one new EF migration
 > `20260827193943_MetadataModelPhase4dEventRelations`), Format-Signal Event Suggestions (4e),
@@ -403,19 +417,31 @@ docs/superpowers/specs/2026-08-09-embedded-metadata-and-migration-relocation-des
   real app.
 
 **Housekeeping, not on the roadmap itself:**
-- Stale worktree `.claude/worktrees/quirky-borg-c5d364` (branch `claude/quirky-borg-c5d364`) —
-  still present as of `5869ed0`, unchanged since last check. Its two commits (PageCanvas focus
-  fix, Virtual Tags wiring) predate and are superseded by `8e1bf55`'s versions of the same fixes.
-  Still has the same uncommitted edit to `LibraryFolderScannerTests.cs`. Safe to discard once
-  confirmed nothing else is needed from it.
-- **New, found this sync:** two more worktrees from the Novels (EPUB/PDF) session —
-  `.claude/worktrees/compassionate-banach-c6e8bf` (branch `claude/compassionate-banach-c6e8bf`,
-  tip `25c664a`) and `.claude/worktrees/exciting-hypatia-eecfc9` (detached HEAD at `d86cac7`).
-  Both confirmed clean (`git status --short` empty) and both tip commits confirmed already merged
-  into `master` (`git branch --contains` shows `master`) — safe-to-discard candidates, same
-  reasoning as quirky-borg above.
-- ~~`docs/alpha-roadmap.md` uncommitted edit~~ — resolved; working tree is clean as of `5869ed0`
-  (re-confirmed this sync — `git status --short` on the main worktree is empty).
+
+**Worktree sweep 2026-09-04** (the branch/hash refs in the older sync notes above are all stale — a
+lot of new worktrees came and went since):
+- **Removed** (clean + HEAD already merged to `master`): `compassionate-banach-c6e8bf`
+  (`9c6b0fd`, branch `claude/interesting-ritchie-e328cd`), `gallant-diffie-290bcb` (`1b6761e`,
+  PR #36), `lucid-allen-96d8e0` (detached `497b689`) — the last one's git registration is gone but
+  the on-disk folder was file-locked at removal time and is left as an orphan for a later
+  `rm -rf` / reboot. Merged local branches `claude/interesting-ritchie-e328cd`,
+  `claude/gallant-diffie-290bcb`, `claude/panorama-variable-width` deleted too.
+- **Left in place, has uncommitted work — needs a human call:**
+  - `exciting-hypatia-eecfc9` (branch `claude/admiring-merkle-3bbcc5`, `0de95e6`) — modified
+    `src/Paperbunkr.Common/Win32/ShellRegister.cs` + an untracked `ShellRegisterTests.cs`. Looks
+    like the "worth a dedicated regression test in a future pass" for the P7 file-association
+    HKCU fix, started and never finished. Salvage the test or discard.
+  - `quirky-borg-c5d364` (`6e8c9b7`, NOT merged) — the long-standing stale one; its commits
+    (PageCanvas focus, Virtual Tags) are superseded by `8e1bf55`, still carries the same
+    `LibraryFolderScannerTests.cs` edit. Been "safe to discard" in this doc for months — needs
+    `git worktree remove --force` since HEAD isn't merged.
+  - `serene-meninsky-08b528` (`1fd36bf`, merged) — one modified `TestAppBuilder.cs`, unclear
+    provenance. Diff it, then discard.
+- **Left alone, active:** `C:/Users/DeeDee/PaperBunkr-plugin-automation` (branch
+  `plugin-api-gap-closure` — live Plugin API v2 gap-closure + IronPython work, pushed not merged)
+  and `.claude/worktrees/agent-adacc7f060a74c906` (an in-flight agent session).
+- **`current_alpha_todo.md` deleted** (`git rm`, staged) — the stale root-level duplicate of this
+  file, flagged for removal since `c1e91a6`.
 
 ---
 

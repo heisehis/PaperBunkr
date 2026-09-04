@@ -69,6 +69,40 @@ sequenced by risk and user-facing impact) lives in [`alpha-todo.md`](alpha-todo.
 Pulled from `docs/ce-feature-inventory.md`'s full CE parity audit (2026-08-07), organized by area.
 Nothing here is sequenced yet — this is the full confirmed "decided: build" list, not a sprint plan.
 
+### On-screen verification — cleared by the user 2026-09-04
+
+Almost every Beta-backlog entry below carries a trailing "on-screen GUI pass still pending" /
+"manual verification still pending" caveat — the standing "no unattended desktop GUI automation in
+this environment" limitation, which meant a lot of shipped, test-green work had never actually been
+clicked through by a human. **The user personally verified the following on 2026-09-04 and reports
+them working on screen.** The per-section caveats below are superseded for these items; they are
+left in place only as history.
+
+- **Activity Center** — status bar + background-job/alert peek/drawer (committed `504e717`, local,
+  not yet pushed to `origin/master` as of this note).
+- **Panorama variable cover widths** — real cover orientations while virtualized (merged, PR #42).
+- **Drag-and-drop import** — files / folders / `.cbl` onto the Library and Reading List screens,
+  including real OS-level drag (the part that was explicitly not automatable here).
+- **File metadata write-back** — the Preferences → Advanced "Comic File Metadata" group and the
+  six edit-flow triggers.
+- **Library view-mode virtualization** — `ListBoxItem` chrome neutral in both themes, group
+  headers render, arrow-key nav on the Poster grid.
+- **Manga detail screen**, **cover-art override** (all three entry points), **MangaBaka provider
+  picker**.
+- **Saved Workspaces** (Library + Books switcher) and the **`Ctrl+P` Quick Open palette** — the
+  FlaUI tests for both are written but unrunnable in this environment; the user covered them by hand.
+- **Double-page spread** rendering / pairing / reflow, **remappable reader keyboard shortcuts**
+  (keypress-to-action wiring), **auto-scroll / hands-free mode** stop behavior.
+- **Comprehensive keyboard operability** — Menu key / Shift+F10 opening context menus at the
+  focused element, arrow-key nav feel on every rolled-out grid (including the Smart Lists
+  virtualized case), tag-pill and column-picker menus.
+- **Smart Collections**, **MediaRelation collection nodes**, **SmartList Engine v2** (nested
+  groups + operators + AllProperties), **Plugin API v3** (metadata/rules/writer facade).
+
+Still genuinely unverified on screen (no code change, just never checked): the app-shell nav
+history trackpad two-finger swipe and Backspace-in-a-textbox edge case; the crash reporter /
+minimize-to-tray interactive parts; auto-update through a real tagged release (see that entry).
+
 ### Preferences: Reader tab (last of 5 tabs)
 **Was stale — a Reader tab already existed** (shipped 2026-08-07 alongside RTL navigation:
 Right-to-Left/Display/Keyboard Shortcuts groups), this entry just hadn't been updated to say so.
@@ -136,11 +170,9 @@ Automated tests green; on-screen gesture/animation verification done (user-confi
 
 **Still genuinely open:** magnifier overlay (explicitly skipped per user direction — "we have a zoom
 slider"), on-screen overlays (scrubber, page/status text, clock/battery), split-page part navigation,
-touch gestures beyond what's already shipped. **On-screen (not just automated-test) verification of
-double-page spread rendering/pairing, remappable-shortcut keypress wiring, and auto-scroll behavior
-is still pending** — same standing no-unattended-GUI-automation caveat that applied when those
-shipped; `Paperbunkr.App.UiTests` (see Library browsing extras below) has since closed this gap for
-other screens and could close it here too.
+touch gestures beyond what's already shipped. **On-screen verification of double-page spread
+rendering/pairing, remappable-shortcut keypress wiring, and auto-scroll behavior — cleared by the
+user 2026-09-04** (see the "On-screen verification" section near the top of this backlog).
 
 ### Metadata editing extras
 Copy/paste fields between books, templated/token text field editor, Quick Rating + free-text
@@ -373,13 +405,18 @@ per-list sharing). Substantial subsystem, not named anywhere in the
 original onboarding.md — needs its own brainstorm → design spec before any implementation starts.
 The **background job/task monitor** that CE bundled with this is now decoupled and **shipped for
 local jobs** as the Activity Center (`docs/superpowers/specs/2026-09-03-activity-center-design.md`,
-implemented 2026-09-03, uncommitted); surfacing *remote/server* jobs in it is the part still
-waiting on this subsystem.
+committed `504e717`, on-screen verified by the user 2026-09-04; local-only, not yet pushed to
+`origin/master` as of this note); surfacing *remote/server* jobs in it is the part still waiting on
+this subsystem. The ported CE Engine classes for the sharing side (`ComicLibraryClient` /
+`ComicLibraryServer` / `RemoteComicBookProvider` / `NetworkManager`) already exist in
+`Paperbunkr.Engine` with zero App-layer call sites — same "ported early, never wired" pattern as
+several other pieces; the App-side client/server/UI is what still needs the brainstorm → spec.
 
 ### Metadata Model platform (user-supplied `PAPERBUNKR_METADATA_MODEL.md`, 2026-08-17/18)
 79-section implementation spec covering canonical metadata, relationships, events/reading lists,
 external providers, and recommendations — its own §68 "Migration Strategy" defines 7 phases.
-**Phases 1-6a shipped (plus net-new Phases 4d-4g, 2026-08-27), Phase 7 explicitly deferred, plus a Specials Tab design (2026-08-28, not yet implemented)** (not dropped — the source doc itself gates it:
+**Phases 1-6a shipped (plus net-new Phases 4d-4g, 2026-08-27), Phase 7 explicitly deferred, plus
+the Specials Tab — shipped 2026-09-02, `32ec248`** (not dropped — the source doc itself gates it:
 "Implement only when needed by the reader and collected-edition use cases," and there's no concrete
 driving use case yet; revisit if one shows up). Design specs:
 `docs/superpowers/specs/2026-08-17-metadata-model-phase{1,2a,2b,2c,3,4a,4b,4c,5a}-*-design.md`,
@@ -472,19 +509,26 @@ driving use case yet; revisit if one shows up). Design specs:
   - First-class `Character` entity landed here (the gap 4g's spec documented). It's an index over
     `Issue.Characters`, not an editable entity — no character-management UI, and family expansion
     is one-hop by design. A fuller character model / character-scoped browse remains future work.
-  - **Series Detail — Specials Tab** (designed 2026-08-28, following a Kavita comparison
-    session — see `event-section-planning` project memory; **not yet implemented**): design
-    spec `docs/superpowers/specs/2026-08-28-series-detail-specials-tab-design.md`. New
+  - **Series Detail — Specials Tab** — **shipped 2026-09-02, `32ec248`** ("Series Detail: run
+    separator (Volume grouping) + Specials tab"; designed 2026-08-28 following a Kavita comparison
+    session — see `event-section-planning` project memory). Design spec
+    `docs/superpowers/specs/2026-08-28-series-detail-specials-tab-design.md`. New
     `SpecialFormatCatalog` (Kavita's real special-triggering Format values, intersected with
     CE's actual 16-value list, plus 10 Kavita-only additions bundled into the Format
     autocomplete — CE has none of these, confirmed by grep, so flagged as a deliberate
     addition, not a port) + `Issue.IsSpecial()` extension. New Specials tab on the comic
-    `DetailScreen`, between Issues and Related, hidden when empty; pulls Format-flagged
+    `DetailScreen`, hidden when a series has none; pulls Format-flagged
     issues fully out of the Issues tab rather than duplicating them, reusing the Issues tab's
-    existing Poster/List/Card templates and view-mode setting. **No migration** (reads the
-    already-shipped `Issue.Format`). Deliberately Format-only for this phase — Kavita's other
-    two detection mechanisms (no-parsed-`Number` auto-detection, `SP##` filename marker) and a
-    manual per-issue override are explicitly out of scope, per the design doc.
+    existing tile templates (extracted to shared `StaticResources` in the same commit).
+    **No migration** (reads the already-shipped `Issue.Format`). Deliberately Format-only for
+    this phase — Kavita's other two detection mechanisms (no-parsed-`Number` auto-detection,
+    `SP##` filename marker) and a manual per-issue override are explicitly out of scope, per the
+    design doc. On-screen verified by the user 2026-09-04. **Landed alongside** an unrelated
+    "run separator" feature: the Issues tab now groups by `Issue.Volume` with a
+    `"{Writer} ({Volume})"` separator bar when a series has more than one distinct run (e.g.
+    "Venom (2018)" vs "Venom (2022)"), collapsing to the flat rendering for the single-run case;
+    numbering / gaps / completion stats stay series-wide. Both turned out to be display-layer
+    work over already-shipped fields — neither needed the deferred Phase 7 schema.
 - **Phase 5a — External Metadata schema**: `ExternalMediaId`/`ExternalMetadataSnapshot`/
   `ExternalRating` + the `IMetadataProvider` adapter contract, schema-only, zero adapters/network/UI.
 - **Phase 5b — Real AniList adapter**: `AniListMetadataProvider`, live GraphQL calls, rate-limit-
@@ -506,6 +550,15 @@ driving use case yet; revisit if one shows up). Design specs:
 Tracker-driven classification pipeline (MangaUpdates/AniList), MangaDex metadata scraping,
 search-and-confirm UI shared across classification/tracking/scraping. Explicitly Beta-scoped from
 the start.
+
+**Publisher-based classification shipped 2026-09-02, `254b36e`** — a third fallback branch in the
+scanner's classification chain (after embedded `Manga` flag and `LanguageISO`): a new series with
+neither hint is classified Comic/Manga/Manhwa/Manhua from its publisher name alone (e.g.
+VIZ Media → Manga/RightToLeft) via `PublisherContentTypeClassifier`. Publishers that genuinely span
+categories (Dark Horse, Tapas) are deliberately excluded rather than guessed. A periodic re-sweep is
+wired fire-and-forget off a new `AppSettings.LastContentTypeSweepUtc`, same shape as the auto-backup
+trigger. One migration (`20260902142325_AddLastContentTypeSweepUtc`). This is a heuristic pre-filter,
+not the tracker-driven pipeline below — that remains unbuilt.
 
 **Expanded scope, per user-supplied research (2026-08-12):** full tracker-service *sync*
 integration (not just classification-time metadata lookup) — one `Track` row per series-per-
@@ -531,8 +584,7 @@ flags let it suppress its own Issues tab + tab strip when hosted this way). Recl
 callback threaded through both view models. Floating Resume button and the recommendations row from
 the research doc's reference screenshot were explicitly deferred, per the brainstorm. 732
 `Paperbunkr.App.Tests` passing (new `MangaDetailScreenViewModelTests`); on-screen verification of the
-new screen itself is still pending as of this write-up — build + tests pass and the app launches
-clean, but nobody has clicked through the actual rendered UI yet.
+new screen itself — **cleared by the user 2026-09-04**.
 
 Stages 1–4 (the `Track`/`TrackingLink` entity, `ITrackerAdapter` abstraction with AniList/
 MyAnimeList/Shikimori/Bangumi adapters, one-way sync-to-tracker, and `CredentialStore`-backed token
@@ -589,7 +641,7 @@ tracker. The user's actual interest in MangaBaka is broader (its site's rich tag
 relations, recommendations) — flagged as a separate future research pass, not built this session.
 1136 tests passing (`Paperbunkr.App.Tests` 737 + `Paperbunkr.Data.Tests` 399, both suites run in
 full, not just the new cases); on-screen verification of all three items (manga screen itself, the
-cover-art entry points, the MangaBaka provider picker) is still pending as of this write-up.
+cover-art entry points, the MangaBaka provider picker) — **cleared by the user 2026-09-04**.
 
 ### Plugin API v2 (onboarding.md §10) — engine + 4 real hooks shipped 2026-08-24, remaining hooks/UI surfaces still open
 Design spec: `2026-08-24-plugin-api-v2-design.md`. Shipped this session: new `Paperbunkr.Plugins`
@@ -634,7 +686,8 @@ hardcoded `OrdinalIgnoreCase`; "Aa" toggle + the two operators in the Text-field
 refactored onto it (behaviour-preserving, golden-list parity test) and `SmartListField.AllProperties`
 + `SmartListCondition.SearchMode` special-cased in the query builder, two-dropdown field picker.
 Tests: 1704 (App 1134 + Data 565 + the new v2/parity/migration suites) green; migration verified
-applying to a fresh DB; app smoke-launched to "Startup complete". On-screen GUI pass still pending.
+applying to a fresh DB; app smoke-launched to "Startup complete". On-screen GUI pass cleared by the
+user 2026-09-04.
 
 ### Smart Collections — rule-based Collection membership (shipped 2026-08-30)
 Design spec: `2026-08-30-smart-collections-design.md`, plan: `2026-08-30-smart-collections-plan.md`.
@@ -665,7 +718,7 @@ Preferences Reader tab session's `HasSentinel` catch. Tests: 1909 total (Data 63
 Plugins 16), all green; app smoke-launched to "Startup complete" via a properly-detached process
 (an earlier attempt to launch it from a backgrounded bash job was killed by shell teardown, not a
 real crash — worth remembering for future smoke-launches in this environment). On-screen GUI pass
-still pending.
+cleared by the user 2026-09-04.
 
 ### MediaRelation collection nodes (shipped 2026-08-30)
 Design spec: `2026-08-30-media-relation-collection-nodes-design.md`, plan: `2026-08-30-media-
@@ -690,7 +743,7 @@ implementation: `TryCreate`'s duplicate check used a custom C# method EF couldn'
 migration round-trip test's own directional-inversion assertions were initially written backwards
 and caught by the test itself. Tests: 1926 total (Data 642 + App 1268 + Plugins 16), all green (one
 known-flaky, unrelated concurrency test confirmed passing in isolation); app smoke-launched to
-"Startup complete". On-screen GUI pass still pending.
+"Startup complete". On-screen GUI pass cleared by the user 2026-09-04.
 
 ### App shell navigation history — back/forward, breadcrumbs, restore-on-launch, CLI deep-linking (shipped 2026-08-31)
 Design spec: `2026-08-30-app-shell-navigation-history-design.md`, plan: `2026-08-30-app-shell-
@@ -793,8 +846,7 @@ Tests: `Paperbunkr.App.Tests` 1385/1385 green (up from 1327 before this spec). A
 `PowerShell Start-Process`, confirmed running 6+ seconds later, left open for on-screen verification.
 On-screen visual/keyboard verification (Menu key opening menus in the right place, arrow-key nav
 feel on each rolled-out grid including the Smart Lists virtualized case specifically, tag-pill and
-column-picker menus) still pending — no unattended GUI automation available in this environment,
-same standing caveat as every other input-focused spec in this project.
+column-picker menus) — **cleared by the user 2026-09-04**.
 
 ### App-wide & library keyboard shortcuts, sidebar arrow-key movement (shipped 2026-08-31)
 Design spec: `2026-08-31-app-wide-and-library-keyboard-shortcuts-design.md` (no separate plan doc —
@@ -861,7 +913,29 @@ both test assemblies, never Plugins); `BlockedMetadataReferenceResolver` closes 
 `#r "Microsoft.EntityFrameworkCore"` hole; `PaperbunkrDbContext` ctor kept public (broad test
 usage) but a script still can't open one; `wiki/Plugins.md` updated with the "accidental overreach,
 not adversarial isolation" framing. §8 tests incl. an end-to-end Data-Manager fixture plugin.
-Plugins.Tests 16/16, no regressions. On-screen GUI pass still pending.
+Plugins.Tests 16/16, no regressions. On-screen GUI pass cleared by the user 2026-09-04.
+
+### Auto-update + changelog + customized installer (shipped 2026-09-01, `32d82bf`) — 0.2.0-beta
+Design/plan: `docs/superpowers/specs/2026-09-01-auto-update-and-changelog-{design,plan}.md`.
+**In-app auto-update via `NetSparkleUpdater.SparkleUpdater`** — checks for new releases on startup
+and on demand from Preferences → About, downloads and applies updates in-app. Installer-agnostic, so
+the P7 Inno Setup installer is unchanged; NetSparkle just downloads and runs it. New
+`.github/workflows/release.yml` (tag-triggered): builds via `installer/BuildInstaller.ps1`, then
+generates and Ed25519-signs an `appcast.xml` via `netsparkle-generate-appcast`, uploaded alongside
+the installer to the GitHub Release (one real bug fixed post-ship, `f0a5878` — the appcast generator
+was silently skipping signing when `SPARKLE_PUBLIC_KEY` was unset). A hand-authored `CHANGELOG.md`
+(repo root, Keep a Changelog) is rendered in a new Preferences → About section (`ChangelogParser`);
+the installer's pre-install "what's new" page is generated from the same file. The installer also
+gained optional "Launch at Windows startup" / "Associate comic-manga files" tasks, Restart Manager
+integration, and an opt-in delete-my-library-data prompt on uninstall (backed by a headless
+`--register/--unregister-file-associations` CLI mode).
+
+**This is the alpha → beta cutover.** The `v0.2.0-beta` git tag exists and `CHANGELOG.md`'s
+`[0.2.0-beta]` section documents the release; README / wiki / GitHub Pages landing page are updated
+to beta. The `docs/alpha-*.md` filenames are now historical — the backlog itself is still live, just
+no longer "alpha". **Still open:** an end-to-end check that a real tagged release actually produces a
+working signed appcast and that a prior install upgrades itself from it — the tag exists but nobody
+has watched an older build pull `0.2.0-beta` down and reinstall.
 
 ### App chrome (crash reporter + minimize-to-tray shipped 2026-08-23/24)
 Crash reporter dialog, minimize-to-tray, external "open with" app associations.
@@ -892,6 +966,16 @@ on-screen - computer-use access was denied for this app, same as a prior session
 ### Novels: EPUB/PDF support (Phase 1+2 landed 2026-08-09/10, Phase 3 landed 2026-08-10)
 Not a CE-parity item — ComicRackCE has no prose-reading equivalent, see the design spec's own
 CE-verification note. Design: docs/superpowers/specs/2026-08-09-novels-epub-pdf-support-design.md.
+
+**FB2 + MOBI/AZW3 ingestion shipped 2026-09-02, `b9f74f5`** (plan
+`docs/superpowers/specs/2026-09-01-books-format-ingestion-fb2-mobi-plan.md`): new `Fb2BookSource`
+and `MobiBookSource` (hand-rolled PalmDB reader, PalmDoc decompressor, MOBI header parsing, CP1252
+decoding) behind the existing `IBookTextSource`, wired into `BookFolderScanService` /
+`BookTextSourceFactory`, plus the `BookFormat` schema migration and the Library/reader UI updates
+that depend on it. **The Books/PDF reader was also reworked 2026-09-03** (`51b51c3`, PR #38):
+WebView-based reflow renderer, a shared HUD, and a touchpad-scroll fix — see the Books reader
+ergonomics project memory / `2026-09-*-books-reader-*` specs. **OPDS catalog client** (Kavita/Komga)
+is design-only so far (`33ad867`).
 **Phase 1 shipped** (independent `Book`/`BookSeries`/`BookBookmark`/`BookFolder` schema, `VersOne.Epub`-
 and raw-`pdfium`-text-API-backed parsers behind a shared `IBookTextSource`, folder-scan import with
 cover/metadata extraction, a Books nav section with a covers grid — no reader yet, verified via 17
@@ -968,8 +1052,10 @@ library and real e-book files** (neither caused by this Novels work, both unrela
 - **News reader** (`Help > News` RSS) — deferred, live idea to repurpose the feed mechanism for
   something Paperbunkr-relevant; needs its own brainstorm before scoping
 - **Export to another format** — dropped, format conversion is a separate concern from this app
-- **GitHub self-updater** — dropped for now, revisit once there's a real release/distribution
-  pipeline
+- ~~**GitHub self-updater** — dropped for now, revisit once there's a real release/distribution
+  pipeline~~ — **superseded**: in-app auto-update shipped 2026-09-01 (`32d82bf`) on
+  `NetSparkleUpdater` + a tag-triggered GitHub Release / appcast pipeline. See the "Auto-update"
+  section above.
 - **Portable device / wireless sync** — excluded, feature doesn't exist in Paperbunkr's model
 - **Multi-tab/multi-window book-open (CE's MDI model)** — confirmed non-goal, single-screen
   rail-nav is the deliberate design target (Mihon/Komikku-style)

@@ -2090,6 +2090,20 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
     }
 
     /// <summary>
+    /// Whether drag-and-drop file import is enabled (Preferences → General, CE
+    /// <c>Settings.DisableDragDrop</c> inverted). Read fresh so a Preferences toggle takes effect
+    /// without reloading the screen - the code-behind <c>DragOver</c>/<c>Drop</c> handlers check it.
+    /// </summary>
+    public bool DragDropImportEnabled
+    {
+        get
+        {
+            using var context = PaperbunkrDb.CreateContext();
+            return context.GetOrCreateAppSettings().EnableDragDropImport;
+        }
+    }
+
+    /// <summary>
     /// Drag-and-drop import entry point for <see cref="Views.LibraryScreen"/>'s code-behind
     /// <c>Drop</c> handler (docs/superpowers/specs/2026-08-31-drag-and-drop-import-design.md) - runs
     /// the shared <see cref="DragImportService"/>, refreshes the grid, and shows one summary toast.
@@ -2098,7 +2112,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
     /// </summary>
     public async Task ImportDroppedPathsAsync(IReadOnlyList<string> paths)
     {
-        if (paths.Count == 0)
+        if (paths.Count == 0 || !DragDropImportEnabled)
         {
             return;
         }

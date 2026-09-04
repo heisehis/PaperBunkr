@@ -292,12 +292,15 @@ public partial class LibraryScreen : UserControl
 
     private void OnDragOver(object? sender, DragEventArgs e)
     {
-        e.DragEffects = e.DataTransfer.Formats.Contains(DataFormat.File) ? DragDropEffects.Copy : DragDropEffects.None;
+        bool enabled = (DataContext as LibraryScreenViewModel)?.DragDropImportEnabled == true;
+        e.DragEffects = enabled && e.DataTransfer.Formats.Contains(DataFormat.File)
+            ? DragDropEffects.Copy
+            : DragDropEffects.None;
     }
 
     private async void OnDrop(object? sender, DragEventArgs e)
     {
-        if (DataContext is not LibraryScreenViewModel vm)
+        if (DataContext is not LibraryScreenViewModel vm || !vm.DragDropImportEnabled)
         {
             return;
         }

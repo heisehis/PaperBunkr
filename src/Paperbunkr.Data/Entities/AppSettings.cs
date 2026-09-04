@@ -459,4 +459,40 @@ public class AppSettings
     /// instead - see the design doc. Default false.
     /// </summary>
     public bool WriteNativeSidecar { get; set; }
+
+    // --- Behavior settings, second batch (docs/superpowers/specs/2026-09-04-behavior-settings-
+    // batch2-design.md). Follows the first batch (OpenLastPage/AutoNavigateComics above); each gates
+    // something that already works today. Defaults chosen so an existing settings row reproduces
+    // current behavior exactly - the two that Paperbunkr already does unconditionally default true,
+    // the two new opt-in behaviors default to CE's own false.
+
+    /// <summary>
+    /// Whether launch restores the screen active when the app last closed (<see cref="LastScreenKey"/>),
+    /// or always opens Home. CE: <c>Settings.OpenLastFile</c> ("Reopen Books from last session"),
+    /// default true. A <c>--open</c> CLI deep link still wins regardless (App.axaml.cs checks it first).
+    /// </summary>
+    public bool RestoreSessionOnStartup { get; set; } = true;
+
+    /// <summary>
+    /// Whether a full library folder scan (comics + book folders) runs in the background on launch.
+    /// CE: <c>Settings.ScanStartup</c> ("Rescan the Book Folders for new Books"), default false.
+    /// <c>LiveFolderWatchService</c> only catches changes made while the app is running; this covers
+    /// changes made while it was closed.
+    /// </summary>
+    public bool ScanFoldersOnStartup { get; set; }
+
+    /// <summary>
+    /// Whether reaching the end of a comic (paging past the last page with no next issue to advance
+    /// to) auto-opens the Quick Rate overlay for that issue. CE: <c>Settings.AutoShowQuickReview</c>
+    /// ("Show Quick Review Dialog after finishing Book"), default false. Fires at most once per
+    /// reader-load session.
+    /// </summary>
+    public bool PromptReviewOnFinish { get; set; }
+
+    /// <summary>
+    /// Whether files/folders/.cbl can be imported by dragging them onto the Library or Reading List
+    /// screens. CE: <c>Settings.DisableDragDrop</c> (inverted sense), default false there = drop
+    /// enabled, so default true here.
+    /// </summary>
+    public bool EnableDragDropImport { get; set; } = true;
 }

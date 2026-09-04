@@ -108,6 +108,11 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         MangaDetail = new MangaDetailScreenViewModel(NavigateBack, GoReaderForIssue, GoIssuePropertiesForIssue, GoBulkIssuePropertiesForIssues, GoDetailForSeries, GoLibraryWithSearch, GoLibraryWithCollection, id => EnqueueMetadataWriteBack(id));
         var keyBindingService = new KeyBindingService();
         Reader = new ReaderScreenViewModel(NavigateBack, keyBindingService);
+        // "Ask me to rate a comic when I finish it" (docs/superpowers/specs/2026-09-04-behavior-
+        // settings-batch2-design.md §3.3) - the reader raises this at the true end of a book when
+        // AppSettings.PromptReviewOnFinish is on; reuse the same Quick Rate overlay the Library /
+        // Detail right-click item opens.
+        Reader.ReviewPromptRequested += OpenQuickRateOverlay;
         IssueProperties = new IssuePropertiesScreenViewModel(CloseIssuePropertiesOverlayAndReload, ShowToast, enqueueMetadataWriteBack: id => EnqueueMetadataWriteBack(id));
         BulkIssueProperties = new BulkIssuePropertiesScreenViewModel(CloseBulkIssuePropertiesOverlayAndReload, ShowToast, enqueueMetadataWriteBack: id => EnqueueMetadataWriteBack(id));
         BulkSeriesProperties = new BulkSeriesPropertiesScreenViewModel(CloseBulkSeriesPropertiesOverlayAndReload, id => EnqueueMetadataWriteBack(id));
@@ -1715,11 +1720,19 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
     /// empty each launch, per the design doc's explicit call). Falls back to Home, logged rather than
     /// thrown, when the referenced entity no longer exists (deleted since last session) - same
     /// posture as <see cref="AppSettings.LibraryActiveCollectionId"/>'s existing "falls back to All
-    /// Series if deleted" handling.</summary>
+    /// Series if deleted" handling. Gated by <see cref="AppSettings.RestoreSessionOnStartup"/>
+    /// (docs/superpowers/specs/2026-09-04-behavior-settings-batch2-design.md §3.1, CE
+    /// <c>Settings.OpenLastFile</c>) - off means a clean Home every launch.</summary>
     public void RestoreLastScreen()
     {
         using var context = PaperbunkrDb.CreateContext();
         var settings = context.GetOrCreateAppSettings();
+
+        if (!settings.RestoreSessionOnStartup)
+        {
+            GoHome();
+            return;
+        }
 
         try
         {
@@ -1813,7 +1826,7 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
     private void CloseBulkSeriesPropertiesOverlay() => BulkSeriesProperties.CancelCommand.Execute(null);
 
     /// <summary>
-    /// Esc-to-close/cancel (P5, docs/alpha-roadmap.md), routed here rather than per-screen
+    /// Esc-to-close/cancel (P5, docs/Paperbunkr-Roadmap.md), routed here rather than per-screen
     /// KeyDown handlers so there's exactly one place that knows what "the current dialog" is -
     /// none of Migration/Issue Properties/Bulk Editing are real Avalonia Windows/Popups (they're
     /// all overlays within the single MainWindow), so there's no native

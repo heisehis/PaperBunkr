@@ -11,6 +11,22 @@
         <StackPanel Margin="28,20,28,40" Spacing="20">
             <TextBlock Classes="pbTextHeading" Text="General" />
 
+            <Border Classes="groupBox" Tag="general.startup">
+                <StackPanel>
+                    <Border Classes="groupHeader">
+                        <TextBlock Text="Startup" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
+                    </Border>
+                    <StackPanel Margin="14" Spacing="12">
+                        <CheckBox IsChecked="{Binding RestoreSessionOnStartup}" Foreground="{DynamicResource PbTextBrush}" FontSize="13"
+                                  Content="Reopen the screen I was on last time" />
+                        <CheckBox IsChecked="{Binding ScanFoldersOnStartup}" Foreground="{DynamicResource PbTextBrush}" FontSize="13"
+                                  Content="Scan library folders for new files at startup" />
+                        <TextBlock Text="Picks up files added or removed while Paperbunkr wasn't running. Runs in the background — check the activity center for progress."
+                                   FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" Margin="0,-6,0,0" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
             <Border Classes="groupBox" Tag="general.reading">
                 <StackPanel>
                     <Border Classes="groupHeader">
@@ -21,6 +37,20 @@
                                   Content="Resume issues where you left off" />
                         <CheckBox IsChecked="{Binding AutoNavigateComics}" Foreground="{DynamicResource PbTextBrush}" FontSize="13"
                                   Content="Reading past the last page opens the next issue" />
+                        <CheckBox IsChecked="{Binding PromptReviewOnFinish}" Foreground="{DynamicResource PbTextBrush}" FontSize="13"
+                                  Content="Ask me to rate a comic when I finish it" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
+            <Border Classes="groupBox" Tag="general.library">
+                <StackPanel>
+                    <Border Classes="groupHeader">
+                        <TextBlock Text="Library" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
+                    </Border>
+                    <StackPanel Margin="14" Spacing="12">
+                        <CheckBox IsChecked="{Binding EnableDragDropImport}" Foreground="{DynamicResource PbTextBrush}" FontSize="13"
+                                  Content="Allow importing files by dragging them into the window" />
                     </StackPanel>
                 </StackPanel>
             </Border>

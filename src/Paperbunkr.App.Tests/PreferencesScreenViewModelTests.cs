@@ -257,6 +257,10 @@ public class PreferencesScreenViewModelTests : IDisposable
         Assert.True(context.GetOrCreateAppSettings().ReducedMotion);
         Assert.Equal(TimeSpan.Zero, Avalonia.Application.Current!.Resources["PbMotionFast"]);
         Assert.Equal(TimeSpan.Zero, Avalonia.Application.Current!.Resources["PbMotionSlow"]);
+        // docs/superpowers/specs/2026-09-04-navigation-transition-system-design.md - PbMotionStandard/
+        // PbMotionLarge get the same zero-on-reduced-motion treatment as Fast/Slow above.
+        Assert.Equal(TimeSpan.Zero, Avalonia.Application.Current!.Resources["PbMotionStandard"]);
+        Assert.Equal(TimeSpan.Zero, Avalonia.Application.Current!.Resources["PbMotionLarge"]);
     }
 
     [Fact]

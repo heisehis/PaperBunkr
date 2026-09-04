@@ -118,6 +118,19 @@
              button-hover feel. Also zeroed by SkinService.ApplyReducedMotion, same as PbMotionFast. -->
         <x:TimeSpan x:Key="PbMotionSlow">0:0:0.7</x:TimeSpan>
 
+        <!-- docs/superpowers/specs/2026-09-04-navigation-transition-system-design.md - two more
+             durations alongside PbMotionFast/PbMotionSlow above, both zeroed the same way by
+             SkinService.ApplyReducedMotion/ApplyPersistedSettings:
+             - PbMotionStandard: drill-down screen cross-fade (push/pop), sidebar, breadcrumb.
+             - PbMotionLarge: the shared-element cover flight (NavigationTransitionCoordinator).
+             Unlike PbScreenSlide's PageSlide above, the drill-down transition's reduced-motion
+             handling does NOT rely on these resources being re-read live (same "captured once"
+             limitation applies to any Duration baked into a StaticResource IPageTransition) - the
+             coordinator instead skips the whole transition (DrillTransitionKind.None) when reduced
+             motion is on, so these tokens only need to be correct for the non-reduced case. -->
+        <x:TimeSpan x:Key="PbMotionStandard">0:0:0.22</x:TimeSpan>
+        <x:TimeSpan x:Key="PbMotionLarge">0:0:0.32</x:TimeSpan>
+
         <!-- Directional screen-slide (docs/superpowers/specs/2026-08-24-navigation-shell-motion-
              system-design.md) - direction comes from MainViewModel.IsTransitionReversed
              (TransitioningContentControl.IsTransitionReversed), not this resource. Duration/Easing

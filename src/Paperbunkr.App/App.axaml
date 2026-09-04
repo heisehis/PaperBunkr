@@ -123,11 +123,10 @@
              SkinService.ApplyReducedMotion/ApplyPersistedSettings:
              - PbMotionStandard: drill-down screen cross-fade (push/pop), sidebar, breadcrumb.
              - PbMotionLarge: the shared-element cover flight (NavigationTransitionCoordinator).
-             Unlike PbScreenSlide's PageSlide above, the drill-down transition's reduced-motion
-             handling does NOT rely on these resources being re-read live (same "captured once"
-             limitation applies to any Duration baked into a StaticResource IPageTransition) - the
-             coordinator instead skips the whole transition (DrillTransitionKind.None) when reduced
-             motion is on, so these tokens only need to be correct for the non-reduced case. -->
+             The shared-element flight's own reduced-motion handling doesn't depend on this
+             resource's liveness at all - NavigationTransitionCoordinator checks the reduced-motion
+             flag itself and skips capturing/flying entirely, in code, before ever touching a
+             duration. PbMotionStandard's liveness matters only for PbDrillTransition below. -->
         <x:TimeSpan x:Key="PbMotionStandard">0:0:0.22</x:TimeSpan>
         <x:TimeSpan x:Key="PbMotionLarge">0:0:0.32</x:TimeSpan>
 
@@ -143,6 +142,27 @@
              speed even with Reduced Motion on - a real, deliberate gap, not an oversight. -->
         <anim:PageSlide x:Key="PbScreenSlide" Duration="{StaticResource PbMotionFast}" Orientation="Horizontal"
                         SlideInEasing="{StaticResource PbMotionEase}" SlideOutEasing="{StaticResource PbMotionEase}" />
+
+        <!-- Drill-down push/pop (docs/superpowers/specs/2026-09-04-navigation-transition-system-
+             design.md) - one shared transition, direction from MainViewModel.IsDrillTransitionReversed,
+             same "one resource + a reversed bool" shape as PbScreenSlide above rather than two
+             separate push/pop resources. Duration is StaticResource, not DynamicResource - tried the
+             latter first and it's a compile error (AVLN3000, "no suitable setter... for argument
+             BindingBase"): CrossFade/PageSlide's Duration is a plain CLR property, not an
+             AvaloniaProperty, so it can only ever take a StaticResource's already-resolved value at
+             parse time - DynamicResource has nothing to attach a live subscription to. This confirms
+             (doesn't just repeat) PbScreenSlide's own documented finding just above: same gap,
+             inherited on purpose rather than worked around, since the underlying Avalonia API makes
+             a real live-duration fix impossible without a custom IPageTransition. Reduced Motion
+             does NOT affect this cross-fade's speed, same as PbScreenSlide - accepted, not an
+             oversight. -->
+        <anim:CompositePageTransition x:Key="PbDrillTransition">
+            <anim:CompositePageTransition.PageTransitions>
+                <anim:CrossFade Duration="{StaticResource PbMotionStandard}" />
+                <anim:PageSlide Duration="{StaticResource PbMotionStandard}" Orientation="Vertical"
+                                SlideInEasing="{StaticResource PbMotionEase}" SlideOutEasing="{StaticResource PbMotionEase}" />
+            </anim:CompositePageTransition.PageTransitions>
+        </anim:CompositePageTransition>
 
         <!-- Bundled fonts (design doc's Typography section). PbDisplayFontFamily (Bebas Neue) is
              for hero/heading text only, referenced directly via StaticResource in Styles/Typography.axaml

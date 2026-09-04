@@ -408,6 +408,36 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
 
     public bool IsLateralScreen => RailOrder.ContainsKey(CurrentScreen);
 
+    /// <summary>The drill-down screen's own ViewModel, or null when a lateral screen (Home/Library/
+    /// etc.) is active - bound to the shell's drill-down <c>TransitioningContentControl</c> (docs/
+    /// superpowers/specs/2026-09-04-navigation-transition-system-design.md), the sibling of
+    /// <see cref="ActiveScreenContent"/>'s own lateral one.</summary>
+    public object? ActiveDrillDownContent => CurrentScreen switch
+    {
+        "detail" => Detail,
+        "mangaDetail" => MangaDetail,
+        "reader" => Reader,
+        "bookReader" => BookReader,
+        "pdfReader" => PdfReader,
+        "bookDetail" => BookDetail,
+        _ => null,
+    };
+
+    /// <summary>Push (deeper) vs Pop (back) for the drill-down transition - set immediately before
+    /// <see cref="CurrentScreen"/> changes (see the <c>RunDrill</c> helper below), so
+    /// <see cref="IsDrillTransitionReversed"/> already has the right value by the time the shell's
+    /// drill-down <c>TransitioningContentControl</c> reacts to the content swap.</summary>
+    [ObservableProperty]
+    private DrillTransitionKind _drillTransitionKind;
+
+    partial void OnDrillTransitionKindChanged(DrillTransitionKind value) => OnPropertyChanged(nameof(IsDrillTransitionReversed));
+
+    /// <summary>Direction for the drill-down <c>TransitioningContentControl</c>'s <c>PageSlide</c> -
+    /// same "one shared transition resource, direction from a bool" pattern
+    /// <see cref="IsTransitionReversed"/> already established for the lateral rail system, reused
+    /// here instead of inventing a second selection mechanism.</summary>
+    public bool IsDrillTransitionReversed => DrillTransitionKind == DrillTransitionKind.Pop;
+
     public bool IsHome => CurrentScreen == "home";
     public bool IsLibrary => CurrentScreen == "library";
     public bool IsBooks => CurrentScreen == "books";
@@ -451,6 +481,7 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
     partial void OnCurrentScreenChanged(string value)
     {
         OnPropertyChanged(nameof(ActiveScreenContent));
+        OnPropertyChanged(nameof(ActiveDrillDownContent));
         OnPropertyChanged(nameof(IsLateralScreen));
         OnPropertyChanged(nameof(IsHome));
         OnPropertyChanged(nameof(IsLibrary));

@@ -22,7 +22,7 @@ public partial class ReaderScreen : UserControl
     }
 
     /// <summary>
-    /// Known-gap fix (docs/alpha-roadmap.md P1): <see cref="PageCanvas"/> previously needed a
+    /// Known-gap fix (docs/Paperbunkr-Roadmap.md P1): <see cref="PageCanvas"/> previously needed a
     /// manual click before arrow keys registered, because the rail-nav screen switcher never
     /// destroys/recreates screens - it just toggles a <c>ContentControl</c>'s <c>IsVisible</c>
     /// (MainWindow.axaml), so <c>Loaded</c>/<c>AttachedToVisualTree</c> only ever fire once, at

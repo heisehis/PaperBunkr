@@ -1,6 +1,6 @@
 # Drag-and-Drop Import — Design
 
-*Part of the "Library browsing extras" backlog (docs/alpha-roadmap.md) — the next open item after
+*Part of the "Library browsing extras" backlog (docs/Paperbunkr-Roadmap.md) — the next open item after
 browse history and live folder-watch scanning, both already shipped.*
 
 ## CE-parity check (standing rule)

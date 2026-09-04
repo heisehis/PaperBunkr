@@ -204,5 +204,5 @@ add it" dead end.
 ## Roadmap
 
 Update `docs/superpowers/specs/2026-08-27-collections-design.md`'s Deferred list (mark this item
-done) and `docs/alpha-roadmap.md`'s Beta backlog once landed, matching the pattern the smart
+done) and `docs/Paperbunkr-Roadmap.md`'s Beta backlog once landed, matching the pattern the smart
 collections spec used.

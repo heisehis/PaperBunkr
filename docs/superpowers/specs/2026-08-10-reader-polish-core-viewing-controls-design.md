@@ -1,7 +1,7 @@
 # Reader Polish — Core Viewing Controls (Fit Modes, Zoom, Rotation)
 
 *Date: 2026-08-10. First slice of the Beta backlog's "Reader polish" item
-(docs/alpha-roadmap.md), the largest unsequenced entry there. Extends the paged-mode reader built
+(docs/Paperbunkr-Roadmap.md), the largest unsequenced entry there. Extends the paged-mode reader built
 in docs/superpowers/specs/2026-08-09-reader-gestures-and-grid-navigation-design.md, which explicitly
 deferred fit-mode presets ("zoom here is simple continuous zoom only, no mode picker") to a later
 pass — this is that pass.*

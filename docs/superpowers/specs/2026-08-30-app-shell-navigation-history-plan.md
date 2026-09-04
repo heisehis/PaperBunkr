@@ -195,6 +195,6 @@ crash and that navigating around + Backspace + a breadcrumb click behave as expe
 **Depends on:** all prior steps
 
 ## Roadmap
-Once landed: update `docs/alpha-roadmap.md` Beta backlog and
+Once landed: update `docs/Paperbunkr-Roadmap.md` Beta backlog and
 `2026-08-24-navigation-shell-motion-system-design.md`'s scope note, per the design doc's own Roadmap
 section.

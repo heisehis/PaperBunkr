@@ -1,6 +1,6 @@
 # Saved Workspaces — Design
 
-*Part of the "Library browsing extras" backlog (docs/alpha-roadmap.md). The next sub-project after
+*Part of the "Library browsing extras" backlog (docs/Paperbunkr-Roadmap.md). The next sub-project after
 **Saved List Layouts** (2026-08-17), which this builds directly on — that shipped the single
 auto-persisted view-state; this adds named, multiple, switchable versions of it.*
 
@@ -369,7 +369,7 @@ app-wide command — out of scope here.
 
 ## Roadmap / docs updates on landing
 
-- `docs/alpha-roadmap.md` — mark Saved Workspaces shipped in the "Library browsing extras" section,
+- `docs/Paperbunkr-Roadmap.md` — mark Saved Workspaces shipped in the "Library browsing extras" section,
   with the deviations (per-screen not global; no reader/window capture; ships starters).
 - `docs/ce-feature-inventory.md` §C — flip `Saved "Workspaces"` from "confirmed still not started"
   to shipped, noting the per-screen scope.

@@ -1,6 +1,6 @@
 # Quick Open — Command Palette — Design
 
-*Part of the "Library browsing extras" backlog (docs/alpha-roadmap.md). Combines that bundle's
+*Part of the "Library browsing extras" backlog (docs/Paperbunkr-Roadmap.md). Combines that bundle's
 "Recent/MRU" and "Quick Open overlay" items into one surface.*
 
 ## CE-parity check (standing rule)
@@ -234,7 +234,7 @@ remap surface for shell hotkeys is built later, `Ctrl+P` moves there with the re
 
 ## Roadmap / docs updates on landing
 
-- `docs/alpha-roadmap.md` — mark "Recent/MRU + Quick Open" shipped in the "Library browsing
+- `docs/Paperbunkr-Roadmap.md` — mark "Recent/MRU + Quick Open" shipped in the "Library browsing
   extras" section, noting the deviation (a `Ctrl+P` command palette, not a recents menu or a
   cover-wall; Home already covered the latter) and that filesystem folder browsing was **dropped**
   from the bundle by decision (see below).

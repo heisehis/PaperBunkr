@@ -225,7 +225,7 @@ concerned. The first beta release's notes should tell existing testers to uninst
 build and run the new Setup.exe once. This only matters if there are testers beyond the primary user;
 confirm at plan/ship time whether that's actually a live concern.
 
-`docs/alpha-todo.md` and/or `docs/alpha-roadmap.md` get a short note (with commit ref) that
+`docs/alpha-todo.md` and/or `docs/Paperbunkr-Roadmap.md` get a short note (with commit ref) that
 installer packaging moved from Inno Setup to Velopack, per the roadmap doc's own "update by hand"
 rule for anything roadmap-relevant.
 

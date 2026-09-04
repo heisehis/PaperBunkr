@@ -5,7 +5,7 @@
 
 ## Context
 
-`docs/alpha-roadmap.md`'s Beta backlog lists an "App chrome" line: crash reporter dialog,
+`docs/Paperbunkr-Roadmap.md`'s Beta backlog lists an "App chrome" line: crash reporter dialog,
 minimize-to-tray, external "open with" app associations. File association already shipped as part
 of Alpha's Advanced tab, so this spec covers the remaining two pieces: a crash reporter dialog and
 minimize-to-tray.

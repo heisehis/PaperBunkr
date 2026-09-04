@@ -146,7 +146,7 @@ public class SmartListQueryBuilderTests : IDisposable
     }
 
     /// <summary>
-    /// P3 audit regression test (docs/alpha-roadmap.md) - Genre/Publisher used to read
+    /// P3 audit regression test (docs/Paperbunkr-Roadmap.md) - Genre/Publisher used to read
     /// <c>Issue.Series.Genre</c>/<c>Publisher</c>, so an issue-level edit via Issue
     /// Properties/Bulk (the actual real editors for these fields) never showed up in Smart List
     /// filtering. Diverges one issue's own Genre from its series' Genre to prove the selector

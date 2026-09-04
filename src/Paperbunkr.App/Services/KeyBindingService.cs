@@ -9,7 +9,7 @@ namespace Paperbunkr.App.Services;
 
 /// <summary>
 /// Resolves and persists <see cref="KeyboardCommandRegistry"/> commands' current gestures
-/// (Preferences &gt; Keyboard Shortcuts, docs/alpha-roadmap.md P5 follow-up). Same context-factory-
+/// (Preferences &gt; Keyboard Shortcuts, docs/Paperbunkr-Roadmap.md P5 follow-up). Same context-factory-
 /// injection test seam as <see cref="SkinService"/>/<c>CoverThumbnailService</c>.
 /// </summary>
 public class KeyBindingService

@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-16
 **Status:** Approved, pending implementation plan
-**Backlog ref:** `docs/alpha-roadmap.md`'s "Library browsing extras" bundle — first of several planned
+**Backlog ref:** `docs/Paperbunkr-Roadmap.md`'s "Library browsing extras" bundle — first of several planned
 sub-projects (decomposed this session; the remaining 9 items — filesystem folder browsing mode,
 browse history, saved Workspaces/List Layouts, pluggable sort/group, drag-and-drop import,
 Recent/MRU + Quick Open, live folder-watch, file metadata write-back — are each their own future

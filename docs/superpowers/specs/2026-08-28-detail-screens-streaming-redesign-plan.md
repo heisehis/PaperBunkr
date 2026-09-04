@@ -176,7 +176,7 @@ populate `MoreLikeThis`. `ShowMoreLikeThis` false when empty.
 detail — hero backdrop renders from a real comic cover, band groups cap/expand, CVDB tags
 hidden with reveal, all three Issues view modes, Related rails + More Like This, selection focus
 + arrow-key nav, Continue/Edit/Cover/Reveal actions. Update `docs/alpha-todo.md` /
-`alpha-roadmap.md` P5 status.
+`Paperbunkr-Roadmap.md` P5 status.
 
 ---
 
@@ -263,7 +263,7 @@ band, sections, series poster grid. Full `App.Tests` green.
 ### Step 3.3: P3 regression + final pass
 **Verify:** full `Paperbunkr.App.Tests` + `Paperbunkr.Data.Tests` + `Paperbunkr.Plugins.Tests`
 green. On-screen pass across all three screen types. Update `docs/alpha-todo.md` +
-`docs/alpha-roadmap.md` — mark UI rework Phase 5 done with what was verified. Update memory
+`docs/Paperbunkr-Roadmap.md` — mark UI rework Phase 5 done with what was verified. Update memory
 `project_paperbunkr_ui_rework`.
 
 ---

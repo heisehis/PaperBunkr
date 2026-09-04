@@ -1,6 +1,6 @@
 ---
 title: App-Wide & Library Keyboard Shortcuts — Design Spec
-status: shipped 2026-08-31 (see docs/alpha-roadmap.md's own entry for what changed during
+status: shipped 2026-08-31 (see docs/Paperbunkr-Roadmap.md's own entry for what changed during
   implementation, notably the Left/Right-degenerates-to-Up/Down finding in the sidebar section)
 related: docs/superpowers/specs/2026-08-31-keyboard-operability-design.md (context-menu keyboard
   trigger + grid-nav rollout, landed 56df3a2), docs/superpowers/specs/2026-08-16-remappable-reader-
@@ -302,7 +302,7 @@ Edit `OnSearchBoxKeyDown`'s existing `Key.Escape` case (`LibraryToolbar.axaml.cs
 
 ## Roadmap
 
-Once landed: add a `docs/alpha-roadmap.md` Beta-backlog entry noting this closes the app-wide/
+Once landed: add a `docs/Paperbunkr-Roadmap.md` Beta-backlog entry noting this closes the app-wide/
 library remainder of the original external keyboard-control draft, and cross-reference from
 `2026-08-31-keyboard-operability-design.md`'s own scope note so a future reader sees both specs
 that together cover "keyboard operability" rather than assuming either one is the whole story.

@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-16
 **Status:** Approved, pending implementation plan
-**Backlog ref:** `docs/alpha-roadmap.md` reader-polish backlog ("remappable keyboard shortcuts,
+**Backlog ref:** `docs/Paperbunkr-Roadmap.md` reader-polish backlog ("remappable keyboard shortcuts,
 auto-scrolling/hands-free mode... remain open"); `docs/alpha-todo.md`'s double-page-spread entry
 also lists it as still-open.
 

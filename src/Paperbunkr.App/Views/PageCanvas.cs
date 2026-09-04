@@ -568,7 +568,7 @@ public class PageCanvas : Control
         set => SetValue(HighQualityDisplayProperty, value);
     }
 
-    /// <summary>Remappable via Preferences &gt; Reader &gt; Keyboard Shortcuts (docs/alpha-roadmap.md P5 follow-up). Defaults to the physical Left arrow.</summary>
+    /// <summary>Remappable via Preferences &gt; Reader &gt; Keyboard Shortcuts (docs/Paperbunkr-Roadmap.md P5 follow-up). Defaults to the physical Left arrow.</summary>
     public KeyGesture LeftKey
     {
         get => GetValue(LeftKeyProperty);

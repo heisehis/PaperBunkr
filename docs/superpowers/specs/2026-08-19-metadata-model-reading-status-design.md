@@ -6,7 +6,7 @@
 ## Context
 
 Prompted by an adversarial architecture review of an external "PaperBunkr Canonical Metadata Model"
-proposal document (`docs/alpha-roadmap.md`'s Metadata Model platform section covers Phases 1-6a;
+proposal document (`docs/Paperbunkr-Roadmap.md`'s Metadata Model platform section covers Phases 1-6a;
 this is unrelated follow-on work the review recommended adopting, not part of that platform doc's
 own phase numbering). The review's one clearly-missing, clearly-valuable finding: PaperBunkr tracks
 *publisher* status (`SeriesStatus`: Unknown/Ongoing/Completed/Cancelled/Hiatus) but has no explicit

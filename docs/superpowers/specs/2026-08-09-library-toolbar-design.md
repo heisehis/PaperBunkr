@@ -33,7 +33,7 @@ feature at all.
   appear in 2 groups, not solved here).
 - **Overlay toggles are session-only state**, matching the existing (already-unpersisted)
   `ViewMode` precedent. Persisting them is explicitly Beta-scoped already —
-  `alpha-roadmap.md`'s Beta backlog literally lists "Saved Workspaces (display-setting presets)"
+  `Paperbunkr-Roadmap.md`'s Beta backlog literally lists "Saved Workspaces (display-setting presets)"
   and "Saved List Layouts (grid/sort/group presets — `LibraryScreen` already has decorative UI
   stubbed for this)". This pass makes that decorative UI real; persisting the *choice* stays Beta.
 - **Komikku's "Tabs" section (show category tabs / show hidden categories / show number of items)

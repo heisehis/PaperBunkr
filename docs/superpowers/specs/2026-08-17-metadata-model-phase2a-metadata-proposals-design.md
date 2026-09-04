@@ -15,7 +15,7 @@ discussed (see [Phase 1 spec](2026-08-17-metadata-model-phase1-canonical-metadat
 "out of scope" section) had grown to include three separable pieces: this proposal workflow,
 Series-reassignment proposals, and the `MetadataDescriptor` sort/group system. Per this project's
 established pattern of decomposing oversized bundles (see the "Library browsing extras"
-decomposition, `docs/alpha-roadmap.md`), these are now three ordered sub-projects:
+decomposition, `docs/Paperbunkr-Roadmap.md`), these are now three ordered sub-projects:
 
 - **2a (this spec):** Metadata Proposals core.
 - **2b:** Series reassignment proposals — needs its own design pass for FK-migration semantics.

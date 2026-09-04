@@ -3,7 +3,7 @@ using Avalonia.Input;
 
 namespace Paperbunkr.App.Models;
 
-/// <summary>Picker option for a remappable key binding (Preferences &gt; Keyboard Shortcuts, docs/alpha-roadmap.md P5 follow-up).</summary>
+/// <summary>Picker option for a remappable key binding (Preferences &gt; Keyboard Shortcuts, docs/Paperbunkr-Roadmap.md P5 follow-up).</summary>
 public readonly record struct KeyOption(KeyGesture Gesture, string Label)
 {
     public override string ToString() => Label;

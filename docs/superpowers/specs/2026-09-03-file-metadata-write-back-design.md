@@ -1,6 +1,6 @@
 # File Metadata Write-Back — Design
 
-*Last open item in the "Library browsing extras" backlog (`docs/alpha-roadmap.md`), deliberately
+*Last open item in the "Library browsing extras" backlog (`docs/Paperbunkr-Roadmap.md`), deliberately
 sequenced last: it mutates the user's original comic files in place, so it's a real risk surface
 that CE itself gates behind explicit opt-in settings.*
 

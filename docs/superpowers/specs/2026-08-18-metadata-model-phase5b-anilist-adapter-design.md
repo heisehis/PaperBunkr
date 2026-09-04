@@ -19,7 +19,7 @@ follow-up - the first real, network-calling adapter.
 list (MyAnimeList, MangaDex, MangaBaka, MangaUpdates, Kitsu, Anime-Planet, Shikimori, GCD, League of
 Comic Geeks) and all search/match UI are deliberately deferred - not to a future "Phase 5c," but
 folded into the already-scoped **tracker-service sync** backlog item
-(`docs/alpha-roadmap.md`'s "Content-type classification & manga metadata scraping" section,
+(`docs/Paperbunkr-Roadmap.md`'s "Content-type classification & manga metadata scraping" section,
 research doc at `docs/tracker-manga-ui-research.md`), which already covers exactly this ground
 (AniList as one of six tracker services, a shared search-and-confirm UI, a manga-specific detail
 page) and is explicitly Beta-scoped pending its own brainstorm/design pass. Building the adapter now

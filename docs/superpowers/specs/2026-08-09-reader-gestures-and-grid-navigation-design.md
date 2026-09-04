@@ -1,7 +1,7 @@
 # Reader Gestures (Zoom/Pan/Wheel/Touch) + Grid Arrow-Key Navigation
 
 *Date: 2026-08-09. Follow-up to the P5 keyboard-navigation pass
-(docs/alpha-roadmap.md) — P5 covered Tab order, Enter/Space/Esc, and the Reader's remappable
+(docs/Paperbunkr-Roadmap.md) — P5 covered Tab order, Enter/Space/Esc, and the Reader's remappable
 page-turn keys, but left two real gaps: Library cards and Detail issue tiles only support
 one-dimensional Tab order (no spatial arrow-key movement through the grid), and the Reader has
 zero mouse-wheel, trackpad, or touch handling at all beyond the existing two-zone click/keyboard

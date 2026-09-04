@@ -2,7 +2,7 @@
 
 *Date: 2026-08-09. Scope: `PluginScreenViewModel`/`PluginScreen.axaml` and the rail-nav "Pl" icon
 only. Not building a real duplicate-finder or plugin system — that's explicitly Beta scope
-(`alpha-roadmap.md`'s Plugin API v2 section). This is a P4-adjacent placeholder-content sweep.*
+(`Paperbunkr-Roadmap.md`'s Plugin API v2 section). This is a P4-adjacent placeholder-content sweep.*
 
 ## 1. Problem
 

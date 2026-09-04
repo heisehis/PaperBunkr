@@ -1,7 +1,7 @@
 namespace Paperbunkr.Data.Entities;
 
 /// <summary>
-/// One user-remapped keyboard command (Preferences &gt; Keyboard Shortcuts, docs/alpha-roadmap.md
+/// One user-remapped keyboard command (Preferences &gt; Keyboard Shortcuts, docs/Paperbunkr-Roadmap.md
 /// P5 follow-up - "when we add something new, we can also set up navigation and shortcuts for
 /// them"). Only remapped commands get a row - a command with no row here just uses its
 /// registry-defined default (<c>Paperbunkr.App.Models.KeyboardCommandRegistry</c>), so adding a

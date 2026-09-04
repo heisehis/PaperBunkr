@@ -179,5 +179,5 @@ killed by shell teardown, not a real crash — use `PowerShell Start-Process` in
 
 ## Roadmap
 Update `docs/superpowers/specs/2026-08-27-collections-design.md`'s Deferred list (mark this item
-done) and add a `docs/alpha-roadmap.md` Beta-backlog entry, matching the pattern the smart
+done) and add a `docs/Paperbunkr-Roadmap.md` Beta-backlog entry, matching the pattern the smart
 collections and prior sessions used.

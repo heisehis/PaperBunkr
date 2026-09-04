@@ -285,7 +285,7 @@ is off / enabled when on; command param is the row/card id.
 
 ## Step 11: Docs + full verification
 
-**Files:** `docs/alpha-roadmap.md`, `docs/ce-feature-inventory.md` (edit)
+**Files:** `docs/Paperbunkr-Roadmap.md`, `docs/ce-feature-inventory.md` (edit)
 **What:** Mark "file metadata write-back" shipped in the roadmap's "Still open" paragraph with a
 summary (CE-parity settings, engine reuse, sidecar deviation, retired the Genre/Tags-only path).
 Update the `ce-feature-inventory.md` §E row for CE's three write-back settings. Run the full

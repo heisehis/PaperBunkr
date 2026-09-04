@@ -14,7 +14,7 @@
                 Padding="9,7" Margin="0,2">
             <StackPanel Spacing="3">
                 <Grid ColumnDefinitions="Auto,*,Auto">
-                    <fi:SymbolIcon Grid.Column="0" FontSize="13" Margin="0,0,7,0" VerticalAlignment="Center"
+                    <fi:SymbolIcon Grid.Column="0" FontSize="{StaticResource PbIconSizeSm}" Margin="0,0,7,0" VerticalAlignment="Center"
                                    Symbol="{Binding Kind, Converter={x:Static views:ActivityKindIconConverter.Instance}}"
                                    Foreground="{Binding Status, Converter={x:Static views:ActivityStatusBrushConverter.Instance}}" />
 
@@ -26,7 +26,7 @@
                             Command="{Binding $parent[ItemsControl].((vm:ActivityCenterViewModel)DataContext).CancelJobCommand}"
                             CommandParameter="{Binding}"
                             AutomationProperties.Name="Cancel job" ToolTip.Tip="Cancel">
-                        <fi:SymbolIcon Symbol="Dismiss" FontSize="11" />
+                        <fi:SymbolIcon Symbol="Dismiss" FontSize="{StaticResource PbIconSizeXs}" />
                     </Button>
 
                     <Border Grid.Column="2" IsVisible="{Binding IsFinished}" CornerRadius="999" Padding="7,1"
@@ -58,7 +58,7 @@
                 Padding="9,7" Margin="0,2" BorderThickness="3,0,0,0"
                 BorderBrush="{Binding Alert.Severity, Converter={x:Static views:ActivityStatusBrushConverter.Instance}}">
             <Grid ColumnDefinitions="Auto,*,Auto">
-                <fi:SymbolIcon Grid.Column="0" FontSize="13" Margin="0,0,7,0" VerticalAlignment="Top"
+                <fi:SymbolIcon Grid.Column="0" FontSize="{StaticResource PbIconSizeSm}" Margin="0,0,7,0" VerticalAlignment="Top"
                                Symbol="{Binding Alert.Severity, Converter={x:Static views:ActivitySeverityIconConverter.Instance}}"
                                Foreground="{Binding Alert.Severity, Converter={x:Static views:ActivityStatusBrushConverter.Instance}}" />
                 <StackPanel Grid.Column="1" Spacing="2">
@@ -73,7 +73,7 @@
                 </StackPanel>
                 <Button Grid.Column="2" Classes="activityIconBtn" Command="{Binding DismissCommand}"
                         AutomationProperties.Name="Dismiss alert" ToolTip.Tip="Dismiss">
-                    <fi:SymbolIcon Symbol="Dismiss" FontSize="11" />
+                    <fi:SymbolIcon Symbol="Dismiss" FontSize="{StaticResource PbIconSizeXs}" />
                 </Button>
             </Grid>
         </Border>
@@ -82,7 +82,7 @@
     <DataTemplate x:Key="ActivityHistoryRowTemplate" DataType="models:ActivityHistoryRow">
         <Border Padding="10,8" BorderThickness="0,0,0,1" BorderBrush="{DynamicResource PbBorderBrush}">
             <Grid ColumnDefinitions="Auto,2*,3*,Auto">
-                <fi:SymbolIcon Grid.Column="0" FontSize="13" Margin="0,2,10,0" VerticalAlignment="Top"
+                <fi:SymbolIcon Grid.Column="0" FontSize="{StaticResource PbIconSizeSm}" Margin="0,2,10,0" VerticalAlignment="Top"
                                Symbol="{Binding Kind, Converter={x:Static views:ActivityKindIconConverter.Instance}}"
                                Foreground="{Binding Status, Converter={x:Static views:ActivityStatusBrushConverter.Instance}}" />
                 <StackPanel Grid.Column="1" Spacing="2" Margin="0,0,10,0">

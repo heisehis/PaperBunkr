@@ -11,7 +11,7 @@
     <Border Width="440" Classes="floatingPanel">
         <StackPanel Margin="24,22" Spacing="4">
             <StackPanel Orientation="Horizontal" Spacing="10">
-                <fi:SymbolIcon Symbol="ArrowDownload" FontSize="20" Foreground="{DynamicResource PbAccentTextBrush}" />
+                <fi:SymbolIcon Symbol="ArrowDownload" FontSize="{StaticResource PbIconSizeLg}" Foreground="{DynamicResource PbAccentTextBrush}" />
                 <TextBlock Text="{Binding VersionText, StringFormat='Paperbunkr {0} is available'}"
                            FontSize="16" FontWeight="Bold" Foreground="{DynamicResource PbTextBrush}" TextWrapping="Wrap" />
             </StackPanel>

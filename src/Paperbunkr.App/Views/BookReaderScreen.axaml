@@ -111,9 +111,9 @@
                                             IsVisible="{Binding PartTitle, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}"
                                             AutomationProperties.Name="{Binding PartTitle}">
                                         <Grid ColumnDefinitions="Auto,*">
-                                            <fi:SymbolIcon Grid.Column="0" Symbol="ChevronDown" FontSize="11" Margin="0,0,6,0"
+                                            <fi:SymbolIcon Grid.Column="0" Symbol="ChevronDown" FontSize="{StaticResource PbIconSizeXs}" Margin="0,0,6,0"
                                                            IsVisible="{Binding IsExpanded}" />
-                                            <fi:SymbolIcon Grid.Column="0" Symbol="ChevronRight" FontSize="11" Margin="0,0,6,0"
+                                            <fi:SymbolIcon Grid.Column="0" Symbol="ChevronRight" FontSize="{StaticResource PbIconSizeXs}" Margin="0,0,6,0"
                                                            IsVisible="{Binding !IsExpanded}" />
                                             <TextBlock Grid.Column="1" Text="{Binding PartTitle}" TextTrimming="CharacterEllipsis" />
                                         </Grid>
@@ -167,7 +167,7 @@
                                                 Command="{Binding $parent[UserControl].((vm:BookReaderScreenViewModel)DataContext).DeleteBookmarkCommand}"
                                                 CommandParameter="{Binding}" ToolTip.Tip="Remove bookmark"
                                                 AutomationProperties.Name="Remove bookmark">
-                                            <fi:SymbolIcon Symbol="Dismiss" FontSize="11" />
+                                            <fi:SymbolIcon Symbol="Dismiss" FontSize="{StaticResource PbIconSizeXs}" />
                                         </Button>
                                     </Grid>
                                 </DataTemplate>
@@ -208,7 +208,7 @@
                                                 Command="{Binding $parent[UserControl].((vm:BookReaderScreenViewModel)DataContext).DeleteHighlightCommand}"
                                                 CommandParameter="{Binding}" ToolTip.Tip="Remove highlight"
                                                 AutomationProperties.Name="Remove highlight">
-                                            <fi:SymbolIcon Symbol="Dismiss" FontSize="11" />
+                                            <fi:SymbolIcon Symbol="Dismiss" FontSize="{StaticResource PbIconSizeXs}" />
                                         </Button>
                                     </Grid>
                                 </DataTemplate>

@@ -8,6 +8,7 @@ using Avalonia;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using CommunityToolkit.Mvvm.ComponentModel;
+using FluentIcons.Common;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.EntityFrameworkCore;
 using Paperbunkr.App.ContextMenus;
@@ -85,21 +86,24 @@ public partial class BookDetailScreenViewModel : ViewModelBase, IDetailHeaderSou
     string? IDetailHeaderSource.SecondaryTitle => null;
     DetailHeroProgress? IDetailHeaderSource.TrackerProgress => null;
 
+    private IReadOnlyList<DetailMetaBadge> _metaBadges = System.Array.Empty<DetailMetaBadge>();
+    IReadOnlyList<DetailMetaBadge> IDetailHeaderSource.MetaBadges => _metaBadges;
+
     partial void OnTitleChanged(string value) => OnPropertyChanged(nameof(HeaderTitle));
     partial void OnSeriesNameChanged(string value) => OnPropertyChanged(nameof(HeaderTitle));
 
     public IReadOnlyList<DetailHeroAction> Actions => IsSeriesMode
         ? new[]
         {
-            new DetailHeroAction("Edit series", EditSeriesCommand),
-            new DetailHeroAction("Edit all books", EditAllSeriesBooksCommand),
+            new DetailHeroAction("Edit series", EditSeriesCommand, Icon: Symbol.Edit),
+            new DetailHeroAction("Edit all books", EditAllSeriesBooksCommand, Icon: Symbol.Edit),
         }
         : new[]
         {
-            new DetailHeroAction(ContinueLabel, ContinueCommand, IsPrimary: true),
-            new DetailHeroAction("Edit", EditCommand),
-            new DetailHeroAction("Reveal in Explorer", RevealInExplorerCommand),
-            new DetailHeroAction("Export Annotations", ExportAnnotationsCommand),
+            new DetailHeroAction(ContinueLabel, ContinueCommand, IsPrimary: true, Icon: Symbol.Play),
+            new DetailHeroAction("Edit", EditCommand, Icon: Symbol.Edit),
+            new DetailHeroAction("Reveal in Explorer", RevealInExplorerCommand, Icon: Symbol.FolderOpen),
+            new DetailHeroAction("Export Annotations", ExportAnnotationsCommand, Icon: Symbol.ArrowExport),
         };
 
     private void RaiseHeaderChanged()
@@ -170,7 +174,7 @@ public partial class BookDetailScreenViewModel : ViewModelBase, IDetailHeaderSou
     private string _filePath = string.Empty;
 
     [ObservableProperty]
-    private string _backLabel = "← Books";
+    private string _backLabel = "Books";
 
     // --- book mode: actions / progress ---
 
@@ -317,14 +321,26 @@ public partial class BookDetailScreenViewModel : ViewModelBase, IDetailHeaderSou
         }.Where(s => !string.IsNullOrWhiteSpace(s)));
         Band.Summary = Summary;
         Band.IsSynopsisExpanded = false;
-        Band.StatusText = FormatBadge;
+        // Format as a glyph mark (docs/superpowers/specs/2026-09-04-detail-screen-icons-and-glyphs-
+        // design.md Part 2 §B) - was in the StatusText slot, which books have no real use for.
+        Band.StatusText = string.Empty;
+        Band.FormatText = FormatBadge;
         Band.PublisherText = Author;
         Band.YearText = book.PublishedDate is { } pd ? pd.Year.ToString() : string.Empty;
+
+        // Hero badge row (Part 4) - books get the format mark + year + a "Finished" chip; author
+        // stays in MetaLine (a person name isn't a publisher logo).
+        _metaBadges = DetailMetaBadge.Build(publisher: null,
+            statusLabel: book.Finished ? "Finished" : null, isComplete: book.Finished,
+            year: Band.YearText, format: FormatBadge, ageRating: null, languageIso: null);
+        OnPropertyChanged(nameof(IDetailHeaderSource.MetaBadges));
+        OnPropertyChanged(nameof(IDetailHeaderSource.HasMetaBadges));
+
         RaiseHeaderChanged();
 
         BackLabel = _cameFromSeriesId is not null && book.BookSeries is not null
-            ? $"← {book.BookSeries.Name}"
-            : "← Books";
+            ? book.BookSeries.Name
+            : "Books";
 
         LoadChaptersAndBookmarks(book);
 
@@ -405,6 +421,9 @@ public partial class BookDetailScreenViewModel : ViewModelBase, IDetailHeaderSou
         }
 
         _bookSeriesId = bookSeriesId;
+        _metaBadges = System.Array.Empty<DetailMetaBadge>();   // series mode: no badge row
+        OnPropertyChanged(nameof(IDetailHeaderSource.MetaBadges));
+        OnPropertyChanged(nameof(IDetailHeaderSource.HasMetaBadges));
 
         SeriesName = series.Name;
         SeriesAuthor = series.Author ?? string.Empty;
@@ -426,7 +445,7 @@ public partial class BookDetailScreenViewModel : ViewModelBase, IDetailHeaderSou
             SeriesBooks.Add(BookCardSample.FromBook(book));
         }
 
-        BackLabel = "← Books";
+        BackLabel = "Books";
         Mode = BookDetailMode.Series;
     }
 

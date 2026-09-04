@@ -104,12 +104,18 @@
             <StackPanel Classes="posterItem" Classes.read="{Binding IsRead}" Width="118" Margin="0,0,14,16" Spacing="5">
                 <Border Classes="issueTile" Classes.selected="{Binding IsSelected}" Height="168"
                         Background="{Binding CoverBrush}" Focusable="True"
-                        PointerPressed="OnIssueTilePointerPressed" KeyDown="OnIssueTileKeyDown">
+                        PointerPressed="OnIssueTilePointerPressed" DoubleTapped="OnIssueTileDoubleTapped"
+                        KeyDown="OnIssueTileKeyDown">
                     <Grid>
                         <Image Source="{Binding CoverImage}" Stretch="UniformToFill" />
                         <Border Classes="posterScrim" />
                         <Border Height="3" VerticalAlignment="Bottom" Background="{DynamicResource PbAccentBrush}"
                                 IsVisible="{Binding IsInProgress}" HorizontalAlignment="Left" Width="70" />
+                        <fi:SymbolIcon Symbol="CheckmarkCircle" FontSize="{StaticResource PbIconSizeMd}"
+                                       Foreground="{DynamicResource PbSuccessBrush}"
+                                       HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,5,5,0"
+                                       ToolTip.Tip="Read" AutomationProperties.AccessibilityView="Raw"
+                                       IsVisible="{Binding IsRead}" />
                     </Grid>
                 </Border>
                 <TextBlock Text="{Binding Title}" FontSize="12" FontWeight="Bold" Foreground="{DynamicResource PbTextBrush}" />
@@ -121,18 +127,29 @@
 
         <DataTemplate x:Key="IssueListRowTemplate" x:DataType="models:IssueCardSample">
             <Grid Classes="issueRow" Classes.selected="{Binding IsSelected}" Classes.read="{Binding IsRead}"
-                  ColumnDefinitions="44,*,150,80,50" Height="30" Focusable="True"
+                  ColumnDefinitions="20,44,*,150,80,50" Height="30" Focusable="True"
                   ContextMenu="{StaticResource IssueContextMenu}"
-                  PointerPressed="OnIssueTilePointerPressed" KeyDown="OnIssueTileKeyDown">
-                <TextBlock Grid.Column="0" Text="{Binding Title}" FontWeight="Bold" VerticalAlignment="Center"
+                  PointerPressed="OnIssueTilePointerPressed" DoubleTapped="OnIssueTileDoubleTapped"
+                  KeyDown="OnIssueTileKeyDown">
+                <Panel Grid.Column="0" VerticalAlignment="Center">
+                    <fi:SymbolIcon Symbol="CheckmarkCircle" FontSize="{StaticResource PbIconSizeXs}"
+                                   Foreground="{DynamicResource PbSuccessBrush}"
+                                   ToolTip.Tip="Read" AutomationProperties.AccessibilityView="Raw"
+                                   IsVisible="{Binding TileGlyph, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static models:IssueTileGlyph.Read}}" />
+                    <fi:SymbolIcon Symbol="CircleHalfFill" FontSize="{StaticResource PbIconSizeXs}"
+                                   Foreground="{DynamicResource PbAccentBrush}"
+                                   ToolTip.Tip="In progress" AutomationProperties.AccessibilityView="Raw"
+                                   IsVisible="{Binding TileGlyph, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static models:IssueTileGlyph.InProgress}}" />
+                </Panel>
+                <TextBlock Grid.Column="1" Text="{Binding Title}" FontWeight="Bold" VerticalAlignment="Center"
                            Foreground="{DynamicResource PbTextBrush}" />
-                <TextBlock Grid.Column="1" Text="{Binding FullTitle}" VerticalAlignment="Center" Margin="8,0"
+                <TextBlock Grid.Column="2" Text="{Binding FullTitle}" VerticalAlignment="Center" Margin="8,0"
                            TextTrimming="CharacterEllipsis" Foreground="{DynamicResource PbTextMutedBrush}" FontSize="12" />
-                <TextBlock Grid.Column="2" Text="{Binding ArcTitle}" VerticalAlignment="Center"
+                <TextBlock Grid.Column="3" Text="{Binding ArcTitle}" VerticalAlignment="Center"
                            Foreground="{DynamicResource PbTextFaintBrush}" FontSize="11" TextTrimming="CharacterEllipsis" />
-                <TextBlock Grid.Column="3" Text="{Binding CoverDateLabel}" VerticalAlignment="Center"
+                <TextBlock Grid.Column="4" Text="{Binding CoverDateLabel}" VerticalAlignment="Center"
                            Foreground="{DynamicResource PbTextFaintBrush}" FontSize="11" />
-                <TextBlock Grid.Column="4" Text="{Binding RatingLabel}" VerticalAlignment="Center"
+                <TextBlock Grid.Column="5" Text="{Binding RatingLabel}" VerticalAlignment="Center"
                            Foreground="{DynamicResource PbBadgeBrush}" FontSize="11" />
             </Grid>
         </DataTemplate>
@@ -140,15 +157,22 @@
         <DataTemplate x:Key="IssueCardTileTemplate" x:DataType="models:IssueCardSample">
             <Border Classes="issueCard" Classes.selected="{Binding IsSelected}" Width="250" Margin="0,0,12,12"
                     Focusable="True" ContextMenu="{StaticResource IssueContextMenu}"
-                    PointerPressed="OnIssueTilePointerPressed" KeyDown="OnIssueTileKeyDown">
+                    PointerPressed="OnIssueTilePointerPressed" DoubleTapped="OnIssueTileDoubleTapped"
+                    KeyDown="OnIssueTileKeyDown">
                 <Grid ColumnDefinitions="54,*">
                     <Border Grid.Column="0" Width="54" Height="80" CornerRadius="3" ClipToBounds="True"
                             Background="{Binding CoverBrush}" VerticalAlignment="Top">
                         <Image Source="{Binding CoverImage}" Stretch="UniformToFill" />
                     </Border>
                     <StackPanel Grid.Column="1" Margin="10,0,0,0" Spacing="4">
-                        <TextBlock Text="{Binding FullTitle}" FontSize="12.5" FontWeight="SemiBold"
-                                   Foreground="{DynamicResource PbTextBrush}" TextWrapping="Wrap" MaxLines="2" TextTrimming="CharacterEllipsis" />
+                        <Grid ColumnDefinitions="Auto,*">
+                            <fi:SymbolIcon Grid.Column="0" Symbol="CheckmarkCircle" FontSize="{StaticResource PbIconSizeXs}"
+                                           Foreground="{DynamicResource PbSuccessBrush}" VerticalAlignment="Top" Margin="0,2,5,0"
+                                           ToolTip.Tip="Read" AutomationProperties.AccessibilityView="Raw"
+                                           IsVisible="{Binding IsRead}" />
+                            <TextBlock Grid.Column="1" Text="{Binding FullTitle}" FontSize="12.5" FontWeight="SemiBold"
+                                       Foreground="{DynamicResource PbTextBrush}" TextWrapping="Wrap" MaxLines="2" TextTrimming="CharacterEllipsis" />
+                        </Grid>
                         <TextBlock Text="{Binding CardProgressLabel}" FontSize="9.5" Foreground="{DynamicResource PbTextFaintBrush}" />
                         <StackPanel Orientation="Horizontal" Spacing="10">
                             <Button Content="{Binding CardActionLabel}" Padding="10,2" FontSize="11" FontWeight="SemiBold"
@@ -159,17 +183,17 @@
                             <Button Classes="creditName"
                                     Command="{Binding #Root.((vm:DetailTabsViewModel)DataContext).MarkIssueReadCommand}"
                                     CommandParameter="{Binding}" ToolTip.Tip="Mark read">
-                                <fi:SymbolIcon Symbol="Checkmark" FontSize="13" />
+                                <fi:SymbolIcon Symbol="Checkmark" FontSize="{StaticResource PbIconSizeSm}" />
                             </Button>
                             <Button Classes="creditName"
                                     Command="{Binding #Root.((vm:DetailTabsViewModel)DataContext).EditIssuePropertiesCommand}"
                                     CommandParameter="{Binding}" ToolTip.Tip="Edit">
-                                <fi:SymbolIcon Symbol="Edit" FontSize="13" />
+                                <fi:SymbolIcon Symbol="Edit" FontSize="{StaticResource PbIconSizeSm}" />
                             </Button>
                             <Button Classes="creditName"
                                     Command="{Binding #Root.((vm:DetailTabsViewModel)DataContext).RevealIssueCommand}"
                                     CommandParameter="{Binding}" IsEnabled="{Binding HasFile}" ToolTip.Tip="Show in Explorer">
-                                <fi:SymbolIcon Symbol="FolderOpen" FontSize="13" />
+                                <fi:SymbolIcon Symbol="FolderOpen" FontSize="{StaticResource PbIconSizeSm}" />
                             </Button>
                         </StackPanel>
                     </StackPanel>
@@ -183,24 +207,37 @@
             <StackPanel Orientation="Horizontal" Spacing="22">
                 <Button Classes="tab" Classes.active="{Binding IsIssuesTab}" Command="{Binding GoIssuesCommand}" IsVisible="{Binding ShowIssuesTab}">
                     <StackPanel Orientation="Horizontal" Spacing="7">
-                        <TextBlock Text="Issues" />
+                        <fi:SymbolIcon Symbol="BookOpen" FontSize="{StaticResource PbIconSizeSm}" VerticalAlignment="Center" />
+                        <TextBlock Text="Issues" VerticalAlignment="Center" />
                         <TextBlock Classes="tabCount" Text="{Binding Issues.Count}" VerticalAlignment="Center" />
                     </StackPanel>
                 </Button>
                 <Button Classes="tab" Classes.active="{Binding IsSpecialsTab}" Command="{Binding GoSpecialsCommand}" IsVisible="{Binding HasSpecials}">
                     <StackPanel Orientation="Horizontal" Spacing="7">
-                        <TextBlock Text="Specials" />
+                        <fi:SymbolIcon Symbol="Star" FontSize="{StaticResource PbIconSizeSm}" VerticalAlignment="Center" />
+                        <TextBlock Text="Specials" VerticalAlignment="Center" />
                         <TextBlock Classes="tabCount" Text="{Binding Specials.Count}" VerticalAlignment="Center" />
                     </StackPanel>
                 </Button>
                 <Button Classes="tab" Classes.active="{Binding IsRelatedTab}" Command="{Binding GoRelatedCommand}">
                     <StackPanel Orientation="Horizontal" Spacing="7">
-                        <TextBlock Text="Related" />
+                        <fi:SymbolIcon Symbol="Link" FontSize="{StaticResource PbIconSizeSm}" VerticalAlignment="Center" />
+                        <TextBlock Text="Related" VerticalAlignment="Center" />
                         <TextBlock Classes="tabCount" Text="{Binding Related.Count}" VerticalAlignment="Center" />
                     </StackPanel>
                 </Button>
-                <Button Classes="tab" Classes.active="{Binding IsDetailsTab}" Command="{Binding GoDetailsCommand}" Content="Details" />
-                <Button Classes="tab" Classes.active="{Binding IsActivityTab}" Command="{Binding GoActivityCommand}" Content="Activity" />
+                <Button Classes="tab" Classes.active="{Binding IsDetailsTab}" Command="{Binding GoDetailsCommand}">
+                    <StackPanel Orientation="Horizontal" Spacing="7">
+                        <fi:SymbolIcon Symbol="Info" FontSize="{StaticResource PbIconSizeSm}" VerticalAlignment="Center" />
+                        <TextBlock Text="Details" VerticalAlignment="Center" />
+                    </StackPanel>
+                </Button>
+                <Button Classes="tab" Classes.active="{Binding IsActivityTab}" Command="{Binding GoActivityCommand}">
+                    <StackPanel Orientation="Horizontal" Spacing="7">
+                        <fi:SymbolIcon Symbol="Pulse" FontSize="{StaticResource PbIconSizeSm}" VerticalAlignment="Center" />
+                        <TextBlock Text="Activity" VerticalAlignment="Center" />
+                    </StackPanel>
+                </Button>
             </StackPanel>
         </Border>
 
@@ -211,14 +248,29 @@
                 <Border DockPanel.Dock="Right" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
                         CornerRadius="6" ClipToBounds="True" Height="24">
                     <StackPanel Orientation="Horizontal">
-                        <Button Classes="segItem" Classes.active="{Binding IsPosterView}" Content="Poster"
-                                Command="{Binding SetIssueViewModeCommand}" CommandParameter="{x:Static entities:DetailIssueViewMode.Poster}" />
+                        <Button Classes="segItem" Classes.active="{Binding IsPosterView}"
+                                Command="{Binding SetIssueViewModeCommand}" CommandParameter="{x:Static entities:DetailIssueViewMode.Poster}">
+                            <StackPanel Orientation="Horizontal" Spacing="4">
+                                <fi:SymbolIcon Symbol="GridDots" FontSize="{StaticResource PbIconSizeXs}" VerticalAlignment="Center" />
+                                <TextBlock Text="Poster" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
                         <Border Width="1" Background="{DynamicResource PbBorderBrush}" />
-                        <Button Classes="segItem" Classes.active="{Binding IsListView}" Content="List"
-                                Command="{Binding SetIssueViewModeCommand}" CommandParameter="{x:Static entities:DetailIssueViewMode.List}" />
+                        <Button Classes="segItem" Classes.active="{Binding IsListView}"
+                                Command="{Binding SetIssueViewModeCommand}" CommandParameter="{x:Static entities:DetailIssueViewMode.List}">
+                            <StackPanel Orientation="Horizontal" Spacing="4">
+                                <fi:SymbolIcon Symbol="TextBulletList" FontSize="{StaticResource PbIconSizeXs}" VerticalAlignment="Center" />
+                                <TextBlock Text="List" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
                         <Border Width="1" Background="{DynamicResource PbBorderBrush}" />
-                        <Button Classes="segItem" Classes.active="{Binding IsCardView}" Content="Card"
-                                Command="{Binding SetIssueViewModeCommand}" CommandParameter="{x:Static entities:DetailIssueViewMode.Card}" />
+                        <Button Classes="segItem" Classes.active="{Binding IsCardView}"
+                                Command="{Binding SetIssueViewModeCommand}" CommandParameter="{x:Static entities:DetailIssueViewMode.Card}">
+                            <StackPanel Orientation="Horizontal" Spacing="4">
+                                <fi:SymbolIcon Symbol="ContentView" FontSize="{StaticResource PbIconSizeXs}" VerticalAlignment="Center" />
+                                <TextBlock Text="Card" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
                     </StackPanel>
                 </Border>
                 <TextBlock Text="{Binding Issues.Count, StringFormat='{}{0} issues'}" Classes="pbTextCaption" VerticalAlignment="Center" />
@@ -302,7 +354,12 @@
             <StackPanel Orientation="Horizontal" Spacing="10" Margin="0,0,0,6">
                 <TextBlock Text="Continuities" FontSize="12.5" FontWeight="SemiBold"
                            Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
-                <Button Classes="railAdd" Content="+ Add to Continuity" Command="{Binding ToggleAddContinuityCommand}" />
+                <Button Classes="railAdd" Command="{Binding ToggleAddContinuityCommand}">
+                    <StackPanel Orientation="Horizontal" Spacing="5">
+                        <fi:SymbolIcon Symbol="Add" FontSize="{StaticResource PbIconSizeXs}" VerticalAlignment="Center" />
+                        <TextBlock Text="Add to Continuity" VerticalAlignment="Center" />
+                    </StackPanel>
+                </Button>
             </StackPanel>
             <Border IsVisible="{Binding IsAddingContinuity}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
                     CornerRadius="6" Padding="12" Margin="0,0,0,8">
@@ -347,7 +404,12 @@
             <StackPanel Orientation="Horizontal" Spacing="10" Margin="0,0,0,6">
                 <TextBlock Text="Collections" FontSize="12.5" FontWeight="SemiBold"
                            Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
-                <Button Classes="railAdd" Content="+ Add to Collection" Command="{Binding ToggleAddCollectionCommand}" />
+                <Button Classes="railAdd" Command="{Binding ToggleAddCollectionCommand}">
+                    <StackPanel Orientation="Horizontal" Spacing="5">
+                        <fi:SymbolIcon Symbol="Add" FontSize="{StaticResource PbIconSizeXs}" VerticalAlignment="Center" />
+                        <TextBlock Text="Add to Collection" VerticalAlignment="Center" />
+                    </StackPanel>
+                </Button>
             </StackPanel>
             <Border IsVisible="{Binding IsAddingCollection}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
                     CornerRadius="6" Padding="12" Margin="0,0,0,8">
@@ -448,23 +510,40 @@
         <!-- ================= DETAILS TAB ================= -->
         <Grid IsVisible="{Binding IsDetailsTab}" ColumnDefinitions="*,*" Margin="0,20,0,0">
             <StackPanel Grid.Column="0" Margin="0,0,28,0">
-                <TextBlock Text="PUBLISHER" FontSize="10.5" Foreground="{DynamicResource PbTextFaintBrush}" Margin="0,0,0,4" />
-                <pbc:BrandMark Family="Publisher" Value="{Binding Publisher}" ShowText="True" MarkSize="16"
+                <StackPanel Orientation="Horizontal" Spacing="5" Margin="0,0,0,4">
+                    <fi:SymbolIcon Symbol="Building" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" />
+                    <TextBlock Text="PUBLISHER" FontSize="10.5" Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" />
+                </StackPanel>
+                <pbc:BrandMark Family="Publisher" Value="{Binding Publisher}" ShowText="True" MarkSize="18"
                                HorizontalAlignment="Left" Foreground="{DynamicResource PbTextBrush}" />
             </StackPanel>
             <StackPanel Grid.Column="1">
-                <TextBlock Text="READING MODE" FontSize="10.5" Foreground="{DynamicResource PbTextFaintBrush}" Margin="0,0,0,4" />
-                <Button Command="{Binding ToggleReadingModeCommand}" Content="{Binding ReadingModeLabel}"
+                <StackPanel Orientation="Horizontal" Spacing="5" Margin="0,0,0,4">
+                    <fi:SymbolIcon Symbol="BookArrowClockwise" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" />
+                    <TextBlock Text="READING MODE" FontSize="10.5" Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" />
+                </StackPanel>
+                <Button Command="{Binding ToggleReadingModeCommand}"
                         Background="Transparent" BorderThickness="0" Padding="0" Cursor="Hand"
-                        HorizontalAlignment="Left" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
+                        HorizontalAlignment="Left" FontSize="13" Foreground="{DynamicResource PbTextBrush}">
+                    <StackPanel Orientation="Horizontal" Spacing="4">
+                        <TextBlock Text="{Binding ReadingModeLabel}" VerticalAlignment="Center" />
+                        <fi:SymbolIcon Symbol="ChevronDown" FontSize="{StaticResource PbIconSizeXs}" VerticalAlignment="Center" />
+                    </StackPanel>
+                </Button>
             </StackPanel>
         </Grid>
 
         <StackPanel IsVisible="{Binding IsDetailsTab}" Margin="0,24,0,0" Spacing="8">
             <StackPanel Orientation="Horizontal" Spacing="10">
+                <fi:SymbolIcon Symbol="Globe" FontSize="{StaticResource PbIconSizeSm}" Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" />
                 <TextBlock Text="External Metadata" FontSize="12.5" FontWeight="SemiBold"
                            Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
-                <Button Classes="railAdd" Content="+ Link External Metadata" Command="{Binding ToggleSearchMetadataCommand}" />
+                <Button Classes="railAdd" Command="{Binding ToggleSearchMetadataCommand}">
+                    <StackPanel Orientation="Horizontal" Spacing="5">
+                        <fi:SymbolIcon Symbol="Add" FontSize="{StaticResource PbIconSizeXs}" VerticalAlignment="Center" />
+                        <TextBlock Text="Link External Metadata" VerticalAlignment="Center" />
+                    </StackPanel>
+                </Button>
             </StackPanel>
 
             <Border IsVisible="{Binding IsSearchingMetadata}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
@@ -472,7 +551,13 @@
                 <StackPanel Spacing="8">
                     <StackPanel Orientation="Horizontal" Spacing="8">
                         <ComboBox ItemsSource="{x:Static vm:DetailTabsViewModel.MetadataProviderOptions}"
-                                  SelectedItem="{Binding SelectedMetadataProvider}" Width="130" FontSize="12" />
+                                  SelectedItem="{Binding SelectedMetadataProvider}" Width="150" FontSize="12">
+                            <ComboBox.ItemTemplate>
+                                <DataTemplate>
+                                    <pbc:BrandMark Family="Service" Value="{Binding}" ShowText="True" MarkSize="{StaticResource PbIconSizeXs}" />
+                                </DataTemplate>
+                            </ComboBox.ItemTemplate>
+                        </ComboBox>
                         <TextBox Text="{Binding MetadataSearchQuery}" Watermark="Search…" FontSize="12" Width="220" />
                         <Button Content="Search" Command="{Binding SearchMetadataCommand}" Padding="10,5" FontSize="12" CornerRadius="5" />
                     </StackPanel>
@@ -519,8 +604,9 @@
                     <DataTemplate x:DataType="models:ExternalLinkSample">
                         <Border Background="{DynamicResource PbSurfaceAltBrush}" CornerRadius="{DynamicResource PbRadius}" Padding="10,4" Margin="0,0,6,6">
                             <StackPanel Orientation="Horizontal" Spacing="6">
-                                <TextBlock Text="{Binding ProviderLabel}" FontSize="11.5" FontWeight="SemiBold"
-                                           Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
+                                <pbc:BrandMark Family="Service" Value="{Binding ProviderLabel}" ShowText="True"
+                                               MarkSize="{StaticResource PbIconSizeSm}" VerticalAlignment="Center"
+                                               Foreground="{DynamicResource PbTextMutedBrush}" />
                                 <Button Content="✕" Padding="0" Width="16" Height="16" FontSize="9.5" CornerRadius="8"
                                         Background="Transparent" BorderThickness="0" Foreground="{DynamicResource PbTextFaintBrush}"
                                         Command="{Binding #Root.((vm:DetailTabsViewModel)DataContext).UnlinkMetadataCommand}"
@@ -534,12 +620,23 @@
 
         <StackPanel IsVisible="{Binding IsDetailsTab}" Margin="0,24,0,0" Spacing="8">
             <StackPanel Orientation="Horizontal" Spacing="10">
+                <fi:SymbolIcon Symbol="CloudSync" FontSize="{StaticResource PbIconSizeSm}" Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" />
                 <TextBlock Text="Trackers" FontSize="12.5" FontWeight="SemiBold"
                            Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
-                <Button Classes="railAdd" Content="+ Link for Tracking" Command="{Binding ToggleLinkTrackerCommand}" />
-                <Button Content="Sync to Trackers" IsVisible="{Binding HasTrackerLinks}"
+                <Button Classes="railAdd" Command="{Binding ToggleLinkTrackerCommand}">
+                    <StackPanel Orientation="Horizontal" Spacing="5">
+                        <fi:SymbolIcon Symbol="Add" FontSize="{StaticResource PbIconSizeXs}" VerticalAlignment="Center" />
+                        <TextBlock Text="Link for Tracking" VerticalAlignment="Center" />
+                    </StackPanel>
+                </Button>
+                <Button IsVisible="{Binding HasTrackerLinks}"
                         Command="{Binding SyncToTrackersCommand}" Padding="10,5" FontSize="12" CornerRadius="5"
-                        Background="{DynamicResource PbSurfaceAltBrush}" Foreground="{DynamicResource PbTextMutedBrush}" BorderThickness="0" />
+                        Background="{DynamicResource PbSurfaceAltBrush}" Foreground="{DynamicResource PbTextMutedBrush}" BorderThickness="0">
+                    <StackPanel Orientation="Horizontal" Spacing="5">
+                        <fi:SymbolIcon Symbol="ArrowSync" FontSize="{StaticResource PbIconSizeXs}" VerticalAlignment="Center" />
+                        <TextBlock Text="Sync to Trackers" VerticalAlignment="Center" />
+                    </StackPanel>
+                </Button>
             </StackPanel>
 
             <Border IsVisible="{Binding IsLinkingTracker}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
@@ -547,7 +644,13 @@
                 <StackPanel Spacing="8">
                     <StackPanel Orientation="Horizontal" Spacing="8">
                         <ComboBox ItemsSource="{x:Static vm:DetailTabsViewModel.TrackerServiceOptions}"
-                                  SelectedItem="{Binding SelectedTrackerService}" Width="140" FontSize="12" />
+                                  SelectedItem="{Binding SelectedTrackerService}" Width="160" FontSize="12">
+                            <ComboBox.ItemTemplate>
+                                <DataTemplate>
+                                    <pbc:BrandMark Family="Service" Value="{Binding}" ShowText="True" MarkSize="{StaticResource PbIconSizeXs}" />
+                                </DataTemplate>
+                            </ComboBox.ItemTemplate>
+                        </ComboBox>
                         <TextBox Text="{Binding TrackerSearchQuery}" Watermark="Search title…" FontSize="12" Width="220" />
                         <Button Content="Search" Command="{Binding SearchTrackerCommand}" Padding="10,5" FontSize="12" CornerRadius="5" />
                     </StackPanel>
@@ -595,8 +698,9 @@
                     <DataTemplate x:DataType="models:TrackerLinkSample">
                         <Border Background="{DynamicResource PbSurfaceAltBrush}" CornerRadius="{DynamicResource PbRadius}" Padding="10,4" Margin="0,0,6,6">
                             <StackPanel Orientation="Horizontal" Spacing="6">
-                                <TextBlock Text="{Binding Service}" FontSize="11.5" FontWeight="SemiBold"
-                                           Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
+                                <pbc:BrandMark Family="Service" Value="{Binding ServiceName}" ShowText="True"
+                                               MarkSize="{StaticResource PbIconSizeSm}" VerticalAlignment="Center"
+                                               Foreground="{DynamicResource PbTextMutedBrush}" />
                                 <Button Content="✕" Padding="0" Width="16" Height="16" FontSize="9.5" CornerRadius="8"
                                         Background="Transparent" BorderThickness="0" Foreground="{DynamicResource PbTextFaintBrush}"
                                         Command="{Binding #Root.((vm:DetailTabsViewModel)DataContext).UnlinkTrackerCommand}"

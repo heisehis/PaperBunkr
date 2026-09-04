@@ -209,7 +209,7 @@
                     <Grid ColumnDefinitions="*,Auto">
                         <TextBox Grid.Column="0" Classes="searchBox" Watermark="Search your library by series or number…" Text="{Binding SearchQuery}">
                             <TextBox.InnerLeftContent>
-                                <fi:SymbolIcon Symbol="Search" FontSize="13" Margin="8,0,2,0" />
+                                <fi:SymbolIcon Symbol="Search" FontSize="{StaticResource PbIconSizeSm}" Margin="8,0,2,0" />
                             </TextBox.InnerLeftContent>
                             <TextBox.KeyBindings>
                                 <KeyBinding Gesture="Enter" Command="{Binding SearchCommand}" />
@@ -259,7 +259,7 @@
                 <StackPanel Spacing="8">
                     <TextBox Classes="searchBox" Watermark="Search series by name…" Text="{Binding ContinuitySeriesSearchQuery}">
                         <TextBox.InnerLeftContent>
-                            <fi:SymbolIcon Symbol="Search" FontSize="13" Margin="8,0,2,0" />
+                            <fi:SymbolIcon Symbol="Search" FontSize="{StaticResource PbIconSizeSm}" Margin="8,0,2,0" />
                         </TextBox.InnerLeftContent>
                         <TextBox.KeyBindings>
                             <KeyBinding Gesture="Enter" Command="{Binding SearchContinuitySeriesCommand}" />
@@ -378,7 +378,7 @@
                                                 <TextBlock Text="{Binding RoleChipLabel}" FontSize="10" Foreground="{DynamicResource PbTextMutedBrush}" />
                                             </Border>
                                             <Button Grid.Column="5" Classes="rowManage headerAction ghost" Padding="7,2" Margin="8,0,0,0" VerticalAlignment="Center" ToolTip.Tip="More">
-                                                <fi:SymbolIcon Symbol="MoreVertical" FontSize="13" />
+                                                <fi:SymbolIcon Symbol="MoreVertical" FontSize="{StaticResource PbIconSizeSm}" />
                                                 <Button.Flyout>
                                                     <MenuFlyout>
                                                         <MenuItem Header="Set role">
@@ -411,8 +411,8 @@
                                     <TextBlock Grid.Column="0" Text="Related events" FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" />
                                     <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
                                         <TextBlock Text="{Binding RelatedEventsSummary}" FontSize="10.5" Foreground="{DynamicResource PbTextFaintBrush}" />
-                                        <fi:SymbolIcon Symbol="ChevronRight" FontSize="9" IsVisible="{Binding !RelatedEventsExpanded}" />
-                                        <fi:SymbolIcon Symbol="ArrowDown" FontSize="9" IsVisible="{Binding RelatedEventsExpanded}" />
+                                        <fi:SymbolIcon Symbol="ChevronRight" FontSize="{StaticResource PbIconSizeXs}" IsVisible="{Binding !RelatedEventsExpanded}" />
+                                        <fi:SymbolIcon Symbol="ArrowDown" FontSize="{StaticResource PbIconSizeXs}" IsVisible="{Binding RelatedEventsExpanded}" />
                                     </StackPanel>
                                 </Grid>
                             </Button>
@@ -432,7 +432,7 @@
                                                 <Button Grid.Column="2" Classes="headerAction ghost" Padding="5" ToolTip.Tip="Unlink"
                                                         Command="{Binding $parent[ItemsControl].((vm:EventsScreenViewModel)DataContext).RemoveConnectedEventCommand}"
                                                         CommandParameter="{Binding}">
-                                                    <fi:SymbolIcon Symbol="Delete" FontSize="11" />
+                                                    <fi:SymbolIcon Symbol="Delete" FontSize="{StaticResource PbIconSizeXs}" />
                                                 </Button>
                                             </Grid>
                                         </DataTemplate>
@@ -484,8 +484,8 @@
                                         Command="{Binding ToggleEventFamilyCommand}" IsVisible="{Binding HasEventChain}">
                                     <StackPanel Orientation="Horizontal" Spacing="5">
                                         <TextBlock Text="Event chain" FontSize="11.5" Foreground="{DynamicResource PbTextMutedBrush}" />
-                                        <fi:SymbolIcon Symbol="ChevronRight" FontSize="8" IsVisible="{Binding !EventFamilyExpanded}" />
-                                        <fi:SymbolIcon Symbol="ArrowDown" FontSize="8" IsVisible="{Binding EventFamilyExpanded}" />
+                                        <fi:SymbolIcon Symbol="ChevronRight" FontSize="{StaticResource PbIconSizeXs}" IsVisible="{Binding !EventFamilyExpanded}" />
+                                        <fi:SymbolIcon Symbol="ArrowDown" FontSize="{StaticResource PbIconSizeXs}" IsVisible="{Binding EventFamilyExpanded}" />
                                     </StackPanel>
                                 </Button>
                                 <ItemsControl ItemsSource="{Binding EventFamily}" IsVisible="{Binding EventFamilyExpanded}">
@@ -513,8 +513,8 @@
                                     <TextBlock Grid.Column="0" Text="Issue suggestions" FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" />
                                     <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
                                         <TextBlock Text="{Binding IssueSuggestionsSummary}" FontSize="10.5" Foreground="{DynamicResource PbTextFaintBrush}" />
-                                        <fi:SymbolIcon Symbol="ChevronRight" FontSize="9" IsVisible="{Binding !IssueSuggestionsExpanded}" />
-                                        <fi:SymbolIcon Symbol="ArrowDown" FontSize="9" IsVisible="{Binding IssueSuggestionsExpanded}" />
+                                        <fi:SymbolIcon Symbol="ChevronRight" FontSize="{StaticResource PbIconSizeXs}" IsVisible="{Binding !IssueSuggestionsExpanded}" />
+                                        <fi:SymbolIcon Symbol="ArrowDown" FontSize="{StaticResource PbIconSizeXs}" IsVisible="{Binding IssueSuggestionsExpanded}" />
                                     </StackPanel>
                                 </Grid>
                             </Button>
@@ -606,19 +606,19 @@
                                                     Background="#B0000000" ToolTip.Tip="Remove from continuity"
                                                     Command="{Binding $parent[ItemsControl].((vm:EventsScreenViewModel)DataContext).RemoveSeriesFromActiveContinuityCommand}"
                                                     CommandParameter="{Binding}">
-                                                <fi:SymbolIcon Symbol="Dismiss" FontSize="10" />
+                                                <fi:SymbolIcon Symbol="Dismiss" FontSize="{StaticResource PbIconSizeXs}" />
                                             </Button>
                                             <Button Classes="headerAction ghost cardHover" Padding="4" HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="4"
                                                     Background="#B0000000" ToolTip.Tip="Move earlier"
                                                     Command="{Binding $parent[ItemsControl].((vm:EventsScreenViewModel)DataContext).MoveContinuitySeriesEarlierCommand}"
                                                     CommandParameter="{Binding}">
-                                                <fi:SymbolIcon Symbol="ChevronLeft" FontSize="10" />
+                                                <fi:SymbolIcon Symbol="ChevronLeft" FontSize="{StaticResource PbIconSizeXs}" />
                                             </Button>
                                             <Button Classes="headerAction ghost cardHover" Padding="4" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="4"
                                                     Background="#B0000000" ToolTip.Tip="Move later"
                                                     Command="{Binding $parent[ItemsControl].((vm:EventsScreenViewModel)DataContext).MoveContinuitySeriesLaterCommand}"
                                                     CommandParameter="{Binding}">
-                                                <fi:SymbolIcon Symbol="ChevronRight" FontSize="10" />
+                                                <fi:SymbolIcon Symbol="ChevronRight" FontSize="{StaticResource PbIconSizeXs}" />
                                             </Button>
                                         </Panel>
                                         <Grid ColumnDefinitions="*,Auto" Margin="0,4,0,0">
@@ -627,7 +627,7 @@
                                             <Button Grid.Column="1" Classes="headerAction ghost cardHover" Padding="2" ToolTip.Tip="Edit note"
                                                     Command="{Binding $parent[ItemsControl].((vm:EventsScreenViewModel)DataContext).BeginEditContinuitySeriesNoteCommand}"
                                                     CommandParameter="{Binding}">
-                                                <fi:SymbolIcon Symbol="Edit" FontSize="9" />
+                                                <fi:SymbolIcon Symbol="Edit" FontSize="{StaticResource PbIconSizeXs}" />
                                             </Button>
                                         </Grid>
                                         <TextBlock Text="{Binding MembershipNote}" FontSize="9.5" Foreground="{DynamicResource PbTextFaintBrush}"
@@ -639,7 +639,7 @@
                                             <Button Classes="headerAction ghost" Padding="4" ToolTip.Tip="Save note"
                                                     Command="{Binding $parent[ItemsControl].((vm:EventsScreenViewModel)DataContext).SetContinuitySeriesNoteCommand}"
                                                     CommandParameter="{Binding}">
-                                                <fi:SymbolIcon Symbol="Checkmark" FontSize="9" />
+                                                <fi:SymbolIcon Symbol="Checkmark" FontSize="{StaticResource PbIconSizeXs}" />
                                             </Button>
                                         </StackPanel>
                                     </StackPanel>

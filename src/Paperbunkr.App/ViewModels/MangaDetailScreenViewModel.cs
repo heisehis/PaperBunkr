@@ -8,6 +8,7 @@ using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using FluentIcons.Common;
 using Microsoft.EntityFrameworkCore;
 using Paperbunkr.App.ContextMenus;
 using Paperbunkr.App.Models;
@@ -95,11 +96,27 @@ public partial class MangaDetailScreenViewModel : ViewModelBase, IDetailHeaderSo
 
     DetailHeroProgress? IDetailHeaderSource.TrackerProgress => null;
 
+    private string? _readingStatus;
+    private ReadingStatusPickerViewModel? _readingStatusPicker;
+    private IReadOnlyList<DetailMetaBadge> _metaBadges = System.Array.Empty<DetailMetaBadge>();
+    private string? _issueSummaryLine;
+    string? IDetailHeaderSource.ReadingStatus => _readingStatus;
+    ReadingStatusPickerViewModel? IDetailHeaderSource.ReadingStatusPicker => _readingStatusPicker;
+    IReadOnlyList<DetailMetaBadge> IDetailHeaderSource.MetaBadges => _metaBadges;
+    string? IDetailHeaderSource.IssueSummaryLine => _issueSummaryLine;
+
+    private void OnReadingStatusPicked()
+    {
+        _readingStatus = _readingStatusPicker?.CurrentValue;
+        OnPropertyChanged(nameof(IDetailHeaderSource.ReadingStatus));
+        Band.ReadingStatusValue = _readingStatus;
+    }
+
     public IReadOnlyList<DetailHeroAction> Actions => new[]
     {
-        new DetailHeroAction(ContinueLabel, ContinueCommand, IsPrimary: true, IsEnabled: _continueIssueId is not null),
-        new DetailHeroAction("Edit", EditCommand, IsEnabled: CanEdit),
-        new DetailHeroAction("Change Cover", ChangeSeriesCoverCommand),
+        new DetailHeroAction(ContinueLabel, ContinueCommand, IsPrimary: true, IsEnabled: _continueIssueId is not null, Icon: Symbol.Play),
+        new DetailHeroAction("Edit", EditCommand, IsEnabled: CanEdit, Icon: Symbol.Edit),
+        new DetailHeroAction("Change Cover", ChangeSeriesCoverCommand, Icon: Symbol.Image),
     };
 
     /// <summary>Header chip row (docs/superpowers/specs/2026-08-23-apply-from-provider-design.md) -
@@ -214,7 +231,10 @@ public partial class MangaDetailScreenViewModel : ViewModelBase, IDetailHeaderSo
     [ObservableProperty]
     private SortDirection _chapterSortDirection = SortDirection.Ascending;
 
-    public string ChapterSortDirectionGlyph => ChapterSortDirection == SortDirection.Ascending ? "↑" : "↓";
+    /// <summary>Sort-direction disclosure as a real FluentIcons glyph, not a text arrow
+    /// (docs/superpowers/specs/2026-09-04-detail-screen-icons-and-glyphs-design.md §8).</summary>
+    public Symbol ChapterSortDirectionSymbol =>
+        ChapterSortDirection == SortDirection.Ascending ? Symbol.ArrowSortUp : Symbol.ArrowSortDown;
 
     public bool HasChapters => Chapters.Count > 0;
 
@@ -224,7 +244,7 @@ public partial class MangaDetailScreenViewModel : ViewModelBase, IDetailHeaderSo
 
     partial void OnChapterSortDirectionChanged(SortDirection value)
     {
-        OnPropertyChanged(nameof(ChapterSortDirectionGlyph));
+        OnPropertyChanged(nameof(ChapterSortDirectionSymbol));
         RenderChapters();
     }
 
@@ -275,6 +295,11 @@ public partial class MangaDetailScreenViewModel : ViewModelBase, IDetailHeaderSo
             _ => "Unknown",
         };
         StatusAttribution = AttributionLabel(series, MetadataProposalField.Status);
+        _readingStatus = series.ReadingStatus == ReadingStatus.Unknown ? null : series.ReadingStatus.ToString();
+        OnPropertyChanged(nameof(IDetailHeaderSource.ReadingStatus));
+        _readingStatusPicker = new ReadingStatusPickerViewModel(seriesId, onChanged: OnReadingStatusPicked);
+        OnPropertyChanged(nameof(IDetailHeaderSource.ReadingStatusPicker));
+        Band.ReadingStatusPicker = _readingStatusPicker;
         ReadingModeBadge = series.ReadingMode switch
         {
             ReadingMode.RightToLeft or ReadingMode.HorizontalContinuousRightToLeft => "RTL",
@@ -344,6 +369,21 @@ public partial class MangaDetailScreenViewModel : ViewModelBase, IDetailHeaderSo
         Band.FormatText = markIssue?.Format ?? string.Empty;
         Band.AgeRatingText = markIssue?.AgeRating ?? string.Empty;
         Band.SetSpecialMarks(markIssue);
+
+        // Series-aggregate fields (Part 4) - publisher/format/rating/language pulled across every
+        // chapter, not off the cover one.
+        var f = SeriesMetaFields.FromSeries(series);
+        _metaBadges = DetailMetaBadge.Build(f.Publisher, StatusLabel,
+            series.Status == SeriesStatus.Completed, f.Year, f.Format, f.AgeRating, f.LanguageIso);
+
+        // Plain-text line (Part 4 revision, user direction) - separate row under the badges, above
+        // the action buttons, same wording the original MetaLine used.
+        int unreadChapters = _allChapters.Count(c => !c.IsRead);
+        string? unreadBadge = unreadChapters > 0 ? $"{unreadChapters} unread" : null;
+        _issueSummaryLine = unreadBadge is null ? ChapterCountBadge : $"{ChapterCountBadge}  ·  {unreadBadge}";
+        OnPropertyChanged(nameof(IDetailHeaderSource.IssueSummaryLine));
+        OnPropertyChanged(nameof(IDetailHeaderSource.MetaBadges));
+        OnPropertyChanged(nameof(IDetailHeaderSource.HasMetaBadges));
 
         MetaLine = string.Join("  ·  ", new[]
         {

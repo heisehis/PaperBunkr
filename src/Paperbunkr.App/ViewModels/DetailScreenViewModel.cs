@@ -7,6 +7,7 @@ using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using FluentIcons.Common;
 using Microsoft.EntityFrameworkCore;
 using Paperbunkr.App.Models;
 using Paperbunkr.App.Services;
@@ -49,6 +50,8 @@ public partial class DetailScreenViewModel : ViewModelBase, IDetailHeaderSource
     private readonly Action<int> _goDetailForSeries;
     private readonly Action<int>? _enqueueMetadataWriteBack;
     private int? _continueIssueId;
+    private int? _focusedIssueId;
+    private string _focusedIssueLabel = "Read Issue";
     private int? _coverIssueId;
     private int? _seriesId;
     private bool _isLoadingSeries;
@@ -72,13 +75,88 @@ public partial class DetailScreenViewModel : ViewModelBase, IDetailHeaderSource
     string? IDetailHeaderSource.SecondaryTitle => null;
     DetailHeroProgress? IDetailHeaderSource.TrackerProgress => null;
 
+    private string? _readingStatus;
+    private ReadingStatusPickerViewModel? _readingStatusPicker;
+
+    private SeriesMetaFields _seriesFields = SeriesMetaFields.Empty;
+    private bool _seriesComplete;
+    private string _issueCountBadge = string.Empty;
+    private string? _unreadBadge;
+    private string? _issueSummaryLine;
+    private IReadOnlyList<DetailMetaBadge> _metaBadges = System.Array.Empty<DetailMetaBadge>();
+
+    /// <summary>Explicit impl (not a public member) so the name doesn't clash with the
+    /// <see cref="Data.Entities.ReadingStatus"/> enum type in this file's scope.</summary>
+    string? IDetailHeaderSource.ReadingStatus => _readingStatus;
+    ReadingStatusPickerViewModel? IDetailHeaderSource.ReadingStatusPicker => _readingStatusPicker;
+    IReadOnlyList<DetailMetaBadge> IDetailHeaderSource.MetaBadges => _metaBadges;
+    string? IDetailHeaderSource.IssueSummaryLine => _issueSummaryLine;
+
+    /// <summary>
+    /// Recomputes every series-level aggregate the hero shows - <see cref="_seriesFields"/>
+    /// (publisher/year/format/age-rating/language), <see cref="_seriesComplete"/>, and the
+    /// issue-count/unread <see cref="IssueSummaryLine"/> - from a freshly-loaded <paramref name="series"/>.
+    /// Called from both <see cref="LoadSeries"/> and <see cref="RefreshForSelection"/> so an
+    /// in-place "Mark as Read"/"Mark as Unread" (which never leaves this screen) updates the
+    /// unread count immediately instead of only on the next full reload (bug found 2026-09-04:
+    /// <see cref="RefreshForSelection"/> refreshed the focused issue's own data but never touched
+    /// these series-wide fields at all).
+    /// </summary>
+    private void RefreshSeriesAggregates(Series series)
+    {
+        _seriesFields = SeriesMetaFields.FromSeries(series);
+        _seriesComplete = series.IsComplete;
+        int unread = series.Issues.Count(i => i.LastPageRead is null or 0);
+        _issueCountBadge = $"{series.Issues.Count} issue{(series.Issues.Count == 1 ? "" : "s")}";
+        _unreadBadge = unread > 0 ? $"{unread} unread" : null;
+        _issueSummaryLine = _unreadBadge is null ? _issueCountBadge : $"{_issueCountBadge}  ·  {_unreadBadge}";
+        OnPropertyChanged(nameof(IDetailHeaderSource.IssueSummaryLine));
+    }
+
+    /// <summary>Rebuilds the hero badge row (Part 4). Publisher / year / status are always
+    /// series-level (<see cref="_seriesFields"/> aggregates across every issue); format /
+    /// age-rating / language come from the focused issue when one is selected, otherwise from the
+    /// same series aggregate - so a series whose cover issue happens to leave those blank still
+    /// shows them. Called from <see cref="UpdateBandIssueMarks"/>.</summary>
+    private void RebuildMetaBadges(Issue? issue, bool issueFocused)
+    {
+        var f = _seriesFields;
+        _metaBadges = DetailMetaBadge.Build(
+            f.Publisher, StatusLabel, _seriesComplete, f.Year,
+            format:    issueFocused ? issue?.Format      : f.Format,
+            ageRating: issueFocused ? issue?.AgeRating   : f.AgeRating,
+            languageIso: issueFocused ? issue?.LanguageISO : f.LanguageIso);
+            // issueCountLabel/unreadLabel deliberately not passed - Part 4 revision moved them to
+            // IssueSummaryLine, a plain-text line rendered separately (see DetailHero.axaml).
+        OnPropertyChanged(nameof(IDetailHeaderSource.MetaBadges));
+        OnPropertyChanged(nameof(IDetailHeaderSource.HasMetaBadges));
+    }
+
+    /// <summary>The picker VM wrote a new <c>Series.ReadingStatus</c> - mirror it onto the hero's
+    /// read-only string and the band so both surfaces refresh in step (Part 2 §C).</summary>
+    private void OnReadingStatusPicked()
+    {
+        _readingStatus = _readingStatusPicker?.CurrentValue;
+        OnPropertyChanged(nameof(IDetailHeaderSource.ReadingStatus));
+        Band.ReadingStatusValue = _readingStatus;
+    }
+
     partial void OnSeriesTitleChanged(string value) => OnPropertyChanged(nameof(HeaderTitle));
 
+    /// <summary>
+    /// The primary hero button is the focused issue's own "Read this issue" action when exactly one
+    /// Issues/Specials tile is selected (docs/superpowers/specs/2026-08-07-detail-screen-issue-
+    /// focus-design.md, extended 2026-09-04) - label reflects that issue's read state
+    /// (Read / Continue / Re-read). With no single tile focused it falls back to the series-level
+    /// Continue button.
+    /// </summary>
     public IReadOnlyList<DetailHeroAction> Actions => new[]
     {
-        new DetailHeroAction(ContinueLabel, ContinueCommand, IsPrimary: true, IsEnabled: _continueIssueId is not null),
-        new DetailHeroAction(EditButtonLabel, EditCommand, IsEnabled: CanEdit),
-        new DetailHeroAction("Change Cover", ChangeSeriesCoverCommand),
+        _focusedIssueId is not null
+            ? new DetailHeroAction(_focusedIssueLabel, ReadFocusedIssueCommand, IsPrimary: true, IsEnabled: true, Icon: Symbol.Play)
+            : new DetailHeroAction(ContinueLabel, ContinueCommand, IsPrimary: true, IsEnabled: _continueIssueId is not null, Icon: Symbol.Play),
+        new DetailHeroAction(EditButtonLabel, EditCommand, IsEnabled: CanEdit, Icon: Symbol.Edit),
+        new DetailHeroAction("Change Cover", ChangeSeriesCoverCommand, Icon: Symbol.Image),
     };
 
     /// <summary>
@@ -167,6 +245,7 @@ public partial class DetailScreenViewModel : ViewModelBase, IDetailHeaderSource
 
         _isLoadingSeries = true;
         _seriesId = seriesId;
+        _focusedIssueId = null;
 
         var card = SeriesCardSample.FromSeries(series);
         CoverBrush = card.CoverBrush;
@@ -181,27 +260,29 @@ public partial class DetailScreenViewModel : ViewModelBase, IDetailHeaderSource
         CoverTitle = series.Name.ToUpperInvariant();
         SelectedContentType = series.ContentType;
         StatusLabel = series.IsComplete ? "Complete" : "Ongoing";
+        _readingStatus = series.ReadingStatus == Data.Entities.ReadingStatus.Unknown ? null : series.ReadingStatus.ToString();
+        OnPropertyChanged(nameof(IDetailHeaderSource.ReadingStatus));
+        _readingStatusPicker = new ReadingStatusPickerViewModel(seriesId, onChanged: OnReadingStatusPicked);
+        OnPropertyChanged(nameof(IDetailHeaderSource.ReadingStatusPicker));
+        Band.ReadingStatusPicker = _readingStatusPicker;
         IssueCountLabel = $"{series.Issues.Count} Issues";
         _seriesSummary = string.IsNullOrWhiteSpace(series.Summary) ? "No summary available." : series.Summary;
         Summary = _seriesSummary;
 
         int unread = series.Issues.Count(i => i.LastPageRead is null or 0);
-        string publisher = string.IsNullOrWhiteSpace(series.Publisher) ? string.Empty : series.Publisher!;
+        RefreshSeriesAggregates(series);
+        string publisher = _seriesFields.Publisher ?? string.Empty;
         _seriesMetaLine = string.Join("  ·  ", new[]
         {
             publisher,
             StatusLabel,
-            $"{series.Issues.Count} issue{(series.Issues.Count == 1 ? "" : "s")}",
+            _issueCountBadge,
             unread > 0 ? $"{unread} unread" : string.Empty,
         }.Where(s => s.Length > 0));
         MetaLine = _seriesMetaLine;
         Band.StatusText = StatusLabel;
         Band.PublisherText = publisher;
-        Band.YearText = series.Issues
-            .Select(i => i.ReleasedTime?.Year)
-            .Where(y => y is > 0)
-            .DefaultIfEmpty(null)
-            .Min() is int y0 ? y0.ToString() : string.Empty;
+        Band.YearText = _seriesFields.Year ?? string.Empty;
         Band.Summary = _seriesSummary;
         Band.IsSynopsisExpanded = false;
 
@@ -299,11 +380,23 @@ public partial class DetailScreenViewModel : ViewModelBase, IDetailHeaderSource
         if (Tabs.SelectedIssueIds.Count == 1)
         {
             int issueId = Tabs.SelectedIssueIds.Single();
-            var issue = context.Issues.Include(i => i.Series).Include(i => i.MetadataProposals).Include(i => i.Tags).FirstOrDefault(i => i.Id == issueId);
+            var issue = context.Issues.Include(i => i.Series).ThenInclude(s => s.Issues)
+                .Include(i => i.MetadataProposals).Include(i => i.Tags).FirstOrDefault(i => i.Id == issueId);
             if (issue is null)
             {
                 return;
             }
+
+            if (issue.Series is not null)
+            {
+                // Series-wide aggregates (unread count, publisher/format/rating fallbacks) must
+                // stay current even while an issue is focused - a "Mark as Read" on the focused
+                // tile itself must move the unread count too.
+                RefreshSeriesAggregates(issue.Series);
+            }
+
+            _focusedIssueId = issue.Id;
+            _focusedIssueLabel = FocusedIssueLabelFor(issue);
 
             var issueCover = CoverImageCache.Get(issue.Id);
             CoverImage = issueCover;
@@ -318,7 +411,7 @@ public partial class DetailScreenViewModel : ViewModelBase, IDetailHeaderSource
             Band.Summary = Summary;
             Band.IsSynopsisExpanded = false;
             Band.LoadIssue(issue, enabledVirtualTags);
-            UpdateBandIssueMarks(issue);
+            UpdateBandIssueMarks(issue, issueFocused: true);
         }
         else
         {
@@ -327,6 +420,9 @@ public partial class DetailScreenViewModel : ViewModelBase, IDetailHeaderSource
             {
                 return;
             }
+
+            _focusedIssueId = null;
+            RefreshSeriesAggregates(series);
 
             CoverImage = _seriesCoverImage;
             BackdropImage = _seriesBackdrop;
@@ -343,11 +439,12 @@ public partial class DetailScreenViewModel : ViewModelBase, IDetailHeaderSource
 
     /// <summary>Feeds the band's Format / AgeRating / Special marks from whichever issue is the
     /// current focus (the selected issue, or the cover issue in whole-series view).</summary>
-    private void UpdateBandIssueMarks(Issue? issue)
+    private void UpdateBandIssueMarks(Issue? issue, bool issueFocused = false)
     {
         Band.FormatText = issue?.Format ?? string.Empty;
         Band.AgeRatingText = issue?.AgeRating ?? string.Empty;
         Band.SetSpecialMarks(issue);
+        RebuildMetaBadges(issue, issueFocused);
     }
 
     private void RaiseEditStateChanged()
@@ -395,6 +492,28 @@ public partial class DetailScreenViewModel : ViewModelBase, IDetailHeaderSource
         {
             _goToReader(issueId);
         }
+    }
+
+    /// <summary>"Read this issue" - opens the currently focused (single-selected) issue in the
+    /// reader. Distinct from <see cref="Continue"/>, which always targets the series' resume point.</summary>
+    [RelayCommand]
+    private void ReadFocusedIssue()
+    {
+        if (_focusedIssueId is int issueId)
+        {
+            _goToReader(issueId);
+        }
+    }
+
+    /// <summary>Read / Continue / Re-read + issue number, matching <see cref="IssueCardSample.CardActionLabel"/>'s
+    /// own wording so the hero button and the Card-view tile button read the same.</summary>
+    private static string FocusedIssueLabelFor(Issue issue)
+    {
+        bool inProgress = issue.LastPageRead is int lpr && lpr > 0
+            && issue.PageCount is int pc && pc > 0 && lpr < pc;
+        string verb = inProgress ? "Continue" : issue.HasBeenRead() ? "Re-read" : "Read";
+        string? number = issue.EffectiveNumber();
+        return string.IsNullOrWhiteSpace(number) ? $"{verb} Issue" : $"{verb} — Issue #{number}";
     }
 
     // --- Cover art override (docs/superpowers/specs/2026-08-23-cover-art-override-design.md) -

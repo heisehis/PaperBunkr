@@ -8,4 +8,9 @@ public sealed class TrackerLinkSample
     public required TrackingService Service { get; init; }
     public required string ExternalId { get; init; }
     public string? Url { get; init; }
+
+    /// <summary>The service name as a plain string for a <c>BrandMark Family="Service"</c> binding
+    /// (its <c>Value</c> is <see cref="string"/>?) - docs/superpowers/specs/2026-09-04-detail-
+    /// screen-icons-and-glyphs-design.md Part 2 §A.</summary>
+    public string ServiceName => Service.ToString();
 }

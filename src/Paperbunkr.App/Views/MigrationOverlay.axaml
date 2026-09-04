@@ -160,20 +160,20 @@
                         <StackPanel IsVisible="{Binding Migration.IsLocate}" Spacing="12">
                             <TextBlock Text="Locate your ComicRack CE library" FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}" />
                             <StackPanel Orientation="Horizontal" Spacing="5" IsVisible="{Binding Migration.DefaultPathFound}">
-                                <fi:SymbolIcon Symbol="CheckmarkCircle" FontSize="14" Foreground="{DynamicResource PbAccentTextBrush}" />
+                                <fi:SymbolIcon Symbol="CheckmarkCircle" FontSize="{StaticResource PbIconSizeSm}" Foreground="{DynamicResource PbAccentTextBrush}" />
                                 <TextBlock Text="Found the default CE install" Foreground="{DynamicResource PbAccentTextBrush}" FontSize="12.5" />
                             </StackPanel>
                             <Grid ColumnDefinitions="*,Auto">
                                 <TextBox Grid.Column="0" Text="{Binding Migration.SelectedPath}" PlaceholderText="Path to ComicDb.xml" />
                                 <Button Grid.Column="1" Margin="8,0,0,0" Command="{Binding Migration.BrowseCommand}">
                                     <StackPanel Orientation="Horizontal" Spacing="5">
-                                        <fi:SymbolIcon Symbol="FolderOpen" FontSize="14" />
+                                        <fi:SymbolIcon Symbol="FolderOpen" FontSize="{StaticResource PbIconSizeSm}" />
                                         <TextBlock Text="Browse…" />
                                     </StackPanel>
                                 </Button>
                             </Grid>
                             <StackPanel Orientation="Horizontal" Spacing="5" IsVisible="{Binding Migration.HasErrorMessage}">
-                                <fi:SymbolIcon Symbol="Warning" FontSize="14" Foreground="#E06060" />
+                                <fi:SymbolIcon Symbol="Warning" FontSize="{StaticResource PbIconSizeSm}" Foreground="#E06060" />
                                 <TextBlock Text="{Binding Migration.ErrorMessage}" Foreground="#E06060" FontSize="12.5" />
                             </StackPanel>
                             <Button Classes="primaryWide" Content="Scan" Command="{Binding Migration.ScanCommand}"

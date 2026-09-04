@@ -103,7 +103,7 @@
                         Command="{Binding StopAllCommand}" IsVisible="{Binding HasRunningJobs}" />
                 <Button Grid.Column="5" Classes="activityIconBtn" Command="{Binding CloseCommand}"
                         AutomationProperties.Name="Close activity center" ToolTip.Tip="Close">
-                    <fi:SymbolIcon Symbol="ChevronDown" FontSize="13" />
+                    <fi:SymbolIcon Symbol="ChevronDown" FontSize="{StaticResource PbIconSizeSm}" />
                 </Button>
             </Grid>
 

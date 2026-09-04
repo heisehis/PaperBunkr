@@ -2,6 +2,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Paperbunkr.App.ViewModels"
              xmlns:views="using:Paperbunkr.App.Views"
+             xmlns:fi="using:FluentIcons.Avalonia"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d" d:DesignWidth="1000" d:DesignHeight="800"
@@ -43,7 +44,12 @@
 
     <ScrollViewer>
         <StackPanel Margin="0,0,0,50">
-            <Button Classes="backLink" Command="{Binding GoBackCommand}" Content="← Back to Library" Margin="28,20,28,12" />
+            <Button Classes="backLink" Command="{Binding GoBackCommand}" Margin="28,20,28,12">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                    <fi:SymbolIcon Symbol="ArrowLeft" FontSize="{StaticResource PbIconSizeSm}" VerticalAlignment="Center" />
+                    <TextBlock Text="Back to Library" VerticalAlignment="Center" />
+                </StackPanel>
+            </Button>
 
             <views:DetailHero DataContext="{Binding}" />
 

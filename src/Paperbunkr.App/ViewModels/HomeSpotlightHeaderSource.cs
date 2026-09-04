@@ -4,6 +4,7 @@ using System.ComponentModel;
 using System.Windows.Input;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
+using FluentIcons.Common;
 using Paperbunkr.App.Models;
 
 namespace Paperbunkr.App.ViewModels;
@@ -26,7 +27,7 @@ public sealed class HomeSpotlightHeaderSource : IDetailHeaderSource
     public HomeSpotlightHeaderSource(Func<SpotlightIssueSample?> current, ICommand openCommand)
     {
         _current = current;
-        _actions = new[] { new DetailHeroAction("Read now", openCommand, IsPrimary: true) };
+        _actions = new[] { new DetailHeroAction("Read now", openCommand, IsPrimary: true, Icon: Symbol.Play) };
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;

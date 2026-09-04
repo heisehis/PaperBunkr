@@ -84,6 +84,17 @@
         <x:Double x:Key="PbFontSizeOverline">10.5</x:Double>
         <x:Double x:Key="PbFontSizeMicro">9.5</x:Double>
 
+        <!-- Icon-size scale (docs/superpowers/specs/2026-09-04-detail-screen-icons-and-glyphs-
+             design.md §1) - based on the avalonia-pro-max/icons-imagery steps, then bumped one
+             stop up (2026-09-04, user direction: glyphs read too small). fi:SymbolIcon is sized
+             by FontSize; reference a token, never a literal. Plain x:Double, not skinned by
+             SkinService (same as PbFontSize* above). Every glyph in the app scales from here. -->
+        <x:Double x:Key="PbIconSizeXs">14</x:Double>
+        <x:Double x:Key="PbIconSizeSm">16</x:Double>
+        <x:Double x:Key="PbIconSizeMd">18</x:Double>
+        <x:Double x:Key="PbIconSizeLg">24</x:Double>
+        <x:Double x:Key="PbIconSizeXl">40</x:Double>
+
         <!-- Genuinely CornerRadius-typed, not x:Double - a Style Setter's DynamicResource
              resolution does NOT run the CornerRadius TypeConverter the way a plain XAML attribute
              does (confirmed the hard way: System.InvalidCastException, "Unable to cast object of

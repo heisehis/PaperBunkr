@@ -1006,7 +1006,7 @@
              search, a filter with no matches, or an entirely empty library. -->
         <StackPanel Grid.Row="1" Spacing="12" IsVisible="{Binding ShowEmptyState}"
                     HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="320">
-            <fi:SymbolIcon Symbol="Layer" FontSize="34" HorizontalAlignment="Center" Foreground="{DynamicResource PbTextFaintBrush}" />
+            <fi:SymbolIcon Symbol="Layer" FontSize="{StaticResource PbIconSizeXl}" HorizontalAlignment="Center" Foreground="{DynamicResource PbTextFaintBrush}" />
             <TextBlock Classes="pbTextBody" Text="{Binding EmptyStateMessage}" TextWrapping="Wrap"
                        TextAlignment="Center" Foreground="{DynamicResource PbTextMutedBrush}" />
             <Button Classes="secondary" HorizontalAlignment="Center"

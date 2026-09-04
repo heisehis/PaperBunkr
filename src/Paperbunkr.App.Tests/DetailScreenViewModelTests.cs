@@ -1,4 +1,5 @@
 using System.Linq;
+using FluentIcons.Common;
 using Microsoft.EntityFrameworkCore;
 using Paperbunkr.App.Services;
 using Paperbunkr.App.ViewModels;
@@ -196,6 +197,143 @@ public class DetailScreenViewModelTests : IDisposable
 
         Assert.Equal("A Completely Different Series", ((IDetailHeaderSource)vm).HeaderTitle);
         Assert.Contains(nameof(IDetailHeaderSource.HeaderTitle), raised);
+    }
+
+    [Fact]
+    public void FocusingOneIssue_PrimaryHeroAction_BecomesReadThatIssue()
+    {
+        int? readerTarget = null;
+        var vm = new DetailScreenViewModel(goBack: () => { }, goToReader: id => readerTarget = id, goToProperties: _ => { }, goToBulkProperties: _ => { });
+        vm.LoadSeries(_seriesId);
+
+        // No focus yet: primary action is the series-level Continue button.
+        Assert.Equal("Continue — Issue #1", vm.Actions[0].Label);
+
+        vm.Tabs.ToggleIssueSelection(vm.Tabs.Issues.Single(), isShiftHeld: false);
+
+        Assert.Equal("Read — Issue #1", vm.Actions[0].Label);
+        Assert.True(vm.Actions[0].IsPrimary);
+        Assert.Equal(Symbol.Play, vm.Actions[0].Icon);
+        Assert.Equal(Symbol.Edit, vm.Actions[1].Icon);
+        Assert.Equal(Symbol.Image, vm.Actions[2].Icon);
+        vm.Actions[0].Command.Execute(null);
+        Assert.Equal(_issueId, readerTarget);
+
+        // Deselecting reverts to the series-level button.
+        vm.Tabs.ToggleIssueSelection(vm.Tabs.Issues.Single(), isShiftHeld: false);
+        Assert.Equal("Continue — Issue #1", vm.Actions[0].Label);
+    }
+
+    [Fact]
+    public void ReadingStatus_HeaderProperty_NullForUnknown_EnumNameOtherwise()
+    {
+        var vm = new DetailScreenViewModel(goBack: () => { }, goToReader: _ => { }, goToProperties: _ => { }, goToBulkProperties: _ => { });
+        vm.LoadSeries(_seriesId);
+        Assert.Null(((IDetailHeaderSource)vm).ReadingStatus);
+        Assert.False(vm.Band.HasReadingStatus);
+
+        using (var context = new PaperbunkrDbContext(new DbContextOptionsBuilder<PaperbunkrDbContext>().UseSqlite($"Data Source={_dbPath}").Options))
+        {
+            context.Series.Single(s => s.Id == _seriesId).ReadingStatus = ReadingStatus.Completed;
+            context.SaveChanges();
+        }
+
+        vm.LoadSeries(_seriesId);
+        Assert.Equal("Completed", ((IDetailHeaderSource)vm).ReadingStatus);
+        Assert.True(vm.Band.HasReadingStatus);
+        Assert.Equal("Completed", vm.Band.ReadingStatusValue);
+    }
+
+    [Fact]
+    public void MetaBadges_AggregateAcrossIssues_ThenFocusedIssueOverrides()
+    {
+        int annualId;
+        using (var context = new PaperbunkrDbContext(new DbContextOptionsBuilder<PaperbunkrDbContext>().UseSqlite($"Data Source={_dbPath}").Options))
+        {
+            var s = context.Series.Single(x => x.Id == _seriesId);
+            s.Status = SeriesStatus.Completed;
+            // series.Publisher stays blank - the aggregate must pick it up from the issues.
+            context.Issues.Single(i => i.Id == _issueId).Format = "Single Issue"; // #1
+            context.Issues.AddRange(
+                new Issue { SeriesId = _seriesId, Number = "2", Publisher = "DC Comics", Format = "Single Issue", AgeRating = "Teen" },
+                new Issue { SeriesId = _seriesId, Number = "3", Publisher = "DC Comics", Format = "Single Issue", AgeRating = "Teen" });
+            var annual = new Issue { SeriesId = _seriesId, Number = "1", Format = "Annual", AgeRating = "Mature", LanguageISO = "en" };
+            context.Issues.Add(annual);
+            context.SaveChanges();
+            annualId = annual.Id;
+        }
+
+        var vm = new DetailScreenViewModel(goBack: () => { }, goToReader: _ => { }, goToProperties: _ => { }, goToBulkProperties: _ => { });
+        vm.LoadSeries(_seriesId);
+
+        var badges = ((IDetailHeaderSource)vm).MetaBadges;
+        Assert.Contains(badges, b => b.Mark == Paperbunkr.App.Controls.MarkFamily.Publisher && b.MarkValue == "DC Comics"); // from issues, not series
+        Assert.Contains(badges, b => b.Text == "Complete");
+        Assert.Contains(badges, b => b.Mark == Paperbunkr.App.Controls.MarkFamily.Format && b.MarkValue == "Single Issue"); // most common
+        Assert.Contains(badges, b => b.Mark == Paperbunkr.App.Controls.MarkFamily.AgeRating && b.MarkValue == "Teen");
+        // issue-count / unread: a separate plain-text line (Part 4 revision, user direction), not a
+        // badge - all 4 seeded issues are unread (no LastPageRead set).
+        Assert.Equal("4 issues  ·  4 unread", ((IDetailHeaderSource)vm).IssueSummaryLine);
+
+        // focus the annual -> its own format/rating take over
+        vm.Tabs.ToggleIssueSelection(vm.Tabs.Specials.First(i => i.Id == annualId), isShiftHeld: false);
+        var focused = ((IDetailHeaderSource)vm).MetaBadges;
+        Assert.Contains(focused, b => b.Mark == Paperbunkr.App.Controls.MarkFamily.Format && b.MarkValue == "Annual");
+        Assert.Contains(focused, b => b.Mark == Paperbunkr.App.Controls.MarkFamily.AgeRating && b.MarkValue == "Mature");
+        Assert.Contains(focused, b => b.Mark == Paperbunkr.App.Controls.MarkFamily.Language && b.MarkValue == "en");
+
+        // deselect -> back to the aggregate
+        vm.Tabs.ToggleIssueSelection(vm.Tabs.Specials.First(i => i.Id == annualId), isShiftHeld: false);
+        Assert.Contains(((IDetailHeaderSource)vm).MetaBadges, b => b.Mark == Paperbunkr.App.Controls.MarkFamily.Format && b.MarkValue == "Single Issue");
+    }
+
+    /// <summary>Bug report 2026-09-04: "the unread doesn't update when i finish reading a comic" -
+    /// marking an issue read from a Detail tile must move the hero's <c>IssueSummaryLine</c> unread
+    /// count immediately, not just on the next full <see cref="DetailScreenViewModel.LoadSeries"/>.</summary>
+    [Fact]
+    public void MarkingAnIssueRead_FromTheTile_UpdatesTheHeroUnreadCountImmediately()
+    {
+        int issue2Id;
+        using (var context = new PaperbunkrDbContext(new DbContextOptionsBuilder<PaperbunkrDbContext>().UseSqlite($"Data Source={_dbPath}").Options))
+        {
+            context.Issues.Single(i => i.Id == _issueId).PageCount = 10;
+            var issue2 = new Issue { SeriesId = _seriesId, Number = "2", PageCount = 10 };
+            context.Issues.Add(issue2);
+            context.SaveChanges();
+            issue2Id = issue2.Id;
+        }
+
+        var vm = new DetailScreenViewModel(goBack: () => { }, goToReader: _ => { }, goToProperties: _ => { }, goToBulkProperties: _ => { });
+        vm.LoadSeries(_seriesId);
+        Assert.Equal("2 issues  ·  2 unread", ((IDetailHeaderSource)vm).IssueSummaryLine);
+
+        // deselected (series-aggregate) tile mark-as-read
+        vm.Tabs.MarkIssueReadCommand.Execute(vm.Tabs.Issues.First(i => i.Id == _issueId));
+        Assert.Equal("2 issues  ·  1 unread", ((IDetailHeaderSource)vm).IssueSummaryLine);
+
+        // focus the other issue, then mark it read too - the count must still update while focused
+        vm.Tabs.ToggleIssueSelection(vm.Tabs.Issues.First(i => i.Id == issue2Id), isShiftHeld: false);
+        vm.Tabs.MarkIssueReadCommand.Execute(vm.Tabs.Issues.First(i => i.Id == issue2Id));
+        Assert.Equal("2 issues", ((IDetailHeaderSource)vm).IssueSummaryLine);
+    }
+
+    [Fact]
+    public void ReadingStatusPicker_IsBuilt_AndSettingItRoundTripsToHeroAndBand()
+    {
+        var vm = new DetailScreenViewModel(goBack: () => { }, goToReader: _ => { }, goToProperties: _ => { }, goToBulkProperties: _ => { });
+        vm.LoadSeries(_seriesId);
+
+        var picker = ((IDetailHeaderSource)vm).ReadingStatusPicker;
+        Assert.NotNull(picker);
+        Assert.Same(picker, vm.Band.ReadingStatusPicker);
+        Assert.True(vm.Band.ShowReadingStatusPicker);
+
+        picker!.SetCommand.Execute(ReadingStatus.Reading);
+
+        Assert.Equal("Reading", ((IDetailHeaderSource)vm).ReadingStatus);
+        Assert.Equal("Reading", vm.Band.ReadingStatusValue);
+        using var context = new PaperbunkrDbContext(new DbContextOptionsBuilder<PaperbunkrDbContext>().UseSqlite($"Data Source={_dbPath}").Options);
+        Assert.Equal(ReadingStatus.Reading, context.Series.Single(s => s.Id == _seriesId).ReadingStatus);
     }
 
     [Fact]

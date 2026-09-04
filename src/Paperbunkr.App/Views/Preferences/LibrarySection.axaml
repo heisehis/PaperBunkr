@@ -36,7 +36,7 @@
                                                 Command="{Binding #WatchedFoldersList.((vm:PreferencesScreenViewModel)DataContext).OpenFolderCommand}"
                                                 CommandParameter="{Binding}">
                                             <StackPanel Orientation="Horizontal" Spacing="5">
-                                                <fi:SymbolIcon Symbol="FolderOpen" FontSize="11" />
+                                                <fi:SymbolIcon Symbol="FolderOpen" FontSize="{StaticResource PbIconSizeXs}" />
                                                 <TextBlock Text="Open" />
                                             </StackPanel>
                                         </Button>
@@ -44,7 +44,7 @@
                                                 Command="{Binding #WatchedFoldersList.((vm:PreferencesScreenViewModel)DataContext).RemoveFolderCommand}"
                                                 CommandParameter="{Binding}">
                                             <StackPanel Orientation="Horizontal" Spacing="5">
-                                                <fi:SymbolIcon Symbol="Delete" FontSize="11" />
+                                                <fi:SymbolIcon Symbol="Delete" FontSize="{StaticResource PbIconSizeXs}" />
                                                 <TextBlock Text="Remove" />
                                             </StackPanel>
                                         </Button>
@@ -110,7 +110,7 @@
                                                 CommandParameter="{Binding}"
                                                 AutomationProperties.AutomationId="PreferencesBookFolderOpen">
                                             <StackPanel Orientation="Horizontal" Spacing="5">
-                                                <fi:SymbolIcon Symbol="FolderOpen" FontSize="11" />
+                                                <fi:SymbolIcon Symbol="FolderOpen" FontSize="{StaticResource PbIconSizeXs}" />
                                                 <TextBlock Text="Open" />
                                             </StackPanel>
                                         </Button>
@@ -119,7 +119,7 @@
                                                 CommandParameter="{Binding}"
                                                 AutomationProperties.AutomationId="PreferencesBookFolderRemove">
                                             <StackPanel Orientation="Horizontal" Spacing="5">
-                                                <fi:SymbolIcon Symbol="Delete" FontSize="11" />
+                                                <fi:SymbolIcon Symbol="Delete" FontSize="{StaticResource PbIconSizeXs}" />
                                                 <TextBlock Text="Remove" />
                                             </StackPanel>
                                         </Button>
@@ -203,7 +203,7 @@
                     <StackPanel Margin="14" Spacing="10">
                         <Button Classes="headerAction ghost" Command="{Binding AddVirtualTagCommand}" HorizontalAlignment="Left">
                             <StackPanel Orientation="Horizontal" Spacing="6">
-                                <fi:SymbolIcon Symbol="Add" FontSize="11" />
+                                <fi:SymbolIcon Symbol="Add" FontSize="{StaticResource PbIconSizeXs}" />
                                 <TextBlock Text="Add Virtual Tag" />
                             </StackPanel>
                         </Button>
@@ -225,7 +225,7 @@
                             <Button Classes="headerAction ghost" Command="{Binding DeleteVirtualTagCommand}"
                                     HorizontalAlignment="Left" Margin="0,6,0,0">
                                 <StackPanel Orientation="Horizontal" Spacing="6">
-                                    <fi:SymbolIcon Symbol="Delete" FontSize="11" />
+                                    <fi:SymbolIcon Symbol="Delete" FontSize="{StaticResource PbIconSizeXs}" />
                                     <TextBlock Text="Delete Tag" />
                                 </StackPanel>
                             </Button>

@@ -29,14 +29,38 @@ public partial class DetailTabs : UserControl
             return;
         }
 
+        if (sender is not Control { DataContext: IssueCardSample issue } || DataContext is not DetailTabsViewModel viewModel)
+        {
+            return;
+        }
+
+        bool shift = e.KeyModifiers.HasFlag(KeyModifiers.Shift);
+        bool ctrl = e.KeyModifiers.HasFlag(KeyModifiers.Control);
+
+        // Plain click focuses one tile (drives the hero + "Read this issue" button); Ctrl/Shift
+        // build the bulk-edit multi-selection (real user direction 2026-09-04).
+        if (shift || ctrl)
+        {
+            viewModel.ToggleIssueSelection(issue, shift);
+        }
+        else
+        {
+            viewModel.FocusIssue(issue);
+        }
+    }
+
+    /// <summary>Double-click / double-tap opens the tile's issue in the reader - attached on all
+    /// three view-mode templates (Poster/List/Card), same as <see cref="OnIssueTilePointerPressed"/>.</summary>
+    private void OnIssueTileDoubleTapped(object? sender, TappedEventArgs e)
+    {
         if (sender is Control { DataContext: IssueCardSample issue } && DataContext is DetailTabsViewModel viewModel)
         {
-            viewModel.ToggleIssueSelection(issue, e.KeyModifiers.HasFlag(KeyModifiers.Shift));
+            viewModel.OpenIssue(issue);
         }
     }
 
     /// <summary>
-    /// Keyboard equivalent of <see cref="OnIssueTilePointerPressed"/> (P5, docs/alpha-roadmap.md) -
+    /// Keyboard equivalent of <see cref="OnIssueTilePointerPressed"/> (P5, docs/Paperbunkr-Roadmap.md) -
     /// Enter/Space toggles the focused tile, Shift held extends the range. Other arrow/Home/End
     /// keys delegate to <see cref="GridKeyboardNavigation"/> for spatial 2D movement, resolving the
     /// active view mode's own <c>ItemsControl</c> from the focused tile rather than a fixed name.

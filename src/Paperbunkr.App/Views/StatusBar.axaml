@@ -91,7 +91,7 @@
                             <TextBlock Text="{Binding StatusBar.UnreadAlertCount}" FontSize="9.5" HorizontalAlignment="Center"
                                        Foreground="{DynamicResource PbBadgeTextBrush}" />
                         </Border>
-                        <fi:SymbolIcon Symbol="ChevronUp" FontSize="10" VerticalAlignment="Center"
+                        <fi:SymbolIcon Symbol="ChevronUp" FontSize="{StaticResource PbIconSizeXs}" VerticalAlignment="Center"
                                        Foreground="{DynamicResource PbTextFaintBrush}" />
                     </StackPanel>
                 </Button>

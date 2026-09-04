@@ -21,11 +21,12 @@
                         <Image Source="{TemplateBinding ImageSource}"
                                Height="{TemplateBinding MarkSize}" Stretch="Uniform"
                                VerticalAlignment="Center"
+                               RenderOptions.BitmapInterpolationMode="HighQuality"
                                IsVisible="{TemplateBinding IsImage}" />
 
                         <fi:SymbolIcon Symbol="{TemplateBinding Glyph}"
                                        FontSize="{TemplateBinding MarkSize}"
-                                       Foreground="{TemplateBinding Foreground}"
+                                       Foreground="{Binding GlyphBrush, RelativeSource={RelativeSource TemplatedParent}, TargetNullValue={DynamicResource PbTextMutedBrush}}"
                                        VerticalAlignment="Center"
                                        IsVisible="{TemplateBinding IsGlyph}" />
 

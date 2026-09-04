@@ -73,6 +73,28 @@ public partial class DetailBandViewModel : ViewModelBase, IContextMenuProvider
     [ObservableProperty]
     private string _ageRatingText = string.Empty;
 
+    /// <summary>The series' <see cref="ReadingStatus"/> as an enum name, or <see langword="null"/>
+    /// for <see cref="ReadingStatus.Unknown"/> - rendered as a coloured <c>BrandMark</c> glyph on
+    /// the inline meta row (docs/superpowers/specs/2026-09-04-detail-screen-icons-and-glyphs-
+    /// design.md §8a). Distinct from <see cref="StatusText"/>, which is the publication status
+    /// (Ongoing / Complete). Used as the read-only fallback when <see cref="ReadingStatusPicker"/>
+    /// is null (book mode); otherwise the picker owns the display.</summary>
+    [ObservableProperty]
+    private string? _readingStatusValue;
+
+    /// <summary>Focused issue's language ISO (or the series' single distinct one) - rendered as a
+    /// flag <c>BrandMark</c> on the meta row (docs/superpowers/specs/2026-09-04-detail-screen-
+    /// icons-and-glyphs-design.md Part 2 §A). Blank when unset or issues disagree.</summary>
+    [ObservableProperty]
+    private string? _languageIso;
+
+    /// <summary>Set by the host screen alongside <see cref="LoadSeries"/> - the clickable
+    /// reading-status setter shared by the hero and this band (Part 2 §C). Null in book mode
+    /// (books have no <see cref="ReadingStatus"/>), where <see cref="ReadingStatusValue"/> is the
+    /// read-only fallback. This VM stays DB-free; the host builds the picker.</summary>
+    [ObservableProperty]
+    private ReadingStatusPickerViewModel? _readingStatusPicker;
+
     /// <summary>Short labels for derived "special" marks (manga / B&amp;W), from
     /// <c>MarkResolver.ResolveSpecial</c>.</summary>
     public ObservableCollection<string> SpecialMarks { get; } = new();
@@ -82,12 +104,33 @@ public partial class DetailBandViewModel : ViewModelBase, IContextMenuProvider
     public bool HasYear => !string.IsNullOrWhiteSpace(YearText);
     public bool HasFormat => !string.IsNullOrWhiteSpace(FormatText);
     public bool HasAgeRating => !string.IsNullOrWhiteSpace(AgeRatingText);
+    public bool HasReadingStatus => !string.IsNullOrWhiteSpace(ReadingStatusValue);
+    public bool HasLanguage => !string.IsNullOrWhiteSpace(LanguageIso);
+
+    /// <summary>The band shows the interactive picker when the host supplied one, else the
+    /// read-only <see cref="ReadingStatusValue"/> mark (book mode - though books have no reading
+    /// status today, so in practice neither shows there).</summary>
+    public bool ShowReadingStatusPicker => ReadingStatusPicker is not null;
+    public bool ShowReadingStatusMark => ReadingStatusPicker is null && HasReadingStatus;
 
     partial void OnStatusTextChanged(string value) => OnPropertyChanged(nameof(HasStatus));
     partial void OnPublisherTextChanged(string value) => OnPropertyChanged(nameof(HasPublisher));
     partial void OnYearTextChanged(string value) => OnPropertyChanged(nameof(HasYear));
     partial void OnFormatTextChanged(string value) => OnPropertyChanged(nameof(HasFormat));
     partial void OnAgeRatingTextChanged(string value) => OnPropertyChanged(nameof(HasAgeRating));
+    partial void OnReadingStatusValueChanged(string? value)
+    {
+        OnPropertyChanged(nameof(HasReadingStatus));
+        OnPropertyChanged(nameof(ShowReadingStatusMark));
+    }
+
+    partial void OnLanguageIsoChanged(string? value) => OnPropertyChanged(nameof(HasLanguage));
+
+    partial void OnReadingStatusPickerChanged(ReadingStatusPickerViewModel? value)
+    {
+        OnPropertyChanged(nameof(ShowReadingStatusPicker));
+        OnPropertyChanged(nameof(ShowReadingStatusMark));
+    }
 
     /// <summary>Sets the derived special-mark labels from a focused issue (empty for series mode /
     /// book mode). Host screens call this alongside setting <see cref="FormatText"/> etc.</summary>
@@ -143,6 +186,10 @@ public partial class DetailBandViewModel : ViewModelBase, IContextMenuProvider
             characters: CsvFieldAggregator.Distinct(issues.Select(i => i.Characters)),
             genreTags: issues.SelectMany(i => i.Tags),
             issueId: null);
+        ReadingStatusValue = series.ReadingStatus == ReadingStatus.Unknown ? null : series.ReadingStatus.ToString();
+        var langs = issues.Select(i => i.LanguageISO).Where(l => !string.IsNullOrWhiteSpace(l))
+            .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        LanguageIso = langs.Count == 1 ? langs[0] : null;
         FillVirtualTags(issues.Select(i => (i, (Series?)series)), virtualTags);
     }
 
@@ -157,6 +204,8 @@ public partial class DetailBandViewModel : ViewModelBase, IContextMenuProvider
             characters: CsvFieldAggregator.Distinct(new[] { issue.Characters }),
             genreTags: issue.Tags,
             issueId: issue.Id);
+        ReadingStatusValue = issue.Series?.ReadingStatus is { } rs && rs != ReadingStatus.Unknown ? rs.ToString() : null;
+        LanguageIso = issue.LanguageISO;
         FillVirtualTags(new[] { (issue, issue.Series) }, virtualTags);
     }
 

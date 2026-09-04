@@ -1,0 +1,87 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:fi="using:FluentIcons.Avalonia"
+             xmlns:pbc="using:Paperbunkr.App.Controls"
+             xmlns:vm="using:Paperbunkr.App.ViewModels"
+             xmlns:models="using:Paperbunkr.App.Models"
+             xmlns:conv="using:Avalonia.Data.Converters"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="220" d:DesignHeight="40"
+             x:Class="Paperbunkr.App.Views.ReadingStatusPicker"
+             x:DataType="vm:ReadingStatusPickerViewModel"
+             x:Name="Root">
+
+    <!--
+        Clickable reading-status chip + flyout, embedded in DetailHero and DetailBand
+        (docs/superpowers/specs/2026-09-04-detail-screen-icons-and-glyphs-design.md Part 2 §C).
+        Button.Flyout (not MenuFlyout / ContextMenu - those don't render in this Avalonia build,
+        see the context-menu-rebuild memory); mirrors BookDetailScreen's working delete-confirm.
+    -->
+    <UserControl.Styles>
+        <Style Selector="Button.statusChip">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style Selector="Button.statusOption">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="CornerRadius" Value="5" />
+            <Setter Property="Padding" Value="9,6" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="HorizontalContentAlignment" Value="Left" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
+        </Style>
+        <Style Selector="Button.statusOption:pointerover">
+            <Setter Property="Background" Value="{DynamicResource PbSurface3Brush}" />
+        </Style>
+    </UserControl.Styles>
+
+    <!-- Self-guards on a null DataContext so hosts can just bind DataContext="{Binding ReadingStatusPicker}"
+         (null in book mode / Home) with no separate IsVisible plumbing. -->
+    <Button Classes="statusChip" AutomationProperties.Name="Reading status" ToolTip.Tip="Set reading status"
+            IsVisible="{Binding Converter={x:Static conv:ObjectConverters.IsNotNull}}">
+        <Panel>
+            <!-- Set: the coloured mark -->
+            <pbc:BrandMark Family="ReadingStatus" Value="{Binding CurrentValue}" ShowText="True"
+                           MarkSize="15" VerticalAlignment="Center"
+                           IsVisible="{Binding HasStatus}" />
+            <!-- Unset: discoverable "Set status" ghost -->
+            <StackPanel Orientation="Horizontal" Spacing="5" VerticalAlignment="Center"
+                        IsVisible="{Binding !HasStatus}">
+                <fi:SymbolIcon Symbol="BookOpen" FontSize="{StaticResource PbIconSizeXs}"
+                               Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" />
+                <TextBlock Text="Set status" FontSize="{StaticResource PbFontSizeMeta}"
+                           Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" />
+            </StackPanel>
+        </Panel>
+
+        <Button.Flyout>
+            <Flyout Placement="BottomEdgeAlignedLeft">
+                <ItemsControl ItemsSource="{Binding Options}" Width="176">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="models:ReadingStatusOption">
+                            <Button Classes="statusOption"
+                                    Command="{Binding #Root.((vm:ReadingStatusPickerViewModel)DataContext).SetCommand}"
+                                    CommandParameter="{Binding Value}">
+                                <Grid ColumnDefinitions="18,*,16">
+                                    <fi:SymbolIcon Grid.Column="0" Symbol="{Binding Glyph}"
+                                                   FontSize="{StaticResource PbIconSizeXs}" VerticalAlignment="Center" />
+                                    <TextBlock Grid.Column="1" Text="{Binding Label}" Margin="7,0,0,0"
+                                               FontSize="{StaticResource PbFontSizeControl}" VerticalAlignment="Center" />
+                                    <fi:SymbolIcon Grid.Column="2" Symbol="Checkmark" FontSize="{StaticResource PbIconSizeXs}"
+                                                   Foreground="{DynamicResource PbAccentBrush}" VerticalAlignment="Center"
+                                                   IsVisible="{Binding IsChecked}" />
+                                </Grid>
+                            </Button>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </Flyout>
+        </Button.Flyout>
+    </Button>
+</UserControl>

@@ -846,6 +846,16 @@
 
     </DockPanel>
 
+    <!-- ============ Shared-element transition overlay (docs/superpowers/specs/2026-09-04-
+         navigation-transition-system-design.md) ============ -->
+    <!-- Above every screen + the breadcrumb, below the modal overlays (Activity drawer/Migration/
+         properties popups below) so a flying cover never renders over an actual modal. A Canvas
+         specifically (not a generic Panel) - SharedElementTransitionService positions its clone via
+         Canvas.Left/Top plus a RenderTransform delta on top. Never touched directly in markup beyond
+         this declaration; NavigationTransitionCoordinator drives it entirely through
+         ISharedElementTransitionService, registered in MainWindow.axaml.cs. -->
+    <Canvas x:Name="TransitionOverlay" IsHitTestVisible="False" ClipToBounds="False" />
+
     <!-- ============ Activity Center drawer (docs/superpowers/specs/2026-09-03-activity-center-design.md) ============ -->
     <!-- Tier 2. Overlay sibling of the DockPanel, non-blocking (no scrim) - the app stays usable
          behind it. IsVisible gates hit-testing when closed; the slide-up is the DrawerRoot.open

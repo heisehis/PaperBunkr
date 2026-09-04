@@ -137,6 +137,11 @@ public sealed class MetronSource : IReadingListSource
         {
             throw new ReadingListSourceException(DisplayName, $"Metron request failed: {ex.Message}");
         }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            // HttpClient.Timeout elapsing throws TaskCanceledException, not HttpRequestException.
+            throw new ReadingListSourceException(DisplayName, "Metron did not respond within 20 seconds.");
+        }
 
         if (response.StatusCode == HttpStatusCode.Unauthorized)
         {

@@ -1,6 +1,6 @@
 # Paperbunkr Alpha Release To-Do
 
-*Scope: git/release prep + known gaps only, per `alpha-roadmap.md` (2026-08-07). Beta backlog is
+*Scope: git/release prep + known gaps only, per `Paperbunkr-Roadmap.md` (2026-08-07). Beta backlog is
 tracked separately in that document and not repeated here.*
 
 Priority order below is suggested — highest-risk / release-blocking first, then polish ordered by
@@ -27,14 +27,14 @@ this file itself already did once (see the note below).
 > 1. **The project is now `0.2.0-beta`** (`v0.2.0-beta` tag, `CHANGELOG.md`, README/wiki updated).
 >    In-app auto-update via NetSparkle + a tag-triggered GitHub Release/appcast pipeline shipped
 >    `32d82bf`. These `alpha-*.md` filenames are historical now; the Beta backlog itself is still
->    live in [`alpha-roadmap.md`](alpha-roadmap.md).
+>    live in [`Paperbunkr-Roadmap.md`](Paperbunkr-Roadmap.md).
 > 2. **On-screen verification debt largely cleared.** The user personally clicked through and
 >    confirmed on 2026-09-04: Activity Center, Panorama variable widths, drag-and-drop import, file
 >    metadata write-back, Library view-mode virtualization, manga detail / cover-art override /
 >    MangaBaka picker, Saved Workspaces, Quick Open palette, double-page spread / remappable reader
 >    shortcuts / auto-scroll, comprehensive keyboard operability, Smart Collections, MediaRelation
 >    collection nodes, SmartList Engine v2, Plugin API v3, Specials tab. Full list + remaining
->    unverified edge cases in `alpha-roadmap.md`'s "On-screen verification" section.
+>    unverified edge cases in `Paperbunkr-Roadmap.md`'s "On-screen verification" section.
 
 > **Manual session note (2026-08-27, Metadata Model Phases 4d-4g):** net-new metadata-platform work
 > landed this session — Event Relations (4d, one new EF migration
@@ -42,7 +42,7 @@ this file itself already did once (see the note below).
 > Continuity Browse view (4f), and Age Progression / Timeline (4g). All four extend the Story
 > Events screen (`EventsScreenViewModel`) — 4f adds an Events|Continuities|Timeline mode switcher,
 > 4g adds Timeline as the third mode. **P0-P7 status is unchanged (still all done)** — this is Beta
-> backlog, so the full detail lives in [`alpha-roadmap.md`](alpha-roadmap.md)'s "Metadata Model
+> backlog, so the full detail lives in [`Paperbunkr-Roadmap.md`](Paperbunkr-Roadmap.md)'s "Metadata Model
 > platform" section, not here.
 >
 > **Follow-up (2026-08-28):** every deferred 4d-4g item then got built too — persisted suggestion
@@ -334,7 +334,7 @@ the P6 section below for what's confirmed vs. still needs a look.
   and fixed 2026-08-09 evening, committed `04a1eb0` — see below.**
 - ~~**New, not yet scoped:** Book Folders scan reads filenames only~~ — **done**, see below.
 - Unrelated, also landed since: Novels (EPUB/PDF) support, Phases 1–3 (`3894723`, `2c3e140`,
-  `8d94d11`, `25c664a`, merged via `5869ed0`) — tracked separately in `alpha-roadmap.md` per this
+  `8d94d11`, `25c664a`, merged via `5869ed0`) — tracked separately in `Paperbunkr-Roadmap.md` per this
   doc's own scope note above, not repeated here.
 
 **Real bug found + fixed today (2026-08-09 evening session, committed `04a1eb0`) — a crash, not a
@@ -588,7 +588,7 @@ Base audit shipped via `8e1bf55`; 2D grid navigation follow-up shipped today via
       own explanatory tooltip (the 4 deferred external-tracker buttons on the Reading Lists
       screen — AniList/MyAnimeList/Auto-Build/Refresh). 1 new test added (252/252 passing).
       **Stale as of 2026-08-22:** Auto-Build (now "Search Story Arc…") and Refresh are real and
-      wired now — see `alpha-roadmap.md`'s "Reading Lists: story-arc auto-build" entry. AniList/
+      wired now — see `Paperbunkr-Roadmap.md`'s "Reading Lists: story-arc auto-build" entry. AniList/
       MyAnimeList remain genuinely disabled/deferred (a different, unrelated tracker-sync feature).
 
 ---
@@ -744,7 +744,7 @@ docs/superpowers/specs/2026-08-09-reader-gestures-and-grid-navigation-design.md.
   toolbar column) — 555 automated tests pass; app verified to launch and stay running, **on-screen
   verification of the actual scroll/stop behavior still pending**, same standing GUI-automation
   caveat. Split-page nav is now the only remaining open item in this backlog. Tracked in full in
-  `alpha-roadmap.md` per this doc's scope note at the top — not duplicated here.
+  `Paperbunkr-Roadmap.md` per this doc's scope note at the top — not duplicated here.
 
 ---
 
@@ -756,4 +756,4 @@ docs/superpowers/specs/2026-08-09-reader-gestures-and-grid-navigation-design.md.
 
 ---
 
-*Beta backlog is tracked in [`alpha-roadmap.md`](alpha-roadmap.md) and not duplicated here.*
+*Beta backlog is tracked in [`Paperbunkr-Roadmap.md`](Paperbunkr-Roadmap.md) and not duplicated here.*

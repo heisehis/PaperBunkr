@@ -155,6 +155,11 @@ public sealed class ComicBookReadingOrdersSource : IReadingListSource
         {
             throw new ReadingListSourceException(DisplayName, $"Comic Book Reading Orders request failed: {ex.Message}");
         }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            // HttpClient.Timeout elapsing throws TaskCanceledException, not HttpRequestException.
+            throw new ReadingListSourceException(DisplayName, "Comic Book Reading Orders did not respond within 20 seconds.");
+        }
     }
 
     private async Task ThrottleAsync(CancellationToken cancellationToken)

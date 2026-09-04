@@ -67,15 +67,21 @@ public class MarkResolverTests
     }
 
     [Theory]
-    [InlineData("Trade Paperback", "TPB")]
-    [InlineData("tpb", "TPB")]
-    [InlineData("One-Shot", "1-SHOT")]
-    [InlineData("b&w", "B/W")]
-    public void ResolveFormat_CeAliases_Resolve(string input, string expectedLabel)
+    [InlineData("Trade Paperback", "trade-paperback")]
+    [InlineData("tpb", "trade-paperback")]
+    [InlineData("One-Shot", "one-shot")]
+    [InlineData("b&w", "black-and-white")]
+    [InlineData("Annual", "annual")]
+    [InlineData("year 0", "year-zero")]
+    public void ResolveFormat_CeAliases_ResolveToPictogram(string input, string stem)
     {
+        // Every comic-format row ships a hand-drawn SVG pictogram (via the tsv's `asset` column).
+        // These carry their own category-hued colour, so - unlike a mono service/publisher mark -
+        // they resolve with no Foreground tint and render as-is.
         var spec = _r.ResolveFormat(input);
-        Assert.True(spec.Kind is MarkKind.Glyph or MarkKind.LetterMark);
-        Assert.Equal(expectedLabel, spec.Text);
+        Assert.Equal(MarkKind.SvgAsset, spec.Kind);
+        Assert.Equal($"avares://Paperbunkr.App/Assets/Marks/Formats/{stem}.svg", spec.AssetPath);
+        Assert.Null(spec.Foreground);
     }
 
     [Fact]
@@ -152,5 +158,74 @@ public class MarkResolverTests
         Assert.Equal(MarkKind.None, _r.ResolvePublisher("").Kind);
         Assert.Equal(MarkKind.None, _r.ResolveFormat("  ").Kind);
         Assert.Equal(MarkKind.None, _r.ResolveLanguage(null).Kind);
+    }
+
+    // --- Reading status / scan group (docs/superpowers/specs/2026-09-04-detail-screen-icons-
+    //     and-glyphs-design.md §8) ---
+
+    [Theory]
+    [InlineData("Reading", "Reading")]
+    [InlineData("reading", "Reading")]          // case-insensitive
+    [InlineData("ReReading", "Re-reading")]
+    [InlineData("Completed", "Completed")]
+    [InlineData("Paused", "On Hold")]
+    [InlineData("Dropped", "Dropped")]
+    [InlineData("Planned", "Planned")]
+    public void ResolveReadingStatus_KnownValue_IsColouredGlyph(string enumName, string label)
+    {
+        var spec = _r.ResolveReadingStatus(enumName);
+        Assert.Equal(MarkKind.Glyph, spec.Kind);
+        Assert.Equal(label, spec.Text);
+        Assert.NotNull(spec.Glyph);
+        Assert.StartsWith("#", spec.Foreground);
+    }
+
+    [Theory]
+    [InlineData("Unknown")]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData("NotAStatus")]
+    [InlineData(null)]
+    public void ResolveReadingStatus_UnknownOrGarbage_IsNone(string? value)
+    {
+        Assert.Equal(MarkKind.None, _r.ResolveReadingStatus(value).Kind);
+    }
+
+    [Fact]
+    public void ResolveScanGroup_GroupName_IsGlyphWithTrimmedText()
+    {
+        var spec = _r.ResolveScanGroup("  TCB Scans  ");
+        Assert.Equal(MarkKind.Glyph, spec.Kind);
+        Assert.Equal("TCB Scans", spec.Text);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData(null)]
+    public void ResolveScanGroup_Blank_IsNone(string? value)
+    {
+        Assert.Equal(MarkKind.None, _r.ResolveScanGroup(value).Kind);
+    }
+
+    // --- Book-format aliases (docs/superpowers/specs/2026-09-04-detail-screen-icons-and-glyphs-
+    //     design.md Part 2 §B) - so the band's Format mark renders a glyph for EPUB/PDF/etc ---
+
+    [Theory]
+    [InlineData("EPUB")]
+    [InlineData("epub")]
+    [InlineData("PDF")]
+    [InlineData("FB2")]
+    [InlineData("MOBI")]
+    [InlineData("azw3")]   // MOBI alias
+    [InlineData("CBZ")]
+    [InlineData("CBR")]
+    public void ResolveFormat_BookFormats_RenderAGlyph(string format)
+    {
+        var spec = _r.ResolveFormat(format);
+        Assert.NotEqual(MarkKind.None, spec.Kind);
+        Assert.NotEqual(MarkKind.Text, spec.Kind);
+        Assert.Equal(MarkKind.Glyph, spec.Kind);
+        Assert.NotNull(spec.Glyph);
     }
 }

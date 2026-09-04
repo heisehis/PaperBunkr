@@ -54,7 +54,7 @@
             <Button Classes="setupCard" Command="{Binding AddComicFolderCommand}"
                     AutomationProperties.AutomationId="WelcomeAddComicFolder">
                 <Grid ColumnDefinitions="Auto,*">
-                    <fi:SymbolIcon Grid.Column="0" Symbol="FolderOpen" FontSize="22" Foreground="{DynamicResource PbAccentTextBrush}" VerticalAlignment="Top" Margin="0,2,14,0" />
+                    <fi:SymbolIcon Grid.Column="0" Symbol="FolderOpen" FontSize="{StaticResource PbIconSizeLg}" Foreground="{DynamicResource PbAccentTextBrush}" VerticalAlignment="Top" Margin="0,2,14,0" />
                     <StackPanel Grid.Column="1">
                         <TextBlock Classes="setupCardTitle" Text="Add Comic Folder" />
                         <TextBlock Classes="setupCardDescription" Text="Point Paperbunkr at a folder of CBZ, CBR, and other comics already on disk." />
@@ -65,7 +65,7 @@
             <Button Classes="setupCard" Command="{Binding AddBookFolderCommand}"
                     AutomationProperties.AutomationId="WelcomeAddBookFolder">
                 <Grid ColumnDefinitions="Auto,*">
-                    <fi:SymbolIcon Grid.Column="0" Symbol="Book" FontSize="22" Foreground="{DynamicResource PbAccentTextBrush}" VerticalAlignment="Top" Margin="0,2,14,0" />
+                    <fi:SymbolIcon Grid.Column="0" Symbol="Book" FontSize="{StaticResource PbIconSizeLg}" Foreground="{DynamicResource PbAccentTextBrush}" VerticalAlignment="Top" Margin="0,2,14,0" />
                     <StackPanel Grid.Column="1">
                         <TextBlock Classes="setupCardTitle" Text="Add Book Folder" />
                         <TextBlock Classes="setupCardDescription" Text="Same idea for novels - EPUB and PDF files in a folder of their own." />
@@ -76,12 +76,12 @@
             <Button Classes="setupCard" Command="{Binding ImportFromCeCommand}"
                     AutomationProperties.AutomationId="WelcomeImportFromCe">
                 <Grid ColumnDefinitions="Auto,*">
-                    <fi:SymbolIcon Grid.Column="0" Symbol="CloudArrowUp" FontSize="22" Foreground="{DynamicResource PbAccentTextBrush}" VerticalAlignment="Top" Margin="0,2,14,0" />
+                    <fi:SymbolIcon Grid.Column="0" Symbol="CloudArrowUp" FontSize="{StaticResource PbIconSizeLg}" Foreground="{DynamicResource PbAccentTextBrush}" VerticalAlignment="Top" Margin="0,2,14,0" />
                     <StackPanel Grid.Column="1">
                         <TextBlock Classes="setupCardTitle" Text="Import from ComicRack CE" />
                         <TextBlock Classes="setupCardDescription" Text="Bring over your existing ComicRack CE library - series, issues, and reading progress." />
                         <StackPanel Orientation="Horizontal" Spacing="5" Margin="0,6,0,0" IsVisible="{Binding CeInstallDetected}">
-                            <fi:SymbolIcon Symbol="CheckmarkCircle" FontSize="13" Foreground="{DynamicResource PbAccentTextBrush}" />
+                            <fi:SymbolIcon Symbol="CheckmarkCircle" FontSize="{StaticResource PbIconSizeSm}" Foreground="{DynamicResource PbAccentTextBrush}" />
                             <TextBlock Text="Found the default CE install" Foreground="{DynamicResource PbAccentTextBrush}" FontSize="11.5" />
                         </StackPanel>
                     </StackPanel>

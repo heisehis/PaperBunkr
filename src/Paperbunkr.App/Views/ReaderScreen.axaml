@@ -196,7 +196,7 @@
                                                        Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center" />
                                         </Border>
                                         <!-- Rotation indicator (docs/ce-feature-inventory.md §A). -->
-                                        <fi:SymbolIcon Symbol="ArrowRotateClockwise" FontSize="12" Foreground="White" IsVisible="{Binding IsRotated}" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,3,2" />
+                                        <fi:SymbolIcon Symbol="ArrowRotateClockwise" FontSize="{StaticResource PbIconSizeXs}" Foreground="White" IsVisible="{Binding IsRotated}" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,3,2" />
                                     </Grid>
                                 </Border>
                             </DataTemplate>
@@ -360,7 +360,7 @@
                 <StackPanel Orientation="Horizontal" Spacing="6">
                     <Button Classes="clusterPill">
                         <StackPanel Orientation="Horizontal" Spacing="6">
-                            <fi:SymbolIcon FontSize="12"
+                            <fi:SymbolIcon FontSize="{StaticResource PbIconSizeXs}"
                                   Symbol="{Binding EffectiveReadingMode, Converter={x:Static views:ReadingModeIconConverter.Instance}}" />
                             <TextBlock Text="{Binding ReadingModeLabel}" VerticalAlignment="Center" />
                         </StackPanel>
@@ -383,7 +383,7 @@
                         <Button Classes="clusterPill" ToolTip.Tip="Fit mode"
                                 IsVisible="{Binding !IsContinuousMode}">
                             <StackPanel Orientation="Horizontal" Spacing="6">
-                                <fi:SymbolIcon Symbol="AutoFit" FontSize="12" />
+                                <fi:SymbolIcon Symbol="AutoFit" FontSize="{StaticResource PbIconSizeXs}" />
                                 <TextBlock Text="{Binding FitMode}" VerticalAlignment="Center" />
                             </StackPanel>
                             <Button.Flyout>
@@ -404,7 +404,7 @@
                         </Button>
                         <Button Classes="clusterPill" Padding="8,6" ToolTip.Tip="Zoom presets">
                             <StackPanel Orientation="Horizontal" Spacing="6">
-                                <fi:SymbolIcon Symbol="Search" FontSize="12" />
+                                <fi:SymbolIcon Symbol="Search" FontSize="{StaticResource PbIconSizeXs}" />
                                 <TextBlock Text="{Binding ZoomLevel, StringFormat={}{0:P0}}" VerticalAlignment="Center" />
                             </StackPanel>
                             <Button.Flyout>
@@ -437,7 +437,7 @@
                     </Button>
                     <Button Grid.Column="1" Classes="clusterIcon" Command="{Binding GoLeftCommand}" Margin="0,0,10,0"
                             ToolTip.Tip="{Binding PageTurnLeftHint}">
-                        <fi:SymbolIcon Symbol="Previous" FontSize="13" />
+                        <fi:SymbolIcon Symbol="Previous" FontSize="{StaticResource PbIconSizeSm}" />
                     </Button>
                     <!-- Per-page dot strip, replacing a plain ProgressBar (docs/superpowers/specs/
                          2026-08-25-reader-chrome-design.md follow-up) - one dot per Thumbnails entry,
@@ -468,7 +468,7 @@
                     </ScrollViewer>
                     <Button Grid.Column="3" Classes="clusterIcon" Command="{Binding GoRightCommand}" Margin="10,0,0,0"
                             ToolTip.Tip="{Binding PageTurnRightHint}">
-                        <fi:SymbolIcon Symbol="Next" FontSize="13" />
+                        <fi:SymbolIcon Symbol="Next" FontSize="{StaticResource PbIconSizeSm}" />
                     </Button>
                     <Button Grid.Column="4" Classes="clusterIcon" Command="{Binding NextChapterCommand}" ToolTip.Tip="Next chapter">
                         <fi:SymbolIcon Symbol="ChevronDoubleRight" />
@@ -487,7 +487,7 @@
                         <TextBlock Grid.Column="0" Text="Reader Tools" FontSize="13" FontWeight="Bold" Foreground="{DynamicResource PbTextBrush}" />
                         <Button Grid.Column="1" Classes="clusterIcon" Padding="4"
                                 Command="{Binding ToggleDrawerCommand}" ToolTip.Tip="Close">
-                            <fi:SymbolIcon Symbol="Dismiss" FontSize="12" />
+                            <fi:SymbolIcon Symbol="Dismiss" FontSize="{StaticResource PbIconSizeXs}" />
                         </Button>
                     </Grid>
                     <ScrollViewer Grid.Row="1">
@@ -499,7 +499,7 @@
                                 <TextBlock Grid.Column="0" Text="Fit mode" FontSize="12.5" VerticalAlignment="Center" Foreground="{DynamicResource PbTextBrush}" />
                                 <Button Grid.Column="1" Classes="clusterPill" Padding="8,4">
                                     <StackPanel Orientation="Horizontal" Spacing="6">
-                                        <fi:SymbolIcon Symbol="AutoFit" FontSize="12" />
+                                        <fi:SymbolIcon Symbol="AutoFit" FontSize="{StaticResource PbIconSizeXs}" />
                                         <TextBlock Text="{Binding FitMode}" VerticalAlignment="Center" />
                                     </StackPanel>
                                     <Button.Flyout>
@@ -612,12 +612,12 @@
                                             <Button Grid.Column="1" Classes="clusterIcon"
                                                     Command="{Binding $parent[UserControl].((vm:ReaderScreenViewModel)DataContext).BeginRenameBookmarkCommand}"
                                                     CommandParameter="{Binding}" ToolTip.Tip="Rename bookmark">
-                                                <fi:SymbolIcon Symbol="Edit" FontSize="12" />
+                                                <fi:SymbolIcon Symbol="Edit" FontSize="{StaticResource PbIconSizeXs}" />
                                             </Button>
                                             <Button Grid.Column="2" Classes="clusterIcon"
                                                     Command="{Binding $parent[UserControl].((vm:ReaderScreenViewModel)DataContext).DeleteBookmarkCommand}"
                                                     CommandParameter="{Binding}" ToolTip.Tip="Remove bookmark">
-                                                <fi:SymbolIcon Symbol="Delete" FontSize="12" />
+                                                <fi:SymbolIcon Symbol="Delete" FontSize="{StaticResource PbIconSizeXs}" />
                                             </Button>
                                         </Grid>
                                         <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding IsEditing}">
@@ -625,7 +625,7 @@
                                             <Button Grid.Column="1" Classes="clusterIcon" Margin="4,0,0,0"
                                                     Command="{Binding $parent[UserControl].((vm:ReaderScreenViewModel)DataContext).CommitRenameBookmarkCommand}"
                                                     CommandParameter="{Binding}" ToolTip.Tip="Save name">
-                                                <fi:SymbolIcon Symbol="Checkmark" FontSize="12" />
+                                                <fi:SymbolIcon Symbol="Checkmark" FontSize="{StaticResource PbIconSizeXs}" />
                                             </Button>
                                         </Grid>
                                     </Panel>
@@ -637,14 +637,14 @@
                         <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,8,0,0" IsVisible="{Binding Bookmarks.Count}">
                             <Button Classes="drawerRow" Command="{Binding PreviousBookmarkCommand}" ToolTip.Tip="{Binding PreviousBookmarkHint}">
                                 <StackPanel Orientation="Horizontal" Spacing="6">
-                                    <fi:SymbolIcon Symbol="ChevronLeft" FontSize="12" />
+                                    <fi:SymbolIcon Symbol="ChevronLeft" FontSize="{StaticResource PbIconSizeXs}" />
                                     <TextBlock Text="Prev" VerticalAlignment="Center" />
                                 </StackPanel>
                             </Button>
                             <Button Classes="drawerRow" Command="{Binding NextBookmarkCommand}" ToolTip.Tip="{Binding NextBookmarkHint}">
                                 <StackPanel Orientation="Horizontal" Spacing="6">
                                     <TextBlock Text="Next" VerticalAlignment="Center" />
-                                    <fi:SymbolIcon Symbol="ChevronRight" FontSize="12" />
+                                    <fi:SymbolIcon Symbol="ChevronRight" FontSize="{StaticResource PbIconSizeXs}" />
                                 </StackPanel>
                             </Button>
                         </StackPanel>

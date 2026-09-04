@@ -84,7 +84,7 @@
                                                     Foreground="{DynamicResource PbTextMutedBrush}" Cursor="Hand"
                                                     Command="{Binding $parent[UserControl].((vm:PdfPageReaderScreenViewModel)DataContext).DeleteCaptureCommand}"
                                                     CommandParameter="{Binding}" ToolTip.Tip="Remove capture" AutomationProperties.Name="Remove capture">
-                                                <fi:SymbolIcon Symbol="Dismiss" FontSize="11" />
+                                                <fi:SymbolIcon Symbol="Dismiss" FontSize="{StaticResource PbIconSizeXs}" />
                                             </Button>
                                         </Grid>
                                     </Grid>

@@ -372,6 +372,23 @@ public class MainViewModelTests : IDisposable
         Assert.True(vm.IsTransitionReversed);
     }
 
+    /// <summary>The nav rail + bottom status bar bind their visibility to <c>!IsInReader</c> - it must be true on all three reading screens and false everywhere else.</summary>
+    [Theory]
+    [InlineData("reader", true)]
+    [InlineData("bookReader", true)]
+    [InlineData("pdfReader", true)]
+    [InlineData("library", false)]
+    [InlineData("detail", false)]
+    [InlineData("home", false)]
+    public void IsInReader_TrueOnEveryReadingScreen_FalseElsewhere(string screen, bool expected)
+    {
+        var vm = new MainViewModel();
+
+        vm.CurrentScreen = screen;
+
+        Assert.Equal(expected, vm.IsInReader);
+    }
+
     /// <summary>docs/superpowers/specs/2026-08-24-navigation-shell-motion-system-design.md - same persisted-preference shape as Phase 1's ReducedMotion.</summary>
     [Fact]
     public void ToggleNavRailPin_PersistsToAppSettings()

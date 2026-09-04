@@ -184,6 +184,11 @@ public sealed class ComicVineSource : IReadingListSource
         {
             throw new ReadingListSourceException(DisplayName, $"ComicVine request failed: {ex.Message}");
         }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            // HttpClient.Timeout elapsing throws TaskCanceledException, not HttpRequestException.
+            throw new ReadingListSourceException(DisplayName, "ComicVine did not respond within 20 seconds.");
+        }
 
         JsonNode? root;
         try

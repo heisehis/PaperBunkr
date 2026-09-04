@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- One Shot: a crosshair target with a centre dot. Category-hued (#3B7BC4); rendered as-is by BrandMark. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="#3B7BC4">
+  <path fill-rule="evenodd" d="M32 8 A24 24 0 1 0 32 56 A24 24 0 1 0 32 8 Z M32 15 A17 17 0 1 0 32 49 A17 17 0 1 0 32 15 Z"/>
+  <rect x="29" y="2" width="6" height="14"/>
+  <rect x="29" y="48" width="6" height="14"/>
+  <rect x="2" y="29" width="14" height="6"/>
+  <rect x="48" y="29" width="14" height="6"/>
+  <circle cx="32" cy="32" r="6"/>
+</svg>

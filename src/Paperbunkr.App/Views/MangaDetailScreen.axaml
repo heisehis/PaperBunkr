@@ -119,7 +119,12 @@
 
     <ScrollViewer>
         <StackPanel Margin="0,0,0,50">
-            <Button Classes="backLink" Command="{Binding GoBackCommand}" Content="← Back to Library" Margin="28,20,28,12" />
+            <Button Classes="backLink" Command="{Binding GoBackCommand}" Margin="28,20,28,12">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                    <fi:SymbolIcon Symbol="ArrowLeft" FontSize="{StaticResource PbIconSizeSm}" VerticalAlignment="Center" />
+                    <TextBlock Text="Back to Library" VerticalAlignment="Center" />
+                </StackPanel>
+            </Button>
 
             <views:DetailHero DataContext="{Binding}" />
 
@@ -138,18 +143,30 @@
                     <StackPanel Orientation="Horizontal" Spacing="22">
                         <Button Classes="tab" Classes.active="{Binding IsChaptersTab}" Command="{Binding GoChaptersTabCommand}">
                             <StackPanel Orientation="Horizontal" Spacing="7">
-                                <TextBlock Text="Chapters" />
+                                <fi:SymbolIcon Symbol="TextBulletList" FontSize="{StaticResource PbIconSizeSm}" VerticalAlignment="Center" />
+                                <TextBlock Text="Chapters" VerticalAlignment="Center" />
                                 <TextBlock Classes="tabCount" Text="{Binding Chapters.Count}" VerticalAlignment="Center" />
                             </StackPanel>
                         </Button>
                         <Button Classes="tab" Classes.active="{Binding IsRelatedTabActive}" Command="{Binding GoRelatedTabCommand}">
                             <StackPanel Orientation="Horizontal" Spacing="7">
-                                <TextBlock Text="Related" />
+                                <fi:SymbolIcon Symbol="Link" FontSize="{StaticResource PbIconSizeSm}" VerticalAlignment="Center" />
+                                <TextBlock Text="Related" VerticalAlignment="Center" />
                                 <TextBlock Classes="tabCount" Text="{Binding Tabs.Related.Count}" VerticalAlignment="Center" />
                             </StackPanel>
                         </Button>
-                        <Button Classes="tab" Classes.active="{Binding IsDetailsTabActive}" Command="{Binding GoDetailsTabCommand}" Content="Details" />
-                        <Button Classes="tab" Classes.active="{Binding IsActivityTabActive}" Command="{Binding GoActivityTabCommand}" Content="Activity" />
+                        <Button Classes="tab" Classes.active="{Binding IsDetailsTabActive}" Command="{Binding GoDetailsTabCommand}">
+                            <StackPanel Orientation="Horizontal" Spacing="7">
+                                <fi:SymbolIcon Symbol="Info" FontSize="{StaticResource PbIconSizeSm}" VerticalAlignment="Center" />
+                                <TextBlock Text="Details" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
+                        <Button Classes="tab" Classes.active="{Binding IsActivityTabActive}" Command="{Binding GoActivityTabCommand}">
+                            <StackPanel Orientation="Horizontal" Spacing="7">
+                                <fi:SymbolIcon Symbol="Pulse" FontSize="{StaticResource PbIconSizeSm}" VerticalAlignment="Center" />
+                                <TextBlock Text="Activity" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
                     </StackPanel>
                 </Border>
 
@@ -166,11 +183,23 @@
                                 Content="Missing" Command="{Binding SetChapterFilterCommand}" CommandParameter="{x:Static models:ChapterListFilter.Missing}" />
                         <Border Width="1" Background="{DynamicResource PbBorderBrush}" Margin="6,2" />
                         <Button Classes="chapterFilterPill" Classes.active="{Binding ChapterSortField, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static models:ChapterSortField.Number}}"
-                                Content="By Number" Command="{Binding SetChapterSortFieldCommand}" CommandParameter="{x:Static models:ChapterSortField.Number}" />
+                                Command="{Binding SetChapterSortFieldCommand}" CommandParameter="{x:Static models:ChapterSortField.Number}">
+                            <StackPanel Orientation="Horizontal" Spacing="5">
+                                <fi:SymbolIcon Symbol="TextSortAscending" FontSize="{StaticResource PbIconSizeXs}" VerticalAlignment="Center" />
+                                <TextBlock Text="By Number" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
                         <Button Classes="chapterFilterPill" Classes.active="{Binding ChapterSortField, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static models:ChapterSortField.Date}}"
-                                Content="By Date" Command="{Binding SetChapterSortFieldCommand}" CommandParameter="{x:Static models:ChapterSortField.Date}" />
+                                Command="{Binding SetChapterSortFieldCommand}" CommandParameter="{x:Static models:ChapterSortField.Date}">
+                            <StackPanel Orientation="Horizontal" Spacing="5">
+                                <fi:SymbolIcon Symbol="Calendar" FontSize="{StaticResource PbIconSizeXs}" VerticalAlignment="Center" />
+                                <TextBlock Text="By Date" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
                         <Button Classes="chapterFilterPill" Command="{Binding ToggleChapterSortDirectionCommand}"
-                                Content="{Binding ChapterSortDirectionGlyph}" ToolTip.Tip="Toggle sort direction" />
+                                ToolTip.Tip="Toggle sort direction" AutomationProperties.Name="Toggle sort direction">
+                            <fi:SymbolIcon Symbol="{Binding ChapterSortDirectionSymbol}" FontSize="{StaticResource PbIconSizeXs}" VerticalAlignment="Center" />
+                        </Button>
                     </StackPanel>
 
                     <TextBlock IsVisible="{Binding !HasChapters}" Text="No chapters match this filter." FontSize="12.5"
@@ -188,7 +217,7 @@
                                                         Command="{Binding #ChapterGroupsList.((vm:MangaDetailScreenViewModel)DataContext).OpenChapterCommand}"
                                                         CommandParameter="{Binding}">
                                                     <Grid>
-                                                        <Grid ColumnDefinitions="60,*,Auto,Auto,Auto,110" VerticalAlignment="Center">
+                                                        <Grid ColumnDefinitions="60,*,Auto,Auto,Auto,Auto,110" VerticalAlignment="Center">
                                                             <TextBlock Grid.Column="0" Classes="chapterNumber" Text="{Binding DisplayNumber}" />
                                                             <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="7" Margin="8,0">
                                                                 <TextBlock Classes="chapterTitle" Text="{Binding Title}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
@@ -196,11 +225,17 @@
                                                                     <TextBlock Text="NEW" FontSize="8" FontWeight="Bold" Foreground="{DynamicResource PbBadgeTextBrush}" />
                                                                 </Border>
                                                             </StackPanel>
-                                                            <fi:SymbolIcon Grid.Column="2" Symbol="Bookmark" FontSize="12" Margin="0,0,8,0" IsVisible="{Binding HasBookmark}" />
-                                                            <fi:SymbolIcon Grid.Column="3" Symbol="Warning" FontSize="12" Margin="0,0,8,0" IsVisible="{Binding IsMissing}"
+                                                            <fi:SymbolIcon Grid.Column="2" Symbol="Checkmark" FontSize="{StaticResource PbIconSizeXs}" Margin="0,0,8,0"
+                                                                    Foreground="{DynamicResource PbTextFaintBrush}" IsVisible="{Binding ShowReadGlyph}"
+                                                                    ToolTip.Tip="Read" AutomationProperties.AccessibilityView="Raw" />
+                                                            <fi:SymbolIcon Grid.Column="3" Symbol="Bookmark" FontSize="{StaticResource PbIconSizeXs}" Margin="0,0,8,0" IsVisible="{Binding HasBookmark}" />
+                                                            <fi:SymbolIcon Grid.Column="4" Symbol="Warning" FontSize="{StaticResource PbIconSizeXs}" Margin="0,0,8,0" IsVisible="{Binding IsMissing}"
                                                                     Foreground="{DynamicResource PbBadgeBrush}" />
-                                                            <TextBlock Grid.Column="4" Classes="chapterMeta" Text="{Binding ScanInformation}" Margin="0,0,10,0" IsVisible="{Binding HasScanInformation}" />
-                                                            <TextBlock Grid.Column="5" Classes="chapterMeta" Text="{Binding Date, StringFormat='{}{0:MMM d, yyyy}'}" HorizontalAlignment="Right" />
+                                                            <controls:BrandMark Grid.Column="5" Family="ScanGroup" Value="{Binding ScanInformation}"
+                                                                    ShowText="True" MarkSize="{StaticResource PbIconSizeXs}" Margin="0,0,10,0"
+                                                                    VerticalAlignment="Center" Foreground="{DynamicResource PbTextFaintBrush}"
+                                                                    IsVisible="{Binding HasScanInformation}" />
+                                                            <TextBlock Grid.Column="6" Classes="chapterMeta" Text="{Binding Date, StringFormat='{}{0:MMM d, yyyy}'}" HorizontalAlignment="Right" />
                                                         </Grid>
                                                         <ProgressBar Classes="chapterProgress" Value="{Binding ReadPercentage}" Minimum="0" Maximum="100" IsVisible="{Binding IsInProgress}" />
                                                     </Grid>

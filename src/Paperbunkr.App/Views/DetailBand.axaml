@@ -1,6 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:pbc="using:Paperbunkr.App.Controls"
+             xmlns:views="using:Paperbunkr.App.Views"
              xmlns:vm="using:Paperbunkr.App.ViewModels"
              xmlns:entities="using:Paperbunkr.Data.Entities"
              xmlns:conv="using:Avalonia.Data.Converters"
@@ -102,22 +103,13 @@
             BorderThickness="2,0,0,0" Padding="26,14,26,4">
         <StackPanel Spacing="10">
 
-            <!-- Inline meta row -->
+            <!-- Inline meta row - the content-type picker + derived "special" chips only. Publisher /
+                 status / year / format / age-rating / language / reading-status all moved up to the
+                 hero badge row (docs/superpowers/specs/2026-09-04-detail-screen-icons-and-glyphs-
+                 design.md Part 4); this row hides entirely when nothing's in it. -->
             <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
                 <ContentControl Content="{Binding #u.LeadingContent}" VerticalAlignment="Center" />
-                <TextBlock Text="{Binding StatusText}" IsVisible="{Binding HasStatus}" FontSize="{StaticResource PbFontSizeMeta}"
-                           FontWeight="SemiBold" Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
-                <TextBlock Text="·" Foreground="{DynamicResource PbTextFaintBrush}" IsVisible="{Binding HasPublisher}" VerticalAlignment="Center" />
-                <pbc:BrandMark Family="Publisher" Value="{Binding PublisherText}" ShowText="True" MarkSize="13"
-                               Foreground="{DynamicResource PbTextMutedBrush}" IsVisible="{Binding HasPublisher}" VerticalAlignment="Center" />
-                <TextBlock Text="·" Foreground="{DynamicResource PbTextFaintBrush}" IsVisible="{Binding HasYear}" VerticalAlignment="Center" />
-                <TextBlock Text="{Binding YearText}" IsVisible="{Binding HasYear}" FontSize="{StaticResource PbFontSizeMeta}"
-                           Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
-                <TextBlock Text="·" Foreground="{DynamicResource PbTextFaintBrush}" IsVisible="{Binding HasFormat}" VerticalAlignment="Center" />
-                <pbc:BrandMark Family="Format" Value="{Binding FormatText}" ShowText="True" MarkSize="13"
-                               Foreground="{DynamicResource PbTextMutedBrush}" IsVisible="{Binding HasFormat}" VerticalAlignment="Center" />
-                <pbc:BrandMark Family="AgeRating" Value="{Binding AgeRatingText}" ShowText="False" MarkSize="18"
-                               IsVisible="{Binding HasAgeRating}" VerticalAlignment="Center" Margin="2,0,0,0" />
+
                 <ItemsControl ItemsSource="{Binding SpecialMarks}" VerticalAlignment="Center">
                     <ItemsControl.ItemsPanel>
                         <ItemsPanelTemplate><StackPanel Orientation="Horizontal" Spacing="6" /></ItemsPanelTemplate>

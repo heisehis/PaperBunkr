@@ -1,3 +1,4 @@
+using FluentIcons.Common;
 using Microsoft.EntityFrameworkCore;
 using Paperbunkr.App.Models;
 using Paperbunkr.App.ViewModels;
@@ -297,6 +298,30 @@ public class MangaDetailScreenViewModelTests : IDisposable
         Assert.True(vm.Chapters.Single(c => c.DisplayNumber == "#3").IsRead);
     }
 
+    /// <summary>Manga counterpart of the comic-screen bug fix (docs/superpowers/specs/2026-09-04-
+    /// detail-screen-icons-and-glyphs-design.md Part 4 revision - "the unread doesn't update when i
+    /// finish reading a comic"). Manga's <c>MarkChapterReadState</c> already calls
+    /// <see cref="MangaDetailScreenViewModel.ReloadCurrentSeries"/> (a full reload), so it was never
+    /// affected by that bug, but there was no test proving the hero's unread count actually moves -
+    /// this locks it in.</summary>
+    [Fact]
+    public void MarkChapterRead_UpdatesTheHeroUnreadCountImmediately()
+    {
+        using (var context = new PaperbunkrDbContext(new DbContextOptionsBuilder<PaperbunkrDbContext>().UseSqlite($"Data Source={_dbPath}").Options))
+        {
+            context.Issues.Single(i => i.Number == "3").PageCount = 20;
+            context.SaveChanges();
+        }
+
+        var vm = CreateViewModel();
+        vm.LoadSeries(_seriesId);
+        Assert.Equal("3 chapters  ·  2 unread", ((IDetailHeaderSource)vm).IssueSummaryLine); // #2 in progress + #3 unread
+
+        vm.MarkChapterReadCommand.Execute(vm.Chapters.Single(c => c.DisplayNumber == "#3"));
+
+        Assert.Equal("3 chapters  ·  1 unread", ((IDetailHeaderSource)vm).IssueSummaryLine);
+    }
+
     [Fact]
     public void MarkChapterUnread_ZeroesLastPageRead()
     {
@@ -396,5 +421,94 @@ public class MangaDetailScreenViewModelTests : IDisposable
         Assert.True(vm.Chapters.Single(c => c.DisplayNumber == "#3").IsNew);
         Assert.False(vm.Chapters.Single(c => c.DisplayNumber == "#2").IsNew);
         Assert.False(vm.Chapters.Single(c => c.DisplayNumber == "#1").IsNew);
+    }
+
+    // --- Icons & glyphs (docs/superpowers/specs/2026-09-04-detail-screen-icons-and-glyphs-design.md) ---
+
+    [Fact]
+    public void HeroActions_CarryPlayEditImageIcons()
+    {
+        var vm = CreateViewModel();
+        vm.LoadSeries(_seriesId);
+
+        var actions = ((IDetailHeaderSource)vm).Actions;
+        Assert.Equal(Symbol.Play, actions[0].Icon);
+        Assert.Equal(Symbol.Edit, actions[1].Icon);
+        Assert.Equal(Symbol.Image, actions[2].Icon);
+    }
+
+    [Fact]
+    public void ChapterSortDirectionSymbol_FlipsOnToggle()
+    {
+        var vm = CreateViewModel();
+        vm.LoadSeries(_seriesId);
+
+        Assert.Equal(Symbol.ArrowSortUp, vm.ChapterSortDirectionSymbol);
+        vm.ToggleChapterSortDirectionCommand.Execute(null);
+        Assert.Equal(Symbol.ArrowSortDown, vm.ChapterSortDirectionSymbol);
+    }
+
+    [Fact]
+    public void ChapterRow_ShowReadGlyph_TrueOnlyWhenFullyReadNotInProgress()
+    {
+        var vm = CreateViewModel();
+        vm.LoadSeries(_seriesId);
+
+        Assert.True(vm.Chapters.Single(c => c.DisplayNumber == "#1").ShowReadGlyph);   // 10/10
+        Assert.False(vm.Chapters.Single(c => c.DisplayNumber == "#2").ShowReadGlyph);  // 3/10 in progress
+        Assert.False(vm.Chapters.Single(c => c.DisplayNumber == "#3").ShowReadGlyph);  // unread
+    }
+
+    [Fact]
+    public void ReadingStatus_HeaderProperty_NullForUnknown_EnumNameOtherwise()
+    {
+        var vm = CreateViewModel();
+        vm.LoadSeries(_seriesId);
+        Assert.Null(((IDetailHeaderSource)vm).ReadingStatus);
+
+        using (var context = new PaperbunkrDbContext(new DbContextOptionsBuilder<PaperbunkrDbContext>().UseSqlite($"Data Source={_dbPath}").Options))
+        {
+            context.Series.Single(s => s.Id == _seriesId).ReadingStatus = ReadingStatus.Reading;
+            context.SaveChanges();
+        }
+
+        vm.LoadSeries(_seriesId);
+        Assert.Equal("Reading", ((IDetailHeaderSource)vm).ReadingStatus);
+    }
+
+    [Fact]
+    public void MetaBadges_IncludePublisherAndStatus()
+    {
+        using (var context = new PaperbunkrDbContext(new DbContextOptionsBuilder<PaperbunkrDbContext>().UseSqlite($"Data Source={_dbPath}").Options))
+        {
+            context.Series.Single(s => s.Id == _seriesId).Publisher = "Shueisha";
+            context.SaveChanges();
+        }
+
+        var vm = CreateViewModel();
+        vm.LoadSeries(_seriesId);
+
+        var badges = ((IDetailHeaderSource)vm).MetaBadges;
+        Assert.Contains(badges, b => b.Mark == Paperbunkr.App.Controls.MarkFamily.Publisher && b.MarkValue == "Shueisha");
+        Assert.Contains(badges, b => b.Text == "Ongoing");
+        // chapter count / unread: a separate plain-text line (Part 4 revision, user direction), not
+        // a badge - #2 (in progress) + #3 (unread) are unread.
+        Assert.Equal("3 chapters  ·  2 unread", ((IDetailHeaderSource)vm).IssueSummaryLine);
+    }
+
+    [Fact]
+    public void ReadingStatusPicker_IsBuilt_AndRoundTrips()
+    {
+        var vm = CreateViewModel();
+        vm.LoadSeries(_seriesId);
+
+        var picker = ((IDetailHeaderSource)vm).ReadingStatusPicker;
+        Assert.NotNull(picker);
+        Assert.Same(picker, vm.Band.ReadingStatusPicker);
+
+        picker!.SetCommand.Execute(ReadingStatus.Completed);
+
+        Assert.Equal("Completed", ((IDetailHeaderSource)vm).ReadingStatus);
+        Assert.Equal("Completed", vm.Band.ReadingStatusValue);
     }
 }

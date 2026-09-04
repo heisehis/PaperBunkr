@@ -140,16 +140,16 @@
                                                     <Button Grid.Column="1" Classes="ghost" Padding="6" IsEnabled="{Binding !IsRuleMatched}"
                                                             Command="{Binding $parent[UserControl].((vm:CollectionPropertiesScreenViewModel)DataContext).MoveMemberUpCommand}"
                                                             CommandParameter="{Binding}" ToolTip.Tip="Move up">
-                                                        <fi:SymbolIcon Symbol="ChevronUp" FontSize="11" />
+                                                        <fi:SymbolIcon Symbol="ChevronUp" FontSize="{StaticResource PbIconSizeXs}" />
                                                     </Button>
                                                     <Button Grid.Column="2" Classes="ghost" Padding="6" IsEnabled="{Binding !IsRuleMatched}"
                                                             Command="{Binding $parent[UserControl].((vm:CollectionPropertiesScreenViewModel)DataContext).MoveMemberDownCommand}"
                                                             CommandParameter="{Binding}" ToolTip.Tip="Move down">
-                                                        <fi:SymbolIcon Symbol="ChevronDown" FontSize="11" />
+                                                        <fi:SymbolIcon Symbol="ChevronDown" FontSize="{StaticResource PbIconSizeXs}" />
                                                     </Button>
                                                     <Button Grid.Column="4" Classes="ghost" Padding="6"
                                                             Command="{Binding RemoveCommand}" ToolTip.Tip="Remove from collection">
-                                                        <fi:SymbolIcon Symbol="SubtractCircle" FontSize="12" />
+                                                        <fi:SymbolIcon Symbol="SubtractCircle" FontSize="{StaticResource PbIconSizeXs}" />
                                                     </Button>
                                                 </Grid>
                                             </Border>

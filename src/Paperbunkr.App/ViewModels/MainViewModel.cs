@@ -421,6 +421,17 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
     public bool IsEvents => CurrentScreen == "events";
     public bool IsPreferences => CurrentScreen == "preferences";
     public bool IsReader => CurrentScreen == "reader";
+
+    /// <summary>
+    /// True on any of the three reading screens (comic <see cref="IsReader"/>, <see cref="IsBookReader"/>,
+    /// <see cref="IsPdfReader"/>). The nav rail and the bottom status bar hide while this is true -
+    /// reading is a full-bleed, distraction-free mode, and each reader carries its own back/close
+    /// chrome plus the app-wide Escape / browser-back / swipe-back gestures. Superseded the older
+    /// rail binding to <c>Reader.IsFullscreen</c>, which only hid chrome in the comic reader's
+    /// fullscreen mode.
+    /// </summary>
+    public bool IsInReader => IsReader || IsBookReader || IsPdfReader;
+
     /// <summary>Alias, not a distinct concept - kept so <see cref="Escape"/>/<see cref="TryLeaveCurrentEditor"/>
     /// didn't need renaming when this stopped being <see cref="CurrentScreen"/>-backed.</summary>
     public bool IsIssueProperties => IsIssuePropertiesOverlayOpen;
@@ -447,6 +458,7 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         OnPropertyChanged(nameof(IsBookDetail));
         OnPropertyChanged(nameof(IsBookReader));
         OnPropertyChanged(nameof(IsPdfReader));
+        OnPropertyChanged(nameof(IsInReader));
         OnPropertyChanged(nameof(IsDetail));
         OnPropertyChanged(nameof(IsMangaDetail));
         OnPropertyChanged(nameof(IsSmart));

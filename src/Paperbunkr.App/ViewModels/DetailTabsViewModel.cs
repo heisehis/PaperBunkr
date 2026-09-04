@@ -1169,13 +1169,15 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
 
     private void SetReadingModeLabel(ReadingMode mode)
     {
+        // The disclosure caret is a real fi:SymbolIcon in the view now, not a text glyph
+        // (docs/superpowers/specs/2026-09-04-detail-screen-icons-and-glyphs-design.md §5).
         ReadingModeLabel = mode switch
         {
-            ReadingMode.RightToLeft => "Right to Left ▾",
-            ReadingMode.TopToBottom => "Vertical ▾",
-            ReadingMode.VerticalContinuous => "Vertical (Continuous) ▾",
-            ReadingMode.HorizontalContinuous => "Horizontal (Continuous) ▾",
-            _ => "Left to Right ▾",
+            ReadingMode.RightToLeft => "Right to Left",
+            ReadingMode.TopToBottom => "Vertical",
+            ReadingMode.VerticalContinuous => "Vertical (Continuous)",
+            ReadingMode.HorizontalContinuous => "Horizontal (Continuous)",
+            _ => "Left to Right",
         };
         OnPropertyChanged(nameof(ReadingModeLabel));
     }
@@ -1241,16 +1243,54 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
     [RelayCommand]
     private void GoActivity() => ActiveTab = "activity";
 
+    /// <summary>The displayed collection a tile belongs to - the numbered Issues flow or the flat
+    /// Specials list (docs/superpowers/specs/2026-08-28-series-detail-specials-tab-design.md). Both
+    /// feed the one shared <see cref="TileSelectionController{TCard}"/>; before this, selection was
+    /// hardcoded against <see cref="Issues"/> only, so clicking a Specials-tab tile silently did
+    /// nothing (its <c>IndexOf</c> in <see cref="Issues"/> is always -1).</summary>
+    private IList<IssueCardSample>? OwnerList(IssueCardSample issue) =>
+        Issues.Contains(issue) ? Issues
+        : Specials.Contains(issue) ? Specials
+        : null;
+
     /// <summary>
-    /// Left-click tile selection (docs/superpowers/specs/2026-08-07-bulk-issue-editing-design.md
-    /// §1): plain click toggles the clicked tile; shift-click additionally selects the contiguous
-    /// range from the last-toggled tile to this one, without clearing the existing selection.
+    /// Ctrl/Shift-click tile selection (docs/superpowers/specs/2026-08-07-bulk-issue-editing-
+    /// design.md §1): ctrl-click toggles the clicked tile; shift-click additionally selects the
+    /// contiguous range from the last-toggled tile to this one, without clearing the existing
+    /// selection. Plain click goes through <see cref="FocusIssue"/> instead (real user direction
+    /// 2026-09-04). Also the Enter/Space keyboard equivalent.
     /// </summary>
     public void ToggleIssueSelection(IssueCardSample issue, bool isShiftHeld)
     {
-        _selection.Toggle(Issues, issue, isShiftHeld);
+        if (OwnerList(issue) is not { } list)
+        {
+            return;
+        }
+
+        _selection.Toggle(list, issue, isShiftHeld);
         _onSelectionChanged?.Invoke();
     }
+
+    /// <summary>
+    /// Plain left-click / tap on an issue or special tile (real user direction 2026-09-04): selects
+    /// exactly that one tile, clearing any existing multi-selection across both the Issues and
+    /// Specials lists, so the detail hero switches to that issue and its "Read this issue" action
+    /// appears. Ctrl/Shift-click still build a multi-selection via <see cref="ToggleIssueSelection"/>.
+    /// </summary>
+    public void FocusIssue(IssueCardSample issue)
+    {
+        if (OwnerList(issue) is not { } list)
+        {
+            return;
+        }
+
+        _selection.ReplaceSelection(list, issue, new[] { (IEnumerable<IssueCardSample>)Issues, Specials });
+        _onSelectionChanged?.Invoke();
+    }
+
+    /// <summary>Double-click / double-tap on a tile - opens that issue in the reader (Issues and
+    /// Specials tabs alike).</summary>
+    public void OpenIssue(IssueCardSample issue) => _openInReader(issue.Id);
 
     /// <summary>
     /// Right-click entry point into the Issue Properties editor(s) (docs/superpowers/specs/
@@ -1334,33 +1374,49 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
         // Same targeted-tile-swap shape as RefreshIssueTile, but recomputing IsUnread (that one
         // preserves the old value verbatim - fine for a cover-only change, not for this) rather
         // than a full LoadSeries, so the rest of the current selection survives the refresh.
+        // Checks both Issues and Specials - a mark-read/unread on a special tile used to silently
+        // no-op here (found 2026-09-04 alongside the header-not-updating bug below).
         foreach (var updated in affected)
         {
-            int index = Issues.ToList().FindIndex(card => card.Id == updated.Id);
-            if (index < 0)
-            {
-                continue;
-            }
-
-            var old = Issues[index];
-            Issues[index] = new IssueCardSample
-            {
-                Id = old.Id,
-                SeriesId = old.SeriesId,
-                Title = old.Title,
-                IsUnread = updated.LastPageRead is null or 0,
-                CoverBrush = old.CoverBrush,
-                CoverImage = old.CoverImage,
-                FilePath = old.FilePath,
-                FullTitle = old.FullTitle,
-                ArcTitle = old.ArcTitle,
-                CoverDate = old.CoverDate,
-                Rating = old.Rating,
-                IsRead = updated.HasBeenRead(),
-                ReadFraction = updated.HasBeenRead() ? 1 : updated.LastPageRead is null or 0 ? 0 : old.ReadFraction,
-                IsSelected = old.IsSelected,
-            };
+            SwapReadStateTile(Issues, updated);
+            SwapReadStateTile(Specials, updated);
         }
+
+        // The host screen's hero shows a series-wide unread count (docs/superpowers/specs/
+        // 2026-09-04-detail-screen-icons-and-glyphs-design.md Part 4) - without this, marking an
+        // issue read/unread from here (right-click, or the Card-view checkmark button) left that
+        // count stale until the next full reload (bug report: "the unread doesn't update when i
+        // finish reading a comic"). Same callback every other selection/read-state change already
+        // routes through.
+        _onSelectionChanged?.Invoke();
+    }
+
+    private static void SwapReadStateTile(ObservableCollection<IssueCardSample> tiles, Issue updated)
+    {
+        int index = tiles.ToList().FindIndex(card => card.Id == updated.Id);
+        if (index < 0)
+        {
+            return;
+        }
+
+        var old = tiles[index];
+        tiles[index] = new IssueCardSample
+        {
+            Id = old.Id,
+            SeriesId = old.SeriesId,
+            Title = old.Title,
+            IsUnread = updated.LastPageRead is null or 0,
+            CoverBrush = old.CoverBrush,
+            CoverImage = old.CoverImage,
+            FilePath = old.FilePath,
+            FullTitle = old.FullTitle,
+            ArcTitle = old.ArcTitle,
+            CoverDate = old.CoverDate,
+            Rating = old.Rating,
+            IsRead = updated.HasBeenRead(),
+            ReadFraction = updated.HasBeenRead() ? 1 : updated.LastPageRead is null or 0 ? 0 : old.ReadFraction,
+            IsSelected = old.IsSelected,
+        };
     }
 
     // --- Cover art override (docs/superpowers/specs/2026-08-23-cover-art-override-design.md),

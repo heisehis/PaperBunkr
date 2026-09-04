@@ -112,7 +112,7 @@ public class BookDetailScreenViewModelTests : IDisposable
         Assert.Equal("Part of Dune Chronicles ▸", vm.SeriesLinkLabel);
         Assert.True(vm.HasPublished);
         Assert.StartsWith("Added ", vm.AddedLabel);
-        Assert.Equal("← Books", vm.BackLabel);
+        Assert.Equal("Books", vm.BackLabel);
     }
 
     [Fact]
@@ -344,7 +344,7 @@ public class BookDetailScreenViewModelTests : IDisposable
         Assert.Equal("Dune Chronicles", vm.SeriesName);
         Assert.Equal("2 books", vm.SeriesBookCountLabel);
         Assert.Equal(2, vm.SeriesBooks.Count);
-        Assert.Equal("← Books", vm.BackLabel);
+        Assert.Equal("Books", vm.BackLabel);
     }
 
     [Fact]
@@ -362,7 +362,7 @@ public class BookDetailScreenViewModelTests : IDisposable
         vm.OpenBookFromSeriesCommand.Execute(sibling);
 
         Assert.True(vm.IsBookMode);
-        Assert.Equal("← Dune Chronicles", vm.BackLabel);
+        Assert.Equal("Dune Chronicles", vm.BackLabel);
 
         bool wentBackToBooks = false;
         vm = CreateViewModel(goBooks: () => wentBackToBooks = true);
@@ -449,7 +449,9 @@ public class BookDetailScreenViewModelTests : IDisposable
 
         Assert.Empty(vm.Band.Groups);
         Assert.Equal("A synopsis.", vm.Band.Summary);
-        Assert.Equal("EPUB", vm.Band.StatusText);
+        // Format moved from the StatusText slot to a real Format mark (Part 2 §B).
+        Assert.Equal(string.Empty, vm.Band.StatusText);
+        Assert.Equal("EPUB", vm.Band.FormatText);
         Assert.Equal("N. Novelist", vm.Band.PublisherText);
     }
 
@@ -467,6 +469,33 @@ public class BookDetailScreenViewModelTests : IDisposable
         Assert.Null(hero.SecondaryTitle);
         Assert.Null(hero.TrackerProgress);
         Assert.Contains(hero.Actions, a => a.IsPrimary);
+
+        // Part 2 §B - hero action glyphs; books never get the reading-status picker.
+        Assert.Equal(FluentIcons.Common.Symbol.Play, hero.Actions.First(a => a.IsPrimary).Icon);
+        Assert.All(hero.Actions, a => Assert.NotNull(a.Icon));
+        Assert.Null(hero.ReadingStatusPicker);
+
+        // Part 4 - book badge row: format mark + "Finished" chip (this book is finished:true).
+        Assert.Contains(hero.MetaBadges, b => b.Mark == Paperbunkr.App.Controls.MarkFamily.Format);
+        Assert.Contains(hero.MetaBadges, b => b.Text == "Finished");
+    }
+
+    [Fact]
+    public void SeriesMode_HasNoMetaBadges()
+    {
+        AddBook("Vol 1", series: "The Set");
+        AddBook("Vol 2", series: "The Set");
+        int seriesId;
+        using (var context = PaperbunkrDb.CreateContext())
+        {
+            seriesId = context.BookSeries.Single(s => s.Name == "The Set").Id;
+        }
+
+        var vm = CreateViewModel();
+        vm.LoadSeries(seriesId);
+
+        Assert.Empty(((IDetailHeaderSource)vm).MetaBadges);
+        Assert.False(((IDetailHeaderSource)vm).HasMetaBadges);
     }
 
     [Fact]

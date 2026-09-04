@@ -3,6 +3,8 @@
              xmlns:vm="using:Paperbunkr.App.ViewModels"
              xmlns:models="using:Paperbunkr.App.Models"
              xmlns:controls="using:Paperbunkr.App.Controls"
+             xmlns:views="using:Paperbunkr.App.Views"
+             xmlns:fi="using:FluentIcons.Avalonia"
              xmlns:conv="using:Avalonia.Data.Converters"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -22,6 +24,19 @@
         Opt-in extras: Synopsis (a body line, DataContext-bound, null hides it) and MutedBackdrop
         (an extra scrim for Home's calmer look).
     -->
+    <UserControl.Styles>
+        <!-- Kavita-style meta badge chip (docs/superpowers/specs/2026-09-04-detail-screen-icons-
+             and-glyphs-design.md Part 4). Hardcoded light-on-dark hex, like the rest of the hero -
+             it always sits on a dark photographic backdrop, never theme-reactive. -->
+        <Style Selector="Border.heroBadge">
+            <Setter Property="Background" Value="#26FFFFFF" />
+            <Setter Property="CornerRadius" Value="5" />
+            <Setter Property="Padding" Value="7,3" />
+            <Setter Property="Margin" Value="0,0,6,5" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+    </UserControl.Styles>
+
     <Border Height="{Binding #Hero.HeroHeight}" ClipToBounds="True" Background="{Binding CoverBrush}">
         <Grid>
             <Image Source="{Binding BackdropImage}" Stretch="UniformToFill"
@@ -54,7 +69,41 @@
                     <TextBlock Text="{Binding SecondaryTitle}" FontSize="11" Foreground="#CFECE7DB"
                                IsVisible="{Binding SecondaryTitle, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
                     <controls:SplitText Text="{Binding HeaderTitle}" FontSize="32" Foreground="{DynamicResource PbTextBrush}" />
-                    <TextBlock Text="{Binding MetaLine}" FontSize="12" Foreground="{DynamicResource PbAccentTextBrush}" Margin="0,3,0,0" />
+                    <!-- Meta badge row (Part 4): reading-status picker + Kavita-style icon chips
+                         (publisher / status / year / format / age-rating / language), falling back
+                         to the plain MetaLine string only when there are no badges (Home spotlight). -->
+                    <WrapPanel Orientation="Horizontal" Margin="0,5,0,0">
+                        <views:ReadingStatusPicker DataContext="{Binding ReadingStatusPicker}" Margin="0,0,8,5" VerticalAlignment="Center"
+                                                   IsVisible="{Binding #Hero.((vm:IDetailHeaderSource)DataContext).ReadingStatusPicker, Converter={x:Static conv:ObjectConverters.IsNotNull}}" />
+                        <ItemsControl ItemsSource="{Binding MetaBadges}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="models:DetailMetaBadge">
+                                    <Border Classes="heroBadge">
+                                        <Panel>
+                                            <controls:BrandMark Family="{Binding MarkOrDefault}" Value="{Binding MarkValue}" ShowText="True"
+                                                                MarkSize="15" VerticalAlignment="Center" IsVisible="{Binding IsMark}"
+                                                                Foreground="{DynamicResource PbTextBrush}" />
+                                            <StackPanel Orientation="Horizontal" Spacing="5" VerticalAlignment="Center" IsVisible="{Binding !IsMark}">
+                                                <fi:SymbolIcon Symbol="{Binding IconGlyph}" FontSize="{StaticResource PbIconSizeXs}"
+                                                               Foreground="#CFECE7DB" VerticalAlignment="Center" />
+                                                <TextBlock Text="{Binding Text}" FontSize="12" Foreground="#F0ECE7DB" VerticalAlignment="Center" />
+                                            </StackPanel>
+                                        </Panel>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <TextBlock Text="{Binding MetaLine}" FontSize="12" Foreground="{DynamicResource PbAccentTextBrush}"
+                                   VerticalAlignment="Center" IsVisible="{Binding !HasMetaBadges}" />
+                    </WrapPanel>
+                    <!-- Plain-text "N issues · M unread" line (Part 4 revision, user direction) -
+                         under the badge row, above the action buttons; same styling the original
+                         MetaLine text used. -->
+                    <TextBlock Text="{Binding IssueSummaryLine}" FontSize="12" Foreground="{DynamicResource PbAccentTextBrush}"
+                               Margin="0,3,0,0" IsVisible="{Binding IssueSummaryLine, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
                     <TextBlock Text="{Binding Synopsis}" FontSize="12" Foreground="#C8ECE7DB" Margin="0,4,0,0"
                                TextWrapping="Wrap" MaxLines="3" TextTrimming="CharacterEllipsis" MaxWidth="520"
                                HorizontalAlignment="Left" ToolTip.Tip="{Binding Synopsis}"
@@ -66,8 +115,14 @@
                         <ItemsControl.ItemTemplate>
                             <DataTemplate x:DataType="models:DetailHeroAction">
                                 <Button Classes="detailAction" Classes.primary="{Binding IsPrimary}" Classes.ghost="{Binding !IsPrimary}"
-                                        Content="{Binding Label}" Command="{Binding Command}" IsEnabled="{Binding IsEnabled}"
-                                        AutomationProperties.AutomationId="{Binding Label}" />
+                                        Command="{Binding Command}" IsEnabled="{Binding IsEnabled}"
+                                        AutomationProperties.AutomationId="{Binding Label}">
+                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                        <fi:SymbolIcon Symbol="{Binding IconGlyph}" FontSize="{StaticResource PbIconSizeSm}"
+                                                       VerticalAlignment="Center" IsVisible="{Binding HasIcon}" />
+                                        <TextBlock Text="{Binding Label}" VerticalAlignment="Center" />
+                                    </StackPanel>
+                                </Button>
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>

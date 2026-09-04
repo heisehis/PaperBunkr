@@ -93,17 +93,67 @@ Chip colours in the tsv (green family / amber teen / red adult) are a first pass
 ## Formats/
 
 CE's `Formats/*.png` (39 icons) are **not icons** — they're stylised yellow-gradient letter
-abbreviations (`ANN`, `TPB`, `GN`, `B/W`…). The design doc renders those as a FluentIcons glyph +
-letter chip (`format-aliases.tsv`), which is the same information. Only **two** CE format icons
-are real pictograms, so only those two are bundled here, redrawn by hand from the CE raster:
+abbreviations (`ANN`, `TPB`, `GN`, `B/W`…). The design doc originally rendered every format as a
+FluentIcons glyph + letter chip (`format-aliases.tsv`), which is the same information; only the
+**two** CE format icons that are real pictograms (`crossover`, `nsfw`) were redrawn by hand from
+the CE raster.
 
-| File | CE source | Note |
-|---|---|---|
-| `crossover.svg` | `Formats/Crossover.png` | two crossing arrows; monochrome, tinted by `BrandMark` |
-| `nsfw.svg` | `Formats/NSFW.png` | prohibition sign; colour mark, used as-is (warning red `#E1251B`) |
+**Deviation (2026-09-04, at the user's request):** every *comic*-format row now also ships a
+hand-drawn pictogram — 38 files total, `viewBox="0 0 64 64"`, transparent ground. These are
+original geometric glyphs (not traced from CE, which had no pictograms for them). The `asset`
+column of `format-aliases.tsv` names the stem for each; the FluentIcons `symbol` / label columns
+stay as the fallback when an asset file is missing.
 
-`format-aliases.tsv` gained an `asset` column — non-blank only on these two rows; every other
-format stays glyph + chip.
+**Colour (2026-09-04):** the marks carry their own colour and `MarkResolver.ResolveFormat` no
+longer tints them — they render as-is, like the age-rating boxes. Each is a flat mid-tone fill
+from a category-hued palette (chosen to stay legible on both the light and dark app themes, so
+they do *not* react to the runtime skin — same trade-off already accepted for publisher logos and
+ESRB marks):
+
+| Hue | Hex | Category | Stems |
+|---|---|---|---|
+| amber | `#C77F1A` | collected / bound editions | `anthology` `box-set` `graphic-novel` `hardcover` `omnibus` `trade-paperback` `series` `magazine` |
+| blue | `#3B7BC4` | issue numbering | `half` `point-one` `minus-one` `annual` `main` `one-shot` |
+| violet | `#8257E0` | story position | `prologue` `epilogue` `year-one` `year-zero` `limited-series` |
+| pink | `#D14E86` | events | `special` (and `crossover`, two-tone pink/violet) |
+| gold | `#D9A521` | premium / energy | `king` `giant` `event` |
+| teal | `#1F9E9E` | editorial | `annotation` `reference` `script` `sketch` `reviewed` `directors-cut` |
+| green | `#4C9E4E` | promo / preview | `preview` `flyer` `fcbd` |
+| indigo | `#5866D6` | fan / web / distribution | `web-comic` `fan-made` `scanlation` |
+| grey | `#9A9A9A` | (literally monochrome) | `black-and-white` |
+
+`crossover` is CE-derived art, recoloured two-tone. `nsfw` is unchanged — CE-derived, stays the
+warning-red (`#E1251B`) prohibition sign.
+
+**v2 redraws (2026-09-04):** the user supplied two AI-generated ("v0") icon sets for comparison.
+Neither was adopted wholesale — set 1 was one template SVG copy-pasted 38 times with a tiny
+distinguishing `<text>` label (illegible at mark size, verified by rendering through
+`Svg.Skia`); set 2 was a genuinely well-drawn monochrome stroke-icon family, but had no colour
+and ~15 of its 38 shared a "page + fine strokes" skeleton that also collapsed to an
+indistinguishable grey box once downscaled to the ~16-20px this control actually renders at.
+Four of *this* app's own icons were weak for the same reason and got redrawn, borrowing shape
+ideas where a v0 attempt suggested a better direction:
+- **`trade-paperback`** — v1's wavy bottom edge was invisible small; now a spine + a large curled
+  cover (bold enough to survive downscaling).
+- **`year-one`** — v1 was a pennant with a numeral cut into it (invisible <24px, and looked
+  identical to `year-zero` at mark size); now a solid up/launch arrow.
+- **`year-zero`** — same pennant problem; now a fat solid ring (reads as "0" at any size) - a
+  different silhouette from `year-one`, not just a swapped digit.
+- **`king`** — was a 3-peak zigzag; borrowed a v0 redraw's 5-peak proportions (filled solid
+  instead of stroked) for a clearer crown silhouette.
+
+All four verified through the same `Svg.Skia` render path as every other mark, at true ~20px mark
+size, on both light and dark backgrounds.
+
+The **six book / container formats** — `EPUB`, `PDF`, `FB2`, `MOBI`, `CBZ`, `CBR` — deliberately
+have **no** pictogram (blank `asset`) and still render as glyph + chip.
+
+Full list of pictogram stems: `annotation`, `annual`, `anthology`, `black-and-white`, `box-set`,
+`crossover`, `directors-cut`, `epilogue`, `event`, `fan-made`, `fcbd`, `flyer`, `giant`,
+`graphic-novel`, `half`, `hardcover`, `king`, `limited-series`, `magazine`, `main`, `minus-one`,
+`nsfw`, `omnibus`, `one-shot`, `point-one`, `preview`, `prologue`, `reference`, `reviewed`,
+`scanlation`, `script`, `series`, `sketch`, `special`, `trade-paperback`, `web-comic`,
+`year-one`, `year-zero`.
 
 ### `valiant.svg` attribution
 

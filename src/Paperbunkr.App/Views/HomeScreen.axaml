@@ -162,7 +162,7 @@
                         Command="{Binding RefreshCommand}" AutomationProperties.AutomationId="HomeRefreshButton"
                         ToolTip.Tip="Refresh">
                     <StackPanel Orientation="Horizontal" Spacing="6">
-                        <fi:SymbolIcon Symbol="ArrowClockwise" FontSize="13" />
+                        <fi:SymbolIcon Symbol="ArrowClockwise" FontSize="{StaticResource PbIconSizeSm}" />
                         <TextBlock Text="Refresh library" FontSize="11.5" Foreground="{DynamicResource PbTextMutedBrush}" />
                     </StackPanel>
                 </Button>

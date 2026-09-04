@@ -21,12 +21,17 @@ public class BrandMarkRenderSmokeTests
     [InlineData(MarkFamily.Publisher, "Marvel", MarkKind.SvgAsset)]
     [InlineData(MarkFamily.Publisher, "Vertigo", MarkKind.LetterMark)]
     [InlineData(MarkFamily.Publisher, "Nobody's Press", MarkKind.Text)]
-    [InlineData(MarkFamily.Format, "Trade Paperback", MarkKind.Glyph)]
-    [InlineData(MarkFamily.Format, "Annual", MarkKind.LetterMark)]
+    [InlineData(MarkFamily.Format, "Trade Paperback", MarkKind.SvgAsset)]
+    [InlineData(MarkFamily.Format, "Annual", MarkKind.SvgAsset)]
+    [InlineData(MarkFamily.Format, "EPUB", MarkKind.Glyph)]
     [InlineData(MarkFamily.AgeRating, "Teen", MarkKind.SvgAsset)]
     [InlineData(MarkFamily.AgeRating, "MA15+", MarkKind.LetterMark)]
     [InlineData(MarkFamily.Language, "ja", MarkKind.Flag)]
     [InlineData(MarkFamily.Language, "eo", MarkKind.Text)]
+    [InlineData(MarkFamily.ReadingStatus, "Reading", MarkKind.Glyph)]
+    [InlineData(MarkFamily.ReadingStatus, "Completed", MarkKind.Glyph)]
+    [InlineData(MarkFamily.ReadingStatus, "Unknown", MarkKind.None)]
+    [InlineData(MarkFamily.ScanGroup, "TCB Scans", MarkKind.Glyph)]
     public void EachFamily_ResolvesToTheExpectedKind(MarkFamily family, string value, MarkKind expected)
     {
         var mark = Make(family, value);
@@ -58,5 +63,23 @@ public class BrandMarkRenderSmokeTests
         var mark = Make(MarkFamily.Publisher, "");
         Assert.Equal(MarkKind.None, mark.ResolvedKind);
         Assert.False(mark.IsImage || mark.IsChip || mark.IsGlyph || mark.IsPlainText);
+    }
+
+    [Fact]
+    public void ReadingStatus_Reading_IsGlyphWithLabelAndColour()
+    {
+        var mark = Make(MarkFamily.ReadingStatus, "Reading");
+        Assert.True(mark.IsGlyph);
+        Assert.Equal("Reading", mark.Label);
+        Assert.True(mark.ShowLabel);
+        Assert.NotNull(mark.GlyphBrush); // per-status #hex colour, not the inherited brush default path only
+    }
+
+    [Fact]
+    public void ScanGroup_IsGlyphWithGroupName()
+    {
+        var mark = Make(MarkFamily.ScanGroup, "  TCB Scans  ");
+        Assert.True(mark.IsGlyph);
+        Assert.Equal("TCB Scans", mark.Label);
     }
 }

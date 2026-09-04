@@ -114,6 +114,11 @@ public sealed class ReadingOrdersNetSource : IReadingListSource
         {
             throw new ReadingListSourceException(DisplayName, $"ReadingOrders.com request failed: {ex.Message}");
         }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            // HttpClient.Timeout elapsing throws TaskCanceledException, not HttpRequestException.
+            throw new ReadingListSourceException(DisplayName, "ReadingOrders.com did not respond within 20 seconds.");
+        }
 
         if (!response.IsSuccessStatusCode)
         {

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Trade Paper Back: a spine with a big curled/bent cover (v2 - the v1 wavy bottom edge did not survive downscaling). Category-hued (#C77F1A); rendered as-is by BrandMark. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="#C77F1A">
+  <rect x="12" y="8" width="24" height="48" rx="2"/>
+  <path d="M36 8 C56 12 56 52 36 56 C46 46 46 18 36 8 Z"/>
+</svg>

@@ -154,13 +154,13 @@
     <DockPanel LastChildFill="True">
 
         <!-- ============ Rail nav (64px) ============ -->
-        <!-- Real bug, found via manual testing: the Reader's own fullscreen toggle (docs/superpowers/
-             specs/2026-08-10-reader-polish-continuous-scroll-chrome-overlays-design.md §7) only sets
-             Window.WindowState - it has no reach into MainWindow's own persistent rail nav, which
-             lives here as a sibling of the Reader's ContentControl, not inside ReaderScreen's own
-             visual tree. Hidden directly off Reader.IsFullscreen (a stable ReaderScreenViewModel
-             instance, per MainViewModel.Reader) rather than adding a MainViewModel-level mirror
-             property - one source of truth. -->
+        <!-- Hidden on every reading screen (comic Reader / BookReader / PdfReader) via
+             MainViewModel.IsInReader - reading is a full-bleed mode and each reader carries its own
+             back/close chrome plus the app-wide Escape / browser-back / swipe-back gestures. This
+             also covers the comic Reader's fullscreen toggle (docs/superpowers/specs/2026-08-10-
+             reader-polish-continuous-scroll-chrome-overlays-design.md §7), which sets only
+             Window.WindowState and has no reach into this rail (a sibling of the reader
+             ContentControl, not inside its visual tree) - IsInReader is already true throughout. -->
         <!-- Collapsed 64px / expanded 200px (docs/superpowers/specs/2026-08-24-navigation-shell-
              motion-system-design.md) - hover expands as a temporary overlay (see PointerEntered/
              PointerExited below), pinning (ToggleNavRailPinCommand) makes it permanent/reflowing.
@@ -173,7 +173,7 @@
         <Border Classes="navRail" Classes.expanded="{Binding IsNavRailExpanded}"
                 DockPanel.Dock="Left" Background="{DynamicResource PbChromeBrush}"
                 BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,0,1,0"
-                IsVisible="{Binding !Reader.IsFullscreen}"
+                IsVisible="{Binding !IsInReader}"
                 ToolTip.ServiceEnabled="{Binding !IsNavRailExpanded}"
                 PointerEntered="RailPointerEntered" PointerExited="RailPointerExited">
             <Grid RowDefinitions="Auto,*,Auto" Margin="0,14,0,10">
@@ -314,7 +314,7 @@
                                         Background="{DynamicResource PbSurface2Brush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
                                         Command="{Binding Library.BeginCreateCollectionCommand}" ToolTip.Tip="New collection"
                                         IsVisible="{Binding !Library.IsCreatingCollection}">
-                                    <fi:SymbolIcon Symbol="Add" FontSize="11" />
+                                    <fi:SymbolIcon Symbol="Add" FontSize="{StaticResource PbIconSizeXs}" />
                                 </Button>
                             </Grid>
 
@@ -327,10 +327,10 @@
                                     </TextBox.KeyBindings>
                                 </TextBox>
                                 <Button Grid.Column="1" Classes="headerAction ghost" Padding="6" Command="{Binding Library.CommitCreateCollectionCommand}">
-                                    <fi:SymbolIcon Symbol="Checkmark" FontSize="11" />
+                                    <fi:SymbolIcon Symbol="Checkmark" FontSize="{StaticResource PbIconSizeXs}" />
                                 </Button>
                                 <Button Grid.Column="2" Classes="headerAction ghost" Padding="6" Command="{Binding Library.CancelCreateCollectionCommand}">
-                                    <fi:SymbolIcon Symbol="Dismiss" FontSize="11" />
+                                    <fi:SymbolIcon Symbol="Dismiss" FontSize="{StaticResource PbIconSizeXs}" />
                                 </Button>
                             </Grid>
 
@@ -344,7 +344,7 @@
                                                 <Panel Grid.Column="0" Width="14" Height="8" Margin="9,0,0,0" VerticalAlignment="Center">
                                                     <Ellipse Width="8" Height="8" HorizontalAlignment="Left"
                                                              Fill="{Binding AccentColor, Converter={x:Static views:AccentColorToBrushConverter.Instance}}" />
-                                                    <fi:SymbolIcon Symbol="Wand" FontSize="9" HorizontalAlignment="Right"
+                                                    <fi:SymbolIcon Symbol="Wand" FontSize="{StaticResource PbIconSizeXs}" HorizontalAlignment="Right"
                                                                    Foreground="{DynamicResource PbTextFaintBrush}"
                                                                    IsVisible="{Binding IsSmart}" ToolTip.Tip="Has a rule-based membership slot" />
                                                 </Panel>
@@ -360,7 +360,7 @@
                                                 </Button>
                                                 <Button Grid.Column="2" Classes="headerAction ghost colHover" Padding="6" Margin="2,0,0,0" VerticalAlignment="Center"
                                                         ToolTip.Tip="More">
-                                                    <fi:SymbolIcon Symbol="MoreVertical" FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" />
+                                                    <fi:SymbolIcon Symbol="MoreVertical" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextFaintBrush}" />
                                                     <Button.Flyout>
                                                         <MenuFlyout>
                                                             <MenuItem Header="Edit…"
@@ -378,8 +378,8 @@
                                                 <Button Grid.Column="3" Classes="headerAction ghost colHover" Padding="6" Margin="2,0,4,0" VerticalAlignment="Center"
                                                         Command="{Binding DeleteConfirm.TriggerCommand}" ToolTip.Tip="{Binding DeleteConfirm.Label}">
                                                     <Panel>
-                                                        <fi:SymbolIcon Symbol="Delete" FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" IsVisible="{Binding !DeleteConfirm.IsArmed}" />
-                                                        <fi:SymbolIcon Symbol="Delete" FontSize="11" Foreground="{DynamicResource PbBadgeBrush}" IsVisible="{Binding DeleteConfirm.IsArmed}" />
+                                                        <fi:SymbolIcon Symbol="Delete" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextFaintBrush}" IsVisible="{Binding !DeleteConfirm.IsArmed}" />
+                                                        <fi:SymbolIcon Symbol="Delete" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbBadgeBrush}" IsVisible="{Binding DeleteConfirm.IsArmed}" />
                                                     </Panel>
                                                 </Button>
                                             </Grid>
@@ -430,7 +430,7 @@
                             <Button Grid.Column="1" Width="24" Height="24" Padding="0" CornerRadius="6"
                                     Background="{DynamicResource PbSurface2Brush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
                                     Command="{Binding Smart.CreateNewCommand}" ToolTip.Tip="New Smart List">
-                                <fi:SymbolIcon Symbol="Add" FontSize="11" />
+                                <fi:SymbolIcon Symbol="Add" FontSize="{StaticResource PbIconSizeXs}" />
                             </Button>
                         </Grid>
 
@@ -469,8 +469,8 @@
                                             <Button Grid.Column="1" Classes="headerAction ghost smDelete" Padding="6" Margin="2,0,4,0" VerticalAlignment="Center"
                                                     Command="{Binding DeleteConfirm.TriggerCommand}" ToolTip.Tip="{Binding DeleteConfirm.Label}">
                                                 <Panel>
-                                                    <fi:SymbolIcon Symbol="Delete" FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" IsVisible="{Binding !DeleteConfirm.IsArmed}" />
-                                                    <fi:SymbolIcon Symbol="Delete" FontSize="11" Foreground="{DynamicResource PbBadgeBrush}" IsVisible="{Binding DeleteConfirm.IsArmed}" />
+                                                    <fi:SymbolIcon Symbol="Delete" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextFaintBrush}" IsVisible="{Binding !DeleteConfirm.IsArmed}" />
+                                                    <fi:SymbolIcon Symbol="Delete" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbBadgeBrush}" IsVisible="{Binding DeleteConfirm.IsArmed}" />
                                                 </Panel>
                                             </Button>
                                         </Grid>
@@ -482,8 +482,8 @@
                         <Button Classes="sideItemButton" Command="{Binding Smart.ToggleMaintenanceCommand}"
                                 Padding="8,7" HorizontalContentAlignment="Left">
                             <StackPanel Orientation="Horizontal" Spacing="6">
-                                <fi:SymbolIcon Symbol="ArrowDown" FontSize="9" Foreground="{DynamicResource PbTextMutedBrush}" IsVisible="{Binding Smart.IsMaintenanceExpanded}" />
-                                <fi:SymbolIcon Symbol="ChevronRight" FontSize="9" Foreground="{DynamicResource PbTextMutedBrush}" IsVisible="{Binding !Smart.IsMaintenanceExpanded}" />
+                                <fi:SymbolIcon Symbol="ArrowDown" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextMutedBrush}" IsVisible="{Binding Smart.IsMaintenanceExpanded}" />
+                                <fi:SymbolIcon Symbol="ChevronRight" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextMutedBrush}" IsVisible="{Binding !Smart.IsMaintenanceExpanded}" />
                                 <TextBlock Text="Maintenance" FontSize="13" Foreground="{DynamicResource PbTextMutedBrush}" />
                             </StackPanel>
                         </Button>
@@ -516,7 +516,7 @@
                             <Button Grid.Column="1" Width="20" Height="20" Padding="0" CornerRadius="5"
                                     Background="{DynamicResource PbSurface2Brush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
                                     Command="{Binding Smart.CreateNewSeriesListCommand}" ToolTip.Tip="New Series Smart List">
-                                <fi:SymbolIcon Symbol="Add" FontSize="9" />
+                                <fi:SymbolIcon Symbol="Add" FontSize="{StaticResource PbIconSizeXs}" />
                             </Button>
                         </Grid>
                         <ItemsControl x:Name="SeriesSmartLists" ItemsSource="{Binding Smart.SeriesLists}">
@@ -535,8 +535,8 @@
                                             <Button Grid.Column="1" Classes="headerAction ghost smDelete" Padding="6" Margin="2,0,4,0" VerticalAlignment="Center"
                                                     Command="{Binding DeleteConfirm.TriggerCommand}" ToolTip.Tip="{Binding DeleteConfirm.Label}">
                                                 <Panel>
-                                                    <fi:SymbolIcon Symbol="Delete" FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" IsVisible="{Binding !DeleteConfirm.IsArmed}" />
-                                                    <fi:SymbolIcon Symbol="Delete" FontSize="11" Foreground="{DynamicResource PbBadgeBrush}" IsVisible="{Binding DeleteConfirm.IsArmed}" />
+                                                    <fi:SymbolIcon Symbol="Delete" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextFaintBrush}" IsVisible="{Binding !DeleteConfirm.IsArmed}" />
+                                                    <fi:SymbolIcon Symbol="Delete" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbBadgeBrush}" IsVisible="{Binding DeleteConfirm.IsArmed}" />
                                                 </Panel>
                                             </Button>
                                         </Grid>
@@ -550,7 +550,7 @@
                             <Button Grid.Column="1" Width="20" Height="20" Padding="0" CornerRadius="5"
                                     Background="{DynamicResource PbSurface2Brush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
                                     Command="{Binding Smart.CreateNewNovelListCommand}" ToolTip.Tip="New Novel Smart List">
-                                <fi:SymbolIcon Symbol="Add" FontSize="9" />
+                                <fi:SymbolIcon Symbol="Add" FontSize="{StaticResource PbIconSizeXs}" />
                             </Button>
                         </Grid>
                         <ItemsControl x:Name="NovelSmartLists" ItemsSource="{Binding Smart.NovelLists}">
@@ -569,8 +569,8 @@
                                             <Button Grid.Column="1" Classes="headerAction ghost smDelete" Padding="6" Margin="2,0,4,0" VerticalAlignment="Center"
                                                     Command="{Binding DeleteConfirm.TriggerCommand}" ToolTip.Tip="{Binding DeleteConfirm.Label}">
                                                 <Panel>
-                                                    <fi:SymbolIcon Symbol="Delete" FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" IsVisible="{Binding !DeleteConfirm.IsArmed}" />
-                                                    <fi:SymbolIcon Symbol="Delete" FontSize="11" Foreground="{DynamicResource PbBadgeBrush}" IsVisible="{Binding DeleteConfirm.IsArmed}" />
+                                                    <fi:SymbolIcon Symbol="Delete" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextFaintBrush}" IsVisible="{Binding !DeleteConfirm.IsArmed}" />
+                                                    <fi:SymbolIcon Symbol="Delete" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbBadgeBrush}" IsVisible="{Binding DeleteConfirm.IsArmed}" />
                                                 </Panel>
                                             </Button>
                                         </Grid>
@@ -607,7 +607,7 @@
                                     Background="{DynamicResource PbSurface2Brush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
                                     Command="{Binding OpenNewReadingListDialogCommand}" ToolTip.Tip="New reading list"
                                     AutomationProperties.AutomationId="NewReadingListButton">
-                                <fi:SymbolIcon Symbol="Add" FontSize="11" />
+                                <fi:SymbolIcon Symbol="Add" FontSize="{StaticResource PbIconSizeXs}" />
                             </Button>
                         </Grid>
 
@@ -642,8 +642,8 @@
                                                     VerticalAlignment="Center"
                                                     Command="{Binding DeleteConfirm.TriggerCommand}" ToolTip.Tip="{Binding DeleteConfirm.Label}">
                                                 <Panel>
-                                                    <fi:SymbolIcon Symbol="Delete" FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" IsVisible="{Binding !DeleteConfirm.IsArmed}" />
-                                                    <fi:SymbolIcon Symbol="Delete" FontSize="11" Foreground="{DynamicResource PbBadgeBrush}" IsVisible="{Binding DeleteConfirm.IsArmed}" />
+                                                    <fi:SymbolIcon Symbol="Delete" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextFaintBrush}" IsVisible="{Binding !DeleteConfirm.IsArmed}" />
+                                                    <fi:SymbolIcon Symbol="Delete" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbBadgeBrush}" IsVisible="{Binding DeleteConfirm.IsArmed}" />
                                                 </Panel>
                                             </Button>
                                         </Grid>
@@ -670,7 +670,7 @@
                             <TextBlock Grid.Column="0" Text="Events &amp; Continuity" FontSize="15" FontWeight="Bold" Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
                             <Button Grid.Column="1" Width="24" Height="24" Padding="0" CornerRadius="6"
                                     Background="{DynamicResource PbSurface2Brush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1" ToolTip.Tip="New...">
-                                <fi:SymbolIcon Symbol="Add" FontSize="11" />
+                                <fi:SymbolIcon Symbol="Add" FontSize="{StaticResource PbIconSizeXs}" />
                                 <Button.Flyout>
                                     <MenuFlyout>
                                         <MenuItem Header="New event" Command="{Binding OpenNewEventDialogCommand}" CommandParameter="Event" />
@@ -695,8 +695,8 @@
                                             <Button Grid.Column="1" Classes="headerAction ghost ecDelete" Padding="6" Margin="2,0,4,0" VerticalAlignment="Center"
                                                     Command="{Binding DeleteConfirm.TriggerCommand}" ToolTip.Tip="{Binding DeleteConfirm.Label}">
                                                 <Panel>
-                                                    <fi:SymbolIcon Symbol="Delete" FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" IsVisible="{Binding !DeleteConfirm.IsArmed}" />
-                                                    <fi:SymbolIcon Symbol="Delete" FontSize="11" Foreground="{DynamicResource PbBadgeBrush}" IsVisible="{Binding DeleteConfirm.IsArmed}" />
+                                                    <fi:SymbolIcon Symbol="Delete" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextFaintBrush}" IsVisible="{Binding !DeleteConfirm.IsArmed}" />
+                                                    <fi:SymbolIcon Symbol="Delete" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbBadgeBrush}" IsVisible="{Binding DeleteConfirm.IsArmed}" />
                                                 </Panel>
                                             </Button>
                                         </Grid>
@@ -722,8 +722,8 @@
                                             <Button Grid.Column="1" Classes="headerAction ghost ecDelete" Padding="6" Margin="2,0,4,0" VerticalAlignment="Center"
                                                     Command="{Binding DeleteConfirm.TriggerCommand}" ToolTip.Tip="{Binding DeleteConfirm.Label}">
                                                 <Panel>
-                                                    <fi:SymbolIcon Symbol="Delete" FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" IsVisible="{Binding !DeleteConfirm.IsArmed}" />
-                                                    <fi:SymbolIcon Symbol="Delete" FontSize="11" Foreground="{DynamicResource PbBadgeBrush}" IsVisible="{Binding DeleteConfirm.IsArmed}" />
+                                                    <fi:SymbolIcon Symbol="Delete" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextFaintBrush}" IsVisible="{Binding !DeleteConfirm.IsArmed}" />
+                                                    <fi:SymbolIcon Symbol="Delete" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbBadgeBrush}" IsVisible="{Binding DeleteConfirm.IsArmed}" />
                                                 </Panel>
                                             </Button>
                                         </Grid>
@@ -741,8 +741,8 @@
 
         <!-- ============ Status bar (docs/superpowers/specs/2026-09-03-activity-center-design.md) ============ -->
         <!-- Docked before the LastChildFill main-content Grid so it claims the window's bottom edge.
-             Hidden in Reader fullscreen, same handling as the nav rail above. -->
-        <views:StatusBar DockPanel.Dock="Bottom" IsVisible="{Binding !Reader.IsFullscreen}" />
+             Hidden on every reading screen (MainViewModel.IsInReader), same as the nav rail above. -->
+        <views:StatusBar DockPanel.Dock="Bottom" IsVisible="{Binding !IsInReader}" />
 
         <!-- ============ Main content ============ -->
         <Grid>
@@ -863,7 +863,7 @@
                     Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
                     Command="{Binding CloseMigrationOverlayCommand}" ToolTip.Tip="Close"
                     AutomationProperties.AutomationId="MigrationOverlayCloseButton">
-                <fi:SymbolIcon Symbol="DismissCircle" FontSize="13" />
+                <fi:SymbolIcon Symbol="DismissCircle" FontSize="{StaticResource PbIconSizeSm}" />
             </Button>
         </Grid>
     </Border>
@@ -879,7 +879,7 @@
                     Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
                     Command="{Binding CloseReadingListPropertiesOverlayCommand}" ToolTip.Tip="Close"
                     AutomationProperties.AutomationId="ReadingListPropertiesOverlayCloseButton">
-                <fi:SymbolIcon Symbol="DismissCircle" FontSize="13" />
+                <fi:SymbolIcon Symbol="DismissCircle" FontSize="{StaticResource PbIconSizeSm}" />
             </Button>
         </Grid>
     </Border>
@@ -894,7 +894,7 @@
                     Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
                     Command="{Binding CloseCollectionPropertiesOverlayCommand}" ToolTip.Tip="Close"
                     AutomationProperties.AutomationId="CollectionPropertiesOverlayCloseButton">
-                <fi:SymbolIcon Symbol="DismissCircle" FontSize="13" />
+                <fi:SymbolIcon Symbol="DismissCircle" FontSize="{StaticResource PbIconSizeSm}" />
             </Button>
         </Grid>
     </Border>
@@ -909,7 +909,7 @@
                     Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
                     Command="{Binding CloseNewReadingListDialogCommand}" ToolTip.Tip="Close"
                     AutomationProperties.AutomationId="NewReadingListOverlayCloseButton">
-                <fi:SymbolIcon Symbol="DismissCircle" FontSize="13" />
+                <fi:SymbolIcon Symbol="DismissCircle" FontSize="{StaticResource PbIconSizeSm}" />
             </Button>
         </Grid>
     </Border>
@@ -924,7 +924,7 @@
                     Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
                     Command="{Binding CloseWorkspaceNameOverlayCommand}" ToolTip.Tip="Close"
                     AutomationProperties.AutomationId="WorkspaceNameOverlayCloseButton">
-                <fi:SymbolIcon Symbol="DismissCircle" FontSize="13" />
+                <fi:SymbolIcon Symbol="DismissCircle" FontSize="{StaticResource PbIconSizeSm}" />
             </Button>
         </Grid>
     </Border>
@@ -946,7 +946,7 @@
                     HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-14,-14,0"
                     Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
                     Command="{Binding CloseNewEventDialogCommand}" ToolTip.Tip="Close">
-                <fi:SymbolIcon Symbol="DismissCircle" FontSize="13" />
+                <fi:SymbolIcon Symbol="DismissCircle" FontSize="{StaticResource PbIconSizeSm}" />
             </Button>
         </Grid>
     </Border>
@@ -961,7 +961,7 @@
                     Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
                     Command="{Binding CloseBookPropertiesOverlayCommand}" ToolTip.Tip="Close"
                     AutomationProperties.AutomationId="BookPropertiesOverlayCloseButton">
-                <fi:SymbolIcon Symbol="DismissCircle" FontSize="13" />
+                <fi:SymbolIcon Symbol="DismissCircle" FontSize="{StaticResource PbIconSizeSm}" />
             </Button>
         </Grid>
     </Border>
@@ -976,7 +976,7 @@
                     Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
                     Command="{Binding CloseBulkBookPropertiesOverlayCommand}" ToolTip.Tip="Close"
                     AutomationProperties.AutomationId="BulkBookPropertiesOverlayCloseButton">
-                <fi:SymbolIcon Symbol="DismissCircle" FontSize="13" />
+                <fi:SymbolIcon Symbol="DismissCircle" FontSize="{StaticResource PbIconSizeSm}" />
             </Button>
         </Grid>
     </Border>
@@ -991,7 +991,7 @@
                     Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
                     Command="{Binding CloseBookSeriesPropertiesOverlayCommand}" ToolTip.Tip="Close"
                     AutomationProperties.AutomationId="BookSeriesPropertiesOverlayCloseButton">
-                <fi:SymbolIcon Symbol="DismissCircle" FontSize="13" />
+                <fi:SymbolIcon Symbol="DismissCircle" FontSize="{StaticResource PbIconSizeSm}" />
             </Button>
         </Grid>
     </Border>
@@ -1006,7 +1006,7 @@
                     Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
                     Command="{Binding CloseQuickRateOverlayCommand}" ToolTip.Tip="Close"
                     AutomationProperties.AutomationId="QuickRateOverlayCloseButton">
-                <fi:SymbolIcon Symbol="DismissCircle" FontSize="13" />
+                <fi:SymbolIcon Symbol="DismissCircle" FontSize="{StaticResource PbIconSizeSm}" />
             </Button>
         </Grid>
     </Border>
@@ -1021,7 +1021,7 @@
                     Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
                     Command="{Binding CloseDesignShowcaseOverlayCommand}" ToolTip.Tip="Close"
                     AutomationProperties.AutomationId="DesignShowcaseOverlayCloseButton">
-                <fi:SymbolIcon Symbol="DismissCircle" FontSize="13" />
+                <fi:SymbolIcon Symbol="DismissCircle" FontSize="{StaticResource PbIconSizeSm}" />
             </Button>
         </Grid>
     </Border>
@@ -1037,7 +1037,7 @@
                     Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
                     Command="{Binding CloseIssuePropertiesOverlayCommand}" ToolTip.Tip="Close"
                     AutomationProperties.AutomationId="IssuePropertiesOverlayCloseButton">
-                <fi:SymbolIcon Symbol="DismissCircle" FontSize="13" />
+                <fi:SymbolIcon Symbol="DismissCircle" FontSize="{StaticResource PbIconSizeSm}" />
             </Button>
         </Grid>
     </Border>
@@ -1052,7 +1052,7 @@
                     Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
                     Command="{Binding CloseBulkIssuePropertiesOverlayCommand}" ToolTip.Tip="Close"
                     AutomationProperties.AutomationId="BulkIssuePropertiesOverlayCloseButton">
-                <fi:SymbolIcon Symbol="DismissCircle" FontSize="13" />
+                <fi:SymbolIcon Symbol="DismissCircle" FontSize="{StaticResource PbIconSizeSm}" />
             </Button>
         </Grid>
     </Border>
@@ -1067,7 +1067,7 @@
                     Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
                     Command="{Binding CloseBulkSeriesPropertiesOverlayCommand}" ToolTip.Tip="Close"
                     AutomationProperties.AutomationId="BulkSeriesPropertiesOverlayCloseButton">
-                <fi:SymbolIcon Symbol="DismissCircle" FontSize="13" />
+                <fi:SymbolIcon Symbol="DismissCircle" FontSize="{StaticResource PbIconSizeSm}" />
             </Button>
         </Grid>
     </Border>
@@ -1081,7 +1081,7 @@
                 BorderThickness="1" CornerRadius="8" Padding="20">
             <StackPanel Spacing="14">
                 <StackPanel Orientation="Horizontal" Spacing="8">
-                    <fi:SymbolIcon Symbol="Warning" FontSize="18" Foreground="#D96C6C" />
+                    <fi:SymbolIcon Symbol="Warning" FontSize="{StaticResource PbIconSizeLg}" Foreground="#D96C6C" />
                     <TextBlock Text="Unsaved changes" FontSize="15" FontWeight="Bold"
                                Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
                 </StackPanel>
@@ -1106,7 +1106,7 @@
                     Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
                     Command="{Binding Welcome.SkipCommand}" ToolTip.Tip="Close"
                     AutomationProperties.AutomationId="WelcomeOverlayCloseButton">
-                <fi:SymbolIcon Symbol="DismissCircle" FontSize="13" />
+                <fi:SymbolIcon Symbol="DismissCircle" FontSize="{StaticResource PbIconSizeSm}" />
             </Button>
         </Grid>
     </Border>
@@ -1122,7 +1122,7 @@
                     Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
                     Command="{Binding Update.NotNowCommand}" ToolTip.Tip="Close"
                     AutomationProperties.AutomationId="UpdateAvailableOverlayCloseButton">
-                <fi:SymbolIcon Symbol="DismissCircle" FontSize="13" />
+                <fi:SymbolIcon Symbol="DismissCircle" FontSize="{StaticResource PbIconSizeSm}" />
             </Button>
         </Grid>
     </Border>
@@ -1136,7 +1136,7 @@
                 BorderThickness="1" CornerRadius="8" Padding="20">
             <StackPanel Spacing="14">
                 <StackPanel Orientation="Horizontal" Spacing="8">
-                    <fi:SymbolIcon Symbol="Sparkle" FontSize="18" Foreground="{DynamicResource PbAccentTextBrush}" />
+                    <fi:SymbolIcon Symbol="Sparkle" FontSize="{StaticResource PbIconSizeLg}" Foreground="{DynamicResource PbAccentTextBrush}" />
                     <TextBlock Text="Want a quick tour?" FontSize="15" FontWeight="Bold"
                                Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
                 </StackPanel>

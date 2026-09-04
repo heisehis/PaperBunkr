@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Directors Cut: a film clapperboard with striped slate (negative space). Category-hued (#1F9E9E); rendered as-is by BrandMark. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="#1F9E9E">
+  <rect x="8" y="26" width="48" height="30"/>
+  <path fill-rule="evenodd" d="M8 12 H56 V24 H8 Z M16 12 L22 12 L14 24 L8 24 Z M28 12 L34 12 L26 24 L20 24 Z M40 12 L46 12 L38 24 L32 24 Z M52 12 L56 12 L56 20 L46 24 Z"/>
+</svg>

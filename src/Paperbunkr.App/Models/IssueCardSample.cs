@@ -64,6 +64,10 @@ public sealed partial class IssueCardSample : ObservableObject, ISelectableCard
 
     public bool IsInProgress => ReadFraction is > 0 and < 1;
 
+    /// <summary>Read-state badge for the detail-screen tile (docs/superpowers/specs/2026-09-04-
+    /// detail-screen-icons-and-glyphs-design.md §4).</summary>
+    public IssueTileGlyph TileGlyph => IsRead ? IssueTileGlyph.Read : IsInProgress ? IssueTileGlyph.InProgress : IssueTileGlyph.None;
+
     public string CoverDateLabel => CoverDate?.ToString("MMM yyyy") ?? string.Empty;
 
     public string RatingLabel => Rating is > 0 ? new string('★', System.Math.Clamp((int)System.Math.Round(Rating.Value), 1, 5)) : "—";

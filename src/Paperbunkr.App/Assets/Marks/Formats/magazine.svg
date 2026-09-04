@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Magazine: a framed cover with masthead and columns. Category-hued (#C77F1A); rendered as-is by BrandMark. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="#C77F1A">
+  <path fill-rule="evenodd" d="M11 5 H53 V59 H11 Z M17 11 H47 V53 H17 Z"/>
+  <rect x="20" y="14" width="24" height="8"/>
+  <rect x="20" y="26" width="10" height="24"/>
+  <rect x="34" y="26" width="10" height="24"/>
+</svg>

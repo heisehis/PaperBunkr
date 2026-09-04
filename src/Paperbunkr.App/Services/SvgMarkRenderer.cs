@@ -27,23 +27,26 @@ public static class SvgMarkRenderer
     private static readonly ConcurrentDictionary<string, Bitmap?> Cache = new();
 
     /// <summary>Rasterises <paramref name="avaresPath"/> into a bitmap fitted (aspect-preserving)
-    /// so its longest side is <paramref name="maxSize"/> px - a portrait mark (e.g. an ESRB rating
-    /// box) comes back the right shape, not letterboxed into a square.</summary>
+    /// so its <em>height</em> is <paramref name="targetHeight"/> px, with width following the
+    /// SVG's own aspect - marks are always displayed by <c>Image.Height</c>, so a wide publisher
+    /// wordmark comes back at full display resolution instead of a tiny longest-side fit that then
+    /// gets upscaled. Callers pass a supersampled height (see <see cref="Controls.BrandMark"/>) so
+    /// the downscale to display size stays crisp on high-DPI screens.</summary>
     /// <param name="tint">When set, every non-transparent pixel is replaced with this colour
     /// (SrcIn blend) - for single-colour marks that should follow the theme. Leave null to render
     /// the SVG's own colours.</param>
-    public static Bitmap? Render(string avaresPath, int maxSize, Color? tint = null)
+    public static Bitmap? Render(string avaresPath, int targetHeight, Color? tint = null)
     {
-        if (string.IsNullOrWhiteSpace(avaresPath) || maxSize <= 0)
+        if (string.IsNullOrWhiteSpace(avaresPath) || targetHeight <= 0)
         {
             return null;
         }
 
-        string key = $"{avaresPath}|{maxSize}|{(tint is { } c ? c.ToUInt32() : 0u)}";
-        return Cache.GetOrAdd(key, _ => RenderUncached(avaresPath, maxSize, tint));
+        string key = $"{avaresPath}|{targetHeight}|{(tint is { } c ? c.ToUInt32() : 0u)}";
+        return Cache.GetOrAdd(key, _ => RenderUncached(avaresPath, targetHeight, tint));
     }
 
-    private static Bitmap? RenderUncached(string avaresPath, int maxSize, Color? tint)
+    private static Bitmap? RenderUncached(string avaresPath, int targetHeight, Color? tint)
     {
         try
         {
@@ -70,7 +73,10 @@ public static class SvgMarkRenderer
                 return null;
             }
 
-            float fit = maxSize / Math.Max(bounds.Width, bounds.Height);
+            // Fit by height - marks render at Image.Height, so scaling by the SVG's own height
+            // gives a bitmap that is exactly display-resolution (times the caller's supersample),
+            // whether the art is square (flag), portrait (ESRB box) or a wide wordmark (publisher).
+            float fit = targetHeight / bounds.Height;
             int w = Math.Max(1, (int)MathF.Round(bounds.Width * fit));
             int h = Math.Max(1, (int)MathF.Round(bounds.Height * fit));
             var target = new PixelSize(w, h);

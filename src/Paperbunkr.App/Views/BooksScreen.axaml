@@ -314,7 +314,7 @@
 
                 <StackPanel IsVisible="{Binding ShowEmptyLibrary}" Spacing="12" MaxWidth="340"
                             HorizontalAlignment="Center" VerticalAlignment="Center">
-                    <fi:SymbolIcon FontSize="34" HorizontalAlignment="Center"
+                    <fi:SymbolIcon FontSize="{StaticResource PbIconSizeXl}" HorizontalAlignment="Center"
                           Symbol="Book" Foreground="{DynamicResource PbTextFaintBrush}" />
                     <TextBlock Classes="pbTextBody" Text="No books yet." TextAlignment="Center"
                                Foreground="{DynamicResource PbTextMutedBrush}" />
@@ -327,7 +327,7 @@
 
                 <StackPanel IsVisible="{Binding ShowNoMatches}" Spacing="12" MaxWidth="340"
                             HorizontalAlignment="Center" VerticalAlignment="Center">
-                    <fi:SymbolIcon FontSize="30" HorizontalAlignment="Center"
+                    <fi:SymbolIcon FontSize="{StaticResource PbIconSizeXl}" HorizontalAlignment="Center"
                           Symbol="Search" Foreground="{DynamicResource PbTextFaintBrush}" />
                     <TextBlock Classes="pbTextBody" TextAlignment="Center" Foreground="{DynamicResource PbTextMutedBrush}"
                                Text="{Binding SearchQuery, StringFormat='No books match “{0}”.'}" />

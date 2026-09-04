@@ -158,4 +158,35 @@ public class DetailBandViewModelTests
         Assert.True(vm.HasPublisher);
         Assert.False(vm.HasYear);
     }
+
+    // --- Language flag (docs/superpowers/specs/2026-09-04-detail-screen-icons-and-glyphs-design.md Part 2 §A) ---
+
+    [Fact]
+    public void LoadIssue_LanguageIso_ComesFromTheIssue()
+    {
+        var vm = new DetailBandViewModel();
+        vm.LoadIssue(new Issue { LanguageISO = "ja" });
+        Assert.Equal("ja", vm.LanguageIso);
+        Assert.True(vm.HasLanguage);
+    }
+
+    [Fact]
+    public void LoadSeries_LanguageIso_SetOnlyWhenIssuesAgree()
+    {
+        var same = new Series { Name = "S" };
+        same.Issues.Add(new Issue { LanguageISO = "en" });
+        same.Issues.Add(new Issue { LanguageISO = "EN" });
+        var vm1 = new DetailBandViewModel();
+        vm1.LoadSeries(same);
+        Assert.Equal("en", vm1.LanguageIso);
+        Assert.True(vm1.HasLanguage);
+
+        var mixed = new Series { Name = "S" };
+        mixed.Issues.Add(new Issue { LanguageISO = "en" });
+        mixed.Issues.Add(new Issue { LanguageISO = "ja" });
+        var vm2 = new DetailBandViewModel();
+        vm2.LoadSeries(mixed);
+        Assert.Null(vm2.LanguageIso);
+        Assert.False(vm2.HasLanguage);
+    }
 }

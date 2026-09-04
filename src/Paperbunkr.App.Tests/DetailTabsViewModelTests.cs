@@ -51,8 +51,8 @@ public class DetailTabsViewModelTests : IDisposable
         }
     }
 
-    private DetailTabsViewModel CreateViewModel(Action<int>? goToProperties = null, Action<IReadOnlyList<int>>? goToBulkProperties = null, Action? onSelectionChanged = null, IMetadataProvider? metadataProvider = null, Action<int>? navigateToCollection = null) =>
-        new(goToProperties ?? (_ => { }), goToBulkProperties ?? (_ => { }), onSelectionChanged, () => new PaperbunkrDbContext(_dbOptions), metadataProvider, onQuickRate: null, navigateToSeries: null, openInReader: null, navigateToCollection: navigateToCollection);
+    private DetailTabsViewModel CreateViewModel(Action<int>? goToProperties = null, Action<IReadOnlyList<int>>? goToBulkProperties = null, Action? onSelectionChanged = null, IMetadataProvider? metadataProvider = null, Action<int>? navigateToCollection = null, Action<int>? openInReader = null) =>
+        new(goToProperties ?? (_ => { }), goToBulkProperties ?? (_ => { }), onSelectionChanged, () => new PaperbunkrDbContext(_dbOptions), metadataProvider, onQuickRate: null, navigateToSeries: null, openInReader: openInReader, navigateToCollection: navigateToCollection);
 
     /// <summary>No-network stand-in for <see cref="AniListMetadataProvider"/> - see docs/superpowers/specs/2026-08-19-metadata-model-anilist-search-and-link-design.md.</summary>
     private sealed class FakeMetadataProvider : IMetadataProvider
@@ -81,7 +81,7 @@ public class DetailTabsViewModelTests : IDisposable
 
         vm.LoadSeries(LoadSeriesEntity());
 
-        Assert.Equal("Left to Right ▾", vm.ReadingModeLabel);
+        Assert.Equal("Left to Right", vm.ReadingModeLabel);
     }
 
     [Fact]
@@ -92,7 +92,7 @@ public class DetailTabsViewModelTests : IDisposable
 
         vm.ToggleReadingModeCommand.Execute(null);
 
-        Assert.Equal("Right to Left ▾", vm.ReadingModeLabel);
+        Assert.Equal("Right to Left", vm.ReadingModeLabel);
         using var context = new PaperbunkrDbContext(_dbOptions);
         Assert.Equal(ReadingMode.RightToLeft, context.Series.First(s => s.Id == _seriesId).ReadingMode);
     }
@@ -103,11 +103,11 @@ public class DetailTabsViewModelTests : IDisposable
         var vm = CreateViewModel();
         vm.LoadSeries(LoadSeriesEntity());
         vm.ToggleReadingModeCommand.Execute(null);
-        Assert.Equal("Right to Left ▾", vm.ReadingModeLabel);
+        Assert.Equal("Right to Left", vm.ReadingModeLabel);
 
         vm.ToggleReadingModeCommand.Execute(null);
 
-        Assert.Equal("Left to Right ▾", vm.ReadingModeLabel);
+        Assert.Equal("Left to Right", vm.ReadingModeLabel);
         using var context = new PaperbunkrDbContext(_dbOptions);
         Assert.Equal(ReadingMode.LeftToRight, context.Series.First(s => s.Id == _seriesId).ReadingMode);
     }
@@ -330,6 +330,56 @@ public class DetailTabsViewModelTests : IDisposable
         Assert.False(vm.Issues.First(i => i.Title == "#1").IsUnread);
     }
 
+    /// <summary>Bug found 2026-09-04: marking an issue read/unread from a Detail tile (right-click
+    /// or the Card-view checkmark) never told the host screen, so the hero's series-wide unread
+    /// count went stale until the next full reload ("the unread doesn't update when i finish
+    /// reading a comic"). <see cref="MarkIssuesReadState"/>-backed commands must invoke the same
+    /// selection-changed callback every other read-state/selection change already routes through.</summary>
+    [Fact]
+    public void MarkIssueRead_InvokesOnSelectionChanged_SoTheHostCanRefreshUnreadCount()
+    {
+        int changed = 0;
+        var vm = CreateViewModel(onSelectionChanged: () => changed++);
+        vm.LoadSeries(LoadSeriesEntity());
+
+        vm.MarkIssueReadCommand.Execute(vm.Issues.First(i => i.Title == "#1"));
+        Assert.True(changed > 0);
+
+        int afterRead = changed;
+        vm.MarkIssueUnreadCommand.Execute(vm.Issues.First(i => i.Title == "#1"));
+        Assert.True(changed > afterRead);
+    }
+
+    /// <summary>The tile-swap after Mark as Read only ever checked <c>Issues</c> - a special tile
+    /// silently kept its stale IsRead/dim state. Found alongside the bug above.</summary>
+    [Fact]
+    public void MarkIssueRead_OnASpecialTile_UpdatesTheSpecialsTileToo()
+    {
+        int seriesId;
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            var series = new Series { Name = "Has Specials" };
+            context.Series.Add(series);
+            context.SaveChanges();
+            seriesId = series.Id;
+            context.Issues.Add(new Issue { SeriesId = seriesId, Number = "1", Format = "Annual", PageCount = 10 });
+            context.SaveChanges();
+        }
+
+        var vm = CreateViewModel();
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            vm.LoadSeries(context.Series.Include(s => s.Issues).First(s => s.Id == seriesId));
+        }
+
+        var special = Assert.Single(vm.Specials);
+        Assert.True(special.IsUnread);
+
+        vm.MarkIssueReadCommand.Execute(special);
+
+        Assert.False(Assert.Single(vm.Specials).IsUnread);
+    }
+
     [Fact]
     public void MarkIssueRead_WithSelection_MarksTheWholeUnion_NotJustTheClickedTile()
     {
@@ -412,6 +462,81 @@ public class DetailTabsViewModelTests : IDisposable
     }
 
     [Fact]
+    public void FocusIssue_PlainClick_ReplacesAnyExistingSelection()
+    {
+        var vm = CreateViewModel();
+        vm.LoadSeries(LoadSeriesEntity());
+
+        vm.ToggleIssueSelection(vm.Issues[0], isShiftHeld: false); // ctrl-style multi-select
+        vm.ToggleIssueSelection(vm.Issues[1], isShiftHeld: false);
+        Assert.Equal(2, vm.SelectedIssueIds.Count);
+
+        vm.FocusIssue(vm.Issues[2]);
+
+        Assert.Equal(new[] { vm.Issues[2].Id }, vm.SelectedIssueIds);
+        Assert.False(vm.Issues[0].IsSelected);
+        Assert.False(vm.Issues[1].IsSelected);
+        Assert.True(vm.Issues[2].IsSelected);
+    }
+
+    [Fact]
+    public void FocusIssue_OnSpecialsTabTile_SelectsIt()
+    {
+        int seriesId;
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            var series = new Series { Name = "Has Specials" };
+            context.Series.Add(series);
+            context.SaveChanges();
+            seriesId = series.Id;
+            context.Issues.AddRange(
+                new Issue { SeriesId = seriesId, Number = "1" },
+                new Issue { SeriesId = seriesId, Number = "1", Format = "Annual" });
+            context.SaveChanges();
+        }
+
+        var vm = CreateViewModel();
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            vm.LoadSeries(context.Series.Include(s => s.Issues).First(s => s.Id == seriesId));
+        }
+
+        var special = Assert.Single(vm.Specials);
+        vm.FocusIssue(special);
+
+        Assert.True(special.IsSelected);
+        Assert.Equal(new[] { special.Id }, vm.SelectedIssueIds);
+    }
+
+    [Fact]
+    public void OpenIssue_InvokesOpenInReaderCallback_ForSpecialsToo()
+    {
+        int seriesId;
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            var series = new Series { Name = "Open Me" };
+            context.Series.Add(series);
+            context.SaveChanges();
+            seriesId = series.Id;
+            context.Issues.AddRange(
+                new Issue { SeriesId = seriesId, Number = "1" },
+                new Issue { SeriesId = seriesId, Number = "1", Format = "Annual" });
+            context.SaveChanges();
+        }
+
+        int? opened = null;
+        var vm = CreateViewModel(openInReader: id => opened = id);
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            vm.LoadSeries(context.Series.Include(s => s.Issues).First(s => s.Id == seriesId));
+        }
+
+        vm.OpenIssue(vm.Specials.Single());
+
+        Assert.Equal(vm.Specials.Single().Id, opened);
+    }
+
+    [Fact]
     public void ToggleIssueSelection_ShiftClick_SelectsContiguousRange()
     {
         var vm = CreateViewModel();
@@ -456,7 +581,7 @@ public class DetailTabsViewModelTests : IDisposable
 
         vm.ToggleReadingModeCommand.Execute(null);
 
-        Assert.Equal("Right to Left ▾", vm.ReadingModeLabel);
+        Assert.Equal("Right to Left", vm.ReadingModeLabel);
     }
 
     // --- Related tab (docs/superpowers/specs/2026-08-17-metadata-model-phase3-media-relations-

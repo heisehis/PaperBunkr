@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- 1/2 (half issue): stacked fraction with a slash. Category-hued (#3B7BC4); rendered as-is by BrandMark. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="#3B7BC4">
+  <path d="M10 16 L22 11 L22 40 L15 40 L15 21 L10 23 Z"/>
+  <path d="M20 54 L40 8 L48 8 L28 54 Z"/>
+  <path d="M38 34 C38 24 58 24 58 35 C58 42 52 46 46 51 L58 51 L58 57 L37 57 L37 51 L48 40 C51 37 51 33 47 32 C43 31 39 33 39 37 Z"/>
+</svg>

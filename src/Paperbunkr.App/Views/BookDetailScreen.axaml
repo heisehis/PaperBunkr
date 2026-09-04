@@ -70,7 +70,12 @@
 
             <!-- ================= BOOK MODE ================= -->
             <StackPanel Margin="0,0,0,50" IsVisible="{Binding IsBookMode}">
-                <Button Classes="backLink" Command="{Binding GoBackCommand}" Content="{Binding BackLabel}" Margin="28,20,28,12" />
+                <Button Classes="backLink" Command="{Binding GoBackCommand}" Margin="28,20,28,12">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <fi:SymbolIcon Symbol="ArrowLeft" FontSize="{StaticResource PbIconSizeSm}" VerticalAlignment="Center" />
+                        <TextBlock Text="{Binding BackLabel}" VerticalAlignment="Center" />
+                    </StackPanel>
+                </Button>
 
                 <views:DetailHero DataContext="{Binding}" />
                 <views:DetailBand DataContext="{Binding Band}" />
@@ -79,20 +84,30 @@
                     <!-- Reading progress -->
                     <Border Classes="sectionCard" Margin="0,18,0,0">
                         <StackPanel>
-                            <TextBlock Classes="sectionTitle" Text="READING PROGRESS" />
+                            <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,0,0,10">
+                                <fi:SymbolIcon Symbol="BookClock" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" />
+                                <TextBlock Classes="sectionTitle" Text="READING PROGRESS" Margin="0" />
+                            </StackPanel>
                             <TextBlock Text="{Binding ProgressLabel}" Classes="pbTextBody" IsVisible="{Binding HasChapterProgress}"
                                        Foreground="{DynamicResource PbTextBrush}" Margin="0,0,0,8" />
                             <ProgressBar Minimum="0" Maximum="1" Value="{Binding ProgressFraction}" Height="6"
                                          IsVisible="{Binding HasChapterProgress}" Margin="0,0,0,12" />
-                            <Button Classes="detailAction ghost" HorizontalAlignment="Left"
-                                    Content="{Binding FinishedToggleLabel}" Command="{Binding ToggleFinishedCommand}" />
+                            <Button Classes="detailAction ghost" HorizontalAlignment="Left" Command="{Binding ToggleFinishedCommand}">
+                                <StackPanel Orientation="Horizontal" Spacing="7">
+                                    <fi:SymbolIcon Symbol="CheckmarkCircle" FontSize="{StaticResource PbIconSizeSm}" VerticalAlignment="Center" />
+                                    <TextBlock Text="{Binding FinishedToggleLabel}" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </Button>
                         </StackPanel>
                     </Border>
 
                     <!-- Chapters -->
                     <Border Classes="sectionCard" IsVisible="{Binding HasChapters}">
                         <StackPanel>
-                            <TextBlock Classes="sectionTitle" Text="CHAPTERS" />
+                            <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,0,0,10">
+                                <fi:SymbolIcon Symbol="TextBulletList" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" />
+                                <TextBlock Classes="sectionTitle" Text="CHAPTERS" Margin="0" />
+                            </StackPanel>
                             <ItemsControl ItemsSource="{Binding Chapters}">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate x:DataType="models:BookChapterSummary">
@@ -120,21 +135,28 @@
                     <!-- Bookmarks -->
                     <Border Classes="sectionCard" IsVisible="{Binding HasBookmarks}">
                         <StackPanel>
-                            <TextBlock Classes="sectionTitle" Text="BOOKMARKS" />
+                            <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,0,0,10">
+                                <fi:SymbolIcon Symbol="Bookmark" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" />
+                                <TextBlock Classes="sectionTitle" Text="BOOKMARKS" Margin="0" />
+                            </StackPanel>
                             <ItemsControl ItemsSource="{Binding Bookmarks}">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate x:DataType="models:BookBookmarkSummary">
                                         <Button Classes="listRow"
                                                 Command="{Binding $parent[ItemsControl].((vm:BookDetailScreenViewModel)DataContext).OpenBookmarkCommand}"
                                                 CommandParameter="{Binding}">
-                                            <StackPanel Spacing="3">
-                                                <TextBlock Text="{Binding Excerpt}" Foreground="{DynamicResource PbTextBrush}"
-                                                           FontSize="12.5" TextWrapping="Wrap" MaxLines="2" TextTrimming="CharacterEllipsis" />
-                                                <StackPanel Orientation="Horizontal" Spacing="8">
-                                                    <TextBlock Text="{Binding ChapterTitle}" Classes="pbTextCaption" />
-                                                    <TextBlock Text="{Binding CreatedTime, StringFormat='{}{0:MMM d, yyyy}'}" Classes="pbTextCaption" />
+                                            <Grid ColumnDefinitions="Auto,*">
+                                                <fi:SymbolIcon Grid.Column="0" Symbol="Bookmark" FontSize="{StaticResource PbIconSizeXs}"
+                                                               Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Top" Margin="0,2,9,0" />
+                                                <StackPanel Grid.Column="1" Spacing="3">
+                                                    <TextBlock Text="{Binding Excerpt}" Foreground="{DynamicResource PbTextBrush}"
+                                                               FontSize="12.5" TextWrapping="Wrap" MaxLines="2" TextTrimming="CharacterEllipsis" />
+                                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                                        <TextBlock Text="{Binding ChapterTitle}" Classes="pbTextCaption" />
+                                                        <TextBlock Text="{Binding CreatedTime, StringFormat='{}{0:MMM d, yyyy}'}" Classes="pbTextCaption" />
+                                                    </StackPanel>
                                                 </StackPanel>
-                                            </StackPanel>
+                                            </Grid>
                                         </Button>
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
@@ -145,7 +167,7 @@
                     <Button Classes="detailAction ghost" HorizontalAlignment="Left" Margin="0,20,0,0" Foreground="#E06060">
                         <Button.Content>
                             <StackPanel Orientation="Horizontal" Spacing="7">
-                                <fi:SymbolIcon Symbol="Delete" FontSize="15" Foreground="#E06060" />
+                                <fi:SymbolIcon Symbol="Delete" FontSize="{StaticResource PbIconSizeMd}" Foreground="#E06060" />
                                 <TextBlock Text="Delete Book" VerticalAlignment="Center" />
                             </StackPanel>
                         </Button.Content>
@@ -165,7 +187,12 @@
 
             <!-- ================= SERIES MODE ================= -->
             <StackPanel Margin="0,0,0,50" IsVisible="{Binding IsSeriesMode}">
-                <Button Classes="backLink" Command="{Binding GoBackCommand}" Content="{Binding BackLabel}" Margin="28,20,28,12" />
+                <Button Classes="backLink" Command="{Binding GoBackCommand}" Margin="28,20,28,12">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <fi:SymbolIcon Symbol="ArrowLeft" FontSize="{StaticResource PbIconSizeSm}" VerticalAlignment="Center" />
+                        <TextBlock Text="{Binding BackLabel}" VerticalAlignment="Center" />
+                    </StackPanel>
+                </Button>
 
                 <views:DetailHero DataContext="{Binding}" />
 

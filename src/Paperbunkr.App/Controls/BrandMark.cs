@@ -18,6 +18,13 @@ public enum MarkFamily
     Format,
     AgeRating,
     Language,
+
+    /// <summary><see cref="Paperbunkr.Data.Entities.ReadingStatus"/> as a coloured glyph
+    /// (docs/superpowers/specs/2026-09-04-detail-screen-icons-and-glyphs-design.md §8a).</summary>
+    ReadingStatus,
+
+    /// <summary>A manga chapter's scanlation group as a "people" glyph + name.</summary>
+    ScanGroup,
 }
 
 /// <summary>
@@ -55,6 +62,12 @@ public class BrandMark : TemplatedControl
     public static readonly DirectProperty<BrandMark, string?> LabelProperty =
         AvaloniaProperty.RegisterDirect<BrandMark, string?>(nameof(Label), o => o._label);
 
+    /// <summary>Per-mark glyph colour for a <see cref="MarkKind.Glyph"/> result whose
+    /// <see cref="MarkSpec.Foreground"/> is a <c>#hex</c> (reading-status). Null → the template
+    /// falls back to the control's inherited <see cref="TemplatedControl.Foreground"/>.</summary>
+    public static readonly DirectProperty<BrandMark, IBrush?> GlyphBrushProperty =
+        AvaloniaProperty.RegisterDirect<BrandMark, IBrush?>(nameof(GlyphBrush), o => o._glyphBrush);
+
     public static readonly DirectProperty<BrandMark, IBrush?> ChipBackgroundProperty =
         AvaloniaProperty.RegisterDirect<BrandMark, IBrush?>(nameof(ChipBackground), o => o._chipBackground);
 
@@ -80,6 +93,7 @@ public class BrandMark : TemplatedControl
     private Symbol _glyph;
     private string? _label;
     private IBrush? _chipBackground;
+    private IBrush? _glyphBrush;
     private MarkKind _kind = MarkKind.None;
     private bool _showLabel;
     private bool _isImage;
@@ -96,6 +110,7 @@ public class BrandMark : TemplatedControl
     public Symbol Glyph => _glyph;
     public string? Label => _label;
     public IBrush? ChipBackground => _chipBackground;
+    public IBrush? GlyphBrush => _glyphBrush;
     public MarkKind ResolvedKind => _kind;
     public bool ShowLabel => _showLabel;
     public bool IsImage => _isImage;
@@ -129,6 +144,8 @@ public class BrandMark : TemplatedControl
             MarkFamily.Format => MarkResolver.Instance.ResolveFormat(Value),
             MarkFamily.AgeRating => MarkResolver.Instance.ResolveAgeRating(Value),
             MarkFamily.Language => MarkResolver.Instance.ResolveLanguage(Value),
+            MarkFamily.ReadingStatus => MarkResolver.Instance.ResolveReadingStatus(Value),
+            MarkFamily.ScanGroup => MarkResolver.Instance.ResolveScanGroup(Value),
             _ => MarkSpec.None,
         };
 
@@ -157,10 +174,21 @@ public class BrandMark : TemplatedControl
         IBrush? bg = TryBrush(spec.Background);
         SetAndRaise(ChipBackgroundProperty, ref _chipBackground, bg);
 
+        // A Glyph result may carry its own #hex foreground (reading-status colour-codes each
+        // status); anything else falls back to the control's inherited Foreground. Rebuild() also
+        // re-runs on ForegroundProperty changes, so this stays correct if the theme swaps the
+        // inherited brush later. SVG tinting is handled separately below.
+        IBrush? glyphBrush = spec.Kind is MarkKind.Glyph ? (TryBrush(spec.Foreground) ?? Foreground) : null;
+        SetAndRaise(GlyphBrushProperty, ref _glyphBrush, glyphBrush);
+
         IImage? image = null;
         if (spec.Kind is MarkKind.SvgAsset or MarkKind.Flag && spec.AssetPath is { } path)
         {
-            int px = Math.Max(8, (int)Math.Round(MarkSize * 2)); // render 2x for crispness
+            // Supersample the SVG raster well above display height (4x, min 64px) so it stays
+            // crisp after Avalonia's HighQuality downscale to Image.Height on 150-200% DPI
+            // screens - 2x was visibly soft on publisher wordmarks / provider logos there
+            // (user report 2026-09-04). Marks are tiny + memoised, so the extra pixels are free.
+            int px = Math.Max(64, (int)Math.Round(MarkSize * 4));
             Color? tint = spec.Foreground == MarkResolver.ThemeTint
                 ? (Foreground as ISolidColorBrush)?.Color ?? Colors.White
                 : null;

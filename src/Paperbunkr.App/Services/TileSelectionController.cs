@@ -70,6 +70,37 @@ public sealed class TileSelectionController<TCard> where TCard : class, ISelecta
         _lastToggledIndex = index;
     }
 
+    /// <summary>
+    /// Exclusive single-select (plain click / tap): clears
+    /// <see cref="ISelectableCard.IsSelected"/> on every tile in <paramref name="allVisibleItems"/>
+    /// - pass every on-screen collection sharing this controller (e.g. an Issues list and a
+    /// separate Specials list) so a tile selected in one visibly deselects when the user
+    /// plain-clicks a tile in the other - then selects just <paramref name="item"/>.
+    /// <paramref name="orderedItems"/> is the list <paramref name="item"/> belongs to, kept as the
+    /// anchor for a subsequent shift-click range.
+    /// </summary>
+    public void ReplaceSelection(IList<TCard> orderedItems, TCard item, IEnumerable<IEnumerable<TCard>> allVisibleItems)
+    {
+        int index = orderedItems.IndexOf(item);
+        if (index < 0)
+        {
+            return;
+        }
+
+        foreach (var list in allVisibleItems)
+        {
+            foreach (var card in list)
+            {
+                card.IsSelected = false;
+            }
+        }
+
+        _selectedIds.Clear();
+        item.IsSelected = true;
+        _selectedIds.Add(item.Id);
+        _lastToggledIndex = index;
+    }
+
     /// <summary>Selects every item in <paramref name="items"/> (the currently displayed set) - backs
     /// the context menu's "Select All". Idempotent; also sets each item's visible
     /// <see cref="ISelectableCard.IsSelected"/> flag.</summary>

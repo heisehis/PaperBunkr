@@ -113,7 +113,7 @@
                             <TextBox Text="{Binding BackupLocation}" Width="320" IsReadOnly="True" />
                             <Button Classes="headerAction ghost" Command="{Binding BrowseBackupLocationCommand}">
                                 <StackPanel Orientation="Horizontal" Spacing="6">
-                                    <fi:SymbolIcon Symbol="FolderOpen" FontSize="11" />
+                                    <fi:SymbolIcon Symbol="FolderOpen" FontSize="{StaticResource PbIconSizeXs}" />
                                     <TextBlock Text="Browse…" />
                                 </StackPanel>
                             </Button>
@@ -147,7 +147,7 @@
                                                    Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
                                         <Button Grid.Column="1" Classes="headerAction ghost" Command="{Binding RestoreCommand}">
                                             <StackPanel Orientation="Horizontal" Spacing="6">
-                                                <fi:SymbolIcon Symbol="ArrowUndo" FontSize="11" />
+                                                <fi:SymbolIcon Symbol="ArrowUndo" FontSize="{StaticResource PbIconSizeXs}" />
                                                 <TextBlock Text="{Binding RestoreLabel}" />
                                             </StackPanel>
                                         </Button>

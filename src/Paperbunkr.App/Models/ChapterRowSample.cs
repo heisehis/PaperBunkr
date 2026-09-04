@@ -30,6 +30,11 @@ public sealed class ChapterRowSample
 
     public bool HasBookmark => BookmarkCount > 0;
     public bool HasScanInformation => !string.IsNullOrWhiteSpace(ScanInformation);
+
+    /// <summary>Fully-read badge on the chapter row (docs/superpowers/specs/2026-09-04-detail-
+    /// screen-icons-and-glyphs-design.md §8) - suppressed while still in progress, since the
+    /// row already shows a progress bar for that state.</summary>
+    public bool ShowReadGlyph => IsRead && !IsInProgress;
 }
 
 /// <summary>A volume section in the manga release-feed Chapters tab (docs/superpowers/specs/

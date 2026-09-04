@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Box Set: an isometric box, three faces. Category-hued (#C77F1A); rendered as-is by BrandMark. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="#C77F1A">
+  <path d="M32 6 L56 18 L32 30 L8 18 Z"/>
+  <path d="M8 20 L31 31 L31 56 L8 45 Z"/>
+  <path d="M56 20 L33 31 L33 56 L56 45 Z"/>
+</svg>

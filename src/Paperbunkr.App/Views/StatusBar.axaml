@@ -1,0 +1,152 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:fi="using:FluentIcons.Avalonia"
+             xmlns:vm="using:Paperbunkr.App.ViewModels"
+             xmlns:views="using:Paperbunkr.App.Views"
+             xmlns:models="using:Paperbunkr.App.Models"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="1000" d:DesignHeight="26"
+             x:Class="Paperbunkr.App.Views.StatusBar"
+             x:DataType="vm:MainViewModel">
+
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceInclude Source="avares://Paperbunkr.App/Views/ActivityTemplates.axaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </UserControl.Resources>
+
+    <UserControl.Styles>
+        <Style Selector="Button.activityIconBtn">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="5" />
+            <Setter Property="MinWidth" Value="30" />
+            <Setter Property="MinHeight" Value="30" />
+            <Setter Property="CornerRadius" Value="5" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+        <Style Selector="Button.activityIconBtn:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="{DynamicResource PbSurface2Brush}" />
+        </Style>
+        <Style Selector="Button.activityLink">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="MinHeight" Value="0" />
+            <Setter Property="HorizontalAlignment" Value="Left" />
+            <Setter Property="HorizontalContentAlignment" Value="Left" />
+            <Setter Property="FontSize" Value="{DynamicResource PbFontSizeOverline}" />
+            <Setter Property="Foreground" Value="{DynamicResource PbAccentTextBrush}" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style Selector="TextBlock.activitySectionHeader">
+            <Setter Property="FontSize" Value="{DynamicResource PbFontSizeMicro}" />
+            <Setter Property="FontWeight" Value="Bold" />
+            <Setter Property="LetterSpacing" Value="0.5" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextFaintBrush}" />
+            <Setter Property="Margin" Value="2,8,0,3" />
+        </Style>
+
+        <Style Selector="Border#IndicatorPulse">
+            <Style.Animations>
+                <Animation Duration="0:0:1.6" IterationCount="Infinite" Easing="SineEaseInOut">
+                    <KeyFrame Cue="0%"><Setter Property="Opacity" Value="1" /></KeyFrame>
+                    <KeyFrame Cue="50%"><Setter Property="Opacity" Value="0.5" /></KeyFrame>
+                    <KeyFrame Cue="100%"><Setter Property="Opacity" Value="1" /></KeyFrame>
+                </Animation>
+            </Style.Animations>
+        </Style>
+    </UserControl.Styles>
+
+    <Panel>
+        <Border Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}"
+                BorderThickness="0,1,0,0" Height="26">
+            <Grid ColumnDefinitions="*,Auto" Margin="12,0,8,0">
+                <TextBlock Grid.Column="0" Text="{Binding StatusBar.ContextText}" VerticalAlignment="Center"
+                           FontSize="{DynamicResource PbFontSizeMicro}" Foreground="{DynamicResource PbTextFaintBrush}"
+                           TextTrimming="CharacterEllipsis" />
+
+                <Button Grid.Column="1" x:Name="ActivityIndicatorButton" Classes="activityIconBtn"
+                        Padding="8,3" MinHeight="20"
+                        Command="{Binding StatusBar.ToggleActivityCenterCommand}"
+                        AutomationProperties.Name="Activity"
+                        AutomationProperties.HelpText="{Binding StatusBar.IndicatorText}"
+                        ToolTip.Tip="Activity">
+                    <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                        <Border Width="6" Height="6" CornerRadius="3" VerticalAlignment="Center"
+                                Background="{DynamicResource PbTextFaintBrush}"
+                                IsVisible="{Binding !StatusBar.HasActiveJobs}" />
+                        <Border x:Name="IndicatorPulse" Width="7" Height="7" CornerRadius="3.5" VerticalAlignment="Center"
+                                Background="{DynamicResource PbAccentBrush}"
+                                IsVisible="{Binding StatusBar.HasActiveJobs}" />
+                        <TextBlock Text="{Binding StatusBar.IndicatorText}" VerticalAlignment="Center"
+                                   FontSize="{DynamicResource PbFontSizeMicro}" Foreground="{DynamicResource PbTextMutedBrush}"
+                                   IsVisible="{Binding StatusBar.HasActiveJobs}" />
+                        <Border CornerRadius="999" Background="{DynamicResource PbBadgeBrush}" Padding="5,0" MinWidth="14"
+                                VerticalAlignment="Center" IsVisible="{Binding StatusBar.HasAlerts}">
+                            <TextBlock Text="{Binding StatusBar.UnreadAlertCount}" FontSize="9.5" HorizontalAlignment="Center"
+                                       Foreground="{DynamicResource PbBadgeTextBrush}" />
+                        </Border>
+                        <fi:SymbolIcon Symbol="ChevronUp" FontSize="10" VerticalAlignment="Center"
+                                       Foreground="{DynamicResource PbTextFaintBrush}" />
+                    </StackPanel>
+                </Button>
+            </Grid>
+        </Border>
+
+        <!-- ===== Tier 1: peek popover ===== -->
+        <Popup PlacementTarget="{Binding #ActivityIndicatorButton}" Placement="TopEdgeAlignedRight"
+               VerticalOffset="-6" IsLightDismissEnabled="True"
+               IsOpen="{Binding ActivityCenter.IsPeekOpen, Mode=TwoWay}">
+            <Border Width="320" MaxHeight="420" Background="{DynamicResource PbSurface2Brush}"
+                    BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
+                    CornerRadius="{DynamicResource PbRadius}" BoxShadow="0 8 30 0 #80000000"
+                    DataContext="{Binding ActivityCenter}">
+                <Grid RowDefinitions="Auto,*,Auto">
+                    <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="12,10">
+                        <TextBlock Grid.Column="0" Text="ACTIVITY" FontWeight="Bold" LetterSpacing="0.6"
+                                   FontSize="{DynamicResource PbFontSizeMicro}" Foreground="{DynamicResource PbTextFaintBrush}"
+                                   VerticalAlignment="Center" />
+                        <Button Grid.Column="1" Classes="activityLink" Content="See all →" Command="{Binding OpenDrawerCommand}" />
+                    </Grid>
+
+                    <ScrollViewer Grid.Row="1" Padding="10,0">
+                        <StackPanel Spacing="1">
+                            <TextBlock Classes="activitySectionHeader" Text="RUNNING" IsVisible="{Binding HasRunningJobs}" />
+                            <ItemsControl ItemsSource="{Binding RunningJobs}" ItemTemplate="{StaticResource ActivityJobRowTemplate}" />
+
+                            <StackPanel IsVisible="{Binding UpkeepJob.UpkeepActive, FallbackValue=False}">
+                                <TextBlock Classes="activitySectionHeader" Text="BACKGROUND UPKEEP" />
+                                <Border Background="{DynamicResource PbSurface3Brush}" CornerRadius="{DynamicResource PbRadiusSm}" Padding="9,7" Margin="0,2">
+                                    <TextBlock Text="{Binding UpkeepJob.Detail}" FontSize="{DynamicResource PbFontSizeOverline}"
+                                               Foreground="{DynamicResource PbTextMutedBrush}" TextWrapping="Wrap" />
+                                </Border>
+                            </StackPanel>
+
+                            <TextBlock Classes="activitySectionHeader" Text="FINISHED" IsVisible="{Binding HasRecentJobs}" />
+                            <ItemsControl ItemsSource="{Binding RecentJobsForPeek}" ItemTemplate="{StaticResource ActivityJobRowTemplate}" />
+
+                            <TextBlock Classes="activitySectionHeader" Text="ALERTS" IsVisible="{Binding HasAlerts}" />
+                            <ItemsControl ItemsSource="{Binding Alerts}" ItemTemplate="{StaticResource ActivityAlertRowTemplate}" />
+
+                            <TextBlock Text="Nothing running." FontSize="{DynamicResource PbFontSizeOverline}"
+                                       Foreground="{DynamicResource PbTextFaintBrush}" Margin="2,10"
+                                       IsVisible="{Binding !HasRunningJobs}" />
+                        </StackPanel>
+                    </ScrollViewer>
+
+                    <Grid Grid.Row="2" ColumnDefinitions="Auto,Auto,*" Margin="12,8" ColumnSpacing="12">
+                        <Button Grid.Column="0" Classes="activityLink" Content="Stop all" Command="{Binding StopAllCommand}"
+                                IsVisible="{Binding HasRunningJobs}" />
+                        <Button Grid.Column="1" Classes="activityLink" Content="Clear finished" Command="{Binding ClearFinishedCommand}"
+                                IsVisible="{Binding HasRecentJobs}" />
+                    </Grid>
+                </Grid>
+            </Border>
+        </Popup>
+    </Panel>
+</UserControl>

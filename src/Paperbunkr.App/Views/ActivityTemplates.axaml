@@ -1,0 +1,115 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:fi="using:FluentIcons.Avalonia"
+                    xmlns:views="using:Paperbunkr.App.Views"
+                    xmlns:vm="using:Paperbunkr.App.ViewModels"
+                    xmlns:models="using:Paperbunkr.App.Models">
+
+    <!-- Shared row templates for the Activity Center peek + drawer (docs/superpowers/specs/
+         2026-09-03-activity-center-design.md). Each host ItemsControl's DataContext is the
+         ActivityCenterViewModel, so row commands bind through $parent[ItemsControl].DataContext. -->
+
+    <DataTemplate x:Key="ActivityJobRowTemplate" DataType="models:ActivityJob">
+        <Border Background="{DynamicResource PbSurface3Brush}" CornerRadius="{DynamicResource PbRadiusSm}"
+                Padding="9,7" Margin="0,2">
+            <StackPanel Spacing="3">
+                <Grid ColumnDefinitions="Auto,*,Auto">
+                    <fi:SymbolIcon Grid.Column="0" FontSize="13" Margin="0,0,7,0" VerticalAlignment="Center"
+                                   Symbol="{Binding Kind, Converter={x:Static views:ActivityKindIconConverter.Instance}}"
+                                   Foreground="{Binding Status, Converter={x:Static views:ActivityStatusBrushConverter.Instance}}" />
+
+                    <TextBlock Grid.Column="1" Text="{Binding Title}" FontSize="{DynamicResource PbFontSizeControl}"
+                               FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}"
+                               TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Title}" VerticalAlignment="Center" />
+
+                    <Button Grid.Column="2" Classes="activityIconBtn" IsVisible="{Binding IsRunning}"
+                            Command="{Binding $parent[ItemsControl].((vm:ActivityCenterViewModel)DataContext).CancelJobCommand}"
+                            CommandParameter="{Binding}"
+                            AutomationProperties.Name="Cancel job" ToolTip.Tip="Cancel">
+                        <fi:SymbolIcon Symbol="Dismiss" FontSize="11" />
+                    </Button>
+
+                    <Border Grid.Column="2" IsVisible="{Binding IsFinished}" CornerRadius="999" Padding="7,1"
+                            Background="{DynamicResource PbSurface2Brush}" VerticalAlignment="Center">
+                        <TextBlock FontSize="{DynamicResource PbFontSizeMicro}"
+                                   Text="{Binding Status, Converter={x:Static views:ActivityStatusLabelConverter.Instance}}"
+                                   Foreground="{Binding Status, Converter={x:Static views:ActivityStatusBrushConverter.Instance}}" />
+                    </Border>
+                </Grid>
+
+                <TextBlock Text="{Binding Detail}" FontSize="{DynamicResource PbFontSizeOverline}"
+                           Foreground="{DynamicResource PbTextMutedBrush}" TextTrimming="CharacterEllipsis"
+                           IsVisible="{Binding Detail, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+
+                <ProgressBar Minimum="0" Maximum="1" Value="{Binding Fraction}" Height="3" CornerRadius="2"
+                             IsIndeterminate="{Binding IsIndeterminate}" IsVisible="{Binding IsRunning}" />
+
+                <Button Classes="activityLink"
+                        IsVisible="{Binding ResultLink, Converter={x:Static ObjectConverters.IsNotNull}}"
+                        Command="{Binding $parent[ItemsControl].((vm:ActivityCenterViewModel)DataContext).FollowLinkCommand}"
+                        CommandParameter="{Binding ResultLink}"
+                        Content="{Binding ResultSummary}" />
+            </StackPanel>
+        </Border>
+    </DataTemplate>
+
+    <DataTemplate x:Key="ActivityAlertRowTemplate" DataType="vm:ActivityAlertViewModel">
+        <Border Background="{DynamicResource PbSurface3Brush}" CornerRadius="{DynamicResource PbRadiusSm}"
+                Padding="9,7" Margin="0,2" BorderThickness="3,0,0,0"
+                BorderBrush="{Binding Alert.Severity, Converter={x:Static views:ActivityStatusBrushConverter.Instance}}">
+            <Grid ColumnDefinitions="Auto,*,Auto">
+                <fi:SymbolIcon Grid.Column="0" FontSize="13" Margin="0,0,7,0" VerticalAlignment="Top"
+                               Symbol="{Binding Alert.Severity, Converter={x:Static views:ActivitySeverityIconConverter.Instance}}"
+                               Foreground="{Binding Alert.Severity, Converter={x:Static views:ActivityStatusBrushConverter.Instance}}" />
+                <StackPanel Grid.Column="1" Spacing="2">
+                    <TextBlock Text="{Binding Alert.Title}" FontSize="{DynamicResource PbFontSizeControl}"
+                               Foreground="{DynamicResource PbTextBrush}" TextWrapping="Wrap" />
+                    <TextBlock Text="{Binding Alert.Detail}" FontSize="{DynamicResource PbFontSizeOverline}"
+                               Foreground="{DynamicResource PbTextMutedBrush}" TextWrapping="Wrap"
+                               IsVisible="{Binding Alert.Detail, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                    <Button Classes="activityLink" Content="{Binding Alert.ActionLabel}"
+                            Command="{Binding FollowLinkCommand}"
+                            IsVisible="{Binding Alert.ActionLabel, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                </StackPanel>
+                <Button Grid.Column="2" Classes="activityIconBtn" Command="{Binding DismissCommand}"
+                        AutomationProperties.Name="Dismiss alert" ToolTip.Tip="Dismiss">
+                    <fi:SymbolIcon Symbol="Dismiss" FontSize="11" />
+                </Button>
+            </Grid>
+        </Border>
+    </DataTemplate>
+
+    <DataTemplate x:Key="ActivityHistoryRowTemplate" DataType="models:ActivityHistoryRow">
+        <Border Padding="10,8" BorderThickness="0,0,0,1" BorderBrush="{DynamicResource PbBorderBrush}">
+            <Grid ColumnDefinitions="Auto,2*,3*,Auto">
+                <fi:SymbolIcon Grid.Column="0" FontSize="13" Margin="0,2,10,0" VerticalAlignment="Top"
+                               Symbol="{Binding Kind, Converter={x:Static views:ActivityKindIconConverter.Instance}}"
+                               Foreground="{Binding Status, Converter={x:Static views:ActivityStatusBrushConverter.Instance}}" />
+                <StackPanel Grid.Column="1" Spacing="2" Margin="0,0,10,0">
+                    <TextBlock Text="{Binding Title}" FontSize="{DynamicResource PbFontSizeControl}"
+                               FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}" TextWrapping="Wrap" />
+                    <StackPanel Orientation="Horizontal" Spacing="4">
+                        <TextBlock Text="{Binding StartedUtc, Converter={x:Static views:RelativeTimeConverter.Instance}}"
+                                   FontSize="{DynamicResource PbFontSizeMicro}" Foreground="{DynamicResource PbTextFaintBrush}" />
+                        <TextBlock Text="·" FontSize="{DynamicResource PbFontSizeMicro}" Foreground="{DynamicResource PbTextFaintBrush}" />
+                        <TextBlock Text="{Binding TriggerLabel}" FontSize="{DynamicResource PbFontSizeMicro}" Foreground="{DynamicResource PbTextFaintBrush}" />
+                    </StackPanel>
+                </StackPanel>
+                <StackPanel Grid.Column="2" Spacing="3" Margin="0,0,10,0">
+                    <TextBlock Text="{Binding ResultSummary}" FontSize="{DynamicResource PbFontSizeOverline}"
+                               Foreground="{DynamicResource PbTextMutedBrush}" TextWrapping="Wrap" />
+                    <Button Classes="activityLink"
+                            IsVisible="{Binding HasLink}"
+                            Command="{Binding $parent[ItemsControl].((vm:ActivityCenterViewModel)DataContext).FollowLinkCommand}"
+                            CommandParameter="{Binding ResultLink}"
+                            Content="Review →" />
+                </StackPanel>
+                <TextBlock Grid.Column="3" VerticalAlignment="Top"
+                           Text="{Binding Status, Converter={x:Static views:ActivityStatusLabelConverter.Instance}}"
+                           FontSize="{DynamicResource PbFontSizeMicro}"
+                           Foreground="{Binding Status, Converter={x:Static views:ActivityStatusBrushConverter.Instance}}" />
+            </Grid>
+        </Border>
+    </DataTemplate>
+
+</ResourceDictionary>

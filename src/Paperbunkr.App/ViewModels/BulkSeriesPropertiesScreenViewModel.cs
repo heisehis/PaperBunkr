@@ -22,18 +22,20 @@ public partial class BulkSeriesPropertiesScreenViewModel : ViewModelBase
 {
     private readonly Action _goBack;
     private readonly Func<PaperbunkrDbContext> _contextFactory;
+    private readonly Action<int>? _enqueueMetadataWriteBack;
     private List<int> _seriesIds = new();
 
-    public BulkSeriesPropertiesScreenViewModel(Action goBack)
-        : this(goBack, PaperbunkrDb.CreateContext)
+    public BulkSeriesPropertiesScreenViewModel(Action goBack, Action<int>? enqueueMetadataWriteBack = null)
+        : this(goBack, PaperbunkrDb.CreateContext, enqueueMetadataWriteBack)
     {
     }
 
     /// <summary>Test-only seam - production always uses the default ctor (the real per-user database).</summary>
-    internal BulkSeriesPropertiesScreenViewModel(Action goBack, Func<PaperbunkrDbContext> contextFactory)
+    internal BulkSeriesPropertiesScreenViewModel(Action goBack, Func<PaperbunkrDbContext> contextFactory, Action<int>? enqueueMetadataWriteBack = null)
     {
         _goBack = goBack;
         _contextFactory = contextFactory;
+        _enqueueMetadataWriteBack = enqueueMetadataWriteBack;
     }
 
     public ObservableCollection<SeriesBulkFieldViewModel> Fields { get; } = new();
@@ -89,6 +91,20 @@ public partial class BulkSeriesPropertiesScreenViewModel : ViewModelBase
         }
 
         context.SaveChanges();
+
+        // File metadata write-back (docs/superpowers/specs/2026-09-03-file-metadata-write-back-
+        // design.md): only Content Type / Reading Mode reach a member issue's ComicInfo (<Manga>);
+        // Publisher/Genre/Summary here are Series-level and IssueToComicInfoMapper never reads them.
+        // Deliberately fans out to every member issue - a series edit can be many file writes, which
+        // the write-back queue serialises into one pass + one toast.
+        if (_enqueueMetadataWriteBack is not null
+            && stagedFields.Any(f => f.Descriptor.Label is "Content Type" or "Reading Mode"))
+        {
+            foreach (int issueId in context.Issues.Where(i => _seriesIds.Contains(i.SeriesId)).Select(i => i.Id).ToList())
+            {
+                _enqueueMetadataWriteBack(issueId);
+            }
+        }
 
         // Matches IssuePropertiesScreenViewModel/BulkIssuePropertiesScreenViewModel's dirty reset -
         // without this, HasUnsavedChanges() would still report true immediately post-Save, until the

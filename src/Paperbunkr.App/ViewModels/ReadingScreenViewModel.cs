@@ -42,6 +42,7 @@ public partial class ReadingScreenViewModel : ViewModelBase, IContextMenuProvide
     private readonly IFilePickerService _filePicker;
     private readonly Action<int, int> _goReaderForIssueInReadingList;
     private readonly Action<int> _openProperties;
+    private readonly Action<string, string> _showToast;
     private int? _activeReadingListId;
     private IReadingListSource? _currentArcSource;
     private string? _currentArcSourceKey;
@@ -49,11 +50,12 @@ public partial class ReadingScreenViewModel : ViewModelBase, IContextMenuProvide
     /// <summary>All lists from the last <see cref="RefreshSidebar"/> query, before any tag filter - <see cref="Lists"/> is the filtered view actually shown.</summary>
     private List<ReadingListSummary> _allListSummaries = new();
 
-    public ReadingScreenViewModel(IFilePickerService filePicker, Action<int, int> goReaderForIssueInReadingList, Action<int>? openProperties = null)
+    public ReadingScreenViewModel(IFilePickerService filePicker, Action<int, int> goReaderForIssueInReadingList, Action<int>? openProperties = null, Action<string, string>? showToast = null)
     {
         _filePicker = filePicker;
         _goReaderForIssueInReadingList = goReaderForIssueInReadingList;
         _openProperties = openProperties ?? (_ => { });
+        _showToast = showToast ?? ((_, _) => { });
         Lists = new ObservableCollection<ReadingListSummary>();
         Groups = new ObservableCollection<ReadingListGroupViewModel>();
         SearchResults = new ObservableCollection<IssueSearchResult>();
@@ -294,6 +296,73 @@ public partial class ReadingScreenViewModel : ViewModelBase, IContextMenuProvide
         LoadReadingList(listId);
     }
 
+    /// <summary>
+    /// Drag-and-drop import entry point for <see cref="Views.ReadingScreen"/>'s code-behind
+    /// <c>Drop</c> handler (docs/superpowers/specs/2026-08-31-drag-and-drop-import-design.md) - runs
+    /// the shared <see cref="DragImportService"/>, then attaches every resolved issue (freshly
+    /// imported + already-in-library) that isn't already a member of the active list, reusing the
+    /// same existing-set / <c>nextOrder</c> pattern <see cref="AddSelectedIssues"/> uses.
+    /// </summary>
+    public async Task ImportDroppedPathsAsync(IReadOnlyList<string> paths)
+    {
+        if (paths.Count == 0 || _activeReadingListId is not int listId)
+        {
+            return;
+        }
+
+        var result = await new DragImportService().ImportAsync(paths);
+
+        int added = 0;
+        if (result.IssueIds.Count > 0)
+        {
+            using var context = PaperbunkrDb.CreateContext();
+            var existing = context.ReadingListItems.Where(i => i.ReadingListId == listId).Select(i => i.IssueId).ToHashSet();
+            int nextOrder = context.ReadingListItems.Where(i => i.ReadingListId == listId).Select(i => (int?)i.SortOrder).Max() is int max ? max + 1 : 0;
+            foreach (int issueId in result.IssueIds)
+            {
+                if (existing.Add(issueId))
+                {
+                    context.ReadingListItems.Add(new ReadingListItem { ReadingListId = listId, IssueId = issueId, SortOrder = nextOrder++ });
+                    added++;
+                }
+            }
+
+            if (added > 0)
+            {
+                BumpUpdatedAt(context, listId);
+                context.SaveChanges();
+            }
+        }
+
+        LoadReadingList(listId);
+
+        var parts = new List<string>();
+        if (added > 0)
+        {
+            parts.Add($"{added} comic{(added == 1 ? "" : "s")} added");
+        }
+
+        if (result.Imported > 0)
+        {
+            parts.Add($"{result.Imported} newly imported");
+        }
+
+        if (result.SkippedUnsupported > 0)
+        {
+            parts.Add($"{result.SkippedUnsupported} skipped");
+        }
+
+        if (result.ReadingListsImported > 0)
+        {
+            parts.Add($"{result.ReadingListsImported} reading list{(result.ReadingListsImported == 1 ? "" : "s")} imported");
+        }
+
+        if (parts.Count > 0)
+        {
+            _showToast("Drag-and-drop import", string.Join(", ", parts) + ".");
+        }
+    }
+
     [RelayCommand]
     private void AddAllOfSeries(IssueSearchResult? result)
     {
@@ -428,6 +497,13 @@ public partial class ReadingScreenViewModel : ViewModelBase, IContextMenuProvide
     /// <summary>An existing list with no items yet - drives the "Add issues to get started" state.</summary>
     public bool IsEmptyList => !HasNoReadingLists && TotalCount == 0;
 
+    /// <summary>Whether a specific reading list is currently open (docs/superpowers/specs/2026-08-31-
+    /// drag-and-drop-import-design.md) - gates the drag-and-drop drop target so a file/folder drop
+    /// only imports-and-attaches when there's a list to attach membership to. Unlike
+    /// <see cref="IsEmptyList"/>, this stays true for an open-but-empty list, which is a prime drop
+    /// target (dropping onto a list you just created).</summary>
+    public bool IsListOpen => _activeReadingListId is not null;
+
     [ObservableProperty]
     private string _searchQuery = string.Empty;
 
@@ -459,6 +535,7 @@ public partial class ReadingScreenViewModel : ViewModelBase, IContextMenuProvide
     public void LoadReadingList(int readingListId)
     {
         _activeReadingListId = readingListId;
+        OnPropertyChanged(nameof(IsListOpen));
         StatusMessage = null;
         LinkingRow = null;
 
@@ -646,6 +723,7 @@ public partial class ReadingScreenViewModel : ViewModelBase, IContextMenuProvide
         if (_activeReadingListId == readingListId)
         {
             _activeReadingListId = null;
+            OnPropertyChanged(nameof(IsListOpen));
             var nextId = context.ReadingLists.OrderBy(r => r.SortOrder).Select(r => (int?)r.Id).FirstOrDefault();
             if (nextId is int id)
             {

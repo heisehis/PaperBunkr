@@ -13,6 +13,7 @@ using Microsoft.EntityFrameworkCore;
 using Paperbunkr.App.Models;
 using Paperbunkr.App.Services;
 using Paperbunkr.Data;
+using Paperbunkr.Data.CeMigration;
 using Paperbunkr.Data.Entities;
 using Paperbunkr.Data.Metadata;
 
@@ -31,6 +32,7 @@ public partial class IssuePropertiesScreenViewModel : ViewModelBase
     private readonly Action _goBack;
     private readonly Func<PaperbunkrDbContext> _contextFactory;
     private readonly Action<string, string>? _notify;
+    private readonly Action<int>? _enqueueMetadataWriteBack;
     private int? _issueId;
 
     /// <summary>
@@ -51,18 +53,19 @@ public partial class IssuePropertiesScreenViewModel : ViewModelBase
     /// entry <see cref="Save"/> records (docs/ce-feature-inventory.md §A "Undo/Redo").</summary>
     private Dictionary<string, string?> _beforeSnapshot = new();
 
-    public IssuePropertiesScreenViewModel(Action goBack, Action<string, string>? notify = null, MetadataEditHistoryService? history = null)
-        : this(goBack, PaperbunkrDb.CreateContext, notify, history)
+    public IssuePropertiesScreenViewModel(Action goBack, Action<string, string>? notify = null, MetadataEditHistoryService? history = null, Action<int>? enqueueMetadataWriteBack = null)
+        : this(goBack, PaperbunkrDb.CreateContext, notify, history, enqueueMetadataWriteBack)
     {
     }
 
     /// <summary>Test-only seam - production always uses the default ctor (the real per-user database).</summary>
-    internal IssuePropertiesScreenViewModel(Action goBack, Func<PaperbunkrDbContext> contextFactory, Action<string, string>? notify = null, MetadataEditHistoryService? history = null)
+    internal IssuePropertiesScreenViewModel(Action goBack, Func<PaperbunkrDbContext> contextFactory, Action<string, string>? notify = null, MetadataEditHistoryService? history = null, Action<int>? enqueueMetadataWriteBack = null)
     {
         _goBack = goBack;
         _contextFactory = contextFactory;
         _notify = notify;
         _history = history ?? MetadataEditHistoryService.Shared;
+        _enqueueMetadataWriteBack = enqueueMetadataWriteBack;
         PropertyChanged += (_, e) =>
         {
             if (_isLoading || e.PropertyName is null || NonDataProperties.Contains(e.PropertyName))
@@ -542,6 +545,12 @@ public partial class IssuePropertiesScreenViewModel : ViewModelBase
             return;
         }
 
+        // File metadata write-back (docs/superpowers/specs/2026-09-03-file-metadata-write-back-
+        // design.md) - snapshot every file-mapped field now, compare after the save, only enqueue a
+        // write if the file's content would actually change. Generalizes the former Genre/Tags-only
+        // JoinedGenre/JoinedTags compare.
+        var writeBackBefore = MetadataFileFieldSnapshot.Capture(issue);
+
         issue.Rating = MyRating.HasValue ? (float?)MyRating.Value : null;
         issue.CommunityRating = CommunityRating.HasValue ? (float?)CommunityRating.Value : null;
 
@@ -561,21 +570,12 @@ public partial class IssuePropertiesScreenViewModel : ViewModelBase
         issue.Year = ParseInt(YearText);
         issue.Month = ParseInt(MonthText);
         issue.Day = ParseInt(DayText);
-        // Snapshot before the diff so Save can tell afterward whether the Genre/Tags *value set*
-        // actually changed - a Category/Weight-only edit (via ApplyTagRows below, or the Detail
-        // screen's reweight popover) never touches this, so it shouldn't trigger a file rewrite.
-        string? genreBefore = issue.JoinedGenre();
-        string? tagsBefore = issue.JoinedTags();
 
         issue.MergeFrom(IssueTagField.Genre, new[] { NullIfEmpty(Genre) });
         issue.MergeFrom(IssueTagField.Tags, new[] { NullIfEmpty(Tags) });
         ApplyTagRows(issue, GenreTagRows, IssueTagField.Genre);
         ApplyTagRows(issue, TagsTagRows, IssueTagField.Tags);
 
-        string? genreAfter = issue.JoinedGenre();
-        string? tagsAfter = issue.JoinedTags();
-        bool tagValuesChanged = genreBefore != genreAfter || tagsBefore != tagsAfter;
-        string? filePath = issue.FilePath;
         issue.Writer = NullIfEmpty(Writer);
         issue.Penciller = NullIfEmpty(Penciller);
         issue.Inker = NullIfEmpty(Inker);
@@ -612,42 +612,12 @@ public partial class IssuePropertiesScreenViewModel : ViewModelBase
         _history.Record($"Edited {HeaderLabel}", new() { [issueId] = _beforeSnapshot },
             new() { [issueId] = MetadataEditHistoryService.CaptureSnapshot(issue) });
 
-        if (tagValuesChanged && filePath is not null)
+        if (MetadataFileFieldSnapshot.Differ(writeBackBefore, MetadataFileFieldSnapshot.Capture(issue)))
         {
-            TriggerComicInfoWriteBack(filePath, genreAfter, tagsAfter, _notify);
+            _enqueueMetadataWriteBack?.Invoke(issueId);
         }
 
         _goBack();
-    }
-
-    /// <summary>
-    /// Fires the CBZ ComicInfo.xml write-back (docs/superpowers/specs/2026-08-23-weighted-
-    /// categorized-tags-design.md) off the UI thread and never blocks Save/navigation on it - a full
-    /// page re-encode is slow, and the database write above is already the source of truth
-    /// regardless of whether the file rewrite succeeds. <see cref="ComicInfoWriteBackService"/>
-    /// never throws (catches internally), so this is safe as true fire-and-forget. Static + a static
-    /// helper on <see cref="ComicInfoWriteBackService"/> means bulk-edit's per-issue loop
-    /// (<see cref="BulkIssuePropertiesScreenViewModel"/>) can call the exact same path.
-    /// </summary>
-    internal static void TriggerComicInfoWriteBack(string filePath, string? genre, string? tags, Action<string, string>? notify)
-    {
-        Task.Run(() =>
-        {
-            var outcome = ComicInfoWriteBackService.WriteGenreTags(filePath, genre, tags);
-            if (outcome.Result == ComicInfoWriteBackResult.Success || notify is null)
-            {
-                return;
-            }
-
-            string fileName = Path.GetFileName(filePath);
-            (string Title, string Message) toast = outcome.Result switch
-            {
-                ComicInfoWriteBackResult.SkippedNotCbz => ("Tags saved to library only",
-                    $"{fileName} isn't a CBZ file, so its own ComicInfo.xml wasn't updated."),
-                _ => ("Couldn't update the file", $"{fileName}: {outcome.ErrorMessage}"),
-            };
-            Dispatcher.UIThread.Post(() => notify(toast.Title, toast.Message));
-        });
     }
 
     /// <summary>

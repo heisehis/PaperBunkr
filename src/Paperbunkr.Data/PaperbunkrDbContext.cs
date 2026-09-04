@@ -106,6 +106,8 @@ public class PaperbunkrDbContext : DbContext
 
     public DbSet<PluginSettingState> PluginSettingStates => Set<PluginSettingState>();
 
+    public DbSet<ActivityRun> ActivityRuns => Set<ActivityRun>();
+
     public PaperbunkrDbContext(DbContextOptions<PaperbunkrDbContext> options)
         : base(options)
     {
@@ -1070,6 +1072,21 @@ public class PaperbunkrDbContext : DbContext
             builder.HasKey(f => f.Id);
             builder.Property(f => f.Path).IsRequired();
             builder.HasIndex(f => f.Path).IsUnique();
+        });
+
+        // Activity Center history (docs/superpowers/specs/2026-09-03-activity-center-design.md) -
+        // brand-new table, no existing rows to backfill, so its enum-as-string columns need only
+        // the conversion (no HasDefaultValue/HasSentinel). Same plain growable-list shape as
+        // KeyBinding/Workspace. Indexed on StartedUtc for the paged "newest first" History query.
+        modelBuilder.Entity<ActivityRun>(builder =>
+        {
+            builder.HasKey(r => r.Id);
+            builder.Property(r => r.Kind).HasConversion<string>().HasMaxLength(32);
+            builder.Property(r => r.Trigger).HasConversion<string>().HasMaxLength(32);
+            builder.Property(r => r.Status).HasConversion<string>().HasMaxLength(32);
+            builder.Property(r => r.Title).IsRequired();
+            builder.Property(r => r.ResultLinkKind).HasMaxLength(32);
+            builder.HasIndex(r => r.StartedUtc);
         });
     }
 

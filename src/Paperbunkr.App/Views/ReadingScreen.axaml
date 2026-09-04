@@ -109,7 +109,11 @@
         </Style>
     </UserControl.Styles>
 
-    <Grid RowDefinitions="Auto,Auto,Auto,Auto,*">
+    <!-- DragDrop.AllowDrop gated on a list actually being open (docs/superpowers/specs/2026-08-31-
+         drag-and-drop-import-design.md) - dropped files/folders import into the library and are added
+         as members of the active list. Inert (OS "not allowed" cursor) when no list is open. -->
+    <Grid RowDefinitions="Auto,Auto,Auto,Auto,*"
+          DragDrop.AllowDrop="{Binding IsListOpen}" DragDrop.DragOver="OnDragOver" DragDrop.Drop="OnDrop">
 
         <!-- ===== Row 0: top band ===== -->
         <Grid Grid.Row="0" ColumnDefinitions="Auto,*" Margin="28,20,28,14" IsVisible="{Binding !IsEmptyList}">

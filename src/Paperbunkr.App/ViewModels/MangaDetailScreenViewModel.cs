@@ -38,13 +38,14 @@ public partial class MangaDetailScreenViewModel : ViewModelBase, IDetailHeaderSo
     IReadOnlyList<ContextMenuEntry>? IContextMenuProvider.BuildContextMenu(object? target) =>
         new MangaDetailContextMenuBuilder(this).Build(target);
 
-    public MangaDetailScreenViewModel(Action goBack, Action<int> goToReader, Action<int> goToProperties, Action<IReadOnlyList<int>> goToBulkProperties, Action<int>? goDetailForSeries = null, Action<string>? goLibraryWithSearch = null, Action<int>? goLibraryWithCollection = null)
+    public MangaDetailScreenViewModel(Action goBack, Action<int> goToReader, Action<int> goToProperties, Action<IReadOnlyList<int>> goToBulkProperties, Action<int>? goDetailForSeries = null, Action<string>? goLibraryWithSearch = null, Action<int>? goLibraryWithCollection = null, Action<int>? enqueueMetadataWriteBack = null)
     {
         _goBack = goBack;
         _goToReader = goToReader;
         _goToProperties = goToProperties;
         _goToBulkProperties = goToBulkProperties;
         _goDetailForSeries = goDetailForSeries ?? (_ => { });
+        _enqueueMetadataWriteBack = enqueueMetadataWriteBack;
         Tabs = new DetailTabsViewModel(goToProperties, goToBulkProperties, navigateToSeries: _goDetailForSeries, openInReader: goToReader, navigateToCollection: goLibraryWithCollection) { ShowIssuesTab = false, ShowTabStrip = false };
         // No reweight callback - LoadSeries below is always the series-aggregated view (chapter-list
         // screen, no single-issue pill focus like the Western DetailScreenViewModel has), so every
@@ -61,6 +62,7 @@ public partial class MangaDetailScreenViewModel : ViewModelBase, IDetailHeaderSo
     private readonly Action<int> _goToProperties;
     private readonly Action<IReadOnlyList<int>> _goToBulkProperties;
     private readonly Action<int> _goDetailForSeries;
+    private readonly Action<int>? _enqueueMetadataWriteBack;
     private int? _seriesId;
     private int? _continueIssueId;
     private int? _coverIssueId;
@@ -143,6 +145,17 @@ public partial class MangaDetailScreenViewModel : ViewModelBase, IDetailHeaderSo
 
         series.ContentType = value;
         context.SaveChanges();
+
+        // Content type drives the ComicInfo <Manga> field for every issue in the series
+        // (docs/superpowers/specs/2026-09-03-file-metadata-write-back-design.md).
+        if (_enqueueMetadataWriteBack is not null)
+        {
+            foreach (int issueId in context.Issues.Where(i => i.SeriesId == seriesId).Select(i => i.Id).ToList())
+            {
+                _enqueueMetadataWriteBack(issueId);
+            }
+        }
+
         _goDetailForSeries(seriesId);
     }
 

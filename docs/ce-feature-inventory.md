@@ -79,7 +79,7 @@ further triage.
 | GitHub self-updater | ⛔ **Dropped for now** | Revisit once Paperbunkr has an actual release/distribution pipeline of its own. |
 | CE's tabbed/multi-window reading model | Confirmed non-goal | Single-screen rail-nav stands, matching onboarding.md §12's Mihon/Komikku direction. |
 | Fileless book entries | 🔨 **Build it** | |
-| File metadata write-back (edits saved into ComicInfo.xml/tags on disk) | 🔨 **Build it** | Real risk surface (mutates user's files) — worth extra care in whatever design spec covers metadata editing. |
+| File metadata write-back (edits saved into ComicInfo.xml/tags on disk) | ✅ shipped 2026-09-03 — `Services/MetadataFileWriteBackService.cs` + `MetadataWriteBackQueue`, gated by three default-off Preferences → Advanced toggles (CE parity). Full ComicInfo.xml field set via `IssueToComicInfoMapper` + optional `paperbunkr.json` sidecar. `.cbz`/folder only (no bundled `7z.exe` for `.cb7`/`.cbt`). docs/superpowers/specs/2026-09-03-file-metadata-write-back-design.md. |
 | Workspaces (named display-setting presets) | 🔨 **Build it** | Full preset system, not just "remember last used." |
 | Minimize-to-tray | 🔨 **Build it** | |
 | Crash reporter dialog | 🔨 **Build it** | |
@@ -153,11 +153,11 @@ being shipped.**
 | Saved "Workspaces" (display-setting presets) | ✅ shipped 2026-09-03 — `Workspace` entity + `WorkspaceService`, a toolbar switcher on both the Library and Books screens (docs/superpowers/specs/2026-09-03-library-saved-workspaces-design.md). **Deviations from CE:** per-screen lists, not one global list; "Views setup" group only (no window-layout / reader-display capture); ships 3+3 read-only starter workspaces (CE ships none). One-shot apply, reuse-a-name-to-overwrite (CE's own Save dialog model). |
 | Saved "List Layouts" (grid column/sort/group presets) | ✅ shipped — persists sort/group/view mode/grid density/overlay toggles/filters/sidebar selection (docs/superpowers/specs/2026-08-17-library-saved-list-layouts-design.md). This is persistence of the existing session-only UI, not named/multiple presets — that's "Workspaces" above, still open |
 | Pluggable sort/group strategies (by rating, community rating, read %, custom/virtual tags) | ⚠️ partial — `IssueListSortField` covers 60+ CE-parity fields including Rating/Community Rating/Read % (docs/superpowers/specs/2026-08-18-issue-list-pluggable-sort-group-design.md); Virtual Tags are **not** a sort/group axis despite being named in this row — real, specific remaining gap |
-| Drag-and-drop (files/folders/reading-list files onto the app) | 📋 confirmed still not started |
+| Drag-and-drop (files/folders/reading-list files onto the app) | ✅ shipped 2026-09-03 — `Services/DragImportService.cs` behind a `Drop` handler on the Library and Reading List screen roots (`Views/DragDropPaths.cs`), docs/superpowers/specs/2026-08-31-drag-and-drop-import-design.md. Files/folders import into the library (folders also register as `WatchedFolder`); `.cbl`/`.csv` import as a new reading list; dropped onto an open reading list, comics also join it. Deliberate CE subset: no window/reader-level "drop to open", no drag-out export, no drag-reorder. |
 | Recent/MRU file list, Quick Open (recents+favorites overlay) | ✅ shipped 2026-09-03 — `Ctrl+P` fuzzy command palette (`Services/QuickOpenService.cs` + `QuickOpenMatcher.cs`, `ViewModels/QuickOpenViewModel.cs`), docs/superpowers/specs/2026-09-03-quick-open-command-palette-design.md. Subsequence-matches series / issues / books / lists / collections / events / screens + action verbs; pre-type list is the recently-opened comics + books. Deliberately not CE's recency cover-wall (Home covers that) or its `File ▸ Open Recent` menu. |
 | Reveal-in-Explorer / copy-file-path | ✅ shipped — `Services/RevealInExplorerHelper.cs` (docs/superpowers/specs/2026-08-16-reveal-in-explorer-and-fileless-entries-design.md §1) |
 | Folder-watch continuous scanning (independent of one-time CE migration) | ✅ shipped — `Services/LiveFolderWatchService.cs` |
-| File metadata write-back (save edits into ComicInfo.xml/tags) | ✅ shipped — `Services/ComicInfoWriteBackService.cs`, wired into both the single-book and bulk editors (currently scoped to Genre/Tags) |
+| File metadata write-back (save edits into ComicInfo.xml/tags) | ✅ shipped 2026-09-03 — full ComicInfo.xml field set + optional `paperbunkr.json` sidecar via `Services/MetadataFileWriteBackService.cs` + `MetadataWriteBackQueue`, gated by three default-off Preferences → Advanced toggles (CE's `UpdateComicFiles`/`AutoUpdateComicsFiles` parity; `UpdateComicBookFiles` → the sidecar instead). Automatic on 6 edit surfaces + a manual "Write metadata to files" action. `.cbz`/folder only (`.cb7`/`.cbt` need a `7z.exe` we don't bundle). Retired the Genre/Tags-only `ComicInfoWriteBackService`. docs/superpowers/specs/2026-09-03-file-metadata-write-back-design.md. |
 | Fileless book entries (catalog a physical book with no file) | ✅ shipped — `LibraryScreenViewModel.CreatePlaceholderIssue`/`ReadingListMatcher.ResolveOrCreatePlaceholder` (docs/superpowers/specs/2026-08-16-reveal-in-explorer-and-fileless-entries-design.md §2-3) |
 
 ### D. Smart Lists (cross-reference only, not a gap)
@@ -196,7 +196,7 @@ only the Engine has a head start.
 |---|---|
 | Client: connect to another ComicRack instance's shared library over the network | 🔨 decided: build — needs its own design spec first; `Paperbunkr.Engine.NetworkManager`/`ComicLibraryClient` exist as dormant ported CE code, not wired to anything |
 | Server: host this library for other instances to browse (password-protected, per-list sharing) | 🔨 decided: build — needs its own design spec first; `Paperbunkr.Engine.ComicLibraryServer` exists dormant, same as above |
-| Background job/task monitor for server activity | 🔨 decided: build — needs its own design spec first; no code anywhere yet, and depends on the server feature above |
+| Background job/task monitor for server activity | ✅ shipped (local jobs) — the **Activity Center** (docs/superpowers/specs/2026-09-03-activity-center-design.md): persistent bottom status bar + live indicator → peek popover (tier 1) → drawer with Active/History tabs (tier 2), DB-backed run history (`ActivityRun`), one `IActivityService`/`ActivityService` every background op reports through (scan, covers, sync, import, update, tracker), replaces the old single progress toast. **Remote/server jobs** and the **Scheduled** tab are the deliberate deferrals — they ride on the still-dormant server feature above. |
 | Portable device sync (e-readers) | 🚫 already excluded (§15) |
 
 ### G. Plugin API (§10, Beta — already planned, now much better itemized)
@@ -239,9 +239,9 @@ stale sequencing plan):
 - **Reader (§B):** magnifier/loupe, sharpen/AutoContrast/WhitePoint image adjustment, paper/texture
   background, clock/battery overlay, type-to-jump-to-page, a per-page manual Near/Far double-page
   override.
-- **Library (§C):** drag-and-drop import (design done), Recent/MRU + Quick Open command palette
-  (design done), Virtual Tags as a sort/group axis. (Saved "Workspaces" shipped 2026-09-03;
-  filesystem folder browsing mode dropped by decision.)
+- **Library (§C):** Virtual Tags as a sort/group axis. (Drag-and-drop import + Recent/MRU + Quick
+  Open + Saved "Workspaces" all shipped 2026-09-03; filesystem folder browsing mode dropped by
+  decision.)
 - **Remote/server (§F):** the entire App-layer feature — Engine-layer CE classes are ported and
   dormant, but nothing in `Paperbunkr.App` calls them yet. Needs its own design spec before any
   App-side code.

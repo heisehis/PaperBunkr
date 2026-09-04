@@ -274,4 +274,26 @@ public class LibraryContextMenuBuilderTests : IDisposable
         var entry = Assert.Single(Menu(vm, null));
         Assert.Equal("Select All", entry.Header);
     }
+
+    [Fact]
+    public void WriteMetadataToFiles_AbsentWhenSettingOff_PresentWhenOn()
+    {
+        Seed("Alpha", filePath: @"C:\comics\alpha1.cbz");
+        var vm = NewVm();
+        var row = Assert.Single(vm.IssueList.Rows);
+
+        // Default: master toggle off.
+        Assert.DoesNotContain(Flatten(Menu(vm, row)), e => e.Header == "Write metadata to file");
+        Assert.DoesNotContain(Flatten(Menu(vm, Assert.Single(vm.Covers))), e => e.Header == "Write metadata to files");
+
+        using (var context = PaperbunkrDb.CreateContext())
+        {
+            context.GetOrCreateAppSettings().WriteMetadataToFiles = true;
+            context.SaveChanges();
+        }
+        vm.LoadFromDatabase();
+
+        Assert.Contains(Flatten(Menu(vm, vm.IssueList.Rows.Single())), e => e.Header == "Write metadata to file");
+        Assert.Contains(Flatten(Menu(vm, Assert.Single(vm.Covers))), e => e.Header == "Write metadata to files");
+    }
 }

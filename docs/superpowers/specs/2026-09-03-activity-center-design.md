@@ -410,6 +410,29 @@ Run `avalonia-pro-max/review-checklist` before calling the UI done (per CLAUDE.m
 
 ---
 
+## As-built deviations (2026-09-03, implementation)
+
+- **"Pause all" → "Stop all".** v1 has no cooperative pause/resume — the control cancels every
+  active job's token (jobs stop cooperatively and record as `Cancelled`). Honest label; real
+  pause/resume stays on the "Later" list. `IActivityService.StopAll()`.
+- **No `Queued` state in v1.** `ActivityService` never emits `ActivityJobStatus.Queued` — every
+  `StartJob` goes straight to `Running`. The enum value and the peek's (empty) "Queued" grouping
+  are kept for the future scheduler.
+- **`Interrupted` reserved, unused.** Nothing persists a non-terminal run in v1, so there are no
+  stale `Running` rows to rewrite on startup; `ActivityRunStatus.Interrupted` exists but is never
+  written yet.
+- **Idle indicator = faint dot** (not fully hidden) — chosen for discoverability.
+- **Drawer has no scrim** — fully non-blocking, as leaned.
+- **Status-bar left region = library total only** (`"N comics · X GB"`), refreshed off the
+  `Changed` event. Live per-screen selection count deferred.
+- **Ambient upkeep rollup = folder-watch only.** The single "Background upkeep" row flips active
+  while `LiveFolderWatchService` reacts to a change (4 s auto-return to idle); wiring the
+  thumbnail decoders into the same row is a follow-up.
+- **`Scrape` kind unused** — no bundled bulk-scrape op exists yet; it lands with the bulk-scraper.
+- **Testability seams:** `ActivityService(dispatch, recordRun)` and
+  `ActivityCenterViewModel(activity, followLink, dispatch)` take injectable delegates so unit
+  tests run synchronously without an Avalonia platform or the real DB.
+
 ## Open questions for implementation review
 
 1. Idle indicator — hidden entirely, or a faint dot so the affordance is discoverable?

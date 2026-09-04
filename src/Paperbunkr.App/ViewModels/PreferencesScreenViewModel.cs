@@ -41,10 +41,10 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     private readonly KeyBindingService _keyBindingService;
     private readonly UpdateService _updateService;
     private readonly Action<string, string> _showToast;
+    private readonly Action<int, bool> _enqueueMetadataWriteBack;
     private readonly Action _openMigration;
     private readonly Action _openDesignShowcase;
-    private readonly Action<ToastProgressViewModel> _showProgressToast;
-    private readonly Action<ToastProgressViewModel> _closeProgressToast;
+    private readonly IActivityService _activity;
     private readonly Action _reloadFolderWatch;
     private readonly Func<PaperbunkrDbContext> _contextFactory;
     private bool _isLoaded;
@@ -67,12 +67,12 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         MigrationOverlayViewModel migration,
         PluginScreenViewModel plugin,
         Action openMigration,
-        Action<ToastProgressViewModel> showProgressToast,
-        Action<ToastProgressViewModel> closeProgressToast,
+        IActivityService activity,
         Action reloadFolderWatch,
         Action openDesignShowcase,
-        UpdateService updateService)
-        : this(skinService, filePicker, libraryScanner, fileAssociationService, backupService, keyBindingService, showToast, migration, plugin, openMigration, showProgressToast, closeProgressToast, reloadFolderWatch, openDesignShowcase, updateService, PaperbunkrDb.CreateContext)
+        UpdateService updateService,
+        Action<int, bool>? enqueueMetadataWriteBack = null)
+        : this(skinService, filePicker, libraryScanner, fileAssociationService, backupService, keyBindingService, showToast, migration, plugin, openMigration, activity, reloadFolderWatch, openDesignShowcase, updateService, PaperbunkrDb.CreateContext, enqueueMetadataWriteBack)
     {
     }
 
@@ -88,13 +88,14 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         MigrationOverlayViewModel migration,
         PluginScreenViewModel plugin,
         Action openMigration,
-        Action<ToastProgressViewModel> showProgressToast,
-        Action<ToastProgressViewModel> closeProgressToast,
+        IActivityService activity,
         Action reloadFolderWatch,
         Action openDesignShowcase,
         UpdateService updateService,
-        Func<PaperbunkrDbContext> contextFactory)
+        Func<PaperbunkrDbContext> contextFactory,
+        Action<int, bool>? enqueueMetadataWriteBack = null)
     {
+        _enqueueMetadataWriteBack = enqueueMetadataWriteBack ?? ((_, _) => { });
         _openDesignShowcase = openDesignShowcase;
         _skinService = skinService;
         _filePicker = filePicker;
@@ -107,8 +108,7 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         Migration = migration;
         Plugin = plugin;
         _openMigration = openMigration;
-        _showProgressToast = showProgressToast;
-        _closeProgressToast = closeProgressToast;
+        _activity = activity;
         _reloadFolderWatch = reloadFolderWatch;
         _contextFactory = contextFactory;
         Skins = new ObservableCollection<SkinSummary>();
@@ -542,6 +542,9 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         PageMarginPercentWidth = settings.PageMarginPercentWidth;
         RenderingBackend = settings.RenderingBackend;
         PreferNativeOpenGl = settings.PreferNativeOpenGl;
+        WriteMetadataToFiles = settings.WriteMetadataToFiles;
+        WriteMetadataAutomatically = settings.WriteMetadataAutomatically;
+        WriteNativeSidecar = settings.WriteNativeSidecar;
         _suppressBehaviorApply = false;
 
         var firstIssue = context.Issues.Include(i => i.Series).OrderBy(i => i.Id).FirstOrDefault();
@@ -827,6 +830,57 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     partial void OnRenderingBackendChanged(RenderBackend value) => PersistRenderingSetting();
 
     partial void OnPreferNativeOpenGlChanged(bool value) => PersistRenderingSetting();
+
+    // --- File metadata write-back (docs/superpowers/specs/2026-09-03-file-metadata-write-back-
+    // design.md). CE parity: three checkboxes, all default off; the lower two are only meaningful
+    // when the master is on (the XAML binds their IsEnabled to WriteMetadataToFiles). ---
+
+    [ObservableProperty]
+    private bool _writeMetadataToFiles;
+
+    [ObservableProperty]
+    private bool _writeMetadataAutomatically;
+
+    [ObservableProperty]
+    private bool _writeNativeSidecar;
+
+    [ObservableProperty]
+    private string _writeAllMetadataStatus = string.Empty;
+
+    partial void OnWriteMetadataToFilesChanged(bool value) => PersistBehaviorSetting(s => s.WriteMetadataToFiles = value);
+
+    partial void OnWriteMetadataAutomaticallyChanged(bool value) => PersistBehaviorSetting(s => s.WriteMetadataAutomatically = value);
+
+    partial void OnWriteNativeSidecarChanged(bool value) => PersistBehaviorSetting(s => s.WriteNativeSidecar = value);
+
+    /// <summary>
+    /// CE's <c>MainForm.UpdateComics()</c> - queue a write for every filed issue in the library,
+    /// regardless of the automatic toggle. The write-back queue serialises them and shows its own
+    /// summary toast when done.
+    /// </summary>
+    [RelayCommand]
+    private void WriteAllMetadataToFiles()
+    {
+        if (!WriteMetadataToFiles)
+        {
+            return;
+        }
+
+        int count;
+        using (var context = _contextFactory())
+        {
+            var ids = context.Issues.Where(i => i.FilePath != null && !i.IsPlaceholder).Select(i => i.Id).ToList();
+            count = ids.Count;
+            foreach (int id in ids)
+            {
+                _enqueueMetadataWriteBack(id, true);
+            }
+        }
+
+        WriteAllMetadataStatus = count == 0
+            ? "No files to write."
+            : $"Queued {count} file{(count == 1 ? "" : "s")} - you'll get a summary when it finishes.";
+    }
 
     /// <summary>
     /// Persists both rendering fields to <see cref="AppSettings"/> and immediately syncs the
@@ -1173,25 +1227,52 @@ public partial class PreferencesScreenViewModel : ViewModelBase
 
         IsScanningBooks = true;
         BookScanStatus = "Scanning…";
+        using var job = _activity.StartJob(ActivityJobKind.BookScan, "Scanning book folders");
+        // Guards against a trailing Progress<T> callback (marshalled async) clobbering the final
+        // status message after the scan has already returned - Progress<T> gives no ordering
+        // guarantee relative to the awaited completion.
+        bool scanFinished = false;
         try
         {
-            var scanProgress = new Progress<(int Done, int Total)>(p => BookScanStatus = $"Scanning… {p.Done}/{p.Total}");
-            var result = await new BookFolderScanService().ScanAllAsync(scanProgress);
+            var scanProgress = new Progress<(int Done, int Total)>(p =>
+            {
+                if (!scanFinished)
+                {
+                    BookScanStatus = $"Scanning… {p.Done}/{p.Total}";
+                }
+
+                job.Report(p.Done, p.Total, $"{p.Done} / {p.Total} files");
+            });
+            var result = await new BookFolderScanService().ScanAllAsync(scanProgress, job.CancellationToken);
 
             if (result.BooksAdded > 0)
             {
-                var coverProgress = new Progress<(int Done, int Total)>(p => BookScanStatus = $"Generating covers… {p.Done}/{p.Total}");
-                await new BookCoverThumbnailService(_contextFactory).GenerateAllAsync(coverProgress);
+                var coverProgress = new Progress<(int Done, int Total)>(p =>
+                {
+                    if (!scanFinished)
+                    {
+                        BookScanStatus = $"Generating covers… {p.Done}/{p.Total}";
+                    }
+
+                    job.Report(p.Done, p.Total, $"Covers {p.Done} / {p.Total}");
+                });
+                await new BookCoverThumbnailService(_contextFactory).GenerateAllAsync(coverProgress, job.CancellationToken);
             }
 
+            scanFinished = true;
             BookScanStatus = result.BooksAdded == 0
                 ? "No new books found."
                 : $"Added {result.BooksAdded} book{(result.BooksAdded == 1 ? "" : "s")} across {result.SeriesTouched} series.";
-            _showToast("Book scan complete", BookScanStatus);
+            job.Succeed(BookScanStatus, itemsProcessed: result.BooksAdded);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
         }
         catch (Exception ex)
         {
             BookScanStatus = $"Scan failed: {ex.Message}";
+            job.Fail("Book scan failed", ex: ex);
         }
         finally
         {
@@ -1210,10 +1291,20 @@ public partial class PreferencesScreenViewModel : ViewModelBase
 
         IsScanning = true;
         ScanStatus = "Scanning…";
+        using var job = _activity.StartJob(ActivityJobKind.LibraryScan, "Scanning library folders");
+        bool scanFinished = false;
         try
         {
-            var progress = new Progress<(int Done, int Total)>(p => ScanStatus = $"Scanning… {p.Done}/{p.Total}");
-            var result = await _libraryScanner.ScanAllAsync(progress);
+            var progress = new Progress<(int Done, int Total)>(p =>
+            {
+                if (!scanFinished)
+                {
+                    ScanStatus = $"Scanning… {p.Done}/{p.Total}";
+                }
+
+                job.Report(p.Done, p.Total, $"{p.Done} / {p.Total} files");
+            });
+            var result = await _libraryScanner.ScanAllAsync(progress, job.CancellationToken);
             string summary = result.IssuesAdded == 0
                 ? "No new issues found."
                 : $"Added {result.IssuesAdded} issue{(result.IssuesAdded == 1 ? "" : "s")} across {result.SeriesTouched} series.";
@@ -1223,16 +1314,30 @@ public partial class PreferencesScreenViewModel : ViewModelBase
                 // Newly-added issues have no cached cover yet - generate them now instead of
                 // leaving Library showing blank placeholders until someone finds the separate
                 // "Generate Covers" button on the Library screen (same pipeline it uses).
-                var coverProgress = new Progress<(int Done, int Total)>(p => ScanStatus = $"Generating covers… {p.Done}/{p.Total}");
-                await new CoverThumbnailService(_contextFactory).GenerateAllAsync(coverProgress);
+                var coverProgress = new Progress<(int Done, int Total)>(p =>
+                {
+                    if (!scanFinished)
+                    {
+                        ScanStatus = $"Generating covers… {p.Done}/{p.Total}";
+                    }
+
+                    job.Report(p.Done, p.Total, $"Covers {p.Done} / {p.Total}");
+                });
+                await new CoverThumbnailService(_contextFactory).GenerateAllAsync(coverProgress, job.CancellationToken);
             }
 
+            scanFinished = true;
             ScanStatus = summary;
-
-            // Toast alongside the inline ScanStatus text (P6 follow-up) - scanning can take a
-            // while on a large folder, and the inline status is easy to miss if the user's
-            // navigated to a different screen while it runs.
-            _showToast("Scan complete", ScanStatus);
+            job.Succeed(summary, itemsProcessed: result.IssuesAdded);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            ScanStatus = $"Scan failed: {ex.Message}";
+            job.Fail("Library scan failed", ex: ex);
         }
         finally
         {
@@ -1260,23 +1365,30 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         }
 
         IsGeneratingCovers = true;
-        var toast = new ToastProgressViewModel("Generating covers…");
-        _showProgressToast(toast);
+        using var job = _activity.StartJob(ActivityJobKind.GenerateCovers, "Generating covers");
+        int total = 0;
 
         try
         {
             var progress = new Progress<(int Done, int Total)>(p =>
             {
-                toast.Done = p.Done;
-                toast.Total = p.Total;
+                total = p.Total;
+                job.Report(p.Done, p.Total, $"{p.Done} / {p.Total} issues");
             });
-            await new CoverThumbnailService(_contextFactory).GenerateAllAsync(progress);
+            await new CoverThumbnailService(_contextFactory).GenerateAllAsync(progress, job.CancellationToken);
+            job.Succeed($"Checked {total} issue{(total == 1 ? "" : "s")}", itemsProcessed: total);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            job.Fail("Cover generation failed", ex: ex);
         }
         finally
         {
             IsGeneratingCovers = false;
-            _closeProgressToast(toast);
-            _showToast("Covers generated", $"Checked {toast.Total} issue{(toast.Total == 1 ? "" : "s")}.");
         }
     }
 
@@ -1296,27 +1408,29 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         }
 
         IsSyncingMetadata = true;
-        var toast = new ToastProgressViewModel("Syncing metadata…");
-        _showProgressToast(toast);
+        using var job = _activity.StartJob(ActivityJobKind.SyncMetadata, "Syncing metadata");
 
         try
         {
-            var progress = new Progress<(int Done, int Total)>(p =>
-            {
-                toast.Done = p.Done;
-                toast.Total = p.Total;
-            });
-            var result = await _libraryScanner.SyncMetadataAsync(progress);
-            _showToast(
-                "Metadata sync complete",
+            var progress = new Progress<(int Done, int Total)>(p => job.Report(p.Done, p.Total, $"{p.Done} / {p.Total} issues"));
+            var result = await _libraryScanner.SyncMetadataAsync(progress, job.CancellationToken);
+            job.Succeed(
                 result.IssuesUpdated == 0
-                    ? "No new metadata found."
-                    : $"Updated {result.IssuesUpdated} issue{(result.IssuesUpdated == 1 ? "" : "s")}.");
+                    ? "No new metadata found"
+                    : $"Updated {result.IssuesUpdated} issue{(result.IssuesUpdated == 1 ? "" : "s")}",
+                itemsProcessed: result.IssuesUpdated);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            job.Fail("Metadata sync failed", ex: ex);
         }
         finally
         {
             IsSyncingMetadata = false;
-            _closeProgressToast(toast);
         }
     }
 

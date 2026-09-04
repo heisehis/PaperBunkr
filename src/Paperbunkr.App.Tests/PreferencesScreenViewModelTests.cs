@@ -86,9 +86,9 @@ public class PreferencesScreenViewModelTests : IDisposable
         Action<string, string>? showToast = null,
         MigrationOverlayViewModel? migration = null,
         Action? openMigration = null,
-        Action<ToastProgressViewModel>? showProgressToast = null,
-        Action<ToastProgressViewModel>? closeProgressToast = null,
-        Action? reloadFolderWatch = null)
+        IActivityService? activity = null,
+        Action? reloadFolderWatch = null,
+        Action<int, bool>? enqueueMetadataWriteBack = null)
     {
         var skinService = new SkinService(() => new PaperbunkrDbContext(_dbOptions));
         var scanner = new LibraryFolderScanner(() => new PaperbunkrDbContext(_dbOptions));
@@ -106,12 +106,12 @@ public class PreferencesScreenViewModelTests : IDisposable
             migration ?? new MigrationOverlayViewModel(filePicker ?? new NoOpFilePicker(), _ => { }),
             new PluginScreenViewModel(filePicker ?? new NoOpFilePicker()),
             openMigration ?? (() => { }),
-            showProgressToast ?? (_ => { }),
-            closeProgressToast ?? (_ => { }),
+            activity ?? new ActivityService(a => a(), _ => { }),
             reloadFolderWatch ?? (() => { }),
             () => { },
             new UpdateService(),
-            () => new PaperbunkrDbContext(_dbOptions));
+            () => new PaperbunkrDbContext(_dbOptions),
+            enqueueMetadataWriteBack ?? ((_, _) => { }));
     }
 
     [Fact]
@@ -955,58 +955,49 @@ public class PreferencesScreenViewModelTests : IDisposable
     }
 
     [Fact]
-    public async Task ScanNow_FiresToast_OnCompletion()
+    public async Task ScanNow_RecordsSucceededActivityJob_OnCompletion()
     {
-        (string Title, string Message)? toast = null;
-        var vm = CreateViewModel(showToast: (title, message) => toast = (title, message));
+        var activity = new ActivityService(a => a(), _ => { });
+        var vm = CreateViewModel(activity: activity);
         vm.EnsureLoaded();
 
         await vm.ScanNowCommand.ExecuteAsync(null);
 
-        Assert.NotNull(toast);
-        Assert.Equal("Scan complete", toast!.Value.Title);
-        Assert.Equal("No new issues found.", toast!.Value.Message);
+        var job = Assert.Single(activity.RecentJobs);
+        Assert.Equal(ActivityJobStatus.Succeeded, job.Status);
+        Assert.Equal("No new issues found.", job.ResultSummary);
+        Assert.Empty(activity.ActiveJobs);
     }
 
     [Fact]
-    public async Task GenerateCoversCommand_ShowsThenClosesProgressToast_ThenFiresCompletionToast()
+    public async Task GenerateCoversCommand_RunsAsActivityJob_ThatSucceeds()
     {
-        ToastProgressViewModel? shown = null;
-        ToastProgressViewModel? closed = null;
+        var activity = new ActivityService(a => a(), _ => { });
         (string Title, string Message)? completionToast = null;
-        var vm = CreateViewModel(
-            showProgressToast: t => shown = t,
-            closeProgressToast: t => closed = t,
-            showToast: (title, message) => completionToast = (title, message));
+        activity.CompletionToastRequested += (t, m) => completionToast = (t, m);
+        var vm = CreateViewModel(activity: activity);
 
         await vm.GenerateCoversCommand.ExecuteAsync(null);
 
-        Assert.NotNull(shown);
-        Assert.Same(shown, closed); // same toast instance shown and closed, not a new one each time
+        var job = Assert.Single(activity.RecentJobs);
+        Assert.Equal(ActivityJobStatus.Succeeded, job.Status);
         Assert.False(vm.IsGeneratingCovers);
         Assert.NotNull(completionToast);
-        Assert.Equal("Covers generated", completionToast!.Value.Title);
+        Assert.Equal("Generating covers finished", completionToast!.Value.Title);
     }
 
     [Fact]
-    public async Task SyncMetadataCommand_ShowsThenClosesProgressToast_ThenFiresCompletionToast()
+    public async Task SyncMetadataCommand_RunsAsActivityJob_ThatSucceeds()
     {
-        ToastProgressViewModel? shown = null;
-        ToastProgressViewModel? closed = null;
-        (string Title, string Message)? completionToast = null;
-        var vm = CreateViewModel(
-            showProgressToast: t => shown = t,
-            closeProgressToast: t => closed = t,
-            showToast: (title, message) => completionToast = (title, message));
+        var activity = new ActivityService(a => a(), _ => { });
+        var vm = CreateViewModel(activity: activity);
 
         await vm.SyncMetadataCommand.ExecuteAsync(null);
 
-        Assert.NotNull(shown);
-        Assert.Same(shown, closed);
+        var job = Assert.Single(activity.RecentJobs);
+        Assert.Equal(ActivityJobStatus.Succeeded, job.Status);
+        Assert.Equal("No new metadata found", job.ResultSummary);
         Assert.False(vm.IsSyncingMetadata);
-        Assert.NotNull(completionToast);
-        Assert.Equal("Metadata sync complete", completionToast!.Value.Title);
-        Assert.Equal("No new metadata found.", completionToast!.Value.Message);
     }
 
     [Fact]
@@ -1224,6 +1215,48 @@ public class PreferencesScreenViewModelTests : IDisposable
         public Task<string?> PickFolderAsync(string title) => Task.FromResult(FolderToReturn);
 
         public Task SetClipboardTextAsync(string text) => Task.CompletedTask;
+    }
+
+    [Fact]
+    public void MetadataWriteBackToggles_PersistToAppSettings()
+    {
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+
+        vm.WriteMetadataToFiles = true;
+        vm.WriteMetadataAutomatically = true;
+        vm.WriteNativeSidecar = true;
+
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        var settings = context.GetOrCreateAppSettings();
+        Assert.True(settings.WriteMetadataToFiles);
+        Assert.True(settings.WriteMetadataAutomatically);
+        Assert.True(settings.WriteNativeSidecar);
+    }
+
+    [Fact]
+    public void WriteAllMetadataToFiles_EnqueuesEveryFiledIssue_AsManual()
+    {
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            context.GetOrCreateAppSettings().WriteMetadataToFiles = true;
+            var series = new Paperbunkr.Data.Entities.Series { Name = "S" };
+            context.Series.Add(series);
+            context.SaveChanges();
+            context.Issues.Add(new Paperbunkr.Data.Entities.Issue { SeriesId = series.Id, Number = "1", FilePath = @"C:\a.cbz" });
+            context.Issues.Add(new Paperbunkr.Data.Entities.Issue { SeriesId = series.Id, Number = "2", FilePath = @"C:\b.cbz" });
+            context.Issues.Add(new Paperbunkr.Data.Entities.Issue { SeriesId = series.Id, Number = "3", IsPlaceholder = true }); // no file - skipped
+            context.SaveChanges();
+        }
+
+        var enqueued = new List<(int Id, bool Manual)>();
+        var vm = CreateViewModel(enqueueMetadataWriteBack: (id, manual) => enqueued.Add((id, manual)));
+        vm.EnsureLoaded();
+
+        vm.WriteAllMetadataToFilesCommand.Execute(null);
+
+        Assert.Equal(2, enqueued.Count);
+        Assert.All(enqueued, e => Assert.True(e.Manual));
     }
 
     /// <summary>Returns a configurable file path for both open/save dialogs - used by the keyboard-shortcut import/export round-trip tests, neither existing fake above supports this.</summary>

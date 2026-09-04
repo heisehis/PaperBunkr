@@ -739,6 +739,11 @@
             </ScrollViewer>
         </Border>
 
+        <!-- ============ Status bar (docs/superpowers/specs/2026-09-03-activity-center-design.md) ============ -->
+        <!-- Docked before the LastChildFill main-content Grid so it claims the window's bottom edge.
+             Hidden in Reader fullscreen, same handling as the nav rail above. -->
+        <views:StatusBar DockPanel.Dock="Bottom" IsVisible="{Binding !Reader.IsFullscreen}" />
+
         <!-- ============ Main content ============ -->
         <Grid>
             <!-- docs/superpowers/specs/2026-08-30-app-shell-navigation-history-design.md - real
@@ -840,6 +845,14 @@
         </Grid>
 
     </DockPanel>
+
+    <!-- ============ Activity Center drawer (docs/superpowers/specs/2026-09-03-activity-center-design.md) ============ -->
+    <!-- Tier 2. Overlay sibling of the DockPanel, non-blocking (no scrim) - the app stays usable
+         behind it. IsVisible gates hit-testing when closed; the slide-up is the DrawerRoot.open
+         pseudo-class inside the view. -->
+    <views:ActivityDrawerView DataContext="{Binding ActivityCenter}"
+                              IsVisible="{Binding IsDrawerOpen}"
+                              VerticalAlignment="Bottom" />
 
     <!-- ============ Migration overlay (docs/superpowers/specs/2026-08-06-migration-ux-design.md §B) ============ -->
     <Border IsVisible="{Binding IsMigrationOverlayOpen}" Background="#B0000000">

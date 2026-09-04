@@ -1,5 +1,4 @@
-using cYo.Projects.ComicRack.Engine;
-using cYo.Projects.ComicRack.Engine.IO.Provider;
+using System.Collections.Generic;
 using Microsoft.EntityFrameworkCore;
 using Paperbunkr.App.ViewModels;
 using Paperbunkr.Data;
@@ -8,21 +7,18 @@ using Paperbunkr.Data.Entities;
 namespace Paperbunkr.App.Tests;
 
 /// <summary>
-/// Exercises the Issue Properties Editor's CBZ ComicInfo.xml write-back trigger (docs/superpowers/
-/// specs/2026-08-23-weighted-categorized-tags-design.md) - <see cref="ComicInfoWriteBackServiceTests"/>
-/// already covers the write itself in isolation; this covers the *decision* Save makes about
-/// whether to fire it at all. The trigger is real fire-and-forget background work
-/// (<see cref="IssuePropertiesScreenViewModel.TriggerComicInfoWriteBack"/>), so these poll a bounded
-/// window rather than asserting synchronously - same idiom as <c>LiveFolderWatchServiceTests</c>'s
-/// <c>WaitUntilAsync</c>.
+/// Exercises the Issue Properties Editor's decision about whether a Save should enqueue a file
+/// metadata write-back (docs/superpowers/specs/2026-09-03-file-metadata-write-back-design.md).
+/// <see cref="MetadataFileWriteBackServiceTests"/> / <see cref="MetadataWriteBackQueueTests"/>
+/// cover the write + queue in isolation; this covers the snapshot-compare guard in
+/// <see cref="IssuePropertiesScreenViewModel.Save"/> via an injected fake enqueue callback.
 /// </summary>
-[Collection(nameof(AvaloniaTestCollection))]
 public class IssuePropertiesWriteBackTests : IDisposable
 {
     private readonly string _dbPath;
     private readonly DbContextOptions<PaperbunkrDbContext> _dbOptions;
-    private readonly string _cbzPath = Path.Combine(Path.GetTempPath(), $"paperbunkr_writeback_trigger_{Guid.NewGuid():N}.cbz");
     private readonly int _issueId;
+    private readonly List<int> _enqueued = new();
 
     public IssuePropertiesWriteBackTests()
     {
@@ -35,7 +31,7 @@ public class IssuePropertiesWriteBackTests : IDisposable
         context.Series.Add(series);
         context.SaveChanges();
 
-        var issue = new Issue { SeriesId = series.Id, Number = "1", FilePath = _cbzPath };
+        var issue = new Issue { SeriesId = series.Id, Number = "1", FilePath = @"C:\comics\test.cbz" };
         issue.MergeFrom(IssueTagField.Genre, new[] { "Original Genre" });
         context.Issues.Add(issue);
         context.SaveChanges();
@@ -48,120 +44,61 @@ public class IssuePropertiesWriteBackTests : IDisposable
         try
         {
             if (File.Exists(_dbPath)) File.Delete(_dbPath);
-            if (File.Exists(_cbzPath)) File.Delete(_cbzPath);
         }
         catch (IOException)
         {
         }
     }
 
-    /// <summary>
-    /// The background write-back runs on a real thread-pool <c>Task.Run</c>, but its completion
-    /// notification goes through <c>Dispatcher.UIThread.Post</c> (production needs that marshaling -
-    /// <c>ShowToast</c> ultimately touches UI). This headless test host (<see cref="TestAppBuilder"/>,
-    /// <c>SetupWithoutStarting</c>) never pumps that queue on its own, so each poll tick also drains
-    /// it via <c>RunJobs()</c> - same idiom already established in
-    /// <c>ReaderScreenViewModelTests.LoadIssue_GeneratesThumbnailsForEveryPage_NoneLeftNull</c>.
-    /// </summary>
-    private static async Task<bool> WaitUntilAsync(Func<bool> condition, TimeSpan timeout)
+    private IssuePropertiesScreenViewModel CreateViewModel() =>
+        new(() => { }, () => new PaperbunkrDbContext(_dbOptions), notify: null, history: null, enqueueMetadataWriteBack: _enqueued.Add);
+
+    [Fact]
+    public void Save_ChangedComicInfoField_EnqueuesWriteBack()
     {
-        // Matches ReaderScreenViewModelTests' guard - an `await` can resume this method on a
-        // different thread-pool thread than the one the headless Dispatcher bound to (re-checked
-        // every iteration, not cached - which thread resumes after `await Task.Delay` can vary
-        // iteration to iteration), and RunJobs() throws (not a no-op) when called off that thread.
-        void TryPump()
-        {
-            if (Avalonia.Threading.Dispatcher.UIThread.CheckAccess())
-            {
-                Avalonia.Threading.Dispatcher.UIThread.RunJobs();
-            }
-        }
+        var vm = CreateViewModel();
+        vm.Load(_issueId);
+        vm.Summary = "A brand new summary.";
 
-        var deadline = DateTime.UtcNow + timeout;
-        while (DateTime.UtcNow < deadline)
-        {
-            TryPump();
-            if (condition())
-            {
-                return true;
-            }
+        vm.SaveCommand.Execute(null);
 
-            await Task.Delay(25);
-        }
-
-        TryPump();
-        return condition();
-    }
-
-    /// <summary>Returns null (not a throw) while the file is transiently unreadable - mid-swap
-    /// during the export's write-to-temp-then-rename, or simply not created yet.</summary>
-    private static ComicInfo? ReadBack(string path)
-    {
-        try
-        {
-            using var provider = Providers.Readers.CreateSourceProvider(path);
-            if (provider is null)
-            {
-                return null;
-            }
-
-            provider.Open(async: false);
-            return ((IInfoStorage)provider).LoadInfo(InfoLoadingMethod.Complete);
-        }
-        catch (IOException)
-        {
-            return null;
-        }
+        Assert.Equal(new[] { _issueId }, _enqueued);
     }
 
     [Fact]
-    public async Task Save_ChangedGenreValue_RewritesTheRealCbzFile()
+    public void Save_ChangedGenreValue_EnqueuesWriteBack()
     {
-        CbzFixture.Create(_cbzPath, pageCount: 1, new ComicInfo { Genre = "Original Genre" });
-        var vm = new IssuePropertiesScreenViewModel(() => { }, () => new PaperbunkrDbContext(_dbOptions));
+        var vm = CreateViewModel();
         vm.Load(_issueId);
         vm.Genre = "New Genre";
 
         vm.SaveCommand.Execute(null);
 
-        bool updated = await WaitUntilAsync(() => ReadBack(_cbzPath)?.Genre == "New Genre", TimeSpan.FromSeconds(5));
-        Assert.True(updated, "Expected the CBZ file's embedded Genre to update after Save.");
+        Assert.Equal(new[] { _issueId }, _enqueued);
     }
 
     [Fact]
-    public async Task Save_CategoryWeightOnlyChange_DoesNotTriggerAWriteBack()
+    public void Save_NoFileMappedFieldChanged_DoesNotEnqueue()
     {
-        CbzFixture.Create(_cbzPath, pageCount: 1, new ComicInfo { Genre = "Original Genre" });
-        var notifications = new List<(string Title, string Message)>();
-        var vm = new IssuePropertiesScreenViewModel(() => { }, () => new PaperbunkrDbContext(_dbOptions), (t, m) => notifications.Add((t, m)));
+        var vm = CreateViewModel();
         vm.Load(_issueId);
-        // Genre text itself is untouched - only the per-tag Weight changes.
+        // Save without touching anything.
+
+        vm.SaveCommand.Execute(null);
+
+        Assert.Empty(_enqueued);
+    }
+
+    [Fact]
+    public void Save_CategoryWeightOnlyChange_EnqueuesForSidecar()
+    {
+        var vm = CreateViewModel();
+        vm.Load(_issueId);
         var row = Assert.Single(vm.GenreTagRows);
-        row.Weight = IssueTagWeight.Core;
+        row.Weight = IssueTagWeight.Core; // flat Genre CSV unchanged; sidecar content changes.
 
         vm.SaveCommand.Execute(null);
 
-        // Delete the file out from under a would-be write-back so any incorrectly-triggered attempt
-        // fails fast and loud (via notify) rather than silently succeeding with identical content -
-        // a same-content rewrite wouldn't be distinguishable from "correctly skipped" otherwise.
-        File.Delete(_cbzPath);
-        bool anyNotification = await WaitUntilAsync(() => notifications.Count > 0, TimeSpan.FromMilliseconds(600));
-        Assert.False(anyNotification, "A Category/Weight-only edit should never trigger a file write-back.");
-    }
-
-    [Fact]
-    public async Task Save_ChangedGenreValue_ButFileMissing_NotifiesFailure()
-    {
-        // No CbzFixture.Create - the file at _cbzPath never exists, so a real trigger attempt fails.
-        var notifications = new List<(string Title, string Message)>();
-        var vm = new IssuePropertiesScreenViewModel(() => { }, () => new PaperbunkrDbContext(_dbOptions), (t, m) => notifications.Add((t, m)));
-        vm.Load(_issueId);
-        vm.Genre = "New Genre";
-
-        vm.SaveCommand.Execute(null);
-
-        bool notified = await WaitUntilAsync(() => notifications.Count > 0, TimeSpan.FromSeconds(5));
-        Assert.True(notified, "Expected a failure notification once the background write-back attempt ran.");
-        Assert.Equal("Couldn't update the file", notifications[0].Title);
+        Assert.Equal(new[] { _issueId }, _enqueued);
     }
 }

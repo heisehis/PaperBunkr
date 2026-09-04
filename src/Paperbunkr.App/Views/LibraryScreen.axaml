@@ -683,7 +683,11 @@
         </DataTemplate>
     </UserControl.Resources>
 
-    <Grid RowDefinitions="Auto,*">
+    <!-- DragDrop.AllowDrop on the screen root so a file/folder drop anywhere on the Library screen
+         imports it (docs/superpowers/specs/2026-08-31-drag-and-drop-import-design.md) - matches CE's
+         "drop anywhere on the list" behavior. No drag-over affordance, same as CE. -->
+    <Grid RowDefinitions="Auto,*"
+          DragDrop.AllowDrop="True" DragDrop.DragOver="OnDragOver" DragDrop.Drop="OnDrop">
 
         <!-- ============ Toolbar (extracted to Views/LibraryToolbar.axaml, 4b §1) ============ -->
         <views:LibraryToolbar x:Name="Toolbar" Grid.Row="0" />

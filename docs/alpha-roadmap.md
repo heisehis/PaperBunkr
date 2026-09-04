@@ -278,13 +278,54 @@ commands, not reachable from `MainViewModel` without lifting them. 25 matcher/se
 + 6 `MainViewModel` dispatch tests green (full `Paperbunkr.App.Tests` 1550 green); the FlaUI
 on-screen test is written but unrunnable here (same UIA barrier).
 
-Still open, in rough sequence: **drag-and-drop import** (design done —
-`docs/superpowers/specs/2026-08-31-drag-and-drop-import-design.md`); **file metadata write-back**
-deliberately sequenced last (CE itself gates it behind explicit opt-in settings — real risk
-surface, mutates user files). A tracker/manga-UI research doc
-(Beta-scoped, see its own backlog entry) surfaced during this work — its Stage 6 "manga-specific
-detail view, selected by ContentType" depends on ContentType actually being real/editable/populated,
-which the Manga/ContentType entry above now provides.
+**Drag-and-drop import shipped 2026-09-03** (design `docs/superpowers/specs/2026-08-31-drag-and-drop-
+import-design.md`). One shared `DragImportService` (`Paperbunkr.App/Services`) behind a `Drop`
+handler on both the Library and Reading List screen roots (`DragDrop.AllowDrop` on the root `Grid`,
+thin code-behind → `DragDropPaths.Extract` → ViewModel). It expands dropped folders to their comic
+files (registering each as a `WatchedFolder`, `Watch = false`, exact-path dedup — a dropped folder
+is an explicit "this belongs in my library" gesture), buckets loose files by extension
+(`.cbl`/`.csv` → new reading list via the existing `CblReadingListIO`/`CsvReadingListIO`, comic
+extensions → `LibraryFolderScanner.ImportNewFilesAsync` which already dedupes on `Issue.FilePath`,
+anything else → counted skipped), and resolves every dropped comic back to an `IssueId`. The Library
+screen reloads the grid + one summary toast; the Reading List screen additionally attaches every
+resolved issue as a member of the open list (gated on a new `IsListOpen` — deliberately *not*
+`!IsEmptyList` as the design first sketched, so dropping onto a freshly-created empty list works).
+No drag-over affordance (matches CE). Out of scope, unchanged from the design: window/reader-level
+"drop to open", drag-*out* export, drag-reorder. 8 `DragImportServiceTests` + 4 VM-wiring tests
+green (full `Paperbunkr.App.Tests` 1610/1611, the one failure an unrelated book-scan flake that
+passes in isolation); real OS-level file-drag is not automatable here — needs a manual on-screen
+check by the user.
+
+**File metadata write-back shipped 2026-09-03** (design + plan:
+`docs/superpowers/specs/2026-09-03-file-metadata-write-back-{design,plan}.md`). CE parity in shape:
+three `AppSettings` toggles in Preferences → Advanced ("Comic File Metadata"), all default **off** —
+`WriteMetadataToFiles` (master), `WriteMetadataAutomatically` (auto vs. manual-only),
+`WriteNativeSidecar`. Mirrors CE's `UpdateComicFiles`/`AutoUpdateComicsFiles`/`UpdateComicBookFiles`
+(all also default false).
+
+- **What's written:** the full `ComicInfo.xml` field set the editors touch, via a new
+  `IssueToComicInfoMapper` (Data/CeMigration — the inverse of `CeLibraryMigrator.MapStoryFields`,
+  effective values incl. accepted proposals). The file's *current* embedded `ComicInfo.xml` is
+  loaded first (`EmbeddedComicInfoReader`), so unmodeled elements survive. Optionally a versioned
+  `paperbunkr.json` archive sidecar for fields with no ComicInfo home (tag categories/weights,
+  personal rating, IsFinalIssue, `Book*` collector fields) — the deliberate deviation from CE's
+  proprietary `ComicBook.xml`.
+- **How:** `MetadataFileWriteBackService` + a debounced serial `MetadataWriteBackQueue`
+  (`MainViewModel`-owned, like `LiveFolderWatchService`). **`.cbz` only** via
+  `System.IO.Compression.ZipArchive` update mode (no page re-encode, temp-copy + atomic swap) plus
+  image folders; **`.cb7`/`.cbt` are a visible skip** — the ported `7z u` path needs a `7z.exe`
+  Paperbunkr doesn't bundle. Retired the narrow Genre/Tags-only `ComicInfoWriteBackService` +
+  `ComicExporter` write path.
+- **Triggers** (when both toggles on): Issue Properties, Bulk Issue Properties, Detail
+  (content-type + tag reweight), Manga Detail (content-type), Bulk Series (Content Type / Reading
+  Mode), Quick Rate — each guarded by a `MetadataFileFieldSnapshot` before/after diff so a no-op
+  edit doesn't rewrite the file. Needs-Review proposal-accept deferred (covered by the next edit +
+  the manual action). Manual **"Write metadata to files"** on the Library context menu (issue +
+  series) and a Preferences "Write all library metadata now" button (CE's `UpdateComics()`).
+- Verified: `Paperbunkr.Data.Tests` 753/753, all write-back `Paperbunkr.App.Tests` green (mapper,
+  snapshot, sidecar, service round-trip against real synthetic CBZ, queue debounce/gating, the 6
+  trigger sites, Preferences persistence, context-menu gating). Real end-to-end file writes are
+  headless-testable here; a manual GUI check of the Preferences group is the only flagged gap.
 
 **Live folder-watch scanning shipped 2026-08-23** (design spec `2026-08-23-live-folder-watch-
 scanning-design.md`) — checked CE's own `FileSystemWatcher` usage first rather than assuming: it's
@@ -328,8 +369,12 @@ changes in this working tree.
 
 ### Remote/server library sharing
 Client (connect to another instance's shared library) + server (host, password-protected,
-per-list sharing) + background job/task monitor. Substantial subsystem, not named anywhere in the
+per-list sharing). Substantial subsystem, not named anywhere in the
 original onboarding.md — needs its own brainstorm → design spec before any implementation starts.
+The **background job/task monitor** that CE bundled with this is now decoupled and **shipped for
+local jobs** as the Activity Center (`docs/superpowers/specs/2026-09-03-activity-center-design.md`,
+implemented 2026-09-03, uncommitted); surfacing *remote/server* jobs in it is the part still
+waiting on this subsystem.
 
 ### Metadata Model platform (user-supplied `PAPERBUNKR_METADATA_MODEL.md`, 2026-08-17/18)
 79-section implementation spec covering canonical metadata, relationships, events/reading lists,

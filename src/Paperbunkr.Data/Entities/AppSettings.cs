@@ -429,4 +429,34 @@ public class AppSettings
 
     /// <summary>Whether the reader's chrome (toolbar/progress bar) auto-fades after ~2.5s of no pointer movement while visible. Default true.</summary>
     public bool BookReaderAutoHideChrome { get; set; } = true;
+
+    // --- File metadata write-back (docs/superpowers/specs/2026-09-03-file-metadata-write-back-
+    // design.md). Mirrors CE's three checkboxes (Settings.cs: updateComicFiles /
+    // autoUpdateComicsFiles / updateComicBookFiles), all of which default false there too - nothing
+    // touches a user's original comic files until they explicitly opt in.
+
+    /// <summary>
+    /// Master switch for writing edited metadata back into comic files' embedded
+    /// <c>ComicInfo.xml</c>. Off means no file is ever written; the two settings below are inert.
+    /// CE: <c>Settings.UpdateComicFiles</c> ("Allow writing of Book info into files"), default false.
+    /// </summary>
+    public bool WriteMetadataToFiles { get; set; }
+
+    /// <summary>
+    /// When <see cref="WriteMetadataToFiles"/> is on: whether a qualifying metadata edit triggers a
+    /// debounced background write automatically. Off means writes happen only via the explicit
+    /// "Write metadata to files" action (Library context menu / Preferences button). CE:
+    /// <c>Settings.AutoUpdateComicsFiles</c> ("Book files are updated automatically"), default false.
+    /// </summary>
+    public bool WriteMetadataAutomatically { get; set; }
+
+    /// <summary>
+    /// When <see cref="WriteMetadataToFiles"/> is on: whether a versioned <c>paperbunkr.json</c>
+    /// sidecar entry is also written into the archive, carrying fields with no <c>ComicInfo.xml</c>
+    /// home (tag categories/weights, personal rating, review, book age, per-page rotation, proposed
+    /// values). Deliberate Paperbunkr deviation from CE's <c>UpdateComicBookFiles</c> ("Allow
+    /// writing of Library info into files"), which embeds CE's proprietary <c>ComicBook.xml</c>
+    /// instead - see the design doc. Default false.
+    /// </summary>
+    public bool WriteNativeSidecar { get; set; }
 }

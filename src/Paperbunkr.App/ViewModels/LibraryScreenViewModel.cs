@@ -55,6 +55,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
     private readonly Action<IReadOnlyList<int>> _goBulkIssueProperties;
     private readonly Action<IReadOnlyList<int>> _goBulkSeriesProperties;
     private readonly Action<string, string> _showToast;
+    private readonly Action<int, bool> _enqueueMetadataWriteBack;
     private readonly Action _goLibraryFolders;
     private readonly Action<int> _openCollectionProperties;
     private readonly Action<int> _goBookDetailForBook;
@@ -172,8 +173,10 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         Action<int>? goBookDetailForBook = null,
         LibraryFolderScanner? libraryScanner = null,
         Action<string?, Action<string>>? promptForName = null,
-        WorkspaceService? workspaceService = null)
+        WorkspaceService? workspaceService = null,
+        Action<int, bool>? enqueueMetadataWriteBack = null)
     {
+        _enqueueMetadataWriteBack = enqueueMetadataWriteBack ?? ((_, _) => { });
         _goDetail = goDetail;
         _goReaderForIssue = goReaderForIssue;
         _goToNewIssueProperties = goToNewIssueProperties;
@@ -437,6 +440,11 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
 #pragma warning restore MVVMTK0034
 
         _recentSearches = DeserializeRecentSearches(settings.LibraryRecentSearches);
+
+        // Gates the context-menu "Write metadata to files" action (docs/superpowers/specs/
+        // 2026-09-03-file-metadata-write-back-design.md) - re-read here so toggling the Preferences
+        // master and returning to Library reflects it.
+        CanWriteMetadataToFiles = settings.WriteMetadataToFiles;
 
         // Stale-reference fallback: a collection deleted since last session falls back to "All
         // Series" rather than silently rendering an empty grid with no visible reason why.
@@ -815,6 +823,10 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
                 .Select(i => (i.Id, i.CoverAspectRatio!.Value)));
 
         _allCollections = context.Collections.Include(c => c.Items).AsNoTracking().AsSplitQuery().OrderBy(c => c.SortOrder).ToList();
+
+        // Re-read here (not just in LoadLibrarySettings) so toggling the Preferences master and
+        // returning to Library reflects it - LoadFromDatabase runs on every nav to this screen.
+        CanWriteMetadataToFiles = context.GetOrCreateAppSettings().WriteMetadataToFiles;
 
         _suggestionIndex = BuildSuggestionIndex(context, _allSeries);
 
@@ -2077,6 +2089,50 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         }
     }
 
+    /// <summary>
+    /// Drag-and-drop import entry point for <see cref="Views.LibraryScreen"/>'s code-behind
+    /// <c>Drop</c> handler (docs/superpowers/specs/2026-08-31-drag-and-drop-import-design.md) - runs
+    /// the shared <see cref="DragImportService"/>, refreshes the grid, and shows one summary toast.
+    /// The service's returned <c>IssueIds</c> are unused here (only the Reading List screen needs
+    /// them, to attach membership).
+    /// </summary>
+    public async Task ImportDroppedPathsAsync(IReadOnlyList<string> paths)
+    {
+        if (paths.Count == 0)
+        {
+            return;
+        }
+
+        var result = await new DragImportService().ImportAsync(paths);
+        LoadFromDatabase();
+
+        var parts = new List<string>();
+        if (result.Imported > 0)
+        {
+            parts.Add($"{result.Imported} comic{(result.Imported == 1 ? "" : "s")} imported");
+        }
+
+        if (result.AlreadyInLibrary > 0)
+        {
+            parts.Add($"{result.AlreadyInLibrary} already in library");
+        }
+
+        if (result.SkippedUnsupported > 0)
+        {
+            parts.Add($"{result.SkippedUnsupported} skipped");
+        }
+
+        if (result.ReadingListsImported > 0)
+        {
+            parts.Add($"{result.ReadingListsImported} reading list{(result.ReadingListsImported == 1 ? "" : "s")} imported");
+        }
+
+        if (parts.Count > 0)
+        {
+            _showToast("Drag-and-drop import", string.Join(", ", parts) + ".");
+        }
+    }
+
     // --- Chips row + empty state ---
 
     public bool HasActiveFilters =>
@@ -2152,6 +2208,38 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
     /// ctor callback (no-op default keeps the VM standalone-testable).</summary>
     [RelayCommand]
     private void OpenLibraryFolders() => _goLibraryFolders();
+
+    /// <summary>Whether <see cref="AppSettings.WriteMetadataToFiles"/> is on - gates the context-menu
+    /// "Write metadata to files" action (docs/superpowers/specs/2026-09-03-file-metadata-write-back-
+    /// design.md). Set by <see cref="LoadLibrarySettings"/>.</summary>
+    [ObservableProperty]
+    private bool _canWriteMetadataToFiles;
+
+    /// <summary>
+    /// Manual "Write metadata to files" on the right-clicked issue (expanded to the whole selection
+    /// when it's part of one) - CE's <c>ComicBrowserControl.UpdateFiles()</c>. Enqueued as
+    /// <c>manual: true</c> so it runs regardless of the automatic-mode toggle.
+    /// </summary>
+    [RelayCommand]
+    private void WriteIssueMetadataToFiles(int issueId)
+    {
+        foreach (int id in Selection.UnionForAction(issueId))
+        {
+            _enqueueMetadataWriteBack(id, true);
+        }
+    }
+
+    /// <summary>Series-card equivalent - fans out to every member issue of the (selection-expanded) series.</summary>
+    [RelayCommand]
+    private void WriteSeriesMetadataToFiles(int seriesId)
+    {
+        var seriesIds = SeriesSelection.UnionForAction(seriesId).ToList();
+        using var context = PaperbunkrDb.CreateContext();
+        foreach (int id in context.Issues.Where(i => seriesIds.Contains(i.SeriesId)).Select(i => i.Id).ToList())
+        {
+            _enqueueMetadataWriteBack(id, true);
+        }
+    }
 
     /// <summary>Reveals THIS tile's own issue file directly (docs/superpowers/specs/
     /// 2026-08-18-library-book-centric-redesign-design.md Slice 3) - simpler and more correct than

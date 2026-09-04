@@ -76,6 +76,9 @@ public sealed class LibraryContextMenuBuilder
                 Symbol.Library),
             ContextMenuEntry.Separator,
             ContextMenuEntry.Item("Show in Explorer", _vm.RevealIssueCommand, row.Id, Symbol.FolderOpen, isEnabled: row.HasFile),
+            _vm.CanWriteMetadataToFiles
+                ? ContextMenuEntry.Item(multi ? $"Write metadata to {n} files" : "Write metadata to file", _vm.WriteIssueMetadataToFilesCommand, row.Id, Symbol.Save, isEnabled: row.HasFile)
+                : null,
             _vm.HasPluginHost
                 ? ContextMenuEntry.Item("Find Duplicates", _vm.RunLibraryPluginsCommand, row.Id, Symbol.DocumentSearch)
                 : null,
@@ -118,6 +121,9 @@ public sealed class LibraryContextMenuBuilder
             ContextMenuEntry.SubMenu("Reading Status", ReadingStatusChildren(card.SeriesId, card.ReadingStatusLabel)),
             ContextMenuEntry.Separator,
             ContextMenuEntry.Item("Show in Explorer", _vm.RevealSeriesCommand, card, Symbol.FolderOpen, isEnabled: card.HasFile),
+            _vm.CanWriteMetadataToFiles
+                ? ContextMenuEntry.Item("Write metadata to files", _vm.WriteSeriesMetadataToFilesCommand, card.SeriesId, Symbol.Save)
+                : null,
             ContextMenuEntry.Separator,
             ContextMenuEntry.SubMenu(
                 multi ? $"Delete {n} Series…" : "Delete Series…",

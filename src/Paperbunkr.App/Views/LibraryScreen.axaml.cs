@@ -5,6 +5,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.Platform.Storage;
 using Avalonia.VisualTree;
 using Paperbunkr.App.Models;
 using Paperbunkr.App.ViewModels;
@@ -283,6 +284,29 @@ public partial class LibraryScreen : UserControl
         double offsetY = targetRow * (cardHeight + margin);
 
         scrollViewer.Offset = new Vector(scrollViewer.Offset.X, offsetY);
+    }
+
+    // --- Drag-and-drop import (docs/superpowers/specs/2026-08-31-drag-and-drop-import-design.md) ---
+    // Both handlers stay thin: DragOver just gates on the File format, Drop resolves local paths and
+    // hands off to the ViewModel, which owns the service call / reload / toast.
+
+    private void OnDragOver(object? sender, DragEventArgs e)
+    {
+        e.DragEffects = e.DataTransfer.Formats.Contains(DataFormat.File) ? DragDropEffects.Copy : DragDropEffects.None;
+    }
+
+    private async void OnDrop(object? sender, DragEventArgs e)
+    {
+        if (DataContext is not LibraryScreenViewModel vm)
+        {
+            return;
+        }
+
+        var paths = DragDropPaths.Extract(e);
+        if (paths.Count > 0)
+        {
+            await vm.ImportDroppedPathsAsync(paths);
+        }
     }
 
     private static int FindFirstIndexForLetter<T>(IReadOnlyList<T> items, Func<T, string> selectName, string letter)

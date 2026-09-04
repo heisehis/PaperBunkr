@@ -65,6 +65,42 @@
                 </StackPanel>
             </Border>
 
+            <!-- Comic File Metadata (docs/superpowers/specs/2026-09-03-file-metadata-write-back-design.md) -->
+            <Border Classes="groupBox" Tag="advanced.fileMetadata">
+                <StackPanel>
+                    <Border Classes="groupHeader">
+                        <TextBlock Text="Comic File Metadata" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
+                    </Border>
+                    <StackPanel Margin="14" Spacing="12">
+                        <CheckBox IsChecked="{Binding WriteMetadataToFiles}" Foreground="{DynamicResource PbTextBrush}" FontSize="13"
+                                  Content="Write metadata changes into comic files" />
+                        <TextBlock Text="When on, edits you make in Paperbunkr are written back into each comic's embedded ComicInfo.xml. This modifies your original files in place. CBZ, CB7, CBT and image folders can be written; CBR/RAR, PDF and DjVu can't."
+                                   FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" Margin="0,-6,0,0" />
+
+                        <CheckBox IsChecked="{Binding WriteMetadataAutomatically}" IsEnabled="{Binding WriteMetadataToFiles}"
+                                  Foreground="{DynamicResource PbTextBrush}" FontSize="13"
+                                  Content="Write automatically after every edit" />
+                        <TextBlock Text="Off: files are only written when you choose &quot;Write metadata to files&quot; from a comic's right-click menu or the button below."
+                                   FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" Margin="0,-6,0,0" />
+
+                        <CheckBox IsChecked="{Binding WriteNativeSidecar}" IsEnabled="{Binding WriteMetadataToFiles}"
+                                  Foreground="{DynamicResource PbTextBrush}" FontSize="13"
+                                  Content="Also write a paperbunkr.json sidecar" />
+                        <TextBlock Text="Keeps Paperbunkr-specific details that ComicInfo.xml has no field for — tag categories and weights, your personal rating, review, and collection notes."
+                                   FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" Margin="0,-6,0,0" />
+
+                        <Button Classes="headerAction primary" Command="{Binding WriteAllMetadataToFilesCommand}"
+                                IsEnabled="{Binding WriteMetadataToFiles}" HorizontalAlignment="Left" Margin="0,6,0,0">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <fi:SymbolIcon Symbol="Save" Foreground="{DynamicResource PbBadgeTextBrush}" />
+                                <TextBlock Text="Write all library metadata to files now…" />
+                            </StackPanel>
+                        </Button>
+                        <TextBlock Text="{Binding WriteAllMetadataStatus}" FontSize="12" Foreground="{DynamicResource PbTextFaintBrush}" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
             <!-- Backup Manager -->
             <Border Classes="groupBox" Tag="advanced.backup">
                 <StackPanel>

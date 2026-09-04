@@ -4,6 +4,7 @@ using CommunityToolkit.Mvvm.Input;
 using Microsoft.EntityFrameworkCore;
 using Paperbunkr.App.Services;
 using Paperbunkr.Data;
+using Paperbunkr.Data.CeMigration;
 using Paperbunkr.Data.Metadata;
 
 namespace Paperbunkr.App.ViewModels;
@@ -21,17 +22,20 @@ public partial class QuickRateScreenViewModel : ViewModelBase
 {
     private readonly System.Action _close;
     private readonly System.Func<PaperbunkrDbContext> _contextFactory;
+    private readonly System.Action<int>? _enqueueMetadataWriteBack;
     private int? _issueId;
 
-    public QuickRateScreenViewModel(System.Action close) : this(close, PaperbunkrDb.CreateContext)
+    public QuickRateScreenViewModel(System.Action close, System.Action<int>? enqueueMetadataWriteBack = null)
+        : this(close, PaperbunkrDb.CreateContext, enqueueMetadataWriteBack)
     {
     }
 
     /// <summary>Test-only seam - production always uses the default ctor (the real per-user database).</summary>
-    internal QuickRateScreenViewModel(System.Action close, System.Func<PaperbunkrDbContext> contextFactory)
+    internal QuickRateScreenViewModel(System.Action close, System.Func<PaperbunkrDbContext> contextFactory, System.Action<int>? enqueueMetadataWriteBack = null)
     {
         _close = close;
         _contextFactory = contextFactory;
+        _enqueueMetadataWriteBack = enqueueMetadataWriteBack;
     }
 
     [ObservableProperty] private string _headerLabel = string.Empty;
@@ -87,12 +91,21 @@ public partial class QuickRateScreenViewModel : ViewModelBase
         }
 
         using var context = _contextFactory();
-        var issue = context.Issues.Find(issueId);
+        var issue = context.Issues.Include(i => i.Series).Include(i => i.Tags).FirstOrDefault(i => i.Id == issueId);
         if (issue is not null)
         {
+            var before = MetadataFileFieldSnapshot.Capture(issue);
+
             issue.Rating = Rating.HasValue ? (float?)Rating.Value : null;
             issue.Review = string.IsNullOrWhiteSpace(Review) ? null : Review;
             context.SaveChanges();
+
+            // Rating -> paperbunkr.json sidecar, Review -> ComicInfo.xml
+            // (docs/superpowers/specs/2026-09-03-file-metadata-write-back-design.md).
+            if (MetadataFileFieldSnapshot.Differ(before, MetadataFileFieldSnapshot.Capture(issue)))
+            {
+                _enqueueMetadataWriteBack?.Invoke(issueId);
+            }
         }
 
         _close();

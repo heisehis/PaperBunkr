@@ -9,6 +9,7 @@ using Microsoft.EntityFrameworkCore;
 using Paperbunkr.App.Models;
 using Paperbunkr.App.Services;
 using Paperbunkr.Data;
+using Paperbunkr.Data.CeMigration;
 using Paperbunkr.Data.Entities;
 
 namespace Paperbunkr.App.ViewModels;
@@ -25,6 +26,7 @@ public partial class BulkIssuePropertiesScreenViewModel : ViewModelBase
     private readonly Action _goBack;
     private readonly Func<PaperbunkrDbContext> _contextFactory;
     private readonly Action<string, string>? _notify;
+    private readonly Action<int>? _enqueueMetadataWriteBack;
     private List<int> _issueIds = new();
     private BulkFieldViewModel? _contentTypeField;
     private BulkFieldViewModel? _readingModeField;
@@ -51,18 +53,19 @@ public partial class BulkIssuePropertiesScreenViewModel : ViewModelBase
     /// <summary>Every selected issue's fields as of <see cref="Load"/>, before any edit - the Undo half of the entry <see cref="Save"/> records (docs/ce-feature-inventory.md §A "Undo/Redo").</summary>
     private Dictionary<int, Dictionary<string, string?>> _beforeSnapshots = new();
 
-    public BulkIssuePropertiesScreenViewModel(Action goBack, Action<string, string>? notify = null, MetadataEditHistoryService? history = null)
-        : this(goBack, PaperbunkrDb.CreateContext, notify, history)
+    public BulkIssuePropertiesScreenViewModel(Action goBack, Action<string, string>? notify = null, MetadataEditHistoryService? history = null, Action<int>? enqueueMetadataWriteBack = null)
+        : this(goBack, PaperbunkrDb.CreateContext, notify, history, enqueueMetadataWriteBack)
     {
     }
 
     /// <summary>Test-only seam - production always uses the default ctor (the real per-user database).</summary>
-    internal BulkIssuePropertiesScreenViewModel(Action goBack, Func<PaperbunkrDbContext> contextFactory, Action<string, string>? notify = null, MetadataEditHistoryService? history = null)
+    internal BulkIssuePropertiesScreenViewModel(Action goBack, Func<PaperbunkrDbContext> contextFactory, Action<string, string>? notify = null, MetadataEditHistoryService? history = null, Action<int>? enqueueMetadataWriteBack = null)
     {
         _goBack = goBack;
         _contextFactory = contextFactory;
         _notify = notify;
         _history = history ?? MetadataEditHistoryService.Shared;
+        _enqueueMetadataWriteBack = enqueueMetadataWriteBack;
     }
 
     public ObservableCollection<BulkFieldViewModel> MainFields { get; } = new();
@@ -219,17 +222,13 @@ public partial class BulkIssuePropertiesScreenViewModel : ViewModelBase
         var issues = context.Issues.Include(i => i.Series).Include(i => i.Tags).Where(i => _issueIds.Contains(i.Id)).ToList();
         var stagedFields = AllFields.Where(f => f.IsStaged).ToList();
 
-        // Genre/Tags value-set changes trigger a CBZ ComicInfo.xml write-back after Save (docs/
-        // superpowers/specs/2026-08-23-weighted-categorized-tags-design.md) - tracked per issue
-        // since the shared added/removed token sets above don't tell you which specific issues in
-        // the selection actually ended up with a different value (one issue's tokens might already
-        // have included every "added" value and lacked every "removed" one).
-        var genreOrTagsChangedIssueIds = new HashSet<int>();
+        // File metadata write-back (docs/superpowers/specs/2026-09-03-file-metadata-write-back-
+        // design.md) - snapshot every file-mapped field per issue now, compare after Save, enqueue a
+        // write only for the issues whose file content would actually change.
+        var writeBackBefore = issues.ToDictionary(i => i.Id, MetadataFileFieldSnapshot.Capture);
 
         foreach (var field in stagedFields)
         {
-            bool tracksFileWriteBack = field.Descriptor.Label is "Genre" or "Tags";
-
             if (field.Descriptor.IsListField)
             {
                 var currentTokens = ListFieldTokens.Parse(field.Value);
@@ -244,11 +243,6 @@ public partial class BulkIssuePropertiesScreenViewModel : ViewModelBase
                     issueTokens.UnionWith(added);
                     string joined = ListFieldTokens.Join(issueTokens);
                     field.Descriptor.Set(issue, joined);
-
-                    if (tracksFileWriteBack && !string.Equals(before ?? string.Empty, joined, StringComparison.Ordinal))
-                    {
-                        genreOrTagsChangedIssueIds.Add(issue.Id);
-                    }
                 }
             }
             else
@@ -281,9 +275,12 @@ public partial class BulkIssuePropertiesScreenViewModel : ViewModelBase
                 _beforeSnapshots, issues.ToDictionary(i => i.Id, MetadataEditHistoryService.CaptureSnapshot));
         }
 
-        foreach (var issue in issues.Where(i => genreOrTagsChangedIssueIds.Contains(i.Id) && i.FilePath is not null))
+        foreach (var issue in issues)
         {
-            IssuePropertiesScreenViewModel.TriggerComicInfoWriteBack(issue.FilePath!, issue.JoinedGenre(), issue.JoinedTags(), _notify);
+            if (MetadataFileFieldSnapshot.Differ(writeBackBefore[issue.Id], MetadataFileFieldSnapshot.Capture(issue)))
+            {
+                _enqueueMetadataWriteBack?.Invoke(issue.Id);
+            }
         }
 
         // Matches IssuePropertiesScreenViewModel's _isDirty reset (P6 follow-up, docs/alpha-todo.md) -

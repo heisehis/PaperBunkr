@@ -2516,4 +2516,53 @@ public class LibraryScreenViewModelTests : IDisposable
         Assert.False(vm.IsSuggestionsOpen);
         Assert.Equal("Solo", vm.SearchQuery);
     }
+
+    [Fact]
+    public async Task ImportDroppedPathsAsync_ImportsComicsRefreshesGridAndToasts()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), $"pb_lib_drop_{Guid.NewGuid():N}"));
+        try
+        {
+            string cbz = CbzFixture.Create(Path.Combine(root.FullName, "Kilo Station 001 (2020).cbz"), pageCount: 1);
+            (string Title, string Message)? toast = null;
+            var vm = new LibraryScreenViewModel(
+                goDetail: _ => { }, goReaderForIssue: _ => { }, goToNewIssueProperties: (_, _, _) => { },
+                showToast: (t, m) => toast = (t, m));
+
+            await vm.ImportDroppedPathsAsync(new[] { cbz });
+
+            using var context = PaperbunkrDb.CreateContext();
+            Assert.Single(context.Issues);
+            // Dropped as a folder-free loose file, so no WatchedFolder row.
+            Assert.Empty(context.WatchedFolders);
+            Assert.NotNull(toast);
+            Assert.Contains("1 comic imported", toast!.Value.Message);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch (IOException) { }
+        }
+    }
+
+    [Fact]
+    public async Task ImportDroppedPathsAsync_DroppedFolder_RegistersWatchedFolder()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), $"pb_lib_drop_{Guid.NewGuid():N}"));
+        try
+        {
+            CbzFixture.Create(Path.Combine(root.FullName, "Kilo Station 001 (2020).cbz"), pageCount: 1);
+            var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { }, goToNewIssueProperties: (_, _, _) => { });
+
+            await vm.ImportDroppedPathsAsync(new[] { root.FullName });
+
+            using var context = PaperbunkrDb.CreateContext();
+            var watched = Assert.Single(context.WatchedFolders);
+            Assert.Equal(root.FullName, watched.Path);
+            Assert.False(watched.Watch);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch (IOException) { }
+        }
+    }
 }

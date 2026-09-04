@@ -17,6 +17,60 @@ namespace Paperbunkr.Data.Migrations
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.11");
 
+            modelBuilder.Entity("Paperbunkr.Data.Entities.ActivityRun", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime?>("FinishedUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("ItemsFailed")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("ItemsProcessed")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ResultLinkKind")
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ResultLinkPayload")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ResultSummary")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("StartedUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Trigger")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("StartedUtc");
+
+                    b.ToTable("ActivityRuns");
+                });
+
             modelBuilder.Entity("Paperbunkr.Data.Entities.AppSettings", b =>
                 {
                     b.Property<int>("Id")
@@ -409,6 +463,15 @@ namespace Paperbunkr.Data.Migrations
                         .HasColumnType("INTEGER");
 
                     b.Property<bool>("WelcomeTourOffered")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("WriteMetadataAutomatically")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("WriteMetadataToFiles")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("WriteNativeSidecar")
                         .HasColumnType("INTEGER");
 
                     b.HasKey("Id");

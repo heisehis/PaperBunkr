@@ -7,9 +7,8 @@ namespace Paperbunkr.App.ViewModels;
 
 /// <summary>
 /// "Update ready - restart to apply" toast (docs/superpowers/specs/2026-09-01-auto-update-and-
-/// changelog-design.md) - <see cref="ToastProgressViewModel"/>'s sibling, not a reuse of it: this one
-/// carries actions (Restart now / Later / What's New), no progress bar, so stretching the existing
-/// determinate-progress VM to also carry buttons didn't fit. Restart only ever fires on explicit
+/// changelog-design.md) - a dedicated toast VM carrying actions (Restart now / Later / What's New),
+/// no progress bar. Restart only ever fires on explicit
 /// user action - never automatic, so an update never interrupts an in-progress reading session.
 /// Carries <see cref="_downloadPath"/> alongside the item because NetSparkle's
 /// <c>SparkleUpdater.InstallUpdate</c> needs both - unlike Velopack's single-argument

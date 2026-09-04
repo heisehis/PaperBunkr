@@ -750,4 +750,46 @@ public class ReadingScreenViewModelTests : IDisposable
         Assert.Equal(2, summary.TotalCount);
         Assert.Equal(0.5, summary.ProgressFraction, 3);
     }
+
+    [Fact]
+    public async Task ImportDroppedPathsAsync_ImportsComicsAndAttachesToOpenList()
+    {
+        var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), $"pb_rl_drop_{Guid.NewGuid():N}"));
+        try
+        {
+            string cbz = CbzFixture.Create(Path.Combine(root.FullName, "Kilo Station 001 (2020).cbz"), pageCount: 1);
+            (string Title, string Message)? toast = null;
+            var vm = new ReadingScreenViewModel(_filePicker, (_, _) => { }, showToast: (t, m) => toast = (t, m));
+            vm.CreateNewCommand.Execute(null);
+            int listId;
+            using (var context = PaperbunkrDb.CreateContext())
+            {
+                listId = context.ReadingLists.Single().Id;
+            }
+
+            await vm.ImportDroppedPathsAsync(new[] { cbz });
+
+            using var db = PaperbunkrDb.CreateContext();
+            Assert.Single(db.Issues);
+            Assert.Single(db.ReadingListItems.Where(i => i.ReadingListId == listId));
+            Assert.Equal(1, vm.TotalCount);
+            Assert.NotNull(toast);
+        }
+        finally
+        {
+            try { root.Delete(recursive: true); } catch (IOException) { }
+        }
+    }
+
+    [Fact]
+    public async Task ImportDroppedPathsAsync_NoListOpen_IsNoOp()
+    {
+        var vm = new ReadingScreenViewModel(_filePicker, (_, _) => { });
+
+        await vm.ImportDroppedPathsAsync(new[] { "Z:\\nonexistent\\Kilo Station 001.cbz" });
+
+        Assert.False(vm.IsListOpen);
+        using var db = PaperbunkrDb.CreateContext();
+        Assert.Empty(db.Issues);
+    }
 }

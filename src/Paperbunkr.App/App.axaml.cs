@@ -94,6 +94,10 @@ public partial class App : Application
             // interval check and swallows its own failures.
             System.Threading.Tasks.Task.Run(() => new LibraryFolderScanner().RunContentTypeSweepIfDue());
 
+            // Activity Center history prune (docs/superpowers/specs/2026-09-03-activity-center-
+            // design.md) - same fire-and-forget, self-swallowing shape as the two triggers above.
+            System.Threading.Tasks.Task.Run(ActivityHistoryStore.PruneOnStartup);
+
             DiagnosticsService.LogMilestone("Database ready. Applying skin/theme...");
             new SkinService().ApplyPersistedSettings();
 

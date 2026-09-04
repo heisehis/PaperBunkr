@@ -64,7 +64,7 @@ public partial class MainWindow : Window
         Closing += OnWindowClosing;
         PointerWheelChanged += OnWindowPointerWheelChanged;
 
-        // Shell-wide shortcuts (Escape/Back: P5, docs/alpha-roadmap.md +
+        // Shell-wide shortcuts (Escape/Back: P5, docs/Paperbunkr-Roadmap.md +
         // docs/superpowers/specs/2026-08-30-app-shell-navigation-history-design.md; Ctrl+,/Ctrl+Tab/
         // Ctrl+Shift+Tab: docs/superpowers/specs/2026-08-31-app-wide-and-library-keyboard-shortcuts-
         // design.md) - a plain Tunnel KeyDown handler, not <Window.KeyBindings>, matching the same

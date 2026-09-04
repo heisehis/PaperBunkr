@@ -229,7 +229,7 @@ gate.
 ## Step 8: Docs
 
 **Files:**
-- `docs/alpha-roadmap.md` (edit) — flip the "Recent/MRU + Quick Open" open item to
+- `docs/Paperbunkr-Roadmap.md` (edit) — flip the "Recent/MRU + Quick Open" open item to
   **shipped 2026-09-03** with commit ref; note the deviations already in the design (Ctrl+P
   palette, not a menu/cover-wall; Scan/Backup/Check-updates actions deferred).
 - `docs/ce-feature-inventory.md` §C (edit) — `Recent/MRU file list, Quick Open` row: "design done"

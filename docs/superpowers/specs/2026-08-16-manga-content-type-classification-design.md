@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-16
 **Status:** Approved, pending implementation plan
-**Backlog ref:** surfaced while scoping "pluggable sort/group strategies" (`docs/alpha-roadmap.md`'s
+**Backlog ref:** surfaced while scoping "pluggable sort/group strategies" (`docs/Paperbunkr-Roadmap.md`'s
 Library-browsing-extras sequence) — CE's `Manga` field turned out to already have a superior,
 already-modeled home in Paperbunkr (`Series.ContentType`), just with no way to ever set it outside
 CE migration. This spec closes that gap; sort/group work itself remains paused/separate.

@@ -170,7 +170,7 @@ during implementation — this section exists to *confirm*, not to design new be
 
 ## Roadmap
 
-Once landed, add a `docs/alpha-roadmap.md` Beta-backlog entry (matching the pattern the navigation-
+Once landed, add a `docs/Paperbunkr-Roadmap.md` Beta-backlog entry (matching the pattern the navigation-
 history and MediaRelation specs used) and note in `docs/superpowers/specs/2026-08-30-app-shell-
 navigation-history-design.md`'s own follow-up reference that this is the keyboard-operability spec it
 pointed to.

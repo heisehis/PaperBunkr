@@ -14,10 +14,28 @@ Seven tabs.
 - **Motion** — animation intensity for navigation transitions.
 - **Developer / Future** — diagnostic toggles and placeholders.
 
-## Behavior
+## General
+
+**Startup**
+
+- **Reopen the screen I was on last time** — off means every launch opens Home.
+- **Scan library folders for new files at startup** — picks up files added or removed while
+  Paperbunkr wasn't running; runs in the background. Off by default.
+
+**Reading**
 
 - **Resume issues where you left off**
 - **Reading past the last page opens the next issue**
+- **Ask me to rate a comic when I finish it** — opens the Quick Rate prompt at the end of a book.
+  Off by default.
+
+**Library**
+
+- **Allow importing files by dragging them into the window** — on by default; turn off to disable
+  drag-and-drop import on the Library and Reading List screens.
+
+**Window**
+
 - **Minimize to tray** (closing the window minimizes to tray while on)
 
 ## Libraries

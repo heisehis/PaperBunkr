@@ -305,6 +305,47 @@ public class PreferencesScreenViewModelTests : IDisposable
     }
 
     [Fact]
+    public void EnsureLoaded_PopulatesBehaviorBatch2FlagsFromAppSettings()
+    {
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            var settings = context.GetOrCreateAppSettings();
+            settings.RestoreSessionOnStartup = false;
+            settings.ScanFoldersOnStartup = true;
+            settings.PromptReviewOnFinish = true;
+            settings.EnableDragDropImport = false;
+            context.SaveChanges();
+        }
+
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+
+        Assert.False(vm.RestoreSessionOnStartup);
+        Assert.True(vm.ScanFoldersOnStartup);
+        Assert.True(vm.PromptReviewOnFinish);
+        Assert.False(vm.EnableDragDropImport);
+    }
+
+    [Fact]
+    public void TogglingBehaviorBatch2Flags_PersistsToAppSettings()
+    {
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+
+        vm.RestoreSessionOnStartup = false;
+        vm.ScanFoldersOnStartup = true;
+        vm.PromptReviewOnFinish = true;
+        vm.EnableDragDropImport = false;
+
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        var settings = context.GetOrCreateAppSettings();
+        Assert.False(settings.RestoreSessionOnStartup);
+        Assert.True(settings.ScanFoldersOnStartup);
+        Assert.True(settings.PromptReviewOnFinish);
+        Assert.False(settings.EnableDragDropImport);
+    }
+
+    [Fact]
     public void GoReader_SetsActiveSectionFlag()
     {
         var vm = CreateViewModel();

@@ -25,9 +25,15 @@ public static class PreferenceIndex
 {
     public static IReadOnlyList<PreferenceIndexEntry> Entries { get; } = new PreferenceIndexEntry[]
     {
+        new(PreferencesSection.General, "Startup", "Startup",
+            new[] { "startup", "launch", "reopen", "last session", "restore screen", "scan on startup", "rescan folders" },
+            "general.startup"),
         new(PreferencesSection.General, "Reading", "Reading",
-            new[] { "resume", "left off", "last page", "auto advance", "next issue", "open next" },
+            new[] { "resume", "left off", "last page", "auto advance", "next issue", "open next", "rate on finish", "quick review", "review prompt" },
             "general.reading"),
+        new(PreferencesSection.General, "Library", "Library",
+            new[] { "drag and drop", "drag drop", "import files", "drop files" },
+            "general.library"),
         new(PreferencesSection.General, "Window", "Window",
             new[] { "minimize", "tray", "close to tray", "system tray" },
             "general.window"),

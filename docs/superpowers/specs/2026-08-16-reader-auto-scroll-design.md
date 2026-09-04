@@ -2,13 +2,13 @@
 
 **Date:** 2026-08-16
 **Status:** Approved, pending implementation plan
-**Backlog ref:** `docs/alpha-roadmap.md` reader-polish backlog, last remaining item after
+**Backlog ref:** `docs/Paperbunkr-Roadmap.md` reader-polish backlog, last remaining item after
 remappable keyboard shortcuts (docs/superpowers/specs/2026-08-16-remappable-reader-shortcuts-
 design.md) and split-page nav.
 
 ## Context
 
-`docs/alpha-roadmap.md` lists "auto-scrolling/hands-free mode" as open backlog. CE's actual
+`docs/Paperbunkr-Roadmap.md` lists "auto-scrolling/hands-free mode" as open backlog. CE's actual
 `AutoScrolling` toggle (`_reference/ComicRackCE/ComicRack.Engine/Display/ComicDisplay.cs:1313-
 1399`) is not what the name suggests: it's a keyboard-arrow behavior switch for zoomed, paged
 books - when on, arrow keys skip fine pixel-panning and jump straight to the next page/"part"

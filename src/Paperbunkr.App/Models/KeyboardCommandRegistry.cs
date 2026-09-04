@@ -25,7 +25,7 @@ public sealed record KeyboardCommandDescriptor(string Id, string Group, string L
 
 /// <summary>
 /// Every remappable keyboard command in the app (Preferences &gt; Keyboard Shortcuts,
-/// docs/alpha-roadmap.md P5 follow-up, extended by docs/superpowers/specs/
+/// docs/Paperbunkr-Roadmap.md P5 follow-up, extended by docs/superpowers/specs/
 /// 2026-08-16-remappable-reader-shortcuts-design.md). The extensible seam this whole feature
 /// exists for: adding a new remappable action anywhere in the app means adding one entry here plus
 /// wiring the consuming control to call <c>KeyBindingService.GetKey(Id)</c> instead of a hardcoded

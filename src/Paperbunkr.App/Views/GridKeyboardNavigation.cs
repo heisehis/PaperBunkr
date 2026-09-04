@@ -12,7 +12,7 @@ public enum GridNavigationDirection { Left, Right, Up, Down, Home, End }
 
 /// <summary>
 /// Spatial 2D arrow-key movement through a <see cref="WrapPanel"/>-backed grid, extending the Tab
-/// order that already exists on Library cards and Detail issue tiles (P5, docs/alpha-roadmap.md),
+/// order that already exists on Library cards and Detail issue tiles (P5, docs/Paperbunkr-Roadmap.md),
 /// per docs/superpowers/specs/2026-08-09-reader-gestures-and-grid-navigation-design.md. Moves focus
 /// only - Enter/Space/click remain the sole selection mechanism, unchanged.
 /// </summary>

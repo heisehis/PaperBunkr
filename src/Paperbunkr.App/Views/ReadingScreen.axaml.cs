@@ -18,12 +18,15 @@ public partial class ReadingScreen : UserControl
 
     private void OnDragOver(object? sender, DragEventArgs e)
     {
-        e.DragEffects = e.DataTransfer.Formats.Contains(DataFormat.File) ? DragDropEffects.Copy : DragDropEffects.None;
+        bool enabled = (DataContext as ReadingScreenViewModel)?.DragDropImportEnabled == true;
+        e.DragEffects = enabled && e.DataTransfer.Formats.Contains(DataFormat.File)
+            ? DragDropEffects.Copy
+            : DragDropEffects.None;
     }
 
     private async void OnDrop(object? sender, DragEventArgs e)
     {
-        if (DataContext is not ReadingScreenViewModel vm)
+        if (DataContext is not ReadingScreenViewModel vm || !vm.DragDropImportEnabled)
         {
             return;
         }

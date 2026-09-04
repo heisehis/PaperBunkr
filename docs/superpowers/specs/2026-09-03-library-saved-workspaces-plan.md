@@ -12,7 +12,7 @@ environment** — `AppFixture` launch hits a UIA-timeout that the pre-existing
 
 Committed to branch `claude/library-saved-workspaces` (`65e2a22` feature, `37281e4` docs),
 surgically split from the uncommitted Books-reader WebView work sharing this tree; verified in a
-clean detached worktree. Step 10 done: `alpha-roadmap.md` + `ce-feature-inventory.md` §C updated
+clean detached worktree. Step 10 done: `Paperbunkr-Roadmap.md` + `ce-feature-inventory.md` §C updated
 (Workspaces shipped, filesystem folder browsing dropped, Quick Open design-done).
 
 **Deviations from the design (both reflected back into the design doc):**
@@ -282,7 +282,7 @@ coverage from Steps 4/6 as the real gate, exactly as prior specs did.
 ## Step 10: Docs
 
 **Files:**
-- `docs/alpha-roadmap.md` (edit) — "Library browsing extras" section: mark Saved Workspaces
+- `docs/Paperbunkr-Roadmap.md` (edit) — "Library browsing extras" section: mark Saved Workspaces
   shipped, note the deviations (per-screen not global; no reader/window capture; ships 7 starters).
   Also record that **filesystem folder browsing was dropped** from the bundle by decision.
 - `docs/ce-feature-inventory.md` §C (edit) — flip `Saved "Workspaces"` to shipped (per-screen

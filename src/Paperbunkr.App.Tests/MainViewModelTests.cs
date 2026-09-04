@@ -6,7 +6,7 @@ using System.Linq;
 namespace Paperbunkr.App.Tests;
 
 /// <summary>
-/// Exercises <see cref="MainViewModel.EscapeCommand"/> (P5, docs/alpha-roadmap.md) - the single
+/// Exercises <see cref="MainViewModel.EscapeCommand"/> (P5, docs/Paperbunkr-Roadmap.md) - the single
 /// app-wide Esc-to-close/cancel routing, since none of Migration/Issue Properties/Bulk Editing are
 /// real Avalonia Windows/Popups with native dialog-Escape behavior. Redirects
 /// <see cref="PaperbunkrDbContext.DatabasePathOverride"/> to a temp SQLite file, same approach as
@@ -628,6 +628,29 @@ public class MainViewModelTests : IDisposable
 
         Assert.True(vm.IsDetail);
         Assert.Equal("Restore Series", vm.Detail.HeaderTitle);
+    }
+
+    /// <summary>docs/superpowers/specs/2026-09-04-behavior-settings-batch2-design.md §3.1 (CE
+    /// Settings.OpenLastFile) - a valid persisted last screen is ignored when the toggle is off.</summary>
+    [Fact]
+    public void RestoreLastScreen_WithRestoreSessionOnStartupOff_GoesHome_IgnoringPersistedScreen()
+    {
+        var (seriesId, _) = SeedSeriesWithIssue("Ignored Restore Series");
+        var options = new DbContextOptionsBuilder<PaperbunkrDbContext>().UseSqlite($"Data Source={_dbPath}").Options;
+        using (var context = new PaperbunkrDbContext(options))
+        {
+            var settings = context.GetOrCreateAppSettings();
+            settings.LastScreenKey = "detail";
+            settings.LastScreenEntityId = seriesId;
+            settings.RestoreSessionOnStartup = false;
+            context.SaveChanges();
+        }
+
+        var vm = new MainViewModel();
+        vm.RestoreLastScreen();
+
+        Assert.True(vm.IsHome);
+        Assert.False(vm.IsDetail);
     }
 
     [Fact]

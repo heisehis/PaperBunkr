@@ -10,7 +10,7 @@ namespace Paperbunkr.App.ViewModels;
 
 /// <summary>
 /// One row in Preferences &gt; Keyboard Shortcuts, wrapping a single <see cref="KeyboardCommandDescriptor"/>
-/// (docs/alpha-roadmap.md P5 follow-up). Persists immediately on selection, same as every other
+/// (docs/Paperbunkr-Roadmap.md P5 follow-up). Persists immediately on selection, same as every other
 /// Preferences toggle - there's no Save/Cancel step here.
 /// </summary>
 public partial class KeyBindingRowViewModel : ViewModelBase

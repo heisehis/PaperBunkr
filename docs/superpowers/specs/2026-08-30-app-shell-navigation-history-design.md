@@ -301,7 +301,7 @@ is ignored (falls through to restore-on-launch), not a startup failure.
 
 ## Roadmap
 
-Once landed, add a `docs/alpha-roadmap.md` Beta-backlog entry and update
+Once landed, add a `docs/Paperbunkr-Roadmap.md` Beta-backlog entry and update
 `docs/superpowers/specs/2026-08-24-navigation-shell-motion-system-design.md`'s own scope note (it
 currently says drill-down transitions/history are "out of scope, deferred" — mark this spec as the
 follow-on that picked that up). The comprehensive-keyboard-operability follow-on (context menus,

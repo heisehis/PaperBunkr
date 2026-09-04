@@ -326,6 +326,25 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     [ObservableProperty]
     private bool _reverseRtlNavigation;
 
+    // Behavior settings, second batch (docs/superpowers/specs/2026-09-04-behavior-settings-batch2-
+    // design.md) - General tab. Same immediate-persist shape as the toggles above.
+
+    /// <summary>CE <c>Settings.OpenLastFile</c> - gates <see cref="MainViewModel.RestoreLastScreen"/>.</summary>
+    [ObservableProperty]
+    private bool _restoreSessionOnStartup;
+
+    /// <summary>CE <c>Settings.ScanStartup</c> - a full folder scan on launch (read in App.axaml.cs).</summary>
+    [ObservableProperty]
+    private bool _scanFoldersOnStartup;
+
+    /// <summary>CE <c>Settings.AutoShowQuickReview</c> - auto-opens Quick Rate at the end of a book.</summary>
+    [ObservableProperty]
+    private bool _promptReviewOnFinish;
+
+    /// <summary>CE <c>Settings.DisableDragDrop</c> (inverted) - gates the Library / Reading List drop handlers.</summary>
+    [ObservableProperty]
+    private bool _enableDragDropImport;
+
     /// <summary>docs/superpowers/specs/2026-09-01-auto-update-and-changelog-design.md - persisted opt-out, also settable from the update-available overlay's own checkbox.</summary>
     [ObservableProperty]
     private bool _checkForUpdatesOnStartup;
@@ -522,6 +541,10 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         OpenLastPage = settings.OpenLastPage;
         AutoNavigateComics = settings.AutoNavigateComics;
         ReverseRtlNavigation = settings.ReverseRtlNavigation;
+        RestoreSessionOnStartup = settings.RestoreSessionOnStartup;
+        ScanFoldersOnStartup = settings.ScanFoldersOnStartup;
+        PromptReviewOnFinish = settings.PromptReviewOnFinish;
+        EnableDragDropImport = settings.EnableDragDropImport;
         CheckForUpdatesOnStartup = settings.CheckForUpdatesOnStartup;
         MinimizeToTray = settings.MinimizeToTray;
         HighQualityPageDisplay = settings.HighQualityPageDisplay;
@@ -572,7 +595,7 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         RefreshTrackerConnectionState(context);
     }
 
-    // ===================== Keyboard Shortcuts (docs/alpha-roadmap.md P5 follow-up) =====================
+    // ===================== Keyboard Shortcuts (docs/Paperbunkr-Roadmap.md P5 follow-up) =====================
 
     private void RefreshKeyBindings()
     {
@@ -735,6 +758,14 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     partial void OnAutoNavigateComicsChanged(bool value) => PersistBehaviorSetting(s => s.AutoNavigateComics = value);
 
     partial void OnReverseRtlNavigationChanged(bool value) => PersistBehaviorSetting(s => s.ReverseRtlNavigation = value);
+
+    partial void OnRestoreSessionOnStartupChanged(bool value) => PersistBehaviorSetting(s => s.RestoreSessionOnStartup = value);
+
+    partial void OnScanFoldersOnStartupChanged(bool value) => PersistBehaviorSetting(s => s.ScanFoldersOnStartup = value);
+
+    partial void OnPromptReviewOnFinishChanged(bool value) => PersistBehaviorSetting(s => s.PromptReviewOnFinish = value);
+
+    partial void OnEnableDragDropImportChanged(bool value) => PersistBehaviorSetting(s => s.EnableDragDropImport = value);
 
     partial void OnCheckForUpdatesOnStartupChanged(bool value) => PersistBehaviorSetting(s => s.CheckForUpdatesOnStartup = value);
 

@@ -295,6 +295,94 @@ public class ReaderScreenViewModelTests : IDisposable
         Assert.Contains("#1", vm.IssueTitle);
     }
 
+    // ===================== "Ask me to rate a comic when I finish it" (docs/superpowers/specs/
+    // 2026-09-04-behavior-settings-batch2-design.md §3.3, CE AutoShowQuickReview) =====================
+
+    private static void SetPromptReviewOnFinish(bool value)
+    {
+        using var context = PaperbunkrDb.CreateContext();
+        context.GetOrCreateAppSettings().PromptReviewOnFinish = value;
+        context.SaveChanges();
+    }
+
+    [Fact]
+    public void FinishPrompt_FiresWithIssueId_AtEndOfSeries_WhenEnabled()
+    {
+        SetPromptReviewOnFinish(true);
+        var prompted = new List<int>();
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.ReviewPromptRequested += prompted.Add;
+        vm.LoadIssue(_issue2Id); // last issue in the series (issue3 is "0", sorts first)
+        vm.NextPageCommand.Execute(null);
+        Assert.Equal("PAGE 2 / 2", vm.PageLabel);
+
+        vm.NextPageCommand.Execute(null);
+
+        Assert.Equal(new[] { _issue2Id }, prompted);
+    }
+
+    [Fact]
+    public void FinishPrompt_DoesNotFire_WhenDisabled()
+    {
+        // PromptReviewOnFinish defaults false.
+        var prompted = new List<int>();
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.ReviewPromptRequested += prompted.Add;
+        vm.LoadIssue(_issue2Id);
+        vm.NextPageCommand.Execute(null);
+        vm.NextPageCommand.Execute(null);
+
+        Assert.Empty(prompted);
+    }
+
+    [Fact]
+    public void FinishPrompt_DoesNotFire_MidSeries_WhenAutoNavigateAdvances()
+    {
+        SetPromptReviewOnFinish(true);
+        var prompted = new List<int>();
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.ReviewPromptRequested += prompted.Add;
+        vm.LoadIssue(_issue1Id); // has a next issue - AutoNavigateComics is on by default
+        vm.NextPageCommand.Execute(null);
+        vm.NextPageCommand.Execute(null);
+
+        vm.NextPageCommand.Execute(null); // shows the chapter card, does not "finish"
+
+        Assert.Empty(prompted);
+    }
+
+    [Fact]
+    public void FinishPrompt_DoesNotFire_OnBackwardUnderrun_AtStartOfSeries()
+    {
+        SetPromptReviewOnFinish(true);
+        var prompted = new List<int>();
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.ReviewPromptRequested += prompted.Add;
+        vm.LoadIssue(_issue3Id); // Number "0" - the first issue in the series
+        Assert.Equal("PAGE 1 / 6", vm.PageLabel);
+
+        vm.PreviousPageCommand.Execute(null); // backward past the first page - not "finishing"
+
+        Assert.Empty(prompted);
+    }
+
+    [Fact]
+    public void FinishPrompt_FiresAtMostOnce_PerLoad()
+    {
+        SetPromptReviewOnFinish(true);
+        var prompted = new List<int>();
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.ReviewPromptRequested += prompted.Add;
+        vm.LoadIssue(_issue2Id);
+        vm.NextPageCommand.Execute(null);
+
+        vm.NextPageCommand.Execute(null);
+        vm.NextPageCommand.Execute(null);
+        vm.NextPageCommand.Execute(null);
+
+        Assert.Equal(new[] { _issue2Id }, prompted);
+    }
+
     // ===================== Chapter transition (docs/superpowers/specs/2026-08-23-reader-chapter-
     // transition-design.md) =====================
 

@@ -53,6 +53,14 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
     private int? _loadedIssueId;
     private int? _loadedSeriesId;
 
+    /// <summary>
+    /// Per-load guard for the "rate a comic when you finish it" prompt (docs/superpowers/specs/
+    /// 2026-09-04-behavior-settings-batch2-design.md §3.3, CE <c>AutoShowQuickReview</c>). Reset in
+    /// <see cref="Load"/>, so bouncing against the last page repeatedly in one sitting only prompts
+    /// once, but re-opening the issue later can prompt again.
+    /// </summary>
+    private bool _reviewPromptShown;
+
     /// <summary>Set only via <see cref="Load"/>'s <c>readingListId</c> param - when non-null, chapter-boundary navigation resolves "adjacent" through that reading list's own order instead of series order (docs/superpowers/specs/2026-08-23-cbl-manager-manual-editing-and-list-aware-reading-design.md §3).</summary>
     private int? _activeReadingListId;
     private IPageImageDecoder? _decoder;
@@ -426,6 +434,14 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
     /// <summary>Fires from <see cref="LoadIssue"/> once an issue has finished loading - the Plugin API v2 BookOpened hook's anchor (docs/superpowers/specs/2026-08-24-plugin-api-v2-design.md §5).</summary>
     public event Action<Issue>? IssueOpened;
 
+    /// <summary>
+    /// Fires with the finished issue's id when the reader reaches the true end of a book and
+    /// <see cref="AppSettings.PromptReviewOnFinish"/> is on (docs/superpowers/specs/2026-09-04-
+    /// behavior-settings-batch2-design.md §3.3). <see cref="MainViewModel"/> wires this to the
+    /// Quick Rate overlay. Guarded once per <see cref="Load"/> by <see cref="_reviewPromptShown"/>.
+    /// </summary>
+    public event Action<int>? ReviewPromptRequested;
+
     /// <summary>The issue this screen currently has loaded, or null before the first <see cref="LoadIssue"/> call this session. Exposed for <c>Paperbunkr.Plugins.Automation.IComicDisplay</c>.</summary>
     public Issue? LoadedIssue { get; private set; }
 
@@ -765,6 +781,7 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
         _loadedIssueId = issue.Id;
         _loadedSeriesId = series.Id;
         _activeReadingListId = readingListId;
+        _reviewPromptShown = false;
 
         // Real open-tracking (docs/superpowers/specs/2026-08-17-metadata-model-phase1-canonical-
         // metadata-design.md) - the first place either of these fields is actually written; confirmed
@@ -2145,6 +2162,14 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
 
         if (!TryGetAdjacentIssuePreview(forward, bypassAutoNavigateSetting: false, out var fromIssue, out var toIssue))
         {
+            // No issue to advance to (true end of the series / reading list, or auto-navigate is
+            // off): the reader is sitting at the last page and the user tried to go further - the
+            // natural "finished this book" signal for the review prompt (spec §3.3).
+            if (forward)
+            {
+                MaybePromptReviewOnFinish();
+            }
+
             return;
         }
 
@@ -2165,6 +2190,12 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
 
         if (!TryGetAdjacentIssuePreview(forward, bypassAutoNavigateSetting: false, out var fromIssue, out var toIssue))
         {
+            // Continuous-mode counterpart of TriggerChapterTransition's own end-of-book handling.
+            if (forward)
+            {
+                MaybePromptReviewOnFinish();
+            }
+
             return;
         }
 
@@ -2272,6 +2303,31 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
         }
 
         return TryResolveAdjacentIssue(context, forward, out fromIssue, out toIssue);
+    }
+
+    /// <summary>
+    /// "Show Quick Review Dialog after finishing Book" (docs/superpowers/specs/2026-09-04-behavior-
+    /// settings-batch2-design.md §3.3, CE <c>Settings.AutoShowQuickReview</c>). Called when the
+    /// reader hits the end of a book with nothing to advance to; raises
+    /// <see cref="ReviewPromptRequested"/> at most once per <see cref="Load"/> when the setting is
+    /// on. Reads <see cref="AppSettings"/> fresh (a fresh context, same as every other setting
+    /// check in this class) so a Preferences toggle takes effect without reopening the book.
+    /// </summary>
+    private void MaybePromptReviewOnFinish()
+    {
+        if (_reviewPromptShown || _loadedIssueId is not int issueId)
+        {
+            return;
+        }
+
+        using var context = PaperbunkrDb.CreateContext();
+        if (!context.GetOrCreateAppSettings().PromptReviewOnFinish)
+        {
+            return;
+        }
+
+        _reviewPromptShown = true;
+        ReviewPromptRequested?.Invoke(issueId);
     }
 
     /// <summary>Leaving the Reader entirely exits fullscreen (spec §7) - unlike page/book navigation, this is the one path where staying fullscreen wouldn't make sense (there's nothing left to view fullscreen).</summary>

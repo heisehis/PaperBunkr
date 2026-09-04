@@ -1,7 +1,7 @@
 # Porting Tachiyomi/Mihon/Komikku Tracker Logic and Manga UI Patterns to Paperbunkr
 
 *Research memo, not a design spec — feeds a future brainstorm → design-spec pass before
-implementation starts (see `docs/alpha-roadmap.md`'s Beta backlog entry for this). User-supplied
+implementation starts (see `docs/Paperbunkr-Roadmap.md`'s Beta backlog entry for this). User-supplied
 research on Mihon (Tachiyomi's active fork) and Komikku (a Mihon fork), covering both tracker-
 service integration and manga-specific detail-page UI, since neither exists in Paperbunkr today
 and ComicRack CE has no equivalent to port from.*

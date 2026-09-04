@@ -274,6 +274,6 @@ only actually verified correct through exactly this kind of manual check.
 **Depends on:** all prior steps
 
 ## Roadmap
-Once landed: `docs/alpha-roadmap.md` Beta-backlog entry, and update
+Once landed: `docs/Paperbunkr-Roadmap.md` Beta-backlog entry, and update
 `docs/superpowers/specs/2026-08-30-app-shell-navigation-history-design.md`'s follow-up reference to
 point at this plan as landed (matching the pattern already used for that spec's own roadmap note).

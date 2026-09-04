@@ -7,7 +7,7 @@ using Paperbunkr.Data;
 namespace Paperbunkr.App.Tests;
 
 /// <summary>
-/// Exercises <see cref="KeyBindingService"/> (docs/alpha-roadmap.md P5 follow-up, extended by
+/// Exercises <see cref="KeyBindingService"/> (docs/Paperbunkr-Roadmap.md P5 follow-up, extended by
 /// docs/superpowers/specs/2026-08-16-remappable-reader-shortcuts-design.md). Uses an injected
 /// in-memory-database context factory (same test-injection seam as <see cref="SkinService"/>) so
 /// tests never touch the real per-user database.

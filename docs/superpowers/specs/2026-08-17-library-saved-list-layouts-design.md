@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-17
 **Status:** Approved, pending implementation plan
-**Backlog ref:** `docs/alpha-roadmap.md`'s "Library browsing extras" bundle — third sub-project
+**Backlog ref:** `docs/Paperbunkr-Roadmap.md`'s "Library browsing extras" bundle — third sub-project
 (after Reveal-in-Explorer/fileless entries and Manga/ContentType classification). Sort/group
 strategies is paused (see prior session's handoff); this sub-project doesn't depend on it. Saved
 Workspaces (the *next* sub-project) depends on this one.
@@ -21,7 +21,7 @@ CE's own equivalent isn't a single feature — it's two distinct concepts, confi
   edited via `SaveWorkspaceDialog`. This is CE's actual "save this as a named preset I can switch
   back to" feature.
 
-`docs/alpha-roadmap.md` already names this split correctly: "saved List Layouts... this is
+`docs/Paperbunkr-Roadmap.md` already names this split correctly: "saved List Layouts... this is
 persistence, not new UI" as one item, "saved Workspaces (depends on List Layouts)" as the next.
 This spec covers only the first half — the CE `DisplayListConfig` equivalent. Named/multiple
 presets (CE `DisplayWorkspace`) are explicitly out of scope here.

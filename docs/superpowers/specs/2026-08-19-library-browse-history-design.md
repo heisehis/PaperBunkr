@@ -2,7 +2,7 @@
 
 **Date:** 2026-08-19
 **Status:** Approved, pending implementation
-**Related:** Next item in the "Library browsing extras" backlog sequence (`docs/alpha-roadmap.md`),
+**Related:** Next item in the "Library browsing extras" backlog sequence (`docs/Paperbunkr-Roadmap.md`),
 after Saved List Layouts, Manga/ContentType classification, and pluggable sort/group all shipped.
 
 ## Context

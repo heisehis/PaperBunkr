@@ -232,7 +232,7 @@ build from *before* this tag successfully detects, downloads, and applies the up
 built in Steps 9-11.
 
 ## Step 15: Roadmap doc note
-**Files:** `docs/alpha-todo.md` (edit) and/or `docs/alpha-roadmap.md` (edit)
+**Files:** `docs/alpha-todo.md` (edit) and/or `docs/Paperbunkr-Roadmap.md` (edit)
 **What:** Short note (with commit ref, added once the actual commit exists) that installer packaging
 moved from Inno Setup to Velopack, and that auto-update + changelog shipped — per `CLAUDE.md`'s own
 "update `docs/alpha-todo.md` by hand" rule for roadmap-relevant work. Also fix/remove whatever

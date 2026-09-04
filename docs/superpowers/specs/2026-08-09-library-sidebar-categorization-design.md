@@ -2,7 +2,7 @@
 
 *Date: 2026-08-09. Scope: `LibraryScreenViewModel` and the Library sidebar block in
 `MainWindow.axaml` only. Not building category *creation* UI — explicitly deferred to Beta
-(user's own scoping), same as `docs/alpha-roadmap.md`'s existing Virtual Tags/metadata-driven
+(user's own scoping), same as `docs/Paperbunkr-Roadmap.md`'s existing Virtual Tags/metadata-driven
 auto-categorization notes.*
 
 ## 1. Problem

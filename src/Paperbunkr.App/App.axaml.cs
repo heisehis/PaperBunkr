@@ -8,6 +8,7 @@ using Paperbunkr.App.Plugins;
 using Paperbunkr.App.Services;
 using Paperbunkr.App.ViewModels;
 using Paperbunkr.App.Views;
+using Paperbunkr.Data.Entities;
 
 namespace Paperbunkr.App;
 
@@ -129,11 +130,19 @@ public partial class App : Application
             };
             desktop.MainWindow = mainWindow;
 
+            bool scanFoldersOnStartup;
+            using (var startupSettingsContext = PaperbunkrDb.CreateContext())
+            {
+                scanFoldersOnStartup = startupSettingsContext.GetOrCreateAppSettings().ScanFoldersOnStartup;
+            }
+
             // App shell navigation history (docs/superpowers/specs/2026-08-30-app-shell-navigation-
             // history-design.md) - a CLI deep link takes priority over restoring the prior session's
             // last screen; on a fresh install (offerFirstRunMigration below) there's nothing to
             // restore yet, so RestoreLastScreen's own "no usable last screen" fallback to Home
-            // covers that case too, no separate branch needed here.
+            // covers that case too, no separate branch needed here. RestoreLastScreen itself honours
+            // AppSettings.RestoreSessionOnStartup (docs/superpowers/specs/2026-09-04-behavior-
+            // settings-batch2-design.md §3.1) - off means it just goes Home.
             if (NavigationCliArgs.TryParseOpenArg(desktop.Args ?? Array.Empty<string>(), out var deepLinkTarget) && deepLinkTarget is not null)
             {
                 mainViewModel.OpenDeepLink(deepLinkTarget);
@@ -141,6 +150,31 @@ public partial class App : Application
             else
             {
                 mainViewModel.RestoreLastScreen();
+            }
+
+            // "Scan library folders for new files at startup" (docs/superpowers/specs/2026-09-04-
+            // behavior-settings-batch2-design.md §3.2, CE Settings.ScanStartup) - off by default.
+            // Fire-and-forget on a background thread, same non-blocking shape as the auto-backup /
+            // content-type-sweep triggers above; LiveFolderWatchService only catches changes made
+            // while the app was running, this covers changes made while it was closed. No cover
+            // pass - Library generates missing covers lazily on first display.
+            if (scanFoldersOnStartup)
+            {
+                _ = System.Threading.Tasks.Task.Run(async () =>
+                {
+                    using var job = mainViewModel.Activity.StartJob(ActivityJobKind.LibraryScan, "Startup folder scan");
+                    try
+                    {
+                        var noProgress = new Progress<(int Done, int Total)>(_ => { });
+                        await new LibraryFolderScanner().ScanAllAsync(noProgress, job.CancellationToken);
+                        await new BookFolderScanService().ScanAllAsync(noProgress, job.CancellationToken);
+                        job.Succeed("Startup folder scan complete");
+                    }
+                    catch (Exception ex)
+                    {
+                        job.Fail("Startup folder scan failed", ex: ex);
+                    }
+                });
             }
 
             bool welcomeOverlayOpened;

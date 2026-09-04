@@ -2565,4 +2565,41 @@ public class LibraryScreenViewModelTests : IDisposable
             try { root.Delete(recursive: true); } catch (IOException) { }
         }
     }
+
+    // --- Drag-and-drop import toggle (docs/superpowers/specs/2026-09-04-behavior-settings-batch2-
+    // design.md §3.4, CE Settings.DisableDragDrop inverted) ---
+
+    [Fact]
+    public void DragDropImportEnabled_ReflectsAppSettings()
+    {
+        var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { }, goToNewIssueProperties: (_, _, _) => { });
+        Assert.True(vm.DragDropImportEnabled); // default
+
+        using (var context = PaperbunkrDb.CreateContext())
+        {
+            context.GetOrCreateAppSettings().EnableDragDropImport = false;
+            context.SaveChanges();
+        }
+
+        Assert.False(vm.DragDropImportEnabled);
+    }
+
+    [Fact]
+    public async Task ImportDroppedPathsAsync_NoOps_WhenDragDropImportDisabled()
+    {
+        using (var context = PaperbunkrDb.CreateContext())
+        {
+            context.GetOrCreateAppSettings().EnableDragDropImport = false;
+            context.SaveChanges();
+        }
+
+        var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { }, goToNewIssueProperties: (_, _, _) => { });
+
+        // A path that would otherwise be probed by DragImportService - the disabled gate returns
+        // before the service is ever constructed, so this must not throw or add anything.
+        await vm.ImportDroppedPathsAsync(new[] { Path.Combine(Path.GetTempPath(), "does-not-exist.cbz") });
+
+        using var check = PaperbunkrDb.CreateContext();
+        Assert.Empty(check.Issues.ToList());
+    }
 }

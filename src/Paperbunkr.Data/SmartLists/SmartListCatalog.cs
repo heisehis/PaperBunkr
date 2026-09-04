@@ -128,7 +128,7 @@ public static class SmartListCatalog
             [SmartListField.SeriesName] = i => i.Series?.Name ?? string.Empty,
 
             // Deliberately i.Genre/i.Publisher, not i.Series?.Genre/Publisher (P3 audit,
-            // docs/alpha-roadmap.md) - both are real per-issue fields the Issue Properties/Bulk
+            // docs/Paperbunkr-Roadmap.md) - both are real per-issue fields the Issue Properties/Bulk
             // editors actually write to (BulkFieldRegistry), same bug class as the Detail Pills
             // fix. The Series-level columns still exist (populated once at CE-migration time,
             // ContentType/ReadingMode/SeriesComplete have no per-issue equivalent to be stale

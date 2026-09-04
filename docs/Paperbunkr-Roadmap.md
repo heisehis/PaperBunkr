@@ -1,4 +1,4 @@
-# Paperbunkr Alpha Roadmap
+# Paperbunkr Roadmap
 
 *Declared: 2026-08-07. This document marks the Alpha checkpoint and lays out the Beta backlog.
 Supersedes onboarding.md §16 as the up-to-date release-staging reference — §16 defined the
@@ -1047,6 +1047,30 @@ library and real e-book files** (neither caused by this Novels work, both unrela
    static constructor) redirecting its DllImport names to the same already-resolved `pdfium.dll`,
    verified against two real e-book PDFs. Worth a dedicated regression test in a future pass — today's
    verification was manual/diagnostic, not a checked-in test, since it depends on files outside the repo.
+
+### Preferences: Behavior / CE-parity toggle remainder
+
+Second Behavior batch (`RestoreSessionOnStartup`, `ScanFoldersOnStartup`, `PromptReviewOnFinish`,
+`EnableDragDropImport`) **shipped 2026-09-04**, uncommitted
+(`docs/superpowers/specs/2026-09-04-behavior-settings-batch2-design.md` +
+`-plan.md`; migration `AddBehaviorSettingsBatch2`). Four checkboxes on Preferences → General
+(Startup / Reading / Library groups). That spec's §5 leaves these CE `Settings` checkboxes still
+deferred:
+
+- **`AddToLibraryOnOpen`** ("Opened Files are added to the Library") — *blocked on a prerequisite*.
+  Paperbunkr has no shell-open-a-loose-file path: `ShellRegister.RegisterFileOpen` writes
+  `"…\Paperbunkr.exe" "%1"` but `App.axaml.cs` only parses `--open <kind>:<id>` and ignores a bare
+  file-path arg (startup falls through to restore-on-launch). Needs: handle a path arg → open it in
+  the Reader (import-on-demand or transient book), *then* an add-to-library toggle has something to
+  gate. Own small feature + brainstorm.
+- **`HideCursorFullScreen` / `AutoMinimalGui`** — Paperbunkr already auto-hides chrome *and* cursor
+  after ~3s idle in every reading mode (`ReaderScreenViewModel.ShowChrome` + `NotifyCursorActivity`,
+  no `IsFullscreen` gate). A toggle would only re-expose the pre-unification "cursor always visible
+  in windowed mode" split — build only if a user asks for it.
+- **Cosmetic browser micro-toggles** — `FadeInThumbnails`, `CoverThumbnailsSameSize` (mostly
+  already the PosterGrid-vs-Panorama view-mode choice), `DogEarThumbnails`, `ShowToolTips` (library
+  tile tooltips aren't built), `NumericRatingThumbnails`, `ExportedListsContainFilenames`. Low
+  value; revisit only on request.
 
 ### Deferred / dropped (no action needed)
 - **News reader** (`Help > News` RSS) — deferred, live idea to repurpose the feed mechanism for

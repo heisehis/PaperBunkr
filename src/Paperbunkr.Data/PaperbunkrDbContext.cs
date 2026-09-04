@@ -958,6 +958,17 @@ public class PaperbunkrDbContext : DbContext
                 .HasDefaultValue(BookTheme.MatchAppSkin)
                 .HasSentinel(BookTheme.MatchAppSkin);
             builder.Property(a => a.BookReaderAutoHideChrome).HasDefaultValue(true);
+
+            // Behavior settings, second batch (docs/superpowers/specs/2026-09-04-behavior-settings-
+            // batch2-design.md). HasDefaultValue matters for the two true-by-default columns: their
+            // ALTER TABLE runs against a table that already has the AppSettings singleton row, which
+            // must backfill to the value that reproduces today's unconditional behavior, not SQLite's
+            // bare 0. The two false-by-default columns match SQLite's own default but are configured
+            // here too so the whole block stays uniform.
+            builder.Property(a => a.RestoreSessionOnStartup).HasDefaultValue(true);
+            builder.Property(a => a.ScanFoldersOnStartup).HasDefaultValue(false);
+            builder.Property(a => a.PromptReviewOnFinish).HasDefaultValue(false);
+            builder.Property(a => a.EnableDragDropImport).HasDefaultValue(true);
         });
 
         modelBuilder.Entity<VirtualTagDefinition>(builder =>

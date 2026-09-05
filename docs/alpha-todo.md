@@ -22,6 +22,26 @@ this file itself already did once (see the note below).
 
 ## What's left (as of 2026-08-12, HEAD `85fb681`)
 
+> **Manual session note (2026-09-05, Plugin API v2 backlog finish):** closes the Plugin API v2
+> backlog for good. Two parts: (1) merged the pushed-but-unmerged `plugin-api-gap-closure` branch
+> (automation gaps - `AddNewBook`/icon methods/`SelectComics` - plus IronPython plugin scripting,
+> found sitting unreviewed since 2026-08-31); (2) wired the remaining 8 hooks with no live UI
+> trigger (Editor/Books/NewBooks/CreateBookList/ParseComicPath/NetSearch/ConfigScript/
+> ReaderResized) and built the 3 net-new UI surfaces the original v2 spec called for but never got
+> (ComicInfoHtml/UI, QuickOpenHtml/UI, DrawThumbnailOverlay). Also fixed a real bug the audit
+> turned up: `BookOpened` was documented as one of "4 hooks with a real live trigger" but was
+> actually a dead wire - nothing subscribed to `ReaderScreenViewModel.IssueOpened`. Full detail,
+> every anchor's CE-source grounding, and the design tradeoffs (why `Books`' hook needed its own
+> globals type, why `CreateBookList` needed a real non-DB-backed sidebar section, why
+> `DrawThumbnailOverlay` isn't live/per-paint like CE's) are in
+> `docs/superpowers/specs/2026-09-05-plugin-api-v2-remaining-hooks-plan.md`. New "Hook Coverage"
+> sample plugin + 14 `Paperbunkr.Plugins.Tests` prove every wired hook end-to-end - closes the "no
+> live sample plugin exercises this hook" gap the original 2026-08-24 audit flagged for
+> ParseComicPath/NetSearch/ConfigScript specifically. Verified: full solution builds clean, 362
+> targeted `Paperbunkr.App.Tests` + 43 `Paperbunkr.Plugins.Tests` green. **Not done this session:**
+> on-screen GUI verification of any of the new surfaces - same standing caveat as every other
+> backlog item that ships without a live click-through pass.
+
 > **Manual session note (2026-09-04):** P0–P7 remain all done. Two things worth recording here since
 > this is the doc a human opens first:
 > 1. **The project is now `0.2.0-beta`** (`v0.2.0-beta` tag, `CHANGELOG.md`, README/wiki updated).

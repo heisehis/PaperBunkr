@@ -238,13 +238,46 @@ children at rest (no stuck clone) — add to the existing UiTests project, seria
 > templates blind, without on-screen verification, was judged a worse risk/reward than shipping the
 > primary view mode correctly). `AsyncCoverImage` needed no change — `ImageSource` reads the sibling
 > `Image`'s own `Source` via an ElementName binding instead of adding a new bindable bitmap property.
-> **`ReaderScreen` first-page participation was cut**, not attempted — `PageCanvas`/
-> `ReaderScreenViewModel` expose no public first-page `Bitmap` or fit-rect, and building that seam
-> blind was judged disproportionate to a first-page cover morph's payoff; Reader keeps Step 6's
-> plain push/pop cross-fade. The back-trip `ScrollIntoView` realization was **not** wired either -
-> a cover-morph back into a scrolled-away grid position currently just falls through to the
-> already-designed "destination never registers → cross-fade" edge case. Both are real, scoped
-> follow-ups, not silently dropped.
+> **Follow-up (2026-09-05) — all three deferred items closed:**
+> - **Remaining Library view modes wired**: Panorama/List/Details/Tiles × issue+series granularity
+>   (8 templates) got the same `SharedElement.Key`/`ImageSource` treatment as the Poster grid.
+>   `CollectionTileTemplate` (mixed series/issue/book membership) stays unwired - outside the named
+>   scope, its own follow-up.
+> - **Back-trip `ScrollIntoView` wired**: `LibraryScreenViewModel.RequestScrollIntoView(sharedKey)` +
+>   a new `ScrollToIndexRequested` event, parsed from the same key scheme; `LibraryScreen.axaml.cs`
+>   extracted `OnAlphabetIndexLetterClick`'s view-mode-aware scroll dispatch into a shared
+>   `ScrollToIndex` method and subscribes to the new event. `MainViewModel.GoToRootScreen` gained an
+>   optional `sharedKey` parameter, threaded from `NavigateBack`/`NavigateToBreadcrumbIndex`'s
+>   already-computed `CurrentDrillSharedKey()`, called right before `CurrentScreen = "library"`.
+> - **`ReaderScreen` first-page participation, reversing the earlier cut**: turned out `PageCanvas`
+>   already had a public `Page` (`Bitmap?`) `StyledProperty`, already bound - no new image-access
+>   plumbing needed after all. Added `ReaderScreenViewModel.SharedElementKey` (mirrors
+>   `IDetailHeaderSource.SharedElementKey`) and wired `SharedElement.Key`/`ImageSource` directly onto
+>   `PageCanvas` in `ReaderScreen.axaml`. Destination rect is `PageCanvas.Bounds` (whole control),
+>   not a computed fit-rect - the plan's own pre-approved fallback.
+>
+> One incidental finding: a `dotnet test --filter` run against a project whose only change was a new
+> `[Fact]` (no other edits) silently reported the *old* test count with no error - the new test
+> wasn't discovered until `obj`/`bin`'s stale `Paperbunkr.App.Tests.dll`/`.pdb` were deleted and the
+> project rebuilt from scratch. Same category of stale-precompiled-artifact risk this project's own
+> CLAUDE.md documents for XAML weaving, apparently not exclusive to XAML - worth remembering if a
+> newly-added test ever seems to vanish from a filtered run.
+>
+> Second incidental finding, confirming (not contradicting) `[[project_paperbunkr_full_suite_headless_flake]]`:
+> combining all six navigation-transition-related test classes into one `--filter` OR-expression
+> reported 5 failures, all `SharedElementTransitionServiceTests`, all the same "calling thread cannot
+> access this object because a different thread owns it" `Compositor`/`Dispatcher.VerifyAccess`
+> error the class's own doc comment already anticipated. Re-run alone (`--filter
+> FullyQualifiedName~SharedElementTransitionServiceTests`), all 5 passed cleanly - as they had every
+> other time this session. Root cause is the same one already on file: xUnit runs different
+> collections in parallel by default, and combining enough test classes into one invocation pulls in
+> enough concurrent collections to contend for the single Avalonia UI thread these particular tests
+> depend on. Not a regression from anything in this session's changes - every suite touched by this
+> feature (`SharedElementFlightMathTests`, `SharedElementTransitionServiceTests`,
+> `NavigationTransitionCoordinatorTests`, `MainViewModelTests`, `LibraryScreenViewModelTests`,
+> `ReaderScreenViewModelTests`) passes cleanly run on its own or in small pairs; only the
+> six-at-once combination tripped it. Targeted, small `--filter` runs remain the right way to verify
+> this project's Avalonia-touching tests, exactly as the existing memory already prescribes.
 
 ---
 

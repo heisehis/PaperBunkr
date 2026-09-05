@@ -135,6 +135,13 @@ public class LiveFolderWatchService : IDisposable
 
     private void OnCreatedOrDeleted(object? sender, FileSystemEventArgs e)
     {
+        // Ignore the app's own metadata write-back churn (a .pbwrite-*.tmp copy + File.Replace) -
+        // without this, the replace reads as a Deleted event and the issue gets flagged missing.
+        if (FileWriteBackCoordinator.IsSuppressed(e.FullPath))
+        {
+            return;
+        }
+
         lock (_pendingLock)
         {
             _pending[e.FullPath] = e.ChangeType;
@@ -151,6 +158,15 @@ public class LiveFolderWatchService : IDisposable
     /// </summary>
     private void OnRenamed(object? sender, RenamedEventArgs e)
     {
+        // Metadata write-back's File.Replace renames the real file aside to a ~RF*.TMP backup and
+        // renames its own .pbwrite-*.tmp into place. Following either of those renames would repoint
+        // the issue's FilePath at a file that's deleted milliseconds later (the "comic went missing
+        // after an edit" bug). Neither endpoint being a real library path = nothing to sync.
+        if (FileWriteBackCoordinator.IsSuppressed(e.OldFullPath) || FileWriteBackCoordinator.IsSuppressed(e.FullPath))
+        {
+            return;
+        }
+
         try
         {
             using var context = _contextFactory();
@@ -311,6 +327,10 @@ public class LiveFolderWatchService : IDisposable
             .Where(i => i.FilePath != null && !i.FileIsMissing)
             .ToList()
             .Where(i => pathSet.Contains(i.FilePath!))
+            // A Deleted event whose path is present again by flush time was an atomic
+            // replace-in-place (our own write-back, an external editor's save, an AV scanner),
+            // not a real deletion - never flag those missing.
+            .Where(i => !File.Exists(i.FilePath!) && !Directory.Exists(i.FilePath!))
             .ToList();
 
         if (issues.Count == 0)

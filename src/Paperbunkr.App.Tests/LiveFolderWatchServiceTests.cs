@@ -329,4 +329,84 @@ public class LiveFolderWatchServiceTests : IDisposable
         bool imported = await WaitUntilAsync(() => IssueCount() == 1, PollTimeout);
         Assert.True(imported, "Expected the file to be imported once it became readable, within the retry window.");
     }
+
+    // --- Metadata write-back must not flag its own files missing
+    //     (docs/superpowers/specs/2026-09-05-metadata-editor-affordances-design.md follow-up bug) ---
+
+    [Fact]
+    public async Task AtomicReplace_OfAWatchedFile_DoesNotFlagItMissing()
+    {
+        FileWriteBackCoordinator.Reset();
+        AddWatchedFolder(_scanRoot, watch: true);
+
+        string path = Path.Combine(_scanRoot, "Kilo Station 012 (2021).cbz");
+        CbzFixture.Create(path, pageCount: 1);
+
+        int issueId;
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            var series = new Series { Name = "Kilo Station" };
+            context.Series.Add(series);
+            var issue = new Issue { Series = series, FilePath = path };
+            context.Issues.Add(issue);
+            context.SaveChanges();
+            issueId = issue.Id;
+        }
+
+        using var service = CreateService();
+        service.Start();
+
+        // Mimic MetadataFileWriteBackService: announce the churn, then copy-to-temp + File.Replace.
+        FileWriteBackCoordinator.Suppress(path, TimeSpan.FromSeconds(15));
+        string temp = path + FileWriteBackCoordinator.ScratchMarker + Guid.NewGuid().ToString("N") + ".tmp";
+        File.Copy(path, temp, overwrite: true);
+        File.Replace(temp, path, destinationBackupFileName: null);
+
+        // Give the watcher well past its debounce to (wrongly) act.
+        await Task.Delay(DebounceWindow + DebounceWindow + TimeSpan.FromMilliseconds(300));
+
+        using var final = new PaperbunkrDbContext(_dbOptions);
+        var after = final.Issues.Single(i => i.Id == issueId);
+        Assert.False(after.FileIsMissing,
+            "An atomic replace-in-place of a file that is still on disk must never flag its Issue missing.");
+        Assert.Equal(path, after.FilePath);
+    }
+
+    [Fact]
+    public async Task ExternalAtomicReplace_NotAnnouncedToTheCoordinator_StillDoesNotFlagMissingOrCorruptFilePath()
+    {
+        // Even a File.Replace we didn't announce (an external editor, another tool) must not break
+        // the issue: OnRenamed ignores the ~RF*.TMP ReplaceFile backup rename, and MarkMissing
+        // re-checks File.Exists as a final backstop.
+        FileWriteBackCoordinator.Reset();
+        AddWatchedFolder(_scanRoot, watch: true);
+
+        string path = Path.Combine(_scanRoot, "Kilo Station 013 (2021).cbz");
+        CbzFixture.Create(path, pageCount: 1);
+        int issueId;
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            var series = new Series { Name = "Kilo Station" };
+            context.Series.Add(series);
+            var issue = new Issue { Series = series, FilePath = path };
+            context.Issues.Add(issue);
+            context.SaveChanges();
+            issueId = issue.Id;
+        }
+
+        using var service = CreateService();
+        service.Start();
+
+        // A plain atomic replace, NOT announced to the coordinator.
+        string temp = Path.Combine(_scanRoot, "external-editor-scratch.tmp");
+        File.Copy(path, temp, overwrite: true);
+        File.Replace(temp, path, destinationBackupFileName: null);
+
+        await Task.Delay(DebounceWindow + DebounceWindow + TimeSpan.FromMilliseconds(400));
+
+        using var final = new PaperbunkrDbContext(_dbOptions);
+        var after = final.Issues.Single(i => i.Id == issueId);
+        Assert.False(after.FileIsMissing, "An atomic replace of a still-present file must not flag it missing.");
+        Assert.Equal(path, after.FilePath);   // FilePath must NOT have followed the ~RF*.TMP rename
+    }
 }

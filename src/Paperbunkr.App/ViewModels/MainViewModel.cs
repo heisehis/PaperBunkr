@@ -1619,12 +1619,19 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
     /// whichever lateral screen is <see cref="NavigationHistoryService.RootScreenKey"/>, the same data
     /// refresh each corresponding GoX() does, just without re-resetting the history root (that would
     /// wipe the forward stack this method's own callers are about to preserve).</summary>
-    private void GoToRootScreen(string rootScreenKey)
+    private void GoToRootScreen(string rootScreenKey, string? sharedKey = null)
     {
         switch (rootScreenKey)
         {
             case "library":
                 Library.LoadFromDatabase();
+                // docs/superpowers/specs/2026-09-04-navigation-transition-system-design.md - back-
+                // trip realization: scroll the flight's destination tile into view before
+                // NavigationTransitionCoordinator's poll starts looking for it. A no-op when
+                // sharedKey is null or doesn't resolve to a currently-visible tile (grouped,
+                // filtered out, wrong granularity) - falls through to the coordinator's existing
+                // "destination never registers -> plain cross-fade" edge case.
+                Library.RequestScrollIntoView(sharedKey);
                 CurrentScreen = "library";
                 break;
             case "books":
@@ -1697,7 +1704,7 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
             var entry = _navigationHistory.Back();
             if (entry is null)
             {
-                GoToRootScreen(_navigationHistory.RootScreenKey);
+                GoToRootScreen(_navigationHistory.RootScreenKey, sharedKey);
             }
             else
             {
@@ -1771,7 +1778,7 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
             var entry = _navigationHistory.JumpTo(index);
             if (entry is null)
             {
-                GoToRootScreen(_navigationHistory.RootScreenKey);
+                GoToRootScreen(_navigationHistory.RootScreenKey, sharedKey);
             }
             else
             {

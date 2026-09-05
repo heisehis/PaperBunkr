@@ -22,6 +22,21 @@ public partial class LibraryScreen : UserControl
         // (an AutoCompleteBox otherwise swallows Escape for its own dropdown).
         AddHandler(KeyDownEvent, OnLibraryScreenKeyDown, RoutingStrategies.Tunnel);
         Toolbar.FocusGridRequested += (_, _) => FocusFirstGridItem();
+        DataContextChanged += OnDataContextChanged;
+    }
+
+    /// <summary>Wires <see cref="LibraryScreenViewModel.ScrollToIndexRequested"/> (docs/superpowers/
+    /// specs/2026-09-04-navigation-transition-system-design.md's back-trip realization) to the same
+    /// view-mode-aware scroll dispatch <see cref="OnAlphabetIndexLetterClick"/> already uses. No
+    /// unsubscribe guard needed - <c>Library</c> is a single stable instance for this control's whole
+    /// lifetime (owned once by <c>MainViewModel</c>), matching <c>MainWindow.axaml.cs</c>'s own
+    /// <c>OnDataContextChanged</c> precedent.</summary>
+    private void OnDataContextChanged(object? sender, EventArgs e)
+    {
+        if (DataContext is LibraryScreenViewModel vm)
+        {
+            vm.ScrollToIndexRequested += index => ScrollToIndex(index, vm);
+        }
     }
 
     private void OnLibraryScreenKeyDown(object? sender, KeyEventArgs e)
@@ -258,6 +273,18 @@ public partial class LibraryScreen : UserControl
             return;
         }
 
+        ScrollToIndex(index, vm);
+    }
+
+    /// <summary>The view-mode-aware scroll dispatch shared by <see cref="OnAlphabetIndexLetterClick"/>
+    /// and the back-trip cover-morph realization wired in <see cref="OnDataContextChanged"/> (docs/
+    /// superpowers/specs/2026-09-04-navigation-transition-system-design.md) - List/Details get a real
+    /// <see cref="ListBox.ScrollIntoView(int)"/>; the wrapping grid modes (Poster/Panorama/Tiles)
+    /// estimate a scroll offset from items-per-row against the active ScrollViewer's width. Assumes
+    /// <paramref name="index"/> is already into the ungrouped, matching-granularity flat collection -
+    /// same assumption <see cref="OnAlphabetIndexLetterClick"/> already made.</summary>
+    private void ScrollToIndex(int index, LibraryScreenViewModel vm)
+    {
         if (vm.ViewMode is LibraryViewMode.List or LibraryViewMode.Details)
         {
             var box = (vm.ViewMode, vm.IsSeriesGranularity) switch

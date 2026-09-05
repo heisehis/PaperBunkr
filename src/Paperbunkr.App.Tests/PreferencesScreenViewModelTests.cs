@@ -349,6 +349,35 @@ public class PreferencesScreenViewModelTests : IDisposable
         Assert.False(settings.EnableDragDropImport);
     }
 
+    /// <summary>docs/superpowers/specs/2026-09-05-nav-rail-hover-toggle-and-undo-redo-removal-design.md - same load/persist shape as the batch2 flags above.</summary>
+    [Fact]
+    public void EnsureLoaded_PopulatesNavRailHoverExpandEnabled_FromAppSettings()
+    {
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            context.GetOrCreateAppSettings().NavRailHoverExpandEnabled = false;
+            context.SaveChanges();
+        }
+
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+
+        Assert.False(vm.NavRailHoverExpandEnabled);
+    }
+
+    [Fact]
+    public void NavRailHoverExpandEnabled_Change_PersistsToAppSettings()
+    {
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+        Assert.True(vm.NavRailHoverExpandEnabled);
+
+        vm.NavRailHoverExpandEnabled = false;
+
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        Assert.False(context.GetOrCreateAppSettings().NavRailHoverExpandEnabled);
+    }
+
     [Fact]
     public void GoReader_SetsActiveSectionFlag()
     {

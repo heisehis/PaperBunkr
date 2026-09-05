@@ -345,6 +345,18 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     [ObservableProperty]
     private bool _enableDragDropImport;
 
+    /// <summary>
+    /// Appearance tab toggle (docs/superpowers/specs/2026-08-24-navigation-shell-motion-system-
+    /// design.md's hover-expand mechanism) - gates whether hovering the collapsed nav rail
+    /// temporarily expands it. Read fresh from AppSettings by MainWindow.axaml.cs's
+    /// RailPointerEntered on every hover rather than proxied through this VM, so it's correct
+    /// immediately even if Preferences has never been opened this session (this property is only
+    /// for the checkbox's own display/edit, not the live gate). Default true preserves today's
+    /// behavior for existing installs.
+    /// </summary>
+    [ObservableProperty]
+    private bool _navRailHoverExpandEnabled;
+
     /// <summary>docs/superpowers/specs/2026-09-01-auto-update-and-changelog-design.md - persisted opt-out, also settable from the update-available overlay's own checkbox.</summary>
     [ObservableProperty]
     private bool _checkForUpdatesOnStartup;
@@ -545,6 +557,7 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         ScanFoldersOnStartup = settings.ScanFoldersOnStartup;
         PromptReviewOnFinish = settings.PromptReviewOnFinish;
         EnableDragDropImport = settings.EnableDragDropImport;
+        NavRailHoverExpandEnabled = settings.NavRailHoverExpandEnabled;
         CheckForUpdatesOnStartup = settings.CheckForUpdatesOnStartup;
         MinimizeToTray = settings.MinimizeToTray;
         HighQualityPageDisplay = settings.HighQualityPageDisplay;
@@ -766,6 +779,8 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     partial void OnPromptReviewOnFinishChanged(bool value) => PersistBehaviorSetting(s => s.PromptReviewOnFinish = value);
 
     partial void OnEnableDragDropImportChanged(bool value) => PersistBehaviorSetting(s => s.EnableDragDropImport = value);
+
+    partial void OnNavRailHoverExpandEnabledChanged(bool value) => PersistBehaviorSetting(s => s.NavRailHoverExpandEnabled = value);
 
     partial void OnCheckForUpdatesOnStartupChanged(bool value) => PersistBehaviorSetting(s => s.CheckForUpdatesOnStartup = value);
 

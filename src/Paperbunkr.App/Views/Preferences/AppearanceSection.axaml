@@ -96,6 +96,21 @@
                 </StackPanel>
             </Border>
 
+            <!-- Navigation (docs/superpowers/specs/2026-08-24-navigation-shell-motion-system-design.md's
+                 hover-expand mechanism) - added 2026-09-05, user-requested opt-out. -->
+            <Border Classes="groupBox" Tag="appearance.navigation">
+                <StackPanel>
+                    <Border Classes="groupHeader">
+                        <TextBlock Text="Navigation" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
+                    </Border>
+                    <StackPanel Margin="14">
+                        <CheckBox Content="Expand nav rail on hover" IsChecked="{Binding NavRailHoverExpandEnabled}" />
+                        <TextBlock Text="When off, the rail only expands while pinned open." FontSize="11.5"
+                                   Foreground="{DynamicResource PbTextFaintBrush}" Margin="0,4,0,0" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
             <!-- Developer - debug-only, hidden entirely in Release builds. -->
             <Border Classes="groupBox" Tag="appearance.developer" IsVisible="{Binding IsDebugBuild}">
                 <StackPanel>

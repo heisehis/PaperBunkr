@@ -178,6 +178,33 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
             onFilesImported: ids => DuplicateAlertHelper.RaiseIfAny(Activity, ids));
         LiveFolderWatch.Start();
 
+        // One-time self-heal for comics whose FilePath got repointed at a ~RF*.TMP ReplaceFile
+        // backup by the pre-fix metadata-write-back / folder-watch bug (idempotent - a no-op once
+        // clean). Runs before nothing else depends on it; only reconnects DB paths, never deletes.
+        try
+        {
+            using var repairContext = PaperbunkrDb.CreateContext();
+            var repair = LibraryPathRepairService.RunOnce(repairContext);
+            if (repair.DidSomething)
+            {
+                Activity.RaiseAlert(new ActivityAlert
+                {
+                    Severity = repair.NeedsManualReview > 0 ? ActivityAlertSeverity.Warning : ActivityAlertSeverity.Info,
+                    Title = "Comic files reconnected",
+                    Detail = repair.NeedsManualReview > 0
+                        ? $"{repair.Reconnected} comic{(repair.Reconnected == 1 ? "" : "s")} reconnected after a metadata write-back issue; {repair.NeedsManualReview} still need a manual relink."
+                        : $"{repair.Reconnected} comic{(repair.Reconnected == 1 ? "" : "s")} reconnected to {(repair.Reconnected == 1 ? "its file" : "their files")} after a metadata write-back issue.",
+                    ActionLabel = repair.NeedsManualReview > 0 ? "Review" : null,
+                    ActionLink = repair.NeedsManualReview > 0 ? new ActivityLink(ActivityLinkKind.MigrationReview) : null,
+                    DedupeKey = "library-path-repair",
+                });
+            }
+        }
+        catch
+        {
+            // Best-effort self-heal - never block startup on it.
+        }
+
         Preferences = new PreferencesScreenViewModel(
             new SkinService(),
             new FilePickerService(),

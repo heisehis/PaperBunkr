@@ -89,6 +89,10 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
     private static readonly TimeSpan PurgeInterval = TimeSpan.FromSeconds(30);
     private DispatcherTimer? _purgeTimer;
 
+    /// <summary>Clock/battery refresh cadence (docs/superpowers/specs/2026-09-05-reader-polish-backlog-finish-design.md §2) - CE repaints its clock on every frame (<c>timeLabel.Drawing</c>), but a Reader that isn't continuously repainting has no equivalent hook, and a clock only needs minute resolution anyway.</summary>
+    private static readonly TimeSpan ClockRefreshInterval = TimeSpan.FromSeconds(60);
+    private DispatcherTimer? _clockTimer;
+
     /// <summary>
     /// Debounce window for continuous-mode's throttled position save (spec §6: "throttled to avoid
     /// a SaveChanges per scroll-frame") - restarted on every <see cref="OnCurrentContinuousPageIndexChanged"/>
@@ -126,15 +130,23 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
     }
 
     public ReaderScreenViewModel(Action goBack, KeyBindingService keyBindingService)
+        : this(goBack, keyBindingService, new BatteryStatusService())
+    {
+    }
+
+    /// <summary>Test seam for <see cref="IBatteryStatusService"/> (docs/superpowers/specs/2026-09-05-reader-polish-backlog-finish-design.md §2), same rationale as the <see cref="KeyBindingService"/> overload above - lets a test substitute a fake reading without touching the real Win32 API.</summary>
+    public ReaderScreenViewModel(Action goBack, KeyBindingService keyBindingService, IBatteryStatusService batteryStatusService)
     {
         _goBack = goBack;
         _keyBindingService = keyBindingService;
+        _batteryStatusService = batteryStatusService;
         CoverBrush = SeriesCardSample.Gradient("#442a1c", "#c9803f");
         Thumbnails = new ObservableCollection<ReaderThumbnailSample>();
         Bookmarks = new ObservableCollection<IssueBookmarkSummary>();
     }
 
     private readonly KeyBindingService _keyBindingService;
+    private readonly IBatteryStatusService _batteryStatusService;
 
     /// <summary>Live shortcut-hint text for a toolbar/cluster control (docs/superpowers/specs/
     /// 2026-08-25-reader-chrome-design.md) - reads <see cref="KeyBindingService"/> fresh on every
@@ -770,6 +782,15 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
             _purgeTimer.Start();
         }
 
+        if (_clockTimer is null)
+        {
+            _clockTimer = new DispatcherTimer { Interval = ClockRefreshInterval };
+            _clockTimer.Tick += (_, _) => RefreshClockAndBattery();
+            _clockTimer.Start();
+        }
+
+        RefreshClockAndBattery();
+
         _decoder?.Dispose();
         _decoder = null;
 
@@ -1235,6 +1256,14 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
     [ObservableProperty]
     private bool _isDrawerOpen;
 
+    /// <summary>Actions cluster clock (docs/superpowers/specs/2026-09-05-reader-polish-backlog-finish-design.md §2), CE-parity port of <c>NavigationOverlay</c>'s <c>timeLabel</c> - refreshed by <see cref="_clockTimer"/>, minute resolution.</summary>
+    [ObservableProperty]
+    private string _currentTimeLabel = "";
+
+    /// <summary>Actions cluster battery reading, <see langword="null"/>/empty (hides the element) when the machine reports no battery - CE-parity port of <c>NavigationOverlay</c>'s <c>batteryStatus</c>, same guard.</summary>
+    [ObservableProperty]
+    private string? _batteryStatusLabel;
+
     /// <summary>True once the hosting window narrows below the View cluster's ~720px crowding
     /// threshold (docs/superpowers/specs/2026-08-25-reader-chrome-design.md) - set from
     /// <see cref="Views.ReaderScreen"/>'s own width tracking, not measured here. When true, the View
@@ -1600,6 +1629,36 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
         ShowChrome = true;
         RestartOverlayAutoHideTimer();
         RefreshShortcutHints();
+    }
+
+    /// <summary>Refreshes <see cref="CurrentTimeLabel"/>/<see cref="BatteryStatusLabel"/> (docs/superpowers/specs/2026-09-05-reader-polish-backlog-finish-design.md §2) - called once synchronously from <see cref="Load"/> so the labels aren't blank for up to a minute after opening a book, then again on every <see cref="_clockTimer"/> tick.</summary>
+    private void RefreshClockAndBattery()
+    {
+        CurrentTimeLabel = DateTime.Now.ToString("t");
+        BatteryStatusLabel = _batteryStatusService.GetStatus() is { } sample ? $"{sample.Percentage}%" : null;
+    }
+
+    /// <summary>
+    /// Touch center-zone tap (docs/superpowers/specs/2026-09-05-reader-polish-backlog-finish-
+    /// design.md §3) - the 3x3 touch tap grid's center column was a documented no-op, reserved for
+    /// "toggle chrome/menu" back when chrome didn't exist yet (docs/superpowers/specs/2026-08-09-
+    /// reader-gestures-and-grid-navigation-design.md §4). Chrome shipped later; this wires that
+    /// already-reserved zone up. Mirrors <see cref="NotifyCursorActivity"/>'s "show" side exactly
+    /// when showing; hiding stops the idle timer immediately rather than waiting out
+    /// <see cref="OverlayAutoHideDelay"/>.
+    /// </summary>
+    [RelayCommand]
+    private void ToggleChrome()
+    {
+        if (ShowChrome)
+        {
+            ShowChrome = false;
+            _overlayAutoHideTimer?.Stop();
+        }
+        else
+        {
+            NotifyCursorActivity();
+        }
     }
 
     private void RestartOverlayAutoHideTimer()
@@ -2349,6 +2408,7 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
         }
 
         StopAutoScroll();
+        _clockTimer?.Stop();
         _goBack();
     }
 }

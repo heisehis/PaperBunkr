@@ -238,6 +238,7 @@
                               ToggleAutoScrollCommand="{Binding ToggleAutoScrollCommand}"
                               ChapterBoundaryOverscrollCommand="{Binding ChapterBoundaryOverscrollCommand}"
                               FullscreenToggleGesture="{Binding ToggleFullscreenKey}"
+                              ToggleChromeCommand="{Binding ToggleChromeCommand}"
                               RotateClockwiseGesture="{Binding RotateClockwiseKey}"
                               RotateClockwiseCommand="{Binding RotateClockwiseCommand}"
                               RotateCounterClockwiseGesture="{Binding RotateCounterClockwiseKey}"
@@ -337,6 +338,12 @@
                     <Border Width="1" Height="14" Background="{DynamicResource PbBorderBrush}" />
                     <TextBlock Text="{Binding PageLabel}" FontFamily="Consolas,monospace" FontSize="12"
                                Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
+                    <!-- Split-page part navigation (docs/superpowers/specs/2026-09-05-reader-polish-
+                         backlog-finish-design.md §1) - only shown once the current page/spread is
+                         zoomed past the viewport and split into more than one part. -->
+                    <TextBlock Text="{Binding #PageCanvasControl.PartLabel}" FontFamily="Consolas,monospace" FontSize="12"
+                               Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center"
+                               IsVisible="{Binding #PageCanvasControl.PartLabel, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
                 </StackPanel>
             </Border>
 
@@ -344,6 +351,14 @@
             <Border Classes="floatingPanel chromeCluster" Classes.hidden="{Binding !ShowChrome}"
                     HorizontalAlignment="Right" VerticalAlignment="Top" Margin="16">
                 <StackPanel Orientation="Horizontal" Spacing="2">
+                    <!-- Clock + battery (docs/superpowers/specs/2026-09-05-reader-polish-backlog-
+                         finish-design.md §2) - CE-parity port of NavigationOverlay's timeLabel/
+                         batteryStatus, rides this cluster's existing idle-fade/capsule chrome. -->
+                    <TextBlock Text="{Binding CurrentTimeLabel}" FontFamily="Consolas,monospace" FontSize="12"
+                               Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" Margin="0,0,8,0" />
+                    <TextBlock Text="{Binding BatteryStatusLabel}" FontFamily="Consolas,monospace" FontSize="12"
+                               Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" Margin="0,0,8,0"
+                               IsVisible="{Binding BatteryStatusLabel, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
                     <Border Classes="bookmarkGlow" Classes.pulsing="{Binding BookmarkJustToggled}" CornerRadius="{DynamicResource PbRadiusSm}">
                         <Button Classes="clusterIcon" Classes.active="{Binding IsCurrentPageBookmarked}"
                                 Command="{Binding ToggleBookmarkCommand}" ToolTip.Tip="Toggle bookmark">

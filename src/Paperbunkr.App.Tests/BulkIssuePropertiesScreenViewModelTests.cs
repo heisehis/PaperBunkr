@@ -1,3 +1,4 @@
+using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using Paperbunkr.App.Models;
 using Paperbunkr.App.ViewModels;
@@ -12,7 +13,12 @@ namespace Paperbunkr.App.Tests;
 /// §4). Two seeded issues deliberately share some field values and disagree on others, and share
 /// only a partial overlap on the Writer list field, so the tests can assert the exact mixed-value/
 /// intersection/delta behavior the spec calls for.
+///
+/// Joins <see cref="AvaloniaTestCollection"/> since the metadata-vocabulary build
+/// (docs/superpowers/specs/2026-09-05-metadata-editor-affordances-design.md) reads
+/// <c>MarkResolver</c>'s <c>avares://</c> alias tables for the Format / Age Rating merge.
 /// </summary>
+[Collection(nameof(AvaloniaTestCollection))]
 public class BulkIssuePropertiesScreenViewModelTests : IDisposable
 {
     private readonly string _dbPath;
@@ -388,5 +394,58 @@ public class BulkIssuePropertiesScreenViewModelTests : IDisposable
         vm.MainFields.Single(f => f.Label == BulkFieldRegistry.ContentTypeLabel).Value = nameof(ContentType.Manga);
 
         Assert.True(vm.HasSeriesAffected);
+    }
+
+    // --- Numeric fields + library vocabulary (docs/superpowers/specs/2026-09-05-metadata-editor-affordances-design.md §5) ---
+
+    [Fact]
+    public void NumberAndVolume_AreNumericTextKind_CountIsSpinnerKind()
+    {
+        var vm = CreateViewModel();
+        vm.Load(new[] { _issueAId, _issueBId });
+
+        Assert.True(vm.MainFields.Single(f => f.Label == "Number").IsNumericTextKind);
+        Assert.True(vm.MainFields.Single(f => f.Label == "Volume").IsNumericTextKind);
+        Assert.True(vm.MainFields.Single(f => f.Label == "Count").IsNumericSpinnerKind);
+    }
+
+    [Fact]
+    public void StagedNumericField_WritesIntToEveryIssue()
+    {
+        var vm = CreateViewModel();
+        vm.Load(new[] { _issueAId, _issueBId });
+
+        var count = vm.MainFields.Single(f => f.Label == "Count");
+        count.Value = "12";
+
+        vm.SaveCommand.Execute(null);
+
+        Assert.Equal(12, GetIssue(_issueAId).Count);
+        Assert.Equal(12, GetIssue(_issueBId).Count);
+    }
+
+    [Fact]
+    public async Task Vocabulary_IsMergedIntoListFieldAutocomplete()
+    {
+        var vm = CreateViewModel();
+        vm.Load(new[] { _issueAId, _issueBId });
+
+        Assert.NotNull(vm.VocabularyLoadTask);
+        await vm.VocabularyLoadTask!;
+
+        var writer = vm.ArtistFields.Single(f => f.Label == "Writer");
+        Assert.Contains("Alan Moore", writer.AutocompleteOptions);
+        Assert.Contains("Dave Gibbons", writer.AutocompleteOptions);
+    }
+
+    [Fact]
+    public async Task Vocabulary_MergesStaticAndLearnedForFormat()
+    {
+        var vm = CreateViewModel();
+        vm.Load(new[] { _issueAId, _issueBId });
+        await vm.VocabularyLoadTask!;
+
+        var format = vm.MainFields.Single(f => f.Label == "Format");
+        Assert.Contains("Hardcover", format.AutocompleteOptions);   // static default
     }
 }

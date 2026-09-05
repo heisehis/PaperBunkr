@@ -1,3 +1,4 @@
+using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using Paperbunkr.App.ViewModels;
 using Paperbunkr.Data;
@@ -292,5 +293,49 @@ public class IssuePropertiesScreenViewModelTests : IDisposable
         vm.GoPlotNotesCommand.Execute(null);
 
         Assert.False(vm.HasUnsavedChanges());
+    }
+
+    // --- Autocomplete / dropdown affordances (docs/superpowers/specs/2026-09-05-metadata-editor-affordances-design.md) ---
+
+    [Fact]
+    public async Task Load_BuildsVocabularyFromLibrary()
+    {
+        var vm = new IssuePropertiesScreenViewModel(() => { }, () => new PaperbunkrDbContext(_dbOptions));
+        vm.Load(_issueId);
+
+        Assert.NotNull(vm.VocabularyLoadTask);
+        await vm.VocabularyLoadTask!;
+
+        Assert.Contains("Original Writer", vm.WriterVocab);
+        Assert.Contains("Original Title", vm.TitleVocab);
+        Assert.Contains("Hardcover", vm.FormatVocab);   // shipped default, merged in
+    }
+
+    [Fact]
+    public void Load_BuildingVocabularyDoesNotMarkDirty()
+    {
+        var vm = new IssuePropertiesScreenViewModel(() => { }, () => new PaperbunkrDbContext(_dbOptions));
+        vm.Load(_issueId);
+
+        vm.VocabularyLoadTask!.GetAwaiter().GetResult();
+
+        Assert.False(vm.HasUnsavedChanges());
+    }
+
+    [Theory]
+    [InlineData("English", "en")]
+    [InlineData("English — en", "en")]
+    [InlineData("en-US", "en-US")]   // not a clean culture name -> stored verbatim
+    [InlineData("", null)]
+    public void Save_NormalizesLanguage(string typed, string? expected)
+    {
+        var vm = new IssuePropertiesScreenViewModel(() => { }, () => new PaperbunkrDbContext(_dbOptions));
+        vm.Load(_issueId);
+        vm.GoDetailsCommand.Execute(null);
+        vm.LanguageIso = typed;
+
+        vm.SaveCommand.Execute(null);
+
+        Assert.Equal(expected, GetIssue().LanguageISO);
     }
 }

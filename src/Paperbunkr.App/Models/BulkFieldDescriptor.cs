@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Paperbunkr.App.Services;
 using Paperbunkr.Data.Entities;
 using Paperbunkr.Data.Metadata;
 
@@ -15,6 +16,11 @@ public enum FieldKind
 
     /// <summary>Fixed-choice picker (docs/superpowers/specs/2026-08-16-manga-content-type-classification-design.md §1) - candidate values live in <see cref="BulkFieldDescriptor.Options"/>, rendered as a flyout of buttons (this app's established enum-picker idiom, e.g. ReaderScreen.axaml's reading-mode/fit-mode pickers) rather than a native ComboBox.</summary>
     Enum,
+
+    /// <summary>Numeric field (docs/superpowers/specs/2026-09-05-metadata-editor-affordances-design.md §5.1) -
+    /// a real <c>NumericUpDown</c> when <see cref="BulkFieldDescriptor.NumericAllowsText"/> is false,
+    /// or a plain <c>TextBox</c> + <c>TextSpinner</c> when the value can be non-numeric (Number/Volume).</summary>
+    Numeric,
 }
 
 /// <summary>
@@ -32,7 +38,11 @@ public sealed record BulkFieldDescriptor(
     Func<Issue, string?> Get,
     Action<Issue, string?> Set,
     IReadOnlyList<string>? Options = null,
-    IReadOnlyList<string>? Autocomplete = null);
+    IReadOnlyList<string>? Autocomplete = null,
+    VocabField? Vocab = null,
+    int NumericMin = 0,
+    int? NumericMax = null,
+    bool NumericAllowsText = false);
 
 /// <summary>
 /// The full bulk-editable field set, verified field-by-field against CE's real
@@ -68,11 +78,16 @@ public static class BulkFieldRegistry
         All.FirstOrDefault(f => f.Label == label)
         ?? throw new ArgumentException($"No BulkFieldDescriptor with label '{label}'.", nameof(label));
 
-    private static BulkFieldDescriptor Text(string label, string group, Func<Issue, string?> get, Action<Issue, string?> set, bool isList = false, IReadOnlyList<string>? autocomplete = null) =>
-        new(label, group, FieldKind.Text, isList, get, (i, v) => set(i, Norm(v)), Autocomplete: autocomplete);
+    private static BulkFieldDescriptor Text(string label, string group, Func<Issue, string?> get, Action<Issue, string?> set, bool isList = false, IReadOnlyList<string>? autocomplete = null, VocabField? vocab = null) =>
+        new(label, group, FieldKind.Text, isList, get, (i, v) => set(i, Norm(v)), Autocomplete: autocomplete, Vocab: vocab);
 
-    private static BulkFieldDescriptor Numeric(string label, string group, Func<Issue, int?> get, Action<Issue, int?> set) =>
-        new(label, group, FieldKind.Text, IsListField: false, i => get(i)?.ToString(), (i, v) => set(i, ParseInt(v)));
+    /// <summary>Real integer field - renders a <c>NumericUpDown</c> (docs/superpowers/specs/2026-09-05-metadata-editor-affordances-design.md §5.1).</summary>
+    private static BulkFieldDescriptor Numeric(string label, string group, Func<Issue, int?> get, Action<Issue, int?> set, int min = 0, int? max = null) =>
+        new(label, group, FieldKind.Numeric, IsListField: false, i => get(i)?.ToString(), (i, v) => set(i, ParseInt(v)), NumericMin: min, NumericMax: max);
+
+    /// <summary>Numeric-ish field that can also hold text (<c>"1.MU"</c>, <c>"2001"</c>) - renders a <c>TextBox</c> + <c>TextSpinner</c>.</summary>
+    private static BulkFieldDescriptor NumericText(string label, string group, Func<Issue, string?> get, Action<Issue, string?> set) =>
+        new(label, group, FieldKind.Numeric, IsListField: false, get, (i, v) => set(i, Norm(v)), NumericAllowsText: true);
 
     public static readonly BulkFieldDescriptor[] All =
     {
@@ -82,23 +97,23 @@ public static class BulkFieldRegistry
         // here even though the raw Issue field is null - Set is unchanged, still writes directly to
         // the raw field (a real edit naturally supersedes any old Accepted proposal, since the
         // resolver always prefers a stored value first).
-        Text("Number", Main, i => i.EffectiveNumber(), (i, v) => i.Number = v),
-        Numeric("Count", Main, i => i.Count, (i, v) => i.Count = v),
-        Text("Volume", Main, i => i.EffectiveVolume(), (i, v) => i.Volume = v),
-        Numeric("Year", Main, i => i.EffectiveYear(), (i, v) => i.Year = v),
-        Numeric("Month", Main, i => i.Month, (i, v) => i.Month = v),
-        Numeric("Day", Main, i => i.Day, (i, v) => i.Day = v),
-        Text("Title", Main, i => i.Title, (i, v) => i.Title = v),
-        Text("Alternate Series", Main, i => i.AlternateSeries, (i, v) => i.AlternateSeries = v),
-        Text("Alternate Number", Main, i => i.AlternateNumber, (i, v) => i.AlternateNumber = v),
-        Text("Series Group", Main, i => i.SeriesGroup, (i, v) => i.SeriesGroup = v),
-        Text("Story Arc", Main, i => i.StoryArc, (i, v) => i.StoryArc = v),
+        NumericText("Number", Main, i => i.EffectiveNumber(), (i, v) => i.Number = v),
+        Numeric("Count", Main, i => i.Count, (i, v) => i.Count = v, min: 0),
+        NumericText("Volume", Main, i => i.EffectiveVolume(), (i, v) => i.Volume = v),
+        Numeric("Year", Main, i => i.EffectiveYear(), (i, v) => i.Year = v, min: 0, max: 9999),
+        Numeric("Month", Main, i => i.Month, (i, v) => i.Month = v, min: 1, max: 12),
+        Numeric("Day", Main, i => i.Day, (i, v) => i.Day = v, min: 1, max: 31),
+        Text("Title", Main, i => i.Title, (i, v) => i.Title = v, vocab: VocabField.Title),
+        Text("Alternate Series", Main, i => i.AlternateSeries, (i, v) => i.AlternateSeries = v, vocab: VocabField.AlternateSeries),
+        NumericText("Alternate Number", Main, i => i.AlternateNumber, (i, v) => i.AlternateNumber = v),
+        Text("Series Group", Main, i => i.SeriesGroup, (i, v) => i.SeriesGroup = v, vocab: VocabField.SeriesGroup),
+        Text("Story Arc", Main, i => i.StoryArc, (i, v) => i.StoryArc = v, vocab: VocabField.StoryArc),
         // Genre/Tags read/write through the structured IssueTag collection now (docs/superpowers/
         // specs/2026-08-23-weighted-categorized-tags-design.md) - Get still returns the same
         // joined comma string as before, and Set still diffs rather than replaces (MergeFrom),
         // preserving Category/Weight for any value that survives the edit.
-        Text("Genre", Main, i => i.JoinedGenre(), (i, v) => i.MergeFrom(IssueTagField.Genre, new[] { v }), isList: true),
-        Text("Tags", Main, i => i.JoinedTags(), (i, v) => i.MergeFrom(IssueTagField.Tags, new[] { v }), isList: true),
+        Text("Genre", Main, i => i.JoinedGenre(), (i, v) => i.MergeFrom(IssueTagField.Genre, new[] { v }), isList: true, vocab: VocabField.Genre),
+        Text("Tags", Main, i => i.JoinedTags(), (i, v) => i.MergeFrom(IssueTagField.Tags, new[] { v }), isList: true, vocab: VocabField.Tags),
         // Series-owned, reached through Issue.Series - the first bulk field to write through to the
         // owning Series rather than the Issue itself (docs/superpowers/specs/2026-08-16-manga-
         // content-type-classification-design.md §1). Bulk-saving iterates selected Issues once per
@@ -121,20 +136,22 @@ public static class BulkFieldRegistry
             i => i.Series.ReadingStatus.ToString(),
             (i, v) => i.Series.ReadingStatus = Enum.Parse<ReadingStatus>(v ?? nameof(ReadingStatus.Unknown)),
             Options: Enum.GetNames<ReadingStatus>()),
-        Text("Publisher", Main, i => i.Publisher, (i, v) => i.Publisher = v),
-        Text("Imprint", Main, i => i.Imprint, (i, v) => i.Imprint = v),
+        Text("Publisher", Main, i => i.Publisher, (i, v) => i.Publisher = v, vocab: VocabField.Publisher),
+        Text("Imprint", Main, i => i.Imprint, (i, v) => i.Imprint = v, vocab: VocabField.Imprint),
         // Autocomplete seeded with CE's 16 shipped [Book Formats] defaults (docs/superpowers/specs/
         // 2026-08-27-metadata-model-phase4e-format-signal-suggestions-design.md) plus
         // SpecialFormatCatalog's Kavita-only additions (docs/superpowers/specs/2026-08-28-series-
         // detail-specials-tab-design.md) - still free text.
         Text("Format", Main, i => i.Format, (i, v) => i.Format = v,
-            autocomplete: FormatSignalCatalog.CeDefaultFormats.Union(SpecialFormatCatalog.KavitaOnlyAdditions, StringComparer.OrdinalIgnoreCase).ToList()),
+            autocomplete: FormatSignalCatalog.CeDefaultFormats.Union(SpecialFormatCatalog.KavitaOnlyAdditions, StringComparer.OrdinalIgnoreCase).ToList(),
+            vocab: VocabField.Format),
         // Book Age - free text (docs/superpowers/specs/2026-08-27-metadata-model-phase4g-age-
         // progression-design.md), autocomplete seeded with CE's five [Book Ages] defaults.
         Text("Book Age", Main, i => i.BookAge, (i, v) => i.BookAge = v,
-            autocomplete: Enum.GetValues<ComicAge>().Select(a => ComicAgeCatalog.All[a].CeListLabel).ToArray()),
-        Text("Age Rating", Main, i => i.AgeRating, (i, v) => i.AgeRating = v),
-        Text("Language (ISO)", Main, i => i.LanguageISO, (i, v) => i.LanguageISO = v),
+            autocomplete: Enum.GetValues<ComicAge>().Select(a => ComicAgeCatalog.All[a].CeListLabel).ToArray(),
+            vocab: VocabField.BookAge),
+        Text("Age Rating", Main, i => i.AgeRating, (i, v) => i.AgeRating = v, vocab: VocabField.AgeRating),
+        Text("Language (ISO)", Main, i => i.LanguageISO, (i, v) => i.LanguageISO = LanguageNormalizer.Normalize(v), vocab: VocabField.LanguageIso),
         new("Color Mode", Main, FieldKind.Enum, IsListField: false,
             i => i.ColorMode.ToString(),
             (i, v) => i.ColorMode = Enum.Parse<ColorMode>(v ?? nameof(ColorMode.Unknown)),
@@ -147,20 +164,20 @@ public static class BulkFieldRegistry
             (i, v) => i.CommunityRating = ParseInt(v)),
 
         // ===== Artists (all list fields, per CE's own listFields set) =====
-        Text("Writer", Artists, i => i.Writer, (i, v) => i.Writer = v, isList: true),
-        Text("Penciller", Artists, i => i.Penciller, (i, v) => i.Penciller = v, isList: true),
-        Text("Inker", Artists, i => i.Inker, (i, v) => i.Inker = v, isList: true),
-        Text("Colorist", Artists, i => i.Colorist, (i, v) => i.Colorist = v, isList: true),
-        Text("Editor", Artists, i => i.Editor, (i, v) => i.Editor = v, isList: true),
-        Text("Cover Artist", Artists, i => i.CoverArtist, (i, v) => i.CoverArtist = v, isList: true),
-        Text("Translator", Artists, i => i.Translator, (i, v) => i.Translator = v, isList: true),
-        Text("Letterer", Artists, i => i.Letterer, (i, v) => i.Letterer = v, isList: true),
+        Text("Writer", Artists, i => i.Writer, (i, v) => i.Writer = v, isList: true, vocab: VocabField.Writer),
+        Text("Penciller", Artists, i => i.Penciller, (i, v) => i.Penciller = v, isList: true, vocab: VocabField.Penciller),
+        Text("Inker", Artists, i => i.Inker, (i, v) => i.Inker = v, isList: true, vocab: VocabField.Inker),
+        Text("Colorist", Artists, i => i.Colorist, (i, v) => i.Colorist = v, isList: true, vocab: VocabField.Colorist),
+        Text("Editor", Artists, i => i.Editor, (i, v) => i.Editor = v, isList: true, vocab: VocabField.Editor),
+        Text("Cover Artist", Artists, i => i.CoverArtist, (i, v) => i.CoverArtist = v, isList: true, vocab: VocabField.CoverArtist),
+        Text("Translator", Artists, i => i.Translator, (i, v) => i.Translator = v, isList: true, vocab: VocabField.Translator),
+        Text("Letterer", Artists, i => i.Letterer, (i, v) => i.Letterer = v, isList: true, vocab: VocabField.Letterer),
 
         // ===== Plot & Notes =====
-        Text("Main Character or Team", PlotAndNotes, i => i.MainCharacterOrTeam, (i, v) => i.MainCharacterOrTeam = v, isList: true),
-        Text("Characters", PlotAndNotes, i => i.Characters, (i, v) => i.Characters = v, isList: true),
-        Text("Teams", PlotAndNotes, i => i.Teams, (i, v) => i.Teams = v, isList: true),
-        Text("Locations", PlotAndNotes, i => i.Locations, (i, v) => i.Locations = v, isList: true),
+        Text("Main Character or Team", PlotAndNotes, i => i.MainCharacterOrTeam, (i, v) => i.MainCharacterOrTeam = v, isList: true, vocab: VocabField.MainCharacterOrTeam),
+        Text("Characters", PlotAndNotes, i => i.Characters, (i, v) => i.Characters = v, isList: true, vocab: VocabField.Characters),
+        Text("Teams", PlotAndNotes, i => i.Teams, (i, v) => i.Teams = v, isList: true, vocab: VocabField.Teams),
+        Text("Locations", PlotAndNotes, i => i.Locations, (i, v) => i.Locations = v, isList: true, vocab: VocabField.Locations),
         Text("Web", PlotAndNotes, i => i.Web, (i, v) => i.Web = v),
         Text("Scan Information", PlotAndNotes, i => i.ScanInformation, (i, v) => i.ScanInformation = v),
         Text("Summary", PlotAndNotes, i => i.Summary, (i, v) => i.Summary = v),

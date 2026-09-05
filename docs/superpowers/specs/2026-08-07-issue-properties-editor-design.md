@@ -30,8 +30,12 @@ builds **Summary, Details, and Plot & Notes only**:
   no loss of function.
 - No autocomplete/suggestion lists for Publisher/Imprint/Format/AgeRating/etc. (CE has them via
   `AutoCompleteMode=SuggestAppend` combos) — plain text fields for v1, a small deferred fast-follow.
+  **[Superseded 2026-09-05 — docs/superpowers/specs/2026-09-05-metadata-editor-affordances-design.md
+  built the fast-follow.]**
 - No numeric spinners — CE itself uses plain textboxes with only a `MaxLength` for Number/Volume/
-  Count/Year/Month/Day, so Paperbunkr matches that exactly (see §4).
+  Count/Year/Month/Day, so Paperbunkr matches that exactly (see §4). **[Wrong — CE's
+  `ComicBookDialog` attaches `SpinButton.AddUpDown` to those fields; corrected and shipped
+  2026-09-05, see the affordances design doc §1.]**
 - **Verified via grep against CE's real source**: the single-book dialog has zero "mixed value"
   logic anywhere — that only exists in the separate bulk-edit dialog. Nothing to replicate here.
 

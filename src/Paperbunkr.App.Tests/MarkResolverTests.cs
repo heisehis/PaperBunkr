@@ -228,4 +228,15 @@ public class MarkResolverTests
         Assert.Equal(MarkKind.Glyph, spec.Kind);
         Assert.NotNull(spec.Glyph);
     }
+
+    // --- Canonical age-rating list for the metadata editors' Age Rating dropdown
+    //     (docs/superpowers/specs/2026-09-05-metadata-editor-affordances-design.md §4.3) ---
+
+    [Fact]
+    public void AgeRatingCanonicals_ContainsCanonicalSpellings_NotAliases()
+    {
+        Assert.Contains("Mature 17+", _r.AgeRatingCanonicals);
+        Assert.Contains("Everyone", _r.AgeRatingCanonicals);
+        Assert.DoesNotContain("m17", _r.AgeRatingCanonicals);   // an alias, not a canonical
+    }
 }

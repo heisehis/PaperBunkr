@@ -59,6 +59,24 @@ this file itself already did once (see the note below).
 > on-screen GUI verification of any of the new surfaces - same standing caveat as every other
 > backlog item that ships without a live click-through pass.
 
+> **Manual session note (2026-09-05, metadata editor affordances):** Beta-polish work landed —
+> CE-style editing affordances on both metadata editors (single-issue + bulk):
+> library-learned + static autocomplete, editable dropdowns (Format / Publisher / Imprint / Age
+> Rating / Book Age / Language), numeric up/down spinners, per-comma-item autocomplete on the
+> multi-value fields. New `MetadataVocabularyService` + `MultiValueAutoComplete` / `TextSpinner`
+> attached behaviors + `Styles/FormControls.axaml`. **No migration** (every field already on
+> `Issue`; Alternate Count deliberately *not* added since it has no column). Corrects the
+> 2026-08-07 editor spec's wrong "CE uses plain textboxes, no spinner/autocomplete" claim —
+> verified against CE's real `ComicBookDialog` + `SpinButton` source. Design +
+> plan: `docs/superpowers/specs/2026-09-05-metadata-editor-affordances-{design,plan}.md`.
+> Verified green: new `MetadataVocabularyServiceTests` / `TextSpinnerTests` /
+> `MultiValueAutoCompleteTests` + extended VM tests; targeted `Paperbunkr.App.Tests` subsets all
+> pass; app rebuilds clean (`rm dll` + build, XAML weave confirmed). `Paperbunkr.Data.Tests` has 7
+> pre-existing migration-replay failures (`no such column: "LibraryGroupField"` — a
+> migration-history/snapshot desync from the earlier unified-sort/group work, unrelated to this
+> App-only change). On branch `claude/metadata-editor-affordances`; on-screen GUI pass still
+> outstanding. **P0–P7 status unchanged (still all done).**
+
 > **Manual session note (2026-09-04):** P0–P7 remain all done. Two things worth recording here since
 > this is the doc a human opens first:
 > 1. **The project is now `0.2.0-beta`** (`v0.2.0-beta` tag, `CHANGELOG.md`, README/wiki updated).

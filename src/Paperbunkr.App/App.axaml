@@ -210,6 +210,7 @@
              styling wins over the theme packages above. -->
         <StyleInclude Source="avares://Paperbunkr.App/Styles/Typography.axaml" />
         <StyleInclude Source="avares://Paperbunkr.App/Styles/Primitives.axaml" />
+        <StyleInclude Source="avares://Paperbunkr.App/Styles/FormControls.axaml" />
         <StyleInclude Source="avares://Paperbunkr.App/Styles/Icons.axaml" />
         <StyleInclude Source="avares://Paperbunkr.App/Styles/Marks.axaml" />
         <StyleInclude Source="avares://Paperbunkr.App/Styles/DetailChrome.axaml" />

@@ -103,7 +103,7 @@ Nothing in this document was left un-triaged.
 ### A. Comic metadata editing
 | Feature | Status |
 |---|---|
-| Single-book properties editor (all ComicInfo fields, cover, pages, scripts tabs) | ✅ shipped 2026-08-07, converted to a borderless overlay 2026-08-23 (docs/superpowers/specs/2026-08-23-issue-editor-borderless-overlay-design.md) |
+| Single-book properties editor (all ComicInfo fields, cover, pages, scripts tabs) | ✅ shipped 2026-08-07, converted to a borderless overlay 2026-08-23 (docs/superpowers/specs/2026-08-23-issue-editor-borderless-overlay-design.md). **CE editing affordances added 2026-09-05** (docs/superpowers/specs/2026-09-05-metadata-editor-affordances-design.md): library-learned + static autocomplete, editable dropdowns (Format/Publisher/Imprint/Age Rating/Book Age/Language), numeric up/down spinners (real `NumericUpDown` for Count/Year/Month/Day, text+spinner for Number/Volume/Alt Number/Story Arc Number), per-comma-item autocomplete on the multi-value fields — both editors. Corrects the 2026-08-07 spec's wrong "CE uses plain textboxes, no spinner/autocomplete" claim. |
 | Bulk multi-book edit (mixed-value tracking) | ✅ shipped 2026-08-07, same overlay conversion 2026-08-23 |
 | Copy/paste metadata fields between books | ✅ shipped 2026-08-23 — Copy/Paste buttons in the single-book editor header |
 | Templated/token text field editor (insert `{property}`) | ✅ shipped 2026-08-23 — both editors; single-book resolves immediately, bulk expands per issue at Save |

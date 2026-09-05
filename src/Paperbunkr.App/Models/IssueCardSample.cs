@@ -38,6 +38,15 @@ public sealed partial class IssueCardSample : ObservableObject, ISelectableCard
     /// </summary>
     public int? CoverIssueId { get; init; }
 
+    /// <summary>
+    /// <see cref="Paperbunkr.App.Services.CoverFingerprint.Stem"/> for <see cref="CoverIssueId"/> -
+    /// what <c>views:AsyncCoverImage.SourceId</c> actually keys its lookup on (docs/superpowers/
+    /// specs/2026-08-27-cover-thumbnail-identity-validation-design.md), so a library rebuild that
+    /// reassigns <see cref="CoverIssueId"/> can't serve a stale cover for the reused id. Null
+    /// whenever <see cref="CoverIssueId"/> is null.
+    /// </summary>
+    public string? CoverKey { get; init; }
+
     /// <summary>Null/empty for a fileless placeholder entry (docs/superpowers/specs/2026-08-16-reveal-in-explorer-and-fileless-entries-design.md).</summary>
     public string? FilePath { get; init; }
 

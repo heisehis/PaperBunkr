@@ -13,11 +13,17 @@ namespace Paperbunkr.App.Services;
 
 /// <summary>
 /// Generates real cover thumbnails from comic archives (docs/superpowers/specs/2026-08-06-cover-thumbnails-design.md
-/// §1-2), decoding via the already-proven <see cref="PageImageDecoder"/> Reader Canvas pipeline
-/// rather than the ported ComicRack CE thumbnail-cache machinery
-/// (<c>Paperbunkr.Engine/IO/Cache</c>), which is built on <c>System.Drawing.Bitmap</c>. Avalonia's
-/// own <see cref="Bitmap"/> supports scaling and JPEG encoding natively (confirmed against the
-/// installed Avalonia version), so no GDI round-trip is needed here.
+/// §1-2), decoding via the already-proven <see cref="PageImageDecoder"/> Reader Canvas pipeline.
+/// Avalonia's own <see cref="Bitmap"/> supports scaling and JPEG encoding natively, so no GDI
+/// round-trip is needed here.
+///
+/// <para>
+/// Cache files are named <c>{issueId}-{fingerprint}.jpg</c> (docs/superpowers/specs/2026-08-27-
+/// cover-thumbnail-identity-validation-design.md) where the fingerprint folds in the issue's
+/// current file path + size (<see cref="CoverFingerprint"/>). A cached file is only trusted when
+/// both parts match, so a library rebuild that reassigns <c>Issue.Id</c> values can no longer
+/// serve the previous issue's cover for a reused id.
+/// </para>
 /// </summary>
 public class CoverThumbnailService
 {
@@ -38,15 +44,20 @@ public class CoverThumbnailService
     }
 
     /// <summary>
-    /// Decodes <paramref name="filePath"/>'s first page and saves a scaled-down JPEG to
-    /// <see cref="CoverThumbnailPaths.GetCachePath"/>. Returns false (without throwing) for a
-    /// missing/unsupported/corrupt file - callers treat that as "skip, try again next run".
-    /// Presence-checked internally too, so this is safe to call directly in tests without going
-    /// through <see cref="GenerateAllAsync"/>.
+    /// Decodes <paramref name="filePath"/>'s first page and saves a scaled-down JPEG to this
+    /// issue's fingerprinted cache path. Any stale <c>{issueId}-*.jpg</c> sibling (a cover for a
+    /// different file that used to hold this id) is deleted first. Returns false (without throwing)
+    /// for a missing/unsupported/corrupt file - callers treat that as "skip, try again next run".
+    /// <paramref name="fileSize"/> is the issue's persisted <c>FileSize</c>; pass it so the stem
+    /// here matches the one <see cref="GenerateAllAsync"/> and the card models compute.
+    /// <paramref name="force"/> skips the presence check - the identity fingerprint alone doesn't
+    /// catch a cache file that's wrong from the moment it was written (docs/superpowers/specs/
+    /// 2026-08-30-cover-thumbnail-content-verification-design.md), so <see cref="VerifyAllAsync"/>
+    /// passes true to unconditionally re-derive every cover from source.
     /// </summary>
-    public bool TryGenerateThumbnail(int issueId, string filePath)
+    public bool TryGenerateThumbnail(int issueId, string filePath, long? fileSize = null, bool force = false)
     {
-        bool ok = TryGenerateThumbnail(issueId, filePath, out double? aspectRatio);
+        bool ok = TryGenerateThumbnail(issueId, filePath, fileSize, force, out double? aspectRatio);
         if (ok && aspectRatio is double ratio)
         {
             // In-memory only here - a single generation (ResetCover, the plugin API, a first scan
@@ -63,11 +74,12 @@ public class CoverThumbnailService
     /// thumbnail was produced (or was already present and can be re-measured from its JPEG header),
     /// else null. Callers decide how to persist it.
     /// </summary>
-    internal bool TryGenerateThumbnail(int issueId, string filePath, out double? aspectRatio)
+    internal bool TryGenerateThumbnail(int issueId, string filePath, long? fileSize, bool force, out double? aspectRatio)
     {
         aspectRatio = null;
-        string destPath = CoverThumbnailPaths.GetCachePath(issueId);
-        if (File.Exists(destPath))
+        string stem = CoverFingerprint.Stem(issueId, filePath, fileSize);
+        string destPath = CoverThumbnailPaths.GetCachePath(stem);
+        if (!force && File.Exists(destPath))
         {
             if (CoverImageDimensions.TryRead(destPath, out int w, out int h))
             {
@@ -101,6 +113,7 @@ public class CoverThumbnailService
             using Bitmap scaled = page.CreateScaledBitmap(target, BitmapInterpolationMode.HighQuality);
             scaled.Save(destPath, new JpegBitmapEncoderOptions { Quality = JpegQuality });
             aspectRatio = size.Width / (double)size.Height;
+            SweepStaleSiblings(issueId, keepStem: stem); // only after the new file is safely written
             return true;
         }
         catch
@@ -112,16 +125,16 @@ public class CoverThumbnailService
     /// <summary>
     /// Overrides an issue's displayed cover with a user-picked local image, regardless of whether
     /// the issue has a real linked file - a deliberate deviation from ComicRackCE, whose own
-    /// <c>SetCustomBookThumbnail</c> (MainForm.cs) refuses linked books entirely, confirmed by
-    /// checking CE source per this project's standing rule (docs/superpowers/specs/2026-08-23-
-    /// cover-art-override-design.md). Always overwrites, unlike <see cref="TryGenerateThumbnail"/>'s
-    /// presence-check - that's what makes this an override rather than a fill-the-gap generation.
-    /// Uses <see cref="CoverImageCache.InvalidateMemoryOnly"/>, not <see cref="CoverImageCache.Invalidate"/> -
-    /// the latter would delete the very file this method just wrote.
+    /// <c>SetCustomBookThumbnail</c> refuses linked books entirely (docs/superpowers/specs/
+    /// 2026-08-23-cover-art-override-design.md). Always overwrites, unlike
+    /// <see cref="TryGenerateThumbnail"/>'s presence-check. Writes to the issue's <b>current</b>
+    /// fingerprinted stem (resolved from the database) and sweeps any stale sibling, so the
+    /// override survives an id/path check the same way a generated cover does.
     /// </summary>
     public bool TrySetCustomCover(int issueId, string sourceImagePath)
     {
-        string destPath = CoverThumbnailPaths.GetCachePath(issueId);
+        string stem = StemFor(issueId);
+        string destPath = CoverThumbnailPaths.GetCachePath(stem);
         try
         {
             using var source = new Bitmap(sourceImagePath);
@@ -139,7 +152,8 @@ public class CoverThumbnailService
 
             using Bitmap scaled = source.CreateScaledBitmap(target, BitmapInterpolationMode.HighQuality);
             scaled.Save(destPath, new JpegBitmapEncoderOptions { Quality = JpegQuality });
-            CoverImageCache.InvalidateMemoryOnly(issueId);
+            SweepStaleSiblings(issueId, keepStem: stem); // only after the new file is safely written
+            CoverImageCache.InvalidateMemoryOnly(stem);
             CoverAspectRatioStore.ReportRatio(issueId, size.Width / (double)size.Height);
             return true;
         }
@@ -150,24 +164,26 @@ public class CoverThumbnailService
     }
 
     /// <summary>
-    /// Reverts a custom cover: deletes the cached file (real <see cref="CoverImageCache.Invalidate"/>
-    /// this time - the file itself must go) and, if the issue actually has a linked file, regenerates
-    /// the real decoded-page-1 cover immediately rather than leaving the cover blank until something
-    /// else happens to call <see cref="TryGenerateThumbnail"/> again.
+    /// Reverts a custom cover: deletes every cached file for this id (<see cref="CoverImageCache.Invalidate"/>)
+    /// and, if the issue actually has a linked file, regenerates the real decoded-page-1 cover
+    /// immediately rather than leaving it blank until something else calls
+    /// <see cref="TryGenerateThumbnail"/> again.
     /// </summary>
     public void ResetCover(int issueId, string? filePath)
     {
         CoverImageCache.Invalidate(issueId);
         if (!string.IsNullOrEmpty(filePath))
         {
-            TryGenerateThumbnail(issueId, filePath);
+            TryGenerateThumbnail(issueId, filePath, FileSizeFor(issueId));
         }
     }
 
     /// <summary>
-    /// Generates thumbnails for every Issue that has a file path but no cached thumbnail yet.
-    /// Presence-based - re-running after adding new comics only fills the gaps. One bad file
-    /// doesn't stop the batch.
+    /// Generates thumbnails for every Issue that has a file path but no cached thumbnail for its
+    /// current fingerprint, then deletes orphaned cache files whose stem no longer matches any
+    /// current issue (covers deleted issues/series and pre-rework <c>{id}.jpg</c> files).
+    /// Presence-based - re-running after a rebuild that re-imported the same files at the same
+    /// paths regenerates nothing. One bad file doesn't stop the batch.
     /// </summary>
     public async Task GenerateAllAsync(IProgress<(int Done, int Total)> progress, CancellationToken ct = default)
     {
@@ -175,11 +191,18 @@ public class CoverThumbnailService
             () =>
             {
                 using var context = _contextFactory();
-                var candidates = context.Issues
+                var all = context.Issues
                     .Where(i => i.FilePath != null)
-                    .Select(i => new { i.Id, i.FilePath })
-                    .ToList()
-                    .Where(i => !File.Exists(CoverThumbnailPaths.GetCachePath(i.Id)))
+                    .Select(i => new { i.Id, i.FilePath, i.FileSize })
+                    .ToList();
+
+                var validStems = new HashSet<string>(
+                    all.Select(i => CoverFingerprint.Stem(i.Id, i.FilePath, i.FileSize)),
+                    StringComparer.Ordinal);
+
+                var candidates = all
+                    .Where(i => !File.Exists(CoverThumbnailPaths.GetCachePath(
+                        CoverFingerprint.Stem(i.Id, i.FilePath, i.FileSize))))
                     .ToList();
 
                 int total = candidates.Count;
@@ -193,7 +216,7 @@ public class CoverThumbnailService
 
                     try
                     {
-                        if (TryGenerateThumbnail(candidate.Id, candidate.FilePath!, out double? ratio) && ratio is double r)
+                        if (TryGenerateThumbnail(candidate.Id, candidate.FilePath!, candidate.FileSize, force: false, out double? ratio) && ratio is double r)
                         {
                             learned.Add((candidate.Id, r));
                         }
@@ -213,6 +236,7 @@ public class CoverThumbnailService
                 // covers were all generated before Issue.CoverAspectRatio existed. Panorama needs
                 // this to render real cover shapes without re-decoding every cover on screen.
                 BackfillAspectRatiosCore(ct);
+                CollectOrphans(validStems);
             },
             ct);
     }
@@ -229,19 +253,20 @@ public class CoverThumbnailService
     private void BackfillAspectRatiosCore(CancellationToken ct)
     {
         using var context = _contextFactory();
-        var pendingIds = context.Issues
+        var pending = context.Issues
             .Where(i => i.CoverAspectRatio == null)
-            .Select(i => i.Id)
+            .Select(i => new { i.Id, i.FilePath, i.FileSize })
             .ToList();
 
         var learned = new List<(int IssueId, double Ratio)>();
-        foreach (int id in pendingIds)
+        foreach (var issue in pending)
         {
             ct.ThrowIfCancellationRequested();
-            string path = CoverThumbnailPaths.GetCachePath(id);
+            string stem = CoverFingerprint.Stem(issue.Id, issue.FilePath, issue.FileSize);
+            string path = CoverThumbnailPaths.GetCachePath(stem);
             if (File.Exists(path) && CoverImageDimensions.TryRead(path, out int w, out int h) && w > 0 && h > 0)
             {
-                learned.Add((id, w / (double)h));
+                learned.Add((issue.Id, w / (double)h));
             }
         }
 
@@ -281,5 +306,109 @@ public class CoverThumbnailService
         {
             // Best-effort persistence - cover generation itself already succeeded.
         }
+    }
+
+    /// <summary>
+    /// Unconditionally re-derives every linked Issue's cover from its source file and overwrites
+    /// the cache, then runs the same orphan GC as <see cref="GenerateAllAsync"/> (docs/superpowers/
+    /// specs/2026-08-30-cover-thumbnail-content-verification-design.md). Every candidate gets a
+    /// real decode+scale+encode+write, not just the ones missing a fingerprint-matching file - the
+    /// identity fingerprint alone doesn't catch a cache entry that was wrong from the moment it was
+    /// written. Heavier than <see cref="GenerateAllAsync"/>; only the manual "Verify & Repair
+    /// Covers" action and the periodic background sweep call this, never the startup/library-load
+    /// reconcile.
+    /// </summary>
+    public async Task VerifyAllAsync(IProgress<(int Done, int Total)> progress, CancellationToken ct = default)
+    {
+        await Task.Run(
+            () =>
+            {
+                using var context = _contextFactory();
+                var all = context.Issues
+                    .Where(i => i.FilePath != null)
+                    .Select(i => new { i.Id, i.FilePath, i.FileSize })
+                    .ToList();
+
+                var validStems = new HashSet<string>(
+                    all.Select(i => CoverFingerprint.Stem(i.Id, i.FilePath, i.FileSize)),
+                    StringComparer.Ordinal);
+
+                int total = all.Count;
+                int done = 0;
+                progress.Report((0, total));
+
+                foreach (var candidate in all)
+                {
+                    ct.ThrowIfCancellationRequested();
+
+                    try
+                    {
+                        TryGenerateThumbnail(candidate.Id, candidate.FilePath!, candidate.FileSize, force: true);
+                    }
+                    catch
+                    {
+                        // One bad file doesn't stop the batch.
+                    }
+
+                    progress.Report((++done, total));
+                }
+
+                CollectOrphans(validStems);
+            },
+            ct);
+    }
+
+    /// <summary>Deletes every <c>{issueId}-*.jpg</c> except <paramref name="keepStem"/>'s file.</summary>
+    private static void SweepStaleSiblings(int issueId, string keepStem)
+    {
+        string keepName = keepStem + ".jpg";
+        foreach (string path in CoverThumbnailPaths.EnumerateForIssue(issueId).ToList())
+        {
+            if (!string.Equals(Path.GetFileName(path), keepName, StringComparison.OrdinalIgnoreCase))
+            {
+                try
+                {
+                    File.Delete(path);
+                }
+                catch (IOException)
+                {
+                }
+            }
+        }
+    }
+
+    /// <summary>Deletes cache files whose stem isn't in <paramref name="validStems"/>.</summary>
+    private static void CollectOrphans(HashSet<string> validStems)
+    {
+        foreach (string path in CoverThumbnailPaths.EnumerateAll().ToList())
+        {
+            string stem = Path.GetFileNameWithoutExtension(path);
+            if (!validStems.Contains(stem))
+            {
+                try
+                {
+                    File.Delete(path);
+                }
+                catch (IOException)
+                {
+                }
+            }
+        }
+    }
+
+    private string StemFor(int issueId)
+    {
+        using var context = _contextFactory();
+        var issue = context.Issues
+            .Where(i => i.Id == issueId)
+            .Select(i => new { i.FilePath, i.FileSize })
+            .FirstOrDefault();
+        return CoverFingerprint.Stem(issueId, issue?.FilePath, issue?.FileSize);
+    }
+
+    private long? FileSizeFor(int issueId)
+    {
+        using var context = _contextFactory();
+        return context.Issues.Where(i => i.Id == issueId).Select(i => i.FileSize).FirstOrDefault();
     }
 }

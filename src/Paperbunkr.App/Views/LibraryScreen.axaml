@@ -239,7 +239,7 @@
                         <Grid>
                             <!-- Uniform (not UniformToFill) - the box is already sized to this cover's own
                                  aspect ratio, so nothing gets cropped; only extreme clamped outliers letterbox. -->
-                            <Image x:Name="PanoramaIssueCoverImage" views:AsyncCoverImage.SourceId="{Binding Id}" Stretch="Uniform" />
+                            <Image x:Name="PanoramaIssueCoverImage" views:AsyncCoverImage.SourceId="{Binding CoverKey}" Stretch="Uniform" />
                             <Border Classes="posterScrim" />
                             <Border IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowUnreadBadge}">
                                 <Border IsVisible="{Binding !IsRead}" Background="#B814161B"
@@ -296,7 +296,7 @@
                                     Background="{Binding CoverBrush}" ClipToBounds="True"
                                     controls:SharedElement.Key="{Binding Id, StringFormat='issue-cover:{0}'}"
                                     controls:SharedElement.ImageSource="{Binding #ListIssueCoverImage.Source}">
-                                <Image x:Name="ListIssueCoverImage" views:AsyncCoverImage.SourceId="{Binding Id}" Stretch="UniformToFill" />
+                                <Image x:Name="ListIssueCoverImage" views:AsyncCoverImage.SourceId="{Binding CoverKey}" Stretch="UniformToFill" />
                             </Border>
                             <CheckBox IsChecked="{Binding IsSelected, Mode=OneWay}"
                                       Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ToggleIssueSelectionCheckboxCommand}"
@@ -331,7 +331,7 @@
                         <Border Width="36" Height="50" CornerRadius="{DynamicResource PbRadiusSm}" Background="{Binding CoverBrush}" ClipToBounds="True"
                                 controls:SharedElement.Key="{Binding Id, StringFormat='issue-cover:{0}'}"
                                 controls:SharedElement.ImageSource="{Binding #DetailsIssueCoverImage.Source}">
-                            <Image x:Name="DetailsIssueCoverImage" views:AsyncCoverImage.SourceId="{Binding Id}" Stretch="UniformToFill" />
+                            <Image x:Name="DetailsIssueCoverImage" views:AsyncCoverImage.SourceId="{Binding CoverKey}" Stretch="UniformToFill" />
                         </Border>
                         <CheckBox IsChecked="{Binding IsSelected, Mode=OneWay}"
                                   Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ToggleIssueSelectionCheckboxCommand}"
@@ -379,7 +379,7 @@
                                     Background="{Binding CoverBrush}" ClipToBounds="True"
                                     controls:SharedElement.Key="{Binding Id, StringFormat='issue-cover:{0}'}"
                                     controls:SharedElement.ImageSource="{Binding #TilesIssueCoverImage.Source}">
-                                <Image x:Name="TilesIssueCoverImage" views:AsyncCoverImage.SourceId="{Binding Id}" Stretch="UniformToFill" />
+                                <Image x:Name="TilesIssueCoverImage" views:AsyncCoverImage.SourceId="{Binding CoverKey}" Stretch="UniformToFill" />
                             </Border>
                             <CheckBox IsChecked="{Binding IsSelected, Mode=OneWay}"
                                       Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ToggleIssueSelectionCheckboxCommand}"
@@ -416,7 +416,7 @@
                         <Grid>
                             <!-- Uniform (not UniformToFill) - the box is already sized to this cover's own
                                  aspect ratio, so nothing gets cropped; only extreme clamped outliers letterbox. -->
-                            <Image x:Name="SeriesPanoramaCoverImage" views:AsyncCoverImage.SourceId="{Binding CoverIssueId}" Stretch="Uniform" />
+                            <Image x:Name="SeriesPanoramaCoverImage" views:AsyncCoverImage.SourceId="{Binding CoverKey}" Stretch="Uniform" />
                             <Border Classes="posterScrim" />
                             <Border IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowUnreadBadge}">
                                 <Border IsVisible="{Binding HasUnread}" Background="#B814161B"
@@ -481,7 +481,7 @@
                                 controls:SharedElement.Key="{Binding SeriesId, StringFormat='series-cover:{0}'}"
                                 controls:SharedElement.ImageSource="{Binding #SeriesListCoverImage.Source}">
                             <Grid>
-                                <Image x:Name="SeriesListCoverImage" views:AsyncCoverImage.SourceId="{Binding CoverIssueId}" Stretch="UniformToFill" />
+                                <Image x:Name="SeriesListCoverImage" views:AsyncCoverImage.SourceId="{Binding CoverKey}" Stretch="UniformToFill" />
                                 <!-- Always visible (not hover-gated like the grid-card templates above) -
                                      this thumbnail is too small to have a Border.cover-class hover parent
                                      to key off, and a permanently tiny checkbox is unobtrusive at this scale. -->
@@ -519,7 +519,7 @@
                             controls:SharedElement.Key="{Binding SeriesId, StringFormat='series-cover:{0}'}"
                             controls:SharedElement.ImageSource="{Binding #SeriesDetailsCoverImage.Source}">
                         <Grid>
-                            <Image x:Name="SeriesDetailsCoverImage" views:AsyncCoverImage.SourceId="{Binding CoverIssueId}" Stretch="UniformToFill" />
+                            <Image x:Name="SeriesDetailsCoverImage" views:AsyncCoverImage.SourceId="{Binding CoverKey}" Stretch="UniformToFill" />
                             <CheckBox Classes="tileSelect forceVisible"
                                       IsChecked="{Binding IsSelected, Mode=OneWay}"
                                       Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ToggleSeriesSelectionCheckboxCommand}"
@@ -556,7 +556,7 @@
                                 controls:SharedElement.Key="{Binding SeriesId, StringFormat='series-cover:{0}'}"
                                 controls:SharedElement.ImageSource="{Binding #SeriesTilesCoverImage.Source}">
                             <Grid>
-                                <Image x:Name="SeriesTilesCoverImage" views:AsyncCoverImage.SourceId="{Binding CoverIssueId}" Stretch="UniformToFill" />
+                                <Image x:Name="SeriesTilesCoverImage" views:AsyncCoverImage.SourceId="{Binding CoverKey}" Stretch="UniformToFill" />
                                 <CheckBox Classes="tileSelect forceVisible"
                                           IsChecked="{Binding IsSelected, Mode=OneWay}"
                                           Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ToggleSeriesSelectionCheckboxCommand}"
@@ -597,7 +597,7 @@
                             controls:SharedElement.Key="{Binding Id, StringFormat='issue-cover:{0}'}"
                             controls:SharedElement.ImageSource="{Binding #PosterIssueCoverImage.Source}">
                         <Grid>
-                            <Image x:Name="PosterIssueCoverImage" views:AsyncCoverImage.SourceId="{Binding Id}" Stretch="UniformToFill" />
+                            <Image x:Name="PosterIssueCoverImage" views:AsyncCoverImage.SourceId="{Binding CoverKey}" Stretch="UniformToFill" />
                             <Border Classes="posterScrim" />
                             <Border Classes="pbChip" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="6">
                                 <Border.IsVisible>
@@ -651,7 +651,7 @@
                             controls:SharedElement.Key="{Binding SeriesId, StringFormat='series-cover:{0}'}"
                             controls:SharedElement.ImageSource="{Binding #PosterSeriesCoverImage.Source}">
                         <Grid>
-                            <Image x:Name="PosterSeriesCoverImage" views:AsyncCoverImage.SourceId="{Binding CoverIssueId}" Stretch="UniformToFill" />
+                            <Image x:Name="PosterSeriesCoverImage" views:AsyncCoverImage.SourceId="{Binding CoverKey}" Stretch="UniformToFill" />
                             <Border Classes="posterScrim" />
                             <Border Classes="pbChip" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="6">
                                 <Border.IsVisible>
@@ -705,7 +705,7 @@
              design.md, step 9) - a trimmed PosterGridIssueTemplate: no selection checkbox/publisher
              badge/unread dot, since a Collection's grid isn't multi-select-aware and members span
              three entity kinds those badges don't uniformly apply to. Series/Issue tiles resolve
-             their cover lazily via CoverIssueId; Book tiles carry an already-decoded CoverImage
+             their cover lazily via CoverKey; Book tiles carry an already-decoded CoverImage
              instead (see LibraryTile's own doc comment) - stacking both Images is simpler than a
              null-check converter, since whichever one is unbound just renders nothing. -->
         <DataTemplate x:Key="CollectionTileTemplate" x:DataType="models:LibraryTile">
@@ -717,7 +717,7 @@
                     <Border Grid.Row="0" Classes="cover posterCover" Background="{Binding CoverBrush}"
                             Height="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PosterCoverHeight}">
                         <Grid>
-                            <Image views:AsyncCoverImage.SourceId="{Binding CoverIssueId}" Stretch="UniformToFill" />
+                            <Image views:AsyncCoverImage.SourceId="{Binding CoverKey}" Stretch="UniformToFill" />
                             <Image Source="{Binding CoverImage}" Stretch="UniformToFill" />
                             <Border Classes="posterScrim" />
                         </Grid>

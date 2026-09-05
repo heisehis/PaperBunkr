@@ -20,6 +20,7 @@ public class PreferencesScreenViewModelTests : IDisposable
     private readonly string _originalInstalledDirectory;
     private readonly string _originalExtractedDirectory;
     private readonly string _originalThumbnailDirectory;
+    private readonly string _originalBookThumbnailDirectory;
     private readonly string? _originalDbPathOverride;
     private readonly string _dbPath;
     private readonly DbContextOptions<PaperbunkrDbContext> _dbOptions;
@@ -31,11 +32,13 @@ public class PreferencesScreenViewModelTests : IDisposable
         _originalInstalledDirectory = SkinPaths.InstalledDirectory;
         _originalExtractedDirectory = SkinPaths.ExtractedDirectory;
         _originalThumbnailDirectory = CoverThumbnailPaths.ThumbnailDirectory;
+        _originalBookThumbnailDirectory = BookCoverThumbnailPaths.ThumbnailDirectory;
 
         string root = Path.Combine(Path.GetTempPath(), $"paperbunkr_prefsvm_test_{Guid.NewGuid():N}");
         SkinPaths.InstalledDirectory = Path.Combine(root, "skins");
         SkinPaths.ExtractedDirectory = Path.Combine(root, "skins-extracted");
         CoverThumbnailPaths.ThumbnailDirectory = Path.Combine(root, "thumbs");
+        BookCoverThumbnailPaths.ThumbnailDirectory = Path.Combine(root, "book-thumbs");
 
         _dbPath = Path.Combine(Path.GetTempPath(), $"paperbunkr_prefsvm_db_test_{Guid.NewGuid():N}.db");
         _dbOptions = new DbContextOptionsBuilder<PaperbunkrDbContext>().UseSqlite($"Data Source={_dbPath}").Options;
@@ -66,6 +69,7 @@ public class PreferencesScreenViewModelTests : IDisposable
         SkinPaths.InstalledDirectory = _originalInstalledDirectory;
         SkinPaths.ExtractedDirectory = _originalExtractedDirectory;
         CoverThumbnailPaths.ThumbnailDirectory = _originalThumbnailDirectory;
+        BookCoverThumbnailPaths.ThumbnailDirectory = _originalBookThumbnailDirectory;
         PaperbunkrDbContext.DatabasePathOverride = _originalDbPathOverride;
         GraphicsBootstrap.CachePathOverride = null;
 
@@ -1060,6 +1064,129 @@ public class PreferencesScreenViewModelTests : IDisposable
         Assert.Equal("Generating covers finished", completionToast!.Value.Title);
     }
 
+    /// <summary>
+    /// docs/superpowers/specs/2026-08-30-cover-thumbnail-content-verification-design.md - separate
+    /// command from GenerateCovers, covers comics and books in one run. Seeds one of each so the
+    /// completion toast's combined total (a real bug caught during design review: two sequential
+    /// progress callbacks sharing one toast can make the total undercount/jump backward if not
+    /// accumulated) is actually checkable.
+    /// </summary>
+    [Fact]
+    public async Task VerifyCoversCommand_RunsAsActivityJob_ThatSucceedsWithCombinedTotal()
+    {
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            var series = context.Series.Add(new Series { Name = "Verify Covers Series" }).Entity;
+            context.SaveChanges();
+            context.Issues.Add(new Issue { SeriesId = series.Id, Number = "1", FilePath = @"C:\nowhere\missing.cbz" });
+            context.Books.Add(new Book { Title = "T", Format = BookFormat.Epub, FilePath = @"C:\nowhere\missing.epub" });
+            context.SaveChanges();
+        }
+
+        var activity = new ActivityService(a => a(), _ => { });
+        (string Title, string Message)? completionToast = null;
+        activity.CompletionToastRequested += (t, m) => completionToast = (t, m);
+        var vm = CreateViewModel(activity: activity);
+
+        await vm.VerifyCoversCommand.ExecuteAsync(null);
+
+        var job = Assert.Single(activity.RecentJobs);
+        Assert.Equal(ActivityJobStatus.Succeeded, job.Status);
+        Assert.False(vm.IsVerifyingCovers);
+        Assert.NotNull(completionToast);
+        Assert.Equal("Verifying covers finished", completionToast!.Value.Title);
+        Assert.Equal("Re-checked 2 covers", completionToast!.Value.Message); // 1 issue + 1 book
+    }
+
+    // --- Clear Cover Cache (docs/superpowers/specs/2026-08-30-cover-thumbnail-content-
+    //     verification-design.md) - TwoStepConfirm escape hatch, independent of VerifyCovers. ---
+
+    [Fact]
+    public void ClearComicCoverCacheConfirm_FirstTrigger_ArmsWithoutDeletingAnything()
+    {
+        Directory.CreateDirectory(CoverThumbnailPaths.ThumbnailDirectory);
+        string existing = Path.Combine(CoverThumbnailPaths.ThumbnailDirectory, "1-deadbeef.jpg");
+        File.WriteAllBytes(existing, new byte[] { 1 });
+        var vm = CreateViewModel();
+
+        vm.ClearComicCoverCacheConfirm.TriggerCommand.Execute(null);
+
+        Assert.True(vm.ClearComicCoverCacheConfirm.IsArmed);
+        Assert.True(File.Exists(existing));
+    }
+
+    [Fact]
+    public async Task ClearComicCoverCacheConfirm_SecondTrigger_DeletesEverythingAndRebuilds()
+    {
+        CbzFixture.Create(Path.Combine(_scanRoot, "1.cbz"), pageCount: 1);
+        int issueId;
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            var series = context.Series.Add(new Series { Name = "Clear Cache Series" }).Entity;
+            context.SaveChanges();
+            var issue = new Issue { SeriesId = series.Id, Number = "1", FilePath = Path.Combine(_scanRoot, "1.cbz"), FileSize = 1 };
+            context.Issues.Add(issue);
+            context.SaveChanges();
+            issueId = issue.Id;
+        }
+        new CoverThumbnailService(() => new PaperbunkrDbContext(_dbOptions)).TryGenerateThumbnail(issueId, Path.Combine(_scanRoot, "1.cbz"), fileSize: 1);
+        Directory.CreateDirectory(CoverThumbnailPaths.ThumbnailDirectory);
+        string strayFile = Path.Combine(CoverThumbnailPaths.ThumbnailDirectory, "999-cafef00d.jpg"); // an orphan that must go too
+        File.WriteAllBytes(strayFile, new byte[] { 1 });
+
+        var activity = new ActivityService(a => a(), _ => { });
+        (string Title, string Message)? completionToast = null;
+        activity.CompletionToastRequested += (t, m) => completionToast = (t, m);
+        var vm = CreateViewModel(activity: activity);
+
+        vm.ClearComicCoverCacheConfirm.TriggerCommand.Execute(null); // arm
+        vm.ClearComicCoverCacheConfirm.TriggerCommand.Execute(null); // confirm - fire-and-forget
+        await Task.Delay(500); // let the fire-and-forget rebuild finish (headless dispatcher, no completion signal to await directly)
+
+        Assert.False(File.Exists(strayFile)); // wiped, not just skipped
+        Assert.False(vm.IsGeneratingCovers);
+        Assert.NotNull(completionToast);
+        Assert.Equal("Rebuilding comic covers finished", completionToast!.Value.Title);
+        var stem = CoverFingerprint.Stem(issueId, Path.Combine(_scanRoot, "1.cbz"), 1);
+        Assert.True(File.Exists(CoverThumbnailPaths.GetCachePath(stem))); // regenerated, not left blank
+    }
+
+    [Fact]
+    public void ClearBookCoverCacheConfirm_FirstTrigger_ArmsWithoutDeletingAnything()
+    {
+        Directory.CreateDirectory(BookCoverThumbnailPaths.ThumbnailDirectory);
+        string existing = Path.Combine(BookCoverThumbnailPaths.ThumbnailDirectory, "1-deadbeef.jpg");
+        File.WriteAllBytes(existing, new byte[] { 1 });
+        var vm = CreateViewModel();
+
+        vm.ClearBookCoverCacheConfirm.TriggerCommand.Execute(null);
+
+        Assert.True(vm.ClearBookCoverCacheConfirm.IsArmed);
+        Assert.True(File.Exists(existing));
+    }
+
+    [Fact]
+    public async Task ClearBookCoverCacheConfirm_SecondTrigger_DeletesEverythingAndRebuilds()
+    {
+        Directory.CreateDirectory(BookCoverThumbnailPaths.ThumbnailDirectory);
+        string strayFile = Path.Combine(BookCoverThumbnailPaths.ThumbnailDirectory, "999-cafef00d.jpg");
+        File.WriteAllBytes(strayFile, new byte[] { 1 });
+
+        var activity = new ActivityService(a => a(), _ => { });
+        (string Title, string Message)? completionToast = null;
+        activity.CompletionToastRequested += (t, m) => completionToast = (t, m);
+        var vm = CreateViewModel(activity: activity);
+
+        vm.ClearBookCoverCacheConfirm.TriggerCommand.Execute(null); // arm
+        vm.ClearBookCoverCacheConfirm.TriggerCommand.Execute(null); // confirm - fire-and-forget
+        await Task.Delay(500);
+
+        Assert.False(File.Exists(strayFile));
+        Assert.False(vm.IsClearingBookCoverCache);
+        Assert.NotNull(completionToast);
+        Assert.Equal("Rebuilding book covers finished", completionToast!.Value.Title);
+    }
+
     [Fact]
     public async Task SyncMetadataCommand_RunsAsActivityJob_ThatSucceeds()
     {
@@ -1093,7 +1220,8 @@ public class PreferencesScreenViewModelTests : IDisposable
         Assert.Equal("Added 1 issue across 1 series.", vm.ScanStatus);
         using var verifyContext = new PaperbunkrDbContext(_dbOptions);
         var issue = Assert.Single(verifyContext.Issues);
-        Assert.True(File.Exists(CoverThumbnailPaths.GetCachePath(issue.Id)));
+        string stem = CoverFingerprint.Stem(issue.Id, issue.FilePath, issue.FileSize);
+        Assert.True(File.Exists(CoverThumbnailPaths.GetCachePath(stem)));
     }
 
     [Fact]

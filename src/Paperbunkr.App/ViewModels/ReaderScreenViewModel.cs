@@ -2322,7 +2322,7 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
     {
         ChapterTransitionFromLabel = $"#{fromIssue.EffectiveNumber() ?? "?"}";
         ChapterTransitionToLabel = $"#{toIssue.EffectiveNumber() ?? "?"}";
-        ChapterTransitionCoverImage = CoverImageCache.Get(toIssue.Id);
+        ChapterTransitionCoverImage = CoverImageCache.Get(toIssue.Id, toIssue.FilePath, toIssue.FileSize);
         ChapterTransitionState = ChapterTransitionState.Card;
     }
 

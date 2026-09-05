@@ -9,7 +9,9 @@ namespace Paperbunkr.App.Tests;
 /// <see cref="CoverImageConverter"/> on the virtualized Library grids so JPEG decode happens off
 /// the UI thread. Same <see cref="AvaloniaTestCollection"/> rationale as
 /// <see cref="CoverImageCacheTests"/> (Bitmap construction + Image control need a platform),
-/// redirecting <see cref="CoverThumbnailPaths.ThumbnailDirectory"/> to a temp folder.
+/// redirecting <see cref="CoverThumbnailPaths.ThumbnailDirectory"/> to a temp folder. Keyed by a
+/// <see cref="CoverFingerprint.Stem"/> string, not a bare issue id (docs/superpowers/specs/
+/// 2026-08-27-cover-thumbnail-identity-validation-design.md), same as <see cref="CoverImageCache"/>.
 ///
 /// The background decode + <c>Dispatcher.UIThread.Post</c> path is not pumped here (headless
 /// dispatcher timing is flaky in this env); instead the two behaviours that actually matter are
@@ -48,12 +50,13 @@ public class AsyncCoverImageTests : IDisposable
     public void SettingSourceId_ToAnAlreadyCachedCover_SetsSourceSynchronously()
     {
         CbzFixture.Create(_cbzPath, pageCount: 1);
-        new CoverThumbnailService().TryGenerateThumbnail(issueId: 600, _cbzPath);
-        var cover = CoverImageCache.Get(600); // warm the in-memory cache
+        new CoverThumbnailService().TryGenerateThumbnail(issueId: 600, _cbzPath, fileSize: 1);
+        string stem = CoverFingerprint.Stem(600, _cbzPath, 1);
+        var cover = CoverImageCache.Get(stem); // warm the in-memory cache
         Assert.NotNull(cover);
 
         var image = new Image();
-        AsyncCoverImage.SetSourceId(image, 600);
+        AsyncCoverImage.SetSourceId(image, stem);
 
         Assert.Same(cover, image.Source);
     }
@@ -62,11 +65,12 @@ public class AsyncCoverImageTests : IDisposable
     public void SettingSourceId_ToNull_ClearsSource()
     {
         CbzFixture.Create(_cbzPath, pageCount: 1);
-        new CoverThumbnailService().TryGenerateThumbnail(issueId: 601, _cbzPath);
-        CoverImageCache.Get(601);
+        new CoverThumbnailService().TryGenerateThumbnail(issueId: 601, _cbzPath, fileSize: 1);
+        string stem = CoverFingerprint.Stem(601, _cbzPath, 1);
+        CoverImageCache.Get(stem);
 
         var image = new Image();
-        AsyncCoverImage.SetSourceId(image, 601);
+        AsyncCoverImage.SetSourceId(image, stem);
         Assert.NotNull(image.Source);
 
         AsyncCoverImage.SetSourceId(image, null);
@@ -78,7 +82,7 @@ public class AsyncCoverImageTests : IDisposable
     {
         var image = new Image();
 
-        AsyncCoverImage.SetSourceId(image, 909090);
+        AsyncCoverImage.SetSourceId(image, "909090-deadbeef");
 
         Assert.Null(image.Source);
     }
@@ -87,30 +91,32 @@ public class AsyncCoverImageTests : IDisposable
     public void Apply_PaintsTheCover_WhenGenerationIsCurrent()
     {
         CbzFixture.Create(_cbzPath, pageCount: 1);
-        new CoverThumbnailService().TryGenerateThumbnail(issueId: 602, _cbzPath);
-        var decoded = CoverImageCache.DecodeFromDisk(602)!;
+        new CoverThumbnailService().TryGenerateThumbnail(issueId: 602, _cbzPath, fileSize: 1);
+        string stem = CoverFingerprint.Stem(602, _cbzPath, 1);
+        var decoded = CoverImageCache.DecodeFromDisk(stem)!;
 
         var image = new Image();
-        AsyncCoverImage.SetSourceId(image, 602); // generation -> 1 (cache miss, background decode pending)
+        AsyncCoverImage.SetSourceId(image, stem); // generation -> 1 (cache miss, background decode pending)
 
-        AsyncCoverImage.Apply(image, issueId: 602, generation: 1, decoded);
+        AsyncCoverImage.Apply(image, stem, generation: 1, decoded);
 
         Assert.Same(decoded, image.Source);
-        Assert.Same(decoded, CoverImageCache.Get(602));
+        Assert.Same(decoded, CoverImageCache.Get(stem));
     }
 
     [Fact]
     public void Apply_DropsAStaleDecode_AfterTheContainerWasRecycled()
     {
         CbzFixture.Create(_cbzPath, pageCount: 1);
-        new CoverThumbnailService().TryGenerateThumbnail(issueId: 603, _cbzPath);
-        var staleDecode = CoverImageCache.DecodeFromDisk(603)!;
+        new CoverThumbnailService().TryGenerateThumbnail(issueId: 603, _cbzPath, fileSize: 1);
+        string stem = CoverFingerprint.Stem(603, _cbzPath, 1);
+        var staleDecode = CoverImageCache.DecodeFromDisk(stem)!;
 
         var image = new Image();
-        AsyncCoverImage.SetSourceId(image, 603); // generation -> 1
-        AsyncCoverImage.SetSourceId(image, 604); // container recycled: generation -> 2
+        AsyncCoverImage.SetSourceId(image, stem); // generation -> 1
+        AsyncCoverImage.SetSourceId(image, "604-cafef00d"); // container recycled: generation -> 2
 
-        AsyncCoverImage.Apply(image, issueId: 603, generation: 1, staleDecode);
+        AsyncCoverImage.Apply(image, stem, generation: 1, staleDecode);
 
         Assert.Null(image.Source); // the cover for 603 must not land on a container now showing 604
     }

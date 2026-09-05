@@ -257,4 +257,112 @@ internal static class SmartListQueryBuilder
 
         return byMetadata.Concat(byPath).Select(i => i.Id).ToHashSet();
     }
+
+    /// <summary>
+    /// Groups issues for the Needs Review "Duplicate Files" section (docs/superpowers/specs/
+    /// 2026-09-05-duplicate-files-review-design.md) - a second entry point over the same two keys
+    /// <see cref="DuplicateIssueIds"/> uses, needed because that method only returns a flat set of
+    /// flagged ids, not which issues actually belong together. Union-find over both keys: two issues
+    /// sharing *either* the metadata tuple or an identical file path land in one cluster, so an issue
+    /// linked to different partners via different keys still gets one group card, not two overlapping
+    /// ones. Only clusters of 2+ are returned.
+    /// </summary>
+    public static List<List<Issue>> BuildDuplicateGroups(IReadOnlyCollection<Issue> issues)
+    {
+        var list = issues as IReadOnlyList<Issue> ?? issues.ToList();
+        int n = list.Count;
+        var parent = new int[n];
+        for (int i = 0; i < n; i++)
+        {
+            parent[i] = i;
+        }
+
+        int Find(int x)
+        {
+            while (parent[x] != x)
+            {
+                parent[x] = parent[parent[x]];
+                x = parent[x];
+            }
+
+            return x;
+        }
+
+        void Union(int a, int b)
+        {
+            a = Find(a);
+            b = Find(b);
+            if (a != b)
+            {
+                parent[a] = b;
+            }
+        }
+
+        var byMetadata = new Dictionary<(int, string?, int?, string?, string?, string?, int?, int?, int?), List<int>>();
+        var byPath = new Dictionary<string, List<int>>(StringComparer.OrdinalIgnoreCase);
+
+        for (int i = 0; i < n; i++)
+        {
+            var issue = list[i];
+            var key = (issue.SeriesId, issue.Format, issue.Count, issue.EffectiveNumber(), issue.EffectiveVolume(), issue.LanguageISO, issue.EffectiveYear(), issue.Month, issue.Day);
+            if (!byMetadata.TryGetValue(key, out var metaIndexes))
+            {
+                byMetadata[key] = metaIndexes = new List<int>();
+            }
+
+            metaIndexes.Add(i);
+
+            if (!string.IsNullOrEmpty(issue.FilePath))
+            {
+                if (!byPath.TryGetValue(issue.FilePath, out var pathIndexes))
+                {
+                    byPath[issue.FilePath] = pathIndexes = new List<int>();
+                }
+
+                pathIndexes.Add(i);
+            }
+        }
+
+        foreach (var indexes in byMetadata.Values.Where(g => g.Count > 1))
+        {
+            for (int k = 1; k < indexes.Count; k++)
+            {
+                Union(indexes[0], indexes[k]);
+            }
+        }
+
+        foreach (var indexes in byPath.Values.Where(g => g.Count > 1))
+        {
+            for (int k = 1; k < indexes.Count; k++)
+            {
+                Union(indexes[0], indexes[k]);
+            }
+        }
+
+        var clusters = new Dictionary<int, List<Issue>>();
+        for (int i = 0; i < n; i++)
+        {
+            int root = Find(i);
+            if (!clusters.TryGetValue(root, out var members))
+            {
+                clusters[root] = members = new List<Issue>();
+            }
+
+            members.Add(list[i]);
+        }
+
+        // FileIsMissing ascending first (a missing copy is never the default keep when a present one
+        // exists in the same cluster), then FileSize descending (nulls last via the -1 sentinel - a
+        // null size can't be "largest"), then AddedTime ascending, then Id as a final deterministic
+        // tie-break.
+        return clusters.Values
+            .Where(members => members.Count > 1)
+            .Select(members => members
+                .OrderBy(i => i.FileIsMissing)
+                .ThenByDescending(i => i.FileSize ?? -1)
+                .ThenBy(i => i.AddedTime ?? DateTime.MaxValue)
+                .ThenBy(i => i.Id)
+                .ToList())
+            .ToList();
+    }
 }

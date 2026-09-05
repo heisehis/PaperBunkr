@@ -118,6 +118,74 @@ public class ShikimoriTrackerAdapterTests : IDisposable
     }
 
     [Fact]
+    public async Task GetEntryAsync_NoStoredAccessToken_ReturnsNull_WithoutSendingRequest()
+    {
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        var adapter = new ShikimoriTrackerAdapter(new HttpClient(new StubHandler((_, _) => throw new InvalidOperationException("should not send"))));
+
+        var result = await adapter.GetEntryAsync(context, new TrackingLink { ExternalId = "30013" }, CancellationToken.None);
+
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public async Task GetEntryAsync_ExistingRate_ParsesStatusAndChapters()
+    {
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        CredentialStore.Set(context, nameof(TrackingService.Shikimori), CredentialKind.OAuthAccessToken, "token-abc");
+
+        var adapter = new ShikimoriTrackerAdapter(new HttpClient(new StubHandler((req, _) =>
+        {
+            if (req.RequestUri!.AbsolutePath.EndsWith("/users/whoami"))
+            {
+                return JsonResponse(HttpStatusCode.OK, """{ "id": 7 }""");
+            }
+
+            return JsonResponse(HttpStatusCode.OK, """[ { "id": 555, "status": "watching", "chapters": 42 } ]""");
+        })));
+
+        var result = await adapter.GetEntryAsync(context, new TrackingLink { ExternalId = "30013" }, CancellationToken.None);
+
+        Assert.NotNull(result);
+        Assert.Equal(ReadingStatus.Reading, result!.Status);
+        Assert.Equal(42, result.ChapterProgress);
+    }
+
+    [Fact]
+    public async Task GetEntryAsync_NoExistingRate_ReturnsNull()
+    {
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        CredentialStore.Set(context, nameof(TrackingService.Shikimori), CredentialKind.OAuthAccessToken, "token-abc");
+
+        var adapter = new ShikimoriTrackerAdapter(new HttpClient(new StubHandler((req, _) =>
+        {
+            if (req.RequestUri!.AbsolutePath.EndsWith("/users/whoami"))
+            {
+                return JsonResponse(HttpStatusCode.OK, """{ "id": 7 }""");
+            }
+
+            return JsonResponse(HttpStatusCode.OK, "[]");
+        })));
+
+        var result = await adapter.GetEntryAsync(context, new TrackingLink { ExternalId = "30013" }, CancellationToken.None);
+
+        Assert.Null(result);
+    }
+
+    [Theory]
+    [InlineData("planned", ReadingStatus.Planned)]
+    [InlineData("watching", ReadingStatus.Reading)]
+    [InlineData("completed", ReadingStatus.Completed)]
+    [InlineData("on_hold", ReadingStatus.Paused)]
+    [InlineData("dropped", ReadingStatus.Dropped)]
+    [InlineData("rewatching", ReadingStatus.ReReading)]
+    [InlineData("something_else", ReadingStatus.Unknown)]
+    public void ShikimoriStatusMapper_FromUserRateStatus_MapsEveryValue(string raw, ReadingStatus expected)
+    {
+        Assert.Equal(expected, ShikimoriStatusMapper.FromUserRateStatus(raw));
+    }
+
+    [Fact]
     public void BuildAuthorizationUrl_UsesOobRedirectAndUserRatesScope()
     {
         string url = ShikimoriTrackerAdapter.BuildAuthorizationUrl("client-1");

@@ -1384,6 +1384,7 @@ public partial class PreferencesScreenViewModel : ViewModelBase
                     job.Report(p.Done, p.Total, $"Covers {p.Done} / {p.Total}");
                 });
                 await new CoverThumbnailService(_contextFactory).GenerateAllAsync(coverProgress, job.CancellationToken);
+                DuplicateAlertHelper.RaiseIfAny(_activity, result.AddedIssueIds);
             }
 
             scanFinished = true;
@@ -1871,6 +1872,14 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     [ObservableProperty] private string _mangaBakaPersonalAccessToken = string.Empty;
     [ObservableProperty] private bool _isMangaBakaConnected;
 
+    [ObservableProperty] private string _mangaUpdatesUsername = string.Empty;
+    [ObservableProperty] private string _mangaUpdatesPassword = string.Empty;
+    [ObservableProperty] private bool _isMangaUpdatesConnected;
+
+    [ObservableProperty] private string _kitsuUsername = string.Empty;
+    [ObservableProperty] private string _kitsuPassword = string.Empty;
+    [ObservableProperty] private bool _isKitsuConnected;
+
     [ObservableProperty] private string? _trackersStatus;
 
     private void RefreshTrackerConnectionState(PaperbunkrDbContext context)
@@ -1880,6 +1889,8 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         IsShikimoriConnected = CredentialStore.HasCredentials(context, nameof(TrackingService.Shikimori), CredentialKind.OAuthAccessToken);
         IsBangumiConnected = CredentialStore.HasCredentials(context, nameof(TrackingService.Bangumi), CredentialKind.ApiKey);
         IsMangaBakaConnected = CredentialStore.HasCredentials(context, nameof(TrackingService.MangaBaka), CredentialKind.ApiKey);
+        IsMangaUpdatesConnected = CredentialStore.HasCredentials(context, nameof(TrackingService.MangaUpdates), CredentialKind.OAuthAccessToken);
+        IsKitsuConnected = CredentialStore.HasCredentials(context, nameof(TrackingService.Kitsu), CredentialKind.OAuthAccessToken);
 
         AniListClientId = CredentialStore.Get(context, nameof(TrackingService.AniList), CredentialKind.OAuthClientId) ?? string.Empty;
         MyAnimeListClientId = CredentialStore.Get(context, nameof(TrackingService.MyAnimeList), CredentialKind.OAuthClientId) ?? string.Empty;
@@ -1979,5 +1990,29 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         MangaBakaPersonalAccessToken = string.Empty;
         RefreshTrackerConnectionState(context);
         TrackersStatus = "MangaBaka token saved.";
+    }
+
+    [RelayCommand]
+    private async Task ConnectMangaUpdatesAsync()
+    {
+        using var context = _contextFactory();
+        var adapter = new MangaUpdatesTrackerAdapter(TrackerHttpClients.MangaUpdates);
+        bool connected = await adapter.CompleteConnectAsync(context, MangaUpdatesUsername, MangaUpdatesPassword, default);
+
+        MangaUpdatesPassword = string.Empty;
+        RefreshTrackerConnectionState(context);
+        TrackersStatus = connected ? "MangaUpdates connected." : "Couldn't connect to MangaUpdates. Check your username/password and try again.";
+    }
+
+    [RelayCommand]
+    private async Task ConnectKitsuAsync()
+    {
+        using var context = _contextFactory();
+        var adapter = new KitsuTrackerAdapter(TrackerHttpClients.Kitsu, accessToken: null);
+        bool connected = await adapter.CompleteConnectAsync(context, KitsuUsername, KitsuPassword, default);
+
+        KitsuPassword = string.Empty;
+        RefreshTrackerConnectionState(context);
+        TrackersStatus = connected ? "Kitsu connected." : "Couldn't connect to Kitsu. Check your username/password and try again.";
     }
 }

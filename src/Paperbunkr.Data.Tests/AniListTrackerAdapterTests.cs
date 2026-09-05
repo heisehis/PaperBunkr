@@ -74,6 +74,73 @@ public class AniListTrackerAdapterTests : IDisposable
     }
 
     [Fact]
+    public async Task GetEntryAsync_NoStoredAccessToken_ReturnsNull_WithoutSendingRequest()
+    {
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        var adapter = new AniListTrackerAdapter(new HttpClient(new StubHandler((_, _) => throw new InvalidOperationException("should not send"))));
+
+        var result = await adapter.GetEntryAsync(context, new TrackingLink { ExternalId = "30013" }, CancellationToken.None);
+
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public async Task GetEntryAsync_ParsesMediaListEntry()
+    {
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        CredentialStore.Set(context, nameof(TrackingService.AniList), CredentialKind.OAuthAccessToken, "token-123");
+
+        var adapter = new AniListTrackerAdapter(new HttpClient(new StubHandler((_, _) =>
+            JsonResponse(HttpStatusCode.OK, """{ "data": { "Media": { "mediaListEntry": { "status": "CURRENT", "progress": 12 } } } } """))));
+
+        var result = await adapter.GetEntryAsync(context, new TrackingLink { ExternalId = "30013" }, CancellationToken.None);
+
+        Assert.NotNull(result);
+        Assert.Equal(ReadingStatus.Reading, result!.Status);
+        Assert.Equal(12, result.ChapterProgress);
+    }
+
+    [Fact]
+    public async Task GetEntryAsync_NoMediaListEntry_ReturnsNull()
+    {
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        CredentialStore.Set(context, nameof(TrackingService.AniList), CredentialKind.OAuthAccessToken, "token-123");
+
+        var adapter = new AniListTrackerAdapter(new HttpClient(new StubHandler((_, _) =>
+            JsonResponse(HttpStatusCode.OK, """{ "data": { "Media": { "mediaListEntry": null } } }"""))));
+
+        var result = await adapter.GetEntryAsync(context, new TrackingLink { ExternalId = "30013" }, CancellationToken.None);
+
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public async Task GetEntryAsync_NonSuccessStatus_ReturnsNull()
+    {
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        CredentialStore.Set(context, nameof(TrackingService.AniList), CredentialKind.OAuthAccessToken, "token-123");
+
+        var adapter = new AniListTrackerAdapter(new HttpClient(new StubHandler((_, _) => new HttpResponseMessage(HttpStatusCode.ServiceUnavailable))));
+
+        var result = await adapter.GetEntryAsync(context, new TrackingLink { ExternalId = "30013" }, CancellationToken.None);
+
+        Assert.Null(result);
+    }
+
+    [Theory]
+    [InlineData("PLANNING", ReadingStatus.Planned)]
+    [InlineData("CURRENT", ReadingStatus.Reading)]
+    [InlineData("COMPLETED", ReadingStatus.Completed)]
+    [InlineData("PAUSED", ReadingStatus.Paused)]
+    [InlineData("DROPPED", ReadingStatus.Dropped)]
+    [InlineData("REPEATING", ReadingStatus.ReReading)]
+    [InlineData("SOMETHING_ELSE", ReadingStatus.Unknown)]
+    public void AniListStatusMapper_FromMediaListStatus_MapsEveryValue(string raw, ReadingStatus expected)
+    {
+        Assert.Equal(expected, AniListStatusMapper.FromMediaListStatus(raw));
+    }
+
+    [Fact]
     public void BuildAuthorizationUrl_IncludesClientIdAndImplicitGrantResponseType()
     {
         string url = AniListTrackerAdapter.BuildAuthorizationUrl("42");

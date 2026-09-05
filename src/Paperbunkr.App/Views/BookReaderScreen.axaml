@@ -99,7 +99,7 @@
              so this is one template, not two parallel grouped/ungrouped paths. FB2/MOBI/PDF chapters
              have no PartTitle (that format-specific limitation is disclosed in IBookTextSource.cs) and
              so render exactly as a flat list, same as before this feature. -->
-        <views:ReaderListDrawer IsOpen="{Binding IsTocOpen}" HeaderText="Chapters" ScrimPressed="OnScrimPointerPressed">
+        <views:ReaderListDrawer IsOpen="{Binding IsTocOpen}" HeaderText="Chapters" OverlayReference="{Binding #RootGrid}" ScrimPressed="OnScrimPointerPressed">
             <views:ReaderListDrawer.DrawerContent>
                 <ScrollViewer>
                     <ItemsControl ItemsSource="{Binding TocGroups}" Margin="8,0,8,16"
@@ -135,7 +135,7 @@
             </views:ReaderListDrawer.DrawerContent>
         </views:ReaderListDrawer>
 
-        <views:ReaderListDrawer IsOpen="{Binding IsBookmarksOpen}" HeaderText="Bookmarks" DrawerWidth="320" ScrimPressed="OnScrimPointerPressed">
+        <views:ReaderListDrawer IsOpen="{Binding IsBookmarksOpen}" HeaderText="Bookmarks" DrawerWidth="320" OverlayReference="{Binding #RootGrid}" ScrimPressed="OnScrimPointerPressed">
             <views:ReaderListDrawer.DrawerContent>
                 <DockPanel>
                     <Button DockPanel.Dock="Top" Classes="sheetOption" Classes.active="{Binding IsCurrentPositionBookmarked}"
@@ -178,7 +178,7 @@
             </views:ReaderListDrawer.DrawerContent>
         </views:ReaderListDrawer>
 
-        <views:ReaderListDrawer IsOpen="{Binding IsHighlightsOpen}" HeaderText="Highlights" DrawerWidth="320" ScrimPressed="OnScrimPointerPressed">
+        <views:ReaderListDrawer IsOpen="{Binding IsHighlightsOpen}" HeaderText="Highlights" DrawerWidth="320" OverlayReference="{Binding #RootGrid}" ScrimPressed="OnScrimPointerPressed">
             <views:ReaderListDrawer.DrawerContent>
                 <DockPanel>
                     <TextBlock DockPanel.Dock="Top" Text="Drag across text in the reading pane to highlight it." FontSize="11.5"
@@ -271,7 +271,7 @@
              TOC/Bookmarks/Highlights above, and the design's overlay-direction decision is "lists
              open left." HasSearchBox="True" pins the search TextBox above the results instead of a
              plain static header. -->
-        <views:ReaderListDrawer IsOpen="{Binding IsSearchOpen}" DrawerWidth="320" ScrimPressed="OnScrimPointerPressed"
+        <views:ReaderListDrawer IsOpen="{Binding IsSearchOpen}" DrawerWidth="320" OverlayReference="{Binding #RootGrid}" ScrimPressed="OnScrimPointerPressed"
                                  HasSearchBox="True" SearchBoxWatermark="Search this book"
                                  SearchBoxText="{Binding SearchQuery, Mode=TwoWay}">
             <views:ReaderListDrawer.DrawerContent>
@@ -313,6 +313,7 @@
                                     SetThemeCommand="{Binding SetThemeCommand}"
                                     HasAutoHideToggle="True" AutoHideToggle="{Binding AutoHideChromeToggle}"
                                     ThemeOptions="{x:Static views:ReaderSettingsSheet.AllThemes}"
+                                    OverlayReference="{Binding #RootGrid}"
                                     ScrimPressed="OnScrimPointerPressed" />
 
     </Grid>

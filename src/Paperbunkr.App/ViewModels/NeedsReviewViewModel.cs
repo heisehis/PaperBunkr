@@ -35,6 +35,7 @@ public partial class NeedsReviewViewModel : ViewModelBase
         MissingFileItems = new ObservableCollection<MissingFileRowViewModel>();
         SeriesConflicts = new ObservableCollection<SeriesConflictRowViewModel>();
         MetadataProposalItems = new ObservableCollection<MetadataProposalRowViewModel>();
+        DuplicateGroupItems = new ObservableCollection<DuplicateGroupRowViewModel>();
         Refresh();
     }
 
@@ -46,6 +47,8 @@ public partial class NeedsReviewViewModel : ViewModelBase
 
     public ObservableCollection<MetadataProposalRowViewModel> MetadataProposalItems { get; }
 
+    public ObservableCollection<DuplicateGroupRowViewModel> DuplicateGroupItems { get; }
+
     public bool HasContentTypeItems => ContentTypeItems.Count > 0;
 
     public bool HasMissingFileItems => MissingFileItems.Count > 0;
@@ -54,7 +57,9 @@ public partial class NeedsReviewViewModel : ViewModelBase
 
     public bool HasMetadataProposalItems => MetadataProposalItems.Count > 0;
 
-    public bool HasPendingItems => HasContentTypeItems || HasMissingFileItems || HasSeriesConflictItems || HasMetadataProposalItems;
+    public bool HasDuplicateFileItems => DuplicateGroupItems.Count > 0;
+
+    public bool HasPendingItems => HasContentTypeItems || HasMissingFileItems || HasSeriesConflictItems || HasMetadataProposalItems || HasDuplicateFileItems;
 
     private void NotifyCountsChanged()
     {
@@ -62,6 +67,7 @@ public partial class NeedsReviewViewModel : ViewModelBase
         OnPropertyChanged(nameof(HasMissingFileItems));
         OnPropertyChanged(nameof(HasSeriesConflictItems));
         OnPropertyChanged(nameof(HasMetadataProposalItems));
+        OnPropertyChanged(nameof(HasDuplicateFileItems));
         OnPropertyChanged(nameof(HasPendingItems));
     }
 
@@ -80,6 +86,18 @@ public partial class NeedsReviewViewModel : ViewModelBase
     [RelayCommand]
     private void MergeAllAboveNinety() => SeriesConflictRowViewModel.ApplyBulkAction(SeriesConflicts, ConflictBulkAction.MergeAboveNinetyPercent);
 
+    /// <summary>Resolves every currently-visible duplicate group using its own pre-computed default (largest, present file) - "use current state" semantics, same as <see cref="MergeAllAboveNinety"/> for conflicts.</summary>
+    [RelayCommand]
+    private void KeepLargestInAllGroups()
+    {
+        foreach (var group in DuplicateGroupItems.ToList())
+        {
+            ApplyResolveDuplicateGroup(group);
+        }
+
+        Refresh();
+    }
+
     public void Refresh()
     {
         using var context = PaperbunkrDb.CreateContext();
@@ -88,6 +106,7 @@ public partial class NeedsReviewViewModel : ViewModelBase
         RefreshMissingFileItems(context);
         RefreshSeriesConflicts(context);
         RefreshMetadataProposalItems(context);
+        RefreshDuplicateFileItems(context);
         NotifyCountsChanged();
     }
 
@@ -197,6 +216,63 @@ public partial class NeedsReviewViewModel : ViewModelBase
             context.SaveChanges();
         }
 
+        Refresh();
+    }
+
+    /// <summary>
+    /// Builds duplicate clusters over every non-placeholder issue, then keeps only clusters that
+    /// still have at least one un-acknowledged member - a cluster where every current member was
+    /// previously dismissed stays hidden, but if a new file later joins that same cluster it
+    /// reappears showing every member (acknowledged or not) so the user has full context again,
+    /// rather than a confusing partial view.
+    /// </summary>
+    private void RefreshDuplicateFileItems(PaperbunkrDbContext context)
+    {
+        DuplicateGroupItems.Clear();
+
+        var issues = context.Issues.Include(i => i.Series).Where(i => !i.IsPlaceholder).ToList();
+        var groups = SmartListQueryBuilder.BuildDuplicateGroups(issues)
+            .Where(g => g.Any(i => !i.DuplicateAcknowledged));
+
+        foreach (var members in groups)
+        {
+            var first = members[0];
+            string label = $"{first.Series?.Name ?? "Unknown"} #{first.EffectiveNumber()} · {members.Count} copies";
+            DuplicateGroupItems.Add(new DuplicateGroupRowViewModel(label, members, onResolve: ResolveDuplicateGroup, onDismiss: DismissDuplicateGroup));
+        }
+    }
+
+    private void ResolveDuplicateGroup(DuplicateGroupRowViewModel group)
+    {
+        ApplyResolveDuplicateGroup(group);
+        Refresh();
+    }
+
+    /// <summary>Deletes every non-kept candidate via <see cref="LibraryDeletionHelper"/> (Recycle Bin, cross-reference cleanup) without refreshing - shared by the single-group Resolve action and the bulk "Keep Largest in All Groups" action, which refreshes once after applying every group.</summary>
+    private void ApplyResolveDuplicateGroup(DuplicateGroupRowViewModel group)
+    {
+        using var context = PaperbunkrDb.CreateContext();
+        foreach (int issueId in group.NonKeptIssueIds)
+        {
+            var issue = context.Issues.Find(issueId);
+            if (issue is not null)
+            {
+                LibraryDeletionHelper.RemoveIssue(context, issue);
+            }
+        }
+
+        context.SaveChanges();
+    }
+
+    private void DismissDuplicateGroup(DuplicateGroupRowViewModel group)
+    {
+        using var context = PaperbunkrDb.CreateContext();
+        foreach (var issue in context.Issues.Where(i => group.IssueIds.Contains(i.Id)))
+        {
+            issue.DuplicateAcknowledged = true;
+        }
+
+        context.SaveChanges();
         Refresh();
     }
 

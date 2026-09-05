@@ -36,6 +36,16 @@ public partial class ReaderSettingsSheet : UserControl
     /// <summary>PDF's theme set (docs/superpowers/specs/2026-09-03-books-reader-hud-redesign-design.md) - no MatchAppSkin/OledBlack/HighContrast, since those were designed around EPUB's reflowable content theming.</summary>
     public static readonly IEnumerable<BookTheme> PdfThemes = new[] { BookTheme.Light, BookTheme.Dark, BookTheme.Sepia };
 
+    /// <summary>The host screen's own real, content-bearing root Grid (e.g. <c>{Binding #RootGrid}</c>) - used only to size the scrim/panel correctly (see ReaderSettingsSheet.axaml's own comment, same fix and reason as ReaderListDrawer.OverlayReference).</summary>
+    public static readonly StyledProperty<Layoutable?> OverlayReferenceProperty =
+        AvaloniaProperty.Register<ReaderSettingsSheet, Layoutable?>(nameof(OverlayReference));
+
+    public Layoutable? OverlayReference
+    {
+        get => GetValue(OverlayReferenceProperty);
+        set => SetValue(OverlayReferenceProperty, value);
+    }
+
     public static readonly StyledProperty<bool> IsOpenProperty =
         AvaloniaProperty.Register<ReaderSettingsSheet, bool>(nameof(IsOpen));
 

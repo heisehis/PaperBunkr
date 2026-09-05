@@ -1,6 +1,8 @@
 using System;
 using System.Net.Http;
 using System.Net.Http.Json;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
 using Paperbunkr.Data.Credentials;
@@ -75,6 +77,65 @@ public sealed class MangaBakaTrackerAdapter : ITrackerAdapter
             return response.IsSuccessStatusCode;
         }
     }
+
+    /// <summary>`GET /v1/my/library/{series_id}` - documented in `docs/mangabaka-metadata-ui-
+    /// research.md` finding 19 (a real endpoint, confirmed via the user-supplied OpenAPI spec, never
+    /// previously called since `ITrackerAdapter` was push-only until this pass). Assumed to wrap its
+    /// body in the same `{ data: {...} }` envelope every other MangaBaka endpoint this codebase calls
+    /// uses (`/v1/series/search`, `/v1/series/{id}`) - not independently re-confirmed against a live
+    /// PAT this session, same "first thing to verify once a real PAT exists" caveat this file's own
+    /// `PUT`-upsert assumption already carries.</summary>
+    public async Task<TrackerRemoteEntry?> GetEntryAsync(PaperbunkrDbContext context, TrackingLink link, CancellationToken cancellationToken)
+    {
+        string? token = CredentialStore.Get(context, nameof(TrackingService.MangaBaka), CredentialKind.ApiKey);
+        if (string.IsNullOrEmpty(token))
+        {
+            return null;
+        }
+
+        var request = new HttpRequestMessage(HttpMethod.Get, $"{ApiBase}/my/library/{link.ExternalId}");
+        request.Headers.Add("x-api-key", token);
+
+        HttpResponseMessage response;
+        try
+        {
+            response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
+        }
+        catch (HttpRequestException)
+        {
+            return null;
+        }
+        catch (TaskCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            return null;
+        }
+
+        using (response)
+        {
+            if (!response.IsSuccessStatusCode)
+            {
+                return null;
+            }
+
+            MangaBakaLibraryEntryResponse? parsed;
+            try
+            {
+                parsed = await response.Content.ReadFromJsonAsync<MangaBakaLibraryEntryResponse>(cancellationToken: cancellationToken).ConfigureAwait(false);
+            }
+            catch (JsonException)
+            {
+                return null;
+            }
+
+            var entry = parsed?.Data;
+            if (entry?.State is null)
+            {
+                return null;
+            }
+
+            return new TrackerRemoteEntry(MangaBakaLibraryStateMapper.FromState(entry.State), entry.ProgressChapter);
+        }
+    }
 }
 
 /// <summary>
@@ -95,4 +156,33 @@ public static class MangaBakaLibraryStateMapper
         ReadingStatus.ReReading => "rereading",
         _ => "considering", // ReadingStatus.Unknown - MangaBaka's own "not yet decided" bucket, the closest semantic match.
     };
+
+    /// <summary>Reverse of <see cref="ToState"/> - lossless both ways per this file's own summary
+    /// (both are 7-value enums that line up 1:1).</summary>
+    public static ReadingStatus FromState(string? state) => state switch
+    {
+        "plan_to_read" => ReadingStatus.Planned,
+        "reading" => ReadingStatus.Reading,
+        "completed" => ReadingStatus.Completed,
+        "paused" => ReadingStatus.Paused,
+        "dropped" => ReadingStatus.Dropped,
+        "rereading" => ReadingStatus.ReReading,
+        "considering" => ReadingStatus.Unknown,
+        _ => ReadingStatus.Unknown,
+    };
+}
+
+internal sealed class MangaBakaLibraryEntryResponse
+{
+    [JsonPropertyName("data")]
+    public MangaBakaLibraryEntryDto? Data { get; set; }
+}
+
+internal sealed class MangaBakaLibraryEntryDto
+{
+    [JsonPropertyName("state")]
+    public string? State { get; set; }
+
+    [JsonPropertyName("progress_chapter")]
+    public int? ProgressChapter { get; set; }
 }

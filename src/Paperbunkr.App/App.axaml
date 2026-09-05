@@ -156,14 +156,18 @@
              a real live-duration fix impossible without a custom IPageTransition. Reduced Motion
              does NOT affect this cross-fade's speed, same as PbScreenSlide - accepted, not an
              oversight. -->
-        <anim:CompositePageTransition x:Key="PbDrillTransition">
-            <anim:CompositePageTransition.PageTransitions>
-                <anim:CrossFade Duration="{StaticResource PbMotionStandard}"
-                                FadeInEasing="{StaticResource PbMotionEase}" FadeOutEasing="{StaticResource PbMotionEase}" />
-                <anim:PageSlide Duration="{StaticResource PbMotionStandard}" Orientation="Vertical"
-                                SlideInEasing="{StaticResource PbMotionEase}" SlideOutEasing="{StaticResource PbMotionEase}" />
-            </anim:CompositePageTransition.PageTransitions>
-        </anim:CompositePageTransition>
+        <!-- 2026-09-05 fix: this originally paired CrossFade with a vertical PageSlide for a
+             directional push/pop flourish. PageSlide has no configurable slide distance - it always
+             slides the full control width/height, which at 220ms read as an abrupt full-screen shove
+             competing with the fade, not the subtle "few-pixel drift" the design called for (and not
+             what the approved visual-companion demo showed - cross-fade + scale only, no full-screen
+             slide). User-reported "transitions don't feel smooth" after shipping; CrossFade alone
+             is the fix - plain, proven, matches the demo. IsDrillTransitionReversed is now inert for
+             this specific transition (CrossFade is symmetric) but stays wired - harmless, and it's
+             what a future directional refinement (a real custom IPageTransition, not PageSlide) would
+             key off. -->
+        <anim:CrossFade x:Key="PbDrillTransition" Duration="{StaticResource PbMotionStandard}"
+                        FadeInEasing="{StaticResource PbMotionEase}" FadeOutEasing="{StaticResource PbMotionEase}" />
 
         <!-- Bundled fonts (design doc's Typography section). PbDisplayFontFamily (Bebas Neue) is
              for hero/heading text only, referenced directly via StaticResource in Styles/Typography.axaml

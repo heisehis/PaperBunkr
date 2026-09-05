@@ -83,6 +83,19 @@
                                     <TextBlock Text="Sync Metadata" />
                                 </StackPanel>
                             </Button>
+                            <Button Classes="headerAction ghost" Command="{Binding VerifyCoversCommand}"
+                                    IsEnabled="{Binding !IsVerifyingCovers}"
+                                    ToolTip.Tip="Re-derives every comic and book cover from its file and overwrites the cache - fixes a cover that was wrong from the moment it was scanned, not just a stale cache entry">
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <fi:SymbolIcon Symbol="CheckmarkCircle" />
+                                    <TextBlock Text="Verify &amp; Repair Covers" />
+                                </StackPanel>
+                            </Button>
+                            <Button Classes="headerAction ghost" Content="{Binding ClearComicCoverCacheConfirm.Label}"
+                                    Command="{Binding ClearComicCoverCacheConfirm.TriggerCommand}"
+                                    IsEnabled="{Binding !IsGeneratingCovers}"
+                                    ToolTip.Tip="Deletes every cached comic cover and rebuilds from your files"
+                                    AutomationProperties.AutomationId="PreferencesClearComicCoverCache" />
                         </StackPanel>
                         <TextBlock Text="{Binding ScanStatus}" FontSize="12" Foreground="{DynamicResource PbTextFaintBrush}" />
                     </StackPanel>
@@ -145,6 +158,11 @@
                                     <TextBlock Text="Scan Now" />
                                 </StackPanel>
                             </Button>
+                            <Button Classes="headerAction ghost" Content="{Binding ClearBookCoverCacheConfirm.Label}"
+                                    Command="{Binding ClearBookCoverCacheConfirm.TriggerCommand}"
+                                    IsEnabled="{Binding !IsClearingBookCoverCache}"
+                                    ToolTip.Tip="Deletes every cached book cover and rebuilds from your files"
+                                    AutomationProperties.AutomationId="PreferencesClearBookCoverCache" />
                         </StackPanel>
                         <TextBlock Text="{Binding BookScanStatus}" FontSize="12" Foreground="{DynamicResource PbTextFaintBrush}" />
                     </StackPanel>

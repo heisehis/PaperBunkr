@@ -43,7 +43,7 @@ public sealed class SpotlightIssueSample
     public static SpotlightIssueSample FromIssue(Issue issue)
     {
         string seriesName = issue.Series?.Name ?? string.Empty;
-        var coverImage = CoverImageCache.Get(issue.Id);
+        var coverImage = CoverImageCache.Get(issue.Id, issue.FilePath, issue.FileSize);
 
         string numberSegment = string.IsNullOrWhiteSpace(issue.EffectiveNumber()) ? "#?" : $"#{issue.EffectiveNumber()}";
         string synopsis = !string.IsNullOrWhiteSpace(issue.Summary)

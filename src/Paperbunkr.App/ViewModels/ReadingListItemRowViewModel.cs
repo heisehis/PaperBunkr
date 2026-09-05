@@ -101,6 +101,12 @@ public partial class ReadingListItemRowViewModel : ViewModelBase, Models.ISelect
     /// </summary>
     public int? CoverIssueId => Item.Issue?.Id;
 
+    /// <summary>What <c>views:AsyncCoverImage.SourceId</c> actually keys its lookup on - see
+    /// <see cref="Models.IssueCardSample.CoverKey"/>'s doc comment.</summary>
+    public string? CoverKey => Item.Issue is { } issue
+        ? Services.CoverFingerprint.Stem(issue.Id, issue.FilePath, issue.FileSize)
+        : null;
+
     public bool IsOwned => Item.Issue is { FileIsMissing: false };
 
     public bool IsMissing => !IsOwned;

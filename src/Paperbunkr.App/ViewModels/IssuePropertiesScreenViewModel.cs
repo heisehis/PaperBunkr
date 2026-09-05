@@ -428,7 +428,7 @@ public partial class IssuePropertiesScreenViewModel : ViewModelBase
         _seriesName = issue.Series?.Name ?? string.Empty;
         _beforeSnapshot = MetadataEditHistoryService.CaptureSnapshot(issue);
         HeaderLabel = $"{issue.Series?.Name ?? "Unknown Series"} #{issue.EffectiveNumber()}";
-        CoverImage = CoverImageCache.Get(issue.Id);
+        CoverImage = CoverImageCache.Get(issue.Id, issue.FilePath, issue.FileSize);
         CoverBrush = SeriesCardSample.CoverBrushFor(issue.Series?.Name ?? string.Empty);
         FilePathLabel = issue.FilePath ?? string.Empty;
         PageCountLabel = issue.PageCount?.ToString() ?? "Unknown";

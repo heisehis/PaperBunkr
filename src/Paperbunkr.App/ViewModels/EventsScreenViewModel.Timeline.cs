@@ -264,7 +264,7 @@ public partial class EventsScreenViewModel
                     IsReducedConfidence = entry.Confidence is > 0m and < 1.0m,
                     ConfidenceReason = entry.Reason,
                     CoverBrush = SeriesCardSample.CoverBrushFor(entry.SeriesName),
-                    CoverImage = CoverImageCache.Get(entry.Issue.Id),
+                    CoverImage = CoverImageCache.Get(entry.Issue.Id, entry.Issue.FilePath, entry.Issue.FileSize),
                     YearLabel = entry.Issue.Year?.ToString(),
                 });
             }
@@ -324,7 +324,7 @@ public partial class EventsScreenViewModel
                     IsReducedConfidence = entry.Confidence is > 0m and < 1.0m,
                     ConfidenceReason = entry.Reason,
                     CoverBrush = SeriesCardSample.CoverBrushFor(entry.SeriesName),
-                    CoverImage = CoverImageCache.Get(entry.Issue.Id),
+                    CoverImage = CoverImageCache.Get(entry.Issue.Id, entry.Issue.FilePath, entry.Issue.FileSize),
                     YearLabel = entry.Issue.Year?.ToString(),
                 });
             }

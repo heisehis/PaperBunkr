@@ -233,6 +233,26 @@ public partial class App : Application
             pluginHost.Initialize(mainViewModel, mainWindow);
             mainViewModel.Plugin.AttachHost(pluginHost);
             mainViewModel.Library.AttachHost(pluginHost);
+            mainViewModel.Books.AttachHost(pluginHost);
+            mainViewModel.Smart.AttachHost(pluginHost);
+            mainViewModel.IssueProperties.AttachHost(pluginHost);
+            mainViewModel.BulkIssueProperties.AttachHost(pluginHost);
+            mainViewModel.Detail.Tabs.AttachHost(pluginHost);
+            mainViewModel.MangaDetail.Tabs.AttachHost(pluginHost);
+            mainViewModel.QuickOpen.AttachHost(pluginHost);
+            // ParseComicPath (docs/superpowers/specs/2026-09-05-plugin-api-v2-remaining-hooks-
+            // plan.md §7) - LibraryFolderScanner has no natural AttachHost point (see its own
+            // PluginHost doc comment), so this is a settable static instead.
+            LibraryFolderScanner.PluginHost = pluginHost;
+            // DrawThumbnailOverlay (docs/superpowers/specs/2026-09-05-plugin-api-v2-remaining-
+            // hooks-plan.md §12) - AsyncPluginOverlayImage is a static attached-property helper,
+            // same "no natural AttachHost point" reasoning as LibraryFolderScanner above.
+            Views.AsyncPluginOverlayImage.PluginHost = pluginHost;
+            // BookOpened/ReaderResized (docs/superpowers/specs/2026-09-05-plugin-api-v2-remaining-
+            // hooks-plan.md §1/§2) are plain event forwards, not AttachHost - ReaderScreenViewModel
+            // never needs to call the host itself for these two.
+            mainViewModel.Reader.IssueOpened += issue => _ = pluginHost.RunBookOpenedHookAsync(issue);
+            mainViewModel.Reader.CanvasResized += (width, height) => _ = pluginHost.RunReaderResizedHookAsync(width, height);
             desktop.Exit += (_, _) => pluginHost.Shutdown();
 
             // Auto-backup shutdown trigger (spec §2) - the primary trigger, since it also catches

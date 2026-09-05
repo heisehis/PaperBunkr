@@ -443,8 +443,18 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
     /// </summary>
     public event Action<int>? CurrentPageIndexChanged;
 
-    /// <summary>Fires from <see cref="LoadIssue"/> once an issue has finished loading - the Plugin API v2 BookOpened hook's anchor (docs/superpowers/specs/2026-08-24-plugin-api-v2-design.md §5).</summary>
+    /// <summary>Fires from <see cref="LoadIssue"/> once an issue has finished loading - the Plugin API v2 BookOpened hook's anchor (docs/superpowers/specs/2026-08-24-plugin-api-v2-design.md §5). <c>App.axaml.cs</c> subscribes this to <c>PluginHostService.RunBookOpenedHookAsync</c> (docs/superpowers/specs/2026-09-05-plugin-api-v2-remaining-hooks-plan.md §1 - this event previously had no subscriber at all despite the doc comment).</summary>
     public event Action<Issue>? IssueOpened;
+
+    /// <summary>Raised by <c>ReaderScreen.axaml.cs</c>'s size-changed handler - the Plugin API v2
+    /// ReaderResized hook's anchor (docs/superpowers/specs/2026-09-05-plugin-api-v2-remaining-hooks-
+    /// plan.md §2). Kept as a plain event (like <see cref="IssueOpened"/>) rather than an
+    /// <c>AttachHost</c> reference, since this ViewModel never needs to call the plugin host itself -
+    /// only forward a signal <c>App.axaml.cs</c> already wires up.</summary>
+    public event Action<int, int>? CanvasResized;
+
+    /// <summary>Called from <c>ReaderScreen.axaml.cs</c>'s <c>SizeChanged</c> handler.</summary>
+    public void NotifyCanvasResized(int width, int height) => CanvasResized?.Invoke(width, height);
 
     /// <summary>
     /// Fires with the finished issue's id when the reader reaches the true end of a book and

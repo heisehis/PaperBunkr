@@ -120,9 +120,12 @@
                                                         Command="{Binding RunCommand}"
                                                         ToolTip.Tip="Runs this command now and shows its result as a toast - this hook needs no live selection/context, so it can be triggered on demand." />
 
-                                                <fi:SymbolIcon Grid.Column="4" Symbol="Settings" FontSize="{StaticResource PbIconSizeMd}"
-                                                        VerticalAlignment="Top" IsVisible="{Binding HasConfigure}"
-                                                        ToolTip.Tip="This command has its own configuration script." />
+                                                <Button Grid.Column="4" Classes="ghost" Padding="4" VerticalAlignment="Top"
+                                                        IsVisible="{Binding HasConfigure}"
+                                                        Command="{Binding OpenConfigureCommand}"
+                                                        ToolTip.Tip="This command has its own configuration script - click to run it.">
+                                                    <fi:SymbolIcon Symbol="Settings" FontSize="{StaticResource PbIconSizeMd}" />
+                                                </Button>
                                             </Grid>
                                         </DataTemplate>
                                     </ItemsControl.ItemTemplate>

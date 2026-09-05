@@ -3,6 +3,7 @@ using System.Linq;
 using FluentIcons.Common;
 using Paperbunkr.App.ContextMenus;
 using Paperbunkr.App.Models;
+using Paperbunkr.Plugins;
 
 namespace Paperbunkr.App.ViewModels;
 
@@ -27,17 +28,35 @@ public sealed class BooksContextMenuBuilder
         _ => null,
     };
 
-    private IReadOnlyList<ContextMenuEntry> BuildBookMenu(BookCardSample card) => new[]
+    private IReadOnlyList<ContextMenuEntry> BuildBookMenu(BookCardSample card)
     {
-        ContextMenuEntry.Item("Edit…", _vm.EditBookCommand, card.BookId, Symbol.Edit),
-        ContextMenuEntry.SubMenu("Add to Collection", CollectionChildren(card.BookId), Symbol.CollectionsAdd),
-        ContextMenuEntry.Separator,
-        ContextMenuEntry.SubMenu(
+        var entries = new List<ContextMenuEntry>
+        {
+            ContextMenuEntry.Item("Edit…", _vm.EditBookCommand, card.BookId, Symbol.Edit),
+            ContextMenuEntry.SubMenu("Add to Collection", CollectionChildren(card.BookId), Symbol.CollectionsAdd),
+        };
+
+        // Plugin API v2 Books hook (docs/superpowers/specs/2026-09-05-plugin-api-v2-remaining-hooks-
+        // plan.md §3/§4) - one entry per enabled command, same "no anchor if nothing's registered"
+        // gating Library's own plugin entry uses (_vm.HasPluginHost).
+        var pluginCommands = _vm.HasPluginHost ? _vm.NovelBooksPluginCommands.ToList() : new List<Command>();
+        if (pluginCommands.Count > 0)
+        {
+            entries.Add(ContextMenuEntry.SubMenu(
+                "Plugins",
+                pluginCommands.Select(cmd => ContextMenuEntry.Item(cmd.Name, _vm.RunNovelBooksPluginCommand, (card.BookId, cmd))),
+                Symbol.Apps));
+        }
+
+        entries.Add(ContextMenuEntry.Separator);
+        entries.Add(ContextMenuEntry.SubMenu(
             "Delete Book…",
             new[] { ContextMenuEntry.Item("Yes, delete this book", _vm.DeleteBookCommand, card.BookId) },
             Symbol.Delete,
-            isDanger: true),
-    };
+            isDanger: true));
+
+        return entries;
+    }
 
     private IReadOnlyList<ContextMenuEntry> BuildSeriesGroupMenu(int bookSeriesId) => new[]
     {

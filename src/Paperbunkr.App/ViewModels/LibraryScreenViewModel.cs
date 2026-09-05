@@ -20,6 +20,7 @@ using Paperbunkr.Data.Collections;
 using Paperbunkr.Data.Entities;
 using Paperbunkr.Data.Metadata;
 using Paperbunkr.Data.ReadingLists;
+using Paperbunkr.Plugins;
 
 namespace Paperbunkr.App.ViewModels;
 
@@ -2376,6 +2377,33 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
     }
 
     public bool HasPluginHost => _pluginHost is not null;
+
+    /// <summary>
+    /// NewBooks-hook commands (docs/superpowers/specs/2026-09-05-plugin-api-v2-remaining-hooks-
+    /// plan.md §5) - CE inserts one File-menu item per enabled command right after "New Comic", a
+    /// peer entry point rather than a takeover of the manual add flow; the Add-issue overlay's
+    /// "Add via {command}" buttons mirror that.
+    /// </summary>
+    public IReadOnlyList<Command> NewBooksPluginCommands => _pluginHost?.GetNewBooksCommands().ToList() ?? new List<Command>();
+
+    public bool HasNewBooksPluginCommands => NewBooksPluginCommands.Count > 0;
+
+    /// <summary>Runs a NewBooks command and, if it returns a draft Issue, opens Issue Properties for it - same hand-off <see cref="CreatePlaceholderIssue"/> already uses.</summary>
+    [RelayCommand]
+    private async Task RunNewBooksPlugin(Command command)
+    {
+        if (_pluginHost is null)
+        {
+            return;
+        }
+
+        IsAddIssueOpen = false;
+        var issue = await _pluginHost.RunNewBooksCommandAsync(command);
+        if (issue is not null)
+        {
+            _goToNewIssueProperties(issue.Id, issue.SeriesId, true);
+        }
+    }
 
     /// <summary>
     /// Real Library-hook trigger (docs/superpowers/specs/2026-08-24-plugin-api-v2-design.md §5) -

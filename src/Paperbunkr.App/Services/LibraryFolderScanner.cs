@@ -8,10 +8,12 @@ using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using cYo.Projects.ComicRack.Engine;
 using cYo.Projects.ComicRack.Engine.IO.Provider;
+using Paperbunkr.App.Plugins;
 using Paperbunkr.Data;
 using Paperbunkr.Data.CeMigration;
 using Paperbunkr.Data.Entities;
 using Paperbunkr.Data.Metadata;
+using Paperbunkr.Plugins.Hooks;
 
 namespace Paperbunkr.App.Services;
 
@@ -39,6 +41,19 @@ public record LibrarySeriesResyncResult(int IssuesReassigned);
 public class LibraryFolderScanner
 {
     private readonly Func<PaperbunkrDbContext> _contextFactory;
+
+    /// <summary>
+    /// Real ParseComicPath-hook anchor (docs/superpowers/specs/2026-09-05-plugin-api-v2-remaining-
+    /// hooks-plan.md §7). This service has no natural "attach point" the way a long-lived screen
+    /// ViewModel does - it's freshly constructed in many places (<c>DragImportService</c>,
+    /// <c>LiveFolderWatchService</c>, <c>LibraryScreenViewModel</c>, <c>MainViewModel</c>'s own
+    /// constructor, all of which run before <c>PluginHostService.Initialize</c> exists), so unlike
+    /// <c>LibraryScreenViewModel.AttachHost</c> this is a settable static, set once from
+    /// <c>App.axaml.cs</c> alongside the other <c>AttachHost</c> calls. Null in every test (no test
+    /// exercises a live plugin against a real scan) and in any scan that runs before the app has
+    /// finished starting up.
+    /// </summary>
+    public static PluginHostService? PluginHost { get; set; }
 
     public LibraryFolderScanner()
         : this(PaperbunkrDb.CreateContext)
@@ -147,6 +162,7 @@ public class LibraryFolderScanner
             try
             {
                 var nameInfo = ComicNameInfo.FromFilePath(file);
+                ApplyParseComicPathOverride(nameInfo, file);
                 var embeddedInfo = EmbeddedComicInfoReader.TryRead(file);
 
                 // Series mismatch detection: embedded and filename can disagree about the series
@@ -495,6 +511,46 @@ public class LibraryFolderScanner
     /// routing through <c>MarkResolver</c>'s alias-table/SVG-asset machinery, which exists to
     /// resolve UI badges, not gate scan logic. Kept in sync with that tsv row by convention, not by
     /// sharing code with it.</summary>
+    /// <summary>ParseComicPath-hook anchor (docs/superpowers/specs/2026-09-05-plugin-api-v2-
+    /// remaining-hooks-plan.md §7) - mutates <paramref name="nameInfo"/> in place, overriding only
+    /// the fields a plugin actually returned a value for. Blocking (<c>GetAwaiter().GetResult()</c>)
+    /// is safe here: <see cref="ImportFiles"/> already runs on a background thread via
+    /// <see cref="ScanAllAsync"/>'s <c>Task.Run</c>, same as <c>PluginHostService</c>'s own
+    /// synchronous lifecycle-hook wrapper for Startup/Shutdown.</summary>
+    private static void ApplyParseComicPathOverride(ComicNameInfo nameInfo, string path)
+    {
+        if (PluginHost is null)
+        {
+            return;
+        }
+
+        ParsedComicPath? overrideResult = PluginHost.RunParseComicPathHookAsync(path).GetAwaiter().GetResult();
+        if (overrideResult is null)
+        {
+            return;
+        }
+
+        if (overrideResult.Series is not null)
+        {
+            nameInfo.Series = overrideResult.Series;
+        }
+
+        if (overrideResult.Number is not null)
+        {
+            nameInfo.Number = overrideResult.Number;
+        }
+
+        if (overrideResult.Volume is int volume)
+        {
+            nameInfo.Volume = volume;
+        }
+
+        if (overrideResult.Year is int year)
+        {
+            nameInfo.Year = year;
+        }
+    }
+
     private static readonly HashSet<string> TpbFormatAliases = new(StringComparer.OrdinalIgnoreCase)
     {
         "tpb", "trade paperback", "trade",

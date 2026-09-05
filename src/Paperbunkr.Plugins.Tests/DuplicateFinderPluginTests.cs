@@ -8,6 +8,13 @@ namespace Paperbunkr.Plugins.Tests;
 /// specs/2026-08-24-plugin-api-v2-design.md §7/§9) - the "one real test plugin" the Beta bar asks
 /// for. Discovers and compiles it for real via <see cref="PluginEngine"/>, then exercises all
 /// three of its hooks (Startup/Library/CreateBookList) against fixture data.
+///
+/// <see cref="PluginsRoot"/> is scoped to this plugin's own subfolder, not the shared
+/// <c>SamplePlugins</c> root - real bug found + fixed when <c>PythonHelloPluginTests</c>
+/// (docs/superpowers/specs/2026-08-30-python-plugin-scripting-design.md) was added alongside it
+/// under that shared root: this class's own hardcoded command count and its
+/// <c>Assert.Single(results)</c> against the shared <c>Startup</c> hook both started failing the
+/// moment a second sample plugin's Startup command existed anywhere under it.
 /// </summary>
 public sealed class DuplicateFinderPluginTests
 {

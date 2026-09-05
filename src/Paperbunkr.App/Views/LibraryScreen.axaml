@@ -6,6 +6,7 @@
              xmlns:controls="using:Paperbunkr.App.Controls"
              xmlns:models="using:Paperbunkr.App.Models"
              xmlns:entities="using:Paperbunkr.Data.Entities"
+             xmlns:plugins="using:Paperbunkr.Plugins"
              xmlns:conv="using:Avalonia.Data.Converters"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -598,6 +599,12 @@
                             controls:SharedElement.ImageSource="{Binding #PosterIssueCoverImage.Source}">
                         <Grid>
                             <Image x:Name="PosterIssueCoverImage" views:AsyncCoverImage.SourceId="{Binding CoverKey}" Stretch="UniformToFill" />
+                            <!-- Plugin API v2 DrawThumbnailOverlay hook (docs/superpowers/specs/
+                                 2026-09-05-plugin-api-v2-remaining-hooks-plan.md §12) - stays empty
+                                 (no visible change) when no plugin implements this hook. Keyed by
+                                 the raw issue id (not CoverKey above) - this hook looks up the real
+                                 Issue entity to run the plugin against, not a cover-file fingerprint. -->
+                            <Image views:AsyncPluginOverlayImage.SourceId="{Binding Id}" Stretch="UniformToFill" />
                             <Border Classes="posterScrim" />
                             <Border Classes="pbChip" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="6">
                                 <Border.IsVisible>
@@ -1094,6 +1101,24 @@
                             Content="Left to Right" Command="{Binding SetNewIssueReadingModeCommand}" CommandParameter="{x:Static entities:ReadingMode.LeftToRight}" />
                     <Button Classes="modeOption" Classes.active="{Binding NewIssueReadingMode, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:ReadingMode.RightToLeft}}"
                             Content="Right to Left" Command="{Binding SetNewIssueReadingModeCommand}" CommandParameter="{x:Static entities:ReadingMode.RightToLeft}" />
+                </StackPanel>
+
+                <!-- Plugin API v2 NewBooks hook (docs/superpowers/specs/2026-09-05-plugin-api-v2-
+                     remaining-hooks-plan.md §5) - CE's own File-menu peer entries next to "New
+                     Comic", adapted as peer buttons next to the manual Add flow. Hidden entirely
+                     when nothing's registered. -->
+                <StackPanel Spacing="4" IsVisible="{Binding HasNewBooksPluginCommands}">
+                    <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,0,0,1" Margin="0,4" />
+                    <ItemsControl ItemsSource="{Binding NewBooksPluginCommands}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="plugins:Command">
+                                <Button Classes="ghost" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+                                        Content="{Binding Name, StringFormat='Add via {0}'}"
+                                        Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).RunNewBooksPluginCommand}"
+                                        CommandParameter="{Binding}" />
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
                 </StackPanel>
 
                 <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">

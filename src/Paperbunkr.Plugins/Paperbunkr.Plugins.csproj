@@ -11,6 +11,10 @@
          2026-08-24-plugin-api-v2-design.md §2/§3) - the C# scripting initializer replacing CE's
          IronPython PythonPluginInitializer. -->
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Scripting" Version="4.11.0" />
+    <!-- Runs each Command's .py script (docs/superpowers/specs/2026-08-30-python-plugin-scripting-
+         design.md) - IronPython 3.4 targets .NET 8.0+/10.0, unlike the legacy 2.7 line CE itself
+         used (Python 2 syntax, .NET Framework/Core 2.0 only). -->
+    <PackageReference Include="IronPython" Version="3.4.2" />
   </ItemGroup>
 
   <ItemGroup>

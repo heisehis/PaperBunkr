@@ -1,0 +1,19 @@
+<Plugin key="hook-coverage" name="Hook Coverage">
+  <!-- Exercises every hook wired up in docs/superpowers/specs/2026-09-05-plugin-api-v2-remaining-
+       hooks-plan.md that had no live sample plugin before this - one minimal command per hook,
+       each returning something derived from its own payload so HookCoveragePluginTests can prove
+       the typed globals actually arrive, not just that the script compiles. -->
+  <Command hook="BookOpened" key="hook-coverage.book-opened" name="Book Opened Probe" script="book-opened.csx" />
+  <Command hook="ReaderResized" key="hook-coverage.reader-resized" name="Reader Resized Probe" script="reader-resized.csx" />
+  <Command hook="Editor" key="hook-coverage.editor" name="Editor Probe" script="editor.csx" />
+  <Command hook="ConfigScript" key="hook-coverage.editor" name="Editor Probe Config" script="config-script.csx" />
+  <Command hook="Books" key="hook-coverage.novel-books" name="Novel Books Probe" script="novel-books.csx" />
+  <Command hook="NewBooks" key="hook-coverage.new-books" name="New Books Probe" script="new-books.csx" />
+  <Command hook="ParseComicPath" key="hook-coverage.parse-comic-path" name="Parse Comic Path Probe" script="parse-comic-path.csx" />
+  <Command hook="NetSearch" key="hook-coverage.net-search" name="Net Search Probe" script="net-search.csx" />
+  <Command hook="ComicInfoHtml" key="hook-coverage.comic-info-html" name="Comic Info Html Probe" script="comic-info-html.csx" />
+  <Command hook="ComicInfoUI" key="hook-coverage.comic-info-ui" name="Comic Info UI Probe" script="comic-info-ui.csx" />
+  <Command hook="QuickOpenHtml" key="hook-coverage.quick-open-html" name="Quick Open Html Probe" script="quick-open-html.csx" />
+  <Command hook="QuickOpenUI" key="hook-coverage.quick-open-ui" name="Quick Open UI Probe" script="quick-open-ui.csx" />
+  <Command hook="DrawThumbnailOverlay" key="hook-coverage.draw-thumbnail-overlay" name="Draw Thumbnail Overlay Probe" script="draw-thumbnail-overlay.csx" />
+</Plugin>

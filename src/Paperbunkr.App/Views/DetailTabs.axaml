@@ -238,6 +238,15 @@
                         <TextBlock Text="Activity" VerticalAlignment="Center" />
                     </StackPanel>
                 </Button>
+                <!-- Plugin API v2 ComicInfoHtml/ComicInfoUI hooks (docs/superpowers/specs/2026-09-05-
+                     plugin-api-v2-remaining-hooks-plan.md §10) - hidden entirely when nothing's
+                     registered, same rule every other plugin anchor in this session follows. -->
+                <Button Classes="tab" Classes.active="{Binding IsPluginsTab}" Command="{Binding GoPluginsCommand}" IsVisible="{Binding HasComicInfoPluginCommands}">
+                    <StackPanel Orientation="Horizontal" Spacing="7">
+                        <fi:SymbolIcon Symbol="Apps" FontSize="{StaticResource PbIconSizeSm}" VerticalAlignment="Center" />
+                        <TextBlock Text="Plugins" VerticalAlignment="Center" />
+                    </StackPanel>
+                </Button>
             </StackPanel>
         </Border>
 
@@ -550,11 +559,22 @@
                     CornerRadius="6" Padding="12">
                 <StackPanel Spacing="8">
                     <StackPanel Orientation="Horizontal" Spacing="8">
-                        <ComboBox ItemsSource="{x:Static vm:DetailTabsViewModel.MetadataProviderOptions}"
+                        <!-- Plugin API v2 NetSearch hook (docs/superpowers/specs/2026-09-05-plugin-
+                             api-v2-remaining-hooks-plan.md §8) - MetadataProviderOptions is now an
+                             instance property (was static) since it includes live plugin commands;
+                             the item template branches on IsPlugin since a plugin entry has no
+                             bundled BrandMark asset. -->
+                        <ComboBox ItemsSource="{Binding MetadataProviderOptions}"
                                   SelectedItem="{Binding SelectedMetadataProvider}" Width="150" FontSize="12">
                             <ComboBox.ItemTemplate>
-                                <DataTemplate>
-                                    <pbc:BrandMark Family="Service" Value="{Binding}" ShowText="True" MarkSize="{StaticResource PbIconSizeXs}" />
+                                <DataTemplate x:DataType="models:MetadataSearchProviderOption">
+                                    <Panel>
+                                        <pbc:BrandMark Family="Service" Value="{Binding BrandMarkValue}" ShowText="True" MarkSize="{StaticResource PbIconSizeXs}" IsVisible="{Binding !IsPlugin}" />
+                                        <StackPanel Orientation="Horizontal" Spacing="6" IsVisible="{Binding IsPlugin}">
+                                            <fi:SymbolIcon Symbol="Apps" FontSize="{StaticResource PbIconSizeXs}" />
+                                            <TextBlock Text="{Binding Label}" FontSize="12" />
+                                        </StackPanel>
+                                    </Panel>
                                 </DataTemplate>
                             </ComboBox.ItemTemplate>
                         </ComboBox>
@@ -715,6 +735,30 @@
         <!-- ================= ACTIVITY TAB ================= -->
         <StackPanel IsVisible="{Binding IsActivityTab}" Margin="0,20,0,0" Spacing="4">
             <TextBlock Text="No recent activity." FontSize="12.5" Foreground="{DynamicResource PbTextFaintBrush}" />
+        </StackPanel>
+
+        <!-- ================= PLUGINS TAB ================= (docs/superpowers/specs/2026-09-05-
+             plugin-api-v2-remaining-hooks-plan.md §10) - CE anchors ComicInfoHtml/UI as a per-comic
+             sidebar info panel on its Library explorer; this is the adapted Paperbunkr anchor,
+             scoped to whichever single issue is currently focused. -->
+        <StackPanel IsVisible="{Binding IsPluginsTab}" Margin="0,20,0,0" Spacing="12">
+            <TextBlock Text="Select a single issue to see plugin info for it." FontSize="12.5"
+                       Foreground="{DynamicResource PbTextFaintBrush}"
+                       IsVisible="{Binding FocusedIssueId, Converter={x:Static conv:ObjectConverters.IsNull}}" />
+            <TextBlock Text="Loading…" FontSize="12.5" Foreground="{DynamicResource PbTextFaintBrush}"
+                       IsVisible="{Binding IsLoadingComicInfoPanels}" />
+            <ItemsControl ItemsSource="{Binding ComicInfoPanels}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="models:PluginInfoPanelSample">
+                        <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1" CornerRadius="6" Padding="12" Margin="0,0,0,8">
+                            <StackPanel Spacing="4">
+                                <TextBlock Text="{Binding CommandName}" FontSize="12" FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}" />
+                                <TextBlock Text="{Binding Text}" FontSize="12.5" TextWrapping="Wrap" Foreground="{DynamicResource PbTextMutedBrush}" />
+                            </StackPanel>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
         </StackPanel>
     </StackPanel>
 </UserControl>

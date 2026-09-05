@@ -1,0 +1,5 @@
+<Plugin key="python-hello" name="Python Hello">
+  <Command hook="Startup" key="python-hello.startup" name="Python Hello Activated"
+           description="Proves a Python-scripted command runs end-to-end through the real plugin engine."
+           script="startup.py" method="on_startup" />
+</Plugin>

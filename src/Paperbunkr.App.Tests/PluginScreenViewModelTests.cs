@@ -302,6 +302,13 @@ public sealed class PluginScreenViewModelTests : IDisposable
         public Task<string?> ReadInternetAsync(string url) => Task.FromResult<string?>(null);
         public int AskQuestion(string question, string buttonText, string optionText) => 0;
         public void ShowComicInfo(IEnumerable<Issue> books) { }
+        public int GetOrCreateSeriesId(string seriesName) => 0;
+        public Issue? AddNewBook(int seriesId, bool showDialog) => null;
+        public byte[]? GetComicPublisherIcon(Issue issue) => null;
+        public byte[]? GetComicImprintIcon(Issue issue) => null;
+        public byte[]? GetComicAgeRatingIcon(Issue issue) => null;
+        public byte[]? GetComicFormatIcon(Issue issue) => null;
+        public IDictionary<string, string> GetComicFields() => new Dictionary<string, string>();
     }
 
     private sealed class StubOpenBooks : IOpenBooksManager

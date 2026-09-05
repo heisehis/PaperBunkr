@@ -1350,6 +1350,13 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
     /// <summary>True only when <paramref name="issueId"/> is the book currently shown by the Reader screen - backs <c>IOpenBooksManager.IsOpen</c>.</summary>
     public bool IsIssueOpenInReaderForPlugin(int issueId) => CurrentScreen == "reader" && Reader.LoadedIssue?.Id == issueId;
 
+    /// <summary>Plugin-facing entry point for <c>IApplication.AddNewBook</c>'s showDialog:true path
+    /// (docs/superpowers/specs/2026-08-30-plugin-api-automation-gaps-design.md) - same overlay-open
+    /// flow <see cref="GoNewIssuePropertiesForPlaceholder"/> already drives for the Library screen's
+    /// own "Add Issue" panel, just reachable from outside this ViewModel.</summary>
+    public void OpenIssuePropertiesForPlugin(int issueId, int seriesId, bool deleteIfUnedited) =>
+        GoNewIssuePropertiesForPlaceholder(issueId, seriesId, deleteIfUnedited);
+
     /// <summary>
     /// Same as <see cref="GoReaderForIssue"/> but anchors the Reader to a reading list's own order
     /// (docs/superpowers/specs/2026-08-23-cbl-manager-manual-editing-and-list-aware-reading-

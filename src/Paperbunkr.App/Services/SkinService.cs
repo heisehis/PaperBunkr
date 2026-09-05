@@ -127,6 +127,8 @@ public class SkinService
         ApplyFontResource(settings.SelectedFontFamily);
         Application.Current!.Resources["PbMotionFast"] = settings.ReducedMotion ? TimeSpan.Zero : DefaultMotionFast;
         Application.Current!.Resources["PbMotionSlow"] = settings.ReducedMotion ? TimeSpan.Zero : DefaultMotionSlow;
+        Application.Current!.Resources["PbMotionStandard"] = settings.ReducedMotion ? TimeSpan.Zero : DefaultMotionStandard;
+        Application.Current!.Resources["PbMotionLarge"] = settings.ReducedMotion ? TimeSpan.Zero : DefaultMotionLarge;
     }
 
     private static void ApplySkinResources(SkinTheme theme)
@@ -250,6 +252,8 @@ public class SkinService
     {
         Application.Current!.Resources["PbMotionFast"] = enabled ? TimeSpan.Zero : DefaultMotionFast;
         Application.Current!.Resources["PbMotionSlow"] = enabled ? TimeSpan.Zero : DefaultMotionSlow;
+        Application.Current!.Resources["PbMotionStandard"] = enabled ? TimeSpan.Zero : DefaultMotionStandard;
+        Application.Current!.Resources["PbMotionLarge"] = enabled ? TimeSpan.Zero : DefaultMotionLarge;
 
         using var context = _contextFactory();
         var settings = context.GetOrCreateAppSettings();
@@ -259,6 +263,11 @@ public class SkinService
 
     private static readonly TimeSpan DefaultMotionFast = TimeSpan.FromMilliseconds(150);
     private static readonly TimeSpan DefaultMotionSlow = TimeSpan.FromMilliseconds(700);
+
+    /// <summary>docs/superpowers/specs/2026-09-04-navigation-transition-system-design.md - same
+    /// zero-on-reduced-motion treatment as <see cref="DefaultMotionFast"/>/<see cref="DefaultMotionSlow"/> above.</summary>
+    private static readonly TimeSpan DefaultMotionStandard = TimeSpan.FromMilliseconds(220);
+    private static readonly TimeSpan DefaultMotionLarge = TimeSpan.FromMilliseconds(320);
 
     /// <summary>Cross-platform replacement for GDI+'s InstalledFontCollection - prepends "System Default" (no override).</summary>
     public IReadOnlyList<string> GetInstalledFontFamilies()

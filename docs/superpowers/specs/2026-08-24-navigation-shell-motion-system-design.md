@@ -3,6 +3,12 @@
 **Status:** Implemented 2026-08-24. See docs/superpowers/specs/2026-08-24-navigation-shell-motion-system-plan.md for what was actually verified.
 **Sub-project 2 of 7** in the full UI rework (see [Design Language Foundation](2026-08-24-design-language-foundation-design.md) for the full phase breakdown). Phase 1 is implemented, tested, and verified.
 
+**Superseded/extended 2026-09-05** by [2026-09-04-navigation-transition-system-design.md](2026-09-04-navigation-transition-system-design.md)
+specifically for the "Out of scope (deferred)" drill-down motion bullet below - the six drill-down
+screens now get a real push/pop transition + (Library↔Detail) a shared-element cover flight. Every
+other decision in this document (nav rail collapse/expand, Plugins-in-Preferences, the 7-screen
+lateral `TransitioningContentControl` + `PbScreenSlide`) is unchanged and still the live behavior.
+
 ## Background
 
 Today's nav rail ([MainWindow.axaml](../../../src/Paperbunkr.App/Views/MainWindow.axaml)) is a fixed 64px icon-only vertical strip: Home, Library, Books, Smart Lists, Reading Lists, Story Events, Plugins (separated), then Undo/Redo and Preferences at the bottom. Every top-level screen is an always-instantiated `ContentControl` toggled via `IsVisible` — switching screens is an instant cut, no transition. Phase 1 defined `PbMotionFast`/`PbMotionEase` motion tokens but the only thing consuming them so far is the FloatingPanel overlays' open/close (5 overlay screens) — no screen-to-screen motion exists anywhere in the app yet.

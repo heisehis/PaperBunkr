@@ -963,6 +963,32 @@ with all the new wiring active (`startup.log` reaches "Startup complete." on eve
 interactive parts (checkbox toggle, tray icon appearing, restore/exit) were **not** verified live
 on-screen - computer-use access was denied for this app, same as a prior session's manga-detail work.
 
+**Navigation transition system shipped 2026-09-05** (sub-project 1 of "full app chrome animations" -
+sub-project 2, chrome/content motion polish, not yet started), design spec + plan
+`2026-09-04-navigation-transition-system-{design,plan}.md`, superseding/extending the 2026-08-24
+navigation-shell-motion spec's own deferred drill-down motion. The six drill-down screens (Detail/
+MangaDetail/Reader/BookDetail/BookReader/PdfReader) move off instant-cut `IsVisible` toggles onto one
+`TransitioningContentControl` with a push/pop cross-fade (`PbDrillTransition`, direction from a new
+`MainViewModel.IsDrillTransitionReversed`), and Library ↔ Detail ↔ Reader all get a real
+shared-element cover flight - a floating clone flies from the grid tile to the hero (or the Reader's
+first page) and back, via a new `SharedElement` attached-property pair +
+`ISharedElementTransitionService` + `NavigationTransitionCoordinator`. Every Library view mode
+(Poster/Panorama/List/Details/Tiles × issue+series granularity, 10 templates) is wired, plus a
+back-trip `ScrollIntoView` realization (`LibraryScreenViewModel.RequestScrollIntoView`) so a
+scrolled-away grid tile gets scrolled back into view before the flight looks for it. Only
+`CollectionTileTemplate` (the mixed series/issue/book Collections grid) stays unwired - a real,
+narrow follow-up if ever wanted. Reader's own participation turned out cheaper than first assessed:
+`PageCanvas` already had a public `Page` bitmap property, already bound - the destination rect is
+just `PageCanvas.Bounds` (whole control), not a computed zoom/fit-mode-aware sub-rect.
+`SharedElementFlightMath` (5 tests), `SharedElementTransitionService` (5 headless tests, two
+Avalonia-headless gotchas found and worked around: no dispatcher loop to re-layout after a tree
+mutation, and a bare `async Task` xUnit test's `await` hopping off Avalonia's owning thread and
+tripping the compositor's thread-affinity check - both documented inline), `NavigationTransitionCoordinator`
+(4 tests), and 6 more covering `RequestScrollIntoView`/`ReaderScreenViewModel.SharedElementKey` are
+new automated coverage; the actual on-screen motion feel is **not yet verified** - no unattended GUI
+automation in this environment, same standing `[[feedback_no_computer_use]]` limitation as
+everywhere else in this project.
+
 ### Novels: EPUB/PDF support (Phase 1+2 landed 2026-08-09/10, Phase 3 landed 2026-08-10)
 Not a CE-parity item — ComicRackCE has no prose-reading equivalent, see the design spec's own
 CE-verification note. Design: docs/superpowers/specs/2026-08-09-novels-epub-pdf-support-design.md.

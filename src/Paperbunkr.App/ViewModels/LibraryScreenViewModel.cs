@@ -730,6 +730,66 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
     /// per-issue equivalent.</summary>
     public ObservableCollection<SeriesCardSample> Covers { get; }
 
+    /// <summary>The view's own scroll dispatch (<c>LibraryScreen.axaml.cs</c>'s
+    /// <c>OnAlphabetIndexLetterClick</c>-shared logic) should scroll to this ungrouped-collection
+    /// index. Raised by <see cref="RequestScrollIntoView"/>, never set directly.</summary>
+    public event Action<int>? ScrollToIndexRequested;
+
+    /// <summary>
+    /// Realizes the tile a cover-morph "back" navigation is about to fly into (docs/superpowers/
+    /// specs/2026-09-04-navigation-transition-system-design.md) - called by
+    /// <see cref="MainViewModel.GoToRootScreen"/> right after <see cref="LoadFromDatabase"/>, before
+    /// <c>NavigationTransitionCoordinator.FlyToIncomingAsync</c>'s poll starts. <paramref name="sharedKey"/>
+    /// is the same <c>"series-cover:{id}"</c>/<c>"issue-cover:{id}"</c> string
+    /// <see cref="MainViewModel.CurrentDrillSharedKey"/> produces. A no-op (not an error) when the key
+    /// is null, doesn't parse, or the target isn't in the current ungrouped/matching-granularity
+    /// collection (grouped, filtered out, wrong granularity) - the shared-element service's own
+    /// "destination never registers" edge case (a plain cross-fade) already covers that case
+    /// gracefully.
+    /// </summary>
+    public void RequestScrollIntoView(string? sharedKey)
+    {
+        if (sharedKey is null)
+        {
+            return;
+        }
+
+        int index;
+        if (sharedKey.StartsWith("series-cover:", StringComparison.Ordinal) &&
+            int.TryParse(sharedKey.AsSpan("series-cover:".Length), out int seriesId))
+        {
+            index = FindIndex(Covers, c => c.SeriesId == seriesId);
+        }
+        else if (sharedKey.StartsWith("issue-cover:", StringComparison.Ordinal) &&
+                 int.TryParse(sharedKey.AsSpan("issue-cover:".Length), out int issueId))
+        {
+            index = FindIndex(IssueList.Rows, r => r.Id == issueId);
+        }
+        else
+        {
+            return;
+        }
+
+        if (index >= 0)
+        {
+            ScrollToIndexRequested?.Invoke(index);
+        }
+    }
+
+    /// <summary>Plain linear index lookup - <see cref="ObservableCollection{T}"/> has no built-in <c>FindIndex</c> (unlike <see cref="List{T}"/>).</summary>
+    private static int FindIndex<T>(ObservableCollection<T> items, Func<T, bool> predicate)
+    {
+        for (int i = 0; i < items.Count; i++)
+        {
+            if (predicate(items[i]))
+            {
+                return i;
+            }
+        }
+
+        return -1;
+    }
+
     /// <summary>Populated instead of <see cref="Covers"/> when <see cref="IsGrouped"/>.</summary>
     public ObservableCollection<SeriesCardGroup> Groups { get; }
 

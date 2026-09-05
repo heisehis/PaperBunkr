@@ -68,8 +68,18 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
     /// 2026-08-31-app-wide-and-library-keyboard-shortcuts-design.md).</summary>
     private static readonly string[] RailOrderKeys = RailOrder.OrderBy(kvp => kvp.Value).Select(kvp => kvp.Key).ToArray();
 
-    public MainViewModel()
+    /// <summary>Runs one drill-down navigation's cross-fade + optional shared-element cover flight
+    /// (docs/superpowers/specs/2026-09-04-navigation-transition-system-design.md) - a real
+    /// <see cref="NavigationTransitionCoordinator"/> at the App composition root, or this no-op
+    /// default (tests, design-time, <c>&lt;vm:MainViewModel /&gt;</c>) that just runs the swap
+    /// synchronously with no visual effect, same convention as <see cref="ShowToast"/>/
+    /// <see cref="NavigateBack"/> already being plain constructor-supplied callbacks.</summary>
+    private readonly Func<string?, Action, Task> _runDrillTransition;
+
+    public MainViewModel(Func<string?, Action, Task>? runDrillTransition = null)
     {
+        _runDrillTransition = runDrillTransition ?? ((_, swap) => { swap(); return Task.CompletedTask; });
+
         // Seed the read-only starter workspaces before the two screen VMs first list them
         // (docs/superpowers/specs/2026-09-03-library-saved-workspaces-design.md). Idempotent.
         new WorkspaceService().EnsureBuiltInsSeeded();
@@ -408,6 +418,36 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
 
     public bool IsLateralScreen => RailOrder.ContainsKey(CurrentScreen);
 
+    /// <summary>The drill-down screen's own ViewModel, or null when a lateral screen (Home/Library/
+    /// etc.) is active - bound to the shell's drill-down <c>TransitioningContentControl</c> (docs/
+    /// superpowers/specs/2026-09-04-navigation-transition-system-design.md), the sibling of
+    /// <see cref="ActiveScreenContent"/>'s own lateral one.</summary>
+    public object? ActiveDrillDownContent => CurrentScreen switch
+    {
+        "detail" => Detail,
+        "mangaDetail" => MangaDetail,
+        "reader" => Reader,
+        "bookReader" => BookReader,
+        "pdfReader" => PdfReader,
+        "bookDetail" => BookDetail,
+        _ => null,
+    };
+
+    /// <summary>Push (deeper) vs Pop (back) for the drill-down transition - set immediately before
+    /// <see cref="CurrentScreen"/> changes (see the <c>RunDrill</c> helper below), so
+    /// <see cref="IsDrillTransitionReversed"/> already has the right value by the time the shell's
+    /// drill-down <c>TransitioningContentControl</c> reacts to the content swap.</summary>
+    [ObservableProperty]
+    private DrillTransitionKind _drillTransitionKind;
+
+    partial void OnDrillTransitionKindChanged(DrillTransitionKind value) => OnPropertyChanged(nameof(IsDrillTransitionReversed));
+
+    /// <summary>Direction for the drill-down <c>TransitioningContentControl</c>'s <c>PageSlide</c> -
+    /// same "one shared transition resource, direction from a bool" pattern
+    /// <see cref="IsTransitionReversed"/> already established for the lateral rail system, reused
+    /// here instead of inventing a second selection mechanism.</summary>
+    public bool IsDrillTransitionReversed => DrillTransitionKind == DrillTransitionKind.Pop;
+
     public bool IsHome => CurrentScreen == "home";
     public bool IsLibrary => CurrentScreen == "library";
     public bool IsBooks => CurrentScreen == "books";
@@ -451,6 +491,7 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
     partial void OnCurrentScreenChanged(string value)
     {
         OnPropertyChanged(nameof(ActiveScreenContent));
+        OnPropertyChanged(nameof(ActiveDrillDownContent));
         OnPropertyChanged(nameof(IsLateralScreen));
         OnPropertyChanged(nameof(IsHome));
         OnPropertyChanged(nameof(IsLibrary));
@@ -1243,11 +1284,11 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         Library.ClearSeriesSelectionCommand.Execute(null);
     }
 
-    private void GoDetailForSeries(int seriesId)
+    private void GoDetailForSeries(int seriesId) => RunDrill(DrillTransitionKind.Push, $"series-cover:{seriesId}", () =>
     {
         NavigateToDetailCore(seriesId);
         PushHistory(BuildDetailEntry(seriesId));
-    }
+    });
 
     /// <summary>The reusable half of <see cref="GoDetailForSeries"/> - no history side effect, so
     /// <see cref="RefreshAfterHistoryChange"/>/<see cref="ReloadDetailAfterIssueEdit"/> (reloading the
@@ -1276,11 +1317,11 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         IsIssuePropertiesOverlayOpen = true;
     }
 
-    private void GoReaderForIssue(int issueId)
+    private void GoReaderForIssue(int issueId) => RunDrill(DrillTransitionKind.Push, $"issue-cover:{issueId}", () =>
     {
         NavigateToReaderCore(issueId, readingListId: null);
         PushHistory(new NavigationEntry("reader", NavigationEntryKind.Issue, issueId, Reader.IssueTitle));
-    }
+    });
 
     /// <summary>The reusable half of <see cref="GoReaderForIssue"/>/<see cref="GoReaderForIssueInReadingList"/> -
     /// no history side effect, so <see cref="ReplayEntry"/> can call it directly during Back/Forward/
@@ -1316,19 +1357,19 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
     /// from (Reading Lists' click-to-read, Home's "Try This Reading List" card), so the far more
     /// common plain <see cref="GoReaderForIssue"/> stays untouched everywhere else.
     /// </summary>
-    private void GoReaderForIssueInReadingList(int issueId, int readingListId)
+    private void GoReaderForIssueInReadingList(int issueId, int readingListId) => RunDrill(DrillTransitionKind.Push, $"issue-cover:{issueId}", () =>
     {
         NavigateToReaderCore(issueId, readingListId);
         PushHistory(new NavigationEntry("reader", NavigationEntryKind.Issue, issueId, Reader.IssueTitle));
-    }
+    });
 
     /// <summary>Book Details entry point (docs/superpowers/specs/2026-08-27-book-details-screen-
     /// design.md) - the Books grid card click lands here now, not straight in the reader.</summary>
-    private void GoBookDetailForBook(int bookId)
+    private void GoBookDetailForBook(int bookId) => RunDrill(DrillTransitionKind.Push, sharedKey: null, () =>
     {
         NavigateToBookDetailCore(bookId);
         PushHistory(new NavigationEntry("bookDetail", NavigationEntryKind.Book, bookId, BookDetail.HeaderTitle));
-    }
+    });
 
     private void NavigateToBookDetailCore(int bookId)
     {
@@ -1338,11 +1379,11 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
     }
 
     /// <summary>Grouped-by-Series section header click on the Books grid - opens Series mode of the same screen.</summary>
-    private void GoBookSeriesDetailForSeries(int bookSeriesId)
+    private void GoBookSeriesDetailForSeries(int bookSeriesId) => RunDrill(DrillTransitionKind.Push, sharedKey: null, () =>
     {
         NavigateToBookSeriesDetailCore(bookSeriesId);
         PushHistory(new NavigationEntry("bookDetail", NavigationEntryKind.BookSeries, bookSeriesId, BookDetail.HeaderTitle));
-    }
+    });
 
     private void NavigateToBookSeriesDetailCore(int bookSeriesId)
     {
@@ -1357,11 +1398,11 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
 
     /// <param name="startAt">A chapter or bookmark jump from the Book Details screen; null resumes
     /// from the book's saved position.</param>
-    private void GoBookReaderForBook(int bookId, BookFormat format, BookPosition? startAt)
+    private void GoBookReaderForBook(int bookId, BookFormat format, BookPosition? startAt) => RunDrill(DrillTransitionKind.Push, sharedKey: null, () =>
     {
         NavigateToBookReaderCore(bookId, format, startAt);
         PushHistory(new NavigationEntry(CurrentScreen, NavigationEntryKind.Book, bookId, LookupBookTitle(bookId)));
-    }
+    });
 
     /// <summary>The reusable half of <see cref="GoBookReaderForBook(int, BookFormat, BookPosition?)"/> -
     /// no history side effect, so <see cref="ReplayEntry"/> can call it directly. <paramref name="startAt"/>
@@ -1410,6 +1451,36 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         _navigationHistory.Push(entry);
         AfterNavigationChanged();
     }
+
+    /// <summary>The single entry point every drill-down navigation (push, pop, and forward-redeepen)
+    /// routes through (docs/superpowers/specs/2026-09-04-navigation-transition-system-design.md) -
+    /// sets <see cref="DrillTransitionKind"/> (driving <see cref="IsDrillTransitionReversed"/>) then
+    /// hands <paramref name="swap"/> - exactly what the call site's body used to run directly - to
+    /// <see cref="_runDrillTransition"/>. Fire-and-forget is fine: <paramref name="swap"/> itself runs
+    /// synchronously before any await inside the coordinator, so CurrentScreen/history/
+    /// CanNavigateBack etc. are already correct by the time this method returns, regardless of how
+    /// long (or whether) a shared-element flight plays afterward.</summary>
+    private void RunDrill(DrillTransitionKind kind, string? sharedKey, Action swap)
+    {
+        DrillTransitionKind = kind;
+        _ = _runDrillTransition(sharedKey, swap);
+    }
+
+    /// <summary>The shared-element key for whichever drill-down screen is on screen <em>right now</em>,
+    /// used by <see cref="NavigateBack"/>/<see cref="NavigateForward"/>/<see cref="NavigateToBreadcrumbIndex"/>
+    /// - call BEFORE moving the history cursor/swapping content, since it reads <see cref="CurrentScreen"/>
+    /// and the <c>_current...Id</c> fields as they stand for the screen about to become the outgoing
+    /// one. Keys are derived purely from ids already in hand (no DB lookup) so both ends of a flight
+    /// - e.g. a Library series card and Detail's hero - can agree on the same string independently:
+    /// "series-cover:{seriesId}" for Detail/MangaDetail, "issue-cover:{issueId}" for Reader. Books have
+    /// no Library-grid cover tile to morph from/to (per the design doc), so BookDetail/BookReader/
+    /// PdfReader resolve to null - a plain cross-fade, no flight.</summary>
+    private string? CurrentDrillSharedKey() => CurrentScreen switch
+    {
+        "detail" or "mangaDetail" when _currentDetailSeriesId is int seriesId => $"series-cover:{seriesId}",
+        "reader" when _currentReaderIssueId is int issueId => $"issue-cover:{issueId}",
+        _ => null,
+    };
 
     /// <summary>Refreshes everything derived from <see cref="_navigationHistory"/>'s state and
     /// persists <see cref="AppSettings.LastScreenKey"/>/<see cref="AppSettings.LastScreenEntityId"/> -
@@ -1548,12 +1619,19 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
     /// whichever lateral screen is <see cref="NavigationHistoryService.RootScreenKey"/>, the same data
     /// refresh each corresponding GoX() does, just without re-resetting the history root (that would
     /// wipe the forward stack this method's own callers are about to preserve).</summary>
-    private void GoToRootScreen(string rootScreenKey)
+    private void GoToRootScreen(string rootScreenKey, string? sharedKey = null)
     {
         switch (rootScreenKey)
         {
             case "library":
                 Library.LoadFromDatabase();
+                // docs/superpowers/specs/2026-09-04-navigation-transition-system-design.md - back-
+                // trip realization: scroll the flight's destination tile into view before
+                // NavigationTransitionCoordinator's poll starts looking for it. A no-op when
+                // sharedKey is null or doesn't resolve to a currently-visible tile (grouped,
+                // filtered out, wrong granularity) - falls through to the coordinator's existing
+                // "destination never registers -> plain cross-fade" edge case.
+                Library.RequestScrollIntoView(sharedKey);
                 CurrentScreen = "library";
                 break;
             case "books":
@@ -1620,17 +1698,21 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
     [RelayCommand(CanExecute = nameof(CanNavigateBack))]
     private void NavigateBack() => TryLeaveCurrentEditor(() =>
     {
-        var entry = _navigationHistory.Back();
-        if (entry is null)
+        var sharedKey = CurrentDrillSharedKey();
+        RunDrill(DrillTransitionKind.Pop, sharedKey, () =>
         {
-            GoToRootScreen(_navigationHistory.RootScreenKey);
-        }
-        else
-        {
-            ReplayEntry(entry);
-        }
+            var entry = _navigationHistory.Back();
+            if (entry is null)
+            {
+                GoToRootScreen(_navigationHistory.RootScreenKey, sharedKey);
+            }
+            else
+            {
+                ReplayEntry(entry);
+            }
 
-        AfterNavigationChanged();
+            AfterNavigationChanged();
+        });
     });
 
     /// <summary>Forward has no keyboard binding by design (docs/superpowers/specs/2026-08-30-app-
@@ -1639,13 +1721,17 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
     [RelayCommand(CanExecute = nameof(CanNavigateForward))]
     private void NavigateForward() => TryLeaveCurrentEditor(() =>
     {
-        var entry = _navigationHistory.Forward();
-        if (entry is not null)
+        var sharedKey = CurrentDrillSharedKey();
+        RunDrill(DrillTransitionKind.Push, sharedKey, () =>
         {
-            ReplayEntry(entry);
-        }
+            var entry = _navigationHistory.Forward();
+            if (entry is not null)
+            {
+                ReplayEntry(entry);
+            }
 
-        AfterNavigationChanged();
+            AfterNavigationChanged();
+        });
     });
 
     public bool CanNavigateBack => _navigationHistory.CanGoBack;
@@ -1686,17 +1772,21 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
     [RelayCommand]
     private void NavigateToBreadcrumbIndex(int index) => TryLeaveCurrentEditor(() =>
     {
-        var entry = _navigationHistory.JumpTo(index);
-        if (entry is null)
+        var sharedKey = CurrentDrillSharedKey();
+        RunDrill(DrillTransitionKind.Pop, sharedKey, () =>
         {
-            GoToRootScreen(_navigationHistory.RootScreenKey);
-        }
-        else
-        {
-            ReplayEntry(entry);
-        }
+            var entry = _navigationHistory.JumpTo(index);
+            if (entry is null)
+            {
+                GoToRootScreen(_navigationHistory.RootScreenKey, sharedKey);
+            }
+            else
+            {
+                ReplayEntry(entry);
+            }
 
-        AfterNavigationChanged();
+            AfterNavigationChanged();
+        });
     });
 
     /// <summary>CLI-argument deep-linking (<c>--open &lt;kind&gt;:&lt;id&gt;</c>) - called once from

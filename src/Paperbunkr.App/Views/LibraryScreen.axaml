@@ -229,12 +229,17 @@
                     Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).IssueList.OpenIssueCommand}"
                     CommandParameter="{Binding}" KeyDown="OnCardKeyDown" PointerPressed="OnTilePointerPressed">
                 <StackPanel>
+                    <!-- Shared-element cover flight (docs/superpowers/specs/2026-09-04-navigation-
+                         transition-system-design.md) - "issue-cover:{Id}", same scheme as the Poster
+                         grid template. -->
                     <Border Classes="cover" Background="{Binding CoverBrush}"
-                            Height="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PanoramaCardHeight}">
+                            Height="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PanoramaCardHeight}"
+                            controls:SharedElement.Key="{Binding Id, StringFormat='issue-cover:{0}'}"
+                            controls:SharedElement.ImageSource="{Binding #PanoramaIssueCoverImage.Source}">
                         <Grid>
                             <!-- Uniform (not UniformToFill) - the box is already sized to this cover's own
                                  aspect ratio, so nothing gets cropped; only extreme clamped outliers letterbox. -->
-                            <Image views:AsyncCoverImage.SourceId="{Binding Id}" Stretch="Uniform" />
+                            <Image x:Name="PanoramaIssueCoverImage" views:AsyncCoverImage.SourceId="{Binding Id}" Stretch="Uniform" />
                             <Border Classes="posterScrim" />
                             <Border IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowUnreadBadge}">
                                 <Border IsVisible="{Binding !IsRead}" Background="#B814161B"
@@ -285,9 +290,13 @@
                 <Border Classes="libRow" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1" CornerRadius="{DynamicResource PbRadius}" Padding="10">
                     <Grid ColumnDefinitions="44,*,Auto">
                         <Panel Grid.Column="0">
+                            <!-- Shared-element cover flight (docs/superpowers/specs/2026-09-04-
+                                 navigation-transition-system-design.md) - "issue-cover:{Id}". -->
                             <Border CornerRadius="{DynamicResource PbRadiusSm}" Width="44" Height="63"
-                                    Background="{Binding CoverBrush}" ClipToBounds="True">
-                                <Image views:AsyncCoverImage.SourceId="{Binding Id}" Stretch="UniformToFill" />
+                                    Background="{Binding CoverBrush}" ClipToBounds="True"
+                                    controls:SharedElement.Key="{Binding Id, StringFormat='issue-cover:{0}'}"
+                                    controls:SharedElement.ImageSource="{Binding #ListIssueCoverImage.Source}">
+                                <Image x:Name="ListIssueCoverImage" views:AsyncCoverImage.SourceId="{Binding Id}" Stretch="UniformToFill" />
                             </Border>
                             <CheckBox IsChecked="{Binding IsSelected, Mode=OneWay}"
                                       Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ToggleIssueSelectionCheckboxCommand}"
@@ -317,8 +326,12 @@
                     CommandParameter="{Binding}" PointerPressed="OnTilePointerPressed">
                 <Grid ColumnDefinitions="52,*" Margin="0,6">
                     <Panel Grid.Column="0">
-                        <Border Width="36" Height="50" CornerRadius="{DynamicResource PbRadiusSm}" Background="{Binding CoverBrush}" ClipToBounds="True">
-                            <Image views:AsyncCoverImage.SourceId="{Binding Id}" Stretch="UniformToFill" />
+                        <!-- Shared-element cover flight (docs/superpowers/specs/2026-09-04-
+                             navigation-transition-system-design.md) - "issue-cover:{Id}". -->
+                        <Border Width="36" Height="50" CornerRadius="{DynamicResource PbRadiusSm}" Background="{Binding CoverBrush}" ClipToBounds="True"
+                                controls:SharedElement.Key="{Binding Id, StringFormat='issue-cover:{0}'}"
+                                controls:SharedElement.ImageSource="{Binding #DetailsIssueCoverImage.Source}">
+                            <Image x:Name="DetailsIssueCoverImage" views:AsyncCoverImage.SourceId="{Binding Id}" Stretch="UniformToFill" />
                         </Border>
                         <CheckBox IsChecked="{Binding IsSelected, Mode=OneWay}"
                                   Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ToggleIssueSelectionCheckboxCommand}"
@@ -358,11 +371,15 @@
                 <Border Classes="libRow" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1" CornerRadius="{DynamicResource PbRadius}" Padding="8">
                     <Grid ColumnDefinitions="Auto,*">
                         <Panel Grid.Column="0">
+                            <!-- Shared-element cover flight (docs/superpowers/specs/2026-09-04-
+                                 navigation-transition-system-design.md) - "issue-cover:{Id}". -->
                             <Border CornerRadius="{DynamicResource PbRadiusSm}"
                                     Width="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).TilesThumbWidth}"
                                     Height="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).TilesThumbHeight}"
-                                    Background="{Binding CoverBrush}" ClipToBounds="True">
-                                <Image views:AsyncCoverImage.SourceId="{Binding Id}" Stretch="UniformToFill" />
+                                    Background="{Binding CoverBrush}" ClipToBounds="True"
+                                    controls:SharedElement.Key="{Binding Id, StringFormat='issue-cover:{0}'}"
+                                    controls:SharedElement.ImageSource="{Binding #TilesIssueCoverImage.Source}">
+                                <Image x:Name="TilesIssueCoverImage" views:AsyncCoverImage.SourceId="{Binding Id}" Stretch="UniformToFill" />
                             </Border>
                             <CheckBox IsChecked="{Binding IsSelected, Mode=OneWay}"
                                       Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ToggleIssueSelectionCheckboxCommand}"
@@ -389,12 +406,17 @@
                     Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SelectCardCommand}"
                     CommandParameter="{Binding}" KeyDown="OnCardKeyDown" PointerPressed="OnSeriesTilePointerPressed">
                 <StackPanel>
+                    <!-- Shared-element cover flight (docs/superpowers/specs/2026-09-04-navigation-
+                         transition-system-design.md) - "series-cover:{SeriesId}", same scheme as the
+                         Poster grid series template. -->
                     <Border Classes="cover" Background="{Binding CoverBrush}"
-                            Height="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PanoramaCardHeight}">
+                            Height="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PanoramaCardHeight}"
+                            controls:SharedElement.Key="{Binding SeriesId, StringFormat='series-cover:{0}'}"
+                            controls:SharedElement.ImageSource="{Binding #SeriesPanoramaCoverImage.Source}">
                         <Grid>
                             <!-- Uniform (not UniformToFill) - the box is already sized to this cover's own
                                  aspect ratio, so nothing gets cropped; only extreme clamped outliers letterbox. -->
-                            <Image views:AsyncCoverImage.SourceId="{Binding CoverIssueId}" Stretch="Uniform" />
+                            <Image x:Name="SeriesPanoramaCoverImage" views:AsyncCoverImage.SourceId="{Binding CoverIssueId}" Stretch="Uniform" />
                             <Border Classes="posterScrim" />
                             <Border IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowUnreadBadge}">
                                 <Border IsVisible="{Binding HasUnread}" Background="#B814161B"
@@ -452,10 +474,14 @@
                     CommandParameter="{Binding}" PointerPressed="OnSeriesTilePointerPressed">
                 <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1" CornerRadius="6" Padding="10">
                     <Grid ColumnDefinitions="44,*,Auto">
+                        <!-- Shared-element cover flight (docs/superpowers/specs/2026-09-04-
+                             navigation-transition-system-design.md) - "series-cover:{SeriesId}". -->
                         <Border Grid.Column="0" CornerRadius="4" Width="44" Height="63"
-                                Background="{Binding CoverBrush}" ClipToBounds="True">
+                                Background="{Binding CoverBrush}" ClipToBounds="True"
+                                controls:SharedElement.Key="{Binding SeriesId, StringFormat='series-cover:{0}'}"
+                                controls:SharedElement.ImageSource="{Binding #SeriesListCoverImage.Source}">
                             <Grid>
-                                <Image views:AsyncCoverImage.SourceId="{Binding CoverIssueId}" Stretch="UniformToFill" />
+                                <Image x:Name="SeriesListCoverImage" views:AsyncCoverImage.SourceId="{Binding CoverIssueId}" Stretch="UniformToFill" />
                                 <!-- Always visible (not hover-gated like the grid-card templates above) -
                                      this thumbnail is too small to have a Border.cover-class hover parent
                                      to key off, and a permanently tiny checkbox is unobtrusive at this scale. -->
@@ -487,9 +513,13 @@
                     Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SelectCardCommand}"
                     CommandParameter="{Binding}" PointerPressed="OnSeriesTilePointerPressed">
                 <Grid ColumnDefinitions="52,*,110,70,70,140" Margin="0,6">
-                    <Border Grid.Column="0" Width="36" Height="50" CornerRadius="3" Background="{Binding CoverBrush}" ClipToBounds="True">
+                    <!-- Shared-element cover flight (docs/superpowers/specs/2026-09-04-navigation-
+                         transition-system-design.md) - "series-cover:{SeriesId}". -->
+                    <Border Grid.Column="0" Width="36" Height="50" CornerRadius="3" Background="{Binding CoverBrush}" ClipToBounds="True"
+                            controls:SharedElement.Key="{Binding SeriesId, StringFormat='series-cover:{0}'}"
+                            controls:SharedElement.ImageSource="{Binding #SeriesDetailsCoverImage.Source}">
                         <Grid>
-                            <Image views:AsyncCoverImage.SourceId="{Binding CoverIssueId}" Stretch="UniformToFill" />
+                            <Image x:Name="SeriesDetailsCoverImage" views:AsyncCoverImage.SourceId="{Binding CoverIssueId}" Stretch="UniformToFill" />
                             <CheckBox Classes="tileSelect forceVisible"
                                       IsChecked="{Binding IsSelected, Mode=OneWay}"
                                       Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ToggleSeriesSelectionCheckboxCommand}"
@@ -517,12 +547,16 @@
                     CommandParameter="{Binding}" PointerPressed="OnSeriesTilePointerPressed">
                 <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1" CornerRadius="6" Padding="8">
                     <Grid ColumnDefinitions="Auto,*">
+                        <!-- Shared-element cover flight (docs/superpowers/specs/2026-09-04-
+                             navigation-transition-system-design.md) - "series-cover:{SeriesId}". -->
                         <Border Grid.Column="0" CornerRadius="4"
                                 Width="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).TilesThumbWidth}"
                                 Height="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).TilesThumbHeight}"
-                                Background="{Binding CoverBrush}" ClipToBounds="True">
+                                Background="{Binding CoverBrush}" ClipToBounds="True"
+                                controls:SharedElement.Key="{Binding SeriesId, StringFormat='series-cover:{0}'}"
+                                controls:SharedElement.ImageSource="{Binding #SeriesTilesCoverImage.Source}">
                             <Grid>
-                                <Image views:AsyncCoverImage.SourceId="{Binding CoverIssueId}" Stretch="UniformToFill" />
+                                <Image x:Name="SeriesTilesCoverImage" views:AsyncCoverImage.SourceId="{Binding CoverIssueId}" Stretch="UniformToFill" />
                                 <CheckBox Classes="tileSelect forceVisible"
                                           IsChecked="{Binding IsSelected, Mode=OneWay}"
                                           Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ToggleSeriesSelectionCheckboxCommand}"
@@ -552,10 +586,18 @@
                     Width="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PosterCardWidth}"
                     KeyDown="OnCardKeyDown" PointerPressed="OnTilePointerPressed" DoubleTapped="OnCardDoubleTapped">
                 <Grid RowDefinitions="*,Auto">
+                    <!-- Shared-element cover flight source/destination (docs/superpowers/specs/
+                         2026-09-04-navigation-transition-system-design.md) - key matches
+                         MainViewModel.GoReaderForIssue's own "issue-cover:{issueId}" scheme.
+                         ImageSource reads the sibling Image's own Source (set asynchronously by
+                         AsyncCoverImage once decoded) rather than a separate eager bind - a cache
+                         miss just means no flight plays (edge case already handled), not a crash. -->
                     <Border Grid.Row="0" Classes="cover posterCover" Background="{Binding CoverBrush}"
-                            Height="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PosterCoverHeight}">
+                            Height="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PosterCoverHeight}"
+                            controls:SharedElement.Key="{Binding Id, StringFormat='issue-cover:{0}'}"
+                            controls:SharedElement.ImageSource="{Binding #PosterIssueCoverImage.Source}">
                         <Grid>
-                            <Image views:AsyncCoverImage.SourceId="{Binding Id}" Stretch="UniformToFill" />
+                            <Image x:Name="PosterIssueCoverImage" views:AsyncCoverImage.SourceId="{Binding Id}" Stretch="UniformToFill" />
                             <Border Classes="posterScrim" />
                             <Border Classes="pbChip" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="6">
                                 <Border.IsVisible>
@@ -598,10 +640,18 @@
                     Width="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PosterCardWidth}"
                     KeyDown="OnCardKeyDown" PointerPressed="OnSeriesTilePointerPressed" DoubleTapped="OnCardDoubleTapped">
                 <Grid RowDefinitions="*,Auto">
+                    <!-- Shared-element cover flight source/destination (docs/superpowers/specs/
+                         2026-09-04-navigation-transition-system-design.md) - key matches
+                         MainViewModel.GoDetailForSeries's own "series-cover:{seriesId}" scheme
+                         (keyed on the SERIES id, not CoverIssueId - sidesteps ever needing to agree
+                         on which issue is "the cover" across screens; both ends resolve their own
+                         cover art independently for the same series id). -->
                     <Border Grid.Row="0" Classes="cover posterCover" Background="{Binding CoverBrush}"
-                            Height="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PosterCoverHeight}">
+                            Height="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PosterCoverHeight}"
+                            controls:SharedElement.Key="{Binding SeriesId, StringFormat='series-cover:{0}'}"
+                            controls:SharedElement.ImageSource="{Binding #PosterSeriesCoverImage.Source}">
                         <Grid>
-                            <Image views:AsyncCoverImage.SourceId="{Binding CoverIssueId}" Stretch="UniformToFill" />
+                            <Image x:Name="PosterSeriesCoverImage" views:AsyncCoverImage.SourceId="{Binding CoverIssueId}" Stretch="UniformToFill" />
                             <Border Classes="posterScrim" />
                             <Border Classes="pbChip" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="6">
                                 <Border.IsVisible>

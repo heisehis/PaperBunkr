@@ -56,9 +56,16 @@
 
             <!-- Foreground -->
             <Grid Margin="28,0,28,20" VerticalAlignment="Bottom" ColumnDefinitions="Auto,*,Auto">
+                <!-- Shared-element cover flight destination/source (docs/superpowers/specs/2026-09-04-
+                     navigation-transition-system-design.md) - the same visual object a Library series
+                     card's own SharedElement.Key registers under, forward (Library -> here) and back
+                     (here -> Library). Null SharedElementKey (BookDetail, Home spotlight) means this
+                     element is simply never registered - no participation, no error. -->
                 <Border Grid.Column="0" Width="142" Height="206" CornerRadius="{DynamicResource PbRadiusSm}"
                         ClipToBounds="True" VerticalAlignment="Bottom"
-                        BorderThickness="1" BorderBrush="#40FFFFFF" Background="{Binding CoverBrush}">
+                        BorderThickness="1" BorderBrush="#40FFFFFF" Background="{Binding CoverBrush}"
+                        controls:SharedElement.Key="{Binding SharedElementKey}"
+                        controls:SharedElement.ImageSource="{Binding CoverImage}">
                     <Grid>
                         <Image Source="{Binding CoverImage}" Stretch="UniformToFill" />
                         <Border Classes="posterScrim" />

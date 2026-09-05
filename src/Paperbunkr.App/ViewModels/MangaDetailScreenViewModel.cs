@@ -95,6 +95,7 @@ public partial class MangaDetailScreenViewModel : ViewModelBase, IDetailHeaderSo
     private string _metaLine = string.Empty;
 
     DetailHeroProgress? IDetailHeaderSource.TrackerProgress => null;
+    string? IDetailHeaderSource.SharedElementKey => _seriesId is int seriesId ? $"series-cover:{seriesId}" : null;
 
     private string? _readingStatus;
     private ReadingStatusPickerViewModel? _readingStatusPicker;
@@ -274,6 +275,7 @@ public partial class MangaDetailScreenViewModel : ViewModelBase, IDetailHeaderSo
 
         _isLoadingSeries = true;
         _seriesId = seriesId;
+        OnPropertyChanged(nameof(IDetailHeaderSource.SharedElementKey));
 
         var card = SeriesCardSample.FromSeries(series);
         _coverIssueId = card.CoverIssueId;

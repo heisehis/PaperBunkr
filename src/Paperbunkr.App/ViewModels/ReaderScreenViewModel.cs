@@ -445,6 +445,12 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
     /// <summary>The issue this screen currently has loaded, or null before the first <see cref="LoadIssue"/> call this session. Exposed for <c>Paperbunkr.Plugins.Automation.IComicDisplay</c>.</summary>
     public Issue? LoadedIssue { get; private set; }
 
+    /// <summary>Shared-element key for the first-page cover-flight participant (docs/superpowers/
+    /// specs/2026-09-04-navigation-transition-system-design.md) - "issue-cover:{issueId}", matching
+    /// MainViewModel.GoReaderForIssue's own scheme so a Library tile / Detail hero and this screen's
+    /// current page agree independently. Null before any issue has loaded.</summary>
+    public string? SharedElementKey => LoadedIssue is { } issue ? $"issue-cover:{issue.Id}" : null;
+
     /// <summary>Read-only view of <see cref="_currentPageIndex"/> for <c>Paperbunkr.Plugins.Automation.IComicDisplay</c>.</summary>
     public int CurrentPageIndex => _currentPageIndex;
 
@@ -707,6 +713,7 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
 
         Load(issue, issue.Series, context, readingListId: readingListId);
         LoadedIssue = issue;
+        OnPropertyChanged(nameof(SharedElementKey));
         IssueOpened?.Invoke(issue);
     }
 

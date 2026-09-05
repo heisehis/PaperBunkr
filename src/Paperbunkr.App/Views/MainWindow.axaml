@@ -763,9 +763,11 @@
                  shell-motion-system-design.md) share one TransitioningContentControl - direction
                  comes from MainViewModel.IsTransitionReversed (computed from rail-order comparison
                  in OnCurrentScreenChanging), content from ActiveScreenContent. The drill-down
-                 screens below (BookReader/PdfReader/Detail/MangaDetail/Reader) are unchanged from
-                 before this phase - still individually always-instantiated, still an instant
-                 IsVisible cut, deliberately out of scope here. -->
+                 screens (BookReader/PdfReader/Detail/BookDetail/MangaDetail/Reader) get their own
+                 sibling TransitioningContentControl just below (docs/superpowers/specs/2026-09-04-
+                 navigation-transition-system-design.md) - kept as a second control rather than
+                 unifying the two groups (fork B1 over B2 in that design doc) so this working lateral
+                 system stays untouched. -->
             <TransitioningContentControl Grid.Row="1" IsVisible="{Binding IsLateralScreen}"
                                           Content="{Binding ActiveScreenContent}"
                                           IsTransitionReversed="{Binding IsTransitionReversed}"
@@ -795,48 +797,41 @@
                 </TransitioningContentControl.DataTemplates>
             </TransitioningContentControl>
 
-            <ContentControl Grid.Row="1" IsVisible="{Binding IsBookReader}" Content="{Binding BookReader}">
-                <ContentControl.ContentTemplate>
-                    <DataTemplate x:DataType="vm:BookReaderScreenViewModel">
+            <!-- The 6 drill-down screens (docs/superpowers/specs/2026-09-04-navigation-transition-
+                 system-design.md) - previously six always-instantiated ContentControls each toggled
+                 by its own IsVisible, an instant cut. Now one TransitioningContentControl bound to
+                 ActiveDrillDownContent; push/pop direction from IsDrillTransitionReversed. Each
+                 screen's own ViewModel instance is unchanged (MainViewModel still owns Detail/
+                 MangaDetail/Reader/BookReader/PdfReader/BookDetail permanently) - only which one this
+                 control's Content points at changes, same as the lateral group above. The cover-art
+                 shared-element flight (Library <-> Detail hero <-> Reader first page) plays on
+                 TransitionOverlay above both this and the lateral control, driven by
+                 NavigationTransitionCoordinator, not by anything declared here. -->
+            <TransitioningContentControl Grid.Row="1" IsVisible="{Binding !IsLateralScreen}"
+                                          Content="{Binding ActiveDrillDownContent}"
+                                          IsTransitionReversed="{Binding IsDrillTransitionReversed}"
+                                          PageTransition="{StaticResource PbDrillTransition}">
+                <TransitioningContentControl.DataTemplates>
+                    <DataTemplate DataType="vm:BookReaderScreenViewModel">
                         <views:BookReaderScreen />
                     </DataTemplate>
-                </ContentControl.ContentTemplate>
-            </ContentControl>
-            <ContentControl Grid.Row="1" IsVisible="{Binding IsPdfReader}" Content="{Binding PdfReader}">
-                <ContentControl.ContentTemplate>
-                    <DataTemplate x:DataType="vm:PdfPageReaderScreenViewModel">
+                    <DataTemplate DataType="vm:PdfPageReaderScreenViewModel">
                         <views:PdfPageReaderScreen />
                     </DataTemplate>
-                </ContentControl.ContentTemplate>
-            </ContentControl>
-            <ContentControl Grid.Row="1" IsVisible="{Binding IsDetail}" Content="{Binding Detail}">
-                <ContentControl.ContentTemplate>
-                    <DataTemplate x:DataType="vm:DetailScreenViewModel">
+                    <DataTemplate DataType="vm:DetailScreenViewModel">
                         <views:DetailScreen />
                     </DataTemplate>
-                </ContentControl.ContentTemplate>
-            </ContentControl>
-            <ContentControl Grid.Row="1" IsVisible="{Binding IsBookDetail}" Content="{Binding BookDetail}">
-                <ContentControl.ContentTemplate>
-                    <DataTemplate x:DataType="vm:BookDetailScreenViewModel">
+                    <DataTemplate DataType="vm:BookDetailScreenViewModel">
                         <views:BookDetailScreen />
                     </DataTemplate>
-                </ContentControl.ContentTemplate>
-            </ContentControl>
-            <ContentControl Grid.Row="1" IsVisible="{Binding IsMangaDetail}" Content="{Binding MangaDetail}">
-                <ContentControl.ContentTemplate>
-                    <DataTemplate x:DataType="vm:MangaDetailScreenViewModel">
+                    <DataTemplate DataType="vm:MangaDetailScreenViewModel">
                         <views:MangaDetailScreen />
                     </DataTemplate>
-                </ContentControl.ContentTemplate>
-            </ContentControl>
-            <ContentControl Grid.Row="1" IsVisible="{Binding IsReader}" Content="{Binding Reader}">
-                <ContentControl.ContentTemplate>
-                    <DataTemplate x:DataType="vm:ReaderScreenViewModel">
+                    <DataTemplate DataType="vm:ReaderScreenViewModel">
                         <views:ReaderScreen />
                     </DataTemplate>
-                </ContentControl.ContentTemplate>
-            </ContentControl>
+                </TransitioningContentControl.DataTemplates>
+            </TransitioningContentControl>
 
             <!-- docs/superpowers/specs/2026-08-30-app-shell-navigation-history-design.md - Row 0,
                  real layout space above whichever drill-down ContentControl (Row 1) is visible; only
@@ -845,6 +840,16 @@
         </Grid>
 
     </DockPanel>
+
+    <!-- ============ Shared-element transition overlay (docs/superpowers/specs/2026-09-04-
+         navigation-transition-system-design.md) ============ -->
+    <!-- Above every screen + the breadcrumb, below the modal overlays (Activity drawer/Migration/
+         properties popups below) so a flying cover never renders over an actual modal. A Canvas
+         specifically (not a generic Panel) - SharedElementTransitionService positions its clone via
+         Canvas.Left/Top plus a RenderTransform delta on top. Never touched directly in markup beyond
+         this declaration; NavigationTransitionCoordinator drives it entirely through
+         ISharedElementTransitionService, registered in MainWindow.axaml.cs. -->
+    <Canvas x:Name="TransitionOverlay" IsHitTestVisible="False" ClipToBounds="False" />
 
     <!-- ============ Activity Center drawer (docs/superpowers/specs/2026-09-03-activity-center-design.md) ============ -->
     <!-- Tier 2. Overlay sibling of the DockPanel, non-blocking (no scrim) - the app stays usable

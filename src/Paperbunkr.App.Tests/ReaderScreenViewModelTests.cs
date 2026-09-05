@@ -250,6 +250,17 @@ public class ReaderScreenViewModelTests : IDisposable
     }
 
     [Fact]
+    public void SharedElementKey_NullBeforeAnyIssueLoaded_ThenIssueCoverAfterLoadIssue()
+    {
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        Assert.Null(vm.SharedElementKey);
+
+        vm.LoadIssue(_issue1Id);
+
+        Assert.Equal($"issue-cover:{_issue1Id}", vm.SharedElementKey);
+    }
+
+    [Fact]
     public void NextPage_PastLastPage_LoadsNextIssue_WhenAutoNavigateEnabled()
     {
         var vm = new ReaderScreenViewModel(goBack: () => { });

@@ -55,6 +55,12 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+
+        // docs/superpowers/specs/2026-09-04-navigation-transition-system-design.md - registered
+        // once, here, before any navigation can occur. SharedElementTransitionService.Shared is the
+        // single app-wide instance every SharedElement-attached participant registers against.
+        SharedElementTransitionService.Shared.RegisterOverlayHost(TransitionOverlay);
+
         DataContextChanged += OnDataContextChanged;
         _railCollapseTimer.Tick += OnRailCollapseTimerTick;
 

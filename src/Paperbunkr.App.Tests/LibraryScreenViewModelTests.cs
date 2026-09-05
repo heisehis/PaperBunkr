@@ -2602,4 +2602,53 @@ public class LibraryScreenViewModelTests : IDisposable
         using var check = PaperbunkrDb.CreateContext();
         Assert.Empty(check.Issues.ToList());
     }
+
+    // --- RequestScrollIntoView (docs/superpowers/specs/2026-09-04-navigation-transition-system-design.md) ---
+
+    [Fact]
+    public void RequestScrollIntoView_SeriesCoverKey_RaisesScrollToIndexRequested_ForMatchingSeries()
+    {
+        CreateSeriesWithIssue("Aardvark");
+        int targetSeriesId = CreateSeriesWithIssue("Zebra");
+        var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { }, goToNewIssueProperties: (_, _, _) => { });
+        vm.Granularity = LibraryContentGranularity.Series;
+        int? raisedIndex = null;
+        vm.ScrollToIndexRequested += i => raisedIndex = i;
+
+        vm.RequestScrollIntoView($"series-cover:{targetSeriesId}");
+
+        Assert.Equal(vm.Covers.ToList().FindIndex(c => c.SeriesId == targetSeriesId), raisedIndex);
+    }
+
+    [Fact]
+    public void RequestScrollIntoView_IssueCoverKey_RaisesScrollToIndexRequested_ForMatchingIssue()
+    {
+        CreateSeriesWithIssue("Aardvark");
+        CreateSeriesWithIssue("Zebra");
+        var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { }, goToNewIssueProperties: (_, _, _) => { });
+        int targetIssueId = vm.IssueList.Rows.Last().Id;
+        int? raisedIndex = null;
+        vm.ScrollToIndexRequested += i => raisedIndex = i;
+
+        vm.RequestScrollIntoView($"issue-cover:{targetIssueId}");
+
+        Assert.Equal(vm.IssueList.Rows.ToList().FindIndex(r => r.Id == targetIssueId), raisedIndex);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("series-cover:999999")]
+    [InlineData("not-a-real-key")]
+    public void RequestScrollIntoView_NullOrUnresolvableKey_DoesNotRaiseScrollToIndexRequested(string? key)
+    {
+        CreateSeriesWithIssue("Aardvark");
+        var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { }, goToNewIssueProperties: (_, _, _) => { });
+        vm.Granularity = LibraryContentGranularity.Series;
+        bool raised = false;
+        vm.ScrollToIndexRequested += _ => raised = true;
+
+        vm.RequestScrollIntoView(key);
+
+        Assert.False(raised);
+    }
 }

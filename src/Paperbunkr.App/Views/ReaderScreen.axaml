@@ -205,7 +205,16 @@
                 </ScrollViewer>
             </Border>
 
+            <!-- Shared-element cover flight participant (docs/superpowers/specs/2026-09-04-
+                 navigation-transition-system-design.md) - keyed on the loaded issue, imaged by
+                 whatever page is currently on screen (the first page, right after
+                 NavigateToReaderCore/LoadIssue runs, before the coordinator's poll checks). No fit-
+                 rect math hookup - PageCanvas's own Bounds is the destination rect, the design doc's
+                 pre-approved fallback since precise zoom/fit-mode geometry isn't cheaply available
+                 from a custom-drawn Control. -->
             <views:PageCanvas x:Name="PageCanvasControl"
+                              controls:SharedElement.Key="{Binding SharedElementKey}"
+                              controls:SharedElement.ImageSource="{Binding CurrentPage}"
                               Page="{Binding CurrentPage}"
                               SecondaryPage="{Binding CurrentPageSecondary}"
                               LeftCommand="{Binding GoLeftCommand}"

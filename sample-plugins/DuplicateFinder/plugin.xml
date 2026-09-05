@@ -2,7 +2,7 @@
   <Command hook="Startup" key="duplicate-finder.startup" name="Duplicate Finder Activated"
            description="Logs that Duplicate Finder is active for this session." script="startup.csx" />
   <Command hook="Library" key="duplicate-finder.find-in-selection" name="Find Duplicates in Selection"
-           description="Compares the selected books by series+number and flags exact matches." script="find-duplicates.csx" />
+           description="Right-click a book on the Library screen to check it against the whole library for a same-series, same-number copy." script="find-duplicates.csx" />
   <Command hook="CreateBookList" key="duplicate-finder.possible-duplicates" name="Possible Duplicates"
-           description="Dynamic Smart List entry: every book that shares its series+number with another book in the library." script="possible-duplicates.csx" />
+           description="A dynamic Smart List entry (Smart Lists screen) listing every book that shares its series and number with another book in the library." script="possible-duplicates.csx" />
 </Plugin>

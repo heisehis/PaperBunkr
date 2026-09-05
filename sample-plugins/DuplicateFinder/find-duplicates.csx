@@ -3,7 +3,7 @@
 // single right-clicked issue here - this compares each book in Books against the WHOLE library
 // (not just within Books itself, which would never find anything with a single-item selection).
 var library = Environment.App.GetLibraryBooks().ToList();
-var duplicateGroups = new System.Collections.Generic.List<string>();
+var duplicateGroups = new List<string>();
 
 foreach (var book in Books)
 {

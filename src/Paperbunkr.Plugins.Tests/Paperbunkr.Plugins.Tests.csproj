@@ -25,10 +25,17 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- Real end-to-end fixture plugin (docs/superpowers/specs/2026-08-24-plugin-api-v2-design.md
-         §7) - the "one real test plugin" the Beta bar asks for. Copied to output so
-         DuplicateFinderPluginTests can point PluginEngine.Discover at an absolute, stable path. -->
+    <!-- Real end-to-end fixture plugins - copied to output so each *PluginTests class can point
+         PluginEngine.Discover at an absolute, stable path. -->
     <None Include="SamplePlugins\**" CopyToOutputDirectory="PreserveNewest" />
+    <!-- Duplicate Finder (docs/superpowers/specs/2026-08-24-plugin-api-v2-design.md §7 - the "one
+         real test plugin" the Beta bar asks for) is no longer a separate test-only copy - this
+         pulls the exact same source repo root sample-plugins/DuplicateFinder/ ships to real users
+         (docs/superpowers/specs/2026-09-05-plugin-api-v2-remaining-hooks-plan.md follow-up), so the
+         two can never drift apart. Paperbunkr.App.Tests/PluginPackageServiceTests.cs separately
+         proves the *packaged* sample-plugins/DuplicateFinder.zip installs correctly - this fixture
+         is for exercising hook logic against the loose source. -->
+    <None Include="..\..\sample-plugins\DuplicateFinder\**" Link="SamplePlugins\DuplicateFinder\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

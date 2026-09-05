@@ -138,6 +138,7 @@ public partial class ReaderScreen : UserControl
         if (_viewModel is not null)
         {
             _viewModel.IsViewClusterCollapsed = e.NewSize.Width < 720;
+            _viewModel.NotifyCanvasResized((int)e.NewSize.Width, (int)e.NewSize.Height);
         }
     }
 

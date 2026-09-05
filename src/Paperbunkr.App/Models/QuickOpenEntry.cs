@@ -31,6 +31,7 @@ public sealed record QuickOpenEntry(
         QuickOpenKind.Continuity => "continuity",
         QuickOpenKind.Screen => "screen",
         QuickOpenKind.Action => "action",
+        QuickOpenKind.PluginCommand => "plugin",
         _ => string.Empty,
     };
 }
@@ -47,4 +48,9 @@ public enum QuickOpenKind
     Continuity,
     Screen,
     Action,
+
+    /// <summary>Plugin API v2 QuickOpenHtml/QuickOpenUI hook (docs/superpowers/specs/2026-09-05-
+    /// plugin-api-v2-remaining-hooks-plan.md §11) - <see cref="QuickOpenEntry.Key"/> is the owning
+    /// <c>Command.Key</c>, resolved back to the real <c>Command</c> at activation time.</summary>
+    PluginCommand,
 }

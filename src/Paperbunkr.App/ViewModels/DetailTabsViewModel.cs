@@ -11,6 +11,7 @@ using CommunityToolkit.Mvvm.Input;
 using Microsoft.EntityFrameworkCore;
 using Paperbunkr.App.ContextMenus;
 using Paperbunkr.App.Models;
+using Paperbunkr.App.Plugins;
 using Paperbunkr.App.Services;
 using Paperbunkr.Data;
 using Paperbunkr.Data.Collections;
@@ -19,6 +20,8 @@ using Paperbunkr.Data.Entities;
 using Paperbunkr.Data.Metadata;
 using Paperbunkr.Data.Tracking;
 using Paperbunkr.Data.Tracking.Adapters;
+using Paperbunkr.Plugins;
+using Paperbunkr.Plugins.Hooks;
 
 namespace Paperbunkr.App.ViewModels;
 
@@ -781,17 +784,45 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
         OnPropertyChanged(nameof(HasExternalLinks));
     }
 
+    // --- Plugin API v2 NetSearch hook (docs/superpowers/specs/2026-09-05-plugin-api-v2-remaining-hooks-plan.md §8) ---
+
+    private PluginHostService? _pluginHost;
+
+    public bool HasPluginHost => _pluginHost is not null;
+
+    /// <summary>Called once from <c>App.axaml.cs</c> after <see cref="PluginHostService.Initialize"/> - same pattern as <c>LibraryScreenViewModel.AttachHost</c>.</summary>
+    public void AttachHost(PluginHostService host)
+    {
+        _pluginHost = host;
+        OnPropertyChanged(nameof(HasPluginHost));
+        OnPropertyChanged(nameof(MetadataProviderOptions));
+    }
+
+    private static readonly MetadataSearchProviderOption AniListOption = MetadataSearchProviderOption.For(ExternalMetadataProvider.AniList);
+    private static readonly MetadataSearchProviderOption MangaBakaOption = MetadataSearchProviderOption.For(ExternalMetadataProvider.MangaBaka);
+
     /// <summary>
     /// Second provider alongside AniList - MangaBaka is search/link only (no auth, no per-user
-    /// library, confirmed against its live API), same shape as AniList's own metadata half.
+    /// library, confirmed against its live API), same shape as AniList's own metadata half. Was a
+    /// static field; now an instance property since enabled NetSearch-hook commands are
+    /// per-environment (docs/superpowers/specs/2026-09-05-plugin-api-v2-remaining-hooks-plan.md §8).
     /// </summary>
-    public static readonly ExternalMetadataProvider[] MetadataProviderOptions =
+    public IReadOnlyList<MetadataSearchProviderOption> MetadataProviderOptions
     {
-        ExternalMetadataProvider.AniList, ExternalMetadataProvider.MangaBaka,
-    };
+        get
+        {
+            var options = new List<MetadataSearchProviderOption> { AniListOption, MangaBakaOption };
+            if (_pluginHost is not null)
+            {
+                options.AddRange(_pluginHost.GetNetSearchCommands().Select(MetadataSearchProviderOption.For));
+            }
+
+            return options;
+        }
+    }
 
     [ObservableProperty]
-    private ExternalMetadataProvider _selectedMetadataProvider = ExternalMetadataProvider.AniList;
+    private MetadataSearchProviderOption _selectedMetadataProvider = AniListOption;
 
     /// <summary>Fresh instance per call for MangaBaka, same "no DI container" rationale as
     /// <see cref="GetTrackerSearchProvider"/> - AniList keeps using the injected/test-seam
@@ -819,6 +850,9 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
     /// <summary>Cancels a still-running search if the user reopens/retriggers it before the prior one completes - a slow provider response must not race a newer query's results into the list.</summary>
     private CancellationTokenSource? _searchCts;
 
+    /// <summary>Which provider the currently-displayed <see cref="MetadataSearchResults"/> actually came from - captured at search time rather than re-read from <see cref="SelectedMetadataProvider"/> at link time, since the user could change the picker in between.</summary>
+    private MetadataSearchProviderOption? _searchedProvider;
+
     [RelayCommand]
     private void ToggleSearchMetadata()
     {
@@ -842,11 +876,18 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
 
         var cts = new CancellationTokenSource();
         _searchCts = cts;
+        _searchedProvider = SelectedMetadataProvider;
         IsMetadataSearchInProgress = true;
         try
         {
+            if (SelectedMetadataProvider.IsPlugin)
+            {
+                await SearchViaPluginAsync(SelectedMetadataProvider.PluginCommand!, cts.Token);
+                return;
+            }
+
             using var context = _contextFactory();
-            var provider = GetMetadataProviderFor(SelectedMetadataProvider);
+            var provider = GetMetadataProviderFor(SelectedMetadataProvider.BuiltIn!.Value);
             var matches = await MetadataLinkResolver.SearchAsync(provider, context, currentSeriesId, MetadataSearchQuery, cts.Token);
 
             if (cts.IsCancellationRequested)
@@ -876,11 +917,56 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
             // Network/provider failure (docs/superpowers/specs/2026-08-19-metadata-model-anilist-
             // search-and-link-design.md) - the library must keep working when a provider is
             // unavailable, so this surfaces as an inline message, not an unhandled exception.
-            MetadataSearchError = $"{SelectedMetadataProvider} is unavailable right now. Try again later.";
+            MetadataSearchError = $"{SelectedMetadataProvider.Label} is unavailable right now. Try again later.";
         }
         finally
         {
             IsMetadataSearchInProgress = false;
+        }
+    }
+
+    /// <summary>NetSearch-hook path (docs/superpowers/specs/2026-09-05-plugin-api-v2-remaining-hooks-plan.md §8) - runs the selected plugin command instead of <see cref="MetadataLinkResolver.SearchAsync"/>. No commands implement this hook today.</summary>
+    private async Task SearchViaPluginAsync(Command command, CancellationToken ct)
+    {
+        if (_pluginHost is null)
+        {
+            return;
+        }
+
+        var result = await _pluginHost.RunNetSearchCommandAsync(command, MetadataSearchQuery).ConfigureAwait(true);
+        if (ct.IsCancellationRequested)
+        {
+            return;
+        }
+
+        if (!result.Success)
+        {
+            MetadataSearchError = $"{command.Name} is unavailable right now. Try again later.";
+            return;
+        }
+
+        var results = (result.ReturnValue as IEnumerable<NetSearchResult>)?.ToList() ?? new List<NetSearchResult>();
+        foreach (var match in results)
+        {
+            MetadataSearchResults.Add(new AniListMatchSample
+            {
+                ExternalId = match.ExternalId,
+                Title = match.Title,
+                Url = match.Url,
+                Confidence = match.Confidence ?? 0,
+                Tier = match.Confidence switch
+                {
+                    >= TitleMatchScorer.AutoThreshold => MatchTier.Auto,
+                    >= TitleMatchScorer.ReviewThreshold => MatchTier.NeedsReview,
+                    null => MatchTier.NeedsReview, // unscored - never auto-preselect a plugin match with no real confidence
+                    _ => MatchTier.Reject,
+                },
+            });
+        }
+
+        if (results.Count == 0)
+        {
+            MetadataSearchError = "No matches found.";
         }
     }
 
@@ -892,8 +978,18 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
             return;
         }
 
+        // A plugin-sourced match has no ExternalMetadataProvider enum value to persist against
+        // (SeriesExternalLink.Provider is a closed set - docs/superpowers/specs/2026-09-05-plugin-
+        // api-v2-remaining-hooks-plan.md §8) - search/browse works, linking doesn't, and says so
+        // rather than silently failing or crashing.
+        if (_searchedProvider?.IsPlugin == true)
+        {
+            MetadataSearchError = "Plugin-sourced matches can't be linked yet - browse-only for now.";
+            return;
+        }
+
         using var context = _contextFactory();
-        var provider = GetMetadataProviderFor(SelectedMetadataProvider);
+        var provider = GetMetadataProviderFor(SelectedMetadataProvider.BuiltIn ?? ExternalMetadataProvider.AniList);
         bool linked = await MetadataLinkResolver.LinkAsync(provider, context, currentSeriesId, candidate.ExternalId, CancellationToken.None);
         if (!linked)
         {
@@ -1218,6 +1314,7 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
     public bool IsRelatedTab => ActiveTab == "related";
     public bool IsDetailsTab => ActiveTab == "details";
     public bool IsActivityTab => ActiveTab == "activity";
+    public bool IsPluginsTab => ActiveTab == "plugins";
 
     partial void OnActiveTabChanged(string value)
     {
@@ -1226,6 +1323,12 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
         OnPropertyChanged(nameof(IsRelatedTab));
         OnPropertyChanged(nameof(IsDetailsTab));
         OnPropertyChanged(nameof(IsActivityTab));
+        OnPropertyChanged(nameof(IsPluginsTab));
+
+        if (value == "plugins")
+        {
+            _ = RefreshComicInfoPanelsAsync();
+        }
     }
 
     [RelayCommand]
@@ -1242,6 +1345,69 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
 
     [RelayCommand]
     private void GoActivity() => ActiveTab = "activity";
+
+    [RelayCommand]
+    private void GoPlugins() => ActiveTab = "plugins";
+
+    // --- Plugin API v2 ComicInfoHtml/ComicInfoUI hooks (docs/superpowers/specs/2026-09-05-plugin-
+    // api-v2-remaining-hooks-plan.md §10) ---
+
+    /// <summary>
+    /// CE anchors this as a per-comic sidebar info panel on the Library explorer view (verified
+    /// against <c>_reference/ComicRackCE/ComicRack/Views/MainView.cs</c>'s <c>AddExplorerView</c> -
+    /// <c>ScriptUtility.CreateComicInfoPages()</c> feeds <c>ISidebar.AddInfo</c>), not a "Detail
+    /// screen tab" - Paperbunkr has no such sidebar, so this "Plugins" tab (same pattern as the
+    /// existing Related/Activity tabs) is the adapted anchor. Scoped to the single focused issue
+    /// (<see cref="SelectedIssueIds"/> with exactly one entry) since <see cref="ComicInfoHookGlobals"/>
+    /// carries one <c>Book</c>, not a set.
+    /// </summary>
+    public int? FocusedIssueId => SelectedIssueIds.Count == 1 ? SelectedIssueIds.Single() : null;
+
+    public bool HasComicInfoPluginCommands => _pluginHost?.GetComicInfoCommands().Any() == true;
+
+    public ObservableCollection<PluginInfoPanelSample> ComicInfoPanels { get; } = new();
+
+    [ObservableProperty]
+    private bool _isLoadingComicInfoPanels;
+
+    private async Task RefreshComicInfoPanelsAsync()
+    {
+        ComicInfoPanels.Clear();
+        if (_pluginHost is null || FocusedIssueId is not int issueId)
+        {
+            return;
+        }
+
+        var commands = _pluginHost.GetComicInfoCommands().ToList();
+        if (commands.Count == 0)
+        {
+            return;
+        }
+
+        using var context = _contextFactory();
+        var issue = context.Issues.Find(issueId);
+        if (issue is null)
+        {
+            return;
+        }
+
+        IsLoadingComicInfoPanels = true;
+        try
+        {
+            foreach (var command in commands)
+            {
+                var result = await _pluginHost.RunComicInfoCommandAsync(command, issue).ConfigureAwait(true);
+                string text = result.Success
+                    ? PluginInfoPanelSample.RenderText(result.ReturnValue as string, isHtml: command.Hook == PluginHooks.ComicInfoHtml)
+                    : $"({command.Name} failed: {result.Error?.Message})";
+                ComicInfoPanels.Add(new PluginInfoPanelSample { CommandName = command.Name, Text = text });
+            }
+        }
+        finally
+        {
+            IsLoadingComicInfoPanels = false;
+        }
+    }
 
     /// <summary>The displayed collection a tile belongs to - the numbered Issues flow or the flat
     /// Specials list (docs/superpowers/specs/2026-08-28-series-detail-specials-tab-design.md). Both

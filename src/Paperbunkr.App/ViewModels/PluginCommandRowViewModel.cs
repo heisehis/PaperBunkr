@@ -91,4 +91,28 @@ public partial class PluginCommandRowViewModel : ViewModelBase
             : string.Join(", ", issues.Take(5).Select(i => $"Series #{i.SeriesId} #{i.Number}")) + (issues.Count > 5 ? $" (+{issues.Count - 5} more)" : string.Empty);
         _host.ShowToast(Name, $"Found {issues.Count} issue(s). {summary}");
     }
+
+    /// <summary>
+    /// ConfigScript gear icon (docs/superpowers/specs/2026-09-05-plugin-api-v2-remaining-hooks-
+    /// plan.md §9) - <see cref="Command.Configure"/> pairing and discovery-time wiring already
+    /// existed (<see cref="PluginEngine.Discover"/>); only this click-to-invoke action was missing.
+    /// No generic plugin-dialog surface exists yet, so this just invokes the paired command - a
+    /// config script drives whatever native primitives it has (<c>IApplication.AskQuestion</c>,
+    /// its own <c>IPluginConfig.SetSetting</c> calls) the same way any other command does, rather
+    /// than this row opening a dialog on the command's behalf.
+    /// </summary>
+    [RelayCommand]
+    private async Task OpenConfigure()
+    {
+        if (_command.Configure is not { Environment: not null } configure)
+        {
+            return;
+        }
+
+        var result = await _host.RunCommandAsync(configure, new ConfigScriptHookGlobals { Environment = configure.Environment });
+        if (!result.Success)
+        {
+            _host.ShowToast("Plugin error", $"\"{Name}\" configuration failed: {result.Error?.Message}");
+        }
+    }
 }

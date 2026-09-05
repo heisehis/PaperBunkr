@@ -854,6 +854,18 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
             case Paperbunkr.App.Models.QuickOpenKind.Action:
                 RunQuickOpenAction(entry.Key!);
                 break;
+            case Paperbunkr.App.Models.QuickOpenKind.PluginCommand:
+                RunQuickOpenPluginCommand(entry.Key!);
+                break;
+        }
+    }
+
+    /// <summary>QuickOpenHtml/QuickOpenUI hook (docs/superpowers/specs/2026-09-05-plugin-api-v2-remaining-hooks-plan.md §11) - re-invokes the command with whatever's currently typed in the palette, surfacing its result via toast (no generic result-display surface exists yet, same honesty as the ConfigScript gear icon).</summary>
+    private async void RunQuickOpenPluginCommand(string commandKey)
+    {
+        if (await QuickOpen.RunPluginCommandAsync(commandKey) is { } outcome)
+        {
+            ShowToastForPlugin(outcome.CommandName, outcome.Text);
         }
     }
 

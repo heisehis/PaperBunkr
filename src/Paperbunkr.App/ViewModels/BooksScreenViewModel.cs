@@ -2,15 +2,18 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
+using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.EntityFrameworkCore;
 using Paperbunkr.App.ContextMenus;
 using Paperbunkr.App.Models;
+using Paperbunkr.App.Plugins;
 using Paperbunkr.App.Services;
 using Paperbunkr.Data;
 using Paperbunkr.Data.Collections;
 using Paperbunkr.Data.Entities;
+using Paperbunkr.Plugins;
 
 namespace Paperbunkr.App.ViewModels;
 
@@ -457,6 +460,41 @@ public partial class BooksScreenViewModel : ViewModelBase, IContextMenuProvider
         var collection = CollectionService.Create(context, "New Collection");
         CollectionService.AddItems(context, collection.Id, bookIds: new[] { bookId });
         LoadFromDatabase();
+    }
+
+    // --- Plugin API v2 Books hook (docs/superpowers/specs/2026-09-05-plugin-api-v2-remaining-hooks-plan.md §3/§4) ---
+
+    private PluginHostService? _pluginHost;
+
+    public bool HasPluginHost => _pluginHost is not null;
+
+    /// <summary>Called once from <c>App.axaml.cs</c> after <see cref="PluginHostService.Initialize"/> - same pattern as <c>LibraryScreenViewModel.AttachHost</c>.</summary>
+    public void AttachHost(PluginHostService host)
+    {
+        _pluginHost = host;
+        OnPropertyChanged(nameof(HasPluginHost));
+    }
+
+    /// <summary>Enabled commands registered under the Books hook, for the tile context menu's plugin submenu - one entry per command (unlike Library's single hardcoded "Find Duplicates" item, since this is a new anchor with no single-plugin assumption baked in).</summary>
+    public IEnumerable<Command> NovelBooksPluginCommands => _pluginHost?.GetNovelBooksCommands() ?? Enumerable.Empty<Command>();
+
+    /// <summary>Runs one Books-hook command against a single book tile. Parameter is <c>(bookId, command)</c>.</summary>
+    [RelayCommand]
+    private async Task RunNovelBooksPlugin((int BookId, Command Command) target)
+    {
+        if (_pluginHost is null)
+        {
+            return;
+        }
+
+        using var context = PaperbunkrDb.CreateContext();
+        var book = context.Books.Find(target.BookId);
+        if (book is null)
+        {
+            return;
+        }
+
+        await _pluginHost.RunNovelBooksCommandAsync(target.Command, new[] { book });
     }
 
     private void Rebuild()

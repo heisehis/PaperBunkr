@@ -117,6 +117,95 @@ public sealed class PluginHostService
         }
     }
 
+    /// <summary>Real BookOpened-hook anchor (docs/superpowers/specs/2026-08-24-plugin-api-v2-design.md
+    /// §5) - <see cref="ReaderScreenViewModel.IssueOpened"/> fires this once an issue finishes
+    /// loading in the reader. Was a documented anchor with no actual subscriber until
+    /// docs/superpowers/specs/2026-09-05-plugin-api-v2-remaining-hooks-plan.md's audit caught it.</summary>
+    public Task<IReadOnlyList<PluginInvocationResult>> RunBookOpenedHookAsync(Issue book) =>
+        InvokeAndReportAsync(PluginHooks.BookOpened, env => new BookOpenedHookGlobals { Environment = env, Book = book });
+
+    /// <summary>Real ReaderResized-hook anchor - the reader screen's size-changed handling.</summary>
+    public Task<IReadOnlyList<PluginInvocationResult>> RunReaderResizedHookAsync(int width, int height) =>
+        InvokeAndReportAsync(PluginHooks.ReaderResized, env => new ReaderResizedHookGlobals { Environment = env, Width = width, Height = height });
+
+    /// <summary>
+    /// Real Editor-hook anchor - the Issue Properties/Bulk Editing overlay toolbar (docs/superpowers/
+    /// specs/2026-09-05-plugin-api-v2-remaining-hooks-plan.md §3). Unlike <see cref="RunLibraryHookAsync"/>'s
+    /// single hardcoded menu item (fine when only one plugin exists), this surfaces one entry per
+    /// enabled command - <see cref="GetEditorCommands"/> backs that enumeration.
+    /// </summary>
+    public IEnumerable<Command> GetEditorCommands() => Engine.GetCommands(PluginHooks.Editor);
+
+    public Task<PluginInvocationResult> RunEditorCommandAsync(Command command, IReadOnlyList<Issue> books) =>
+        RunCommandAsync(command, new BooksHookGlobals { Environment = _environment!, Books = books });
+
+    /// <summary>Real Books-hook anchor - the Books screen (novels/EPUB/PDF) context menu. See <see cref="NovelBooksHookGlobals"/>'s own doc comment for why this isn't <see cref="BooksHookGlobals"/>.</summary>
+    public IEnumerable<Command> GetNovelBooksCommands() => Engine.GetCommands(PluginHooks.Books);
+
+    public Task<PluginInvocationResult> RunNovelBooksCommandAsync(Command command, IReadOnlyList<Book> books) =>
+        RunCommandAsync(command, new NovelBooksHookGlobals { Environment = _environment!, Books = books });
+
+    /// <summary>Real NewBooks-hook anchor - Library's "Add issue to library" overlay, one entry per enabled command (mirrors CE's own per-command File-menu items, docs/superpowers/specs/2026-09-05-plugin-api-v2-remaining-hooks-plan.md §5) rather than replacing the manual add flow.</summary>
+    public IEnumerable<Command> GetNewBooksCommands() => Engine.GetCommands(PluginHooks.NewBooks);
+
+    public async Task<Issue?> RunNewBooksCommandAsync(Command command)
+    {
+        var result = await RunCommandAsync(command, new NewBooksHookGlobals { Environment = _environment! }).ConfigureAwait(false);
+        if (!result.Success)
+        {
+            DiagnosticsService.LogMilestone($"Plugin command '{command.Name}' (NewBooks) failed: {result.Error?.Message}");
+            _main?.ShowToastForPlugin("Plugin error", $"\"{command.Name}\" failed: {result.Error?.Message}");
+            return null;
+        }
+
+        return result.ReturnValue as Issue;
+    }
+
+    /// <summary>
+    /// Real ParseComicPath-hook anchor - <see cref="Services.LibraryFolderScanner"/>'s filename
+    /// parse step (docs/superpowers/specs/2026-09-05-plugin-api-v2-remaining-hooks-plan.md §7).
+    /// Runs every enabled command in registration order and returns the first non-null override -
+    /// the built-in filename parser's guess is used untouched when none returns one (no commands
+    /// implement this hook today, so behavior is unchanged until one does).
+    /// </summary>
+    public async Task<ParsedComicPath?> RunParseComicPathHookAsync(string path)
+    {
+        foreach (var command in Engine.GetCommands(PluginHooks.ParseComicPath))
+        {
+            if (command.Environment is null)
+            {
+                continue;
+            }
+
+            var result = await RunCommandAsync(command, new ParseComicPathHookGlobals { Environment = command.Environment, Path = path }).ConfigureAwait(false);
+            if (!result.Success)
+            {
+                DiagnosticsService.LogMilestone($"Plugin command '{command.Name}' (ParseComicPath) failed: {result.Error?.Message}");
+                continue;
+            }
+
+            if (result.ReturnValue is ParsedComicPath parsed)
+            {
+                return parsed;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>Real NetSearch-hook anchor - additional providers in Detail's Apply-from-Provider search picker, alongside AniList/MangaBaka (docs/superpowers/specs/2026-09-05-plugin-api-v2-remaining-hooks-plan.md §8).</summary>
+    public IEnumerable<Command> GetNetSearchCommands() => Engine.GetCommands(PluginHooks.NetSearch);
+
+    public Task<PluginInvocationResult> RunNetSearchCommandAsync(Command command, string query) =>
+        RunCommandAsync(command, new NetSearchHookGlobals { Environment = _environment!, Query = query });
+
+    /// <summary>Real ComicInfoHtml/ComicInfoUI-hook anchor - the Detail screen's "Plugins" tab (docs/superpowers/specs/2026-09-05-plugin-api-v2-remaining-hooks-plan.md §10).</summary>
+    public IEnumerable<Command> GetComicInfoCommands() =>
+        Engine.GetCommands(PluginHooks.ComicInfoHtml).Concat(Engine.GetCommands(PluginHooks.ComicInfoUI));
+
+    public Task<PluginInvocationResult> RunComicInfoCommandAsync(Command command, Issue book) =>
+        RunCommandAsync(command, new ComicInfoHookGlobals { Environment = _environment!, Book = book });
+
     public void ShowToast(string title, string message) => _main?.ShowToastForPlugin(title, message);
 
     /// <summary>Persists a user toggle and applies it immediately (docs §3's <see cref="PluginCommandState"/> sparse-table convention) - called from the Plugin screen.</summary>

@@ -152,6 +152,19 @@ public partial class MainWindow : Window
             viewModel.CycleScreenBackCommand.Execute(null);
             e.Handled = true;
         }
+        // Metadata-edit Undo/Redo (docs/ce-feature-inventory.md §A) - added 2026-09-05 as this
+        // app's first keyboard access to it, replacing the rail's own Undo/Redo buttons (removed
+        // the same day - the rail was getting cluttered and this is the standard shortcut anyway).
+        else if (e.Key == Key.Z && e.KeyModifiers == KeyModifiers.Control)
+        {
+            viewModel.UndoCommand.Execute(null);
+            e.Handled = true;
+        }
+        else if (e.Key == Key.Y && e.KeyModifiers == KeyModifiers.Control)
+        {
+            viewModel.RedoCommand.Execute(null);
+            e.Handled = true;
+        }
     }
 
     /// <summary>
@@ -255,9 +268,20 @@ public partial class MainWindow : Window
         }
     }
 
-    /// <summary>docs/superpowers/specs/2026-08-24-navigation-shell-motion-system-design.md - hover-expand is transient UI state, not worth a full binding round-trip; a plain code-behind handler matches this file's existing event-handler pattern (OnWindowClosing etc).</summary>
+    /// <summary>docs/superpowers/specs/2026-08-24-navigation-shell-motion-system-design.md - hover-expand is transient UI state, not worth a full binding round-trip; a plain code-behind handler matches this file's existing event-handler pattern (OnWindowClosing etc).
+    /// Gated by AppSettings.NavRailHoverExpandEnabled (Preferences -> Appearance -> Navigation, added
+    /// 2026-09-05) - read fresh from the DB on every hover rather than proxied through
+    /// PreferencesScreenViewModel, so it's correct even if Preferences has never been opened this
+    /// session (that VM's own copy is lazy-loaded). Pinning (NavRailPinned) is a separate mechanism,
+    /// unaffected by this toggle.</summary>
     private void RailPointerEntered(object? sender, PointerEventArgs e)
     {
+        using var context = PaperbunkrDb.CreateContext();
+        if (!context.GetOrCreateAppSettings().NavRailHoverExpandEnabled)
+        {
+            return;
+        }
+
         _railCollapseTimer.Stop();
         if (DataContext is MainViewModel viewModel)
         {

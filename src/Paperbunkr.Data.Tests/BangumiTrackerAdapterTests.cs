@@ -128,6 +128,61 @@ public class BangumiTrackerAdapterTests : IDisposable
         Assert.False(result);
     }
 
+    [Fact]
+    public async Task GetEntryAsync_NoStoredToken_ReturnsNull_WithoutSendingRequest()
+    {
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        var adapter = new BangumiTrackerAdapter(new HttpClient(new StubHandler((_, _) => throw new InvalidOperationException("should not send"))));
+
+        var result = await adapter.GetEntryAsync(context, new TrackingLink { ExternalId = "12" }, CancellationToken.None);
+
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public async Task GetEntryAsync_ParsesTypeAndEpStatus()
+    {
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        BangumiTrackerAdapter.CompleteConnect(context, "pat-123");
+
+        var adapter = new BangumiTrackerAdapter(new HttpClient(new StubHandler((req, _) =>
+        {
+            Assert.Equal(HttpMethod.Get, req.Method);
+            return JsonResponse(HttpStatusCode.OK, """{ "type": 3, "ep_status": 8 }""");
+        })));
+
+        var result = await adapter.GetEntryAsync(context, new TrackingLink { ExternalId = "12" }, CancellationToken.None);
+
+        Assert.NotNull(result);
+        Assert.Equal(ReadingStatus.Reading, result!.Status);
+        Assert.Equal(8, result.ChapterProgress);
+    }
+
+    [Fact]
+    public async Task GetEntryAsync_NotFound_ReturnsNull()
+    {
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        BangumiTrackerAdapter.CompleteConnect(context, "pat-123");
+
+        var adapter = new BangumiTrackerAdapter(new HttpClient(new StubHandler((_, _) => new HttpResponseMessage(HttpStatusCode.NotFound))));
+
+        var result = await adapter.GetEntryAsync(context, new TrackingLink { ExternalId = "12" }, CancellationToken.None);
+
+        Assert.Null(result);
+    }
+
+    [Theory]
+    [InlineData(1, ReadingStatus.Planned)]
+    [InlineData(2, ReadingStatus.Completed)]
+    [InlineData(3, ReadingStatus.Reading)]
+    [InlineData(4, ReadingStatus.Paused)]
+    [InlineData(5, ReadingStatus.Dropped)]
+    [InlineData(99, ReadingStatus.Unknown)]
+    public void BangumiCollectionTypeMapper_FromCollectionType_MapsEveryValue(int type, ReadingStatus expected)
+    {
+        Assert.Equal(expected, BangumiCollectionTypeMapper.FromCollectionType(type));
+    }
+
     private static HttpResponseMessage JsonResponse(HttpStatusCode status, string json) => new(status)
     {
         Content = new StringContent(json, Encoding.UTF8, "application/json"),

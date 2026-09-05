@@ -117,6 +117,63 @@ public class MangaBakaTrackerAdapterTests : IDisposable
         Assert.Equal(expected, MangaBakaLibraryStateMapper.ToState(status));
     }
 
+    [Theory]
+    [InlineData("plan_to_read", ReadingStatus.Planned)]
+    [InlineData("reading", ReadingStatus.Reading)]
+    [InlineData("completed", ReadingStatus.Completed)]
+    [InlineData("paused", ReadingStatus.Paused)]
+    [InlineData("dropped", ReadingStatus.Dropped)]
+    [InlineData("rereading", ReadingStatus.ReReading)]
+    [InlineData("considering", ReadingStatus.Unknown)]
+    public void FromState_MapsEveryValue(string raw, ReadingStatus expected)
+    {
+        Assert.Equal(expected, MangaBakaLibraryStateMapper.FromState(raw));
+    }
+
+    [Fact]
+    public async Task GetEntryAsync_NoStoredToken_ReturnsNull_WithoutSendingRequest()
+    {
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        var adapter = new MangaBakaTrackerAdapter(new HttpClient(new StubHandler((_, _) => throw new InvalidOperationException("should not send"))));
+
+        var result = await adapter.GetEntryAsync(context, new TrackingLink { ExternalId = "708" }, CancellationToken.None);
+
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public async Task GetEntryAsync_ParsesStateAndProgressChapter()
+    {
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        MangaBakaTrackerAdapter.CompleteConnect(context, "mb-test-token");
+
+        var adapter = new MangaBakaTrackerAdapter(new HttpClient(new StubHandler((req, _) =>
+        {
+            Assert.Equal(HttpMethod.Get, req.Method);
+            Assert.Equal("https://api.mangabaka.org/v1/my/library/708", req.RequestUri!.ToString());
+            return JsonResponse(HttpStatusCode.OK, """{ "data": { "state": "reading", "progress_chapter": 14 } }""");
+        })));
+
+        var result = await adapter.GetEntryAsync(context, new TrackingLink { ExternalId = "708" }, CancellationToken.None);
+
+        Assert.NotNull(result);
+        Assert.Equal(ReadingStatus.Reading, result!.Status);
+        Assert.Equal(14, result.ChapterProgress);
+    }
+
+    [Fact]
+    public async Task GetEntryAsync_NotFound_ReturnsNull()
+    {
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        MangaBakaTrackerAdapter.CompleteConnect(context, "mb-test-token");
+
+        var adapter = new MangaBakaTrackerAdapter(new HttpClient(new StubHandler((_, _) => new HttpResponseMessage(HttpStatusCode.NotFound))));
+
+        var result = await adapter.GetEntryAsync(context, new TrackingLink { ExternalId = "708" }, CancellationToken.None);
+
+        Assert.Null(result);
+    }
+
     private static HttpResponseMessage JsonResponse(HttpStatusCode status, string json) => new(status)
     {
         Content = new StringContent(json, Encoding.UTF8, "application/json"),

@@ -15,4 +15,6 @@ public static class TrackerHttpClients
     public static readonly HttpClient MyAnimeList = new() { Timeout = TimeSpan.FromSeconds(15) };
     public static readonly HttpClient Shikimori = new() { Timeout = TimeSpan.FromSeconds(15) };
     public static readonly HttpClient Bangumi = new() { Timeout = TimeSpan.FromSeconds(15) };
+    public static readonly HttpClient MangaUpdates = new() { Timeout = TimeSpan.FromSeconds(15) };
+    public static readonly HttpClient Kitsu = new() { Timeout = TimeSpan.FromSeconds(15) };
 }

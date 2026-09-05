@@ -46,7 +46,7 @@ public class LiveFolderWatchServiceTests : IDisposable
         }
     }
 
-    private LiveFolderWatchService CreateService(Action<string, string>? showToast = null, Action? onLibraryChanged = null)
+    private LiveFolderWatchService CreateService(Action<string, string>? showToast = null, Action? onLibraryChanged = null, Action<int>? onFilesMissing = null, Action<IReadOnlyList<int>>? onFilesImported = null)
     {
         return new LiveFolderWatchService(
             () => new PaperbunkrDbContext(_dbOptions),
@@ -54,7 +54,9 @@ public class LiveFolderWatchServiceTests : IDisposable
             showToast ?? ((_, _) => { }),
             onLibraryChanged ?? (() => { }),
             DebounceWindow,
-            RetryDelay);
+            RetryDelay,
+            onFilesMissing,
+            onFilesImported);
     }
 
     private void AddWatchedFolder(string path, bool watch)
@@ -113,6 +115,36 @@ public class LiveFolderWatchServiceTests : IDisposable
         // several debounce cycles, then assert nothing landed.
         await Task.Delay(DebounceWindow + DebounceWindow);
         Assert.Equal(0, IssueCount());
+    }
+
+    [Fact]
+    public async Task Created_FileDuplicatingExisting_InvokesOnFilesImported_WithAddedIds()
+    {
+        AddWatchedFolder(_scanRoot, watch: true);
+
+        int existingIssueId;
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            var series = new Series { Name = "Kilo Station" };
+            context.Series.Add(series);
+            var issue = new Issue { Series = series, Number = "12", FilePath = @"C:\lib\kilo012_existing.cbz" };
+            context.Issues.Add(issue);
+            context.SaveChanges();
+            existingIssueId = issue.Id;
+        }
+
+        IReadOnlyList<int>? imported = null;
+        using var service = CreateService(onFilesImported: ids => imported = ids);
+        service.Start();
+
+        CbzFixture.Create(Path.Combine(_scanRoot, "Kilo Station 012 (2021).cbz"), pageCount: 1);
+
+        bool notified = await WaitUntilAsync(() => imported is not null, PollTimeout);
+        Assert.True(notified, "Expected the import to invoke onFilesImported once the new file was added.");
+
+        using var verifyContext = new PaperbunkrDbContext(_dbOptions);
+        int newIssueId = verifyContext.Issues.Single(i => i.Id != existingIssueId).Id;
+        Assert.Equal(new[] { newIssueId }, imported);
     }
 
     [Fact]
@@ -201,6 +233,25 @@ public class LiveFolderWatchServiceTests : IDisposable
 
         using var finalContext = new PaperbunkrDbContext(_dbOptions);
         Assert.False(finalContext.Issues.Single(i => i.Id == issueId).MissingAcknowledged);
+    }
+
+    [Fact]
+    public async Task Deleted_WatchedFile_RaisesOnFilesMissing_WithCount()
+    {
+        AddWatchedFolder(_scanRoot, watch: true);
+        int? reportedCount = null;
+        using var service = CreateService(onFilesMissing: count => reportedCount = count);
+        service.Start();
+
+        string path = Path.Combine(_scanRoot, "Kilo Station 012 (2021).cbz");
+        CbzFixture.Create(path, pageCount: 1);
+        Assert.True(await WaitUntilAsync(() => IssueCount() == 1, PollTimeout));
+
+        File.Delete(path);
+
+        bool notified = await WaitUntilAsync(() => reportedCount is not null, PollTimeout);
+        Assert.True(notified, "Expected the deletion flush to invoke onFilesMissing so the caller can surface an alert.");
+        Assert.Equal(1, reportedCount);
     }
 
     [Fact]

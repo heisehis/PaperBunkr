@@ -654,7 +654,7 @@
                         Background="{DynamicResource PbSurfaceAltBrush}" Foreground="{DynamicResource PbTextMutedBrush}" BorderThickness="0">
                     <StackPanel Orientation="Horizontal" Spacing="5">
                         <fi:SymbolIcon Symbol="ArrowSync" FontSize="{StaticResource PbIconSizeXs}" VerticalAlignment="Center" />
-                        <TextBlock Text="Sync to Trackers" VerticalAlignment="Center" />
+                        <TextBlock Text="Sync with Trackers" VerticalAlignment="Center" />
                     </StackPanel>
                 </Button>
             </StackPanel>

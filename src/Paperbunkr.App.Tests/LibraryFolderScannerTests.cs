@@ -67,7 +67,9 @@ public class LibraryFolderScannerTests : IDisposable
         using var context = new PaperbunkrDbContext(_dbOptions);
         var series = Assert.Single(context.Series);
         Assert.Equal("Kilo Station", series.Name);
+
         var issue = Assert.Single(context.Issues.Include(i => i.MetadataProposals));
+        Assert.Equal(new[] { issue.Id }, result.AddedIssueIds);
         // No embedded ComicInfo.xml - Number/Year land as MetadataProposal rows (docs/superpowers/
         // specs/2026-08-17-metadata-model-phase2a-metadata-proposals-design.md), not direct field
         // writes. Default policy is Automatic, so they're already Accepted and Effective* surfaces

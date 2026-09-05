@@ -2,6 +2,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Paperbunkr.App.ViewModels"
              xmlns:models="using:Paperbunkr.App.Models"
+             xmlns:views="using:Paperbunkr.App.Views"
              xmlns:fi="using:FluentIcons.Avalonia"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -43,6 +44,43 @@
                         <Button Classes="rowAction destructive" Content="{Binding DeleteConfirm.Label}" Command="{Binding DeleteConfirm.TriggerCommand}" />
                     </StackPanel>
                 </Grid>
+            </Border>
+        </DataTemplate>
+
+        <DataTemplate x:Key="DuplicateGroupRowTemplate" x:DataType="vm:DuplicateGroupRowViewModel">
+            <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1" CornerRadius="6" Padding="12,10" Margin="0,0,0,8">
+                <StackPanel Spacing="6">
+                    <Grid ColumnDefinitions="*,Auto">
+                        <TextBlock Grid.Column="0" Text="{Binding GroupLabel}" FontWeight="SemiBold" FontSize="13"
+                                   Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
+                            <Button Classes="rowAction" Content="Dismiss" Command="{Binding DismissCommand}" />
+                            <Button Classes="rowAction destructive" Content="Resolve" Command="{Binding ResolveCommand}" />
+                        </StackPanel>
+                    </Grid>
+                    <ItemsControl ItemsSource="{Binding Candidates}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:DuplicateCandidateViewModel">
+                                <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto" Margin="0,4,0,0">
+                                    <RadioButton Grid.Column="0" GroupName="{Binding GroupKey}" IsChecked="{Binding IsKeep}" VerticalAlignment="Center"
+                                                 AutomationProperties.Name="{Binding FileName, StringFormat='Keep {0}'}" />
+                                    <Border Grid.Column="1" Width="28" Height="38" Margin="6,0" CornerRadius="3" ClipToBounds="True"
+                                            Background="{DynamicResource PbSurface3Brush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1">
+                                        <Image views:AsyncCoverImage.SourceId="{Binding IssueId}" Stretch="UniformToFill" />
+                                    </Border>
+                                    <TextBlock Grid.Column="2" Text="{Binding FileName}" FontSize="12.5" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                                               Foreground="{DynamicResource PbTextBrush}" IsVisible="{Binding IsKeep}" />
+                                    <TextBlock Grid.Column="2" Text="{Binding FileName}" FontSize="12.5" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                                               Foreground="{DynamicResource PbTextMutedBrush}" IsVisible="{Binding !IsKeep}" />
+                                    <TextBlock Grid.Column="3" Text="{Binding SizeLabel}" FontSize="11.5" Foreground="{DynamicResource PbTextMutedBrush}"
+                                               VerticalAlignment="Center" Margin="10,0,0,0" />
+                                    <TextBlock Grid.Column="4" Text="{Binding DateLabel}" FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}"
+                                               VerticalAlignment="Center" Margin="10,0,0,0" />
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
             </Border>
         </DataTemplate>
 
@@ -292,6 +330,14 @@
                         <StackPanel IsVisible="{Binding NeedsReview.HasMissingFileItems}">
                             <TextBlock Classes="sectionHeading" Text="Missing Files" />
                             <ItemsControl ItemsSource="{Binding NeedsReview.MissingFileItems}" ItemTemplate="{StaticResource MissingFileRowTemplate}" />
+                        </StackPanel>
+
+                        <StackPanel IsVisible="{Binding NeedsReview.HasDuplicateFileItems}">
+                            <TextBlock Classes="sectionHeading" Text="Duplicate Files" />
+                            <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,0,0,10">
+                                <Button Classes="rowAction destructive" Content="Keep Largest in All Groups" Command="{Binding NeedsReview.KeepLargestInAllGroupsCommand}" />
+                            </StackPanel>
+                            <ItemsControl ItemsSource="{Binding NeedsReview.DuplicateGroupItems}" ItemTemplate="{StaticResource DuplicateGroupRowTemplate}" />
                         </StackPanel>
 
                         <StackPanel IsVisible="{Binding NeedsReview.HasSeriesConflictItems}">

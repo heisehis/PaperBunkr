@@ -18,7 +18,7 @@ using Paperbunkr.Plugins.Hooks;
 namespace Paperbunkr.App.Services;
 
 /// <summary>Result of a completed <see cref="LibraryFolderScanner"/> run.</summary>
-public record LibraryFolderScanResult(int IssuesAdded, int SeriesTouched);
+public record LibraryFolderScanResult(int IssuesAdded, int SeriesTouched, IReadOnlyList<int> AddedIssueIds);
 
 /// <summary>Result of a completed <see cref="LibraryFolderScanner.SyncMetadataAsync"/> run.</summary>
 public record LibraryMetadataSyncResult(int IssuesUpdated);
@@ -146,6 +146,7 @@ public class LibraryFolderScanner
         // instead of creating a duplicate per file.
         var seriesByName = context.Series.ToList().ToDictionary(s => s.Name, s => s, StringComparer.OrdinalIgnoreCase);
         var seriesTouched = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var addedIssues = new List<Issue>();
         int issuesAdded = 0;
 
         // Series-mismatch proposals that were auto-Accepted this scan (docs/superpowers/specs/
@@ -313,6 +314,7 @@ public class LibraryFolderScanner
                 series.Issues.Add(issue);
                 context.Issues.Add(issue);
 
+                addedIssues.Add(issue);
                 issuesAdded++;
                 seriesTouched.Add(seriesName);
             }
@@ -336,7 +338,7 @@ public class LibraryFolderScanner
             SeriesReassignmentResolver.Apply(context, proposal);
         }
 
-        return new LibraryFolderScanResult(issuesAdded, seriesTouched.Count);
+        return new LibraryFolderScanResult(issuesAdded, seriesTouched.Count, addedIssues.Select(i => i.Id).ToList());
     }
 
     /// <summary>

@@ -31,6 +31,22 @@ public sealed class AniListTrackerAdapter : ITrackerAdapter
         }
         """;
 
+    /// <summary><c>mediaListEntry</c> on <c>Media</c> resolves to the authenticated viewer's own list
+    /// entry for that media (confirmed live against AniList's own API docs, docs.anilist.co/guide/
+    /// graphql/queries/media-list) - no separate numeric AniList user id needed, unlike Mihon's own
+    /// <c>findLibManga</c> (which queries <c>Page.mediaList(userId:, mediaId:)</c> and therefore has
+    /// to look up the viewer's id first). Null when unauthenticated or the media has no entry yet.</summary>
+    private const string GetMediaListEntryQuery = """
+        query ($mediaId: Int) {
+          Media(id: $mediaId) {
+            mediaListEntry {
+              status
+              progress
+            }
+          }
+        }
+        """;
+
     private readonly HttpClient _httpClient;
 
     public AniListTrackerAdapter(HttpClient httpClient)
@@ -104,6 +120,63 @@ public sealed class AniListTrackerAdapter : ITrackerAdapter
             }
         }
     }
+
+    public async Task<TrackerRemoteEntry?> GetEntryAsync(PaperbunkrDbContext context, TrackingLink link, CancellationToken cancellationToken)
+    {
+        string? accessToken = CredentialStore.Get(context, nameof(TrackingService.AniList), CredentialKind.OAuthAccessToken);
+        if (string.IsNullOrEmpty(accessToken) || !int.TryParse(link.ExternalId, out int mediaId))
+        {
+            return null;
+        }
+
+        var request = new HttpRequestMessage(HttpMethod.Post, Endpoint)
+        {
+            Content = JsonContent.Create(new { query = GetMediaListEntryQuery, variables = new { mediaId } }),
+        };
+        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", accessToken);
+
+        HttpResponseMessage response;
+        try
+        {
+            response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
+        }
+        catch (HttpRequestException)
+        {
+            return null;
+        }
+        catch (TaskCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            return null;
+        }
+
+        using (response)
+        {
+            if (!response.IsSuccessStatusCode)
+            {
+                return null;
+            }
+
+            AniListMediaListEntryResponse? parsed;
+            try
+            {
+                parsed = await response.Content
+                    .ReadFromJsonAsync<AniListMediaListEntryResponse>(cancellationToken: cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            catch (System.Text.Json.JsonException)
+            {
+                return null;
+            }
+
+            if (parsed?.Errors is { Count: > 0 })
+            {
+                return null;
+            }
+
+            var entry = parsed?.Data?.Media?.MediaListEntry;
+            return entry is null ? null : new TrackerRemoteEntry(AniListStatusMapper.FromMediaListStatus(entry.Status), entry.Progress);
+        }
+    }
 }
 
 /// <summary><see cref="ReadingStatus"/> -&gt; AniList's <c>MediaListStatus</c> enum - clean 1:1, no
@@ -120,10 +193,54 @@ public static class AniListStatusMapper
         ReadingStatus.ReReading => "REPEATING",
         _ => "PLANNING",
     };
+
+    /// <summary>Reverse of <see cref="ToMediaListStatus"/> - clean 1:1 both ways, unlike services
+    /// whose push side is already lossy. Unrecognized/null resolves to <see cref="ReadingStatus.Unknown"/>
+    /// rather than guessing.</summary>
+    public static ReadingStatus FromMediaListStatus(string? status) => status switch
+    {
+        "PLANNING" => ReadingStatus.Planned,
+        "CURRENT" => ReadingStatus.Reading,
+        "COMPLETED" => ReadingStatus.Completed,
+        "PAUSED" => ReadingStatus.Paused,
+        "DROPPED" => ReadingStatus.Dropped,
+        "REPEATING" => ReadingStatus.ReReading,
+        _ => ReadingStatus.Unknown,
+    };
 }
 
 internal sealed class AniListMutationResponse
 {
     [JsonPropertyName("errors")]
     public System.Collections.Generic.List<object>? Errors { get; set; }
+}
+
+internal sealed class AniListMediaListEntryResponse
+{
+    [JsonPropertyName("data")]
+    public AniListMediaListEntryData? Data { get; set; }
+
+    [JsonPropertyName("errors")]
+    public System.Collections.Generic.List<object>? Errors { get; set; }
+}
+
+internal sealed class AniListMediaListEntryData
+{
+    [JsonPropertyName("Media")]
+    public AniListMediaListEntryMedia? Media { get; set; }
+}
+
+internal sealed class AniListMediaListEntryMedia
+{
+    [JsonPropertyName("mediaListEntry")]
+    public AniListMediaListEntryDto? MediaListEntry { get; set; }
+}
+
+internal sealed class AniListMediaListEntryDto
+{
+    [JsonPropertyName("status")]
+    public string? Status { get; set; }
+
+    [JsonPropertyName("progress")]
+    public int? Progress { get; set; }
 }

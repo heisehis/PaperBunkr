@@ -46,13 +46,23 @@ everything below — as Alpha**, effective 2026-08-07.
 
 ## Known gaps in shipped Alpha work
 
-Carry these into Beta polish, not blocking the Alpha declaration itself:
+Carry these into Beta polish, not blocking the Alpha declaration itself.
 
-- `PageCanvas` requires a click before arrow-key navigation registers in the Reader
-- Virtual Tags compute correctly but aren't wired into Smart Lists or any display surface yet
-- Content-type classification is a manual dropdown on Detail — no real §7/§9 auto-classify pipeline
-- Series.Genre vs Issue.Genre display inconsistency — mostly fixed during Detail-focus work, worth
-  a final pass
+**Manual session note (2026-09-05): 3 of 4 were already fixed, this list just never got updated.**
+Checked each against `docs/alpha-todo.md`, the doc a human actually maintains status in:
+
+- ~~`PageCanvas` requires a click before arrow-key navigation registers in the Reader~~ — **fixed**,
+  `alpha-todo.md` line 467.
+- ~~Virtual Tags compute correctly but aren't wired into Smart Lists or any display surface yet~~ —
+  **fixed**, wired into both (`alpha-todo.md` lines 477-478).
+- ~~Series.Genre vs Issue.Genre display inconsistency~~ — **fixed**, full audit done
+  (`alpha-todo.md` line 486).
+- **Content-type classification is a manual dropdown on Detail — no real §7/§9 auto-classify
+  pipeline.** Still genuinely open, and it's not a small fix — see "Content-type classification &
+  manga metadata scraping" below, which is the real tracking entry for this. Partially built
+  already (publisher-based heuristic classifier, tracker sync stages 1-4, manga detail screen,
+  MangaBaka + MangaUpdates + Kitsu adapters, Apply-from-Provider, MangaDex metadata scraping,
+  two-way tracker sync all shipped); only the Stage 5 stats dashboard remains unbuilt.
 
 ## Before tagging a release
 
@@ -597,17 +607,148 @@ handling) were already implemented in the codebase — surfaced while researchin
 work, not built by it. MangaUpdates/Kitsu adapters, two-way sync, and Stage 5's statistics
 dashboard remain unbuilt.
 
-**Confirmed gap found 2026-08-23, deferred to a future session on the user's own call**: linking a
-series to external metadata (AniList or MangaBaka) has never applied the fetched data to any
-editable field. `MetadataLinkResolver.LinkAsync` only ever writes an `ExternalMediaId` reference,
-appends a raw-JSON `ExternalMetadataSnapshot` (audit log), and adds alt-titles to `SeriesTitle` -
-`Description`/`Status`/`ChapterCount`/`VolumeCount` are fetched and stored in the snapshot but never
-read back anywhere; `ExternalMetadataResolver.GetLatestSnapshot` is called only from its own unit
-tests, confirmed by grep. Been true since Phase 5b, not something this session broke. The existing
-`MetadataProposal` accept/reject system (filename/embedded-metadata inference) doesn't cover this
-cleanly either - it's Issue-scoped (Title/Format/Volume/Number/Count/Year/Series only), while
-Summary/Status are Series-level. A real "Apply from [Provider]" feature is needed, not a reuse of
-what's there.
+**MangaUpdates tracker adapter shipped 2026-09-05** — the 5th of the 6 originally-scoped services.
+MangaUpdates publishes no public API reference; verified against Mihon's real
+`MangaUpdatesApi.kt`/`MangaUpdates.kt`/DTO source (fetched live via `gh api` against
+`mihonapp/mihon`) rather than guessing the shape, per this project's standing rule to verify before
+assuming. Auth is its own username/password → session-token login (`PUT /v1/account/login`), not
+OAuth and not a pasted PAT like Bangumi/MangaBaka — the password is used once and never stored,
+only the returned `session_token` (kept in `CredentialStore` under `CredentialKind.OAuthAccessToken`,
+same "bearer token" storage kind AniList/Shikimori use for their own tokens). `PushEntryAsync`
+mirrors the real API's own two-call shape confirmed from Mihon's source: a `GET /lists/series/{id}`
+existence check, `POST /lists/series` to add a series not yet on any list (that endpoint doesn't
+accept a status payload), then always `POST /lists/series/update` to set list/chapter — so a
+first-time push costs three requests, a repeat push two. `MangaUpdatesListMapper` maps
+`ReadingStatus` to the service's five list IDs (Reading=0/Wish=1/Complete=2/Unfinished=3/OnHold=4,
+confirmed against Mihon's companion constants); no dedicated re-reading list exists on this service
+(Mihon's own `getRereadingStatus()` returns "unsupported"), so `ReReading` collapses into Reading,
+same lossy-collapse precedent as `BangumiCollectionTypeMapper`. Wired into `DetailTabsViewModel`'s
+tracker-service picker/search/sync-loop and a new Preferences username/password connect field
+(`ConnectionsSection.axaml`) — `MangaUpdates` already had a `MU` `BrandMark` abbreviation registered,
+so no new iconography needed. 14 new `Paperbunkr.Data.Tests` (770 total in that project, all
+green); `Paperbunkr.App.Tests` DetailTabsViewModel/PreferencesScreenViewModel suites (130 tests)
+green. On-screen verification of the new Preferences connect UI is the standing gap, same caveat as
+every other tracker's connect flow.
+
+**MangaDex metadata provider shipped 2026-09-05** — closes the "MangaDex second provider" item that
+`2026-08-19-metadata-model-second-provider-mangadex-design.md` had explicitly sketched-only ("build
+later"). Built to that spec almost exactly as sketched: `MangaDexMetadataProvider` mirrors
+`AniListMetadataProvider`'s shape (throws `MetadataProviderUnavailableException` on a failed call,
+rather than `MangaBakaMetadataProvider`'s looser "return empty" behavior — matches the documented
+contract on `IMetadataProvider` itself) but calls MangaDex's REST API (`GET /manga?title=`,
+`GET /manga/{id}`, both unauthenticated) instead of AniList's GraphQL. Rate-limited to one request
+per 400ms (~2.5 req/s), under MangaDex's documented ~5 req/s/IP global limit (re-verified live this
+session, matches the figure already recorded in `docs/open_items_resolved.md` §2 before this
+provider existed) — same conservative-under-the-limit posture as every other provider in this file.
+Title normalization handles MangaDex's richer language-keyed `title`/`altTitles` maps (checks the
+primary map first, then the first matching entry in the plural `altTitles` array — "first title per
+language only" per the spec's own open question) into the same `TitleEnglish`/`TitleRomaji`/
+`TitleNative` fields `MetadataLinkResolver` already consumes, so `MetadataLinkResolver`/
+`TitleMatchScorer` needed zero changes, exactly as the spec predicted. `Genre` only pulls
+`group: "genre"` tags (MangaDex separately tags theme/format/content) so it doesn't over-broaden
+what this codebase treats as Genre. `ChapterCount`/`VolumeCount` are left null - MangaDex doesn't
+expose per-series totals on this endpoint (would need `/manga/{id}/aggregate`, deliberately out of
+scope - a different, larger feature from onboarding.md §9's own deferred "chapter/volume alignment"
+item, not started). No schema change (`ExternalMetadataProvider.MangaDex` already existed, unused).
+UI is one line: added to `DetailTabsViewModel.MetadataProviderOptions` and `GetMetadataProviderFor`
+- the picker in `DetailTabs.axaml` is a plain `ComboBox` bound to that static array, so the new
+option appears with no XAML change. Metadata-only, deliberately not an `ITrackerSearchProvider`/
+`ITrackerAdapter` like AniList/MangaBaka - MangaDex has no authenticated per-user library API to
+push progress to. 10 new `Paperbunkr.Data.Tests` (780 total in that project, all green);
+`DetailTabsViewModel` suite (55 tests) green. On-screen verification of the new provider-picker
+entry is the standing gap, same caveat as every other metadata/tracker UI here.
+
+**Kitsu tracker adapter shipped 2026-09-05** — the 6th and last of the originally-scoped services,
+closing out the tracker-sync half of this section entirely (Stages 1-4 now cover all six).
+GraphQL (`https://kitsu.app/api/graphql`), confirmed against Mihon's real `KitsuApi.kt`/`Kitsu.kt`/
+DTO source. **Real wrinkle, resolved with the user before building:** Kitsu has no self-serve
+third-party app registration, so unlike AniList/MyAnimeList/Shikimori (each user registers their
+own OAuth app), there's no client_id/secret a Paperbunkr user could generate themselves. Every
+open-source manga reader that supports Kitsu (Mihon, Komikku, forks) ships the same hardcoded
+credential pair; the user explicitly chose to reuse it (2026-09-05) rather than skip the adapter,
+understanding it isn't Paperbunkr's own registered app and Kitsu could revoke/rate-limit it without
+notice — the one tracker here with that specific risk called out. Login is OAuth2 password grant
+(`POST /api/oauth/token`, form-encoded username/password/grant_type=password/client_id/
+client_secret) storing both `access_token` and `refresh_token`. Unlike every other tracker's search
+(public, or gated only by a Client ID header for MyAnimeList), Kitsu's GraphQL API requires a full
+bearer token for search too — confirmed from Mihon's own `search()` using its authenticated client
+— so `KitsuTrackerAdapter.SearchAsync` returns empty (not connected yet, not a provider failure,
+same idiom as MyAnimeList's null-Client-ID case) rather than working pre-connection.
+`PushEntryAsync` mirrors Kitsu's real two-mutation shape: a `findMangaById { myLibraryEntry { id } }`
+query to check for an existing library entry, then either an `AddManga` or `UpdateManga` GraphQL
+mutation - handling Kitsu's own "two different error shapes on HTTP 200" quirk (a transport-level
+`errors`/`error` alongside a separate mutation-payload-level `errors` nested under the result,
+confirmed from Mihon's own doc comment on this). `KitsuStatusMapper` maps to Kitsu's
+`LibraryEntryStatusEnum` (`CURRENT`/`PLANNED`/`COMPLETED`/`ON_HOLD`/`DROPPED`); no dedicated
+re-reading status exists on this service (Mihon's own `getRereadingStatus()` returns "unsupported"),
+so `ReReading` collapses into `CURRENT`, same lossy-collapse precedent as
+`BangumiCollectionTypeMapper`/`MangaUpdatesListMapper`. Wired into `DetailTabsViewModel`'s
+tracker-service picker/search/sync-loop and a new Preferences username/password connect field
+(`ConnectionsSection.axaml`) — `Kitsu` already had a `KT` `BrandMark` abbreviation registered.
+17 new `Paperbunkr.Data.Tests`; `DetailTabsViewModel`/`PreferencesScreenViewModel` suites (132
+tests) green. On-screen verification of the new Preferences connect UI is the standing gap, same
+caveat as every other tracker's connect flow. **Unrelated to this adapter, found while running the
+full suite:** 7 pre-existing `Paperbunkr.Data.Tests` migration round-trip tests
+(`LibraryDetailsColumnsMigrationTests`, `AddBookReaderErgonomicsAndAnnotationsMigrationTests`,
+`ReworkBookHighlightAnchorMigrationTests`, `AddLastContentTypeSweepUtcMigrationTests`,
+`AddFb2MobiBookFormatMigrationTests`, `AddBooksBrowseStateMigrationTests`, one more) are currently
+failing (`no such column: "LibraryGroupField"` on an up/down round-trip) - not caused by this
+session's changes (nothing here touches migrations, `Issue.cs`, or the model snapshot); most likely
+from a concurrent session's in-progress `AddIssueDuplicateAcknowledged` migration work sitting
+uncommitted in the same working tree. Flagged, not fixed - not this session's scope to untangle
+another session's in-flight migration.
+
+**Two-way tracker sync shipped 2026-09-05** (design: docs/superpowers/specs/2026-09-05-two-way-
+tracker-sync-design.md) — the last of the two remaining items in this section, and the reason
+`ITrackerAdapter.cs`'s own doc comment had been reserving a spot for a `GetEntryAsync` method since
+2026-08-23 ("Phase A scope only... add it back only when a Phase B pull/bidirectional spec actually
+needs it" - this is that spec). **Two real decisions the user made before this was built, not
+assumed:** (1) a pulled remote chapter-progress number auto-marks local `Issue`s read up to that
+number (via the existing `IssueReadStateResolver.MarkAsRead`, which already safely no-ops on an
+issue whose `PageCount` isn't known yet) rather than only being displayed — accepted with the
+caveat that `Issue.Number` isn't guaranteed to line up with a tracker's own chapter numbering
+(TPB folding, variant issues); (2) conflicts resolve silently to "whichever side is further along"
+(`TrackerSyncResolver.RemoteWins`, extending Komikku's own "keep the higher last-read chapter" rule
+to also cover `ReadingStatus` as a tie-break when progress is equal) rather than a confirmation
+prompt — even though the original research doc had recommended a prompt if two-way sync were ever
+built.
+
+`GetEntryAsync` is now implemented on all 7 tracker adapters (the six originally scoped plus
+MangaBaka), each verified against a real source rather than guessed: AniList uses `Media.
+mediaListEntry` (confirmed against AniList's own docs - no numeric user id lookup needed, simpler
+than Mihon's own `Page.mediaList(userId:, mediaId:)` approach); MyAnimeList re-fetches `/manga/{id}?
+fields=my_list_status{...}`; Shikimori/Kitsu/MangaUpdates each got their existing "does an entry
+already exist" push-side lookup extended to also return status/progress, so pull costs no extra
+HTTP round trip beyond what push already made; Bangumi and MangaBaka each gained a new `GET` call
+(`/v0/users/-/collections/{id}` and `/v1/my/library/{id}` respectively) that push never needed
+before. `SyncToTrackersAsync` (button relabeled "Sync with Trackers") now calls `GetEntryAsync`
+first for each link, applying `TrackerSyncResolver`'s verdict before falling back to the existing
+push path - local progress/status are recomputed fresh before each link's comparison rather than
+once up front, so a pull applied earlier in the same pass is visible to the next link. A pulled
+mark-as-read swaps the same `Issues`/`Specials` tiles and fires the same `_onSelectionChanged`
+callback the manual mark-as-read context-menu action already uses, so the Detail screen's
+unread-count hero doesn't go stale. 32 new `Paperbunkr.Data.Tests` (`TrackerSyncResolverTests` plus
+`GetEntryAsync`/reverse-mapper cases across all 7 adapter test files); full suite 880 total, 873
+green (the 7 pre-existing unrelated migration failures noted above, unchanged by this work);
+`DetailTabsViewModel`/`PreferencesScreenViewModel` suites (132 tests) green. On-screen verification
+of the new pulled-progress behavior (does a real mark-as-read actually show up in the Issues tab
+after a sync) is the standing gap, same caveat as every other tracker UI here - doubly so here since
+it's the one feature in this file that mutates local library state as a side effect of a sync
+action, not just tracker-side state.
+
+**Gap found 2026-08-23, closed same day** (this section previously said "deferred" — stale, fixed
+here): linking a series to external metadata (AniList or MangaBaka) had never applied the fetched
+data to any editable field. `MetadataLinkResolver.LinkAsync` only ever wrote an `ExternalMediaId`
+reference, an audit-log `ExternalMetadataSnapshot`, and alt-titles — `Description`/`Status`/
+`ChapterCount`/`VolumeCount` were fetched and stored but never read back anywhere. Closed same
+session via a real "Apply from [Provider]" feature (design spec `2026-08-23-apply-from-provider-
+design.md`), built around the existing `MetadataProposal` accept/reject system rather than a
+parallel one: `MetadataProposal.IssueId` widened to nullable, new nullable `SeriesId`/`ProviderKey`
+columns (one polymorphic table), `MetadataProposalField` gained `Summary`/`Status`/`Genre`.
+Series-scoped proposals auto-accept-and-overwrite in `MetadataLinkResolver.LinkAsync` (the user's
+own choice over a "pending, needs review" default) since there's no filename-vs-XML race to
+arbitrate for these fields. A new `SeriesStatusNormalizer` maps provider status strings to
+`SeriesStatus`, unrecognized → `Unknown` rather than clobbering a good stored value.
 
 **MangaBaka tracker adapter shipped 2026-08-23** (design spec `2026-08-23-mangabaka-tracker-
 adapter-design.md`) — corrects this same session's own earlier "MangaBaka can't be a tracker"

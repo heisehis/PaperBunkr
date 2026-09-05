@@ -150,7 +150,8 @@ public sealed class ShikimoriTrackerAdapter : ITrackerSearchProvider, ITrackerAd
             return false;
         }
 
-        int? existingRateId = await FindExistingRateIdAsync(accessToken, link.ExternalId, cancellationToken).ConfigureAwait(false);
+        var existingRate = await FindExistingRateAsync(accessToken, link.ExternalId, cancellationToken).ConfigureAwait(false);
+        int? existingRateId = existingRate?.Id;
 
         var body = new
         {
@@ -188,11 +189,24 @@ public sealed class ShikimoriTrackerAdapter : ITrackerSearchProvider, ITrackerAd
         }
     }
 
-    /// <summary>Looks up whether a <c>user_rate</c> already exists for this manga, so
-    /// <see cref="PushEntryAsync"/> knows to update it (PUT) rather than create a duplicate (POST).
-    /// Returns null (treat as "create") on any failure - matches every other adapter's "unavailable,
-    /// not exceptional" idiom.</summary>
-    private async Task<int?> FindExistingRateIdAsync(string accessToken, string targetExternalId, CancellationToken cancellationToken)
+    public async Task<TrackerRemoteEntry?> GetEntryAsync(PaperbunkrDbContext context, TrackingLink link, CancellationToken cancellationToken)
+    {
+        string? accessToken = CredentialStore.Get(context, nameof(TrackingService.Shikimori), CredentialKind.OAuthAccessToken);
+        if (string.IsNullOrEmpty(accessToken))
+        {
+            return null;
+        }
+
+        var rate = await FindExistingRateAsync(accessToken, link.ExternalId, cancellationToken).ConfigureAwait(false);
+        return rate is null ? null : new TrackerRemoteEntry(ShikimoriStatusMapper.FromUserRateStatus(rate.Status), rate.Chapters);
+    }
+
+    /// <summary>Looks up the existing <c>user_rate</c> for this manga, if any - <see cref="PushEntryAsync"/>
+    /// uses just its id (to decide PUT vs POST), <see cref="GetEntryAsync"/> uses its status/chapters
+    /// too. One shared lookup rather than two near-identical HTTP round trips. Returns null (treat as
+    /// "create"/"nothing to compare") on any failure - matches every other adapter's "unavailable, not
+    /// exceptional" idiom.</summary>
+    private async Task<ShikimoriUserRateDto?> FindExistingRateAsync(string accessToken, string targetExternalId, CancellationToken cancellationToken)
     {
         var whoamiRequest = new HttpRequestMessage(HttpMethod.Get, $"{ApiBase}/users/whoami");
         whoamiRequest.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", accessToken);
@@ -234,7 +248,7 @@ public sealed class ShikimoriTrackerAdapter : ITrackerSearchProvider, ITrackerAd
             }
 
             var rates = await rateResponse.Content.ReadFromJsonAsync<List<ShikimoriUserRateDto>>(cancellationToken: cancellationToken).ConfigureAwait(false);
-            return rates?.FirstOrDefault()?.Id;
+            return rates?.FirstOrDefault();
         }
         catch (HttpRequestException)
         {
@@ -261,6 +275,19 @@ public static class ShikimoriStatusMapper
         ReadingStatus.Dropped => "dropped",
         ReadingStatus.ReReading => "rewatching",
         _ => "planned",
+    };
+
+    /// <summary>Reverse of <see cref="ToUserRateStatus"/> - clean 1:1 both ways, same as the push
+    /// direction's own doc comment already notes for this service.</summary>
+    public static ReadingStatus FromUserRateStatus(string? status) => status switch
+    {
+        "planned" => ReadingStatus.Planned,
+        "watching" => ReadingStatus.Reading,
+        "completed" => ReadingStatus.Completed,
+        "on_hold" => ReadingStatus.Paused,
+        "dropped" => ReadingStatus.Dropped,
+        "rewatching" => ReadingStatus.ReReading,
+        _ => ReadingStatus.Unknown,
     };
 }
 
@@ -298,4 +325,10 @@ internal sealed class ShikimoriUserRateDto
 {
     [JsonPropertyName("id")]
     public int Id { get; set; }
+
+    [JsonPropertyName("status")]
+    public string? Status { get; set; }
+
+    [JsonPropertyName("chapters")]
+    public int? Chapters { get; set; }
 }

@@ -99,6 +99,62 @@ public class MyAnimeListTrackerAdapterTests : IDisposable
     }
 
     [Fact]
+    public async Task GetEntryAsync_NoStoredAccessToken_ReturnsNull_WithoutSendingRequest()
+    {
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        var adapter = new MyAnimeListTrackerAdapter(new HttpClient(new StubHandler((_, _) => throw new InvalidOperationException("should not send"))), clientId: null);
+
+        var result = await adapter.GetEntryAsync(context, new TrackingLink { ExternalId = "13" }, CancellationToken.None);
+
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public async Task GetEntryAsync_ParsesMyListStatus_RereadingFlagWinsOverRawStatus()
+    {
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        CredentialStore.Set(context, nameof(TrackingService.MyAnimeList), CredentialKind.OAuthAccessToken, "token-xyz");
+
+        const string json = """{ "my_list_status": { "status": "reading", "num_chapters_read": 7, "is_rereading": true } }""";
+        var adapter = new MyAnimeListTrackerAdapter(new HttpClient(new StubHandler((req, _) =>
+        {
+            Assert.Equal(HttpMethod.Get, req.Method);
+            return JsonResponse(HttpStatusCode.OK, json);
+        })), clientId: null);
+
+        var result = await adapter.GetEntryAsync(context, new TrackingLink { ExternalId = "13" }, CancellationToken.None);
+
+        Assert.NotNull(result);
+        Assert.Equal(ReadingStatus.ReReading, result!.Status);
+        Assert.Equal(7, result.ChapterProgress);
+    }
+
+    [Fact]
+    public async Task GetEntryAsync_NoMyListStatus_ReturnsNull()
+    {
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        CredentialStore.Set(context, nameof(TrackingService.MyAnimeList), CredentialKind.OAuthAccessToken, "token-xyz");
+
+        var adapter = new MyAnimeListTrackerAdapter(new HttpClient(new StubHandler((_, _) => JsonResponse(HttpStatusCode.OK, "{}"))), clientId: null);
+
+        var result = await adapter.GetEntryAsync(context, new TrackingLink { ExternalId = "13" }, CancellationToken.None);
+
+        Assert.Null(result);
+    }
+
+    [Theory]
+    [InlineData("plan_to_read", ReadingStatus.Planned)]
+    [InlineData("reading", ReadingStatus.Reading)]
+    [InlineData("completed", ReadingStatus.Completed)]
+    [InlineData("on_hold", ReadingStatus.Paused)]
+    [InlineData("dropped", ReadingStatus.Dropped)]
+    [InlineData("something_else", ReadingStatus.Unknown)]
+    public void MyAnimeListStatusMapper_FromListStatus_MapsEveryValue(string raw, ReadingStatus expected)
+    {
+        Assert.Equal(expected, MyAnimeListStatusMapper.FromListStatus(raw));
+    }
+
+    [Fact]
     public async Task CompleteConnectAsync_SuccessfulExchange_StoresTokens()
     {
         using var context = new PaperbunkrDbContext(_dbOptions);

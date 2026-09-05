@@ -209,6 +209,63 @@ public sealed class MyAnimeListTrackerAdapter : ITrackerSearchProvider, ITracker
         }
     }
 
+    /// <summary>MAL's own <c>my_list_status</c> sub-object always carries its core fields
+    /// (<c>status</c>/<c>num_chapters_read</c>/<c>is_rereading</c>) once requested, confirmed from
+    /// Mihon's <c>MALListItemStatus</c> DTO declaring them non-nullable regardless of which optional
+    /// sub-fields (e.g. <c>start_date</c>) a caller's <c>fields=</c> selector also asked for.</summary>
+    public async Task<TrackerRemoteEntry?> GetEntryAsync(PaperbunkrDbContext context, TrackingLink link, CancellationToken cancellationToken)
+    {
+        string? accessToken = CredentialStore.Get(context, nameof(TrackingService.MyAnimeList), CredentialKind.OAuthAccessToken);
+        if (string.IsNullOrEmpty(accessToken))
+        {
+            return null;
+        }
+
+        var request = new HttpRequestMessage(HttpMethod.Get,
+            $"{ApiBase}/manga/{link.ExternalId}?fields=my_list_status{{status,num_chapters_read,is_rereading}}");
+        request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", accessToken);
+
+        HttpResponseMessage response;
+        try
+        {
+            response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
+        }
+        catch (HttpRequestException)
+        {
+            return null;
+        }
+        catch (TaskCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            return null;
+        }
+
+        using (response)
+        {
+            if (!response.IsSuccessStatusCode)
+            {
+                return null;
+            }
+
+            MalListItemDto? parsed;
+            try
+            {
+                parsed = await response.Content.ReadFromJsonAsync<MalListItemDto>(cancellationToken: cancellationToken).ConfigureAwait(false);
+            }
+            catch (JsonException)
+            {
+                return null;
+            }
+
+            var status = parsed?.MyListStatus;
+            if (status is null)
+            {
+                return null;
+            }
+
+            var readingStatus = status.IsRereading ? ReadingStatus.ReReading : MyAnimeListStatusMapper.FromListStatus(status.Status);
+            return new TrackerRemoteEntry(readingStatus, (int?)status.NumChaptersRead);
+        }
+    }
 }
 
 /// <summary><see cref="ReadingStatus"/> -&gt; MyAnimeList's manga status string + <c>is_rereading</c>
@@ -227,6 +284,19 @@ public static class MyAnimeListStatusMapper
         ReadingStatus.ReReading => ("reading", true),
         _ => ("plan_to_read", false),
     };
+
+    /// <summary>Reverse of <see cref="ToListStatus"/>'s status half - the <c>is_rereading</c> flag is
+    /// handled separately by the caller, matching how it's a sibling field on MAL's own response, not
+    /// encoded into <c>status</c> itself.</summary>
+    public static ReadingStatus FromListStatus(string? status) => status switch
+    {
+        "plan_to_read" => ReadingStatus.Planned,
+        "reading" => ReadingStatus.Reading,
+        "completed" => ReadingStatus.Completed,
+        "on_hold" => ReadingStatus.Paused,
+        "dropped" => ReadingStatus.Dropped,
+        _ => ReadingStatus.Unknown,
+    };
 }
 
 internal sealed class MalTokenResponse
@@ -236,6 +306,24 @@ internal sealed class MalTokenResponse
 
     [JsonPropertyName("refresh_token")]
     public string? RefreshToken { get; set; }
+}
+
+internal sealed class MalListItemDto
+{
+    [JsonPropertyName("my_list_status")]
+    public MalListItemStatusDto? MyListStatus { get; set; }
+}
+
+internal sealed class MalListItemStatusDto
+{
+    [JsonPropertyName("status")]
+    public string? Status { get; set; }
+
+    [JsonPropertyName("num_chapters_read")]
+    public double NumChaptersRead { get; set; }
+
+    [JsonPropertyName("is_rereading")]
+    public bool IsRereading { get; set; }
 }
 
 internal sealed class MalSearchResponse

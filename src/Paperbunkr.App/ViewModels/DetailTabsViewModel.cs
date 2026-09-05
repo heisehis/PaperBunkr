@@ -782,23 +782,25 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
     }
 
     /// <summary>
-    /// Second provider alongside AniList - MangaBaka is search/link only (no auth, no per-user
-    /// library, confirmed against its live API), same shape as AniList's own metadata half.
+    /// Second and third providers alongside AniList - MangaBaka and MangaDex are both search/link
+    /// only (no auth, no per-user library, confirmed against their live APIs), same shape as
+    /// AniList's own metadata half.
     /// </summary>
     public static readonly ExternalMetadataProvider[] MetadataProviderOptions =
     {
-        ExternalMetadataProvider.AniList, ExternalMetadataProvider.MangaBaka,
+        ExternalMetadataProvider.AniList, ExternalMetadataProvider.MangaBaka, ExternalMetadataProvider.MangaDex,
     };
 
     [ObservableProperty]
     private ExternalMetadataProvider _selectedMetadataProvider = ExternalMetadataProvider.AniList;
 
-    /// <summary>Fresh instance per call for MangaBaka, same "no DI container" rationale as
+    /// <summary>Fresh instance per call for MangaBaka/MangaDex, same "no DI container" rationale as
     /// <see cref="GetTrackerSearchProvider"/> - AniList keeps using the injected/test-seam
     /// <see cref="_metadataProvider"/> instance instead of constructing a second one.</summary>
     private IMetadataProvider GetMetadataProviderFor(ExternalMetadataProvider provider) => provider switch
     {
         ExternalMetadataProvider.MangaBaka => MangaBakaMetadataProvider.Shared,
+        ExternalMetadataProvider.MangaDex => MangaDexMetadataProvider.Shared,
         _ => _metadataProvider,
     };
 
@@ -937,6 +939,7 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
     public static readonly TrackingService[] TrackerServiceOptions =
     {
         TrackingService.AniList, TrackingService.MyAnimeList, TrackingService.Shikimori, TrackingService.Bangumi, TrackingService.MangaBaka,
+        TrackingService.MangaUpdates, TrackingService.Kitsu,
     };
 
     public ObservableCollection<TrackerLinkSample> TrackerLinks { get; } = new();
@@ -1008,6 +1011,8 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
         TrackingService.Shikimori => new ShikimoriTrackerAdapter(TrackerHttpClients.Shikimori),
         TrackingService.Bangumi => new BangumiTrackerAdapter(TrackerHttpClients.Bangumi),
         TrackingService.MangaBaka => MangaBakaMetadataProvider.Shared,
+        TrackingService.MangaUpdates => new MangaUpdatesTrackerAdapter(TrackerHttpClients.MangaUpdates),
+        TrackingService.Kitsu => new KitsuTrackerAdapter(TrackerHttpClients.Kitsu, CredentialStore.Get(context, nameof(TrackingService.Kitsu), CredentialKind.OAuthAccessToken)),
         _ => null,
     };
 
@@ -1017,6 +1022,8 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
         TrackingService.Shikimori => new ShikimoriTrackerAdapter(TrackerHttpClients.Shikimori),
         TrackingService.Bangumi => new BangumiTrackerAdapter(TrackerHttpClients.Bangumi),
         TrackingService.MangaBaka => new MangaBakaTrackerAdapter(MangaBakaHttpClient.Shared),
+        TrackingService.MangaUpdates => new MangaUpdatesTrackerAdapter(TrackerHttpClients.MangaUpdates),
+        TrackingService.Kitsu => new KitsuTrackerAdapter(TrackerHttpClients.Kitsu, accessToken: null),
         _ => new AniListTrackerAdapter(AniListHttpClient.Shared),
     };
 
@@ -1113,9 +1120,15 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
         RefreshTrackerLinks(context, currentSeriesId);
     }
 
-    /// <summary>Pushes this series' <see cref="Series.ReadingStatus"/> + chapter progress to every
-    /// currently-connected tracker it's linked to - one action regardless of how many trackers are
-    /// linked, per this feature's design.</summary>
+    /// <summary>Two-way sync (docs/superpowers/specs/2026-09-05-two-way-tracker-sync-design.md) -
+    /// for every currently-connected tracker this series is linked to, reads the remote entry first
+    /// and lets <see cref="TrackerSyncResolver.RemoteWins"/> decide per-link whether to pull the
+    /// remote's status/progress into <see cref="Series"/> (when remote is further along) or push
+    /// local state to the tracker (when local is further along or tied) - "keep whichever side is
+    /// further along," the user's own choice (2026-09-05) over a confirmation prompt. Local
+    /// progress/status are recomputed fresh before each link's comparison (not once up front), so a
+    /// pull applied earlier in this same pass is visible to the next link's comparison and any
+    /// following push carries the just-pulled state forward, not a stale pre-loop snapshot.</summary>
     [RelayCommand]
     private async Task SyncToTrackersAsync()
     {
@@ -1131,9 +1144,8 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
             return;
         }
 
-        var payload = new TrackerPushPayload(series.ReadingStatus, TrackerProgressCalculator.ComputeChapterProgress(series.Issues));
-
-        var succeeded = new List<string>();
+        var pulled = new List<string>();
+        var pushed = new List<string>();
         var failed = new List<string>();
         foreach (var link in series.TrackingLinks)
         {
@@ -1144,6 +1156,8 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
                 TrackingService.Shikimori => CredentialStore.HasCredentials(context, nameof(TrackingService.Shikimori), CredentialKind.OAuthAccessToken),
                 TrackingService.Bangumi => CredentialStore.HasCredentials(context, nameof(TrackingService.Bangumi), CredentialKind.ApiKey),
                 TrackingService.MangaBaka => CredentialStore.HasCredentials(context, nameof(TrackingService.MangaBaka), CredentialKind.ApiKey),
+                TrackingService.MangaUpdates => CredentialStore.HasCredentials(context, nameof(TrackingService.MangaUpdates), CredentialKind.OAuthAccessToken),
+                TrackingService.Kitsu => CredentialStore.HasCredentials(context, nameof(TrackingService.Kitsu), CredentialKind.OAuthAccessToken),
                 _ => false,
             };
             if (!isConnected)
@@ -1151,19 +1165,47 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
                 continue;
             }
 
-            bool ok = await GetTrackerAdapter(link.Service).PushEntryAsync(context, link, payload, CancellationToken.None);
-            (ok ? succeeded : failed).Add(link.Service.ToString());
+            var adapter = GetTrackerAdapter(link.Service);
+            var remote = await adapter.GetEntryAsync(context, link, CancellationToken.None);
+
+            if (remote is not null && TrackerSyncResolver.RemoteWins(TrackerProgressCalculator.ComputeChapterProgress(series.Issues), series.ReadingStatus, remote))
+            {
+                var newlyRead = TrackerSyncResolver.ApplyRemote(series, remote);
+                foreach (var issue in newlyRead)
+                {
+                    SwapReadStateTile(Issues, issue);
+                    SwapReadStateTile(Specials, issue);
+                }
+
+                pulled.Add(link.Service.ToString());
+                continue;
+            }
+
+            var payload = new TrackerPushPayload(series.ReadingStatus, TrackerProgressCalculator.ComputeChapterProgress(series.Issues));
+            bool ok = await adapter.PushEntryAsync(context, link, payload, CancellationToken.None);
+            (ok ? pushed : failed).Add(link.Service.ToString());
         }
 
-        if (succeeded.Count == 0 && failed.Count == 0)
+        context.SaveChanges();
+
+        if (pulled.Count > 0)
+        {
+            // Same "host's unread-count hero is stale otherwise" callback every other read-state
+            // change already routes through (see MarkIssuesReadState's own doc comment) - a pull can
+            // mark issues read exactly like a manual mark-as-read action does.
+            _onSelectionChanged?.Invoke();
+        }
+
+        if (pulled.Count == 0 && pushed.Count == 0 && failed.Count == 0)
         {
             TrackerSyncStatus = "No connected trackers linked to this series.";
         }
         else
         {
-            string summary = succeeded.Count > 0 ? $"Synced to {string.Join(", ", succeeded)}." : string.Empty;
+            string pulledSummary = pulled.Count > 0 ? $"Pulled from {string.Join(", ", pulled)}. " : string.Empty;
+            string pushedSummary = pushed.Count > 0 ? $"Synced to {string.Join(", ", pushed)}." : string.Empty;
             string failureSummary = failed.Count > 0 ? $" {string.Join(", ", failed)} sync failed, try again later." : string.Empty;
-            TrackerSyncStatus = (summary + failureSummary).Trim();
+            TrackerSyncStatus = (pulledSummary + pushedSummary + failureSummary).Trim();
         }
     }
 

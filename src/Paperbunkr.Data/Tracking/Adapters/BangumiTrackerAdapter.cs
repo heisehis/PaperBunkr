@@ -123,6 +123,64 @@ public sealed class BangumiTrackerAdapter : ITrackerSearchProvider, ITrackerAdap
         return succeeded;
     }
 
+    /// <summary>Uses the same <c>-</c> self-alias as <see cref="PushEntryAsync"/>'s own collection
+    /// endpoint (Bangumi API v0 convention) rather than fetching the real username first - Mihon's
+    /// own <c>statusLibManga</c> uses the real username instead, but nothing else in this adapter
+    /// needs it, and the alias avoids an extra <c>GET /v0/me</c> round trip.</summary>
+    public async Task<TrackerRemoteEntry?> GetEntryAsync(PaperbunkrDbContext context, TrackingLink link, CancellationToken cancellationToken)
+    {
+        string? token = CredentialStore.Get(context, nameof(TrackingService.Bangumi), CredentialKind.ApiKey);
+        if (string.IsNullOrEmpty(token))
+        {
+            return null;
+        }
+
+        var request = new HttpRequestMessage(HttpMethod.Get, $"{ApiBase}/users/-/collections/{link.ExternalId}");
+        request.Headers.UserAgent.ParseAdd(UserAgent);
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        HttpResponseMessage response;
+        try
+        {
+            response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
+        }
+        catch (HttpRequestException)
+        {
+            return null;
+        }
+        catch (TaskCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            return null;
+        }
+
+        using (response)
+        {
+            // 404 covers "subject is not collected by user" (confirmed from Mihon's own
+            // statusLibManga error handling) - genuinely "no entry", not a failure.
+            if (!response.IsSuccessStatusCode)
+            {
+                return null;
+            }
+
+            BangumiCollectionResponseDto? parsed;
+            try
+            {
+                parsed = await response.Content.ReadFromJsonAsync<BangumiCollectionResponseDto>(cancellationToken: cancellationToken).ConfigureAwait(false);
+            }
+            catch (JsonException)
+            {
+                return null;
+            }
+
+            if (parsed?.Type is not int type)
+            {
+                return null;
+            }
+
+            return new TrackerRemoteEntry(BangumiCollectionTypeMapper.FromCollectionType(type), parsed.EpStatus);
+        }
+    }
+
     private async Task<bool> SendCollectionRequestAsync(HttpMethod method, string token, string subjectId, Dictionary<string, object> body, CancellationToken cancellationToken)
     {
         var request = new HttpRequestMessage(method, $"{ApiBase}/users/-/collections/{subjectId}")
@@ -170,6 +228,28 @@ public static class BangumiCollectionTypeMapper
         ReadingStatus.ReReading => 3, // Doing - collapsed, see summary above
         _ => 1,
     };
+
+    /// <summary>Reverse of <see cref="ToCollectionType"/> - <see cref="ReadingStatus.ReReading"/>
+    /// never comes back from this service (collapsed into <c>Doing</c>/3 on the push side already),
+    /// so pulling a 3 always resolves to plain <see cref="ReadingStatus.Reading"/>, never ReReading.</summary>
+    public static ReadingStatus FromCollectionType(int type) => type switch
+    {
+        1 => ReadingStatus.Planned,
+        2 => ReadingStatus.Completed,
+        3 => ReadingStatus.Reading,
+        4 => ReadingStatus.Paused,
+        5 => ReadingStatus.Dropped,
+        _ => ReadingStatus.Unknown,
+    };
+}
+
+internal sealed class BangumiCollectionResponseDto
+{
+    [JsonPropertyName("type")]
+    public int? Type { get; set; }
+
+    [JsonPropertyName("ep_status")]
+    public int? EpStatus { get; set; }
 }
 
 internal sealed class BangumiSearchResponse

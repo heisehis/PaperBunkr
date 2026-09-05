@@ -789,7 +789,7 @@ relations, recommendations) — flagged as a separate future research pass, not 
 full, not just the new cases); on-screen verification of all three items (manga screen itself, the
 cover-art entry points, the MangaBaka provider picker) — **cleared by the user 2026-09-04**.
 
-### Plugin API v2 (onboarding.md §10) — engine + 4 real hooks shipped 2026-08-24, remaining hooks/UI surfaces still open
+### Plugin API v2 (onboarding.md §10) — engine + 4 real hooks shipped 2026-08-24, rest of the hooks + all 3 UI surfaces closed 2026-09-05
 Design spec: `2026-08-24-plugin-api-v2-design.md`. Shipped this session: new `Paperbunkr.Plugins`
 project (`PluginEngine`, `Command`/`CSharpCommand`, `IPluginEnvironment` + all 5 sub-interfaces as
 typed abstractions, all 17 hook constants + typed globals/payload types, `XmlPluginInitializer`
@@ -809,13 +809,60 @@ capture/ConfigScript-pairing plus the full Duplicate Finder fixture end-to-end; 
 Plugin screen showing Duplicate Finder's 3 commands with working checkboxes; one real bug found and
 fixed from that screenshot (hook badge bound to the long group description instead of the short
 hook name, overflowing illegibly — fixed to show `Hook` with the description as a tooltip instead).
-**Explicitly deferred, not yet wired to a live UI trigger:** Editor/Books/NewBooks/CreateBookList
-(sidebar)/ParseComicPath/NetSearch/ConfigScript/ReaderResized hooks (engine supports them, no menu/
-lifecycle anchor wired to a real screen yet — `IBrowser.SelectComics` is a documented no-op since
-Library grid's selection model isn't exposed for plugin control yet); the three net-new UI surfaces
-the design spec called for (ComicInfoHtml/UI info panel tab, QuickOpenHtml/UI command palette,
-DrawThumbnailOverlay paint hook) were not built this session despite being in scope on paper — full
-skeleton for all 17 hooks plus all 3 stub surfaces is a larger follow-on, not a quick add-on.
+**Explicitly deferred, not yet wired to a live UI trigger (2026-08-24):** Editor/Books/NewBooks/
+CreateBookList (sidebar)/ParseComicPath/NetSearch/ConfigScript/ReaderResized hooks (engine supports
+them, no menu/lifecycle anchor wired to a real screen yet — `IBrowser.SelectComics` is a documented
+no-op since Library grid's selection model isn't exposed for plugin control yet); the three net-new
+UI surfaces the design spec called for (ComicInfoHtml/UI info panel tab, QuickOpenHtml/UI command
+palette, DrawThumbnailOverlay paint hook) were not built this session despite being in scope on
+paper — full skeleton for all 17 hooks plus all 3 stub surfaces is a larger follow-on, not a quick
+add-on.
+
+**Follow-up (2026-09-05) — every deferred item above closed, plus one real bug fixed:** design spec
+`2026-09-05-plugin-api-v2-remaining-hooks-plan.md`, grounded against `_reference/ComicRackCE` for
+every anchor point. **Bug found by this session's own audit:** `BookOpened` was listed above as one
+of "4 hooks with a real live trigger" but was actually a dead wire —
+`ReaderScreenViewModel.IssueOpened` fired, nothing subscribed — now genuinely wired in
+`App.axaml.cs`. **Hooks:** `ReaderResized` (reader canvas size-changed); `Editor` (Issue Properties
++ Bulk Editing overlay toolbars, one menu entry per enabled command — CE's own per-command
+File-menu-item shape, not Library's single-hardcoded-label shortcut); `Books` (Books screen context
+menu — needed its own `NovelBooksHookGlobals` since that screen's `Book` entities are a wholly
+separate schema from `Issue`, a type mismatch the original spec's shared `BooksHookGlobals` would
+have had); `NewBooks` (peer "Add via {command}" buttons in Library's Add-issue overlay, mirroring
+CE's peer File-menu items rather than replacing the manual flow); `CreateBookList` (a real Smart
+Lists sidebar section — genuinely can't reuse `SmartListQueryBuilder`'s DB-row model since a
+plugin-backed list has no `SmartList` row, so this is parallel plumbing, not a shim); `ParseComicPath`
+(`LibraryFolderScanner`, first non-null override wins, no live plugin uses it yet so scan behavior
+is unchanged); `NetSearch` (Detail's Apply-from-Provider picker generalized via a new
+`MetadataSearchProviderOption` wrapper so a plugin entry can sit alongside AniList/MangaBaka without
+touching the persisted `ExternalMetadataProvider` enum — search works for a plugin match, linking
+one doesn't, since there's no enum slot to persist it against, and says so rather than pretending);
+`ConfigScript` (Plugin screen gear icon — `Command.Configure` pairing already existed from
+2026-08-24, only the click-to-invoke action was missing). **UI surfaces:** `ComicInfoHtml`/`UI` (a
+new "Plugins" tab on Detail's tab strip, scoped to the single focused issue — CE's own anchor is a
+per-comic Library-explorer sidebar panel, which Paperbunkr has no equivalent of); `QuickOpenHtml`/
+`UI` (extends this app's own independently-built Ctrl+P palette — CE's literal "QuickOpen" is a
+recently-opened-books grid with attached info panels, which doesn't map onto this UI at all, so
+this is a deliberate adaptation, not a stopgap); `DrawThumbnailOverlay` (new
+`AsyncPluginOverlayImage`, shaped exactly like `AsyncCoverImage`'s off-UI-thread-decode/cache
+pattern — CE invokes this hook live, per paint, via a raw GDI+ callback with no Avalonia
+equivalent, and firing a Roslyn script synchronously on every tile repaint in a virtualized grid
+would undo the work `AsyncCoverImage` itself exists to fix, so this trades live-per-paint for a
+one-decode-per-issue cache; wired into the primary Poster grid tile only, not every one of
+Library's other view modes' cover images, since no live plugin implements this hook yet).
+**Testing:** a new "Hook Coverage" sample plugin (`src/Paperbunkr.Plugins.Tests/SamplePlugins/
+HookCoverage/`) + 14 new `Paperbunkr.Plugins.Tests` invoke every one of the hooks above end-to-end
+through the real `PluginEngine` — closes "no live sample plugin exercises this hook", the exact gap
+the 2026-08-24 audit flagged for ParseComicPath/NetSearch/ConfigScript specifically. Plus
+`AsyncPluginOverlayImageTests` (generation-guard, same shape as `AsyncCoverImageTests`). Verified:
+full solution builds clean; 362 targeted `Paperbunkr.App.Tests` + 43 `Paperbunkr.Plugins.Tests`
+green (was 29 before this session). **Separately, this session also merged the
+`plugin-api-gap-closure` branch** (pushed 2026-08-31, sitting unmerged) — the three
+`IApplication`/`IBrowser` automation gaps (`AddNewBook`/`GetOrCreateSeriesId`, the four comic icon
+methods + `GetComicFields`, a real `SelectComics`) plus IronPython plugin scripting
+(`PythonCommand`) alongside the existing C# `.csx` path. **Not done this session:** on-screen GUI
+verification of any of the above — same standing caveat as every other backlog item that ships
+without a live click-through pass.
 
 ### SmartList Engine v2 — nested groups + operators + AllProperties split (shipped 2026-08-29)
 Design spec: `2026-08-28-smartlist-engine-v2-design.md`. Three CE-parity gaps closed:

@@ -3,14 +3,17 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Linq;
+using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.EntityFrameworkCore;
 using Paperbunkr.App.Models;
+using Paperbunkr.App.Plugins;
 using Paperbunkr.App.Services;
 using Paperbunkr.Data;
 using Paperbunkr.Data.CeMigration;
 using Paperbunkr.Data.Entities;
+using Paperbunkr.Plugins;
 
 namespace Paperbunkr.App.ViewModels;
 
@@ -84,6 +87,49 @@ public partial class BulkIssuePropertiesScreenViewModel : ViewModelBase
 
     [ObservableProperty]
     private string _headerLabel = string.Empty;
+
+    // --- Plugin API v2 Editor hook (docs/superpowers/specs/2026-09-05-plugin-api-v2-remaining-hooks-plan.md §3) ---
+
+    private PluginHostService? _pluginHost;
+
+    public bool HasPluginHost => _pluginHost is not null;
+
+    /// <summary>Called once from <c>App.axaml.cs</c> after <see cref="PluginHostService.Initialize"/> - same pattern as <c>LibraryScreenViewModel.AttachHost</c>.</summary>
+    public void AttachHost(PluginHostService host)
+    {
+        _pluginHost = host;
+        OnPropertyChanged(nameof(HasPluginHost));
+    }
+
+    /// <summary>Enabled commands registered under the Editor hook, for the toolbar's plugin menu - one entry per command, this screen's whole-selection payload.</summary>
+    public IReadOnlyList<Command> EditorPluginCommands => _pluginHost?.GetEditorCommands().ToList() ?? new List<Command>();
+
+    public bool HasEditorPluginCommands => EditorPluginCommands.Count > 0;
+
+    [ObservableProperty]
+    private bool _isEditorPluginMenuOpen;
+
+    [RelayCommand]
+    private void ToggleEditorPluginMenu() => IsEditorPluginMenuOpen = !IsEditorPluginMenuOpen;
+
+    [RelayCommand]
+    private async Task RunEditorPlugin(Command command)
+    {
+        IsEditorPluginMenuOpen = false;
+        if (_pluginHost is null || _issueIds.Count == 0)
+        {
+            return;
+        }
+
+        using var context = _contextFactory();
+        var issues = context.Issues.Where(i => _issueIds.Contains(i.Id)).ToList();
+        if (issues.Count == 0)
+        {
+            return;
+        }
+
+        await _pluginHost.RunEditorCommandAsync(command, issues);
+    }
 
     public void Load(IReadOnlyList<int> issueIds)
     {

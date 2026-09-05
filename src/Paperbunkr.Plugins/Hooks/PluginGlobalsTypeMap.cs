@@ -7,7 +7,7 @@ public static class PluginGlobalsTypeMap
     {
         [PluginHooks.Library] = typeof(BooksHookGlobals),
         [PluginHooks.Editor] = typeof(BooksHookGlobals),
-        [PluginHooks.Books] = typeof(BooksHookGlobals),
+        [PluginHooks.Books] = typeof(NovelBooksHookGlobals),
         [PluginHooks.NewBooks] = typeof(NewBooksHookGlobals),
         [PluginHooks.CreateBookList] = typeof(CreateBookListHookGlobals),
         [PluginHooks.ParseComicPath] = typeof(ParseComicPathHookGlobals),

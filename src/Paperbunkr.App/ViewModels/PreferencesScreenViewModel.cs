@@ -122,6 +122,20 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         ZoomFitKeyBindings = new ObservableCollection<KeyBindingRowViewModel>();
         DisplayKeyBindings = new ObservableCollection<KeyBindingRowViewModel>();
         ChangelogEntries = new ObservableCollection<ChangelogEntry>();
+
+        // Clear Cover Cache (docs/superpowers/specs/2026-08-30-cover-thumbnail-content-
+        // verification-design.md) - manual escape hatch, independent of VerifyCovers' detection
+        // logic. Two-step inline confirm, same pattern every other destructive action in this
+        // codebase uses (docs/superpowers/specs/2026-08-22-delete-functionality-design.md), not a
+        // modal dialog.
+        ClearComicCoverCacheConfirm = new TwoStepConfirm(
+            onConfirmed: () => _ = ClearComicCoverCacheAsync(),
+            idleLabel: "Clear Comic Cover Cache",
+            armedLabel: "Confirm clear?");
+        ClearBookCoverCacheConfirm = new TwoStepConfirm(
+            onConfirmed: () => _ = ClearBookCoverCacheAsync(),
+            idleLabel: "Clear Book Cover Cache",
+            armedLabel: "Confirm clear?");
     }
 
     private static Issue SampleIssue() => new()
@@ -1436,6 +1450,176 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         finally
         {
             IsGeneratingCovers = false;
+        }
+    }
+
+    [ObservableProperty]
+    private bool _isVerifyingCovers;
+
+    /// <summary>
+    /// Unconditionally re-derives every comic and book cover from its source file and overwrites
+    /// the cache, catching a cover that was wrong from the moment it was scanned - not just the
+    /// identity-fingerprint mismatches <see cref="GenerateCovers"/> already self-heals in the
+    /// background (docs/superpowers/specs/2026-08-30-cover-thumbnail-content-verification-design.md).
+    /// Deliberately a separate command/button from <see cref="GenerateCovers"/> rather than a
+    /// behavior change to it, so today's "fill gaps only" semantics (and its tests) stay intact.
+    /// Covers both comics and books in one run/toast, unlike <see cref="GenerateCovers"/> which is
+    /// comics-only.
+    /// </summary>
+    [RelayCommand]
+    private async Task VerifyCovers()
+    {
+        if (IsVerifyingCovers)
+        {
+            return;
+        }
+
+        IsVerifyingCovers = true;
+        using var job = _activity.StartJob(ActivityJobKind.GenerateCovers, "Verifying covers");
+
+        // Two sequential passes sharing one job - accumulate rather than assign directly, or the
+        // second pass's smaller Total would make the bar jump backward and undercount the summary.
+        int comicTotal = 0;
+        int bookTotal = 0;
+        try
+        {
+            var comicProgress = new Progress<(int Done, int Total)>(p =>
+            {
+                comicTotal = p.Total;
+                job.Report(p.Done, comicTotal, $"{p.Done} / {comicTotal} comics");
+            });
+            await new CoverThumbnailService(_contextFactory).VerifyAllAsync(comicProgress, job.CancellationToken);
+
+            var bookProgress = new Progress<(int Done, int Total)>(p =>
+            {
+                bookTotal = p.Total;
+                job.Report(comicTotal + p.Done, comicTotal + bookTotal, $"{p.Done} / {bookTotal} books");
+            });
+            await new BookCoverThumbnailService(_contextFactory).VerifyAllAsync(bookProgress, job.CancellationToken);
+
+            int total = comicTotal + bookTotal;
+            job.Succeed($"Re-checked {total} cover{(total == 1 ? "" : "s")}", itemsProcessed: total);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            job.Fail("Cover verification failed", ex: ex);
+        }
+        finally
+        {
+            IsVerifyingCovers = false;
+        }
+    }
+
+    /// <summary>
+    /// Manual, unconditional escape hatch (docs/superpowers/specs/2026-08-30-cover-thumbnail-
+    /// content-verification-design.md) - wipes the entire comic cover cache and rebuilds it, no
+    /// detection logic involved at all. Separate from <see cref="ClearBookCoverCacheConfirm"/> so
+    /// one side can be nuked without touching the other. Guarded by <see cref="IsGeneratingCovers"/>
+    /// (not a new flag) since the rebuild step reuses <see cref="GenerateCovers"/>'s own pipeline.
+    /// </summary>
+    public TwoStepConfirm ClearComicCoverCacheConfirm { get; }
+
+    private async Task ClearComicCoverCacheAsync()
+    {
+        if (IsGeneratingCovers)
+        {
+            return;
+        }
+
+        foreach (string path in CoverThumbnailPaths.EnumerateAll())
+        {
+            try
+            {
+                File.Delete(path);
+            }
+            catch (IOException)
+            {
+            }
+        }
+
+        // Directory is now empty, so the cheap presence-based path regenerates everything - no
+        // need for VerifyAllAsync/force here.
+        IsGeneratingCovers = true;
+        using var job = _activity.StartJob(ActivityJobKind.GenerateCovers, "Rebuilding comic covers");
+        int total = 0;
+        try
+        {
+            var progress = new Progress<(int Done, int Total)>(p =>
+            {
+                total = p.Total;
+                job.Report(p.Done, p.Total, $"{p.Done} / {p.Total} issues");
+            });
+            await new CoverThumbnailService(_contextFactory).GenerateAllAsync(progress, job.CancellationToken);
+            job.Succeed($"Regenerated {total} cover{(total == 1 ? "" : "s")}", itemsProcessed: total);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            job.Fail("Comic cover rebuild failed", ex: ex);
+        }
+        finally
+        {
+            IsGeneratingCovers = false;
+        }
+    }
+
+    /// <summary>Book counterpart of <see cref="ClearComicCoverCacheConfirm"/> - see its doc comment.
+    /// Guarded by <see cref="IsClearingBookCoverCache"/>, since <see cref="IsGeneratingCovers"/> is
+    /// comic-only and there's no pre-existing "generating book covers" flag to reuse.</summary>
+    public TwoStepConfirm ClearBookCoverCacheConfirm { get; }
+
+    [ObservableProperty]
+    private bool _isClearingBookCoverCache;
+
+    private async Task ClearBookCoverCacheAsync()
+    {
+        if (IsClearingBookCoverCache)
+        {
+            return;
+        }
+
+        foreach (string path in BookCoverThumbnailPaths.EnumerateAll())
+        {
+            try
+            {
+                File.Delete(path);
+            }
+            catch (IOException)
+            {
+            }
+        }
+
+        IsClearingBookCoverCache = true;
+        using var job = _activity.StartJob(ActivityJobKind.GenerateCovers, "Rebuilding book covers");
+        int total = 0;
+        try
+        {
+            var progress = new Progress<(int Done, int Total)>(p =>
+            {
+                total = p.Total;
+                job.Report(p.Done, p.Total, $"{p.Done} / {p.Total} books");
+            });
+            await new BookCoverThumbnailService(_contextFactory).GenerateAllAsync(progress, job.CancellationToken);
+            job.Succeed($"Regenerated {total} cover{(total == 1 ? "" : "s")}", itemsProcessed: total);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            job.Fail("Book cover rebuild failed", ex: ex);
+        }
+        finally
+        {
+            IsClearingBookCoverCache = false;
         }
     }
 

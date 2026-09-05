@@ -2,15 +2,19 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
+using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.EntityFrameworkCore;
 using Paperbunkr.App.Models;
+using Paperbunkr.App.Plugins;
 using Paperbunkr.App.Services;
 using Paperbunkr.Data;
 using Paperbunkr.Data.Entities;
 using Paperbunkr.Data.Metadata;
 using Paperbunkr.Data.SmartLists;
+using Paperbunkr.Plugins;
+using Paperbunkr.Plugins.Hooks;
 
 namespace Paperbunkr.App.ViewModels;
 
@@ -61,6 +65,103 @@ public partial class SmartScreenViewModel : ViewModelBase
     public ObservableCollection<SmartListSummary> CustomLists { get; }
     public ObservableCollection<SmartListSummary> SeriesLists { get; }
     public ObservableCollection<SmartListSummary> NovelLists { get; }
+
+    /// <summary>
+    /// Plugin API v2 CreateBookList hook (docs/superpowers/specs/2026-09-05-plugin-api-v2-remaining-
+    /// hooks-plan.md §6) - one entry per enabled command, computed fresh each time it's selected
+    /// (spec: "computed by scanning the whole library each time it's opened"), not backed by any
+    /// <see cref="SmartList"/> row. Doesn't fit <see cref="SmartListQueryBuilder"/>'s DB-row model at
+    /// all, so this is a parallel sidebar section rather than shoehorned into the existing ones.
+    /// Synthetic negative ids (never collide with a real <see cref="SmartList.Id"/>) map back to the
+    /// actual <see cref="Command"/> via <see cref="_pluginListCommands"/>.
+    /// </summary>
+    public ObservableCollection<SmartListSummary> PluginLists { get; } = new();
+
+    private readonly Dictionary<int, Command> _pluginListCommands = new();
+    private int? _activePluginListId;
+    private PluginHostService? _pluginHost;
+
+    public bool HasPluginHost => _pluginHost is not null;
+
+    /// <summary>Called once from <c>App.axaml.cs</c> after <see cref="PluginHostService.Initialize"/> - same pattern as <c>LibraryScreenViewModel.AttachHost</c>.</summary>
+    public void AttachHost(PluginHostService host)
+    {
+        _pluginHost = host;
+        OnPropertyChanged(nameof(HasPluginHost));
+        RefreshPluginLists();
+    }
+
+    private void RefreshPluginLists()
+    {
+        PluginLists.Clear();
+        _pluginListCommands.Clear();
+        if (_pluginHost is null)
+        {
+            return;
+        }
+
+        int syntheticId = -1;
+        foreach (var command in _pluginHost.Engine.GetCommands(PluginHooks.CreateBookList))
+        {
+            _pluginListCommands[syntheticId] = command;
+            PluginLists.Add(new SmartListSummary
+            {
+                Id = syntheticId,
+                Name = command.Name,
+                TargetKind = SmartListTargetKind.Issue,
+                IsActive = syntheticId == _activePluginListId,
+                DeleteConfirm = null,
+            });
+            syntheticId--;
+        }
+    }
+
+    /// <summary>Runs the plugin command fresh and shows its returned issues as the current results - the CreateBookList counterpart to <see cref="LoadSmartList"/>.</summary>
+    private async Task LoadPluginListAsync(int syntheticId)
+    {
+        if (_pluginHost is null || !_pluginListCommands.TryGetValue(syntheticId, out var command) || command.Environment is null)
+        {
+            return;
+        }
+
+        _activeSmartListId = null;
+        _activePluginListId = syntheticId;
+        _workingList = null;
+        RootGroup = null;
+        ListName = command.Name;
+        Subtitle = "Plugin smart list · recomputed each time it's opened";
+        IsReadOnly = true;
+
+        var result = await _pluginHost.RunCommandAsync(command, new CreateBookListHookGlobals { Environment = command.Environment! }).ConfigureAwait(true);
+
+        Results.Clear();
+        SeriesResults.Clear();
+        NovelResults.Clear();
+
+        if (result.ReturnValue is IEnumerable<Issue> issues)
+        {
+            using var context = PaperbunkrDb.CreateContext();
+            var ids = issues.Select(i => i.Id).ToList();
+            var loaded = context.Issues.Include(i => i.Series).Where(i => ids.Contains(i.Id)).ToList();
+            foreach (var issue in loaded)
+            {
+                Results.Add(new IssueCardSample
+                {
+                    Id = issue.Id,
+                    SeriesId = issue.SeriesId,
+                    Title = string.IsNullOrWhiteSpace(issue.EffectiveNumber()) ? "#?" : $"#{issue.EffectiveNumber()}",
+                    IsUnread = issue.LastPageRead is null or 0,
+                    CoverBrush = SeriesCardSample.CoverBrushFor(issue.Series!.Name),
+                    CoverIssueId = issue.Id,
+                });
+            }
+        }
+
+        MatchCountLabel = Results.Count.ToString();
+        NotifyResultsChanged();
+        RefreshSidebar();
+        RefreshPluginLists();
+    }
 
     /// <summary>The root AND/OR group of the currently-open list (spec §2). Null until a list is loaded.</summary>
     [ObservableProperty]
@@ -399,6 +500,7 @@ public partial class SmartScreenViewModel : ViewModelBase
                 IsUnread = issue.LastPageRead is null or 0,
                 CoverBrush = SeriesCardSample.CoverBrushFor(issue.Series!.Name),
                 CoverIssueId = issue.Id, // lazy async decode via AsyncCoverImage - see IssueCardSample.CoverIssueId
+                CoverKey = CoverFingerprint.Stem(issue.Id, issue.FilePath, issue.FileSize),
             });
         }
 
@@ -551,9 +653,18 @@ public partial class SmartScreenViewModel : ViewModelBase
     }
 
     [RelayCommand]
-    private void SelectList(SmartListSummary? summary)
+    private async Task SelectList(SmartListSummary? summary)
     {
-        if (summary is not null)
+        if (summary is null)
+        {
+            return;
+        }
+
+        if (summary.Id < 0 && _pluginListCommands.ContainsKey(summary.Id))
+        {
+            await LoadPluginListAsync(summary.Id);
+        }
+        else
         {
             LoadSmartList(summary.Id);
         }

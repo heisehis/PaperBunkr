@@ -11,11 +11,13 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.EntityFrameworkCore;
 using Paperbunkr.App.Models;
+using Paperbunkr.App.Plugins;
 using Paperbunkr.App.Services;
 using Paperbunkr.Data;
 using Paperbunkr.Data.CeMigration;
 using Paperbunkr.Data.Entities;
 using Paperbunkr.Data.Metadata;
+using Paperbunkr.Plugins;
 
 namespace Paperbunkr.App.ViewModels;
 
@@ -314,6 +316,49 @@ public partial class IssuePropertiesScreenViewModel : ViewModelBase
 
     public bool HasClipboard => _clipboard is not null;
 
+    // --- Plugin API v2 Editor hook (docs/superpowers/specs/2026-09-05-plugin-api-v2-remaining-hooks-plan.md §3) ---
+
+    private PluginHostService? _pluginHost;
+
+    public bool HasPluginHost => _pluginHost is not null;
+
+    /// <summary>Called once from <c>App.axaml.cs</c> after <see cref="PluginHostService.Initialize"/> - same pattern as <c>LibraryScreenViewModel.AttachHost</c>.</summary>
+    public void AttachHost(PluginHostService host)
+    {
+        _pluginHost = host;
+        OnPropertyChanged(nameof(HasPluginHost));
+    }
+
+    /// <summary>Enabled commands registered under the Editor hook, for the toolbar's plugin menu - one entry per command, this screen's single-issue payload.</summary>
+    public IReadOnlyList<Command> EditorPluginCommands => _pluginHost?.GetEditorCommands().ToList() ?? new List<Command>();
+
+    public bool HasEditorPluginCommands => EditorPluginCommands.Count > 0;
+
+    [ObservableProperty]
+    private bool _isEditorPluginMenuOpen;
+
+    [RelayCommand]
+    private void ToggleEditorPluginMenu() => IsEditorPluginMenuOpen = !IsEditorPluginMenuOpen;
+
+    [RelayCommand]
+    private async Task RunEditorPlugin(Command command)
+    {
+        IsEditorPluginMenuOpen = false;
+        if (_pluginHost is null || _issueId is not int issueId)
+        {
+            return;
+        }
+
+        using var context = PaperbunkrDb.CreateContext();
+        var issue = context.Issues.Find(issueId);
+        if (issue is null)
+        {
+            return;
+        }
+
+        await _pluginHost.RunEditorCommandAsync(command, new[] { issue });
+    }
+
     [RelayCommand]
     private void CopyFields()
     {
@@ -428,7 +473,7 @@ public partial class IssuePropertiesScreenViewModel : ViewModelBase
         _seriesName = issue.Series?.Name ?? string.Empty;
         _beforeSnapshot = MetadataEditHistoryService.CaptureSnapshot(issue);
         HeaderLabel = $"{issue.Series?.Name ?? "Unknown Series"} #{issue.EffectiveNumber()}";
-        CoverImage = CoverImageCache.Get(issue.Id);
+        CoverImage = CoverImageCache.Get(issue.Id, issue.FilePath, issue.FileSize);
         CoverBrush = SeriesCardSample.CoverBrushFor(issue.Series?.Name ?? string.Empty);
         FilePathLabel = issue.FilePath ?? string.Empty;
         PageCountLabel = issue.PageCount?.ToString() ?? "Unknown";

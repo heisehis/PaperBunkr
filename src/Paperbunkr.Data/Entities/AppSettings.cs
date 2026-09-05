@@ -504,4 +504,12 @@ public class AppSettings
     /// expanded" mechanism. Default true preserves today's behavior for existing installs.
     /// </summary>
     public bool NavRailHoverExpandEnabled { get; set; } = true;
+
+    /// <summary>
+    /// UTC timestamp of the last completed full cover-content verification pass (docs/superpowers/
+    /// specs/2026-08-30-cover-thumbnail-content-verification-design.md). Null means never run.
+    /// Only set on successful completion - an interrupted pass (app closed mid-run) retries next
+    /// launch rather than being marked done early.
+    /// </summary>
+    public DateTime? LastCoverVerificationUtc { get; set; }
 }

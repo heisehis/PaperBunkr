@@ -110,17 +110,12 @@ internal sealed class BlockedMetadataReferenceResolver : MetadataReferenceResolv
 {
     public static readonly BlockedMetadataReferenceResolver Instance = new();
 
-    private static readonly string[] DeniedAssemblyPrefixes =
-    {
-        "Microsoft.EntityFrameworkCore", "Microsoft.Data.Sqlite", "SQLitePCLRaw",
-    };
-
     private readonly MetadataReferenceResolver _inner = ScriptMetadataResolver.Default;
 
     public override bool ResolveMissingAssemblies => true;
 
     public override PortableExecutableReference? ResolveMissingAssembly(MetadataReference definition, AssemblyIdentity referenceIdentity) =>
-        IsDenied(referenceIdentity.Name) ? null : _inner.ResolveMissingAssembly(definition, referenceIdentity);
+        PluginSandboxDenylist.IsDenied(referenceIdentity.Name) ? null : _inner.ResolveMissingAssembly(definition, referenceIdentity);
 
     public override ImmutableArray<PortableExecutableReference> ResolveReference(string reference, string? baseFilePath, MetadataReferenceProperties properties) =>
         ImmutableArray<PortableExecutableReference>.Empty;
@@ -128,7 +123,4 @@ internal sealed class BlockedMetadataReferenceResolver : MetadataReferenceResolv
     public override bool Equals(object? other) => other is BlockedMetadataReferenceResolver;
 
     public override int GetHashCode() => typeof(BlockedMetadataReferenceResolver).GetHashCode();
-
-    private static bool IsDenied(string assemblyName) =>
-        DeniedAssemblyPrefixes.Any(p => assemblyName.StartsWith(p, StringComparison.OrdinalIgnoreCase));
 }

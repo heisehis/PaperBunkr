@@ -2,6 +2,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:fi="using:FluentIcons.Avalonia"
              xmlns:vm="using:Paperbunkr.App.ViewModels"
+             xmlns:plugins="using:Paperbunkr.Plugins"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d" d:DesignWidth="900" d:DesignHeight="780"
@@ -145,6 +146,17 @@
                                FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" Margin="0,4,0,0" />
                 </StackPanel>
                 <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="10" VerticalAlignment="Bottom">
+                    <!-- Plugin API v2 Editor hook (docs/superpowers/specs/2026-09-05-plugin-api-v2-
+                         remaining-hooks-plan.md §3) - same treatment as IssuePropertiesScreen.axaml,
+                         payload here is the whole selection rather than one issue. -->
+                    <Button x:Name="BulkEditorPluginsButton" Classes="ghost" FontSize="12.5"
+                            Command="{Binding ToggleEditorPluginMenuCommand}"
+                            IsVisible="{Binding HasEditorPluginCommands}" ToolTip.Tip="Plugin commands">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <fi:SymbolIcon Symbol="Apps" />
+                            <TextBlock Text="Plugins" />
+                        </StackPanel>
+                    </Button>
                     <Button Classes="ghost" FontSize="12.5" Command="{Binding CancelCommand}">
                         <StackPanel Orientation="Horizontal" Spacing="6">
                             <fi:SymbolIcon Symbol="DismissCircle" />
@@ -159,6 +171,22 @@
                     </Button>
                 </StackPanel>
             </Grid>
+
+            <Popup DockPanel.Dock="Top" PlacementTarget="{Binding #BulkEditorPluginsButton}" Placement="BottomEdgeAlignedLeft" VerticalOffset="6"
+                   IsOpen="{Binding IsEditorPluginMenuOpen}" IsLightDismissEnabled="True">
+                <Border Classes="dropdown" MinWidth="200">
+                    <ItemsControl ItemsSource="{Binding EditorPluginCommands}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="plugins:Command">
+                                <Button Classes="modeOption" Content="{Binding Name}"
+                                        Command="{Binding $parent[UserControl].((vm:BulkIssuePropertiesScreenViewModel)DataContext).RunEditorPluginCommand}"
+                                        CommandParameter="{Binding}" />
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </Border>
+            </Popup>
+
             <Border DockPanel.Dock="Top" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,0,0,1" Margin="0,0,0,24" />
 
             <ScrollViewer>

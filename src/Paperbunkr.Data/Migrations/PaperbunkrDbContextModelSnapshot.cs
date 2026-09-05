@@ -251,6 +251,9 @@ namespace Paperbunkr.Data.Migrations
                     b.Property<DateTime?>("LastContentTypeSweepUtc")
                         .HasColumnType("TEXT");
 
+                    b.Property<DateTime?>("LastCoverVerificationUtc")
+                        .HasColumnType("TEXT");
+
                     b.Property<int?>("LastScreenEntityId")
                         .HasColumnType("INTEGER");
 

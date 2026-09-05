@@ -40,6 +40,10 @@ public sealed class LibraryTile
     /// <summary>Series (its resolved cover issue) / Issue tiles only - see the type doc comment.</summary>
     public int? CoverIssueId { get; init; }
 
+    /// <summary>What <c>views:AsyncCoverImage.SourceId</c> actually keys its lookup on - see
+    /// <see cref="IssueCardSample.CoverKey"/>'s doc comment. Series/Issue tiles only.</summary>
+    public string? CoverKey { get; init; }
+
     /// <summary>Book tiles only - see the type doc comment.</summary>
     public Bitmap? CoverImage { get; init; }
 
@@ -56,7 +60,10 @@ public sealed class LibraryTile
             Title = series.Name,
             Subtitle = $"{series.ContentType} · {series.Issues.Count} issues",
             CoverBrush = SeriesCardSample.CoverBrushFor(series.Name),
-            CoverIssueId = (series.Issues.FirstOrDefault(i => i.Id == series.CoverIssueId) ?? series.Issues.OrderByNumber().FirstOrDefault())?.Id,
+            CoverIssueId = CoverIssueFor(series)?.Id,
+            CoverKey = CoverIssueFor(series) is { } coverIssue
+                ? CoverFingerprint.Stem(coverIssue.Id, coverIssue.FilePath, coverIssue.FileSize)
+                : null,
         },
         CollectionMemberKind.Issue when member.Issue is { } issue => new LibraryTile
         {
@@ -66,6 +73,7 @@ public sealed class LibraryTile
             Subtitle = issue.Series?.Name,
             CoverBrush = SeriesCardSample.CoverBrushFor(member.DisplayTitle),
             CoverIssueId = issue.Id,
+            CoverKey = CoverFingerprint.Stem(issue.Id, issue.FilePath, issue.FileSize),
         },
         CollectionMemberKind.Book when member.Book is { } book => new LibraryTile
         {
@@ -74,7 +82,7 @@ public sealed class LibraryTile
             Title = book.Title,
             Subtitle = "Book",
             CoverBrush = SeriesCardSample.CoverBrushFor(book.Title),
-            CoverImage = BookCoverImageCache.Get(book.Id),
+            CoverImage = BookCoverImageCache.Get(book.Id, book.FilePath),
         },
         // A member whose target row was deleted out from under it without the CollectionItem being
         // cleaned up (shouldn't happen - FK cascade handles that - but a display-layer fallback is
@@ -87,4 +95,7 @@ public sealed class LibraryTile
             CoverBrush = SeriesCardSample.CoverBrushFor(member.DisplayTitle),
         },
     };
+
+    private static Paperbunkr.Data.Entities.Issue? CoverIssueFor(Paperbunkr.Data.Entities.Series series) =>
+        series.Issues.FirstOrDefault(i => i.Id == series.CoverIssueId) ?? series.Issues.OrderByNumber().FirstOrDefault();
 }

@@ -296,20 +296,20 @@ public partial class HomeScreenViewModel : ViewModelBase
 
         foreach (var card in RecentlyAdded)
         {
-            TryAdd(card.CoverIssueId is int id ? CoverImageCache.Get(id) : null);
+            TryAdd(card.CoverKey is string key ? CoverImageCache.Get(key) : null);
         }
 
         foreach (var row in BecauseYouRead)
         {
             foreach (var card in row.Cards)
             {
-                TryAdd(card.CoverIssueId is int id ? CoverImageCache.Get(id) : null);
+                TryAdd(card.CoverKey is string key ? CoverImageCache.Get(key) : null);
             }
         }
 
         foreach (var card in ContinueReading)
         {
-            TryAdd(card.Series.CoverIssueId is int id ? CoverImageCache.Get(id) : null);
+            TryAdd(card.Series.CoverKey is string key ? CoverImageCache.Get(key) : null);
         }
 
         foreach (var item in SpotlightItems)

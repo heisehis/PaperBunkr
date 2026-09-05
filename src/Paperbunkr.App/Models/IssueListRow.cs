@@ -115,6 +115,11 @@ public sealed partial class IssueListRow : ObservableObject, ISelectableCard, IV
     public bool IsMangaFamily => ContentTypeLabel is "Manga" or "Manhua" or "Manhwa";
 
     public bool HasFile => !string.IsNullOrEmpty(FilePath);
+
+    /// <summary>Cache-file stem for this issue's current file identity - what
+    /// <c>CoverImageConverter</c> binds against (docs/superpowers/specs/2026-08-27-cover-thumbnail-
+    /// identity-validation-design.md).</summary>
+    public string CoverKey => CoverFingerprint.Stem(Id, FilePath, FileSize);
     public bool HasPublisher => !string.IsNullOrWhiteSpace(Publisher);
     public bool HasLanguage => !string.IsNullOrWhiteSpace(LanguageIso);
 

@@ -4,6 +4,7 @@ using System.Collections.ObjectModel;
 using System.Linq;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using System.Threading;
 using System.Threading.Tasks;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -19,6 +20,7 @@ using Paperbunkr.Data.Collections;
 using Paperbunkr.Data.Entities;
 using Paperbunkr.Data.Metadata;
 using Paperbunkr.Data.ReadingLists;
+using Paperbunkr.Plugins;
 
 namespace Paperbunkr.App.ViewModels;
 
@@ -1153,6 +1155,43 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         OnPropertyChanged(nameof(EmptyStateMessage));
         OnPropertyChanged(nameof(EmptyStateActionLabel));
         OnPropertyChanged(nameof(EmptyStateActionCommand));
+
+        KickCoverReconcile();
+    }
+
+    // 0 = idle, 1 = a reconcile pass is running. Static: one library-wide cover cache, and
+    // LoadFromDatabase runs on every rail navigation - without this guard, quick back-and-forth
+    // navigation would stack redundant full passes.
+    private static int s_coverReconcileRunning;
+
+    /// <summary>
+    /// Fire-and-forget cover-cache reconciliation on library load (docs/superpowers/specs/
+    /// 2026-08-27-cover-thumbnail-identity-validation-design.md) - regenerates any cover whose
+    /// fingerprint no longer matches its issue and sweeps orphaned files. Presence-based, so a
+    /// pass with nothing to do is cheap (one query + a File.Exists per issue + one dir listing).
+    /// </summary>
+    private static void KickCoverReconcile()
+    {
+        if (Interlocked.CompareExchange(ref s_coverReconcileRunning, 1, 0) != 0)
+        {
+            return;
+        }
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await new CoverThumbnailService().GenerateAllAsync(new Progress<(int Done, int Total)>());
+            }
+            catch
+            {
+                // Best-effort - startup and the "Generate Covers" button also reconcile.
+            }
+            finally
+            {
+                Interlocked.Exchange(ref s_coverReconcileRunning, 0);
+            }
+        });
     }
 
     /// <summary>
@@ -2338,6 +2377,33 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
     }
 
     public bool HasPluginHost => _pluginHost is not null;
+
+    /// <summary>
+    /// NewBooks-hook commands (docs/superpowers/specs/2026-09-05-plugin-api-v2-remaining-hooks-
+    /// plan.md §5) - CE inserts one File-menu item per enabled command right after "New Comic", a
+    /// peer entry point rather than a takeover of the manual add flow; the Add-issue overlay's
+    /// "Add via {command}" buttons mirror that.
+    /// </summary>
+    public IReadOnlyList<Command> NewBooksPluginCommands => _pluginHost?.GetNewBooksCommands().ToList() ?? new List<Command>();
+
+    public bool HasNewBooksPluginCommands => NewBooksPluginCommands.Count > 0;
+
+    /// <summary>Runs a NewBooks command and, if it returns a draft Issue, opens Issue Properties for it - same hand-off <see cref="CreatePlaceholderIssue"/> already uses.</summary>
+    [RelayCommand]
+    private async Task RunNewBooksPlugin(Command command)
+    {
+        if (_pluginHost is null)
+        {
+            return;
+        }
+
+        IsAddIssueOpen = false;
+        var issue = await _pluginHost.RunNewBooksCommandAsync(command);
+        if (issue is not null)
+        {
+            _goToNewIssueProperties(issue.Id, issue.SeriesId, true);
+        }
+    }
 
     /// <summary>
     /// Real Library-hook trigger (docs/superpowers/specs/2026-08-24-plugin-api-v2-design.md §5) -

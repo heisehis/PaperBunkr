@@ -51,7 +51,7 @@ public sealed class HomeCollectionCard
         {
             var tile = LibraryTile.FromMember(member);
             coverBrush = tile.CoverBrush;
-            coverImage = tile.CoverImage ?? (tile.CoverIssueId is int issueId ? CoverImageCache.Get(issueId) : null);
+            coverImage = tile.CoverImage ?? (tile.CoverKey is string coverKey ? CoverImageCache.Get(coverKey) : null);
         }
 
         return new HomeCollectionCard

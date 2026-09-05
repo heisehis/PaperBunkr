@@ -155,13 +155,27 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         // UI should refresh" responsibility is just re-running Migration.NeedsReview's live query -
         // Library itself already reloads its data on every navigation (an earlier real bug fix), so
         // no separate push-refresh is needed there.
-        LiveFolderWatch = new LiveFolderWatchService(ShowToast, () =>
-        {
-            _upkeep.SetActive("Reacting to a watched-folder change");
-            _upkeepIdleTimer.Stop();
-            _upkeepIdleTimer.Start();
-            Migration.NeedsReview.Refresh();
-        });
+        LiveFolderWatch = new LiveFolderWatchService(
+            ShowToast,
+            () =>
+            {
+                _upkeep.SetActive("Reacting to a watched-folder change");
+                _upkeepIdleTimer.Stop();
+                _upkeepIdleTimer.Start();
+                Migration.NeedsReview.Refresh();
+            },
+            onFilesMissing: count => Activity.RaiseAlert(new ActivityAlert
+            {
+                Severity = ActivityAlertSeverity.Warning,
+                Title = "Missing files detected",
+                Detail = count == 1
+                    ? "A watched file disappeared from disk."
+                    : $"{count} watched files disappeared from disk.",
+                ActionLabel = "Review",
+                ActionLink = new ActivityLink(ActivityLinkKind.MigrationReview),
+                DedupeKey = "missing-files",
+            }),
+            onFilesImported: ids => DuplicateAlertHelper.RaiseIfAny(Activity, ids));
         LiveFolderWatch.Start();
 
         Preferences = new PreferencesScreenViewModel(

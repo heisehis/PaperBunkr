@@ -31,6 +31,8 @@ public class LiveFolderWatchService : IDisposable
     private readonly LibraryFolderScanner _scanner;
     private readonly Action<string, string> _showToast;
     private readonly Action _onLibraryChanged;
+    private readonly Action<int> _onFilesMissing;
+    private readonly Action<IReadOnlyList<int>> _onFilesImported;
     private readonly TimeSpan _debounceWindow;
     private readonly TimeSpan _fileReadyRetryDelay;
     private readonly object _pendingLock = new();
@@ -40,8 +42,8 @@ public class LiveFolderWatchService : IDisposable
     private readonly List<FileSystemWatcher> _watchers = new();
     private bool _disposed;
 
-    public LiveFolderWatchService(Action<string, string> showToast, Action onLibraryChanged)
-        : this(PaperbunkrDb.CreateContext, new LibraryFolderScanner(), showToast, onLibraryChanged, TimeSpan.FromSeconds(2), TimeSpan.FromMilliseconds(500))
+    public LiveFolderWatchService(Action<string, string> showToast, Action onLibraryChanged, Action<int>? onFilesMissing = null, Action<IReadOnlyList<int>>? onFilesImported = null)
+        : this(PaperbunkrDb.CreateContext, new LibraryFolderScanner(), showToast, onLibraryChanged, TimeSpan.FromSeconds(2), TimeSpan.FromMilliseconds(500), onFilesMissing, onFilesImported)
     {
     }
 
@@ -52,12 +54,16 @@ public class LiveFolderWatchService : IDisposable
         Action<string, string> showToast,
         Action onLibraryChanged,
         TimeSpan debounceWindow,
-        TimeSpan fileReadyRetryDelay)
+        TimeSpan fileReadyRetryDelay,
+        Action<int>? onFilesMissing = null,
+        Action<IReadOnlyList<int>>? onFilesImported = null)
     {
         _contextFactory = contextFactory;
         _scanner = scanner;
         _showToast = showToast;
         _onLibraryChanged = onLibraryChanged;
+        _onFilesMissing = onFilesMissing ?? (_ => { });
+        _onFilesImported = onFilesImported ?? (_ => { });
         _debounceWindow = debounceWindow;
         _fileReadyRetryDelay = fileReadyRetryDelay;
 
@@ -246,6 +252,7 @@ public class LiveFolderWatchService : IDisposable
         _showToast(
             "New comics found",
             $"{result.IssuesAdded} new issue{(result.IssuesAdded == 1 ? "" : "s")} added across {result.SeriesTouched} series.");
+        _onFilesImported(result.AddedIssueIds);
         _onLibraryChanged();
     }
 
@@ -290,6 +297,10 @@ public class LiveFolderWatchService : IDisposable
     /// ever set <c>Issue.FileIsMissing</c> based on a real-time disk check before this - only CE
     /// migration import and reading-list placeholder creation ever set it, so a natively-scanned
     /// issue whose file got deleted outside a relink flow was never flagged missing at all.
+    /// <see cref="_onFilesMissing"/> fires once per flush (already batched with everything else in
+    /// this method) so the caller can surface one Activity Center alert per bulk delete rather than
+    /// one per file, pointing at the Needs Review "Missing Files" section where a file can be
+    /// relinked, removed, or dismissed.
     /// </summary>
     private void MarkMissing(List<string> deletedPaths)
     {
@@ -313,6 +324,7 @@ public class LiveFolderWatchService : IDisposable
         }
 
         context.SaveChanges();
+        _onFilesMissing(issues.Count);
     }
 
     public void Dispose()

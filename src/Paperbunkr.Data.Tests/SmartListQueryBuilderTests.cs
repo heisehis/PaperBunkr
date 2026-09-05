@@ -362,6 +362,49 @@ public class SmartListQueryBuilderTests : IDisposable
         Assert.Contains(_issuePathDupId, duplicateIds);
     }
 
+    // --- BuildDuplicateGroups ---
+
+    [Fact]
+    public void BuildDuplicateGroups_UnionsIssuesLinkedByEitherKey_IntoOneCluster()
+    {
+        // MetaDupA<->MetaDupB share the metadata key; MetaDupA<->PathDup share only the file path
+        // key (different metadata) - all three must land in one cluster, not two overlapping ones.
+        var issues = _context.Issues.ToList();
+        var groups = SmartListQueryBuilder.BuildDuplicateGroups(issues);
+
+        var cluster = Assert.Single(groups, g => g.Any(i => i.Id == _issueMetaDupAId));
+        Assert.Equal(3, cluster.Count);
+        Assert.Contains(cluster, i => i.Id == _issueMetaDupBId);
+        Assert.Contains(cluster, i => i.Id == _issuePathDupId);
+    }
+
+    [Fact]
+    public void BuildDuplicateGroups_ExcludesSingletons()
+    {
+        var issues = _context.Issues.ToList();
+        var groups = SmartListQueryBuilder.BuildDuplicateGroups(issues);
+
+        Assert.DoesNotContain(groups, g => g.Any(i => i.Id == _issueReadId));
+        Assert.All(groups, g => Assert.True(g.Count >= 2));
+    }
+
+    [Fact]
+    public void BuildDuplicateGroups_SortsFileIsMissingLast_ThenBySizeDescending_ThenDeterministicTiebreak()
+    {
+        var series = new Series { Name = "Sort Test" };
+        var missingButOtherwiseLargest = new Issue { Series = series, Number = "1", FilePath = @"C:\lib\sort.cbz", FileIsMissing = true, FileSize = 999_000_000 };
+        var smaller = new Issue { Series = series, Number = "1", FilePath = @"C:\lib\sort.cbz", FileSize = 10_000_000, AddedTime = new DateTime(2026, 1, 2) };
+        var larger = new Issue { Series = series, Number = "1", FilePath = @"C:\lib\sort.cbz", FileSize = 20_000_000, AddedTime = new DateTime(2026, 1, 1) };
+
+        var groups = SmartListQueryBuilder.BuildDuplicateGroups(new[] { missingButOtherwiseLargest, smaller, larger });
+
+        var cluster = Assert.Single(groups);
+        Assert.Equal(3, cluster.Count);
+        Assert.Same(larger, cluster[0]); // present + largest wins over a "larger" but missing file
+        Assert.Same(smaller, cluster[1]);
+        Assert.Same(missingButOtherwiseLargest, cluster[2]); // missing always sorts last
+    }
+
     // --- Multi-condition AND composition ---
 
     [Fact]

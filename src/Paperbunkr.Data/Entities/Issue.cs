@@ -291,4 +291,13 @@ public class Issue
     /// file when browsed directly.
     /// </summary>
     public bool MissingAcknowledged { get; set; }
+
+    /// <summary>
+    /// True once the user has dismissed this issue's duplicate-cluster state from the Needs Review
+    /// "Duplicate Files" queue ("these aren't actually duplicates I want flagged") without deleting
+    /// it (docs/superpowers/specs/2026-09-05-duplicate-files-review-design.md). Same review-queue-
+    /// only contract as <see cref="MissingAcknowledged"/> - the "Duplicate Candidates" system smart
+    /// list ignores this and still shows every duplicate when browsed directly.
+    /// </summary>
+    public bool DuplicateAcknowledged { get; set; }
 }

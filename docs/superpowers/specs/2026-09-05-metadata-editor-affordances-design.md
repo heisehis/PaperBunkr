@@ -214,10 +214,16 @@ flyouts, Genre/Tags "Details" sub-panels). Only the inner editing control change
 | Field | Minimum | Maximum | Notes |
 |---|---|---|---|
 | Count | 0 | — | CE `txCount` start 1 / min 0 |
-| Alternate Count *(new field on this screen)* | 0 | — | CE `txAlternateCount`; Paperbunkr's `Issue.AlternateCount` exists but has no editor UI today — add the row |
 | Year | 0 | 9999 | CE start = current year; we keep empty-allowed |
 | Month | 1 | 12 | CE `txMonth` |
 | Day | 1 | 31 | CE `txDay` (CE's own max is a flat 31, no month awareness — match that) |
+
+**Alternate Count is not added.** CE's dialog has `txAlternateCount`, but `Issue` has no
+`AlternateCount` column (verified 2026-09-05 — `IssueToComicInfoMapper` explicitly lists it among
+"elements Paperbunkr doesn't model"). Adding it means a schema column + EF migration + write-back
+mapping, which is out of proportion to an affordances pass and breaks this spec's "no migration"
+constraint. The `of:` box next to Alternate Number in CE's screenshot simply has no Paperbunkr
+field behind it yet.
 
 Bound as today: VM keeps `string` properties, `NumericUpDown.Value` ↔ string via a tiny
 `decimal?`/`string` converter (empty string ↔ `null`). `Save` still `int.TryParse`s. `NumericUpDown`
@@ -239,7 +245,7 @@ avalonia-controls/input pitfalls, is bound with no explicit `Mode`.
 |---|---|---|
 | Format | `VocabField.Format` | unchanged (`NullIfEmpty`) |
 | Age Rating | `VocabField.AgeRating` | unchanged |
-| Book Age *(already an `AutoCompleteBox` on `BookAge`)* | `VocabField.BookAge` | unchanged |
+| Book Age *(VM has `BookAge` + options already; **not** currently rendered in the single editor's XAML — add the field)* | `VocabField.BookAge` | unchanged |
 | Publisher | `VocabField.Publisher` | unchanged |
 | Imprint | `VocabField.Imprint` | unchanged |
 | Language (ISO) | `VocabField.LanguageIso` | **normalize**: if `Text` case-insensitively equals a neutral culture's `DisplayName` or `EnglishName`, store its `TwoLetterISOLanguageName`; else store `Text` verbatim |
@@ -331,14 +337,13 @@ Staging semantics are untouched — `BulkFieldViewModel.OnValueChanged` already 
 
 - **Single editor** (`IssuePropertiesScreenViewModel.Save`): unchanged except the Language
   normalization (§4.3) — a new `NormalizeLanguage(string) -> string?` helper applied where
-  `issue.LanguageISO` is assigned. Add `issue.AlternateCount = ParseInt(AlternateCountText)` for
-  the new field. Everything else still flows `string` → `NullIfEmpty` / `ParseInt`.
+  `issue.LanguageISO` is assigned. Everything else still flows `string` → `NullIfEmpty` /
+  `ParseInt`.
 - **Bulk editor** (`BulkIssuePropertiesScreenViewModel.Save`): unchanged — `FieldKind.Numeric`
   rows still round-trip through the descriptor's existing `Set(issue, string?)`, which already
   `ParseInt`s. Language normalization applied in the `Language (ISO)` descriptor's `Set`.
 
-No migration. `Issue.AlternateCount` already exists in the schema (added with the metadata model
-phases) — this only adds its editor row.
+No migration — every field already exists on `Issue`; this is a pure UI/vocabulary change.
 
 ## 7. Deliberate deviations from CE
 
@@ -369,8 +374,8 @@ manual pass by the user.
   segment and preserves the prefix + adds `", "`.
 - **`IssuePropertiesScreenViewModelTests`** (extend): vocabulary lists populate after `Load`
   (await the background build in the test seam); `NormalizeLanguage` — `"English"` → `"en"`,
-  `"en-US"` → `"en-US"` (verbatim), `""` → `null`; `AlternateCount` round-trips; the existing
-  numeric-field and Cancel-never-writes assertions still pass.
+  `"en-US"` → `"en-US"` (verbatim), `""` → `null`; the existing numeric-field and
+  Cancel-never-writes assertions still pass.
 - **`BulkIssuePropertiesScreenViewModelTests`** (extend): `FieldKind.Numeric` row stages on
   edit and writes an int; a list-field row's `AutocompleteOptions` is the union of its static
   list and the pushed vocabulary.
@@ -390,9 +395,9 @@ manual pass by the user.
 
 **Changed**
 - `src/Paperbunkr.App/App.axaml` — merge `FormControls.axaml`
-- `src/Paperbunkr.App/Views/IssuePropertiesScreen.axaml` — control swaps, new Alternate Count row
+- `src/Paperbunkr.App/Views/IssuePropertiesScreen.axaml` — control swaps
 - `src/Paperbunkr.App/ViewModels/IssuePropertiesScreenViewModel.cs` — vocab build, vocab list
-  properties, `AlternateCountText`, `NormalizeLanguage`
+  properties, `NormalizeLanguage`
 - `src/Paperbunkr.App/Views/BulkIssuePropertiesScreen.axaml` — `FieldRowTemplate` numeric branch +
   per-item behavior hook
 - `src/Paperbunkr.App/ViewModels/BulkIssuePropertiesScreenViewModel.cs` — vocab build + push

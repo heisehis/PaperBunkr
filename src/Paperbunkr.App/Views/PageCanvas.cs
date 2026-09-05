@@ -64,6 +64,10 @@ public class PageCanvas : Control
     public static readonly StyledProperty<ICommand?> FullscreenToggleCommandProperty =
         AvaloniaProperty.Register<PageCanvas, ICommand?>(nameof(FullscreenToggleCommand));
 
+    /// <summary>Touch center-zone tap (docs/superpowers/specs/2026-09-05-reader-polish-backlog-finish-design.md §3) - invoked by <see cref="InvokeTouchZone"/> when <see cref="PageTurnGestureMath.ResolveZone"/> returns the reserved center-column no-op.</summary>
+    public static readonly StyledProperty<ICommand?> ToggleChromeCommandProperty =
+        AvaloniaProperty.Register<PageCanvas, ICommand?>(nameof(ToggleChromeCommand));
+
     /// <summary>
     /// Always-context commands (docs/superpowers/specs/2026-08-16-remappable-reader-shortcuts-
     /// design.md §2/§3) - checked first in <see cref="OnKeyDown"/>, ahead of every mode branch,
@@ -281,6 +285,31 @@ public class PageCanvas : Control
 
     public static readonly StyledProperty<int> PageCountProperty =
         AvaloniaProperty.Register<PageCanvas, int>(nameof(PageCount));
+
+    /// <summary>
+    /// Split-page part navigation (docs/superpowers/specs/2026-09-05-reader-polish-backlog-finish-
+    /// design.md §1) - 0-based index of the current viewport-sized "part" within the current page
+    /// (or double-page spread) when it's zoomed past what the viewport shows. No external writer -
+    /// recomputed by <see cref="UpdatePartLabel"/> whenever page/zoom/pan/fit changes, so plain
+    /// OneWay is enough (unlike <see cref="PageCountProperty"/>'s TwoWay-bound siblings elsewhere in
+    /// this file, which the ViewModel itself sets).
+    /// </summary>
+    public static readonly StyledProperty<int> CurrentPartProperty =
+        AvaloniaProperty.Register<PageCanvas, int>(nameof(CurrentPart));
+
+    /// <summary>Total part count for the current page/spread at the current zoom/fit - <c>1</c> when it fits the viewport (no parts to step through). See <see cref="CurrentPartProperty"/>.</summary>
+    public static readonly StyledProperty<int> PartCountProperty =
+        AvaloniaProperty.Register<PageCanvas, int>(nameof(PartCount), defaultValue: 1);
+
+    /// <summary>
+    /// "Part 2/4"-style display text for ReaderScreen.axaml's Navigate cluster, empty when
+    /// <see cref="PartCount"/> is <c>1</c> (no parts to show) - a computed string rather than making
+    /// the XAML compose <see cref="CurrentPart"/>/<see cref="PartCount"/> itself via a MultiBinding,
+    /// since the only consumer is this one label and <c>StringConverters.IsNotNullOrEmpty</c>
+    /// already gives the empty-string case a free <c>IsVisible</c> binding with no new converter.
+    /// </summary>
+    public static readonly StyledProperty<string> PartLabelProperty =
+        AvaloniaProperty.Register<PageCanvas, string>(nameof(PartLabel), defaultValue: "");
 
     /// <summary>Continuous mode's scroll position, in stack space - the main-axis analog of <see cref="PanOffsetX"/>/<see cref="PanOffsetY"/> (which continuous mode reuses for cross-axis pan when zoomed, per <see cref="ReaderLayoutModel.ComputeContinuousLayout"/>'s <c>crossAxisPanOffset</c>).</summary>
     public static readonly StyledProperty<double> ScrollOffsetProperty =
@@ -518,6 +547,12 @@ public class PageCanvas : Control
     {
         get => GetValue(FullscreenToggleCommandProperty);
         set => SetValue(FullscreenToggleCommandProperty, value);
+    }
+
+    public ICommand? ToggleChromeCommand
+    {
+        get => GetValue(ToggleChromeCommandProperty);
+        set => SetValue(ToggleChromeCommandProperty, value);
     }
 
     public ICommand? SetFitModeCommand
@@ -816,6 +851,24 @@ public class PageCanvas : Control
         set => SetValue(PageCountProperty, value);
     }
 
+    public int CurrentPart
+    {
+        get => GetValue(CurrentPartProperty);
+        private set => SetValue(CurrentPartProperty, value);
+    }
+
+    public int PartCount
+    {
+        get => GetValue(PartCountProperty);
+        private set => SetValue(PartCountProperty, value);
+    }
+
+    public string PartLabel
+    {
+        get => GetValue(PartLabelProperty);
+        private set => SetValue(PartLabelProperty, value);
+    }
+
     public double ScrollOffset
     {
         get => GetValue(ScrollOffsetProperty);
@@ -889,11 +942,134 @@ public class PageCanvas : Control
     private (ICommand? Command, PageTransitionDirection Direction) BackwardTurn =>
         IsPagedVertical ? (LeftCommand, PageTransitionDirection.Up) : (LeftCommand, PageTransitionDirection.Left);
 
-    /// <summary>Runs a resolved zone/flick turn intent (<c>true</c> = forward, <c>false</c> = back).</summary>
+    /// <summary>
+    /// Runs a resolved zone/flick turn intent (<c>true</c> = forward, <c>false</c> = back).
+    /// Split-page part navigation (docs/superpowers/specs/2026-09-05-reader-polish-backlog-finish-
+    /// design.md §1) intercepts this first: when the current page (or spread) is zoomed past what
+    /// the viewport shows, this steps through its viewport-sized "parts" before actually turning the
+    /// page - matching ComicRackCE's own <c>DisplayNextPageOrPart</c>, which only falls through to a
+    /// real page turn once <c>DisplayPart</c> reports no more parts in that direction.
+    /// </summary>
     private bool ExecuteTurn(bool forward)
     {
+        if (!IsContinuous && TryStepPart(forward))
+        {
+            return true;
+        }
+
         var (command, direction) = forward ? ForwardTurn : BackwardTurn;
-        return ExecuteDirectional(command, direction);
+        bool executed = ExecuteDirectional(command, direction);
+        if (executed && !IsContinuous)
+        {
+            LandOnPartAfterPageTurn(forward);
+        }
+
+        return executed;
+    }
+
+    /// <summary>
+    /// The content the part grid is computed against: the current page's own (rotation-adjusted)
+    /// pixel size, or - when a double-page spread is active - the combined virtual spread size
+    /// (<see cref="SpreadLayoutMath.ComputeCombinedSize"/>), matching how <see cref="ReaderPageVisualHandler.RenderSpread"/>
+    /// already feeds that same combined size through the shared fit/zoom/pan math. Rotation is inert
+    /// for spreads (that render path's own documented simplification), so this uses the raw
+    /// <see cref="Page"/>/<see cref="SecondaryPage"/> pixel sizes rather than <see cref="EffectivePixelSize"/>
+    /// whenever a spread is active.
+    /// </summary>
+    private PixelSize EffectivePartContentSize() =>
+        SecondaryPage is { } secondary && Page is { } primary
+            ? SpreadLayoutMath.ComputeCombinedSize(primary.PixelSize, secondary.PixelSize).Combined
+            : EffectivePixelSize();
+
+    private (int Cols, int Rows) ComputeCurrentPartGrid() =>
+        PagePartMath.ComputePartGrid(Bounds.Size, EffectivePartContentSize(), ZoomLevel, FitMode, FitOnlyIfOversized);
+
+    /// <summary>
+    /// Recomputes <see cref="CurrentPart"/>/<see cref="PartCount"/> from the current page/zoom/pan/
+    /// fit state - called on every relevant property change (see <see cref="OnPropertyChanged(AvaloniaPropertyChangedEventArgs)"/>)
+    /// so the "Part X/Y" label (ReaderScreen.axaml's Navigate cluster) stays live even when pan
+    /// changes via a free mouse-drag, not just via <see cref="TryStepPart"/>. No-ops (leaves both at
+    /// their current values) in continuous mode or with no page loaded - parts are a paged-mode-only
+    /// concept.
+    /// </summary>
+    private void UpdatePartLabel()
+    {
+        if (IsContinuous || Page is null)
+        {
+            PartCount = 1;
+            CurrentPart = 0;
+            PartLabel = "";
+            return;
+        }
+
+        var grid = ComputeCurrentPartGrid();
+        int count = PagePartMath.PartCount(grid);
+        PartCount = count;
+        CurrentPart = count <= 1
+            ? 0
+            : PagePartMath.FindNearestPart(grid, Bounds.Size, EffectivePartContentSize(),
+                ZoomPanMath.ComputeBaseScale(Bounds.Size, EffectivePartContentSize(), FitMode, FitOnlyIfOversized) * ZoomLevel,
+                PanOffsetX, PanOffsetY, ReadingMode == ReadingMode.RightToLeft);
+        PartLabel = count > 1 ? $"Part {CurrentPart + 1}/{count}" : "";
+    }
+
+    /// <summary>Attempts to step to the next/previous grid part of the current page/spread. Returns <c>false</c> (no-op) when there's only one part, or the current part is already the last one in the requested direction - the caller then falls through to a real page turn.</summary>
+    private bool TryStepPart(bool forward)
+    {
+        if (Page is null)
+        {
+            return false;
+        }
+
+        var grid = ComputeCurrentPartGrid();
+        int count = PagePartMath.PartCount(grid);
+        if (count <= 1)
+        {
+            return false;
+        }
+
+        var content = EffectivePartContentSize();
+        double scale = ZoomPanMath.ComputeBaseScale(Bounds.Size, content, FitMode, FitOnlyIfOversized) * ZoomLevel;
+        bool rtl = ReadingMode == ReadingMode.RightToLeft;
+        int current = PagePartMath.FindNearestPart(grid, Bounds.Size, content, scale, PanOffsetX, PanOffsetY, rtl);
+        int next = forward ? current + 1 : current - 1;
+        if (next < 0 || next >= count)
+        {
+            return false;
+        }
+
+        var (x, y) = PagePartMath.PanForPart(next, grid, Bounds.Size, content, scale, ZoomLevel, rtl, FitMode, FitOnlyIfOversized);
+        PanOffsetX = x;
+        PanOffsetY = y;
+        return true;
+    }
+
+    /// <summary>
+    /// Sets the just-landed-on page's pan to its first part (forward turn) or last part (backward
+    /// turn), matching CE's own landing convention (<c>NavigationOverlay</c>'s
+    /// <c>part = (oldPage &gt;= newPage) ? (PartCount - 1) : 0</c>) - a stale pan value carried over
+    /// from the previous page could otherwise clamp to a nonsensical spot once the new page's
+    /// (possibly differently-shaped) dimensions are known. Only meaningful when the just-completed
+    /// turn was <see cref="ExecuteTurn"/>'s own real-page-turn fallback, not <see cref="TryStepPart"/>'s
+    /// same-page part step (which already leaves pan exactly where it should be).
+    /// </summary>
+    private void LandOnPartAfterPageTurn(bool forward)
+    {
+        if (Page is null)
+        {
+            return;
+        }
+
+        var grid = ComputeCurrentPartGrid();
+        int count = PagePartMath.PartCount(grid);
+        var content = EffectivePartContentSize();
+        double scale = ZoomPanMath.ComputeBaseScale(Bounds.Size, content, FitMode, FitOnlyIfOversized) * ZoomLevel;
+        bool rtl = ReadingMode == ReadingMode.RightToLeft;
+        int landingPart = forward ? 0 : count - 1;
+
+        var (x, y) = PagePartMath.PanForPart(landingPart, grid, Bounds.Size, content, scale, ZoomLevel, rtl, FitMode, FitOnlyIfOversized);
+        PanOffsetX = x;
+        PanOffsetY = y;
     }
 
     private ReaderLayoutModel.Axis ContinuousAxis => ReadingMode is ReadingMode.HorizontalContinuous or ReadingMode.HorizontalContinuousRightToLeft ? ReaderLayoutModel.Axis.Horizontal : ReaderLayoutModel.Axis.Vertical;
@@ -1170,6 +1346,14 @@ public class PageCanvas : Control
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
     {
         base.OnPropertyChanged(change);
+
+        // Split-page part navigation (docs/superpowers/specs/2026-09-05-reader-polish-backlog-
+        // finish-design.md §1) - recomputed unconditionally, ahead of every early-return branch
+        // below, so the "Part X/Y" label stays live for every relevant change (page, zoom, pan, fit,
+        // bounds) regardless of which branch a given property change falls into. Cheap no-op for any
+        // unrelated property change - UpdatePartLabel itself no-ops in continuous mode or with no
+        // page loaded.
+        UpdatePartLabel();
 
         if (change.Property == DecoderProperty)
         {
@@ -2061,11 +2245,16 @@ public class PageCanvas : Control
 
     private void InvokeTouchZone(Point p)
     {
-        // Left/right thirds (top/bottom in vertical paged mode); middle third is a reserved no-op,
-        // per the 3-zone tap spec - no chrome/menu feature to call yet.
+        // Left/right thirds (top/bottom in vertical paged mode); middle third toggles chrome
+        // visibility (docs/superpowers/specs/2026-09-05-reader-polish-backlog-finish-design.md §3) -
+        // originally a reserved no-op per the 3-zone tap spec, back when chrome didn't exist yet.
         if (PageTurnGestureMath.ResolveZone(p, Bounds.Size, IsPagedVertical, divisions: 3) is { } forward)
         {
             ExecuteTurn(forward);
+        }
+        else
+        {
+            TryExecute(ToggleChromeCommand);
         }
     }
 

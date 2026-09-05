@@ -169,10 +169,15 @@ wheel, top/bottom click-and-tap zones, vertical flick), with vertical `Slide` an
 Automated tests green; on-screen gesture/animation verification done (user-confirmed 2026-08-27).
 
 **Still genuinely open:** magnifier overlay (explicitly skipped per user direction — "we have a zoom
-slider"), on-screen overlays (scrubber, page/status text, clock/battery), split-page part navigation,
-touch gestures beyond what's already shipped. **On-screen verification of double-page spread
-rendering/pairing, remappable-shortcut keypress wiring, and auto-scroll behavior — cleared by the
-user 2026-09-04** (see the "On-screen verification" section near the top of this backlog).
+slider"). **On-screen overlays (clock/battery + "Part X/Y" label), split-page part navigation
+(including a double-page-spread extension), and the touch center-zone → chrome-toggle gesture all
+shipped 2026-09-05** (docs/superpowers/specs/2026-09-05-reader-polish-backlog-finish-design.md) —
+this closes the Reader polish backlog entirely, aside from the explicitly-declined magnifier.
+**On-screen verification of double-page spread rendering/pairing, remappable-shortcut keypress
+wiring, and auto-scroll behavior — cleared by the user 2026-09-04** (see the "On-screen
+verification" section near the top of this backlog); this session's three new items — clock/
+battery + "Part X/Y" label, split-page part navigation, and touch center-zone chrome toggle —
+user-confirmed live 2026-09-05.
 
 ### Metadata editing extras
 Copy/paste fields between books, templated/token text field editor, Quick Rating + free-text

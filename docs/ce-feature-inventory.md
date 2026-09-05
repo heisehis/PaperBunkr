@@ -131,11 +131,11 @@ memory alone isn't trustworthy here).
 | Magnifier/loupe overlay tool | 📋 confirmed still not started — CE's `MagnifierStyle`/`IComicDisplayConfig` exist only as dormant ported code in `Paperbunkr.Engine`, zero references anywhere in `Paperbunkr.App` |
 | Page transition animations (fade/slide/paging) + zoom-in/out-on-page-change | ✅ shipped — `PageTransitionStyle`/`PageTransitionMath`/`ReaderPageVisualHandler` (docs/superpowers/specs/2026-08-13-reader-page-transition-animations-design.md) |
 | Fullscreen + minimal-UI chrome-reduction mode | ✅ shipped — `ReaderScreenViewModel.IsFullscreen`/`ToggleFullscreen`/`ShowFullscreenOverlays` |
-| On-screen overlays: nav scrubber bar, page/status text, part-info, clock/battery | ⚠️ partial — nav scrubber (thumbnail rail) and page/status text both real and shipped; "part-info" doesn't apply, confirmed no CE-style "Part" concept exists in Paperbunkr at all; clock/battery genuinely not built |
+| On-screen overlays: nav scrubber bar, page/status text, part-info, clock/battery | ✅ shipped — nav scrubber (thumbnail rail + chrome dot-strip) and page/status text shipped earlier; part-info ("Part X/Y" label) and clock/battery **shipped 2026-09-05** (docs/superpowers/specs/2026-09-05-reader-polish-backlog-finish-design.md §1/§2) — this row previously claimed "no CE-style 'Part' concept exists," which was wrong, see the split-page part-navigation row above |
 | Image adjustment: brightness/contrast/saturation/gamma/sharpen, live (not baked into files) | ⚠️ partial — brightness/contrast/saturation/gamma shipped and live (`Services/ImageAdjustmentMath.cs`, ported from CE's `ImageProcessing.cs`); sharpen and AutoContrast/WhitePoint explicitly skipped, real remaining gap |
 | Background: solid/texture/paper-texture, page margins | ⚠️ partial — solid-color background + page margins shipped (`AppSettings.ImageBackgroundMode`/`PageMarginEnabled` etc., global-only by design, no per-issue override); paper/texture background mode genuinely not built |
 | Continuous/webtoon vertical scroll | ✅ shipped — **not** a CE feature at all, confirmed genuinely new work, not parity (docs/superpowers/specs/2026-08-10-reader-polish-continuous-scroll-chrome-overlays-design.md) |
-| Split-page "part" navigation for zoomed pages, type-to-jump-to-page, scroll page-turn throttling | ⚠️ partial — page-turn throttling shipped (`ReaderScreenViewModel`'s rapid-paging guard); split-page part navigation doesn't apply (no Part concept, confirmed absent); type-to-jump-to-page genuinely not built (only click-to-jump via the thumbnail rail) |
+| Split-page "part" navigation for zoomed pages, type-to-jump-to-page, scroll page-turn throttling | ⚠️ partial — page-turn throttling shipped (`ReaderScreenViewModel`'s rapid-paging guard); split-page part navigation **shipped 2026-09-05** (`PagePartMath.cs` — this row previously claimed CE has "no Part concept, confirmed absent," which was wrong: verified directly against `ImageDisplayControl.cs`/`ComicDisplay.cs` source, CE genuinely splits an overflowing page into a grid of viewport-sized parts and steps through them before turning the page; ported, including the double-page-spread case, docs/superpowers/specs/2026-09-05-reader-polish-backlog-finish-design.md §1); type-to-jump-to-page genuinely not built (only click-to-jump via the thumbnail rail) |
 | Touch gestures: 9-zone tap mapping + double-tap, flick, media keys | ✅ shipped (minus media keys) — 3×3 zone grid, double-tap, flick, pinch all real in `PageCanvas.cs` (docs/superpowers/specs/2026-08-09-reader-gestures-and-grid-navigation-design.md); media keys were an explicit scope cut in that same spec (cross-platform Avalonia support too inconsistent), not an oversight |
 | Fully remappable keyboard shortcuts, import/export layout | ✅ shipped — `KeyboardCommandRegistry`/`KeyBindingService` cover ~24 Reader commands (docs/superpowers/specs/2026-08-16-remappable-reader-shortcuts-design.md); import/export of the layout specifically not independently re-verified |
 | Auto-scrolling / hands-free reading mode | ✅ shipped (docs/superpowers/specs/2026-08-16-reader-auto-scroll-design.md) — deliberate deviation from CE's own differently-behaving toggle, documented as such |
@@ -237,8 +237,8 @@ genuinely open-ended, and export/self-updater are the two clean drops. As of 202
 stale sequencing plan):
 
 - **Reader (§B):** magnifier/loupe, sharpen/AutoContrast/WhitePoint image adjustment, paper/texture
-  background, clock/battery overlay, type-to-jump-to-page, a per-page manual Near/Far double-page
-  override.
+  background, type-to-jump-to-page, a per-page manual Near/Far double-page override. (Clock/battery
+  overlay and split-page part navigation shipped 2026-09-05.)
 - **Library (§C):** Virtual Tags as a sort/group axis. (Drag-and-drop import + Recent/MRU + Quick
   Open + Saved "Workspaces" all shipped 2026-09-03; filesystem folder browsing mode dropped by
   decision.)

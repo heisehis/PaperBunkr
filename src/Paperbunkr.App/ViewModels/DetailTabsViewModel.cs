@@ -263,7 +263,7 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
             Title = string.IsNullOrWhiteSpace(issue.EffectiveNumber()) ? "#?" : $"#{issue.EffectiveNumber()}",
             IsUnread = issue.LastPageRead is null or 0,
             CoverBrush = coverBrush,
-            CoverImage = CoverImageCache.Get(issue.Id),
+            CoverImage = CoverImageCache.Get(issue.Id, issue.FilePath, issue.FileSize),
             FilePath = issue.FilePath,
             FullTitle = issue.EffectiveTitle(),
             ArcTitle = issue.StoryArc,
@@ -310,7 +310,7 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
 
         var cover = series.Issues.FirstOrDefault(i => i.Id == series.CoverIssueId)
             ?? series.Issues.OrderByNumber().FirstOrDefault();
-        return cover is null ? null : CoverImageCache.Get(cover.Id);
+        return cover is null ? null : CoverImageCache.Get(cover.Id, cover.FilePath, cover.FileSize);
     }
 
     private void RefreshRelated(PaperbunkrDbContext context, int seriesId)
@@ -352,7 +352,7 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
                 {
                     var tile = LibraryTile.FromMember(member);
                     coverBrush = tile.CoverBrush;
-                    coverImage = tile.CoverImage ?? (tile.CoverIssueId is int issueId ? CoverImageCache.Get(issueId) : null);
+                    coverImage = tile.CoverImage ?? (tile.CoverKey is string coverKey ? CoverImageCache.Get(coverKey) : null);
                 }
 
                 sample = new RelatedSeriesSample
@@ -1633,6 +1633,12 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
             return;
         }
 
+        using var context = _contextFactory();
+        var info = context.Issues
+            .Where(i => i.Id == issueId)
+            .Select(i => new { i.FilePath, i.FileSize })
+            .FirstOrDefault();
+
         var old = Issues[index];
         Issues[index] = new IssueCardSample
         {
@@ -1641,7 +1647,7 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
             Title = old.Title,
             IsUnread = old.IsUnread,
             CoverBrush = old.CoverBrush,
-            CoverImage = CoverImageCache.Get(issueId),
+            CoverImage = CoverImageCache.Get(issueId, info?.FilePath, info?.FileSize),
             FilePath = old.FilePath,
             FullTitle = old.FullTitle,
             ArcTitle = old.ArcTitle,

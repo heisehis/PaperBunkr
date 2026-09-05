@@ -125,7 +125,8 @@ public sealed class PaperbunkrApplication : IApplication
 
     public byte[]? GetComicThumbnail(Issue issue)
     {
-        string path = CoverThumbnailPaths.GetCachePath(issue.Id);
+        string stem = CoverFingerprint.Stem(issue.Id, issue.FilePath, issue.FileSize);
+        string path = CoverThumbnailPaths.GetCachePath(stem);
         return File.Exists(path) ? File.ReadAllBytes(path) : null;
     }
 

@@ -135,6 +135,15 @@ public sealed partial class SeriesCardSample : ObservableObject, ISelectableCard
     /// </summary>
     public required IssueListRow RepresentativeRow { get; init; }
 
+    /// <summary>
+    /// Cache-file stem (<see cref="CoverFingerprint.Stem"/>) for the cover issue's current file
+    /// identity - what <c>CoverImageConverter</c> actually binds against (docs/superpowers/specs/
+    /// 2026-08-27-cover-thumbnail-identity-validation-design.md). Null when the series has no
+    /// issue to derive a cover from. Distinct from <see cref="CoverIssueId"/>, which several
+    /// non-cover consumers (Continue Reading, Detail's issue-focus) still need as a raw id.
+    /// </summary>
+    public string? CoverKey { get; init; }
+
     public static IBrush Gradient(string fromHex, string toHex) => new LinearGradientBrush
     {
         StartPoint = new RelativePoint(0, 0, RelativeUnit.Relative),
@@ -242,6 +251,9 @@ public sealed partial class SeriesCardSample : ObservableObject, ISelectableCard
             HasFile = series.Issues.Any(i => !string.IsNullOrEmpty(i.FilePath)),
             CoverBrush = CoverBrushFor(series.Name),
             CoverIssueId = coverIssue?.Id,
+            CoverKey = coverIssue is null
+                ? null
+                : CoverFingerprint.Stem(coverIssue.Id, coverIssue.FilePath, coverIssue.FileSize),
             PanoramaWidth = ComputePanoramaWidth(aspectRatio),
             // LINQ's nullable Max() returns null for an all-null or empty sequence rather than throwing.
             LastAddedTime = series.Issues.Select(i => i.AddedTime).Max(),

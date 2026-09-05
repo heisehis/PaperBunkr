@@ -495,4 +495,21 @@ public class AppSettings
     /// enabled, so default true here.
     /// </summary>
     public bool EnableDragDropImport { get; set; } = true;
+
+    /// <summary>
+    /// Whether hovering the collapsed nav rail temporarily expands it (docs/superpowers/specs/
+    /// 2026-08-24-navigation-shell-motion-system-design.md's hover-expand mechanism) - user-facing
+    /// toggle added 2026-09-05 for people who found the hover-expand distracting. Pinning
+    /// (<see cref="NavRailPinned"/>) is unaffected either way - that's a separate, explicit "always
+    /// expanded" mechanism. Default true preserves today's behavior for existing installs.
+    /// </summary>
+    public bool NavRailHoverExpandEnabled { get; set; } = true;
+
+    /// <summary>
+    /// UTC timestamp of the last completed full cover-content verification pass (docs/superpowers/
+    /// specs/2026-08-30-cover-thumbnail-content-verification-design.md). Null means never run.
+    /// Only set on successful completion - an interrupted pass (app closed mid-run) retries next
+    /// launch rather than being marked done early.
+    /// </summary>
+    public DateTime? LastCoverVerificationUtc { get; set; }
 }

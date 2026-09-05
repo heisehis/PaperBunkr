@@ -298,7 +298,7 @@
                                     CommandParameter="{Binding}" KeyDown="OnResultCardKeyDown">
                                 <Border Classes="resultTile" Background="{Binding CoverBrush}">
                                     <Grid>
-                                        <Image views:AsyncCoverImage.SourceId="{Binding CoverIssueId}" Stretch="UniformToFill" />
+                                        <Image views:AsyncCoverImage.SourceId="{Binding CoverKey}" Stretch="UniformToFill" />
                                         <TextBlock Text="{Binding Title}" FontSize="13" FontWeight="Black" Foreground="#FFFFF8EC"
                                                    VerticalAlignment="Bottom" Margin="9" />
                                     </Grid>
@@ -325,7 +325,7 @@
                                     CommandParameter="{Binding}">
                                 <Border Classes="resultTile" Background="{Binding CoverBrush}">
                                     <Grid>
-                                        <Image views:AsyncCoverImage.SourceId="{Binding CoverIssueId}" Stretch="UniformToFill" />
+                                        <Image views:AsyncCoverImage.SourceId="{Binding CoverKey}" Stretch="UniformToFill" />
                                         <TextBlock Text="{Binding Title}" FontSize="13" FontWeight="Black" Foreground="#FFFFF8EC"
                                                    VerticalAlignment="Bottom" Margin="9" TextTrimming="CharacterEllipsis" />
                                     </Grid>

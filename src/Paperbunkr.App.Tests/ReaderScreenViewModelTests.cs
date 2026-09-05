@@ -2361,4 +2361,54 @@ public class ReaderScreenViewModelTests : IDisposable
         Assert.Equal("PAGE 2 / 2", vm.PageLabel);
         Assert.Contains("#2", vm.IssueTitle);
     }
+
+    private sealed class FakeBatteryStatusService(BatteryStatusSample? sample) : IBatteryStatusService
+    {
+        public BatteryStatusSample? GetStatus() => sample;
+    }
+
+    [Fact]
+    public void LoadIssue_WithBatteryPresent_FormatsPercentageLabel()
+    {
+        var vm = new ReaderScreenViewModel(() => { }, new KeyBindingService(), new FakeBatteryStatusService(new BatteryStatusSample(72, IsCharging: false)));
+
+        vm.LoadIssue(_issue1Id);
+
+        Assert.Equal("72%", vm.BatteryStatusLabel);
+    }
+
+    [Fact]
+    public void LoadIssue_WithNoBatteryPresent_LeavesLabelNull()
+    {
+        var vm = new ReaderScreenViewModel(() => { }, new KeyBindingService(), new FakeBatteryStatusService(null));
+
+        vm.LoadIssue(_issue1Id);
+
+        Assert.Null(vm.BatteryStatusLabel);
+    }
+
+    [Fact]
+    public void ToggleChromeCommand_WhenChromeShown_HidesIt()
+    {
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id);
+        Assert.True(vm.ShowChrome);
+
+        vm.ToggleChromeCommand.Execute(null);
+
+        Assert.False(vm.ShowChrome);
+    }
+
+    [Fact]
+    public void ToggleChromeCommand_WhenChromeHidden_ShowsItAgain()
+    {
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id);
+        vm.ToggleChromeCommand.Execute(null);
+        Assert.False(vm.ShowChrome);
+
+        vm.ToggleChromeCommand.Execute(null);
+
+        Assert.True(vm.ShowChrome);
+    }
 }

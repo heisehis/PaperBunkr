@@ -251,6 +251,9 @@ namespace Paperbunkr.Data.Migrations
                     b.Property<DateTime?>("LastContentTypeSweepUtc")
                         .HasColumnType("TEXT");
 
+                    b.Property<DateTime?>("LastCoverVerificationUtc")
+                        .HasColumnType("TEXT");
+
                     b.Property<int?>("LastScreenEntityId")
                         .HasColumnType("INTEGER");
 
@@ -400,6 +403,11 @@ namespace Paperbunkr.Data.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("REAL")
                         .HasDefaultValue(2.0);
+
+                    b.Property<bool>("NavRailHoverExpandEnabled")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasDefaultValue(true);
 
                     b.Property<bool>("NavRailPinned")
                         .HasColumnType("INTEGER");

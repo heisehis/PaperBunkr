@@ -969,6 +969,7 @@ public class PaperbunkrDbContext : DbContext
             builder.Property(a => a.ScanFoldersOnStartup).HasDefaultValue(false);
             builder.Property(a => a.PromptReviewOnFinish).HasDefaultValue(false);
             builder.Property(a => a.EnableDragDropImport).HasDefaultValue(true);
+            builder.Property(a => a.NavRailHoverExpandEnabled).HasDefaultValue(true);
         });
 
         modelBuilder.Entity<VirtualTagDefinition>(builder =>

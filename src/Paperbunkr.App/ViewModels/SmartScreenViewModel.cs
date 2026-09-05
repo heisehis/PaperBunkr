@@ -500,6 +500,7 @@ public partial class SmartScreenViewModel : ViewModelBase
                 IsUnread = issue.LastPageRead is null or 0,
                 CoverBrush = SeriesCardSample.CoverBrushFor(issue.Series!.Name),
                 CoverIssueId = issue.Id, // lazy async decode via AsyncCoverImage - see IssueCardSample.CoverIssueId
+                CoverKey = CoverFingerprint.Stem(issue.Id, issue.FilePath, issue.FileSize),
             });
         }
 

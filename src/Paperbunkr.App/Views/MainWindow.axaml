@@ -231,22 +231,12 @@
                 </StackPanel>
 
                 <StackPanel Grid.Row="2" Margin="10,0" Spacing="2">
-                    <!-- Undo/Redo for metadata edits (docs/ce-feature-inventory.md §A) - app-wide, not
-                         screen-specific, so the rail nav's utility row (alongside Preferences below)
-                         is the one place they're always reachable regardless of what's on screen. -->
-                    <Button Classes="rail" Command="{Binding UndoCommand}" ToolTip.Tip="Undo last metadata edit">
-                        <StackPanel Orientation="Horizontal">
-                            <fi:SymbolIcon Symbol="ArrowUndo" />
-                            <TextBlock Classes="railLabel" Text="Undo" IsVisible="{Binding IsNavRailExpanded}" />
-                        </StackPanel>
-                    </Button>
-                    <Button Classes="rail" Command="{Binding RedoCommand}" ToolTip.Tip="Redo">
-                        <StackPanel Orientation="Horizontal">
-                            <fi:SymbolIcon Symbol="ArrowUndo" RenderTransform="scaleX(-1)" />
-                            <TextBlock Classes="railLabel" Text="Redo" IsVisible="{Binding IsNavRailExpanded}" />
-                        </StackPanel>
-                    </Button>
-                    <Border Width="28" Height="1" Background="{DynamicResource PbBorderBrush}" Margin="0,4" />
+                    <!-- Undo/Redo buttons removed from the rail 2026-09-05 (user request - the rail
+                         was getting cluttered) - metadata-edit Undo/Redo (docs/ce-feature-inventory.md
+                         §A) is still reachable app-wide via Ctrl+Z/Ctrl+Y (MainWindow.axaml.cs's
+                         OnMainWindowKeyDown), UndoCommand/RedoCommand themselves are unchanged. The
+                         separator that used to sit between them and Preferences went too - nothing
+                         left to separate. -->
                     <Button Classes="rail" Classes.active="{Binding IsPreferences}"
                             Command="{Binding GoPreferencesCommand}" ToolTip.Tip="Preferences"
                             AutomationProperties.AutomationId="PreferencesRailButton">

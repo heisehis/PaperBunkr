@@ -229,6 +229,23 @@ FlaUI (`Paperbunkr.App.UiTests`): after each drill nav the `TransitionOverlay` p
 children at rest (no stuck clone) — add to the existing UiTests project, serialized per its
 `xunit.runner.json`.
 
+> **As implemented (2026-09-05):** the shared key strategy landed as `"issue-cover:{issueId}"` /
+> `"series-cover:{seriesId}"` — computed from ids already in hand at each call site (no DB lookup;
+> see Step 7's own commit note), not the plan's original `cover:{issueId}` guess. `LibraryScreen.axaml`
+> only got the **default Poster grid** templates wired (`PosterGridIssueTemplate`/
+> `PosterGridSeriesTemplate`) — Tiles/Panorama/List/Details view modes are unwired this pass (their
+> covers are small/cropped enough that the morph would look questionable, and wiring all ~11 tile
+> templates blind, without on-screen verification, was judged a worse risk/reward than shipping the
+> primary view mode correctly). `AsyncCoverImage` needed no change — `ImageSource` reads the sibling
+> `Image`'s own `Source` via an ElementName binding instead of adding a new bindable bitmap property.
+> **`ReaderScreen` first-page participation was cut**, not attempted — `PageCanvas`/
+> `ReaderScreenViewModel` expose no public first-page `Bitmap` or fit-rect, and building that seam
+> blind was judged disproportionate to a first-page cover morph's payoff; Reader keeps Step 6's
+> plain push/pop cross-fade. The back-trip `ScrollIntoView` realization was **not** wired either -
+> a cover-morph back into a scrolled-away grid position currently just falls through to the
+> already-designed "destination never registers → cross-fade" edge case. Both are real, scoped
+> follow-ups, not silently dropped.
+
 ---
 
 ## Step 9: Review + roadmap

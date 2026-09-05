@@ -74,6 +74,7 @@ public partial class DetailScreenViewModel : ViewModelBase, IDetailHeaderSource
     public string HeaderTitle => SeriesTitle;
     string? IDetailHeaderSource.SecondaryTitle => null;
     DetailHeroProgress? IDetailHeaderSource.TrackerProgress => null;
+    string? IDetailHeaderSource.SharedElementKey => _seriesId is int seriesId ? $"series-cover:{seriesId}" : null;
 
     private string? _readingStatus;
     private ReadingStatusPickerViewModel? _readingStatusPicker;
@@ -245,6 +246,7 @@ public partial class DetailScreenViewModel : ViewModelBase, IDetailHeaderSource
 
         _isLoadingSeries = true;
         _seriesId = seriesId;
+        OnPropertyChanged(nameof(IDetailHeaderSource.SharedElementKey));
         _focusedIssueId = null;
 
         var card = SeriesCardSample.FromSeries(series);

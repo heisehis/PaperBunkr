@@ -552,10 +552,18 @@
                     Width="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PosterCardWidth}"
                     KeyDown="OnCardKeyDown" PointerPressed="OnTilePointerPressed" DoubleTapped="OnCardDoubleTapped">
                 <Grid RowDefinitions="*,Auto">
+                    <!-- Shared-element cover flight source/destination (docs/superpowers/specs/
+                         2026-09-04-navigation-transition-system-design.md) - key matches
+                         MainViewModel.GoReaderForIssue's own "issue-cover:{issueId}" scheme.
+                         ImageSource reads the sibling Image's own Source (set asynchronously by
+                         AsyncCoverImage once decoded) rather than a separate eager bind - a cache
+                         miss just means no flight plays (edge case already handled), not a crash. -->
                     <Border Grid.Row="0" Classes="cover posterCover" Background="{Binding CoverBrush}"
-                            Height="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PosterCoverHeight}">
+                            Height="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PosterCoverHeight}"
+                            controls:SharedElement.Key="{Binding Id, StringFormat='issue-cover:{0}'}"
+                            controls:SharedElement.ImageSource="{Binding #PosterIssueCoverImage.Source}">
                         <Grid>
-                            <Image views:AsyncCoverImage.SourceId="{Binding Id}" Stretch="UniformToFill" />
+                            <Image x:Name="PosterIssueCoverImage" views:AsyncCoverImage.SourceId="{Binding Id}" Stretch="UniformToFill" />
                             <Border Classes="posterScrim" />
                             <Border Classes="pbChip" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="6">
                                 <Border.IsVisible>
@@ -598,10 +606,18 @@
                     Width="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PosterCardWidth}"
                     KeyDown="OnCardKeyDown" PointerPressed="OnSeriesTilePointerPressed" DoubleTapped="OnCardDoubleTapped">
                 <Grid RowDefinitions="*,Auto">
+                    <!-- Shared-element cover flight source/destination (docs/superpowers/specs/
+                         2026-09-04-navigation-transition-system-design.md) - key matches
+                         MainViewModel.GoDetailForSeries's own "series-cover:{seriesId}" scheme
+                         (keyed on the SERIES id, not CoverIssueId - sidesteps ever needing to agree
+                         on which issue is "the cover" across screens; both ends resolve their own
+                         cover art independently for the same series id). -->
                     <Border Grid.Row="0" Classes="cover posterCover" Background="{Binding CoverBrush}"
-                            Height="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PosterCoverHeight}">
+                            Height="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PosterCoverHeight}"
+                            controls:SharedElement.Key="{Binding SeriesId, StringFormat='series-cover:{0}'}"
+                            controls:SharedElement.ImageSource="{Binding #PosterSeriesCoverImage.Source}">
                         <Grid>
-                            <Image views:AsyncCoverImage.SourceId="{Binding CoverIssueId}" Stretch="UniformToFill" />
+                            <Image x:Name="PosterSeriesCoverImage" views:AsyncCoverImage.SourceId="{Binding CoverIssueId}" Stretch="UniformToFill" />
                             <Border Classes="posterScrim" />
                             <Border Classes="pbChip" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="6">
                                 <Border.IsVisible>

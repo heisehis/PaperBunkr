@@ -59,6 +59,14 @@ public interface IDetailHeaderSource : INotifyPropertyChanged
     /// redesign-design.md §3).</summary>
     string? Synopsis => null;
 
+    /// <summary>Shared-element key for the hero's own foreground cover thumbnail (docs/superpowers/
+    /// specs/2026-09-04-navigation-transition-system-design.md) - "series-cover:{seriesId}", matching
+    /// <c>MainViewModel.CurrentDrillSharedKey</c>'s/<c>GoDetailForSeries</c>'s own scheme so a Library
+    /// series card and this hero agree on the same key independently, with no shared lookup. Default
+    /// null so BookDetail (books have no Library-grid cover tile to morph from/to) and the Home
+    /// spotlight adapter (not a drill-down navigation target) need no change.</summary>
+    string? SharedElementKey => null;
+
     /// <summary>Ordered action buttons; first <c>IsPrimary</c> one is the accent button.</summary>
     IReadOnlyList<DetailHeroAction> Actions { get; }
 

@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Threading.Tasks;
 using Avalonia;
+using Avalonia.Animation.Easings;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 using Paperbunkr.App.Plugins;
@@ -100,7 +101,8 @@ public partial class App : Application
             System.Threading.Tasks.Task.Run(ActivityHistoryStore.PruneOnStartup);
 
             DiagnosticsService.LogMilestone("Database ready. Applying skin/theme...");
-            new SkinService().ApplyPersistedSettings();
+            var skinService = new SkinService();
+            skinService.ApplyPersistedSettings();
 
             // Reconcile the pre-UI graphics.json cache to the now-readable AppSettings source of
             // truth (docs/superpowers/specs/2026-08-27-hardware-accelerated-rendering-design.md
@@ -123,7 +125,17 @@ public partial class App : Application
             }
 
             DiagnosticsService.LogMilestone("Building main window...");
-            var mainViewModel = new MainViewModel();
+
+            // docs/superpowers/specs/2026-09-04-navigation-transition-system-design.md - real
+            // shared-element flight duration/easing come from the same App.axaml resources every
+            // XAML-declared transition uses, read live at flight time (not once at startup) so a
+            // runtime resource change (skin reload) is picked up.
+            var transitionCoordinator = new NavigationTransitionCoordinator(
+                SharedElementTransitionService.Shared,
+                isReducedMotion: skinService.GetReducedMotion,
+                flightDuration: () => (TimeSpan)(Application.Current!.Resources["PbMotionLarge"] ?? TimeSpan.FromMilliseconds(320)),
+                easing: new CubicEaseOut());
+            var mainViewModel = new MainViewModel(transitionCoordinator.RunAsync);
             var mainWindow = new MainWindow
             {
                 DataContext = mainViewModel,

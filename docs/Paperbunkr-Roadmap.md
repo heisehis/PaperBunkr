@@ -963,6 +963,27 @@ with all the new wiring active (`startup.log` reaches "Startup complete." on eve
 interactive parts (checkbox toggle, tray icon appearing, restore/exit) were **not** verified live
 on-screen - computer-use access was denied for this app, same as a prior session's manga-detail work.
 
+**Navigation transition system shipped 2026-09-05** (sub-project 1 of "full app chrome animations" -
+sub-project 2, chrome/content motion polish, not yet started), design spec + plan
+`2026-09-04-navigation-transition-system-{design,plan}.md`, superseding/extending the 2026-08-24
+navigation-shell-motion spec's own deferred drill-down motion. The six drill-down screens (Detail/
+MangaDetail/Reader/BookDetail/BookReader/PdfReader) move off instant-cut `IsVisible` toggles onto one
+`TransitioningContentControl` with a push/pop cross-fade (`PbDrillTransition`, direction from a new
+`MainViewModel.IsDrillTransitionReversed`), and Library ↔ Detail (default Poster grid only) gets a
+real shared-element cover flight - a floating clone flies from the grid tile to the hero and back,
+via a new `SharedElement` attached-property pair + `ISharedElementTransitionService` +
+`NavigationTransitionCoordinator`. Two participants were scoped out during implementation, not
+silently dropped: Reader's first-page morph (`PageCanvas` exposes no public bitmap/fit-rect to hook
+into cheaply) and the Tiles/Panorama/List/Details Library view modes (smaller/cropped covers, judged
+not worth wiring blind without on-screen verification) - both are real follow-ups if ever wanted.
+`SharedElementFlightMath` (5 tests), `SharedElementTransitionService` (5 headless tests, two
+Avalonia-headless gotchas found and worked around: no dispatcher loop to re-layout after a tree
+mutation, and a bare `async Task` xUnit test's `await` hopping off Avalonia's owning thread and
+tripping the compositor's thread-affinity check - both documented inline), and
+`NavigationTransitionCoordinator` (4 tests) are new automated coverage; the actual on-screen motion
+feel is **not yet verified** - no unattended GUI automation in this environment, same standing
+`[[feedback_no_computer_use]]` limitation as everywhere else in this project.
+
 ### Novels: EPUB/PDF support (Phase 1+2 landed 2026-08-09/10, Phase 3 landed 2026-08-10)
 Not a CE-parity item — ComicRackCE has no prose-reading equivalent, see the design spec's own
 CE-verification note. Design: docs/superpowers/specs/2026-08-09-novels-epub-pdf-support-design.md.

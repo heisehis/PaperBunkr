@@ -158,7 +158,8 @@
              oversight. -->
         <anim:CompositePageTransition x:Key="PbDrillTransition">
             <anim:CompositePageTransition.PageTransitions>
-                <anim:CrossFade Duration="{StaticResource PbMotionStandard}" />
+                <anim:CrossFade Duration="{StaticResource PbMotionStandard}"
+                                FadeInEasing="{StaticResource PbMotionEase}" FadeOutEasing="{StaticResource PbMotionEase}" />
                 <anim:PageSlide Duration="{StaticResource PbMotionStandard}" Orientation="Vertical"
                                 SlideInEasing="{StaticResource PbMotionEase}" SlideOutEasing="{StaticResource PbMotionEase}" />
             </anim:CompositePageTransition.PageTransitions>

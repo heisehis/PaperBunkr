@@ -864,6 +864,36 @@ methods + `GetComicFields`, a real `SelectComics`) plus IronPython plugin script
 verification of any of the above — same standing caveat as every other backlog item that ships
 without a live click-through pass.
 
+**Follow-up (2026-09-05) — Duplicate Finder shipped for real + a general grouped-review/bulk-
+delete/scan-alert capability:** design spec `2026-09-05-plugin-grouped-review-and-scan-alerts-
+design.md`. Two parts. (1) "Duplicate Finder" only ever existed as a `Paperbunkr.Plugins.Tests`
+fixture, invisible to a real user — moved to a canonical `sample-plugins/DuplicateFinder/` (repo
+root) + packaged `DuplicateFinder.zip`, documented in `wiki/Plugins.md` as a real "try this first"
+example; the old test-only copy is gone, `DuplicateFinderPluginTests` now points at this same
+canonical source via a csproj `Link` glob so the two can never drift. New `PluginPackageServiceTests`
+installs the actual shipped `.zip` through the real `PluginPackageService`/`PackageManager` code
+path — nothing exercised that before. (2) A new, general (not Duplicate-Finder-specific)
+`CreateBookList` return shape, `PluginBookGroup` — a script can still return a flat
+`IEnumerable<Issue>` unchanged, or `IEnumerable<PluginBookGroup>` to open a new Grouped Review
+overlay on the Smart Lists screen (per-group keep/skip choices, one bulk "Resolve All" delete
+through the existing `LibraryDeletionHelper`) plus make the command eligible for a new proactive
+Activity Center alert (`PluginScanAlertService`, re-runs enabled grouped `CreateBookList` commands
+after a scan/import and alerts when the group count grows — in-memory tracking, not persisted,
+matching `ActivityAlert`'s own "session-scoped" design). Duplicate Finder's "Possible Duplicates"
+command upgraded to demonstrate the new shape for real. Two real bugs found via this session's own
+new tests, not inspection: `ActivityService.RaiseAlert`'s dedupe path only refreshes an alert's
+timestamp, not its title, so a real duplicate-count growth silently kept showing the stale count
+(fixed by dismissing the old alert before raising the fresh one); the Smart Lists plugin-result
+construction (flat and grouped) never set `IssueCardSample.CoverKey`, only the now-unwired
+`CoverIssueId`, so covers silently never rendered for any plugin-backed Smart List result since the
+concurrent cover-thumbnail-identity work landed - fixed both branches. This is a separate, plugin-
+driven capability from the native "Duplicate Files Review" (Needs Review queue) that landed
+concurrently in this same window - CE itself ships both native duplicate handling and sample
+scripts, so the two aren't in conflict, just adjacent. Verified: full solution builds clean; 45
+`Paperbunkr.Plugins.Tests` + 461 targeted `Paperbunkr.App.Tests` green, re-run after merging in the
+native Duplicate Files Review work to confirm no interaction bugs. **Not done:** on-screen
+verification.
+
 ### SmartList Engine v2 — nested groups + operators + AllProperties split (shipped 2026-08-29)
 Design spec: `2026-08-28-smartlist-engine-v2-design.md`. Three CE-parity gaps closed:
 (§2) `SmartList.Conditions` flat always-AND list → nested `SmartListConditionGroup` tree

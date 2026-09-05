@@ -50,6 +50,18 @@ public sealed class CreateBookListHookGlobals : PluginGlobals
 {
 }
 
+/// <summary>
+/// A richer <see cref="PluginHooks.CreateBookList"/> return shape (docs/superpowers/specs/
+/// 2026-09-05-plugin-grouped-review-and-scan-alerts-design.md §1) - a script can still return a
+/// flat <c>IEnumerable&lt;Issue&gt;</c> for today's flat Smart Lists results grid; returning
+/// <c>IEnumerable&lt;PluginBookGroup&gt;</c> instead opens the Grouped Review overlay (per-group
+/// keep/skip choices, one bulk delete action) and makes the command eligible for proactive
+/// Activity Center alerts when a scan finds more groups than last time. Not duplicate-specific -
+/// any <c>CreateBookList</c> plugin can opt into this shape. <see cref="SuggestedKeepIssueId"/> is
+/// optional; the overlay defaults to the first book in <see cref="Books"/> when null.
+/// </summary>
+public sealed record PluginBookGroup(string Label, IReadOnlyList<Issue> Books, int? SuggestedKeepIssueId = null);
+
 public sealed class ParseComicPathHookGlobals : PluginGlobals
 {
     public required string Path { get; init; }

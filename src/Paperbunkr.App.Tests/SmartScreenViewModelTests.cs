@@ -1,9 +1,11 @@
 using Avalonia.Media;
 using Paperbunkr.App.Models;
+using Paperbunkr.App.Plugins;
 using Paperbunkr.App.Services;
 using Paperbunkr.App.ViewModels;
 using Paperbunkr.Data;
 using Paperbunkr.Data.Entities;
+using Paperbunkr.Plugins;
 
 namespace Paperbunkr.App.Tests;
 
@@ -330,5 +332,160 @@ public class SmartScreenViewModelTests : IDisposable
         Assert.Null(summary.DeleteConfirm); // no delete affordance exists for a system list at all
         using var verifyContext = PaperbunkrDb.CreateContext();
         Assert.True(verifyContext.SmartLists.Any(l => l.Id == systemListId));
+    }
+
+    // --- Grouped Review overlay (docs/superpowers/specs/2026-09-05-plugin-grouped-review-and-scan-alerts-design.md §3) ---
+
+    private string? _originalPluginRoot;
+    private string? _pluginRoot;
+
+    /// <summary>Redirects plugin discovery to a temp folder (same seam <c>PluginScanAlertServiceTests</c> uses) and writes one CreateBookList command grouping <paramref name="groupSeriesIds"/>'s issues by series - one group per distinct series id passed in.</summary>
+    private PluginHostService AttachGroupedPlugin(SmartScreenViewModel vm, out TestPluginApplication app)
+    {
+        _originalPluginRoot = PluginPaths.RootDirectory;
+        _pluginRoot = Path.Combine(Path.GetTempPath(), $"pb-smart-grouped-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(_pluginRoot);
+        PluginPaths.RootDirectory = _pluginRoot;
+
+        string dir = Path.Combine(_pluginRoot, "grouped-probe");
+        Directory.CreateDirectory(dir);
+        File.WriteAllText(Path.Combine(dir, "plugin.xml"), """
+            <Plugin key="grouped-probe" name="Grouped Probe">
+              <Command hook="CreateBookList" key="grouped-probe.grouped" name="Grouped" script="grouped.csx" />
+            </Plugin>
+            """);
+        File.WriteAllText(Path.Combine(dir, "grouped.csx"),
+            "return Environment.App.GetLibraryBooks().GroupBy(b => b.SeriesId).Select(g => new PluginBookGroup(\"series \" + g.Key, g.ToList(), g.First().Id)).ToArray();");
+
+        app = new TestPluginApplication();
+        var host = new PluginHostService();
+        host.InitializeForTests(new TestPluginEnvironment(app));
+        vm.AttachHost(host);
+        return host;
+    }
+
+    private void CleanUpPluginRoot()
+    {
+        if (_originalPluginRoot is not null)
+        {
+            PluginPaths.RootDirectory = _originalPluginRoot;
+        }
+
+        if (_pluginRoot is not null)
+        {
+            try { Directory.Delete(_pluginRoot, recursive: true); } catch (IOException) { }
+        }
+    }
+
+    [Fact]
+    public async Task LoadPluginList_WithAGroupedResult_OpensTheOverlay_NotTheFlatResultsGrid()
+    {
+        int seriesId = CreateSeriesWithIssues("Dup Series", "1", "1");
+        List<int> issueIds;
+        using (var context = PaperbunkrDb.CreateContext())
+        {
+            issueIds = context.Issues.Where(i => i.SeriesId == seriesId).Select(i => i.Id).OrderBy(id => id).ToList();
+        }
+
+        var vm = new SmartScreenViewModel(goToSeries: _ => { }, goToBook: _ => { });
+        try
+        {
+            AttachGroupedPlugin(vm, out var app);
+            app.Library = issueIds.Select(id => new Issue { Id = id, SeriesId = seriesId, Number = "1" }).ToList();
+
+            var pluginSummary = Assert.Single(vm.PluginLists);
+            await vm.SelectListCommand.ExecuteAsync(pluginSummary);
+
+            Assert.True(vm.IsGroupedReviewOpen);
+            Assert.Empty(vm.Results);
+            var row = Assert.Single(vm.GroupedReviewRows);
+            Assert.Equal(2, row.Books.Count);
+            Assert.Equal(issueIds[0], row.SelectedKeepIssueId); // g.First().Id per the fixture script above
+        }
+        finally
+        {
+            CleanUpPluginRoot();
+        }
+    }
+
+    [Fact]
+    public async Task GroupedReview_TogglingKeepAndSkip_UpdatesTheLiveDeleteCount()
+    {
+        int seriesId = CreateSeriesWithIssues("Dup Series", "1", "1");
+        List<int> issueIds;
+        using (var context = PaperbunkrDb.CreateContext())
+        {
+            issueIds = context.Issues.Where(i => i.SeriesId == seriesId).Select(i => i.Id).OrderBy(id => id).ToList();
+        }
+
+        var vm = new SmartScreenViewModel(goToSeries: _ => { }, goToBook: _ => { });
+        try
+        {
+            AttachGroupedPlugin(vm, out var app);
+            app.Library = issueIds.Select(id => new Issue { Id = id, SeriesId = seriesId, Number = "1" }).ToList();
+            await vm.SelectListCommand.ExecuteAsync(Assert.Single(vm.PluginLists));
+            var row = Assert.Single(vm.GroupedReviewRows);
+
+            Assert.Equal(1, vm.GroupedReviewDeleteCount); // 2 books, 1 kept -> 1 to delete
+            Assert.True(vm.HasGroupedReviewDeletions);
+
+            row.IsSkipped = true;
+            Assert.Equal(0, vm.GroupedReviewDeleteCount);
+            Assert.False(vm.HasGroupedReviewDeletions);
+
+            row.IsSkipped = false;
+            row.SelectKeepCommand.Execute(row.Books[1]); // switch the kept book - count unchanged, still 1
+            Assert.Equal(1, vm.GroupedReviewDeleteCount);
+            Assert.Equal(row.Books[1].Id, row.SelectedKeepIssueId);
+        }
+        finally
+        {
+            CleanUpPluginRoot();
+        }
+    }
+
+    [Fact]
+    public async Task ResolveAll_DeletesNonKeptBooksInNonSkippedGroups_LeavesSkippedGroupsUntouched()
+    {
+        int keptSeriesId = CreateSeriesWithIssues("Resolve Series", "1", "1");
+        int skippedSeriesId = CreateSeriesWithIssues("Skip Series", "5", "5");
+        List<int> resolveIds, skipIds;
+        using (var context = PaperbunkrDb.CreateContext())
+        {
+            resolveIds = context.Issues.Where(i => i.SeriesId == keptSeriesId).Select(i => i.Id).OrderBy(id => id).ToList();
+            skipIds = context.Issues.Where(i => i.SeriesId == skippedSeriesId).Select(i => i.Id).OrderBy(id => id).ToList();
+        }
+
+        var vm = new SmartScreenViewModel(goToSeries: _ => { }, goToBook: _ => { });
+        try
+        {
+            AttachGroupedPlugin(vm, out var app);
+            app.Library = resolveIds.Select(id => new Issue { Id = id, SeriesId = keptSeriesId, Number = "1" })
+                .Concat(skipIds.Select(id => new Issue { Id = id, SeriesId = skippedSeriesId, Number = "5" }))
+                .ToList();
+            await vm.SelectListCommand.ExecuteAsync(Assert.Single(vm.PluginLists));
+
+            var skipRow = vm.GroupedReviewRows.Single(r => r.Books.Any(b => b.Id == skipIds[0]));
+            skipRow.IsSkipped = true;
+
+            await vm.ResolveAllCommand.ExecuteAsync(null); // arm
+            Assert.True(vm.IsResolveArmed);
+            await vm.ResolveAllCommand.ExecuteAsync(null); // confirm
+
+            using var verifyContext = PaperbunkrDb.CreateContext();
+            Assert.False(verifyContext.Issues.Any(i => i.Id == resolveIds[1])); // the non-kept copy in the resolved group is gone
+            Assert.True(verifyContext.Issues.Any(i => i.Id == resolveIds[0])); // the kept copy survives
+            Assert.True(verifyContext.Issues.Any(i => i.Id == skipIds[0])); // skipped group untouched
+            Assert.True(verifyContext.Issues.Any(i => i.Id == skipIds[1]));
+            // Not asserting on IsGroupedReviewOpen's final state here: production code re-runs the
+            // command against the real (now-updated) library after resolving, but this test's fake
+            // IApplication.Library is a static snapshot that doesn't reflect the delete, so the
+            // re-run artifact-groups the still-present-in-the-fake books again - a limitation of
+            // keeping TestPluginApplication a plain in-memory list, not a real bug.
+        }
+        finally
+        {
+            CleanUpPluginRoot();
+        }
     }
 }

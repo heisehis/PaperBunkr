@@ -34,9 +34,9 @@ public sealed class HookCoveragePluginTests
     {
         var engine = DiscoverEngine();
 
-        // 13 manifest entries minus the ConfigScript one, which is diverted into the Editor
+        // 14 manifest entries minus the ConfigScript one, which is diverted into the Editor
         // Probe command's own Configure property (PluginEngine.Discover), not added to AllCommands.
-        Assert.Equal(12, engine.AllCommands.Count);
+        Assert.Equal(13, engine.AllCommands.Count);
         Assert.All(engine.AllCommands, c => Assert.False(c.IsBroken));
 
         var editorProbe = engine.AllCommands.Single(c => c.Key == "hook-coverage.editor");
@@ -212,5 +212,22 @@ public sealed class HookCoveragePluginTests
         Assert.True(result.Success);
         var bytes = Assert.IsType<byte[]>(result.ReturnValue);
         Assert.Equal(new byte[] { 1, 2, 3, 9 }, bytes);
+    }
+
+    [Fact]
+    public async Task CreateBookList_hook_grouped_shape_round_trips()
+    {
+        var app = new FakePluginEnvironment.FakeApplication { Library = new List<Issue> { new() { Id = 1 }, new() { Id = 2 } } };
+        var engine = DiscoverEngine(app);
+
+        var results = await engine.InvokeAsync(PluginHooks.CreateBookList, env => new CreateBookListHookGlobals { Environment = env });
+
+        var result = Assert.Single(results.Where(r => r.Command.Key == "hook-coverage.create-book-list-grouped"));
+        Assert.True(result.Success);
+        var groups = Assert.IsAssignableFrom<PluginBookGroup[]>(result.ReturnValue);
+        var group = Assert.Single(groups);
+        Assert.Equal("all books", group.Label);
+        Assert.Equal(new[] { 1, 2 }, group.Books.Select(b => b.Id));
+        Assert.Equal(1, group.SuggestedKeepIssueId);
     }
 }

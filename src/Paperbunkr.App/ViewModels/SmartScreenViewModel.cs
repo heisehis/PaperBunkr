@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Threading.Tasks;
+using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.EntityFrameworkCore;
@@ -80,8 +81,106 @@ public partial class SmartScreenViewModel : ViewModelBase
     private readonly Dictionary<int, Command> _pluginListCommands = new();
     private int? _activePluginListId;
     private PluginHostService? _pluginHost;
+    private Command? _groupedReviewCommand;
 
     public bool HasPluginHost => _pluginHost is not null;
+
+    // --- Grouped Review overlay (docs/superpowers/specs/2026-09-05-plugin-grouped-review-and-scan-alerts-design.md §3) ---
+
+    public ObservableCollection<PluginGroupRowViewModel> GroupedReviewRows { get; } = new();
+
+    [ObservableProperty]
+    private bool _isGroupedReviewOpen;
+
+    [ObservableProperty]
+    private bool _isResolveArmed;
+
+    private DispatcherTimer? _resolveArmRevertTimer;
+
+    /// <summary>Every non-kept book in every non-skipped group, right now - recomputed live as keep/skip choices change (each row's <c>onChanged</c> callback triggers this).</summary>
+    public int GroupedReviewDeleteCount => GroupedReviewRows.Sum(r => r.DeleteCount);
+
+    public bool HasGroupedReviewDeletions => GroupedReviewDeleteCount > 0;
+
+    public string ResolveAllLabel => IsResolveArmed
+        ? $"Confirm delete {GroupedReviewDeleteCount} file{(GroupedReviewDeleteCount == 1 ? "" : "s")}?"
+        : $"Delete {GroupedReviewDeleteCount} duplicate file{(GroupedReviewDeleteCount == 1 ? "" : "s")}";
+
+    private void NotifyGroupedReviewChanged()
+    {
+        OnPropertyChanged(nameof(GroupedReviewDeleteCount));
+        OnPropertyChanged(nameof(HasGroupedReviewDeletions));
+        OnPropertyChanged(nameof(ResolveAllLabel));
+    }
+
+    [RelayCommand]
+    private void CloseGroupedReview()
+    {
+        IsGroupedReviewOpen = false;
+        CancelResolveArm();
+        GroupedReviewRows.Clear();
+        _groupedReviewCommand = null;
+    }
+
+    private void CancelResolveArm()
+    {
+        _resolveArmRevertTimer?.Stop();
+        _resolveArmRevertTimer = null;
+        IsResolveArmed = false;
+    }
+
+    /// <summary>
+    /// Two-step confirm inlined rather than reusing <see cref="TwoStepConfirm"/> directly - that
+    /// class's idle/armed labels are fixed at construction time, but this button's label carries a
+    /// live delete count that changes as the user toggles rows, so its content has to be computed,
+    /// not swapped between two fixed strings. Same 3-second arm/auto-revert timer shape though.
+    /// </summary>
+    [RelayCommand]
+    private async Task ResolveAll()
+    {
+        if (!IsResolveArmed)
+        {
+            IsResolveArmed = true;
+            OnPropertyChanged(nameof(ResolveAllLabel));
+            _resolveArmRevertTimer?.Stop();
+            _resolveArmRevertTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(3) };
+            _resolveArmRevertTimer.Tick += (_, _) =>
+            {
+                CancelResolveArm();
+                OnPropertyChanged(nameof(ResolveAllLabel));
+            };
+            _resolveArmRevertTimer.Start();
+            return;
+        }
+
+        CancelResolveArm();
+
+        var command = _groupedReviewCommand;
+        var rows = GroupedReviewRows.Where(r => !r.IsSkipped).ToList();
+
+        using (var context = PaperbunkrDb.CreateContext())
+        {
+            foreach (var row in rows)
+            {
+                foreach (var book in row.Books.Where(b => b.Id != row.SelectedKeepIssueId))
+                {
+                    var issue = context.Issues.Find(book.Id);
+                    if (issue is not null)
+                    {
+                        LibraryDeletionHelper.RemoveIssue(context, issue);
+                    }
+                }
+            }
+
+            context.SaveChanges();
+        }
+
+        CloseGroupedReview();
+        if (command is not null)
+        {
+            await LoadPluginListAsync(_pluginListCommands.FirstOrDefault(kv => kv.Value == command).Key);
+        }
+    }
 
     /// <summary>Called once from <c>App.axaml.cs</c> after <see cref="PluginHostService.Initialize"/> - same pattern as <c>LibraryScreenViewModel.AttachHost</c>.</summary>
     public void AttachHost(PluginHostService host)
@@ -138,6 +237,43 @@ public partial class SmartScreenViewModel : ViewModelBase
         SeriesResults.Clear();
         NovelResults.Clear();
 
+        if (result.ReturnValue is IEnumerable<PluginBookGroup> groups)
+        {
+            // Grouped Review overlay (docs/superpowers/specs/2026-09-05-plugin-grouped-review-and-
+            // scan-alerts-design.md §2/§3) instead of the flat Results grid - Smart Lists' own
+            // sidebar/selection state underneath is left exactly as it was. No DB round-trip needed
+            // here - PaperbunkrApplication.GetLibraryBooks() (the real source of a CreateBookList
+            // script's Issue objects) already eager-loads Series, same as the flat-Issue branch below
+            // relies on.
+            GroupedReviewRows.Clear();
+            foreach (var group in groups)
+            {
+                var books = group.Books.Select(issue => new IssueCardSample
+                {
+                    Id = issue.Id,
+                    SeriesId = issue.SeriesId,
+                    Title = string.IsNullOrWhiteSpace(issue.EffectiveNumber()) ? "#?" : $"#{issue.EffectiveNumber()}",
+                    IsUnread = issue.LastPageRead is null or 0,
+                    CoverBrush = SeriesCardSample.CoverBrushFor(issue.Series?.Name ?? "Unknown"),
+                    CoverIssueId = issue.Id,
+                    CoverKey = CoverFingerprint.Stem(issue.Id, issue.FilePath, issue.FileSize),
+                }).ToList();
+
+                if (books.Count == 0)
+                {
+                    continue;
+                }
+
+                GroupedReviewRows.Add(new PluginGroupRowViewModel(group.Label, books, group.SuggestedKeepIssueId, NotifyGroupedReviewChanged));
+            }
+
+            _groupedReviewCommand = command;
+            IsGroupedReviewOpen = true;
+            NotifyGroupedReviewChanged();
+            RefreshPluginLists();
+            return;
+        }
+
         if (result.ReturnValue is IEnumerable<Issue> issues)
         {
             using var context = PaperbunkrDb.CreateContext();
@@ -153,6 +289,12 @@ public partial class SmartScreenViewModel : ViewModelBase
                     IsUnread = issue.LastPageRead is null or 0,
                     CoverBrush = SeriesCardSample.CoverBrushFor(issue.Series!.Name),
                     CoverIssueId = issue.Id,
+                    // Real bug found while wiring the grouped branch above: AsyncCoverImage.SourceId
+                    // now binds CoverKey (a fingerprint string, docs/superpowers/specs/2026-08-27-
+                    // cover-thumbnail-identity-validation-design.md), not the CoverIssueId this
+                    // branch was still only setting - covers silently never rendered for a
+                    // flat-list plugin result. Same fix as the grouped branch.
+                    CoverKey = CoverFingerprint.Stem(issue.Id, issue.FilePath, issue.FileSize),
                 });
             }
         }
@@ -668,6 +810,29 @@ public partial class SmartScreenViewModel : ViewModelBase
         {
             LoadSmartList(summary.Id);
         }
+    }
+
+    /// <summary>
+    /// Real anchor for <see cref="Models.ActivityLinkKind.PluginGroupedReview"/> - a scan alert's
+    /// "Review" link resolves here (docs/superpowers/specs/2026-09-05-plugin-grouped-review-and-
+    /// scan-alerts-design.md §4), driving straight to the same overlay a sidebar click already
+    /// opens for this exact command.
+    /// </summary>
+    public async Task OpenPluginListByKey(string pluginKeyAndCommandKey)
+    {
+        string[] parts = pluginKeyAndCommandKey.Split('|', 2);
+        if (parts.Length != 2)
+        {
+            return;
+        }
+
+        var match = _pluginListCommands.FirstOrDefault(kv => kv.Value.PluginKey == parts[0] && kv.Value.Key == parts[1]);
+        if (match.Value is null)
+        {
+            return;
+        }
+
+        await LoadPluginListAsync(match.Key);
     }
 
     /// <summary>Deep copy of a group tree with all Ids stripped, for Save/Duplicate (fresh rows every time).</summary>

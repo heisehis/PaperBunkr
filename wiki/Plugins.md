@@ -4,9 +4,10 @@ PaperBunkr has a plugin host modeled on ComicRack CE's, for **genuinely novel au
 not for backfilling core features (importing, scraping, themes, and reading-list tools are
 all built in).
 
-> **Not compatible with ComicRack CE plugins.** CE plugins are IronPython (`.py`) against a
-> WinForms API. PaperBunkr plugins are **C# scripts** (`.csx`) against PaperBunkr's own
-> abstractions. This is deliberate.
+> **Not compatible with ComicRack CE plugins as-is.** CE plugins are IronPython (`.py`) against a
+> WinForms API; PaperBunkr's own abstractions are different, so a CE script can't be dropped in
+> unchanged. PaperBunkr supports both **C# scripts** (`.csx`, the primary path) and **IronPython
+> scripts** (`.py`, for porting CE automation logic) against those same abstractions.
 
 ## Installing a plugin
 
@@ -18,13 +19,17 @@ A plugin is a folder under:
 
 containing:
 
-- `plugin.xml` — the manifest (one or more `Command` entries: hook, name, description,
-  icon, parameter count).
-- one `.csx` C# file per command.
+- `plugin.xml` — the manifest (one or more `Command` entries: `hook`, `key`, `name`,
+  `description`, `script`).
+- one `.csx` (C#) or `.py` (IronPython) file per command — the file extension picks which
+  engine runs it; a `.py` entry also needs a `method` attribute naming the function to call.
 
 Drop the folder in, restart PaperBunkr, and open **Preferences → Plugins** (or the
 **Plugins** screen). Each command is compiled on startup; a broken script is listed with
 its **compile error** rather than silently dropped, and never blocks other plugins.
+
+**Try the real example below first** if you just want to see a working plugin before writing
+your own.
 
 ### Installing from a package (.zip)
 
@@ -59,10 +64,34 @@ write) until the command has shown an `Environment.App.AskQuestion(...)` prompt 
 has chosen the primary (affirmative) button in that same run — so a bulk edit is
 *structurally* required to ask first.
 
-The reference test plugin is a **Duplicate Finder**. See the design specs in the repo
-(`docs/superpowers/specs/2026-08-24-plugin-api-v2-design.md` and
-`docs/superpowers/specs/2026-08-28-plugin-api-v3-data-manager-design.md`) for the full hook
+See the design specs in the repo (`docs/superpowers/specs/2026-08-24-plugin-api-v2-design.md`,
+`docs/superpowers/specs/2026-08-28-plugin-api-v3-data-manager-design.md`, and
+`docs/superpowers/specs/2026-09-05-plugin-api-v2-remaining-hooks-plan.md`) for the full hook
 list and API surface.
+
+## Example: Duplicate Finder
+
+A complete, working plugin lives in the repo at `sample-plugins/DuplicateFinder/`, packaged
+as `sample-plugins/DuplicateFinder.zip` for the one-click install path above. It's a real
+three-command plugin, not a stub:
+
+- **Duplicate Finder Activated** (`Startup`) — logs that the plugin loaded.
+- **Find Duplicates in Selection** (`Library`) — right-click a book on the Library screen;
+  compares it against the whole library for a same-series, same-number copy and shows what
+  it finds.
+- **Possible Duplicates** (`CreateBookList`) — a dynamic Smart List entry (Smart Lists
+  screen, under **Plugins**) grouping every book that shares its series and number with
+  another book, recomputed each time you open it. Opens the **Grouped Review** overlay: pick
+  which copy to keep in each group (or skip a group entirely), then **Resolve All** to bulk
+  delete the rest in one pass. A library scan or import that finds *more* duplicate groups than
+  last time also raises a proactive Activity Center alert with a "Review" link straight into
+  this same overlay.
+
+Read its three `.csx` files for a short, real example of `Environment.App.GetLibraryBooks()`,
+`Environment.App.AskQuestion(...)`, and returning grouped results (a `PluginBookGroup[]`, one
+group per duplicate cluster with a suggested copy to keep) from a `CreateBookList` command - or
+return a plain flat list instead if your own list doesn't need the review-and-bulk-delete
+treatment; both shapes work.
 
 ### A note on the sandbox
 
@@ -75,5 +104,6 @@ so someone *deliberately* trying to escape the reference set via reflection
 (`Type.GetType` + `Activator.CreateInstance` against an internal type name) can still
 technically succeed. Only run plugins you trust.
 
-Python interop (`pythonnet`) is a possible future addition but is not in the current
-build.
+A `.py` script gets the same environment object and a comparable sandbox: static analysis
+rejects a `clr.AddReference(...)` call naming anything outside the same fixed reference set
+the `.csx` path uses, at discovery time rather than only at runtime.

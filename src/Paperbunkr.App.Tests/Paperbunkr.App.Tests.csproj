@@ -28,4 +28,12 @@
     <ProjectReference Include="..\Paperbunkr.App\Paperbunkr.App.csproj" />
   </ItemGroup>
 
+  <!-- The real, shipped Duplicate Finder plugin package (repo root sample-plugins/, not test
+       fixture data) - PluginPackageServiceTests installs this exact .zip to prove the actual
+       distributable a user would download works end-to-end, not just its loose source files
+       (which src/Paperbunkr.Plugins.Tests/SamplePlugins/DuplicateFinder/ already covers). -->
+  <ItemGroup>
+    <None Include="..\..\sample-plugins\DuplicateFinder.zip" Link="SamplePlugins\DuplicateFinder.zip" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

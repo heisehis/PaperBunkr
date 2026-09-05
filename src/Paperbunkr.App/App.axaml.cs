@@ -244,6 +244,9 @@ public partial class App : Application
             // plan.md §7) - LibraryFolderScanner has no natural AttachHost point (see its own
             // PluginHost doc comment), so this is a settable static instead.
             LibraryFolderScanner.PluginHost = pluginHost;
+            // Proactive scan alerts (docs/superpowers/specs/2026-09-05-plugin-grouped-review-and-
+            // scan-alerts-design.md §4) - same "no natural attach point" reasoning as PluginHost above.
+            LibraryFolderScanner.ScanAlertService = new PluginScanAlertService(pluginHost, mainViewModel.Activity);
             // DrawThumbnailOverlay (docs/superpowers/specs/2026-09-05-plugin-api-v2-remaining-
             // hooks-plan.md §12) - AsyncPluginOverlayImage is a static attached-property helper,
             // same "no natural AttachHost point" reasoning as LibraryFolderScanner above.

@@ -22,6 +22,23 @@ this file itself already did once (see the note below).
 
 ## What's left (as of 2026-08-12, HEAD `85fb681`)
 
+> **Manual session note (2026-09-05, Duplicate Finder shipped + grouped review/bulk delete/scan
+> alerts):** follow-up to the Plugin API v2 backlog-finish note directly below. Duplicate Finder
+> moved from a `Paperbunkr.Plugins.Tests`-only fixture to a real, downloadable plugin
+> (`sample-plugins/DuplicateFinder/` + `.zip`, documented in `wiki/Plugins.md`). Also adds a new
+> general Plugin API capability: a `CreateBookList` command can return grouped results
+> (`PluginBookGroup`) to open a Grouped Review overlay (per-group keep/skip, bulk "Resolve All"
+> delete) and get a proactive Activity Center alert when a scan finds more duplicate groups than
+> last time - Duplicate Finder's own "Possible Duplicates" command upgraded to use it as the real
+> demonstration. Design: `docs/superpowers/specs/2026-09-05-plugin-grouped-review-and-scan-alerts-
+> design.md`. Two real bugs found via this session's own new tests (an `ActivityService.RaiseAlert`
+> dedupe/stale-title bug, and a `CoverKey`-vs-`CoverIssueId` cover-rendering bug in the Smart Lists
+> plugin-result path) - detail in `Paperbunkr-Roadmap.md`'s Plugin API v2 section. Verified: full
+> solution builds clean, 45 `Paperbunkr.Plugins.Tests` + 461 targeted `Paperbunkr.App.Tests` green,
+> re-checked after merging in the concurrently-landed native "Duplicate Files Review" feature
+> (Needs Review queue) to confirm no interaction bugs between the two. **Not done:** on-screen
+> verification.
+
 > **Manual session note (2026-09-05, Plugin API v2 backlog finish):** closes the Plugin API v2
 > backlog for good. Two parts: (1) merged the pushed-but-unmerged `plugin-api-gap-closure` branch
 > (automation gaps - `AddNewBook`/icon methods/`SelectComics` - plus IronPython plugin scripting,

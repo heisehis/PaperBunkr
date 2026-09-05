@@ -976,4 +976,20 @@ public class MainViewModelTests : IDisposable
         var now = DateTime.UtcNow;
         Assert.True(MainViewModel.ShouldRunCoverVerification(now.AddDays(-7), now));
     }
+
+    /// <summary>
+    /// PluginGroupedReview activity link (docs/superpowers/specs/2026-09-05-plugin-grouped-review-
+    /// and-scan-alerts-design.md §4) - <see cref="MainViewModel.ResolveActivityLink"/> is private,
+    /// so this goes through the same public path a real alert click does:
+    /// <c>ActivityCenter.FollowLinkCommand</c> (wired to it via the constructor delegate).
+    /// </summary>
+    [Fact]
+    public void FollowLink_WithPluginGroupedReview_NavigatesToSmartLists()
+    {
+        var vm = new MainViewModel();
+
+        vm.ActivityCenter.FollowLinkCommand.Execute(new Paperbunkr.App.Models.ActivityLink(Paperbunkr.App.Models.ActivityLinkKind.PluginGroupedReview, "some-plugin|some-command"));
+
+        Assert.Equal("smart", vm.CurrentScreen);
+    }
 }

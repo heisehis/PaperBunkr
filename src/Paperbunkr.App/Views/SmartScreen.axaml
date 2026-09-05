@@ -361,5 +361,72 @@
 
         </StackPanel>
         </ScrollViewer>
+
+        <!-- ============ Grouped Review overlay (docs/superpowers/specs/2026-09-05-plugin-grouped-
+             review-and-scan-alerts-design.md §3) - a CreateBookList plugin command returning
+             grouped data opens this instead of the flat Results grid above. Same backdrop/
+             floatingPanel pattern as LibraryScreen's Add-issue overlay. ============ -->
+        <Border Grid.Row="0" Grid.RowSpan="3" IsVisible="{Binding IsGroupedReviewOpen}" Background="#B0000000"
+                PointerPressed="OnGroupedReviewBackdropPressed" />
+        <Border Grid.Row="0" Grid.RowSpan="3" IsVisible="{Binding IsGroupedReviewOpen}" Classes="floatingPanel"
+                Width="620" MaxHeight="720" Padding="0">
+            <DockPanel LastChildFill="True">
+                <Grid DockPanel.Dock="Top" Margin="24,20,24,12" ColumnDefinitions="*,Auto">
+                    <TextBlock Grid.Column="0" Text="Review duplicates" FontSize="18" FontWeight="Bold" Foreground="{DynamicResource PbTextBrush}" />
+                    <Button Grid.Column="1" Classes="ghost" Content="Close" Command="{Binding CloseGroupedReviewCommand}" />
+                </Grid>
+                <Border DockPanel.Dock="Top" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,0,0,1" />
+
+                <Border DockPanel.Dock="Bottom" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,1,0,0" Padding="24,14">
+                    <Button Classes="primary" HorizontalAlignment="Right" Content="{Binding ResolveAllLabel}"
+                            Command="{Binding ResolveAllCommand}" IsEnabled="{Binding HasGroupedReviewDeletions}" />
+                </Border>
+
+                <ScrollViewer>
+                    <ItemsControl ItemsSource="{Binding GroupedReviewRows}" Margin="24,4,24,16">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:PluginGroupRowViewModel">
+                                <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1" CornerRadius="{DynamicResource PbRadius}" Padding="14" Margin="0,0,0,10">
+                                    <StackPanel Spacing="10">
+                                        <Grid ColumnDefinitions="*,Auto">
+                                            <TextBlock Grid.Column="0" Text="{Binding Label}" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}" />
+                                            <CheckBox Grid.Column="1" Content="Skip" IsChecked="{Binding IsSkipped}" />
+                                        </Grid>
+                                        <ItemsControl ItemsSource="{Binding Books}" IsEnabled="{Binding !IsSkipped}">
+                                            <ItemsControl.ItemsPanel>
+                                                <ItemsPanelTemplate>
+                                                    <StackPanel Orientation="Horizontal" Spacing="10" />
+                                                </ItemsPanelTemplate>
+                                            </ItemsControl.ItemsPanel>
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate x:DataType="models:IssueCardSample">
+                                                    <Button Width="88" Background="Transparent" BorderThickness="0" Padding="0" Cursor="Hand"
+                                                            Command="{Binding $parent[ItemsControl].((vm:PluginGroupRowViewModel)DataContext).SelectKeepCommand}"
+                                                            CommandParameter="{Binding}">
+                                                        <StackPanel Spacing="4">
+                                                            <Border CornerRadius="{DynamicResource PbRadiusSm}" Height="120" Background="{Binding CoverBrush}" ClipToBounds="True">
+                                                                <Grid>
+                                                                    <Image views:AsyncCoverImage.SourceId="{Binding CoverKey}" Stretch="UniformToFill" />
+                                                                    <Border IsVisible="{Binding IsSelected}" BorderBrush="{DynamicResource PbAccentBrush}" BorderThickness="3" CornerRadius="{DynamicResource PbRadiusSm}" />
+                                                                    <Border IsVisible="{Binding IsSelected}" Classes="pbChip" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="4"
+                                                                            Background="{DynamicResource PbAccentBrush}">
+                                                                        <TextBlock Text="Keep" FontSize="10" FontWeight="Bold" Foreground="{DynamicResource PbAccentTextBrush}" />
+                                                                    </Border>
+                                                                </Grid>
+                                                            </Border>
+                                                            <TextBlock Text="{Binding Title}" FontSize="11" HorizontalAlignment="Center" Foreground="{DynamicResource PbTextMutedBrush}" />
+                                                        </StackPanel>
+                                                    </Button>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </StackPanel>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+            </DockPanel>
+        </Border>
     </Grid>
 </UserControl>

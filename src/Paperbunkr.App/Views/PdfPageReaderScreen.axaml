@@ -25,7 +25,7 @@
          row layout with permanently-docked toolbar/scrubber bars. No WebView-airspace problem here
          (PageCanvas is an ordinary Avalonia-drawn control, not a native windowed one), so ReaderChrome
          can simply overlay it via normal z-order - no reserved-margin trick needed. -->
-    <Grid Background="{Binding CanvasBackground}">
+    <Grid x:Name="RootGrid" Background="{Binding CanvasBackground}">
 
         <Grid>
             <views:PageCanvas x:Name="PageCanvasControl"
@@ -66,7 +66,7 @@
 
         <!-- Captures drawer - ReaderListDrawer (left, matching every other list drawer in both
              readers now - it used to open from the right, an inconsistency this redesign resolves). -->
-        <views:ReaderListDrawer IsOpen="{Binding IsCapturesOpen}" HeaderText="Captures" ScrimPressed="OnCapturesScrimPointerPressed">
+        <views:ReaderListDrawer IsOpen="{Binding IsCapturesOpen}" HeaderText="Captures" OverlayReference="{Binding #RootGrid}" ScrimPressed="OnCapturesScrimPointerPressed">
             <views:ReaderListDrawer.DrawerContent>
                 <ScrollViewer>
                     <ItemsControl ItemsSource="{Binding AnnotationImages}" Margin="8,0,8,16">
@@ -104,6 +104,7 @@
                                     SheetForeground="{Binding Theme, Converter={x:Static views:ReaderChromeForegroundConverter.Instance}}"
                                     SetThemeCommand="{Binding SetThemeCommand}"
                                     ThemeOptions="{x:Static views:ReaderSettingsSheet.PdfThemes}"
+                                    OverlayReference="{Binding #RootGrid}"
                                     ScrimPressed="OnFontThemeScrimPointerPressed" />
 
     </Grid>

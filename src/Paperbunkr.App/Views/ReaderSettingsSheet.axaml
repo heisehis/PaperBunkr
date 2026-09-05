@@ -39,10 +39,15 @@
     <Popup IsOpen="{Binding #Root.IsOpen}" PlacementTarget="{Binding #Root}"
            Placement="AnchorAndGravity" PlacementAnchor="TopLeft" PlacementGravity="BottomRight"
            ShouldUseOverlayLayer="False" IsLightDismissEnabled="False">
-        <Grid Width="{Binding #Root.Bounds.Width}" Height="{Binding #Root.Bounds.Height}">
+        <!-- Sized from OverlayReference (the host screen's own real root Grid), not this control's own
+             Bounds - same fix and same reason as ReaderListDrawer.axaml's identical comment: #Root's
+             only content is this Popup, which doesn't participate in normal layout sizing, so
+             #Root.Bounds wasn't a reliable window-size source (real bug found on-screen: the sheet
+             rendered oversized whenever the window wasn't maximized). -->
+        <Grid Width="{Binding #Root.OverlayReference.Bounds.Width}" Height="{Binding #Root.OverlayReference.Bounds.Height}">
             <Border Background="#B0000000" PointerPressed="OnScrimPointerPressed" />
-            <Border HorizontalAlignment="Right" Width="340" Background="{Binding #Root.SheetBackground}"
-                    BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1,0,0,0"
+            <Border HorizontalAlignment="Left" Width="340" Background="{Binding #Root.SheetBackground}"
+                    BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,0,1,0"
                     Padding="16,18">
                 <ScrollViewer>
                 <StackPanel Spacing="14">

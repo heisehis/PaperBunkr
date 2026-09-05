@@ -55,6 +55,9 @@ public class LibraryFolderScanner
     /// </summary>
     public static PluginHostService? PluginHost { get; set; }
 
+    /// <summary>Proactive scan-alert check (docs/superpowers/specs/2026-09-05-plugin-grouped-review-and-scan-alerts-design.md §4) - same "no natural attach point" reasoning as <see cref="PluginHost"/> above.</summary>
+    public static PluginScanAlertService? ScanAlertService { get; set; }
+
     public LibraryFolderScanner()
         : this(PaperbunkrDb.CreateContext)
     {
@@ -334,6 +337,17 @@ public class LibraryFolderScanner
         foreach (var proposal in autoAcceptedSeriesProposals)
         {
             SeriesReassignmentResolver.Apply(context, proposal);
+        }
+
+        // Proactive scan alerts (docs/superpowers/specs/2026-09-05-plugin-grouped-review-and-scan-
+        // alerts-design.md §4) - every real scan/import path (ScanAllAsync, ImportNewFilesAsync,
+        // drag import, live folder watch) funnels through this one method, so this is the single
+        // place to re-check, gated on issuesAdded > 0 to skip the work on a no-op scan. Blocking is
+        // safe here for the same reason ApplyParseComicPathOverride's blocking call already is -
+        // this runs on a background thread.
+        if (issuesAdded > 0)
+        {
+            ScanAlertService?.CheckForNewGroupsAsync().GetAwaiter().GetResult();
         }
 
         return new LibraryFolderScanResult(issuesAdded, seriesTouched.Count);

@@ -22,4 +22,7 @@ public enum ActivityLinkKind
 
     /// <summary>Open Preferences (payload = optional tab key).</summary>
     Preferences,
+
+    /// <summary>Open Smart Lists and the Grouped Review overlay for a specific plugin command (docs/superpowers/specs/2026-09-05-plugin-grouped-review-and-scan-alerts-design.md §4) - payload = <c>"pluginKey|commandKey"</c>.</summary>
+    PluginGroupedReview,
 }

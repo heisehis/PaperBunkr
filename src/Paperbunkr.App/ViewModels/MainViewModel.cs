@@ -2152,6 +2152,10 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
             case ActivityLinkKind.Preferences:
                 GoPreferencesCommand.Execute(null);
                 break;
+            case ActivityLinkKind.PluginGroupedReview:
+                GoSmartCommand.Execute(null);
+                _ = Smart.OpenPluginListByKey(link.Payload);
+                break;
         }
     }
 

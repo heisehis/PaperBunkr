@@ -126,8 +126,11 @@ public sealed class DuplicateFinderPluginTests
     }
 
     [Fact]
-    public async Task CreateBookList_hook_returns_every_library_book_that_shares_series_and_number()
+    public async Task CreateBookList_hook_returns_one_group_per_series_and_number_that_repeats()
     {
+        // Upgraded to the grouped shape (docs/superpowers/specs/2026-09-05-plugin-grouped-review-
+        // and-scan-alerts-design.md §5) - #1/#2 form the one real duplicate group, #3 is unique
+        // (never grouped, since GroupBy only keeps groups with more than one book).
         var app = new FakePluginEnvironment.FakeApplication
         {
             Library = new List<Issue>
@@ -143,7 +146,29 @@ public sealed class DuplicateFinderPluginTests
 
         var result = Assert.Single(results);
         Assert.True(result.Success);
-        var list = Assert.IsAssignableFrom<List<Issue>>(result.ReturnValue);
-        Assert.Equal(new[] { 1, 2 }, list.Select(i => i.Id).OrderBy(id => id));
+        var groups = Assert.IsAssignableFrom<List<PluginBookGroup>>(result.ReturnValue);
+        var group = Assert.Single(groups);
+        Assert.Equal(new[] { 1, 2 }, group.Books.Select(i => i.Id).OrderBy(id => id));
+    }
+
+    [Fact]
+    public async Task CreateBookList_hook_suggests_keeping_the_copy_with_a_real_file_over_a_placeholder()
+    {
+        var app = new FakePluginEnvironment.FakeApplication
+        {
+            Library = new List<Issue>
+            {
+                new() { Id = 1, SeriesId = 10, Number = "1", IsPlaceholder = true },
+                new() { Id = 2, SeriesId = 10, Number = "1", FilePath = @"C:\comics\real.cbz", IsPlaceholder = false },
+            },
+        };
+        var engine = DiscoverEngine(app);
+
+        var results = await engine.InvokeAsync(PluginHooks.CreateBookList, env => new CreateBookListHookGlobals { Environment = env });
+
+        var result = Assert.Single(results);
+        Assert.True(result.Success);
+        var group = Assert.Single(Assert.IsAssignableFrom<List<PluginBookGroup>>(result.ReturnValue));
+        Assert.Equal(2, group.SuggestedKeepIssueId);
     }
 }

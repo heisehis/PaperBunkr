@@ -1,6 +1,7 @@
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.VisualTree;
+using Paperbunkr.App.ViewModels;
 
 namespace Paperbunkr.App.Views;
 
@@ -9,6 +10,15 @@ public partial class SmartScreen : UserControl
     public SmartScreen()
     {
         InitializeComponent();
+    }
+
+    /// <summary>Backdrop click-to-close for the Grouped Review overlay (docs/superpowers/specs/2026-09-05-plugin-grouped-review-and-scan-alerts-design.md §3) - same pattern as LibraryScreen's Add-issue overlay backdrop.</summary>
+    private void OnGroupedReviewBackdropPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (DataContext is SmartScreenViewModel vm)
+        {
+            vm.CloseGroupedReviewCommand.Execute(null);
+        }
     }
 
     /// <summary>

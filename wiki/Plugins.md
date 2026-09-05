@@ -80,11 +80,18 @@ three-command plugin, not a stub:
   compares it against the whole library for a same-series, same-number copy and shows what
   it finds.
 - **Possible Duplicates** (`CreateBookList`) — a dynamic Smart List entry (Smart Lists
-  screen, under **Plugins**) listing every book that shares its series and number with
-  another book, recomputed each time you open it.
+  screen, under **Plugins**) grouping every book that shares its series and number with
+  another book, recomputed each time you open it. Opens the **Grouped Review** overlay: pick
+  which copy to keep in each group (or skip a group entirely), then **Resolve All** to bulk
+  delete the rest in one pass. A library scan or import that finds *more* duplicate groups than
+  last time also raises a proactive Activity Center alert with a "Review" link straight into
+  this same overlay.
 
 Read its three `.csx` files for a short, real example of `Environment.App.GetLibraryBooks()`,
-`Environment.App.AskQuestion(...)`, and returning a book list from a `CreateBookList` command.
+`Environment.App.AskQuestion(...)`, and returning grouped results (a `PluginBookGroup[]`, one
+group per duplicate cluster with a suggested copy to keep) from a `CreateBookList` command - or
+return a plain flat list instead if your own list doesn't need the review-and-bulk-delete
+treatment; both shapes work.
 
 ### A note on the sandbox
 

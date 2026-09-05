@@ -16,4 +16,8 @@
   <Command hook="QuickOpenHtml" key="hook-coverage.quick-open-html" name="Quick Open Html Probe" script="quick-open-html.csx" />
   <Command hook="QuickOpenUI" key="hook-coverage.quick-open-ui" name="Quick Open UI Probe" script="quick-open-ui.csx" />
   <Command hook="DrawThumbnailOverlay" key="hook-coverage.draw-thumbnail-overlay" name="Draw Thumbnail Overlay Probe" script="draw-thumbnail-overlay.csx" />
+  <!-- Grouped CreateBookList return shape (docs/superpowers/specs/2026-09-05-plugin-grouped-review-
+       and-scan-alerts-design.md §1) - DuplicateFinderPluginTests already covers the flat-vs-grouped
+       real-world case; this is the minimal round-trip probe alongside every other hook here. -->
+  <Command hook="CreateBookList" key="hook-coverage.create-book-list-grouped" name="Create Book List Grouped Probe" script="create-book-list-grouped.csx" />
 </Plugin>

@@ -60,13 +60,19 @@ namespace Paperbunkr.Data.Migrations
             migrationBuilder.DropTable(
                 name: "ReadingEvents");
 
-            // Books.CharacterCount is deliberately NOT dropped on down-migrate - left as an orphan
-            // column, the same pattern (and for the same reason) as AddNavRailHoverExpandEnabled /
-            // AddBehaviorSettingsBatch2 / AddMetadataWriteBackSettings. A DropColumn here triggers
-            // SQLite's full-table-rebuild path, which recreates the table from a model snapshot that
-            // no longer lists columns other migrations orphaned but never physically dropped - the
-            // rebuild silently drops them and a later Down() step in a rollback chain then fails
-            // with "no such column". A nullable orphan column costs nothing.
+            // Unlike AppSettings/Issues (AddNavRailHoverExpandEnabled, AddBehaviorSettingsBatch2,
+            // AddMetadataWriteBackSettings, AddIssueDuplicateAcknowledged), Books has no pre-existing
+            // unmapped-but-undropped orphan column for a rebuild to collaterally wipe - CharacterCount
+            // is still a live, mapped Book property, and nothing else on Books has ever been silently
+            // unmapped. The no-op-Down workaround those migrations need doesn't apply here, and
+            // applying it anyway broke a genuine down-then-up round trip: leaving CharacterCount in
+            // place meant the next forward Migrate() re-ran this Up() and failed with "duplicate
+            // column name: CharacterCount" (caught by ReworkBookHighlightAnchorMigrationTests, which
+            // rolls back below this migration and then migrates forward again). A real DropColumn is
+            // safe and correct here.
+            migrationBuilder.DropColumn(
+                name: "CharacterCount",
+                table: "Books");
         }
     }
 }

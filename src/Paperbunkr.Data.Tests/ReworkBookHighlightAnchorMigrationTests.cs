@@ -51,15 +51,26 @@ public class ReworkBookHighlightAnchorMigrationTests : IDisposable
             context.Database.Migrate();
             context.GetService<IMigrator>().Migrate(PriorMigration);
 
-            var book = new Book { Title = "Legacy Book", Format = BookFormat.Epub, FilePath = @"C:\x.epub", AddedTime = DateTime.UtcNow };
-            context.Books.Add(book);
-            context.SaveChanges();
+            // Written via raw SQL rather than context.Books.Add(...), since the current Book entity
+            // is mapped to columns (e.g. CharacterCount, added later by AddReadingEventLog) that
+            // don't exist in the schema at this rolled-back point - an EF-generated INSERT would
+            // reference them and fail with "no such column".
+            context.Database.ExecuteSqlRaw(
+                "INSERT INTO Books (Title, FilePath, Format, AddedTime, LastChapterIndex, LastCharacterOffset) VALUES ({0}, {1}, {2}, {3}, 0, 0)",
+                "Legacy Book", @"C:\x.epub", nameof(BookFormat.Epub), DateTime.UtcNow.ToString("O"));
+
+            // Looked up by Title rather than last_insert_rowid(), which is scoped to whichever
+            // physical connection executes it - not guaranteed to be the same one that ran the
+            // INSERT above once EF's connection pooling is involved.
+            var bookId = context.Database
+                .SqlQueryRaw<int>("SELECT Id AS Value FROM Books WHERE Title = {0}", "Legacy Book")
+                .Single();
 
             // Written under the pre-migration schema (StartOffset/EndOffset, no BlockId) via raw SQL,
             // since the current Book Highlight entity no longer has those columns to write through.
             context.Database.ExecuteSqlRaw(
                 "INSERT INTO BookHighlights (BookId, ChapterIndex, StartOffset, EndOffset, Color, Excerpt, CreatedTime) VALUES ({0}, 0, 10, 20, 'Yellow', 'legacy excerpt', {1})",
-                book.Id, DateTime.UtcNow.ToString("O"));
+                bookId, DateTime.UtcNow.ToString("O"));
         }
 
         using (var context = CreateContext())

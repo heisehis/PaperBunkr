@@ -11,7 +11,7 @@ using Paperbunkr.Data;
 namespace Paperbunkr.Data.Migrations
 {
     [DbContext(typeof(PaperbunkrDbContext))]
-    [Migration("20260906071551_AddScheduledTaskState")]
+    [Migration("20260906030530_AddScheduledTaskState")]
     partial class AddScheduledTaskState
     {
         /// <inheritdoc />

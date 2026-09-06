@@ -190,6 +190,14 @@
                             <TextBlock Classes="railLabel" Text="Home" IsVisible="{Binding IsNavRailExpanded}" />
                         </StackPanel>
                     </Button>
+                    <Button Classes="rail" Classes.active="{Binding IsInsights}"
+                            Command="{Binding GoInsightsCommand}" ToolTip.Tip="Insights"
+                            AutomationProperties.AutomationId="InsightsRailButton">
+                        <StackPanel Orientation="Horizontal">
+                            <fi:SymbolIcon Symbol="DataHistogram" />
+                            <TextBlock Classes="railLabel" Text="Insights" IsVisible="{Binding IsNavRailExpanded}" />
+                        </StackPanel>
+                    </Button>
                     <Button Classes="rail" Classes.active="{Binding IsLibrary}"
                             Command="{Binding GoLibraryCommand}" ToolTip.Tip="Library"
                             AutomationProperties.AutomationId="LibraryRailButton">
@@ -765,6 +773,9 @@
                 <TransitioningContentControl.DataTemplates>
                     <DataTemplate DataType="vm:HomeScreenViewModel">
                         <views:HomeScreen />
+                    </DataTemplate>
+                    <DataTemplate DataType="vm:InsightsScreenViewModel">
+                        <views:InsightsScreen />
                     </DataTemplate>
                     <DataTemplate DataType="vm:LibraryScreenViewModel">
                         <views:LibraryScreen />

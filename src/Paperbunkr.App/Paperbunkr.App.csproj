@@ -76,6 +76,13 @@
          against this project's 12.1.1, confirmed via its own nuspec, not assumed) with no stable
          12.x-compatible release yet, so the hand-rolled overlay/toast UI is used instead. -->
     <PackageReference Include="NetSparkleUpdater.SparkleUpdater" Version="3.1.0" />
+    <!-- Insights dashboard bar charts (docs/superpowers/specs/2026-09-05-insights-dashboard-design.md
+         §9). 5.1.59 is the first ScottPlot.Avalonia with real Avalonia 12 support (Avalonia/
+         Avalonia.Skia >= 12.0.0, published 2026-06-22, github.com/ScottPlot/ScottPlot#5230). Its
+         core ScottPlot dep wants SkiaSharp/SkiaSharp.HarfBuzz >= 3.119.0, which unifies cleanly with
+         Svg.Skia 5.1.0's SkiaSharp 3.119.2 pin above (verified, not assumed). Only the two bar
+         charts use it; the completion donut is a hand-rolled OnRender control. -->
+    <PackageReference Include="ScottPlot.Avalonia" Version="5.1.59" />
   </ItemGroup>
 
   <ItemGroup>

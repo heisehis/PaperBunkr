@@ -22,13 +22,14 @@ public partial class WelcomeTourOverlayViewModel : ViewModelBase
     private readonly Action _onFinished;
 
     public WelcomeTourOverlayViewModel(
-        IRelayCommand goHome, IRelayCommand goLibrary, IRelayCommand goBooks, IRelayCommand goSmart,
+        IRelayCommand goHome, IRelayCommand goInsights, IRelayCommand goLibrary, IRelayCommand goBooks, IRelayCommand goSmart,
         IRelayCommand goReading, IRelayCommand goEvents, IRelayCommand goPreferences, Action onFinished)
     {
         _onFinished = onFinished;
         Steps = new List<TourStep>
         {
             new("HomeRailButton", "Home", "Your at-a-glance feed - what's new, what's in progress, what to read next.", () => goHome.Execute(null)),
+            new("InsightsRailButton", "Insights", "Reading stats and a running list of what needs your attention - stalled series, near-complete runs, gaps in your collection.", () => goInsights.Execute(null)),
             new("LibraryRailButton", "Library", "Every comic and manga you own, sorted, grouped, and searchable however you like.", () => goLibrary.Execute(null)),
             new("BooksRailButton", "Books", "A separate shelf for EPUB and PDF novels, kept apart from the comics library.", () => goBooks.Execute(null)),
             new("SmartListsRailButton", "Smart Lists", "Rules-based lists that update themselves - \"Unread\", \"Recently Added\", or ones you build yourself.", () => goSmart.Execute(null)),

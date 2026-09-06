@@ -36,9 +36,17 @@ public partial class PdfPageReaderScreenViewModel : ViewModelBase
 
     private int _bookId;
 
-    public PdfPageReaderScreenViewModel(Action goBack)
+    /// <summary>Reading-event log (docs/superpowers/specs/2026-09-05-insights-dashboard-design.md §5).
+    /// Null for the test/design-time ctor - every call is null-guarded. PDF pages are real pages.</summary>
+    private readonly IReadingEventRecorder? _readingEventRecorder;
+    private int _sessionMaxPage;
+    private bool _finishedEmittedThisSession;
+    private int? _sessionSeriesId;
+
+    public PdfPageReaderScreenViewModel(Action goBack, IReadingEventRecorder? readingEventRecorder = null)
     {
         _goBack = goBack;
+        _readingEventRecorder = readingEventRecorder;
     }
 
     public ObservableCollection<BookAnnotationImageSummary> AnnotationImages { get; } = new();
@@ -136,7 +144,10 @@ public partial class PdfPageReaderScreenViewModel : ViewModelBase
     public void LoadBook(int bookId, BookPosition? startAt = null)
     {
         _ = startAt;
+        EndReadingSession();
         _bookId = bookId;
+        _sessionMaxPage = 0;
+        _finishedEmittedThisSession = false;
         _decoder?.Dispose();
         _decoder = null;
         IsCaptureMode = false;
@@ -173,7 +184,31 @@ public partial class PdfPageReaderScreenViewModel : ViewModelBase
         }
 
         PageCount = Math.Max(1, _decoder.PageCount);
+        _sessionSeriesId = book.BookSeriesId;
+        _readingEventRecorder?.RecordOpened(ReadingItemType.Novel, bookId, book.BookSeriesId, publisher: null, primaryGenre: null);
         RefreshCurrentPage();
+    }
+
+    /// <summary>Fills the open session's page delta onto its <c>Opened</c> log row (design §5).</summary>
+    private void EndReadingSession()
+    {
+        if (_bookId != 0)
+        {
+            _readingEventRecorder?.UpdateSessionPages(ReadingItemType.Novel, _bookId, _sessionMaxPage);
+        }
+    }
+
+    private void EmitFinishedIfNeeded()
+    {
+        if (_finishedEmittedThisSession || _bookId == 0)
+        {
+            return;
+        }
+
+        _finishedEmittedThisSession = true;
+        _readingEventRecorder?.RecordFinished(
+            ReadingItemType.Novel, _bookId, _sessionSeriesId, publisher: null, primaryGenre: null,
+            pagesRead: _sessionMaxPage > 0 ? _sessionMaxPage : null);
     }
 
     [RelayCommand]
@@ -183,7 +218,11 @@ public partial class PdfPageReaderScreenViewModel : ViewModelBase
     private void GoRight() => ChangePage(1);
 
     [RelayCommand]
-    private void Close() => _goBack();
+    private void Close()
+    {
+        EndReadingSession();
+        _goBack();
+    }
 
     [RelayCommand]
     private void ToggleCaptureMode() => IsCaptureMode = !IsCaptureMode;
@@ -301,10 +340,26 @@ public partial class PdfPageReaderScreenViewModel : ViewModelBase
         int next = Math.Clamp(PageIndex + delta, 0, PageCount - 1);
         if (next == PageIndex)
         {
+            // Already at the last page and trying to go further - the natural "finished" signal.
+            if (delta > 0 && PageIndex >= PageCount - 1 && PageCount > 1)
+            {
+                EmitFinishedIfNeeded();
+            }
+
             return;
         }
 
         PageIndex = next;
+        if (PageIndex > _sessionMaxPage)
+        {
+            _sessionMaxPage = PageIndex;
+        }
+
+        if (PageIndex >= PageCount - 1 && PageCount > 1)
+        {
+            EmitFinishedIfNeeded();
+        }
+
         RefreshCurrentPage();
     }
 

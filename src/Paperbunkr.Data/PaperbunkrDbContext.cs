@@ -108,6 +108,8 @@ public class PaperbunkrDbContext : DbContext
 
     public DbSet<ActivityRun> ActivityRuns => Set<ActivityRun>();
 
+    public DbSet<ReadingEvent> ReadingEvents => Set<ReadingEvent>();
+
     public PaperbunkrDbContext(DbContextOptions<PaperbunkrDbContext> options)
         : base(options)
     {
@@ -1028,6 +1030,10 @@ public class PaperbunkrDbContext : DbContext
             builder.Property(b => b.Format).HasConversion<string>().HasMaxLength(32);
             builder.Property(b => b.Finished).HasDefaultValue(false);
             builder.Property(b => b.ChapterCount).HasDefaultValue(0);
+            // Nullable, no HasDefaultValue/HasSentinel - null is an unambiguous "not parsed yet",
+            // same treatment as the per-book override columns below (docs/superpowers/specs/
+            // 2026-09-05-insights-dashboard-design.md §6).
+            builder.Property(b => b.CharacterCount);
             builder.HasIndex(b => b.FilePath);
 
             // Per-book reader-ergonomics overrides (docs/superpowers/specs/2026-09-01-books-reader-
@@ -1099,6 +1105,22 @@ public class PaperbunkrDbContext : DbContext
             builder.Property(r => r.Title).IsRequired();
             builder.Property(r => r.ResultLinkKind).HasMaxLength(32);
             builder.HasIndex(r => r.StartedUtc);
+        });
+
+        // Reading-event log (docs/superpowers/specs/2026-09-05-insights-dashboard-design.md §4) -
+        // brand-new table, no existing rows to backfill via EF (the migration's own raw SQL does
+        // the one-time backfill from Issue.OpenedTime / Book.LastOpenedTime instead), so its
+        // enum-as-string columns need only the conversion. Same plain growable-list shape as
+        // ActivityRun above but never pruned. No FK to Issue/Book - a row must outlive its item.
+        modelBuilder.Entity<ReadingEvent>(builder =>
+        {
+            builder.HasKey(e => e.Id);
+            builder.Property(e => e.ItemType).HasConversion<string>().HasMaxLength(16);
+            builder.Property(e => e.Kind).HasConversion<string>().HasMaxLength(16);
+            builder.Property(e => e.Publisher).HasMaxLength(256);
+            builder.Property(e => e.PrimaryGenre).HasMaxLength(128);
+            builder.HasIndex(e => e.TimestampUtc);
+            builder.HasIndex(e => new { e.ItemType, e.ItemId });
         });
     }
 

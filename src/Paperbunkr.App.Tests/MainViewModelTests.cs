@@ -802,17 +802,17 @@ public class MainViewModelTests : IDisposable
 
     /// <summary>
     /// Ctrl+Tab/Ctrl+Shift+Tab (docs/superpowers/specs/2026-08-31-app-wide-and-library-keyboard-
-    /// shortcuts-design.md) - forward/back through the same 7-screen RailOrder that already drives
+    /// shortcuts-design.md) - forward/back through the same 8-screen RailOrder that already drives
     /// the rail nav's slide direction, including wraparound at both ends.
     /// </summary>
     [Fact]
-    public void CycleScreenForward_FromHome_GoesToLibrary()
+    public void CycleScreenForward_FromHome_GoesToInsights()
     {
         var vm = new MainViewModel();
 
         vm.CycleScreenForwardCommand.Execute(null);
 
-        Assert.True(vm.IsLibrary);
+        Assert.True(vm.IsInsights);
     }
 
     [Fact]
@@ -837,10 +837,10 @@ public class MainViewModelTests : IDisposable
     }
 
     [Fact]
-    public void CycleScreenBack_FromLibrary_ReturnsToHome()
+    public void CycleScreenBack_FromInsights_ReturnsToHome()
     {
         var vm = new MainViewModel();
-        vm.GoLibraryCommand.Execute(null);
+        vm.GoInsightsCommand.Execute(null);
 
         vm.CycleScreenBackCommand.Execute(null);
 

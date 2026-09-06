@@ -1138,6 +1138,36 @@ usage) but a script still can't open one; `wiki/Plugins.md` updated with the "ac
 not adversarial isolation" framing. §8 tests incl. an end-to-end Data-Manager fixture plugin.
 Plugins.Tests 16/16, no regressions. On-screen GUI pass cleared by the user 2026-09-04.
 
+### Insights dashboard — reading-habit analytics + "needs attention" (shipped 2026-09-05)
+Design/plan: `docs/superpowers/specs/2026-09-05-insights-dashboard-{design,plan}.md`. New nav-rail
+destination ("Insights", `DataHistogram`, directly under Home). Two halves: a **"Needs attention"**
+band (stalled in-progress series >21d untouched, series 1–3 issues from finishing, integer gaps in
+partly-owned runs, never-opened arrivals >7d old — each card deep-links to the reader / detail /
+Library) and an **"At a glance"** section (lifetime totals, reading-day + finish streaks, finished-
+in-range, a ScottPlot pace bar chart, a hand-rolled completion donut, publisher composition, a
+ScottPlot ratings histogram). Global range selector (30d/90d/12mo/All, default 90d) drives the
+time-based tiles; lifetime/composition/ratings ignore it.
+
+New **`ReadingEvent`** append-only log (`{ItemType, ItemId (no FK), Kind: Opened|Finished,
+TimestampUtc, PagesRead, denormalised SeriesId/Publisher/PrimaryGenre}`) — a deliberate CE deviation
+(CE tracked only point-in-time `OpenedTime`/`LastPageRead`). Written by `IReadingEventRecorder` from
+all three readers at open + the 95%/`Book.Finished` crossing + session teardown; re-reads re-emit
+`Finished`. One-time migration backfill synthesises events from existing `Issue.OpenedTime` /
+`Book.LastOpenedTime`. `Book.CharacterCount` added (lazy, feeds the ~1,800-chars/page EPUB estimate
+since reflowed novels have no real page count). Never pruned. `InsightsResolver` is a pure
+`(db, range, now)` function; `InsightsScreenViewModel` caches one snapshot per range, dropped on a
+new event. New dep: **`ScottPlot.Avalonia` 5.1.59** (first Avalonia-12 build; unifies with Svg.Skia's
+SkiaSharp 3.119.x) for the two bar charts only.
+
+`AddReadingEventLog.Down()` follows the codebase's orphan-column rule (no-op for `Books.CharacterCount`).
+Verified: full solution builds clean (`-t:Rebuild`); `Paperbunkr.Data.Tests` 892/899 (the 7 failures
+are a **pre-existing** migration-rollback-chain bug from `AddLastCoverVerificationUtc` /
+`AddIssueDuplicateAcknowledged` doing `DropColumn` off AppSettings/Issues — confirmed identical on a
+clean `HEAD` worktree, not introduced here); targeted `Paperbunkr.App.Tests` reader/insights/main-VM
+slices all green (194 + 97 + …). **On-screen GUI verification not done** — same standing caveat as
+every other Beta feature (no computer-use); needs a user click-through of the new screen, the range
+switch, the attention deep-links, and the two charts rendering under a real library.
+
 ### Auto-update + changelog + customized installer (shipped 2026-09-01, `32d82bf`) — 0.2.0-beta
 Design/plan: `docs/superpowers/specs/2026-09-01-auto-update-and-changelog-{design,plan}.md`.
 **In-app auto-update via `NetSparkleUpdater.SparkleUpdater`** — checks for new releases on startup

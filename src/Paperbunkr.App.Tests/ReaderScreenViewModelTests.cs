@@ -261,6 +261,42 @@ public class ReaderScreenViewModelTests : IDisposable
     }
 
     [Fact]
+    public void LoadIssue_RecordsAnOpenedReadingEvent_ThenReachingTheEndRecordsFinished()
+    {
+        var recorder = new RecordingReadingEventRecorder();
+        var vm = new ReaderScreenViewModel(() => { }, new KeyBindingService(), recorder);
+
+        vm.LoadIssue(_issue4Id); // 1-page issue, last in its own series
+        Assert.Contains(recorder.Calls, c => c.Kind == "Opened" && c.ItemId == _issue4Id);
+
+        // Paging past the last page of the last issue in the series is the end-of-book signal.
+        vm.NextPageCommand.Execute(null);
+        Assert.Contains(recorder.Calls, c => c.Kind == "Finished" && c.ItemId == _issue4Id);
+    }
+
+    private sealed class RecordingReadingEventRecorder : IReadingEventRecorder
+    {
+        public readonly System.Collections.Generic.List<(string Kind, int ItemId)> Calls = new();
+
+        public event System.Action? ReadingEventRecorded;
+
+        public void RecordOpened(ReadingItemType itemType, int itemId, int? seriesId, string? publisher, string? primaryGenre)
+        {
+            Calls.Add(("Opened", itemId));
+            ReadingEventRecorded?.Invoke();
+        }
+
+        public void RecordFinished(ReadingItemType itemType, int itemId, int? seriesId, string? publisher, string? primaryGenre, int? pagesRead)
+        {
+            Calls.Add(("Finished", itemId));
+            ReadingEventRecorded?.Invoke();
+        }
+
+        public void UpdateSessionPages(ReadingItemType itemType, int itemId, int pagesRead)
+            => Calls.Add(("SessionPages", itemId));
+    }
+
+    [Fact]
     public void NextPage_PastLastPage_LoadsNextIssue_WhenAutoNavigateEnabled()
     {
         var vm = new ReaderScreenViewModel(goBack: () => { });

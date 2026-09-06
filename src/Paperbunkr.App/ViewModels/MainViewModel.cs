@@ -55,12 +55,13 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
     private static readonly Dictionary<string, int> RailOrder = new()
     {
         ["home"] = 0,
-        ["library"] = 1,
-        ["books"] = 2,
-        ["smart"] = 3,
-        ["reading"] = 4,
-        ["events"] = 5,
-        ["preferences"] = 6,
+        ["insights"] = 1,
+        ["library"] = 2,
+        ["books"] = 3,
+        ["smart"] = 4,
+        ["reading"] = 5,
+        ["events"] = 6,
+        ["preferences"] = 7,
     };
 
     /// <summary><see cref="RailOrder"/>'s keys sorted by their index, for <see cref="CycleScreen"/> -
@@ -94,6 +95,11 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         // presentation VMs and the link resolver.
         Activity = new ActivityService();
         ActivityCenter = new ActivityCenterViewModel(Activity, ResolveActivityLink);
+
+        // Reading-event log recorder (docs/superpowers/specs/2026-09-05-insights-dashboard-design.md
+        // §5) - one instance, shared by the three reader VMs that write events and the Insights
+        // screen VM that invalidates its cache when one lands.
+        ReadingEvents = new ReadingEventRecorder();
         StatusBar = new StatusBarViewModel(Activity, QueryLibraryStats, () => ActivityCenter.TogglePeekCommand.Execute(null));
         Activity.CompletionToastRequested += (title, message) => ShowToast(title, message);
 
@@ -112,12 +118,12 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         BookProperties = new BookPropertiesScreenViewModel(CloseBookPropertiesOverlay, ShowToast);
         BulkBookProperties = new BulkBookPropertiesScreenViewModel(CloseBulkBookPropertiesOverlay, ShowToast);
         BookSeriesProperties = new BookSeriesPropertiesScreenViewModel(CloseBookSeriesPropertiesOverlay, ShowToast);
-        BookReader = new BookReaderScreenViewModel(NavigateBack);
-        PdfReader = new PdfPageReaderScreenViewModel(NavigateBack);
+        BookReader = new BookReaderScreenViewModel(NavigateBack, ReadingEvents);
+        PdfReader = new PdfPageReaderScreenViewModel(NavigateBack, ReadingEvents);
         Detail = new DetailScreenViewModel(NavigateBack, GoReaderForIssue, GoIssuePropertiesForIssue, GoBulkIssuePropertiesForIssues, GoDetailForSeries, GoLibraryWithSearch, OpenQuickRateOverlay, GoLibraryWithCollection, id => EnqueueMetadataWriteBack(id));
         MangaDetail = new MangaDetailScreenViewModel(NavigateBack, GoReaderForIssue, GoIssuePropertiesForIssue, GoBulkIssuePropertiesForIssues, GoDetailForSeries, GoLibraryWithSearch, GoLibraryWithCollection, id => EnqueueMetadataWriteBack(id));
         var keyBindingService = new KeyBindingService();
-        Reader = new ReaderScreenViewModel(NavigateBack, keyBindingService);
+        Reader = new ReaderScreenViewModel(NavigateBack, keyBindingService, ReadingEvents);
         // "Ask me to rate a comic when I finish it" (docs/superpowers/specs/2026-09-04-behavior-
         // settings-batch2-design.md §3.3) - the reader raises this at the true end of a book when
         // AppSettings.PromptReviewOnFinish is on; reuse the same Quick Rate overlay the Library /
@@ -129,6 +135,7 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         Smart = new SmartScreenViewModel(GoDetailForSeries, GoBookDetailForBook);
         Reading = new ReadingScreenViewModel(new FilePickerService(), GoReaderForIssueInReadingList, OpenReadingListPropertiesOverlay, ShowToast);
         Events = new EventsScreenViewModel(GoDetailForSeries, GoReaderForIssue, GoReadingWithList, ShowToast);
+        Insights = new InsightsScreenViewModel(GoReaderForIssue, GoDetailForSeries, GoLibraryWithSearch, ReadingEvents);
         Plugin = new PluginScreenViewModel(new FilePickerService());
         Migration = new MigrationOverlayViewModel(new FilePickerService(), OpenSeriesDetailFromReview);
         // First-run onboarding (docs/superpowers/specs/2026-08-31-first-run-onboarding-design.md) -
@@ -140,7 +147,7 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         // small-overlay-VM shape as Welcome above.
         Update = new UpdateAvailableOverlayViewModel(DownloadUpdateAsync, CloseUpdateAvailableOverlay);
         WelcomeTour = new WelcomeTourOverlayViewModel(
-            GoHomeCommand, GoLibraryCommand, GoBooksCommand, GoSmartCommand, GoReadingCommand, GoEventsCommand, GoPreferencesCommand,
+            GoHomeCommand, GoInsightsCommand, GoLibraryCommand, GoBooksCommand, GoSmartCommand, GoReadingCommand, GoEventsCommand, GoPreferencesCommand,
             CloseWelcomeTourOverlay);
         ReadingListProperties = new ReadingListPropertiesScreenViewModel(CloseReadingListPropertiesOverlay);
         CollectionProperties = new CollectionPropertiesScreenViewModel(CloseCollectionPropertiesOverlay);
@@ -340,6 +347,7 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
     public SmartScreenViewModel Smart { get; }
     public ReadingScreenViewModel Reading { get; }
     public EventsScreenViewModel Events { get; }
+    public InsightsScreenViewModel Insights { get; }
     public PluginScreenViewModel Plugin { get; }
     public PreferencesScreenViewModel Preferences { get; }
     public MigrationOverlayViewModel Migration { get; }
@@ -359,6 +367,9 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
 
     /// <summary>App-wide background-job registry (docs/superpowers/specs/2026-09-03-activity-center-design.md).</summary>
     public IActivityService Activity { get; }
+
+    /// <summary>Reading-event log recorder (docs/superpowers/specs/2026-09-05-insights-dashboard-design.md §5).</summary>
+    public IReadingEventRecorder ReadingEvents { get; }
 
     /// <summary>Backs the persistent bottom status bar.</summary>
     public StatusBarViewModel StatusBar { get; }
@@ -498,6 +509,7 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
     public object? ActiveScreenContent => CurrentScreen switch
     {
         "home" => Home,
+        "insights" => Insights,
         "library" => Library,
         "books" => Books,
         "smart" => Smart,
@@ -540,6 +552,7 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
     public bool IsDrillTransitionReversed => DrillTransitionKind == DrillTransitionKind.Pop;
 
     public bool IsHome => CurrentScreen == "home";
+    public bool IsInsights => CurrentScreen == "insights";
     public bool IsLibrary => CurrentScreen == "library";
     public bool IsBooks => CurrentScreen == "books";
     public bool IsBookDetail => CurrentScreen == "bookDetail";
@@ -585,6 +598,8 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         OnPropertyChanged(nameof(ActiveDrillDownContent));
         OnPropertyChanged(nameof(IsLateralScreen));
         OnPropertyChanged(nameof(IsHome));
+        OnPropertyChanged(nameof(IsInsights));
+        Insights.IsActive = CurrentScreen == "insights";
         OnPropertyChanged(nameof(IsLibrary));
         OnPropertyChanged(nameof(IsBooks));
         OnPropertyChanged(nameof(IsBookDetail));
@@ -657,6 +672,14 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
     });
 
     [RelayCommand]
+    private void GoInsights() => TryLeaveCurrentEditor(() =>
+    {
+        CurrentScreen = "insights";
+        Insights.Refresh();
+        ResetHistoryRoot("insights");
+    });
+
+    [RelayCommand]
     private void GoSmart() => TryLeaveCurrentEditor(() =>
     {
         Smart.EnsureListLoaded();
@@ -726,6 +749,7 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         switch (RailOrderKeys[nextIndex])
         {
             case "home": GoHome(); break;
+            case "insights": GoInsights(); break;
             case "library": GoLibrary(); break;
             case "books": GoBooks(); break;
             case "smart": GoSmart(); break;
@@ -933,6 +957,7 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
             case Paperbunkr.App.Models.QuickOpenKind.Screen:
                 (entry.Key switch
                 {
+                    "insights" => GoInsightsCommand,
                     "library" => GoLibraryCommand,
                     "books" => GoBooksCommand,
                     "smart" => GoSmartCommand,
@@ -1748,6 +1773,10 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
                 Books.LoadFromDatabase();
                 CurrentScreen = "books";
                 break;
+            case "insights":
+                CurrentScreen = "insights";
+                Insights.Refresh();
+                break;
             case "smart":
                 Smart.EnsureListLoaded();
                 CurrentScreen = "smart";
@@ -1866,6 +1895,7 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
     private static readonly Dictionary<string, string> RailScreenLabels = new()
     {
         ["home"] = "Home",
+        ["insights"] = "Insights",
         ["library"] = "Library",
         ["books"] = "Books",
         ["smart"] = "Smart Lists",
@@ -1980,6 +2010,9 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
                     return;
                 case "books":
                     GoBooks();
+                    return;
+                case "insights":
+                    GoInsights();
                     return;
                 case "smart":
                     GoSmart();

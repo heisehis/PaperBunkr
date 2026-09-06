@@ -12,6 +12,7 @@ namespace Paperbunkr.App.Tests;
 public class WelcomeTourOverlayViewModelTests
 {
     private int _homeCount;
+    private int _insightsCount;
     private int _libraryCount;
     private int _booksCount;
     private int _smartCount;
@@ -22,6 +23,7 @@ public class WelcomeTourOverlayViewModelTests
 
     private WelcomeTourOverlayViewModel CreateViewModel() => new(
         new RelayCommand(() => _homeCount++),
+        new RelayCommand(() => _insightsCount++),
         new RelayCommand(() => _libraryCount++),
         new RelayCommand(() => _booksCount++),
         new RelayCommand(() => _smartCount++),
@@ -31,15 +33,15 @@ public class WelcomeTourOverlayViewModelTests
         () => _finishedCount++);
 
     [Fact]
-    public void Steps_AreAllSevenInRailOrder()
+    public void Steps_AreAllEightInRailOrder()
     {
         var vm = CreateViewModel();
 
-        Assert.Equal(7, vm.Steps.Count);
-        Assert.Equal(new[] { "Home", "Library", "Books", "Smart Lists", "Reading Lists", "Continuity", "Preferences" },
+        Assert.Equal(8, vm.Steps.Count);
+        Assert.Equal(new[] { "Home", "Insights", "Library", "Books", "Smart Lists", "Reading Lists", "Continuity", "Preferences" },
             vm.Steps.Select(s => s.Title));
         Assert.Equal(
-            new[] { "HomeRailButton", "LibraryRailButton", "BooksRailButton", "SmartListsRailButton", "ReadingListsRailButton", "EventsRailButton", "PreferencesRailButton" },
+            new[] { "HomeRailButton", "InsightsRailButton", "LibraryRailButton", "BooksRailButton", "SmartListsRailButton", "ReadingListsRailButton", "EventsRailButton", "PreferencesRailButton" },
             vm.Steps.Select(s => s.TargetElementName));
     }
 
@@ -64,7 +66,7 @@ public class WelcomeTourOverlayViewModelTests
         vm.NextCommand.Execute(null);
 
         Assert.Equal(1, vm.CurrentStepIndex);
-        Assert.Equal(1, _libraryCount);
+        Assert.Equal(1, _insightsCount);
     }
 
     [Fact]
@@ -100,7 +102,7 @@ public class WelcomeTourOverlayViewModelTests
         vm.BackCommand.Execute(null);
 
         Assert.Equal(1, vm.CurrentStepIndex);
-        Assert.Equal(1, _libraryCount);
+        Assert.Equal(1, _insightsCount);
     }
 
     [Fact]

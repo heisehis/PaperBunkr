@@ -49,6 +49,13 @@ public class Book
     /// <see cref="BookFormat.Pdf"/> (the page reader has no chapters).</summary>
     public int ChapterCount { get; set; }
 
+    /// <summary>Total character count of the parsed text, populated lazily the first time the book is
+    /// opened in the reader (null until then), same pattern as <see cref="ChapterCount"/>. Used only
+    /// by the Insights dashboard to estimate "pages read" for reflowed EPUBs at ~1800 chars/page
+    /// (docs/superpowers/specs/2026-09-05-insights-dashboard-design.md §6). Null / unused for
+    /// <see cref="BookFormat.Pdf"/> (real page counts available there).</summary>
+    public int? CharacterCount { get; set; }
+
     public List<BookBookmark> Bookmarks { get; set; } = new();
 
     // --- Reader ergonomics per-book overrides (docs/superpowers/specs/2026-09-01-books-reader-

@@ -15,6 +15,7 @@ using Paperbunkr.App.Services;
 using Paperbunkr.App.Views;
 using Paperbunkr.Data.Books;
 using Paperbunkr.Data.Entities;
+using Paperbunkr.Data.Metadata;
 
 namespace Paperbunkr.App.ViewModels;
 
@@ -78,9 +79,20 @@ public partial class BookReaderScreenViewModel : ViewModelBase
     /// </summary>
     private bool _isSeedingSettings;
 
-    public BookReaderScreenViewModel(Action goBack)
+    /// <summary>
+    /// Reading-event log (docs/superpowers/specs/2026-09-05-insights-dashboard-design.md §5). Null
+    /// for the test/design-time ctor - every call is null-guarded. "Pages" for a reflowed novel are
+    /// estimated at <see cref="Paperbunkr.Data.Metadata.ReadingPageMath.EpubCharsPerPage"/> chars
+    /// per page (design §6).
+    /// </summary>
+    private readonly IReadingEventRecorder? _readingEventRecorder;
+    private long _sessionStartCharOffset;
+    private bool _finishedEmittedThisSession;
+
+    public BookReaderScreenViewModel(Action goBack, IReadingEventRecorder? readingEventRecorder = null)
     {
         _goBack = goBack;
+        _readingEventRecorder = readingEventRecorder;
 
         // Any settings change re-runs RecomputeCurrentPage (cheap - it no longer measures text, just
         // re-derives chapter title/progress/bookmark state; the WebView's own typography CSS
@@ -342,6 +354,10 @@ public partial class BookReaderScreenViewModel : ViewModelBase
         SearchResults.Clear();
         SearchQuery = string.Empty;
 
+        // Close out the previous book's reading session in the event log before _bookId moves
+        // (docs/superpowers/specs/2026-09-05-insights-dashboard-design.md §5).
+        EndReadingSession();
+
         _bookId = bookId;
 
         using var context = PaperbunkrDb.CreateContext();
@@ -418,8 +434,16 @@ public partial class BookReaderScreenViewModel : ViewModelBase
         // Lazy-populate ChapterCount (feeds Home's progress bar) + un-finish a re-read
         // (docs/superpowers/specs/2026-08-27-books-screen-chrome-and-home-strip-design.md).
         _book.ChapterCount = _source.Chapters.Count;
+        // Lazy-populate CharacterCount too - feeds the Insights dashboard's "pages" estimate for
+        // reflowed novels (docs/superpowers/specs/2026-09-05-insights-dashboard-design.md §6).
+        _book.CharacterCount = (int)Math.Min(int.MaxValue, TotalSourceChars());
         _book.Finished = false;
         context.SaveChanges();
+
+        // Reading-event log: one Opened row, session char-delta baseline captured now.
+        _sessionStartCharOffset = CharOffsetOf(_position);
+        _finishedEmittedThisSession = false;
+        _readingEventRecorder?.RecordOpened(ReadingItemType.Novel, _book.Id, _book.BookSeriesId, publisher: null, primaryGenre: null);
 
         IsChromeVisible = false;
         IsTocOpen = false;
@@ -827,7 +851,11 @@ public partial class BookReaderScreenViewModel : ViewModelBase
     }
 
     [RelayCommand]
-    private void Close() => _goBack();
+    private void Close()
+    {
+        EndReadingSession();
+        _goBack();
+    }
 
     [RelayCommand]
     private void SetFontFamily(BookFontFamilyOption option) => Settings.FontFamilyOption = option;
@@ -1056,6 +1084,80 @@ public partial class BookReaderScreenViewModel : ViewModelBase
         }
 
         context.SaveChanges();
+
+        if (markFinished && !_finishedEmittedThisSession)
+        {
+            _finishedEmittedThisSession = true;
+            int pages = ReadingPageMath.EstimatePagesFromChars(CharOffsetOf(_position) - _sessionStartCharOffset);
+            _readingEventRecorder?.RecordFinished(
+                ReadingItemType.Novel, book.Id, book.BookSeriesId, publisher: null, primaryGenre: null,
+                pagesRead: pages > 0 ? pages : null);
+        }
+    }
+
+    /// <summary>Total character count across every parsed chapter/paragraph of the open source (design §6).</summary>
+    private long TotalSourceChars()
+    {
+        if (_source is null)
+        {
+            return 0;
+        }
+
+        long total = 0;
+        foreach (var chapter in _source.Chapters)
+        {
+            total += ChapterChars(chapter);
+        }
+
+        return total;
+    }
+
+    private static long ChapterChars(cYo.Projects.ComicRack.Engine.IO.Provider.Books.BookChapter chapter)
+    {
+        long total = 0;
+        foreach (var paragraph in chapter.Paragraphs)
+        {
+            total += paragraph.Text?.Length ?? 0;
+        }
+
+        return total;
+    }
+
+    /// <summary>Cumulative characters up to a reading position: every chapter before it in full, plus
+    /// the clamped in-chapter offset. Used as the per-session "pages read" delta baseline (design §6).</summary>
+    private long CharOffsetOf(BookPosition position)
+    {
+        if (_source is null)
+        {
+            return 0;
+        }
+
+        long total = 0;
+        int chapterIndex = Math.Clamp(position.ChapterIndex, 0, Math.Max(0, _source.Chapters.Count - 1));
+        for (int i = 0; i < chapterIndex && i < _source.Chapters.Count; i++)
+        {
+            total += ChapterChars(_source.Chapters[i]);
+        }
+
+        if (chapterIndex < _source.Chapters.Count)
+        {
+            total += Math.Clamp(position.CharacterOffset, 0, (int)ChapterChars(_source.Chapters[chapterIndex]));
+        }
+
+        return total;
+    }
+
+    /// <summary>Fills the open session's estimated page delta onto its <c>Opened</c> log row (design §5).
+    /// Called when leaving a book - from <see cref="LoadBook"/> before switching, and from <see cref="Close"/>.</summary>
+    private void EndReadingSession()
+    {
+        if (_bookId == 0 || _source is null)
+        {
+            return;
+        }
+
+        int pages = ReadingPageMath.EstimatePagesFromChars(CharOffsetOf(_position) - _sessionStartCharOffset);
+        _readingEventRecorder?.UpdateSessionPages(ReadingItemType.Novel, _bookId, pages);
     }
 
     private void RecomputeCurrentPage()

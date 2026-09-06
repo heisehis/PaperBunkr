@@ -61,6 +61,19 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
     /// </summary>
     private bool _reviewPromptShown;
 
+    /// <summary>
+    /// Reading-event log (docs/superpowers/specs/2026-09-05-insights-dashboard-design.md §5). Null
+    /// for the ~130 test/design-time call sites that use the older ctor overloads - every call is
+    /// null-guarded. Session page-delta tracking below is reset in <see cref="Load"/>.
+    /// </summary>
+    private readonly IReadingEventRecorder? _readingEventRecorder;
+    private int _sessionStartPage;
+    private int _sessionMaxPage;
+    private bool _finishedEmittedThisSession;
+    private int? _sessionSeriesId;
+    private string? _sessionPublisher;
+    private string? _sessionPrimaryGenre;
+
     /// <summary>Set only via <see cref="Load"/>'s <c>readingListId</c> param - when non-null, chapter-boundary navigation resolves "adjacent" through that reading list's own order instead of series order (docs/superpowers/specs/2026-08-23-cbl-manager-manual-editing-and-list-aware-reading-design.md §3).</summary>
     private int? _activeReadingListId;
     private IPageImageDecoder? _decoder;
@@ -129,17 +142,18 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
     {
     }
 
-    public ReaderScreenViewModel(Action goBack, KeyBindingService keyBindingService)
-        : this(goBack, keyBindingService, new BatteryStatusService())
+    public ReaderScreenViewModel(Action goBack, KeyBindingService keyBindingService, IReadingEventRecorder? readingEventRecorder = null)
+        : this(goBack, keyBindingService, new BatteryStatusService(), readingEventRecorder)
     {
     }
 
     /// <summary>Test seam for <see cref="IBatteryStatusService"/> (docs/superpowers/specs/2026-09-05-reader-polish-backlog-finish-design.md §2), same rationale as the <see cref="KeyBindingService"/> overload above - lets a test substitute a fake reading without touching the real Win32 API.</summary>
-    public ReaderScreenViewModel(Action goBack, KeyBindingService keyBindingService, IBatteryStatusService batteryStatusService)
+    public ReaderScreenViewModel(Action goBack, KeyBindingService keyBindingService, IBatteryStatusService batteryStatusService, IReadingEventRecorder? readingEventRecorder = null)
     {
         _goBack = goBack;
         _keyBindingService = keyBindingService;
         _batteryStatusService = batteryStatusService;
+        _readingEventRecorder = readingEventRecorder;
         CoverBrush = SeriesCardSample.Gradient("#442a1c", "#c9803f");
         Thumbnails = new ObservableCollection<ReaderThumbnailSample>();
         Bookmarks = new ObservableCollection<IssueBookmarkSummary>();
@@ -783,6 +797,10 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
         // scroll progress on the book being left would be silently dropped, not just delayed.
         FlushPendingPositionSave();
 
+        // Close out the previous issue's reading session in the event log before _loadedIssueId
+        // moves (docs/superpowers/specs/2026-09-05-insights-dashboard-design.md §5).
+        EndReadingSession();
+
         int generation = ++_loadGeneration;
 
         if (_purgeTimer is null)
@@ -828,6 +846,21 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
         // flips 0->1 on mark-as-read), this is a real counter, incremented on every load.
         issue.OpenCount++;
         issue.OpenedTime = DateTime.UtcNow;
+
+        // Reading-event log (docs/superpowers/specs/2026-09-05-insights-dashboard-design.md §5) -
+        // one Opened row per open, with the session's page-delta baseline captured now. Publisher
+        // falls back to the series value the same way SmartListCatalog.TextSelectors resolves it;
+        // primary genre is the first genre tag (a small extra query - Tags aren't Included here).
+        _sessionStartPage = issue.LastPageRead ?? 0;
+        _sessionMaxPage = _sessionStartPage;
+        _finishedEmittedThisSession = false;
+        _sessionSeriesId = series.Id;
+        _sessionPublisher = string.IsNullOrWhiteSpace(issue.Publisher) ? series.Publisher : issue.Publisher;
+        _sessionPrimaryGenre = context.IssueTags
+            .Where(t => t.IssueId == issue.Id && t.Field == IssueTagField.Genre)
+            .Select(t => t.Value)
+            .FirstOrDefault();
+        _readingEventRecorder?.RecordOpened(ReadingItemType.Comic, issue.Id, series.Id, _sessionPublisher, _sessionPrimaryGenre);
 
         // Light-touch nudge (docs/superpowers/specs/2026-08-19-metadata-model-reading-status-
         // design.md) - only the Unknown->Reading transition is automatic; every other ReadingStatus
@@ -1910,6 +1943,56 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
             issue.LastPageRead = _currentPageIndex;
             context.SaveChanges();
         }
+
+        TrackSessionProgress(_currentPageIndex);
+    }
+
+    /// <summary>
+    /// Reading-event log session tracking (docs/superpowers/specs/2026-09-05-insights-dashboard-
+    /// design.md §5): advances the session's high-water page mark and emits the <c>Finished</c> row
+    /// the first time this session's read position reaches CE's 95% "has been read" threshold.
+    /// </summary>
+    private void TrackSessionProgress(int pageIndex)
+    {
+        if (pageIndex > _sessionMaxPage)
+        {
+            _sessionMaxPage = pageIndex;
+        }
+
+        if (!_finishedEmittedThisSession && PageCount > 0
+            && 100.0 * pageIndex / PageCount >= Paperbunkr.Data.Metadata.IssueMetadataExtensions.ReadThresholdPercent)
+        {
+            EmitFinishedIfNeeded();
+        }
+    }
+
+    /// <summary>Writes the session's <c>Finished</c> row once. Also called from
+    /// <see cref="MaybePromptReviewOnFinish"/> so a re-read that opens already past the threshold
+    /// (and so never "crosses" it) still records a finish when the reader pages off the end.</summary>
+    private void EmitFinishedIfNeeded()
+    {
+        if (_finishedEmittedThisSession || _loadedIssueId is not int issueId)
+        {
+            return;
+        }
+
+        _finishedEmittedThisSession = true;
+        int pages = _sessionMaxPage - _sessionStartPage;
+        _readingEventRecorder?.RecordFinished(
+            ReadingItemType.Comic, issueId, _sessionSeriesId, _sessionPublisher, _sessionPrimaryGenre,
+            pages > 0 ? pages : null);
+    }
+
+    /// <summary>Fills the open session's page delta onto its <c>Opened</c> log row (design §5). Called
+    /// when leaving an issue - from <see cref="Load"/> before switching, and from <see cref="GoBack"/>.</summary>
+    private void EndReadingSession()
+    {
+        if (_loadedIssueId is not int issueId)
+        {
+            return;
+        }
+
+        _readingEventRecorder?.UpdateSessionPages(ReadingItemType.Comic, issueId, _sessionMaxPage - _sessionStartPage);
     }
 
     /// <summary>Shared by <see cref="GoToPage"/> (paged mode, immediate) and <see cref="OnCurrentContinuousPageIndexChanged"/> (continuous mode, per scroll-frame) so the format string/progress formula can't drift between the two paths.</summary>
@@ -1980,6 +2063,11 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
         {
             issue.LastPageRead = _pendingPositionSaveIndex;
             context.SaveChanges();
+        }
+
+        if (issueId == _loadedIssueId)
+        {
+            TrackSessionProgress(_pendingPositionSaveIndex);
         }
     }
 
@@ -2391,6 +2479,11 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
     /// </summary>
     private void MaybePromptReviewOnFinish()
     {
+        // The "paged off the end" gesture is also the natural finish signal for the reading-event
+        // log on a re-read (which opens already past the 95% threshold and so never crosses it) -
+        // logged regardless of the PromptReviewOnFinish setting below (design §5).
+        EmitFinishedIfNeeded();
+
         if (_reviewPromptShown || _loadedIssueId is not int issueId)
         {
             return;
@@ -2419,6 +2512,8 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
 
         StopAutoScroll();
         _clockTimer?.Stop();
+        FlushPendingPositionSave();
+        EndReadingSession();
         _goBack();
     }
 }

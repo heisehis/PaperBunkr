@@ -3,6 +3,8 @@
              xmlns:pbc="using:Paperbunkr.App.Controls"
              xmlns:fi="using:FluentIcons.Avalonia"
              xmlns:vm="using:Paperbunkr.App.ViewModels"
+             xmlns:v="using:Paperbunkr.App.Views"
+             xmlns:beh="using:Paperbunkr.App.Behaviors"
              xmlns:plugins="using:Paperbunkr.Plugins"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -253,13 +255,13 @@
                                     <TextBlock Text="Details" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
                                 </Border>
                                 <WrapPanel Margin="14,14,0,0">
-                                    <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="NUMBER" /><TextBox Text="{Binding Number}" /></StackPanel>
-                                    <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="VOLUME" /><TextBox Text="{Binding VolumeText}" /></StackPanel>
-                                    <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="COUNT" /><TextBox Text="{Binding CountText}" /></StackPanel>
+                                    <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="NUMBER" /><TextBox Text="{Binding Number}" beh:TextSpinner.Enabled="True" /></StackPanel>
+                                    <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="VOLUME" /><TextBox Text="{Binding VolumeText}" beh:TextSpinner.Enabled="True" /></StackPanel>
+                                    <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="COUNT" /><NumericUpDown HorizontalAlignment="Stretch" Minimum="0" FormatString="0" Value="{Binding CountText, Converter={x:Static v:NullableDecimalStringConverter.Instance}}" /></StackPanel>
                                     <StackPanel Classes="field">
                                         <TextBlock Classes="fieldLabel" Text="TITLE" />
                                         <Grid ColumnDefinitions="*,Auto">
-                                            <TextBox Grid.Column="0" Text="{Binding Title}" />
+                                            <AutoCompleteBox Grid.Column="0" Text="{Binding Title}" ItemsSource="{Binding TitleVocab}" FilterMode="ContainsOrdinal" />
                                             <Button x:Name="TitleTokenButton" Grid.Column="1" Classes="toolbarPill" Content="{}{ }" Margin="4,0,0,0" ToolTip.Tip="Insert a token">
                                                 <Button.Flyout>
                                                     <Flyout Placement="Bottom">
@@ -282,7 +284,7 @@
                                     <StackPanel Classes="field">
                                         <TextBlock Classes="fieldLabel" Text="ALTERNATE SERIES" />
                                         <Grid ColumnDefinitions="*,Auto">
-                                            <TextBox Grid.Column="0" Text="{Binding AlternateSeries}" />
+                                            <AutoCompleteBox Grid.Column="0" Text="{Binding AlternateSeries}" ItemsSource="{Binding AlternateSeriesVocab}" FilterMode="ContainsOrdinal" />
                                             <Button x:Name="AltSeriesTokenButton" Grid.Column="1" Classes="toolbarPill" Content="{}{ }" Margin="4,0,0,0" ToolTip.Tip="Insert a token">
                                                 <Button.Flyout>
                                                     <Flyout Placement="Bottom">
@@ -302,11 +304,11 @@
                                             </Button>
                                         </Grid>
                                     </StackPanel>
-                                    <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="ALTERNATE NUMBER" /><TextBox Text="{Binding AlternateNumber}" /></StackPanel>
+                                    <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="ALTERNATE NUMBER" /><TextBox Text="{Binding AlternateNumber}" beh:TextSpinner.Enabled="True" /></StackPanel>
                                     <StackPanel Classes="field">
                                         <TextBlock Classes="fieldLabel" Text="STORY ARC" />
                                         <Grid ColumnDefinitions="*,Auto">
-                                            <TextBox Grid.Column="0" Text="{Binding StoryArc}" />
+                                            <AutoCompleteBox Grid.Column="0" Text="{Binding StoryArc}" ItemsSource="{Binding StoryArcVocab}" FilterMode="ContainsOrdinal" />
                                             <Button x:Name="StoryArcTokenButton" Grid.Column="1" Classes="toolbarPill" Content="{}{ }" Margin="4,0,0,0" ToolTip.Tip="Insert a token">
                                                 <Button.Flyout>
                                                     <Flyout Placement="Bottom">
@@ -326,11 +328,11 @@
                                             </Button>
                                         </Grid>
                                     </StackPanel>
-                                    <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="STORY ARC NUMBER" /><TextBox Text="{Binding StoryArcNumber}" /></StackPanel>
+                                    <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="STORY ARC NUMBER" /><TextBox Text="{Binding StoryArcNumber}" beh:TextSpinner.Enabled="True" /></StackPanel>
                                     <StackPanel Classes="field">
                                         <TextBlock Classes="fieldLabel" Text="SERIES GROUP" />
                                         <Grid ColumnDefinitions="*,Auto">
-                                            <TextBox Grid.Column="0" Text="{Binding SeriesGroup}" />
+                                            <AutoCompleteBox Grid.Column="0" Text="{Binding SeriesGroup}" ItemsSource="{Binding SeriesGroupVocab}" FilterMode="ContainsOrdinal" />
                                             <Button x:Name="SeriesGroupTokenButton" Grid.Column="1" Classes="toolbarPill" Content="{}{ }" Margin="4,0,0,0" ToolTip.Tip="Insert a token">
                                                 <Button.Flyout>
                                                     <Flyout Placement="Bottom">
@@ -350,45 +352,55 @@
                                             </Button>
                                         </Grid>
                                     </StackPanel>
-                                    <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="PUBLISHER" /><TextBox Text="{Binding Publisher}" /></StackPanel>
-                                    <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="IMPRINT" /><TextBox Text="{Binding Imprint}" /></StackPanel>
+                                    <StackPanel Classes="field">
+                                        <TextBlock Classes="fieldLabel" Text="PUBLISHER" />
+                                        <ComboBox IsEditable="True" HorizontalAlignment="Stretch" Text="{Binding Publisher, Mode=TwoWay}" ItemsSource="{Binding PublisherVocab}" />
+                                    </StackPanel>
+                                    <StackPanel Classes="field">
+                                        <TextBlock Classes="fieldLabel" Text="IMPRINT" />
+                                        <ComboBox IsEditable="True" HorizontalAlignment="Stretch" Text="{Binding Imprint, Mode=TwoWay}" ItemsSource="{Binding ImprintVocab}" />
+                                    </StackPanel>
                                     <StackPanel Classes="field">
                                         <Grid ColumnDefinitions="*,Auto">
                                             <TextBlock Grid.Column="0" Classes="fieldLabel" Text="FORMAT" />
                                             <pbc:BrandMark Grid.Column="1" Family="Format" Value="{Binding Format}" ShowText="False" MarkSize="14" />
                                         </Grid>
-                                        <AutoCompleteBox Text="{Binding Format}" ItemsSource="{Binding FormatOptions}" />
+                                        <ComboBox IsEditable="True" HorizontalAlignment="Stretch" Text="{Binding Format, Mode=TwoWay}" ItemsSource="{Binding FormatVocab}" />
                                     </StackPanel>
-                                    <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="YEAR" /><TextBox Text="{Binding YearText}" /></StackPanel>
-                                    <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="MONTH" /><TextBox Text="{Binding MonthText}" /></StackPanel>
-                                    <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="DAY" /><TextBox Text="{Binding DayText}" /></StackPanel>
-                                    <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="GENRE" /><TextBox Text="{Binding Genre}" /></StackPanel>
-                                    <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="TAGS" /><TextBox Text="{Binding Tags}" /></StackPanel>
-                                    <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="WRITER" /><TextBox Text="{Binding Writer}" /></StackPanel>
-                                    <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="PENCILLER" /><TextBox Text="{Binding Penciller}" /></StackPanel>
-                                    <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="INKER" /><TextBox Text="{Binding Inker}" /></StackPanel>
-                                    <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="COLORIST" /><TextBox Text="{Binding Colorist}" /></StackPanel>
-                                    <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="LETTERER" /><TextBox Text="{Binding Letterer}" /></StackPanel>
-                                    <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="COVER ARTIST" /><TextBox Text="{Binding CoverArtist}" /></StackPanel>
-                                    <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="EDITOR" /><TextBox Text="{Binding Editor}" /></StackPanel>
-                                    <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="TRANSLATOR" /><TextBox Text="{Binding Translator}" /></StackPanel>
+                                    <StackPanel Classes="field">
+                                        <TextBlock Classes="fieldLabel" Text="BOOK AGE" />
+                                        <ComboBox IsEditable="True" HorizontalAlignment="Stretch" Text="{Binding BookAge, Mode=TwoWay}" ItemsSource="{Binding BookAgeVocab}" />
+                                    </StackPanel>
+                                    <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="YEAR" /><NumericUpDown HorizontalAlignment="Stretch" Minimum="0" Maximum="9999" FormatString="0" Value="{Binding YearText, Converter={x:Static v:NullableDecimalStringConverter.Instance}}" /></StackPanel>
+                                    <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="MONTH" /><NumericUpDown HorizontalAlignment="Stretch" Minimum="1" Maximum="12" FormatString="0" Value="{Binding MonthText, Converter={x:Static v:NullableDecimalStringConverter.Instance}}" /></StackPanel>
+                                    <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="DAY" /><NumericUpDown HorizontalAlignment="Stretch" Minimum="1" Maximum="31" FormatString="0" Value="{Binding DayText, Converter={x:Static v:NullableDecimalStringConverter.Instance}}" /></StackPanel>
+                                    <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="GENRE" /><AutoCompleteBox Text="{Binding Genre}" ItemsSource="{Binding GenreVocab}" beh:MultiValueAutoComplete.Enabled="True" /></StackPanel>
+                                    <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="TAGS" /><AutoCompleteBox Text="{Binding Tags}" ItemsSource="{Binding TagsVocab}" beh:MultiValueAutoComplete.Enabled="True" /></StackPanel>
+                                    <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="WRITER" /><AutoCompleteBox Text="{Binding Writer}" ItemsSource="{Binding WriterVocab}" beh:MultiValueAutoComplete.Enabled="True" /></StackPanel>
+                                    <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="PENCILLER" /><AutoCompleteBox Text="{Binding Penciller}" ItemsSource="{Binding PencillerVocab}" beh:MultiValueAutoComplete.Enabled="True" /></StackPanel>
+                                    <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="INKER" /><AutoCompleteBox Text="{Binding Inker}" ItemsSource="{Binding InkerVocab}" beh:MultiValueAutoComplete.Enabled="True" /></StackPanel>
+                                    <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="COLORIST" /><AutoCompleteBox Text="{Binding Colorist}" ItemsSource="{Binding ColoristVocab}" beh:MultiValueAutoComplete.Enabled="True" /></StackPanel>
+                                    <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="LETTERER" /><AutoCompleteBox Text="{Binding Letterer}" ItemsSource="{Binding LettererVocab}" beh:MultiValueAutoComplete.Enabled="True" /></StackPanel>
+                                    <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="COVER ARTIST" /><AutoCompleteBox Text="{Binding CoverArtist}" ItemsSource="{Binding CoverArtistVocab}" beh:MultiValueAutoComplete.Enabled="True" /></StackPanel>
+                                    <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="EDITOR" /><AutoCompleteBox Text="{Binding Editor}" ItemsSource="{Binding EditorVocab}" beh:MultiValueAutoComplete.Enabled="True" /></StackPanel>
+                                    <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="TRANSLATOR" /><AutoCompleteBox Text="{Binding Translator}" ItemsSource="{Binding TranslatorVocab}" beh:MultiValueAutoComplete.Enabled="True" /></StackPanel>
                                     <StackPanel Classes="field">
                                         <Grid ColumnDefinitions="*,Auto">
                                             <TextBlock Grid.Column="0" Classes="fieldLabel" Text="AGE RATING" />
                                             <pbc:BrandMark Grid.Column="1" Family="AgeRating" Value="{Binding AgeRating}" ShowText="False" MarkSize="18" />
                                         </Grid>
-                                        <TextBox Text="{Binding AgeRating}" />
+                                        <ComboBox IsEditable="True" HorizontalAlignment="Stretch" Text="{Binding AgeRating, Mode=TwoWay}" ItemsSource="{Binding AgeRatingVocab}" />
                                     </StackPanel>
                                     <StackPanel Classes="field">
                                         <Grid ColumnDefinitions="*,Auto">
-                                            <TextBlock Grid.Column="0" Classes="fieldLabel" Text="LANGUAGE (ISO)" />
+                                            <TextBlock Grid.Column="0" Classes="fieldLabel" Text="LANGUAGE" />
                                             <pbc:BrandMark Grid.Column="1" Family="Language" Value="{Binding LanguageIso}" ShowText="False" MarkSize="13" />
                                         </Grid>
-                                        <TextBox Text="{Binding LanguageIso}" />
+                                        <ComboBox IsEditable="True" HorizontalAlignment="Stretch" Text="{Binding LanguageIso, Mode=TwoWay}" ItemsSource="{Binding LanguageVocab}" />
                                     </StackPanel>
                                     <StackPanel Classes="field">
                                         <TextBlock Classes="fieldLabel" Text="COLOR MODE" />
-                                        <ComboBox ItemsSource="{Binding ColorModeOptions}" SelectedItem="{Binding ColorModeText}" />
+                                        <ComboBox HorizontalAlignment="Stretch" ItemsSource="{Binding ColorModeOptions}" SelectedItem="{Binding ColorModeText}" />
                                     </StackPanel>
                                     <StackPanel Classes="field" VerticalAlignment="Bottom">
                                         <CheckBox Content="Final issue" IsChecked="{Binding IsFinalIssue}" />
@@ -449,10 +461,10 @@
                                     <TextBlock Text="Plot" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
                                 </Border>
                                 <WrapPanel Margin="14,14,0,0">
-                                    <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="CHARACTERS" /><TextBox Text="{Binding Characters}" /></StackPanel>
-                                    <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="TEAMS" /><TextBox Text="{Binding Teams}" /></StackPanel>
-                                    <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="MAIN CHARACTER OR TEAM" /><TextBox Text="{Binding MainCharacterOrTeam}" /></StackPanel>
-                                    <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="LOCATIONS" /><TextBox Text="{Binding Locations}" /></StackPanel>
+                                    <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="CHARACTERS" /><AutoCompleteBox Text="{Binding Characters}" ItemsSource="{Binding CharactersVocab}" beh:MultiValueAutoComplete.Enabled="True" /></StackPanel>
+                                    <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="TEAMS" /><AutoCompleteBox Text="{Binding Teams}" ItemsSource="{Binding TeamsVocab}" beh:MultiValueAutoComplete.Enabled="True" /></StackPanel>
+                                    <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="MAIN CHARACTER OR TEAM" /><AutoCompleteBox Text="{Binding MainCharacterOrTeam}" ItemsSource="{Binding MainCharacterOrTeamVocab}" beh:MultiValueAutoComplete.Enabled="True" /></StackPanel>
+                                    <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="LOCATIONS" /><AutoCompleteBox Text="{Binding Locations}" ItemsSource="{Binding LocationsVocab}" beh:MultiValueAutoComplete.Enabled="True" /></StackPanel>
                                     <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="WEB" /><TextBox Text="{Binding Web}" /></StackPanel>
                                     <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="SCAN INFORMATION" /><TextBox Text="{Binding ScanInformation}" /></StackPanel>
                                 </WrapPanel>

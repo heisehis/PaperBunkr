@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Paperbunkr.App.Models;
@@ -23,16 +24,53 @@ public partial class BulkFieldViewModel : ObservableObject
     public string Label => Descriptor.Label;
     public bool IsTextKind => Descriptor.Kind == FieldKind.Text;
 
-    /// <summary>Free-text field with a fixed autocomplete vocabulary (docs/superpowers/specs/2026-08-27-metadata-model-phase4e-format-signal-suggestions-design.md) - e.g. Format. Renders an AutoCompleteBox instead of a plain TextBox.</summary>
-    public bool HasAutocomplete => Descriptor.Autocomplete is { Count: > 0 };
+    /// <summary>Library-learned candidates for this field, pushed by
+    /// <see cref="BulkIssuePropertiesScreenViewModel"/> once its background vocabulary build lands
+    /// (docs/superpowers/specs/2026-09-05-metadata-editor-affordances-design.md §5.2).</summary>
+    private IReadOnlyList<string> _vocab = [];
+
+    public void SetVocabulary(IReadOnlyList<string> vocab)
+    {
+        _vocab = vocab;
+        OnPropertyChanged(nameof(AutocompleteOptions));
+        OnPropertyChanged(nameof(HasAutocomplete));
+        OnPropertyChanged(nameof(IsPlainTextKind));
+    }
+
+    /// <summary>Free-text field with any autocomplete vocabulary - a fixed static list
+    /// (<see cref="BulkFieldDescriptor.Autocomplete"/>) and/or library-learned values. Renders an
+    /// AutoCompleteBox instead of a plain TextBox.</summary>
+    public bool HasAutocomplete => AutocompleteOptions.Count > 0;
 
     /// <summary>A plain TextBox row - a text field with no autocomplete vocabulary.</summary>
     public bool IsPlainTextKind => IsTextKind && !HasAutocomplete;
 
-    public IReadOnlyList<string> AutocompleteOptions => Descriptor.Autocomplete ?? [];
+    public IReadOnlyList<string> AutocompleteOptions =>
+        (Descriptor.Autocomplete ?? []).Count == 0 && _vocab.Count == 0
+            ? []
+            : (Descriptor.Autocomplete ?? [])
+                .Concat(_vocab)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(v => v, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+
     public bool IsBooleanKind => Descriptor.Kind == FieldKind.Boolean;
     public bool IsRatingKind => Descriptor.Kind == FieldKind.Rating;
     public bool IsEnumKind => Descriptor.Kind == FieldKind.Enum;
+
+    /// <summary>Numeric field (docs/superpowers/specs/2026-09-05-metadata-editor-affordances-design.md §5.1).</summary>
+    public bool IsNumericKind => Descriptor.Kind == FieldKind.Numeric;
+
+    /// <summary>Numeric field rendered as a real <c>NumericUpDown</c> (pure integer).</summary>
+    public bool IsNumericSpinnerKind => IsNumericKind && !Descriptor.NumericAllowsText;
+
+    /// <summary>Numeric-ish field rendered as a <c>TextBox</c> + <c>TextSpinner</c> (can hold <c>"1.MU"</c>).</summary>
+    public bool IsNumericTextKind => IsNumericKind && Descriptor.NumericAllowsText;
+
+    public decimal NumericMin => Descriptor.NumericMin;
+    public decimal NumericMax => Descriptor.NumericMax ?? decimal.MaxValue;
+    public int NumericMinInt => Descriptor.NumericMin;
+    public int NumericMaxInt => Descriptor.NumericMax ?? int.MaxValue;
 
     /// <summary>Candidate values for an <see cref="IsEnumKind"/> row's flyout (docs/superpowers/specs/2026-08-16-manga-content-type-classification-design.md §1).</summary>
     public IReadOnlyList<string> Options => Descriptor.Options ?? [];

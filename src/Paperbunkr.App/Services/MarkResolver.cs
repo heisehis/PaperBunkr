@@ -54,6 +54,11 @@ public sealed class MarkResolver
     private readonly HashSet<string> _formatAssets;
     private readonly HashSet<string> _flagAssets;
 
+    /// <summary>Canonical age-rating spellings from <c>age-rating-aliases.tsv</c> (the ComicInfo
+    /// v2.1 value set + ESRB labels), for the metadata editors' Age Rating dropdown
+    /// (docs/superpowers/specs/2026-09-05-metadata-editor-affordances-design.md §4.3).</summary>
+    public IReadOnlyList<string> AgeRatingCanonicals => _ageRatings.Canonicals;
+
     public MarkResolver()
     {
         _publishers = AliasTable.Load(Root + "publisher-aliases.tsv");
@@ -376,6 +381,12 @@ public sealed class MarkResolver
     internal sealed class AliasTable
     {
         private readonly Dictionary<string, AliasRow> _byKey = new(StringComparer.OrdinalIgnoreCase);
+        private readonly List<string> _canonicals = new();
+
+        /// <summary>Canonical spelling of every row, in file order - the primary values, without
+        /// the pipe-separated aliases. Used to seed autocomplete/dropdown vocabularies
+        /// (docs/superpowers/specs/2026-09-05-metadata-editor-affordances-design.md §3.1).</summary>
+        public IReadOnlyList<string> Canonicals => _canonicals;
 
         public static AliasTable Load(string avares, Func<string, string>? normaliseKey = null)
         {
@@ -398,6 +409,11 @@ public sealed class MarkResolver
                 }
 
                 string canonical = p[0].Trim();
+                if (canonical.Length > 0)
+                {
+                    table._canonicals.Add(canonical);
+                }
+
                 var row = new AliasRow(
                     canonical,
                     p.Length > 2 ? p[2].Trim() : string.Empty,

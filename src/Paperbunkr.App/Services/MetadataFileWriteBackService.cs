@@ -115,6 +115,12 @@ public class MetadataFileWriteBackService
 
         ct.ThrowIfCancellationRequested();
 
+        // Tell the live-folder watcher to ignore the file churn we're about to cause (copy to a
+        // .pbwrite-*.tmp sibling, then File.Replace it back) - otherwise it reads the replace as a
+        // Deleted event and flags the issue FileIsMissing. Window covers the whole write plus the
+        // watcher's 2s debounce with margin.
+        FileWriteBackCoordinator.Suppress(path, TimeSpan.FromSeconds(15));
+
         try
         {
             var info = EmbeddedComicInfoReader.TryRead(path) ?? new ComicInfo();
@@ -141,7 +147,9 @@ public class MetadataFileWriteBackService
             {
                 foreach (var entry in entries)
                 {
-                    File.WriteAllBytes(Path.Combine(path, entry.Key), entry.Value);
+                    string entryPath = Path.Combine(path, entry.Key);
+                    FileWriteBackCoordinator.Suppress(entryPath, TimeSpan.FromSeconds(15));
+                    File.WriteAllBytes(entryPath, entry.Value);
                 }
 
                 return new MetadataWriteBackOutcome(MetadataWriteBackResult.Success, fileName, null);

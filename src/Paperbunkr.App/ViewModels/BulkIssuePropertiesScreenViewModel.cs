@@ -209,6 +209,30 @@ public partial class BulkIssuePropertiesScreenViewModel : ViewModelBase
         OnPropertyChanged(nameof(ShowReadingModePicker));
         OnPropertyChanged(nameof(SeriesAffectedCount));
         OnPropertyChanged(nameof(HasSeriesAffected));
+
+        VocabularyLoadTask = LoadVocabularyAsync();
+    }
+
+    /// <summary>Test seam - awaited by <c>BulkIssuePropertiesScreenViewModelTests</c> for determinism.</summary>
+    internal Task? VocabularyLoadTask { get; private set; }
+
+    private async Task LoadVocabularyAsync()
+    {
+        // See IssuePropertiesScreenViewModel.LoadVocabularyAsync - the continuation resumes on the
+        // UI thread in the app (captured sync context), on the threadpool in a headless test.
+        var vocab = await Task.Run(() =>
+        {
+            using var context = _contextFactory();
+            return MetadataVocabularyService.Build(context);
+        });
+
+        foreach (var field in AllFields)
+        {
+            if (field.Descriptor.Vocab is { } vf)
+            {
+                field.SetVocabulary(vocab[vf]);
+            }
+        }
     }
 
     private static readonly string[] MangaFamily = [nameof(ContentType.Manga), nameof(ContentType.Manhua), nameof(ContentType.Manhwa)];

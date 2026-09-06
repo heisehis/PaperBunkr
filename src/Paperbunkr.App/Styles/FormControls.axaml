@@ -1,0 +1,66 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:fi="using:FluentIcons.Avalonia">
+    <!--
+        Form-control skin coordination for the metadata editors (docs/superpowers/specs/
+        2026-09-05-metadata-editor-affordances-design.md §3.4). FluentAvaloniaTheme owns the base
+        templates for NumericUpDown / AutoCompleteBox / editable ComboBox; these Styles only pull
+        their surface/border/radius onto the Pb* skin tokens so they match the plain TextBoxes they
+        sit beside and react to a runtime skin switch. No literal hex, no literal sizes where a
+        PbRadius*/PbFontSize* token fits.
+
+        Kept as plain Styles rather than ControlTheme overrides - same rationale as Primitives.axaml:
+        these are token nudges on existing templated controls, not re-templates.
+    -->
+
+    <!-- NumericUpDown: match the TextBox corner radius; keep FluentAvalonia's own spinner buttons. -->
+    <Style Selector="NumericUpDown">
+        <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusSm}" />
+        <Setter Property="Background" Value="{DynamicResource PbSurface2Brush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource PbTextBrush}" />
+    </Style>
+
+    <!-- AutoCompleteBox: the inner TextBox is themed by FluentAvalonia; the drop-down popup is a
+         bare ListBox in a Popup - give it the same surface/border as our other flyouts. -->
+    <Style Selector="AutoCompleteBox">
+        <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusSm}" />
+        <Setter Property="Background" Value="{DynamicResource PbSurface2Brush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource PbTextBrush}" />
+    </Style>
+    <Style Selector="AutoCompleteBox /template/ Popup#PART_Popup Border">
+        <Setter Property="Background" Value="{DynamicResource PbSurface3Brush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
+        <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusSm}" />
+    </Style>
+
+    <!-- Editable ComboBox: used for Format / Publisher / Imprint / Age Rating / Book Age / Language.
+         Only the radius + surface need pinning; FluentAvalonia handles the rest incl. the accent
+         focus border from SystemAccentColor (seeded from our amber, see App.axaml). -->
+    <Style Selector="ComboBox">
+        <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusSm}" />
+        <Setter Property="Background" Value="{DynamicResource PbSurface2Brush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
+    </Style>
+
+    <!-- Text-box spinner arrows (Behaviors/TextSpinner.cs) - two stacked RepeatButtons docked in
+         TextBox.InnerRightContent. Tiny, borderless, muted; accent on hover. -->
+    <Style Selector="RepeatButton.textSpinner">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Padding" Value="2,0" />
+        <Setter Property="Width" Value="16" />
+        <Setter Property="Height" Value="10" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Foreground" Value="{DynamicResource PbTextFaintBrush}" />
+        <Setter Property="HorizontalContentAlignment" Value="Center" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+    </Style>
+    <Style Selector="RepeatButton.textSpinner:pointerover">
+        <Setter Property="Foreground" Value="{DynamicResource PbAccentBrush}" />
+    </Style>
+    <Style Selector="RepeatButton.textSpinner fi|SymbolIcon">
+        <Setter Property="FontSize" Value="9" />
+    </Style>
+</Styles>

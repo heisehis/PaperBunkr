@@ -2,6 +2,8 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:fi="using:FluentIcons.Avalonia"
              xmlns:vm="using:Paperbunkr.App.ViewModels"
+             xmlns:v="using:Paperbunkr.App.Views"
+             xmlns:beh="using:Paperbunkr.App.Behaviors"
              xmlns:plugins="using:Paperbunkr.Plugins"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -72,10 +74,12 @@
 
                 <Grid Grid.Column="2" ColumnDefinitions="*,Auto" IsVisible="{Binding IsTextKind}">
                     <TextBox Grid.Column="0" Text="{Binding Value}" IsVisible="{Binding IsPlainTextKind}" />
-                    <!-- Free-text-with-autocomplete field, e.g. Format (docs/superpowers/specs/2026-08-27-
-                         metadata-model-phase4e-format-signal-suggestions-design.md). -->
+                    <!-- Free-text-with-autocomplete field: a static vocabulary (e.g. Format) and/or
+                         library-learned values (docs/superpowers/specs/2026-09-05-metadata-editor-
+                         affordances-design.md §5.2). Per-item (post-last-comma) completion on list fields. -->
                     <AutoCompleteBox Grid.Column="0" Text="{Binding Value}" ItemsSource="{Binding AutocompleteOptions}"
-                                     IsVisible="{Binding HasAutocomplete}" />
+                                     FilterMode="ContainsOrdinal" IsVisible="{Binding HasAutocomplete}"
+                                     beh:MultiValueAutoComplete.Enabled="{Binding Descriptor.IsListField}" />
                     <!-- Templated/token text field editor (docs/ce-feature-inventory.md §A) - inserts the
                          literal placeholder; BulkIssuePropertiesScreenViewModel.Save expands it per issue. -->
                     <Button x:Name="TokenButton" Grid.Column="1" Classes="toolbarPill" Content="{}{ }" Margin="6,0,0,0" ToolTip.Tip="Insert a token">
@@ -129,6 +133,17 @@
                         </Flyout>
                     </Button.Flyout>
                 </Button>
+
+                <!-- Numeric fields (docs/superpowers/specs/2026-09-05-metadata-editor-affordances-design.md §5.1):
+                     a real NumericUpDown for pure integers, a TextBox + TextSpinner for the ones that
+                     can hold "1.MU" / "2001" (Number, Volume, Alternate Number). -->
+                <NumericUpDown Grid.Column="2" HorizontalAlignment="Left" Width="160" FormatString="0"
+                               Minimum="{Binding NumericMin}" Maximum="{Binding NumericMax}"
+                               IsVisible="{Binding IsNumericSpinnerKind}"
+                               Value="{Binding Value, Converter={x:Static v:NullableDecimalStringConverter.Instance}}" />
+                <TextBox Grid.Column="2" HorizontalAlignment="Left" Width="160" Text="{Binding Value}"
+                         IsVisible="{Binding IsNumericTextKind}"
+                         beh:TextSpinner.Enabled="{Binding IsNumericTextKind}" />
             </Grid>
         </DataTemplate>
     </UserControl.Resources>

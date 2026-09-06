@@ -88,7 +88,7 @@ public partial class IssuePropertiesScreenViewModel : ViewModelBase
     private static readonly HashSet<string> NonDataProperties = new()
     {
         nameof(ActiveTab), nameof(IsSummaryTab), nameof(IsDetailsTab), nameof(IsPlotNotesTab),
-        nameof(HasClipboard),
+        nameof(HasClipboard), nameof(Vocabulary),
     };
 
     /// <summary>
@@ -218,6 +218,59 @@ public partial class IssuePropertiesScreenViewModel : ViewModelBase
     /// <summary>ComicRack CE's shipped <c>[Book Formats]</c> default list (docs/superpowers/specs/2026-08-27-metadata-model-phase4e-format-signal-suggestions-design.md) plus <see cref="SpecialFormatCatalog"/>'s Kavita-only additions (docs/superpowers/specs/2026-08-28-series-detail-specials-tab-design.md) - autocomplete for the free-text Format field.</summary>
     public static IReadOnlyList<string> FormatOptions { get; } =
         FormatSignalCatalog.CeDefaultFormats.Union(SpecialFormatCatalog.KavitaOnlyAdditions, StringComparer.OrdinalIgnoreCase).ToList();
+
+    // ===================== Autocomplete / dropdown vocabulary (docs/superpowers/specs/2026-09-05-metadata-editor-affordances-design.md) =====================
+
+    /// <summary>Library-learned + static-catalog candidate lists, built off-thread by <see cref="Load"/>
+    /// (see <see cref="VocabularyLoadTask"/>). Starts <see cref="MetadataVocabulary.Empty"/> - the
+    /// dropdowns/autocomplete just have no suggestions until it lands, never block typing or Save.</summary>
+    [ObservableProperty]
+    private MetadataVocabulary _vocabulary = MetadataVocabulary.Empty;
+
+    /// <summary>Test seam - awaited by <c>IssuePropertiesScreenViewModelTests</c> for determinism.</summary>
+    internal Task? VocabularyLoadTask { get; private set; }
+
+    partial void OnVocabularyChanged(MetadataVocabulary value) => OnPropertyChanged((string?)null);
+
+    public IReadOnlyList<string> TitleVocab => Vocabulary[VocabField.Title];
+    public IReadOnlyList<string> AlternateSeriesVocab => Vocabulary[VocabField.AlternateSeries];
+    public IReadOnlyList<string> StoryArcVocab => Vocabulary[VocabField.StoryArc];
+    public IReadOnlyList<string> SeriesGroupVocab => Vocabulary[VocabField.SeriesGroup];
+    public IReadOnlyList<string> PublisherVocab => Vocabulary[VocabField.Publisher];
+    public IReadOnlyList<string> ImprintVocab => Vocabulary[VocabField.Imprint];
+    public IReadOnlyList<string> FormatVocab => Vocabulary[VocabField.Format];
+    public IReadOnlyList<string> AgeRatingVocab => Vocabulary[VocabField.AgeRating];
+    public IReadOnlyList<string> BookAgeVocab => Vocabulary[VocabField.BookAge];
+    public IReadOnlyList<string> LanguageVocab => Vocabulary[VocabField.LanguageIso];
+    public IReadOnlyList<string> WriterVocab => Vocabulary[VocabField.Writer];
+    public IReadOnlyList<string> PencillerVocab => Vocabulary[VocabField.Penciller];
+    public IReadOnlyList<string> InkerVocab => Vocabulary[VocabField.Inker];
+    public IReadOnlyList<string> ColoristVocab => Vocabulary[VocabField.Colorist];
+    public IReadOnlyList<string> LettererVocab => Vocabulary[VocabField.Letterer];
+    public IReadOnlyList<string> CoverArtistVocab => Vocabulary[VocabField.CoverArtist];
+    public IReadOnlyList<string> EditorVocab => Vocabulary[VocabField.Editor];
+    public IReadOnlyList<string> TranslatorVocab => Vocabulary[VocabField.Translator];
+    public IReadOnlyList<string> GenreVocab => Vocabulary[VocabField.Genre];
+    public IReadOnlyList<string> TagsVocab => Vocabulary[VocabField.Tags];
+    public IReadOnlyList<string> CharactersVocab => Vocabulary[VocabField.Characters];
+    public IReadOnlyList<string> TeamsVocab => Vocabulary[VocabField.Teams];
+    public IReadOnlyList<string> MainCharacterOrTeamVocab => Vocabulary[VocabField.MainCharacterOrTeam];
+    public IReadOnlyList<string> LocationsVocab => Vocabulary[VocabField.Locations];
+
+    private async Task LoadVocabularyAsync()
+    {
+        // No ConfigureAwait(false): Load runs on the UI thread, so the continuation resumes there
+        // via the captured AvaloniaSynchronizationContext and the Vocabulary assignment (and its
+        // PropertyChanged) lands on the UI thread. In a headless test with no sync context it
+        // resumes on the threadpool, which is fine - nothing is data-bound there.
+        var vocab = await Task.Run(() =>
+        {
+            using var context = _contextFactory();
+            return MetadataVocabularyService.Build(context);
+        });
+
+        Vocabulary = vocab;
+    }
 
     /// <summary>Book Age - free text, ported from CE's own autocomplete combo (docs/superpowers/specs/2026-08-27-metadata-model-phase4g-age-progression-design.md). Autocomplete seeded with CE's five <c>[Book Ages]</c> defaults; the Timeline mode's <c>BookAgeResolver</c> reads this as the authoritative age when set.</summary>
     [ObservableProperty] private string _bookAge = string.Empty;
@@ -533,6 +586,9 @@ public partial class IssuePropertiesScreenViewModel : ViewModelBase
         ActiveTab = "summary";
         _isLoading = false;
         _isDirty = false;
+
+        Vocabulary = MetadataVocabulary.Empty;
+        VocabularyLoadTask = LoadVocabularyAsync();
     }
 
     private static string? NullIfEmpty(string value) => string.IsNullOrWhiteSpace(value) ? null : value;
@@ -630,7 +686,7 @@ public partial class IssuePropertiesScreenViewModel : ViewModelBase
         issue.Editor = NullIfEmpty(Editor);
         issue.Translator = NullIfEmpty(Translator);
         issue.AgeRating = NullIfEmpty(AgeRating);
-        issue.LanguageISO = NullIfEmpty(LanguageIso);
+        issue.LanguageISO = LanguageNormalizer.Normalize(LanguageIso);
         issue.ColorMode = Enum.Parse<ColorMode>(ColorModeText);
         issue.IsFinalIssue = IsFinalIssue;
 

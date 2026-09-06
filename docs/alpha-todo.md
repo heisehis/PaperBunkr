@@ -22,6 +22,21 @@ this file itself already did once (see the note below).
 
 ## What's left (as of 2026-08-12, HEAD `85fb681`)
 
+> **Manual session note (2026-09-06, migration rollback-chain bug fixed):** `Paperbunkr.Data.Tests`
+> had 7 tests failing on clean HEAD — every deep `Migrate(PriorMigration)` rollback died with
+> `SQLite Error 1: 'no such column: "LibraryGroupField"'`. Root cause: two migrations
+> (`20260905063939_AddLastCoverVerificationUtc`, `20260905064447_AddIssueDuplicateAcknowledged`)
+> violated the established "new AppSettings/Issues columns get a NO-OP `Down()`, never `DropColumn`"
+> rule (documented in `AddNavRailHoverExpandEnabled.Down()`). A `DropColumn` on SQLite forces a
+> full-table rebuild from the prior model snapshot, which — since `UnifyLibrarySortGroupFields`
+> unmapped `LibraryGroupField`/`LibrarySortField`/`LibrarySortDirection` without physically dropping
+> them — silently drops those orphans, breaking every later `Down()` step in the chain. Fix: both
+> `Down()` methods are now no-ops with an explanatory comment (columns left as orphans on
+> down-migrate), matching `AddNavRailHoverExpandEnabled` / `AddBehaviorSettingsBatch2` /
+> `AddMetadataWriteBackSettings` / `AddReadingEventLog`. `AddLastCoverVerificationUtcMigrationTests`
+> updated to assert the no-op. `Paperbunkr.Data.Tests` now 881/881 green. Pre-existing bug, unrelated
+> to any feature work (found during the Insights dashboard session 2026-09-05). P0–P7 unchanged.
+>
 > **Manual session note (2026-09-05, Duplicate Finder shipped + grouped review/bulk delete/scan
 > alerts):** follow-up to the Plugin API v2 backlog-finish note directly below. Duplicate Finder
 > moved from a `Paperbunkr.Plugins.Tests`-only fixture to a real, downloadable plugin

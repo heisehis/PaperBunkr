@@ -1,11 +1,13 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Media.Imaging;
+using Paperbunkr.App.Services.Covers;
 using Paperbunkr.Data;
 using Paperbunkr.Data.Books;
 using Paperbunkr.Data.Entities;
@@ -14,18 +16,15 @@ namespace Paperbunkr.App.Services;
 
 /// <summary>
 /// Generates cover thumbnails for Books (docs/superpowers/specs/
-/// 2026-08-09-novels-epub-pdf-support-design.md §3, extended for FB2/MOBI by docs/superpowers/specs/
-/// 2026-09-01-books-format-ingestion-fb2-mobi-design.md), mirroring <see cref="CoverThumbnailService"/>
-/// for comics. Reflowable-format covers come straight from the book's own embedded cover image (via
-/// <see cref="BookTextSourceFactory"/>); PDF has no equivalent embedded-cover concept, so its cover
-/// reuses the same <see cref="PageImageDecoder"/> pipeline the comic library already uses for PDF
-/// page rendering - PDF is already a supported comic archive format there, just decoding page 0.
+/// 2026-08-09-novels-epub-pdf-support-design.md §3), mirroring <see cref="CoverThumbnailService"/>
+/// for comics. Reflowable-format covers come from the book's embedded cover image; PDF reuses the
+/// <see cref="PageImageDecoder"/> page-0 pipeline.
 ///
 /// <para>
-/// Cache files are named <c>{bookId}-{fingerprint}.jpg</c> where the fingerprint is the book's
-/// current file path (docs/superpowers/specs/2026-08-27-cover-thumbnail-identity-validation-
-/// design.md) - path-only, since Books have no persisted size. A rebuild that reassigns
-/// <c>Book.Id</c> can no longer serve the previous book's cover for a reused id.
+/// Cache files are named <c>{bookId}.jpg</c> (docs/superpowers/specs/2026-09-06-scheduled-tasks-
+/// and-cover-durability-design.md). A cover is only ever moved to the attic when its id matches no
+/// book row; a path change never touches it. User-picked covers live in
+/// <see cref="CustomBookCoverPaths"/> and are never swept.
 /// </para>
 /// </summary>
 public class BookCoverThumbnailService
@@ -47,32 +46,30 @@ public class BookCoverThumbnailService
     }
 
     /// <summary>
-    /// Generates and caches <paramref name="bookId"/>'s cover at its fingerprinted path, sweeping
-    /// any stale <c>{bookId}-*.jpg</c> sibling. Returns false (without throwing) for a
-    /// missing/unsupported/corrupt file or a book with no embedded cover - callers treat that as
-    /// "skip, try again next run", same contract as <see cref="CoverThumbnailService.TryGenerateThumbnail"/>.
-    /// <paramref name="force"/> skips the presence check - see
-    /// <see cref="CoverThumbnailService.TryGenerateThumbnail"/>'s doc comment for why.
+    /// Generates and caches <paramref name="bookId"/>'s cover at <c>{bookId}.jpg</c>. Returns false
+    /// (without throwing) for a missing/unsupported/corrupt file or a book with no embedded cover.
+    /// <paramref name="force"/> skips the presence check.
     /// </summary>
     public bool TryGenerateThumbnail(int bookId, string filePath, BookFormat format, bool force = false)
     {
-        string stem = CoverFingerprint.Stem(bookId, filePath, null);
-        string destPath = BookCoverThumbnailPaths.GetCachePath(stem);
-        if (!force && File.Exists(destPath))
+        string destPath = BookCoverThumbnailPaths.GetCachePath(bookId);
+
+        if (!force)
         {
-            return true;
+            if (!File.Exists(destPath))
+            {
+                CoverCacheAttic.TryRestoreById(bookId, BookCoverThumbnailPaths.ThumbnailDirectory, BookCoverThumbnailPaths.AtticDirectory);
+            }
+
+            if (File.Exists(destPath))
+            {
+                return true;
+            }
         }
 
-        bool ok = format == BookFormat.Pdf
+        return format == BookFormat.Pdf
             ? TryGenerateFromPdfFirstPage(filePath, destPath)
             : TryGenerateFromReflowSourceCover(format, filePath, destPath);
-
-        if (ok)
-        {
-            SweepStaleSiblings(bookId, keepStem: stem);
-        }
-
-        return ok;
     }
 
     private static bool TryGenerateFromReflowSourceCover(BookFormat format, string filePath, string destPath)
@@ -98,9 +95,6 @@ public class BookCoverThumbnailService
 
     private static bool TryGenerateFromPdfFirstPage(string filePath, string destPath)
     {
-        // The decoder must stay alive for the whole scale+save below - GetPage(0) returns a
-        // Bitmap owned by the decoder's own internal cache (same contract PageImageDecoder gives
-        // CoverThumbnailService), not a bitmap this method owns and could dispose independently.
         using var decoder = PageImageDecoder.TryOpen(filePath);
         if (decoder is null)
         {
@@ -119,20 +113,13 @@ public class BookCoverThumbnailService
     }
 
     /// <summary>
-    /// Overrides <paramref name="bookId"/>'s displayed cover with a user-picked local image
-    /// (docs/superpowers/specs/2026-08-27-book-properties-editor-design.md), regardless of format -
-    /// a PDF book has no auto cover at all, so this is the only way it gets one. Mirrors
-    /// <see cref="CoverThumbnailService.TrySetCustomCover"/>: writes to the book's <b>current</b>
-    /// fingerprinted stem (resolved from the database, docs/superpowers/specs/2026-08-27-cover-
-    /// thumbnail-identity-validation-design.md), always overwrites (unlike
-    /// <see cref="TryGenerateThumbnail"/>'s presence check), sweeps any stale sibling, and uses
-    /// <see cref="BookCoverImageCache.InvalidateMemoryOnly"/> - the file-deleting
-    /// <see cref="BookCoverImageCache.Invalidate"/> would wipe the very file just written.
+    /// Overrides <paramref name="bookId"/>'s displayed cover with a user-picked local image, written
+    /// to <see cref="CustomBookCoverPaths"/> - its own directory, never swept. Any generated
+    /// <c>{id}.jpg</c> is removed so the custom art wins cleanly.
     /// </summary>
     public bool TrySetCustomCover(int bookId, string sourceImagePath)
     {
-        string stem = StemFor(bookId);
-        string destPath = BookCoverThumbnailPaths.GetCachePath(stem);
+        string destPath = CustomBookCoverPaths.GetCachePath(bookId);
         try
         {
             using var source = new Bitmap(sourceImagePath);
@@ -141,8 +128,8 @@ public class BookCoverThumbnailService
                 return false;
             }
 
-            SweepStaleSiblings(bookId, keepStem: stem);
-            BookCoverImageCache.InvalidateMemoryOnly(stem);
+            TryDelete(BookCoverThumbnailPaths.GetCachePath(bookId));
+            BookCoverImageCache.InvalidateMemoryOnly(bookId.ToString(CultureInfo.InvariantCulture));
             return true;
         }
         catch
@@ -152,10 +139,8 @@ public class BookCoverThumbnailService
     }
 
     /// <summary>
-    /// Reverts a custom cover: deletes every cached file for this id (real
-    /// <see cref="BookCoverImageCache.Invalidate"/>) and regenerates the auto cover. EPUB gets its
-    /// embedded cover back immediately; PDF has no auto cover, so it simply goes blank - the honest
-    /// reset for that format.
+    /// Reverts a custom cover: deletes the custom + generated file and the in-memory entry, then
+    /// regenerates the auto cover. EPUB gets its embedded cover back; PDF goes blank.
     /// </summary>
     public void ResetCover(int bookId, string? filePath, BookFormat format)
     {
@@ -164,16 +149,6 @@ public class BookCoverThumbnailService
         {
             TryGenerateThumbnail(bookId, filePath, format);
         }
-    }
-
-    private string StemFor(int bookId)
-    {
-        using var context = _contextFactory();
-        var book = context.Books
-            .Where(b => b.Id == bookId)
-            .Select(b => new { b.FilePath })
-            .FirstOrDefault();
-        return CoverFingerprint.Stem(bookId, book?.FilePath, null);
     }
 
     private static bool ScaleAndSave(Bitmap source, string destPath)
@@ -195,12 +170,7 @@ public class BookCoverThumbnailService
         return true;
     }
 
-    /// <summary>
-    /// Generates thumbnails for every Book with no cached thumbnail for its current fingerprint,
-    /// then deletes orphaned cache files whose stem no longer matches any current book. Presence-
-    /// based, one bad file doesn't stop the batch - same contract as
-    /// <see cref="CoverThumbnailService.GenerateAllAsync"/>.
-    /// </summary>
+    /// <summary>Generates thumbnails for every Book with no cached cover, then attics files whose id matches no book.</summary>
     public async Task GenerateAllAsync(IProgress<(int Done, int Total)> progress, CancellationToken ct = default)
     {
         await Task.Run(
@@ -211,13 +181,11 @@ public class BookCoverThumbnailService
                     .Select(b => new { b.Id, b.FilePath, b.Format })
                     .ToList();
 
-                var validStems = new HashSet<string>(
-                    all.Select(b => CoverFingerprint.Stem(b.Id, b.FilePath, null)),
-                    StringComparer.Ordinal);
+                var validIds = new HashSet<int>(all.Select(b => b.Id));
 
                 var candidates = all
-                    .Where(b => !File.Exists(BookCoverThumbnailPaths.GetCachePath(
-                        CoverFingerprint.Stem(b.Id, b.FilePath, null))))
+                    .Where(b => !File.Exists(BookCoverThumbnailPaths.GetCachePath(b.Id))
+                                && !CustomBookCoverPaths.Exists(b.Id))
                     .ToList();
 
                 int total = candidates.Count;
@@ -240,16 +208,14 @@ public class BookCoverThumbnailService
                     progress.Report((++done, total));
                 }
 
-                CollectOrphans(validStems);
+                RunCacheMaintenance(validIds, all.Count);
             },
             ct);
     }
 
     /// <summary>
-    /// Unconditionally re-derives every Book's cover from its source file and overwrites the
-    /// cache, then runs the same orphan GC as <see cref="GenerateAllAsync"/> - mirrors
-    /// <see cref="CoverThumbnailService.VerifyAllAsync"/>'s doc comment for the full rationale
-    /// (docs/superpowers/specs/2026-08-30-cover-thumbnail-content-verification-design.md).
+    /// Re-derives a Book's cover from source only when the source file changed since the cover was
+    /// made (mtime-smart), then runs the same id-based attic + prune.
     /// </summary>
     public async Task VerifyAllAsync(IProgress<(int Done, int Total)> progress, CancellationToken ct = default)
     {
@@ -261,9 +227,7 @@ public class BookCoverThumbnailService
                     .Select(b => new { b.Id, b.FilePath, b.Format })
                     .ToList();
 
-                var validStems = new HashSet<string>(
-                    all.Select(b => CoverFingerprint.Stem(b.Id, b.FilePath, null)),
-                    StringComparer.Ordinal);
+                var validIds = new HashSet<int>(all.Select(b => b.Id));
 
                 int total = all.Count;
                 int done = 0;
@@ -275,7 +239,10 @@ public class BookCoverThumbnailService
 
                     try
                     {
-                        TryGenerateThumbnail(candidate.Id, candidate.FilePath, candidate.Format, force: true);
+                        if (NeedsReverify(candidate.Id, candidate.FilePath))
+                        {
+                            TryGenerateThumbnail(candidate.Id, candidate.FilePath, candidate.Format, force: true);
+                        }
                     }
                     catch
                     {
@@ -285,44 +252,117 @@ public class BookCoverThumbnailService
                     progress.Report((++done, total));
                 }
 
-                CollectOrphans(validStems);
+                RunCacheMaintenance(validIds, all.Count);
             },
             ct);
     }
 
-    private static void SweepStaleSiblings(int bookId, string keepStem)
+    /// <summary>Regenerates covers only for books with no cover (generated or custom) and a readable source.</summary>
+    public async Task RepairMissingAsync(IProgress<(int Done, int Total)> progress, CancellationToken ct = default)
     {
-        string keepName = keepStem + ".jpg";
-        foreach (string path in BookCoverThumbnailPaths.EnumerateForBook(bookId).ToList())
-        {
-            if (!string.Equals(Path.GetFileName(path), keepName, StringComparison.OrdinalIgnoreCase))
+        await Task.Run(
+            () =>
             {
-                try
+                using var context = _contextFactory();
+                var missing = context.Books
+                    .Select(b => new { b.Id, b.FilePath, b.Format })
+                    .ToList()
+                    .Where(b => !File.Exists(BookCoverThumbnailPaths.GetCachePath(b.Id))
+                                && !CustomBookCoverPaths.Exists(b.Id)
+                                && SourceReadable(b.FilePath))
+                    .ToList();
+
+                int total = missing.Count;
+                int done = 0;
+                progress.Report((0, total));
+
+                foreach (var book in missing)
                 {
-                    File.Delete(path);
+                    ct.ThrowIfCancellationRequested();
+                    try
+                    {
+                        TryGenerateThumbnail(book.Id, book.FilePath, book.Format);
+                    }
+                    catch
+                    {
+                    }
+
+                    progress.Report((++done, total));
                 }
-                catch (IOException)
-                {
-                }
-            }
+            },
+            ct);
+    }
+
+    private static bool NeedsReverify(int bookId, string sourcePath)
+    {
+        string cachePath = BookCoverThumbnailPaths.GetCachePath(bookId);
+        if (!File.Exists(cachePath))
+        {
+            return true;
+        }
+
+        try
+        {
+            return File.GetLastWriteTimeUtc(sourcePath) > File.GetLastWriteTimeUtc(cachePath);
+        }
+        catch (IOException)
+        {
+            return false;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return false;
         }
     }
 
-    private static void CollectOrphans(HashSet<string> validStems)
+    private static bool SourceReadable(string path)
+    {
+        try
+        {
+            return File.Exists(path);
+        }
+        catch (IOException)
+        {
+            return false;
+        }
+    }
+
+    private static void RunCacheMaintenance(HashSet<int> validIds, int bookCount)
+    {
+        try
+        {
+            CollectOrphans(validIds);
+            CoverCacheAttic.Prune(BookCoverThumbnailPaths.AtticDirectory);
+            CoverCacheState.RecordBookCount(bookCount);
+        }
+        catch (Exception)
+        {
+        }
+    }
+
+    private static void CollectOrphans(HashSet<int> validIds)
     {
         foreach (string path in BookCoverThumbnailPaths.EnumerateAll().ToList())
         {
             string stem = Path.GetFileNameWithoutExtension(path);
-            if (!validStems.Contains(stem))
+            if (!int.TryParse(stem, NumberStyles.Integer, CultureInfo.InvariantCulture, out int id) || !validIds.Contains(id))
             {
-                try
-                {
-                    File.Delete(path);
-                }
-                catch (IOException)
-                {
-                }
+                CoverCacheAttic.MoveToAttic(path, BookCoverThumbnailPaths.AtticDirectory);
             }
+        }
+    }
+
+    private static void TryDelete(string path)
+    {
+        try
+        {
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+        }
+        catch (IOException)
+        {
         }
     }
 }

@@ -17,7 +17,11 @@ public enum ActivityDrawerTab
 {
     Active,
     History,
+    Scheduled,
 }
+
+/// <summary>One row in the drawer's read-only "Scheduled" tab.</summary>
+public sealed record UpcomingTaskRow(string DisplayName, string NextRunLabel);
 
 /// <summary>
 /// Backs both tiers of the Activity Center (docs/superpowers/specs/2026-09-03-activity-center-
@@ -36,10 +40,13 @@ public sealed partial class ActivityCenterViewModel : ViewModelBase
     private CancellationTokenSource? _historyCts;
 
     /// <param name="dispatch">Marshals the projection rebuild onto the UI thread. Defaults to a <c>Dispatcher.UIThread</c>-aware post; tests pass <c>a =&gt; a()</c>.</param>
-    public ActivityCenterViewModel(IActivityService activity, Action<ActivityLink> followLink, Action<Action>? dispatch = null)
+    private Services.Scheduling.ISchedulerService? _scheduler;
+
+    public ActivityCenterViewModel(IActivityService activity, Action<ActivityLink> followLink, Services.Scheduling.ISchedulerService? scheduler = null, Action<Action>? dispatch = null)
     {
         _activity = activity;
         _followLink = followLink;
+        _scheduler = scheduler;
         _dispatch = dispatch ?? (a =>
         {
             if (Dispatcher.UIThread.CheckAccess())
@@ -53,6 +60,57 @@ public sealed partial class ActivityCenterViewModel : ViewModelBase
         });
         _activity.Changed += (_, _) => _dispatch(RebuildProjections);
         RebuildProjections();
+        if (scheduler is not null)
+        {
+            AttachScheduler(scheduler);
+        }
+    }
+
+    /// <summary>The scheduler's enabled tasks, soonest-first - the read-only "Scheduled" drawer tab.</summary>
+    public ObservableCollection<UpcomingTaskRow> UpcomingTasks { get; } = new();
+
+    public void AttachScheduler(Services.Scheduling.ISchedulerService scheduler)
+    {
+        _scheduler = scheduler;
+        scheduler.Changed += (_, _) => _dispatch(RebuildUpcoming);
+        RebuildUpcoming();
+    }
+
+    private void RebuildUpcoming()
+    {
+        if (_scheduler is null)
+        {
+            return;
+        }
+
+        var rows = _scheduler.Tasks
+            .Where(t => t.Enabled)
+            .OrderBy(t => t.IsRunning ? 0 : t.IsQueued ? 1 : 2)
+            .ThenBy(t => t.NextRunLabel)
+            .Select(t => new UpcomingTaskRow(t.DisplayName, t.NextRunLabel))
+            .ToList();
+
+        UpcomingTasks.Clear();
+        foreach (var r in rows)
+        {
+            UpcomingTasks.Add(r);
+        }
+
+        OnPropertyChanged(nameof(HasUpcoming));
+    }
+
+    public bool HasUpcoming => UpcomingTasks.Count > 0;
+
+    public bool IsScheduled => ActiveTab == ActivityDrawerTab.Scheduled;
+
+    [RelayCommand]
+    private void ShowScheduledTab() => ActiveTab = ActivityDrawerTab.Scheduled;
+
+    [RelayCommand]
+    private void ManageScheduledTasks()
+    {
+        IsDrawerOpen = false;
+        _followLink(new ActivityLink(ActivityLinkKind.Preferences, "Automation"));
     }
 
     // ---- open state ----
@@ -69,6 +127,8 @@ public sealed partial class ActivityCenterViewModel : ViewModelBase
     public bool IsOpen => IsPeekOpen || IsDrawerOpen;
 
     public bool IsHistory => ActiveTab == ActivityDrawerTab.History;
+
+    public bool IsActiveTab => ActiveTab == ActivityDrawerTab.Active;
 
     public Array HistoryKindOptions { get; } = Enum.GetValues(typeof(ActivityHistoryKindOption));
 
@@ -88,6 +148,13 @@ public sealed partial class ActivityCenterViewModel : ViewModelBase
     partial void OnActiveTabChanged(ActivityDrawerTab value)
     {
         OnPropertyChanged(nameof(IsHistory));
+        OnPropertyChanged(nameof(IsScheduled));
+        OnPropertyChanged(nameof(IsActiveTab));
+        if (value == ActivityDrawerTab.Scheduled)
+        {
+            RebuildUpcoming();
+        }
+
         if (value == ActivityDrawerTab.History && _historyLoaded == 0)
         {
             ReloadHistory();

@@ -83,9 +83,17 @@
                                     <TextBlock Text="Sync Metadata" />
                                 </StackPanel>
                             </Button>
+                            <Button Classes="headerAction ghost" Command="{Binding RepairMissingCoversCommand}"
+                                    IsEnabled="{Binding !IsRepairingCovers}"
+                                    ToolTip.Tip="Regenerates only the covers that are currently blank, for comics and books whose file is available - the quick fix when covers have gone missing">
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <fi:SymbolIcon Symbol="ArrowSync" />
+                                    <TextBlock Text="Repair Missing Covers" />
+                                </StackPanel>
+                            </Button>
                             <Button Classes="headerAction ghost" Command="{Binding VerifyCoversCommand}"
                                     IsEnabled="{Binding !IsVerifyingCovers}"
-                                    ToolTip.Tip="Re-derives every comic and book cover from its file and overwrites the cache - fixes a cover that was wrong from the moment it was scanned, not just a stale cache entry">
+                                    ToolTip.Tip="Re-derives comic and book covers whose file has changed since the thumbnail was made - catches an updated archive without re-decoding the whole library">
                                 <StackPanel Orientation="Horizontal" Spacing="6">
                                     <fi:SymbolIcon Symbol="CheckmarkCircle" />
                                     <TextBlock Text="Verify &amp; Repair Covers" />

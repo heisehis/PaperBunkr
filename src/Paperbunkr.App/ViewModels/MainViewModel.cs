@@ -9,6 +9,7 @@ using CommunityToolkit.Mvvm.Input;
 using Paperbunkr.App.ContextMenus;
 using Paperbunkr.App.Models;
 using Paperbunkr.App.Services;
+using Paperbunkr.App.Services.Covers;
 using NetSparkleUpdater;
 using NetSparkleUpdater.Enums;
 using Paperbunkr.Data.Entities;
@@ -94,12 +95,17 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         // services. Screen VMs that start background work take Activity; the shell owns the two
         // presentation VMs and the link resolver.
         Activity = new ActivityService();
-        ActivityCenter = new ActivityCenterViewModel(Activity, ResolveActivityLink);
 
         // Reading-event log recorder (docs/superpowers/specs/2026-09-05-insights-dashboard-design.md
         // §5) - one instance, shared by the three reader VMs that write events and the Insights
         // screen VM that invalidates its cache when one lands.
         ReadingEvents = new ReadingEventRecorder();
+
+        // Maintenance scheduler (docs/superpowers/specs/2026-09-06-scheduled-tasks-and-cover-
+        // durability-design.md, Part 1) - App.axaml.cs calls Start()/Stop() once the window exists.
+        Scheduler = new Services.Scheduling.SchedulerService(Activity);
+
+        ActivityCenter = new ActivityCenterViewModel(Activity, ResolveActivityLink, Scheduler);
         StatusBar = new StatusBarViewModel(Activity, QueryLibraryStats, () => ActivityCenter.TogglePeekCommand.Execute(null));
         Activity.CompletionToastRequested += (title, message) => ShowToast(title, message);
 
@@ -228,6 +234,7 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
             OpenDesignShowcaseOverlay,
             _updateService,
             enqueueMetadataWriteBack: EnqueueMetadataWriteBack);
+        Preferences.AttachScheduler(Scheduler);
 
         // Real bug, found via manual testing: Reader.CanvasBackgroundBrush/PageMarginMultiplier
         // (docs/superpowers/specs/2026-08-10-reader-polish-continuous-scroll-chrome-overlays-design.md
@@ -244,23 +251,52 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
             _navRailPinned = context.GetOrCreateAppSettings().NavRailPinned;
         }
 
-        // Cover-cache reconciliation (docs/superpowers/specs/2026-08-27-cover-thumbnail-identity-
-        // validation-design.md): on every launch, regenerate any cover whose fingerprint no longer
-        // matches its issue/book (e.g. after a library rebuild reassigned ids) and sweep orphaned
-        // files. Presence-based, so it's cheap when nothing changed. Fire-and-forget - a slow first
-        // run after an upgrade must not block the shell.
-        _ = ReconcileCoverCachesAsync();
-
-        // Periodic content verification (docs/superpowers/specs/2026-08-30-cover-thumbnail-content-
-        // verification-design.md): unlike the reconcile above (identity-fingerprint presence only),
-        // this unconditionally re-derives every cover from source, catching a cache entry that was
-        // simply wrong from the moment it was written. Heavier, so it's gated to once every 7 days
-        // rather than every launch - independent fire-and-forget task, silent by design (no toast).
-        _ = PeriodicCoverVerificationAsync();
+        // Cover-cache reconciliation (docs/superpowers/specs/2026-09-06-scheduled-tasks-and-cover-
+        // durability-design.md, Part 2): flatten any legacy {id}-{hash}.jpg files once, honour a
+        // deferred rebuild purge, catch an unannounced rebuild via the count heuristic, then run the
+        // (now non-destructive) generate pass. Periodic re-verification of changed covers is the
+        // scheduler's "verify-covers" task, not a silent pass here. Fire-and-forget - a slow first
+        // run must not block the shell.
+        _ = ReconcileCoverCachesAsync(Activity);
     }
 
-    private static async Task ReconcileCoverCachesAsync()
+    private static async Task ReconcileCoverCachesAsync(IActivityService activity)
     {
+        try
+        {
+            CoverCacheUpgrade.RunOnce();
+
+            int issueCount;
+            int bookCount;
+            using (var context = PaperbunkrDb.CreateContext())
+            {
+                issueCount = context.Issues.Count();
+                bookCount = context.Books.Count();
+            }
+
+            var state = CoverCacheState.Read();
+            bool heuristic = !state.RebuildPending && CoverCacheState.LooksLikeUnannouncedRebuild(issueCount, bookCount);
+            if (state.RebuildPending || heuristic)
+            {
+                CoverCacheMaintenance.PurgeForRebuild();
+
+                if (heuristic)
+                {
+                    activity.RaiseAlert(new ActivityAlert
+                    {
+                        Severity = ActivityAlertSeverity.Info,
+                        Title = "Cover cache rebuilt",
+                        Detail = "The library changed a lot since the last cover pass, so covers are being regenerated.",
+                        DedupeKey = "cover-cache-rebuilt",
+                    });
+                }
+            }
+        }
+        catch
+        {
+            // Best-effort - the generate pass below and the manual cover actions still self-heal.
+        }
+
         var noProgress = new Progress<(int Done, int Total)>();
         try
         {
@@ -268,7 +304,6 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         }
         catch
         {
-            // Best-effort - the "Generate Covers" button and per-screen reloads still self-heal.
         }
 
         try
@@ -277,48 +312,6 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         }
         catch
         {
-        }
-    }
-
-    private static readonly TimeSpan CoverVerificationInterval = TimeSpan.FromDays(7);
-
-    /// <summary>
-    /// Whether a periodic cover-verification pass is due, given when it last completed
-    /// (<paramref name="lastRunUtc"/>, null if never) and the current time. A pure function so the
-    /// gating logic is testable without waiting out real elapsed time or constructing a full
-    /// <see cref="MainViewModel"/>.
-    /// </summary>
-    internal static bool ShouldRunCoverVerification(DateTime? lastRunUtc, DateTime nowUtc) =>
-        lastRunUtc is not DateTime last || nowUtc - last >= CoverVerificationInterval;
-
-    private static async Task PeriodicCoverVerificationAsync()
-    {
-        DateTime? lastRunUtc;
-        using (var context = PaperbunkrDb.CreateContext())
-        {
-            lastRunUtc = context.GetOrCreateAppSettings().LastCoverVerificationUtc;
-        }
-
-        if (!ShouldRunCoverVerification(lastRunUtc, DateTime.UtcNow))
-        {
-            return;
-        }
-
-        var noProgress = new Progress<(int Done, int Total)>();
-        try
-        {
-            await new CoverThumbnailService().VerifyAllAsync(noProgress);
-            await new BookCoverThumbnailService().VerifyAllAsync(noProgress);
-
-            using var context = PaperbunkrDb.CreateContext();
-            var settings = context.GetOrCreateAppSettings();
-            settings.LastCoverVerificationUtc = DateTime.UtcNow;
-            context.SaveChanges();
-        }
-        catch
-        {
-            // Best-effort, same rationale as ReconcileCoverCachesAsync - retried next launch either
-            // way, since the timestamp only advances on full completion.
         }
     }
 
@@ -397,6 +390,9 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
 
     /// <summary>Reading-event log recorder (docs/superpowers/specs/2026-09-05-insights-dashboard-design.md §5).</summary>
     public IReadingEventRecorder ReadingEvents { get; }
+
+    /// <summary>Maintenance-task scheduler (docs/superpowers/specs/2026-09-06-scheduled-tasks-and-cover-durability-design.md, Part 1).</summary>
+    public Services.Scheduling.ISchedulerService Scheduler { get; }
 
     /// <summary>Backs the persistent bottom status bar.</summary>
     public StatusBarViewModel StatusBar { get; }
@@ -2225,6 +2221,11 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
                 break;
             case ActivityLinkKind.Preferences:
                 GoPreferencesCommand.Execute(null);
+                if (link.Payload == "Automation")
+                {
+                    Preferences.GoAutomationCommand.Execute(null);
+                }
+
                 break;
             case ActivityLinkKind.PluginGroupedReview:
                 GoSmartCommand.Execute(null);

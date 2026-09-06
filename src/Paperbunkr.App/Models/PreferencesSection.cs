@@ -13,6 +13,7 @@ public enum PreferencesSection
     General,
     Appearance,
     Library,
+    Automation,
     Reader,
     KeyboardShortcuts,
     Connections,

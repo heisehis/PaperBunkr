@@ -21,6 +21,7 @@ public class LiveFolderWatchServiceTests : IDisposable
     private readonly string _dbPath;
     private readonly DbContextOptions<PaperbunkrDbContext> _dbOptions;
     private readonly string _scanRoot;
+    private readonly CoverCacheTestRedirect _coverRedirect;
 
     public LiveFolderWatchServiceTests()
     {
@@ -31,11 +32,16 @@ public class LiveFolderWatchServiceTests : IDisposable
 
         _scanRoot = Path.Combine(Path.GetTempPath(), $"paperbunkr_watch_root_{Guid.NewGuid():N}");
         Directory.CreateDirectory(_scanRoot);
+
+        // The service's import path calls CoverThumbnailService.GenerateAllAsync, which sweeps the
+        // cover cache dirs - keep it off the real per-user cache.
+        _coverRedirect = new CoverCacheTestRedirect();
     }
 
     public void Dispose()
     {
         Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
+        _coverRedirect.Dispose();
         try
         {
             if (File.Exists(_dbPath)) File.Delete(_dbPath);

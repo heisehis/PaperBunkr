@@ -79,6 +79,48 @@ sequenced by risk and user-facing impact) lives in [`alpha-todo.md`](alpha-todo.
 Pulled from `docs/ce-feature-inventory.md`'s full CE parity audit (2026-08-07), organized by area.
 Nothing here is sequenced yet — this is the full confirmed "decided: build" list, not a sprint plan.
 
+### Scheduled Tasks + cover-cache durability — implemented 2026-09-06 (GUI pass pending)
+
+Design + plan: `docs/superpowers/specs/2026-09-06-scheduled-tasks-and-cover-durability-design.md`
+(+ `-plan.md`). Two coupled pieces:
+
+- **Cover-cache durability (root fix).** The 2026-08-27 path-fingerprint identity scheme
+  (`{id}-{hash(path)}.jpg`) plus its hard-deleting orphan GC destroyed generated cover thumbnails on
+  every routine file-path change — metadata write-back, file moves, the `~RF*.TMP` watch bug,
+  drive-letter changes — which is what the user hit as "close the app, covers wiped, regenerate
+  everything." Fixed: covers are keyed by the bare `{id}.jpg`; a path change never touches them;
+  orphan cleanup **moves to an attic** (14-day + 500 MB, restore-by-id) instead of deleting, and
+  only ever sweeps ids that match no row; a missing/offline source never loses its cover; id-reuse
+  after a *rebuild* is handled by one explicit purge (CE re-migration / DB restore / "start fresh" /
+  a count-collapse heuristic) that also spares user-picked covers (moved to their own
+  `custom-covers/` dir, like arc covers). `verify-covers` is now mtime-smart, not a silent 7-day
+  full re-decode. A one-time on-disk `{id}-{hash}.jpg → {id}.jpg` migration runs on first launch.
+  New **"Repair Missing Covers"** button in Preferences → Libraries fills only the blanks. **Zero
+  schema changes** — all new state is a `cover-cache-state.json` sidecar. Also fixed a real
+  test-isolation hazard: several fixtures were letting the cover sweep run against the real
+  per-user cache; added `CoverCacheTestRedirect` + a process-wide safety net in
+  `AvaloniaTestCollection`. This supersedes the 2026-08-27 identity-validation design and the
+  2026-08-30 periodic content-verification pass.
+
+- **Scheduled Tasks (the "job system" the user asked about).** A code-defined catalog of 7
+  recurring maintenance tasks (DB backup, comic scan, book scan, sync metadata, content-type
+  sweep, verify covers, generate covers), each with a per-task Interval or Daily-at schedule,
+  enable toggle, and "Run now". A hand-composed `SchedulerService` runs a startup pass for
+  anything overdue, then a fixed 15-minute in-session tick; a priority queue runs up to two tasks
+  at once but never two of the same resource class (so never two SQLite writers). New
+  **Automation** Preferences tab is the control surface; the Activity Center's "Scheduled" drawer
+  tab becomes a read-only "up next" view. Runs report through the Activity Center with a per-app
+  "notify on every run / only failures / never" setting (default only-failures); successful
+  scheduled runs are exempt from the 200-row history floor. Folds in and retires the two ad-hoc
+  `RunAutoBackupIfDue` / `RunContentTypeSweepIfDue` startup triggers and the standalone
+  `ScanFoldersOnStartup` checkbox (its value carries into the scan tasks). One migration:
+  `AddScheduledTaskState` (`ScheduledTaskState` table + `AppSettings.ScheduledTaskNotificationLevel`;
+  `ScanFoldersOnStartup` left as a dormant column, not dropped, to avoid the SQLite
+  rebuild/rollback-chain hazard).
+
+Deliberate CE deviation (CE has no scheduler and no persisted history), consistent with the
+Activity Center itself. On-screen GUI pass still pending. Not yet committed.
+
 ### On-screen verification — cleared by the user 2026-09-04
 
 Almost every Beta-backlog entry below carries a trailing "on-screen GUI pass still pending" /

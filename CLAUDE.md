@@ -27,6 +27,33 @@ Before adding any field, default, or behavior, verify it against the original Co
 source/behavior (`_reference/ComicRackCE`) rather than assuming — this project is a from-scratch
 rewrite aiming for CE parity plus deliberate deviations, not a guess at what CE probably did.
 
+## Design workflow — grilling is the clarifying-questions step
+
+The `brainstorming` skill (still mandatory before any feature/behavior work, per its own
+HARD-GATE) governs the pipeline: explore context → clarify → propose approaches → present design
+→ write `docs/superpowers/specs/YYYY-MM-DD-<topic>-design.md` → user reviews → hand off to
+`writing-plans`. For Paperbunkr, **replace brainstorming's "one question at a time" clarification
+(its checklist step 3) with a `/grilling` pass** (`mattpocock-skills` plugin, installed
+2026-09-05 at user scope):
+
+- Build the **design tree** — every decision branches into the decisions that hang off it — and
+  work it in **rounds**. Each round, ask the *entire settled frontier* at once: number the
+  questions, give each a recommended answer in the `❓ Q1 … ➡️ <recommendation>` format, then
+  wait. The user's answers reshape the tree; recompute the frontier and ask the next round.
+- **Facts are your job, never the user's.** When a frontier question needs something from the
+  repo (does CE do X? does this type exist? what does `_reference/ComicRackCE` say?), dispatch a
+  subagent to find it instead of asking — and don't block the rest of the frontier on it. This
+  pairs directly with the Standing rule above: CE-parity questions get *looked up*, not guessed
+  at and not punted to the user.
+- The session ends only when the frontier is empty — every branch visited, nothing silently
+  assumed. Do not start writing the design doc until the user confirms shared understanding.
+- Everything else in `brainstorming` stays: the HARD-GATE, YAGNI, 2–3 approaches with a
+  recommendation, the spec self-review, the user-review gate, and the `writing-plans` hand-off.
+- **Auto-trigger is allowed.** The model-invoked `grilling` skill may fire on its own when a
+  design or plan is worth stress-testing; `/grill-me` also runs it on demand. `/grill-with-docs`
+  is the variant that also writes ADRs/glossary via `domain-modeling` — use it when the work
+  introduces genuinely new domain vocabulary, not routine feature work.
+
 ## UI/Avalonia foundation — mandatory across all phases
 
 Load the `avalonia` skill (installed via https://github.com/linuxdevel/Avalonia-skills, symlinked

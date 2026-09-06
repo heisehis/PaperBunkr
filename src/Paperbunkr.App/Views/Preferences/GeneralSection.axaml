@@ -19,10 +19,8 @@
                     <StackPanel Margin="14" Spacing="12">
                         <CheckBox IsChecked="{Binding RestoreSessionOnStartup}" Foreground="{DynamicResource PbTextBrush}" FontSize="13"
                                   Content="Reopen the screen I was on last time" />
-                        <CheckBox IsChecked="{Binding ScanFoldersOnStartup}" Foreground="{DynamicResource PbTextBrush}" FontSize="13"
-                                  Content="Scan library folders for new files at startup" />
-                        <TextBlock Text="Picks up files added or removed while Paperbunkr wasn't running. Runs in the background — check the activity center for progress."
-                                   FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" Margin="0,-6,0,0" />
+                        <TextBlock Text="Scanning folders for new files at startup is now a scheduled task — set it up under Automation."
+                                   FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" />
                     </StackPanel>
                 </StackPanel>
             </Border>

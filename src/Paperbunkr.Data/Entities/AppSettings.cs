@@ -474,14 +474,6 @@ public class AppSettings
     public bool RestoreSessionOnStartup { get; set; } = true;
 
     /// <summary>
-    /// Whether a full library folder scan (comics + book folders) runs in the background on launch.
-    /// CE: <c>Settings.ScanStartup</c> ("Rescan the Book Folders for new Books"), default false.
-    /// <c>LiveFolderWatchService</c> only catches changes made while the app is running; this covers
-    /// changes made while it was closed.
-    /// </summary>
-    public bool ScanFoldersOnStartup { get; set; }
-
-    /// <summary>
     /// Whether reaching the end of a comic (paging past the last page with no next issue to advance
     /// to) auto-opens the Quick Rate overlay for that issue. CE: <c>Settings.AutoShowQuickReview</c>
     /// ("Show Quick Review Dialog after finishing Book"), default false. Fires at most once per
@@ -512,4 +504,12 @@ public class AppSettings
     /// launch rather than being marked done early.
     /// </summary>
     public DateTime? LastCoverVerificationUtc { get; set; }
+
+    /// <summary>
+    /// How loudly a finished scheduled maintenance task announces itself (docs/superpowers/specs/
+    /// 2026-09-06-scheduled-tasks-and-cover-durability-design.md, Part 1). Default
+    /// <see cref="ScheduledTaskNotificationLevel.OnlyFailures"/> - routine upkeep shouldn't nag, but
+    /// a persistently-failing task should be visible.
+    /// </summary>
+    public ScheduledTaskNotificationLevel ScheduledTaskNotificationLevel { get; set; } = ScheduledTaskNotificationLevel.OnlyFailures;
 }

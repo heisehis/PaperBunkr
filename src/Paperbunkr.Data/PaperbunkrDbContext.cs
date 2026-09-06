@@ -110,6 +110,8 @@ public class PaperbunkrDbContext : DbContext
 
     public DbSet<ReadingEvent> ReadingEvents => Set<ReadingEvent>();
 
+    public DbSet<ScheduledTaskState> ScheduledTaskStates => Set<ScheduledTaskState>();
+
     public PaperbunkrDbContext(DbContextOptions<PaperbunkrDbContext> options)
         : base(options)
     {
@@ -837,6 +839,11 @@ public class PaperbunkrDbContext : DbContext
                 .HasDefaultValue(ImageFitMode.FitWidth)
                 .HasSentinel(ImageFitMode.Original);
             builder.Property(a => a.DefaultAutoRotate).HasDefaultValue(false);
+            // Same enum-as-string HasSentinel treatment as DefaultPageFitMode - the ALTER TABLE runs
+            // against the existing AppSettings singleton row, so it needs a valid DB-level default.
+            builder.Property(a => a.ScheduledTaskNotificationLevel).HasConversion<string>().HasMaxLength(16)
+                .HasDefaultValue(ScheduledTaskNotificationLevel.OnlyFailures)
+                .HasSentinel(ScheduledTaskNotificationLevel.EveryRun);
             // Same enum-as-string HasSentinel treatment as DefaultPageFitMode/ImageBackgroundMode
             // above, even though None is both the CLR default and the desired default here - keeps
             // every enum-as-string AppSettings column configured identically rather than special-
@@ -968,7 +975,6 @@ public class PaperbunkrDbContext : DbContext
             // bare 0. The two false-by-default columns match SQLite's own default but are configured
             // here too so the whole block stays uniform.
             builder.Property(a => a.RestoreSessionOnStartup).HasDefaultValue(true);
-            builder.Property(a => a.ScanFoldersOnStartup).HasDefaultValue(false);
             builder.Property(a => a.PromptReviewOnFinish).HasDefaultValue(false);
             builder.Property(a => a.EnableDragDropImport).HasDefaultValue(true);
             builder.Property(a => a.NavRailHoverExpandEnabled).HasDefaultValue(true);
@@ -1121,6 +1127,20 @@ public class PaperbunkrDbContext : DbContext
             builder.Property(e => e.PrimaryGenre).HasMaxLength(128);
             builder.HasIndex(e => e.TimestampUtc);
             builder.HasIndex(e => new { e.ItemType, e.ItemId });
+        });
+
+        // Scheduled-task state (docs/superpowers/specs/2026-09-06-scheduled-tasks-and-cover-
+        // durability-design.md, Part 1) - brand-new table, <= 8 rows, keyed by the catalog id.
+        // Same plain growable shape as ActivityRun; Mode gets a DB default so the new NOT NULL
+        // column is valid even though there are no existing rows to backfill.
+        modelBuilder.Entity<ScheduledTaskState>(builder =>
+        {
+            builder.HasKey(s => s.TaskId);
+            builder.Property(s => s.TaskId).HasMaxLength(64);
+            builder.Property(s => s.Mode).HasConversion<string>().HasMaxLength(16)
+                .HasDefaultValue(ScheduleMode.Interval)
+                .HasSentinel(ScheduleMode.Interval);
+            builder.Property(s => s.LastRunStatus).HasConversion<string>().HasMaxLength(16);
         });
     }
 

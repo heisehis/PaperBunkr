@@ -35,8 +35,13 @@ public interface IActivityService
     /// <summary>Raised when a job settles and a toast should surface it (title, message). Not raised while <see cref="PanelIsOpen"/>.</summary>
     event Action<string, string>? CompletionToastRequested;
 
-    /// <summary>Start tracking a job. The caller drives it via the returned handle and must dispose it.</summary>
-    IActivityJobHandle StartJob(ActivityJobKind kind, string title, bool cancellable = true, ActivityTrigger trigger = ActivityTrigger.Manual);
+    /// <summary>
+    /// Start tracking a job. The caller drives it via the returned handle and must dispose it.
+    /// Pass <paramref name="startQueued"/> to create the job in <see cref="ActivityJobStatus.Queued"/>
+    /// (the scheduler's serial queue) - it becomes <see cref="ActivityJobStatus.Running"/> only when
+    /// the caller calls <see cref="IActivityJobHandle.Begin"/>.
+    /// </summary>
+    IActivityJobHandle StartJob(ActivityJobKind kind, string title, bool cancellable = true, ActivityTrigger trigger = ActivityTrigger.Manual, ActivityToastPolicy toastPolicy = ActivityToastPolicy.Always, bool startQueued = false);
 
     /// <summary>Register the single ambient "Background upkeep" rollup row. Call once at startup.</summary>
     IActivityUpkeepHandle RegisterUpkeep(string title);
@@ -69,6 +74,9 @@ public interface IActivityJobHandle : IDisposable
 {
     /// <summary>Trips when this job is cancelled individually or by <see cref="IActivityService.StopAll"/>.</summary>
     CancellationToken CancellationToken { get; }
+
+    /// <summary>Promote a job created with <c>startQueued: true</c> from Queued to Running. No-op otherwise.</summary>
+    void Begin();
 
     void Report(int done, int total, string? detail = null);
 

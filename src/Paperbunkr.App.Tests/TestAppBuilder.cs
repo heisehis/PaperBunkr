@@ -112,5 +112,20 @@ public static class TestAppBuilder
 [CollectionDefinition(nameof(AvaloniaTestCollection))]
 public class AvaloniaTestCollection : ICollectionFixture<AvaloniaTestCollection>
 {
-    public AvaloniaTestCollection() => TestAppBuilder.EnsureInitialized();
+    public AvaloniaTestCollection()
+    {
+        TestAppBuilder.EnsureInitialized();
+
+        // Process-wide safety net: some tests (MainViewModel's ctor reconcile, LibraryScreen's
+        // background regen, migration hooks) reach the cover services on a fire-and-forget thread
+        // whose lifetime a per-test fixture can't bracket. Without this, that sweep attics the real
+        // per-user cover cache. Set once for the whole run and never restored; per-test fixtures
+        // that need their own isolated dir still override it and restore to this temp base.
+        string root = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"paperbunkr_covers_global_{System.Guid.NewGuid():N}");
+        Paperbunkr.App.Services.CoverThumbnailPaths.ThumbnailDirectory = System.IO.Path.Combine(root, "thumbnails");
+        Paperbunkr.App.Services.BookCoverThumbnailPaths.ThumbnailDirectory = System.IO.Path.Combine(root, "book-thumbnails");
+        Paperbunkr.App.Services.Covers.CustomCoverPaths.Directory = System.IO.Path.Combine(root, "custom-covers");
+        Paperbunkr.App.Services.Covers.CustomBookCoverPaths.Directory = System.IO.Path.Combine(root, "custom-book-covers");
+        Paperbunkr.App.Services.Covers.CoverCacheState.FilePath = System.IO.Path.Combine(root, "cover-cache-state.json");
+    }
 }

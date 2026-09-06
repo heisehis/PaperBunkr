@@ -258,6 +258,11 @@ public partial class MigrationViewModel : ViewModelBase
 
         IsBusy = false;
 
+        // A CE re-migration reassigns Issue/Series ids wholesale - drop the cover caches so no
+        // reused id serves the previous entity's cover (docs/superpowers/specs/2026-09-06-
+        // scheduled-tasks-and-cover-durability-design.md). The Generate Covers step below refills.
+        Services.Covers.CoverCacheMaintenance.PurgeForRebuild();
+
         SeriesCreatedLabel = result.SeriesCreated.ToString();
         IssuesCreatedLabel = result.IssuesCreated.ToString();
         SeriesMergedLabel = result.SeriesMerged.ToString();

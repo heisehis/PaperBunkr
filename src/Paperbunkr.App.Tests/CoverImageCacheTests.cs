@@ -1,4 +1,5 @@
 using Paperbunkr.App.Services;
+using Paperbunkr.App.Services.Covers;
 
 namespace Paperbunkr.App.Tests;
 
@@ -12,26 +13,34 @@ namespace Paperbunkr.App.Tests;
 public class CoverImageCacheTests : IDisposable
 {
     private readonly string _originalThumbnailDirectory;
+    private readonly string _originalCustomDirectory;
     private readonly string _thumbnailDirectory;
+    private readonly string _customDirectory;
     private readonly string _cbzPath;
 
     public CoverImageCacheTests()
     {
         _originalThumbnailDirectory = CoverThumbnailPaths.ThumbnailDirectory;
-        _thumbnailDirectory = Path.Combine(Path.GetTempPath(), $"paperbunkr_cache_test_{Guid.NewGuid():N}");
+        _originalCustomDirectory = CustomCoverPaths.Directory;
+        string root = Path.Combine(Path.GetTempPath(), $"paperbunkr_cache_test_{Guid.NewGuid():N}");
+        _thumbnailDirectory = Path.Combine(root, "thumbnails");
+        _customDirectory = Path.Combine(root, "custom-covers");
         CoverThumbnailPaths.ThumbnailDirectory = _thumbnailDirectory;
+        CustomCoverPaths.Directory = _customDirectory;
 
         _cbzPath = Path.Combine(Path.GetTempPath(), $"paperbunkr_cache_cbz_{Guid.NewGuid():N}.cbz");
     }
 
     public void Dispose()
     {
+        string root = Path.GetDirectoryName(_thumbnailDirectory)!;
         CoverThumbnailPaths.ThumbnailDirectory = _originalThumbnailDirectory;
+        CustomCoverPaths.Directory = _originalCustomDirectory;
 
         try
         {
             if (File.Exists(_cbzPath)) File.Delete(_cbzPath);
-            if (Directory.Exists(_thumbnailDirectory)) Directory.Delete(_thumbnailDirectory, recursive: true);
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
         }
         catch (IOException)
         {
@@ -114,17 +123,45 @@ public class CoverImageCacheTests : IDisposable
     }
 
     [Fact]
-    public void Get_ReturnsNull_WhenOnlyAMismatchedStemFileExistsForThatId()
+    public void Get_ServesTheSameCover_RegardlessOfThePathTheKeyWasComputedFrom()
     {
-        // The real bug: a rebuild reassigns id 101 to a different comic. The old cover file
-        // (101-{oldfp}.jpg) is still on disk, but the id's *current* fingerprint doesn't match it.
+        // Post root-fix: the key is the bare id, so a path change can't orphan the cover.
         CbzFixture.Create(_cbzPath, pageCount: 1);
         Service().TryGenerateThumbnail(issueId: 101, _cbzPath, fileSize: 100);
-        Assert.NotNull(CoverImageCache.Get(CoverFingerprint.Stem(101, _cbzPath, 100)));
 
-        // Same id, different file identity -> different stem -> nothing to serve.
-        Assert.Null(CoverImageCache.Get(CoverFingerprint.Stem(101, "C:/somewhere/else.cbz", 100)));
-        Assert.Null(CoverImageCache.Get(CoverFingerprint.Stem(101, _cbzPath, 200)));
+        var viaOnePath = CoverImageCache.Get(CoverFingerprint.Stem(101, _cbzPath, 100));
+        var viaAnother = CoverImageCache.Get(CoverFingerprint.Stem(101, "C:/somewhere/else.cbz", 200));
+
+        Assert.NotNull(viaOnePath);
+        Assert.Same(viaOnePath, viaAnother);
+    }
+
+    [Fact]
+    public void Get_PrefersACustomCover_OverAGeneratedOne()
+    {
+        CbzFixture.Create(_cbzPath, pageCount: 1);
+        Service().TryGenerateThumbnail(issueId: 550, _cbzPath, fileSize: 1);
+        Directory.CreateDirectory(_customDirectory);
+        File.Copy(CoverThumbnailPaths.GetCachePath(550), CustomCoverPaths.GetCachePath(550));
+
+        // Fresh key (nothing cached in memory yet) -> resolves the custom file.
+        var served = CoverImageCache.DecodeFromDisk("550");
+        Assert.NotNull(served);
+        // The generated file also exists, but the custom path is what DecodeFromDisk resolves.
+        Assert.True(File.Exists(CustomCoverPaths.GetCachePath(550)));
+    }
+
+    [Fact]
+    public void Clear_EmptiesTheInMemoryCache()
+    {
+        CbzFixture.Create(_cbzPath, pageCount: 1);
+        Service().TryGenerateThumbnail(issueId: 560, _cbzPath, fileSize: 1);
+        Assert.NotNull(CoverImageCache.Get("560"));
+        Assert.True(CoverImageCache.TryGetCached("560", out _));
+
+        CoverImageCache.Clear();
+
+        Assert.False(CoverImageCache.TryGetCached("560", out _));
     }
 
     // --- Invalidate (real bug found 2026-08-19: a stale on-disk thumbnail from a since-deleted

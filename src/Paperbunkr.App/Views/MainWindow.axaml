@@ -576,6 +576,25 @@
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
+
+                        <!-- Plugin-provided CreateBookList lists (docs/superpowers/specs/2026-09-05-
+                             plugin-api-v2-remaining-hooks-plan.md / plugin-grouped-review-and-scan-
+                             alerts-design.md) - read-only, no add/delete affordance since these come
+                             from installed plugins, not user-created. -->
+                        <TextBlock Classes="sideHeading" Text="PLUGINS" Margin="8,12,8,6" IsVisible="{Binding Smart.PluginLists.Count}" />
+                        <ItemsControl x:Name="PluginSmartLists" ItemsSource="{Binding Smart.PluginLists}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="models:SmartListSummary">
+                                    <Border Classes="smRow" Classes.active="{Binding IsActive}" CornerRadius="6" BorderThickness="3,0,0,0" Margin="0,1">
+                                        <Button Classes="sideItemButton" Padding="11,7"
+                                                Command="{Binding #PluginSmartLists.((vm:MainViewModel)DataContext).Smart.SelectListCommand}"
+                                                CommandParameter="{Binding}">
+                                            <TextBlock Classes="sideItemLabel" Text="{Binding Name}" FontSize="13" Foreground="{DynamicResource PbTextMutedBrush}" />
+                                        </Button>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
                     </StackPanel>
 
                     <!-- Reading Lists sidebar (docs/superpowers/specs/2026-08-28-reading-lists-screen-redesign-design.md → v2) -->

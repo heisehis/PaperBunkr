@@ -67,6 +67,10 @@ public static class PreferenceIndex
             new[] { "virtual tag", "caption format", "computed tag" },
             "library.virtualTags"),
 
+        new(PreferencesSection.Automation, "Scheduled Tasks", "Scheduled Tasks",
+            new[] { "schedule", "scheduled task", "automation", "automatic", "recurring", "background job", "backup", "scan on startup", "periodic", "cron" },
+            "automation.tasks"),
+
         new(PreferencesSection.Reader, "Right to Left", "Right to Left",
             new[] { "right to left", "rtl", "manga", "page turn direction", "reverse" },
             "reader.rtl"),

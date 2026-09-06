@@ -116,6 +116,16 @@ public sealed class LruCache<TKey, TValue> where TKey : notnull
         }
     }
 
+    /// <summary>Drops every entry, without disposing (same rationale as <see cref="Remove"/>).
+    /// Used by the cover-cache rebuild purge - after a library rebuild reassigns ids, every cached
+    /// bitmap could be for the wrong entity.</summary>
+    public void Clear()
+    {
+        _values.Clear();
+        _recencyOrder.Clear();
+        _recencyNodes.Clear();
+    }
+
     private void Touch(TKey key)
     {
         if (_recencyNodes.TryGetValue(key, out var node))

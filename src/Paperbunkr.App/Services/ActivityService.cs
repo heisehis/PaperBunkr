@@ -62,9 +62,16 @@ public sealed class ActivityService : IActivityService
 
     public event Action<string, string>? CompletionToastRequested;
 
-    public IActivityJobHandle StartJob(ActivityJobKind kind, string title, bool cancellable = true, ActivityTrigger trigger = ActivityTrigger.Manual)
+    public IActivityJobHandle StartJob(ActivityJobKind kind, string title, bool cancellable = true, ActivityTrigger trigger = ActivityTrigger.Manual, ActivityToastPolicy toastPolicy = ActivityToastPolicy.Always, bool startQueued = false)
     {
-        var job = new ActivityJob { Kind = kind, Title = title, Trigger = trigger, Status = ActivityJobStatus.Running };
+        var job = new ActivityJob
+        {
+            Kind = kind,
+            Title = title,
+            Trigger = trigger,
+            ToastPolicy = toastPolicy,
+            Status = startQueued ? ActivityJobStatus.Queued : ActivityJobStatus.Running,
+        };
         var handle = new JobHandle(this, job, cancellable);
 
         _dispatch(() =>
@@ -193,6 +200,18 @@ public sealed class ActivityService : IActivityService
         }
     }
 
+    private void PromoteToRunning(ActivityJob job)
+    {
+        _dispatch(() =>
+        {
+            if (job.Status == ActivityJobStatus.Queued)
+            {
+                job.Status = ActivityJobStatus.Running;
+                RaiseChanged();
+            }
+        });
+    }
+
     private void SettleJob(JobHandle handle, ActivityJobStatus status, string summary, ActivityLink? link, int? processed, int? failed)
     {
         lock (_gate)
@@ -219,13 +238,28 @@ public sealed class ActivityService : IActivityService
 
             RaiseChanged();
 
-            if (!PanelIsOpen && status != ActivityJobStatus.Cancelled)
+            if (ShouldToast(job, status))
             {
                 CompletionToastRequested?.Invoke(TitleForToast(job, status), summary);
             }
         });
 
         PersistRun(job, status, link, processed, failed);
+    }
+
+    private bool ShouldToast(ActivityJob job, ActivityJobStatus status)
+    {
+        if (PanelIsOpen || status == ActivityJobStatus.Cancelled)
+        {
+            return false;
+        }
+
+        return job.ToastPolicy switch
+        {
+            ActivityToastPolicy.Never => false,
+            ActivityToastPolicy.FailuresOnly => status == ActivityJobStatus.Failed,
+            _ => true,
+        };
     }
 
     private static string TitleForToast(ActivityJob job, ActivityJobStatus status) =>
@@ -295,6 +329,8 @@ public sealed class ActivityService : IActivityService
         public ActivityJob Job { get; }
 
         public CancellationToken CancellationToken => _cts?.Token ?? CancellationToken.None;
+
+        public void Begin() => _owner.PromoteToRunning(Job);
 
         public void Report(int done, int total, string? detail = null)
         {

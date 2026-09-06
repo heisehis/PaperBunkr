@@ -1,5 +1,7 @@
+using System.Threading;
 using Microsoft.EntityFrameworkCore;
 using Paperbunkr.App.Services;
+using Paperbunkr.App.Services.Covers;
 using Paperbunkr.Data;
 using Paperbunkr.Data.Entities;
 using SdBitmap = System.Drawing.Bitmap;
@@ -10,23 +12,19 @@ using SdImageFormat = System.Drawing.Imaging.ImageFormat;
 namespace Paperbunkr.App.Tests;
 
 /// <summary>
-/// Covers both the custom-cover pair added for the Book Properties editor (docs/superpowers/specs/
-/// 2026-08-27-book-properties-editor-design.md) and the identity-validation behaviour
-/// <see cref="BookCoverThumbnailService"/> gained in docs/superpowers/specs/2026-08-27-cover-
-/// thumbnail-identity-validation-design.md - fingerprinted cache-file names and
-/// <see cref="BookCoverThumbnailService.GenerateAllAsync"/>'s orphan GC. Custom-cover paths now
-/// resolve their stem from the database (mirrors <see cref="CoverThumbnailServiceTests"/>'s
-/// equivalent for comics), hence the DB-context fixture. The actual auto-cover-decode paths (EPUB
-/// embedded cover / PDF page 0) are exercised by <c>EpubBookSourceTests</c> / <c>PdfBookSourceTests</c>;
-/// here we plant cache files directly for the identity tests so they don't depend on a
-/// cover-bearing fixture. The fingerprint itself (shared with comics) is covered by
-/// <see cref="CoverFingerprintTests"/>.
+/// <see cref="BookCoverThumbnailService"/> after the 2026-09-06 cover-durability root fix
+/// (docs/superpowers/specs/2026-09-06-scheduled-tasks-and-cover-durability-design.md, Part 2):
+/// covers keyed by bare id (<c>{id}.jpg</c>), path changes never touch them, orphan cleanup attics
+/// rather than deletes, custom covers in their own directory, mtime-smart verify.
 /// </summary>
 [Collection(nameof(AvaloniaTestCollection))]
 public class BookCoverThumbnailServiceTests : IDisposable
 {
     private readonly string _originalDirectory;
+    private readonly string _originalCustomDirectory;
+    private readonly string _originalStateFile;
     private readonly string _thumbnailDirectory;
+    private readonly string _customDirectory;
     private readonly string _dbPath;
     private readonly DbContextOptions<PaperbunkrDbContext> _dbOptions;
     private readonly string _sourceImagePath;
@@ -34,8 +32,15 @@ public class BookCoverThumbnailServiceTests : IDisposable
     public BookCoverThumbnailServiceTests()
     {
         _originalDirectory = BookCoverThumbnailPaths.ThumbnailDirectory;
-        _thumbnailDirectory = Path.Combine(Path.GetTempPath(), $"paperbunkr_bookthumbs_test_{Guid.NewGuid():N}");
+        _originalCustomDirectory = CustomBookCoverPaths.Directory;
+        _originalStateFile = CoverCacheState.FilePath;
+
+        string root = Path.Combine(Path.GetTempPath(), $"paperbunkr_bookthumbs_test_{Guid.NewGuid():N}");
+        _thumbnailDirectory = Path.Combine(root, "book-thumbnails");
+        _customDirectory = Path.Combine(root, "custom-book-covers");
         BookCoverThumbnailPaths.ThumbnailDirectory = _thumbnailDirectory;
+        CustomBookCoverPaths.Directory = _customDirectory;
+        CoverCacheState.FilePath = Path.Combine(root, "cover-cache-state.json");
         Directory.CreateDirectory(_thumbnailDirectory);
 
         _dbPath = Path.Combine(Path.GetTempPath(), $"paperbunkr_bookcover_db_{Guid.NewGuid():N}.db");
@@ -54,13 +59,16 @@ public class BookCoverThumbnailServiceTests : IDisposable
 
     public void Dispose()
     {
+        string root = Path.GetDirectoryName(_thumbnailDirectory)!;
         BookCoverThumbnailPaths.ThumbnailDirectory = _originalDirectory;
+        CustomBookCoverPaths.Directory = _originalCustomDirectory;
+        CoverCacheState.FilePath = _originalStateFile;
         Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
         try
         {
             if (File.Exists(_dbPath)) File.Delete(_dbPath);
             if (File.Exists(_sourceImagePath)) File.Delete(_sourceImagePath);
-            if (Directory.Exists(_thumbnailDirectory)) Directory.Delete(_thumbnailDirectory, recursive: true);
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
         }
         catch (IOException)
         {
@@ -78,27 +86,24 @@ public class BookCoverThumbnailServiceTests : IDisposable
         return book.Id;
     }
 
-    private static void Plant(string stem)
+    private static void Plant(int id)
     {
         using var bmp = new SdBitmap(4, 4);
-        bmp.Save(BookCoverThumbnailPaths.GetCachePath(stem), SdImageFormat.Jpeg);
+        bmp.Save(BookCoverThumbnailPaths.GetCachePath(id), SdImageFormat.Jpeg);
     }
 
-    // --- Custom cover (Book Properties editor) - stem resolved from the database, mirroring
-    //     CoverThumbnailServiceTests' equivalent coverage for comics. ---
+    // --- Custom cover -> its own directory, never swept ---
 
     [Fact]
-    public void TrySetCustomCover_WritesADecodableJpeg()
+    public void TrySetCustomCover_WritesADecodableJpeg_ToTheCustomDirectory()
     {
         int bookId = AddBook(@"C:\books\5.epub");
-        var service = Service();
 
-        bool ok = service.TrySetCustomCover(bookId, _sourceImagePath);
+        bool ok = Service().TrySetCustomCover(bookId, _sourceImagePath);
 
         Assert.True(ok);
-        string dest = BookCoverThumbnailPaths.GetCachePath(CoverFingerprint.Stem(bookId, @"C:\books\5.epub", null));
-        Assert.True(File.Exists(dest));
-        using var decoded = new Avalonia.Media.Imaging.Bitmap(dest);
+        Assert.True(CustomBookCoverPaths.Exists(bookId));
+        using var decoded = new Avalonia.Media.Imaging.Bitmap(CustomBookCoverPaths.GetCachePath(bookId));
         Assert.True(decoded.PixelSize.Width > 0);
     }
 
@@ -106,84 +111,80 @@ public class BookCoverThumbnailServiceTests : IDisposable
     public void TrySetCustomCover_Overwrites_UnlikeTryGenerate()
     {
         int bookId = AddBook(@"C:\books\6.epub");
-        string stem = CoverFingerprint.Stem(bookId, @"C:\books\6.epub", null);
         var service = Service();
         service.TrySetCustomCover(bookId, _sourceImagePath);
-        var firstWrite = File.GetLastWriteTimeUtc(BookCoverThumbnailPaths.GetCachePath(stem));
+        var firstWrite = File.GetLastWriteTimeUtc(CustomBookCoverPaths.GetCachePath(bookId));
 
         Thread.Sleep(10);
         bool ok = service.TrySetCustomCover(bookId, _sourceImagePath);
 
         Assert.True(ok);
-        Assert.True(File.GetLastWriteTimeUtc(BookCoverThumbnailPaths.GetCachePath(stem)) > firstWrite);
+        Assert.True(File.GetLastWriteTimeUtc(CustomBookCoverPaths.GetCachePath(bookId)) > firstWrite);
     }
 
     [Fact]
     public void TrySetCustomCover_BadImagePath_ReturnsFalse_NoFile()
     {
         int bookId = AddBook(@"C:\books\7.epub");
-        string stem = CoverFingerprint.Stem(bookId, @"C:\books\7.epub", null);
-        var service = Service();
 
-        bool ok = service.TrySetCustomCover(bookId, @"C:\nope\not-an-image.png");
+        bool ok = Service().TrySetCustomCover(bookId, @"C:\nope\not-an-image.png");
 
         Assert.False(ok);
-        Assert.False(File.Exists(BookCoverThumbnailPaths.GetCachePath(stem)));
+        Assert.False(CustomBookCoverPaths.Exists(bookId));
     }
 
     [Fact]
     public void ResetCover_Pdf_LeavesNoFile()
     {
         int bookId = AddBook(@"C:\missing\book.pdf", BookFormat.Pdf);
-        string stem = CoverFingerprint.Stem(bookId, @"C:\missing\book.pdf", null);
         var service = Service();
         service.TrySetCustomCover(bookId, _sourceImagePath);
-        Assert.True(File.Exists(BookCoverThumbnailPaths.GetCachePath(stem)));
+        Assert.True(CustomBookCoverPaths.Exists(bookId));
 
-        // A PDF with no real file on disk: ResetCover deletes the custom cover and can't regenerate.
         service.ResetCover(bookId, filePath: @"C:\missing\book.pdf", format: BookFormat.Pdf);
 
-        Assert.False(File.Exists(BookCoverThumbnailPaths.GetCachePath(stem)));
+        Assert.False(CustomBookCoverPaths.Exists(bookId));
+        Assert.False(File.Exists(BookCoverThumbnailPaths.GetCachePath(bookId)));
     }
 
-    // --- Identity validation (docs/superpowers/specs/2026-08-27-cover-thumbnail-identity-
-    //     validation-design.md) - fingerprinted cache-file names and orphan GC. ---
+    // --- Orphan cleanup: attic (not delete), keyed by id, never touches a live book's cover ---
 
     [Fact]
-    public async Task GenerateAllAsync_GarbageCollectsOrphans_ButKeepsValidStems()
+    public async Task GenerateAllAsync_KeepsALiveBooksCover_AndAtticsAnIdLessOne()
     {
         int bookId = AddBook(@"C:\books\current.epub");
-        string validStem = CoverFingerprint.Stem(bookId, @"C:\books\current.epub", null);
-        Plant(validStem);
-
-        // Orphans: a cover for a since-reassigned id, and a pre-rework bare-id file.
-        string reusedIdOrphan = CoverFingerprint.Stem(bookId, @"C:\books\old-different.epub", null);
-        Plant(reusedIdOrphan);
-        Plant($"{bookId}"); // legacy "{id}.jpg"
+        Plant(bookId);
+        Plant(999999); // no such book row
 
         await Service().GenerateAllAsync(new Progress<(int Done, int Total)>());
 
-        Assert.True(File.Exists(BookCoverThumbnailPaths.GetCachePath(validStem)));
-        Assert.False(File.Exists(BookCoverThumbnailPaths.GetCachePath(reusedIdOrphan)));
-        Assert.False(File.Exists(Path.Combine(_thumbnailDirectory, $"{bookId}.jpg")));
+        Assert.True(File.Exists(BookCoverThumbnailPaths.GetCachePath(bookId)));
+        Assert.False(File.Exists(BookCoverThumbnailPaths.GetCachePath(999999)));
+        Assert.Contains(BookCoverThumbnailPaths.EnumerateAttic(), p => Path.GetFileName(p).StartsWith("999999.", StringComparison.Ordinal));
     }
 
     [Fact]
-    public void Get_ReturnsNull_WhenOnlyAMismatchedStemFileExistsForThatId()
+    public void Get_ServesByBareId_RegardlessOfPath()
     {
         int bookId = 77;
-        Plant(CoverFingerprint.Stem(bookId, @"C:\books\a.epub", null));
+        Plant(bookId);
 
         Assert.NotNull(BookCoverImageCache.Get(bookId, @"C:\books\a.epub"));
-        Assert.Null(BookCoverImageCache.Get(bookId, @"C:\books\b.epub"));
+        Assert.Same(
+            BookCoverImageCache.Get(bookId, @"C:\books\a.epub"),
+            BookCoverImageCache.Get(bookId, @"C:\books\moved-elsewhere.epub"));
     }
 
     [Fact]
     public void Invalidate_DeletesEveryOnDiskFileForThatId()
     {
         int bookId = 88;
-        Plant(CoverFingerprint.Stem(bookId, @"C:\books\a.epub", null));
-        Plant($"{bookId}-0badc0de");
+        Plant(bookId);
+        using (var bmp = new SdBitmap(4, 4))
+        {
+            bmp.Save(BookCoverThumbnailPaths.GetCachePath("88-0badc0de"), SdImageFormat.Jpeg); // a legacy straggler
+        }
+
         Assert.Equal(2, BookCoverThumbnailPaths.EnumerateForBook(bookId).Count());
 
         BookCoverImageCache.Invalidate(bookId);
@@ -191,11 +192,7 @@ public class BookCoverThumbnailServiceTests : IDisposable
         Assert.Empty(BookCoverThumbnailPaths.EnumerateForBook(bookId));
     }
 
-    // --- Content verification (docs/superpowers/specs/2026-08-30-cover-thumbnail-content-
-    //     verification-design.md) - force-regeneration. Uses PdfFixture (not EpubFixture, which has
-    //     no embedded cover metadata - same rationale EpubBookSourceTests/PdfBookSourceTests
-    //     already established) so the positive "regenerated a real cover" case has a source that
-    //     genuinely decodes. ---
+    // --- mtime-smart verify ---
 
     [Fact]
     public void TryGenerateThumbnail_Force_OverwritesEvenWhenFileAlreadyExists()
@@ -205,15 +202,14 @@ public class BookCoverThumbnailServiceTests : IDisposable
         try
         {
             int bookId = AddBook(pdfPath, BookFormat.Pdf);
-            string stem = CoverFingerprint.Stem(bookId, pdfPath, null);
             var service = Service();
             Assert.True(service.TryGenerateThumbnail(bookId, pdfPath, BookFormat.Pdf));
-            var firstWrite = File.GetLastWriteTimeUtc(BookCoverThumbnailPaths.GetCachePath(stem));
+            var firstWrite = File.GetLastWriteTimeUtc(BookCoverThumbnailPaths.GetCachePath(bookId));
 
             Thread.Sleep(10);
             Assert.True(service.TryGenerateThumbnail(bookId, pdfPath, BookFormat.Pdf, force: true));
 
-            Assert.True(File.GetLastWriteTimeUtc(BookCoverThumbnailPaths.GetCachePath(stem)) > firstWrite);
+            Assert.True(File.GetLastWriteTimeUtc(BookCoverThumbnailPaths.GetCachePath(bookId)) > firstWrite);
         }
         finally
         {
@@ -222,27 +218,31 @@ public class BookCoverThumbnailServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task VerifyAllAsync_RegeneratesEveryCandidate_RegardlessOfPriorCacheState()
+    public async Task VerifyAllAsync_ReDecodesOnlyWhenTheSourceIsNewer_AndAtticsOrphans()
     {
         string pdfPath = Path.Combine(Path.GetTempPath(), $"paperbunkr_bookcover_verify2_{Guid.NewGuid():N}.pdf");
         PdfFixture.Create(pdfPath, "Hello from page one.");
         try
         {
-            int alreadyCachedId = AddBook(pdfPath, BookFormat.Pdf);
-            Service().TryGenerateThumbnail(alreadyCachedId, pdfPath, BookFormat.Pdf);
-            string alreadyCachedPath = BookCoverThumbnailPaths.GetCachePath(CoverFingerprint.Stem(alreadyCachedId, pdfPath, null));
-            var firstWrite = File.GetLastWriteTimeUtc(alreadyCachedPath);
+            int unchangedId = AddBook(pdfPath, BookFormat.Pdf);
+            Service().TryGenerateThumbnail(unchangedId, pdfPath, BookFormat.Pdf);
+            string unchangedPath = BookCoverThumbnailPaths.GetCachePath(unchangedId);
+            File.SetLastWriteTimeUtc(unchangedPath, DateTime.UtcNow.AddHours(1));
+            var unchangedWrite = File.GetLastWriteTimeUtc(unchangedPath);
 
-            int notYetCachedId = AddBook(pdfPath, BookFormat.Pdf);
+            int changedId = AddBook(pdfPath, BookFormat.Pdf);
+            Service().TryGenerateThumbnail(changedId, pdfPath, BookFormat.Pdf);
+            string changedPath = BookCoverThumbnailPaths.GetCachePath(changedId);
+            File.SetLastWriteTimeUtc(changedPath, DateTime.UtcNow.AddHours(-2));
+            var changedWriteBefore = File.GetLastWriteTimeUtc(changedPath);
 
-            Thread.Sleep(10);
-            var reports = new List<(int Done, int Total)>();
-            await Service().VerifyAllAsync(new Progress<(int Done, int Total)>(reports.Add));
+            Plant(99999); // orphan
 
-            Assert.Equal((0, 2), reports.First());
-            Assert.Equal((2, 2), reports.Last());
-            Assert.True(File.GetLastWriteTimeUtc(alreadyCachedPath) > firstWrite);
-            Assert.True(File.Exists(BookCoverThumbnailPaths.GetCachePath(CoverFingerprint.Stem(notYetCachedId, pdfPath, null))));
+            await Service().VerifyAllAsync(new Progress<(int Done, int Total)>());
+
+            Assert.Equal(unchangedWrite, File.GetLastWriteTimeUtc(unchangedPath));
+            Assert.True(File.GetLastWriteTimeUtc(changedPath) > changedWriteBefore);
+            Assert.False(File.Exists(BookCoverThumbnailPaths.GetCachePath(99999)));
         }
         finally
         {
@@ -251,24 +251,19 @@ public class BookCoverThumbnailServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task VerifyAllAsync_OneBadFileDoesNotStopTheBatch_AndStillGarbageCollectsOrphans()
+    public async Task RepairMissingAsync_RegeneratesOnlyBlankCoversWithAReadableSource()
     {
-        string pdfPath = Path.Combine(Path.GetTempPath(), $"paperbunkr_bookcover_verify3_{Guid.NewGuid():N}.pdf");
+        string pdfPath = Path.Combine(Path.GetTempPath(), $"paperbunkr_bookcover_repair_{Guid.NewGuid():N}.pdf");
         PdfFixture.Create(pdfPath, "Hello from page one.");
         try
         {
-            int goodId = AddBook(pdfPath, BookFormat.Pdf);
-            int missingFileId = AddBook(@"C:\nowhere\missing.pdf", BookFormat.Pdf);
+            int blankWithSource = AddBook(pdfPath, BookFormat.Pdf);
+            int blankNoSource = AddBook(@"C:\gone\missing.pdf", BookFormat.Pdf);
 
-            // An orphan from a since-deleted book - VerifyAllAsync must still sweep it.
-            string orphanStem = CoverFingerprint.Stem(99999, @"C:\gone\deleted.epub", null);
-            Plant(orphanStem);
+            await Service().RepairMissingAsync(new Progress<(int Done, int Total)>());
 
-            await Service().VerifyAllAsync(new Progress<(int Done, int Total)>());
-
-            Assert.True(File.Exists(BookCoverThumbnailPaths.GetCachePath(CoverFingerprint.Stem(goodId, pdfPath, null))));
-            Assert.False(File.Exists(BookCoverThumbnailPaths.GetCachePath(CoverFingerprint.Stem(missingFileId, @"C:\nowhere\missing.pdf", null))));
-            Assert.False(File.Exists(BookCoverThumbnailPaths.GetCachePath(orphanStem)));
+            Assert.True(File.Exists(BookCoverThumbnailPaths.GetCachePath(blankWithSource)));
+            Assert.False(File.Exists(BookCoverThumbnailPaths.GetCachePath(blankNoSource)));
         }
         finally
         {

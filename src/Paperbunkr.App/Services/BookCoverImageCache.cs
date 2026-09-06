@@ -1,15 +1,15 @@
-using System;
+using System.Globalization;
 using System.IO;
 using Avalonia.Media.Imaging;
+using Paperbunkr.App.Services.Covers;
 
 namespace Paperbunkr.App.Services;
 
 /// <summary>
 /// In-memory <see cref="Bitmap"/> cache over <see cref="BookCoverThumbnailPaths"/>' on-disk cache -
 /// mirrors <see cref="CoverImageCache"/> for comics, including its bounded-size, miss-not-cached,
-/// and stem-keyed rationale (docs/superpowers/specs/2026-08-09-novels-epub-pdf-support-design.md
-/// §3; docs/superpowers/specs/2026-08-27-cover-thumbnail-identity-validation-design.md).
-/// UI-thread-only, same assumption as <see cref="CoverImageCache"/>.
+/// and id-keyed rationale (docs/superpowers/specs/2026-09-06-scheduled-tasks-and-cover-durability-
+/// design.md). UI-thread-only, same assumption as <see cref="CoverImageCache"/>.
 /// </summary>
 public static class BookCoverImageCache
 {
@@ -17,17 +17,16 @@ public static class BookCoverImageCache
 
     private static readonly LruCache<string, Bitmap> _cache = new(MaxEntries);
 
-    /// <summary>Decoded cover for a <see cref="CoverFingerprint.Stem"/>, or null when no matching
-    /// file exists on disk.</summary>
-    public static Bitmap? Get(string stem)
+    /// <summary>Decoded cover for an id key, or null when no file exists (custom cover preferred).</summary>
+    public static Bitmap? Get(string idKey)
     {
-        if (_cache.TryGetValue(stem, out var cached))
+        if (_cache.TryGetValue(idKey, out var cached))
         {
             return cached;
         }
 
-        string path = BookCoverThumbnailPaths.GetCachePath(stem);
-        if (!File.Exists(path))
+        string path = ResolveFile(idKey);
+        if (path.Length == 0)
         {
             return null;
         }
@@ -35,7 +34,7 @@ public static class BookCoverImageCache
         try
         {
             var bitmap = new Bitmap(path);
-            _cache.Add(stem, bitmap);
+            _cache.Add(idKey, bitmap);
             return bitmap;
         }
         catch
@@ -44,23 +43,37 @@ public static class BookCoverImageCache
         }
     }
 
-    /// <summary>Convenience overload - resolves the stem from the book's current file path
-    /// (books have no persisted size, so the fingerprint is path-only).</summary>
+    /// <summary>Convenience overload - the file-path argument is ignored (see <see cref="CoverFingerprint"/>).</summary>
     public static Bitmap? Get(int bookId, string? filePath) =>
-        Get(CoverFingerprint.Stem(bookId, filePath, null));
+        Get(bookId.ToString(CultureInfo.InvariantCulture));
 
-    /// <summary>Drops every in-memory entry for <paramref name="bookId"/> (any fingerprint) and
-    /// deletes its on-disk files; call whenever a <c>Book</c> row is deleted.</summary>
-    public static void Invalidate(int bookId)
+    private static string ResolveFile(string idKey)
     {
-        string prefix = $"{bookId}-";
-        _cache.RemoveWhere(key => key.StartsWith(prefix, StringComparison.Ordinal));
-        BookCoverThumbnailPaths.DeleteCachedThumbnail(bookId);
+        if (int.TryParse(idKey, NumberStyles.Integer, CultureInfo.InvariantCulture, out int id))
+        {
+            string custom = CustomBookCoverPaths.GetCachePath(id);
+            if (File.Exists(custom))
+            {
+                return custom;
+            }
+        }
+
+        string generated = BookCoverThumbnailPaths.GetCachePath(idKey);
+        return File.Exists(generated) ? generated : string.Empty;
     }
 
-    /// <summary>Drops only the in-memory entry for one stem, leaving the on-disk file - mirrors
-    /// <see cref="CoverImageCache.InvalidateMemoryOnly"/>. Used right after
-    /// <see cref="BookCoverThumbnailService.TrySetCustomCover"/> has just written a new file, so
-    /// the next <see cref="Get(string)"/> re-reads it without <see cref="Invalidate"/> deleting it first.</summary>
-    public static void InvalidateMemoryOnly(string stem) => _cache.Remove(stem);
+    /// <summary>Drops the in-memory entry for <paramref name="bookId"/> and deletes its on-disk files - generated and custom.</summary>
+    public static void Invalidate(int bookId)
+    {
+        string key = bookId.ToString(CultureInfo.InvariantCulture);
+        _cache.Remove(key);
+        BookCoverThumbnailPaths.DeleteCachedThumbnail(bookId);
+        CustomBookCoverPaths.Delete(bookId);
+    }
+
+    /// <summary>Drops every in-memory entry - after a library-rebuild purge.</summary>
+    public static void Clear() => _cache.Clear();
+
+    /// <summary>Drops only the in-memory entry for one key, leaving the on-disk file.</summary>
+    public static void InvalidateMemoryOnly(string idKey) => _cache.Remove(idKey);
 }

@@ -19,12 +19,17 @@ public class MainViewModelTests : IDisposable
 {
     private readonly string? _originalDbPathOverride;
     private readonly string _dbPath;
+    private readonly CoverCacheTestRedirect _coverRedirect;
 
     public MainViewModelTests()
     {
         _originalDbPathOverride = PaperbunkrDbContext.DatabasePathOverride;
         _dbPath = Path.Combine(Path.GetTempPath(), $"paperbunkr_mainvm_test_{Guid.NewGuid():N}.db");
         PaperbunkrDbContext.DatabasePathOverride = _dbPath;
+
+        // MainViewModel's ctor fires a background cover-cache reconcile (upgrade + orphan sweep) -
+        // keep it off the real per-user cache.
+        _coverRedirect = new CoverCacheTestRedirect();
 
         var options = new DbContextOptionsBuilder<PaperbunkrDbContext>().UseSqlite($"Data Source={_dbPath}").Options;
         using var context = new PaperbunkrDbContext(options);
@@ -34,6 +39,7 @@ public class MainViewModelTests : IDisposable
     public void Dispose()
     {
         PaperbunkrDbContext.DatabasePathOverride = _originalDbPathOverride;
+        _coverRedirect.Dispose();
         Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
         try
         {
@@ -945,37 +951,10 @@ public class MainViewModelTests : IDisposable
         Assert.False(vm.IsQuickOpenOverlayOpen);
     }
 
-    // --- Periodic cover verification gate (docs/superpowers/specs/2026-08-30-cover-thumbnail-
-    // content-verification-design.md) - a pure function, tested directly rather than through
-    // MainViewModel construction: the actual sweep is fire-and-forget with no completion signal,
-    // so asserting its side effects from a unit test would be inherently racy. ---
-
-    [Fact]
-    public void ShouldRunCoverVerification_NeverRunBefore_ReturnsTrue()
-    {
-        Assert.True(MainViewModel.ShouldRunCoverVerification(lastRunUtc: null, nowUtc: DateTime.UtcNow));
-    }
-
-    [Fact]
-    public void ShouldRunCoverVerification_RanThreeDaysAgo_ReturnsFalse()
-    {
-        var now = DateTime.UtcNow;
-        Assert.False(MainViewModel.ShouldRunCoverVerification(now.AddDays(-3), now));
-    }
-
-    [Fact]
-    public void ShouldRunCoverVerification_RanEightDaysAgo_ReturnsTrue()
-    {
-        var now = DateTime.UtcNow;
-        Assert.True(MainViewModel.ShouldRunCoverVerification(now.AddDays(-8), now));
-    }
-
-    [Fact]
-    public void ShouldRunCoverVerification_RanExactlySevenDaysAgo_ReturnsTrue()
-    {
-        var now = DateTime.UtcNow;
-        Assert.True(MainViewModel.ShouldRunCoverVerification(now.AddDays(-7), now));
-    }
+    // Periodic cover re-verification is now the scheduler's mtime-smart "verify-covers" task
+    // (docs/superpowers/specs/2026-09-06-scheduled-tasks-and-cover-durability-design.md); the old
+    // MainViewModel.ShouldRunCoverVerification gate was removed. Its behaviour is covered by the
+    // scheduler + CoverThumbnailService tests.
 
     /// <summary>
     /// PluginGroupedReview activity link (docs/superpowers/specs/2026-09-05-plugin-grouped-review-

@@ -122,6 +122,7 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         ZoomFitKeyBindings = new ObservableCollection<KeyBindingRowViewModel>();
         DisplayKeyBindings = new ObservableCollection<KeyBindingRowViewModel>();
         ChangelogEntries = new ObservableCollection<ChangelogEntry>();
+        ScheduledTasks = new ObservableCollection<ScheduledTaskRow>();
 
         // Clear Cover Cache (docs/superpowers/specs/2026-08-30-cover-thumbnail-content-
         // verification-design.md) - manual escape hatch, independent of VerifyCovers' detection
@@ -242,6 +243,7 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     public bool IsGeneralSection => ActiveSection == PreferencesSection.General;
     public bool IsAppearanceSection => ActiveSection == PreferencesSection.Appearance;
     public bool IsLibrarySection => ActiveSection == PreferencesSection.Library;
+    public bool IsAutomationSection => ActiveSection == PreferencesSection.Automation;
     public bool IsReaderSection => ActiveSection == PreferencesSection.Reader;
     public bool IsKeyboardShortcutsSection => ActiveSection == PreferencesSection.KeyboardShortcuts;
     public bool IsConnectionsSection => ActiveSection == PreferencesSection.Connections;
@@ -346,10 +348,6 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     /// <summary>CE <c>Settings.OpenLastFile</c> - gates <see cref="MainViewModel.RestoreLastScreen"/>.</summary>
     [ObservableProperty]
     private bool _restoreSessionOnStartup;
-
-    /// <summary>CE <c>Settings.ScanStartup</c> - a full folder scan on launch (read in App.axaml.cs).</summary>
-    [ObservableProperty]
-    private bool _scanFoldersOnStartup;
 
     /// <summary>CE <c>Settings.AutoShowQuickReview</c> - auto-opens Quick Rate at the end of a book.</summary>
     [ObservableProperty]
@@ -495,6 +493,7 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         OnPropertyChanged(nameof(IsGeneralSection));
         OnPropertyChanged(nameof(IsAppearanceSection));
         OnPropertyChanged(nameof(IsLibrarySection));
+        OnPropertyChanged(nameof(IsAutomationSection));
         OnPropertyChanged(nameof(IsReaderSection));
         OnPropertyChanged(nameof(IsKeyboardShortcutsSection));
         OnPropertyChanged(nameof(IsConnectionsSection));
@@ -511,6 +510,9 @@ public partial class PreferencesScreenViewModel : ViewModelBase
 
     [RelayCommand]
     private void GoLibrary() => ActiveSection = PreferencesSection.Library;
+
+    [RelayCommand]
+    private void GoAutomation() => ActiveSection = PreferencesSection.Automation;
 
     [RelayCommand]
     private void GoReader() => ActiveSection = PreferencesSection.Reader;
@@ -568,7 +570,6 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         AutoNavigateComics = settings.AutoNavigateComics;
         ReverseRtlNavigation = settings.ReverseRtlNavigation;
         RestoreSessionOnStartup = settings.RestoreSessionOnStartup;
-        ScanFoldersOnStartup = settings.ScanFoldersOnStartup;
         PromptReviewOnFinish = settings.PromptReviewOnFinish;
         EnableDragDropImport = settings.EnableDragDropImport;
         NavRailHoverExpandEnabled = settings.NavRailHoverExpandEnabled;
@@ -787,8 +788,6 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     partial void OnReverseRtlNavigationChanged(bool value) => PersistBehaviorSetting(s => s.ReverseRtlNavigation = value);
 
     partial void OnRestoreSessionOnStartupChanged(bool value) => PersistBehaviorSetting(s => s.RestoreSessionOnStartup = value);
-
-    partial void OnScanFoldersOnStartupChanged(bool value) => PersistBehaviorSetting(s => s.ScanFoldersOnStartup = value);
 
     partial void OnPromptReviewOnFinishChanged(bool value) => PersistBehaviorSetting(s => s.PromptReviewOnFinish = value);
 
@@ -1324,6 +1323,7 @@ public partial class PreferencesScreenViewModel : ViewModelBase
                 ? "No new books found."
                 : $"Added {result.BooksAdded} book{(result.BooksAdded == 1 ? "" : "s")} across {result.SeriesTouched} series.";
             job.Succeed(BookScanStatus, itemsProcessed: result.BooksAdded);
+            _scheduler?.NotifyRan(Services.Scheduling.ScheduledTaskCatalog.BookScan, ScheduledRunStatus.Succeeded);
         }
         catch (OperationCanceledException)
         {
@@ -1333,6 +1333,7 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         {
             BookScanStatus = $"Scan failed: {ex.Message}";
             job.Fail("Book scan failed", ex: ex);
+            _scheduler?.NotifyRan(Services.Scheduling.ScheduledTaskCatalog.BookScan, ScheduledRunStatus.Failed);
         }
         finally
         {
@@ -1390,6 +1391,7 @@ public partial class PreferencesScreenViewModel : ViewModelBase
             scanFinished = true;
             ScanStatus = summary;
             job.Succeed(summary, itemsProcessed: result.IssuesAdded);
+            _scheduler?.NotifyRan(Services.Scheduling.ScheduledTaskCatalog.LibraryScan, ScheduledRunStatus.Succeeded);
         }
         catch (OperationCanceledException)
         {
@@ -1399,6 +1401,7 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         {
             ScanStatus = $"Scan failed: {ex.Message}";
             job.Fail("Library scan failed", ex: ex);
+            _scheduler?.NotifyRan(Services.Scheduling.ScheduledTaskCatalog.LibraryScan, ScheduledRunStatus.Failed);
         }
         finally
         {
@@ -1438,6 +1441,7 @@ public partial class PreferencesScreenViewModel : ViewModelBase
             });
             await new CoverThumbnailService(_contextFactory).GenerateAllAsync(progress, job.CancellationToken);
             job.Succeed($"Checked {total} issue{(total == 1 ? "" : "s")}", itemsProcessed: total);
+            _scheduler?.NotifyRan(Services.Scheduling.ScheduledTaskCatalog.GenerateCovers, ScheduledRunStatus.Succeeded);
         }
         catch (OperationCanceledException)
         {
@@ -1446,6 +1450,7 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         catch (Exception ex)
         {
             job.Fail("Cover generation failed", ex: ex);
+            _scheduler?.NotifyRan(Services.Scheduling.ScheduledTaskCatalog.GenerateCovers, ScheduledRunStatus.Failed);
         }
         finally
         {
@@ -1499,6 +1504,7 @@ public partial class PreferencesScreenViewModel : ViewModelBase
 
             int total = comicTotal + bookTotal;
             job.Succeed($"Re-checked {total} cover{(total == 1 ? "" : "s")}", itemsProcessed: total);
+            _scheduler?.NotifyRan(Services.Scheduling.ScheduledTaskCatalog.VerifyCovers, ScheduledRunStatus.Succeeded);
         }
         catch (OperationCanceledException)
         {
@@ -1507,10 +1513,70 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         catch (Exception ex)
         {
             job.Fail("Cover verification failed", ex: ex);
+            _scheduler?.NotifyRan(Services.Scheduling.ScheduledTaskCatalog.VerifyCovers, ScheduledRunStatus.Failed);
         }
         finally
         {
             IsVerifyingCovers = false;
+        }
+    }
+
+    [ObservableProperty]
+    private bool _isRepairingCovers;
+
+    /// <summary>
+    /// Regenerates covers only for comics and books that currently have <b>no</b> cover (generated
+    /// or user-picked) and whose source file is readable right now - the light "my covers went
+    /// blank, put them back" action (docs/superpowers/specs/2026-09-06-scheduled-tasks-and-cover-
+    /// durability-design.md, Part 2). Presence-based, so it is safely cancellable and resumable.
+    /// Unlike <see cref="VerifyCovers"/> it never re-decodes a cover that is already there, and
+    /// unlike the Clear/Rebuild actions it never deletes anything.
+    /// </summary>
+    [RelayCommand]
+    private async Task RepairMissingCovers()
+    {
+        if (IsRepairingCovers)
+        {
+            return;
+        }
+
+        IsRepairingCovers = true;
+        using var job = _activity.StartJob(ActivityJobKind.GenerateCovers, "Repairing missing covers");
+
+        int comicTotal = 0;
+        int bookTotal = 0;
+        try
+        {
+            var comicProgress = new Progress<(int Done, int Total)>(p =>
+            {
+                comicTotal = p.Total;
+                job.Report(p.Done, comicTotal, $"{p.Done} / {comicTotal} comics");
+            });
+            await new CoverThumbnailService(_contextFactory).RepairMissingAsync(comicProgress, job.CancellationToken);
+
+            var bookProgress = new Progress<(int Done, int Total)>(p =>
+            {
+                bookTotal = p.Total;
+                job.Report(comicTotal + p.Done, comicTotal + bookTotal, $"{p.Done} / {bookTotal} books");
+            });
+            await new BookCoverThumbnailService(_contextFactory).RepairMissingAsync(bookProgress, job.CancellationToken);
+
+            int total = comicTotal + bookTotal;
+            job.Succeed(
+                total == 0 ? "No missing covers to repair" : $"Repaired {total} cover{(total == 1 ? "" : "s")}",
+                itemsProcessed: total);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            job.Fail("Cover repair failed", ex: ex);
+        }
+        finally
+        {
+            IsRepairingCovers = false;
         }
     }
 
@@ -1650,6 +1716,7 @@ public partial class PreferencesScreenViewModel : ViewModelBase
                     ? "No new metadata found"
                     : $"Updated {result.IssuesUpdated} issue{(result.IssuesUpdated == 1 ? "" : "s")}",
                 itemsProcessed: result.IssuesUpdated);
+            _scheduler?.NotifyRan(Services.Scheduling.ScheduledTaskCatalog.SyncMetadata, ScheduledRunStatus.Succeeded);
         }
         catch (OperationCanceledException)
         {
@@ -1658,6 +1725,7 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         catch (Exception ex)
         {
             job.Fail("Metadata sync failed", ex: ex);
+            _scheduler?.NotifyRan(Services.Scheduling.ScheduledTaskCatalog.SyncMetadata, ScheduledRunStatus.Failed);
         }
         finally
         {
@@ -2014,5 +2082,137 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         KitsuPassword = string.Empty;
         RefreshTrackerConnectionState(context);
         TrackersStatus = connected ? "Kitsu connected." : "Couldn't connect to Kitsu. Check your username/password and try again.";
+    }
+
+    // ===================== Automation tab (docs/superpowers/specs/2026-09-06-scheduled-tasks-and-
+    //                       cover-durability-design.md, Part 1) =====================
+
+    private Services.Scheduling.ISchedulerService? _scheduler;
+
+    /// <summary>The scheduler's task rows, rebuilt whenever it raises <c>Changed</c>.</summary>
+    public ObservableCollection<ScheduledTaskRow> ScheduledTasks { get; }
+
+    public static readonly ScheduledTaskNotificationLevel[] NotificationLevelOptions =
+        Enum.GetValues<ScheduledTaskNotificationLevel>();
+
+    public static readonly ScheduleMode[] ScheduleModeOptions = Enum.GetValues<ScheduleMode>();
+
+    [ObservableProperty]
+    private ScheduledTaskNotificationLevel _scheduledTaskNotificationLevel = ScheduledTaskNotificationLevel.OnlyFailures;
+
+    partial void OnScheduledTaskNotificationLevelChanged(ScheduledTaskNotificationLevel value)
+    {
+        if (!_isLoaded)
+        {
+            return;
+        }
+
+        try
+        {
+            using var context = _contextFactory();
+            context.GetOrCreateAppSettings().ScheduledTaskNotificationLevel = value;
+            context.SaveChanges();
+        }
+        catch (Exception)
+        {
+        }
+    }
+
+    /// <summary>Wired once from <c>MainViewModel</c> after both this VM and the scheduler exist.</summary>
+    public void AttachScheduler(Services.Scheduling.ISchedulerService scheduler)
+    {
+        _scheduler = scheduler;
+        scheduler.Changed += (_, _) => RebuildScheduledTasks();
+        using (var context = _contextFactory())
+        {
+            ScheduledTaskNotificationLevel = context.GetOrCreateAppSettings().ScheduledTaskNotificationLevel;
+        }
+
+        RebuildScheduledTasks();
+    }
+
+    private bool _rebuildingScheduledTasks;
+
+    private void RebuildScheduledTasks()
+    {
+        if (_scheduler is null || _rebuildingScheduledTasks)
+        {
+            return;
+        }
+
+        void Apply()
+        {
+            _rebuildingScheduledTasks = true;
+            try
+            {
+                ApplyRows();
+            }
+            finally
+            {
+                _rebuildingScheduledTasks = false;
+            }
+        }
+
+        void ApplyRows()
+        {
+            var byId = ScheduledTasks.ToDictionary(r => r.TaskId);
+            ScheduledTasks.Clear();
+            foreach (var source in _scheduler.Tasks)
+            {
+                // Reuse the row instance where possible so an in-progress edit isn't stomped.
+                var row = byId.TryGetValue(source.TaskId, out var existing) ? existing : source;
+                row.Enabled = source.Enabled;
+                row.Mode = source.Mode;
+                row.IntervalHours = source.IntervalHours;
+                row.DailyAtTime = source.DailyAtTime;
+                row.LastRunUtc = source.LastRunUtc;
+                row.LastRunStatus = source.LastRunStatus;
+                row.IsRunning = source.IsRunning;
+                row.IsQueued = source.IsQueued;
+                row.NextRunLabel = source.NextRunLabel;
+                row.RunNowCommand ??= new AsyncRelayCommand(() => _scheduler!.RunNowAsync(row.TaskId));
+                WireRowPersistence(row);
+                ScheduledTasks.Add(row);
+            }
+        }
+
+        if (Avalonia.Threading.Dispatcher.UIThread.CheckAccess())
+        {
+            Apply();
+        }
+        else
+        {
+            Avalonia.Threading.Dispatcher.UIThread.Post(Apply);
+        }
+    }
+
+    private readonly HashSet<string> _rowPersistenceWired = new();
+
+    private void WireRowPersistence(ScheduledTaskRow row)
+    {
+        if (!_rowPersistenceWired.Add(row.TaskId))
+        {
+            return;
+        }
+
+        row.PropertyChanged += (_, e) =>
+        {
+            if (_scheduler is null || _rebuildingScheduledTasks)
+            {
+                return;
+            }
+
+            switch (e.PropertyName)
+            {
+                case nameof(ScheduledTaskRow.Enabled):
+                    _scheduler.SetEnabled(row.TaskId, row.Enabled);
+                    break;
+                case nameof(ScheduledTaskRow.Mode):
+                case nameof(ScheduledTaskRow.IntervalHours):
+                case nameof(ScheduledTaskRow.DailyAtTime):
+                    _scheduler.SetSchedule(row.TaskId, row.Mode, row.IntervalHours, (int)row.DailyAtTime.TotalMinutes);
+                    break;
+            }
+        };
     }
 }

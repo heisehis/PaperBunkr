@@ -21,6 +21,9 @@ public class PreferencesScreenViewModelTests : IDisposable
     private readonly string _originalExtractedDirectory;
     private readonly string _originalThumbnailDirectory;
     private readonly string _originalBookThumbnailDirectory;
+    private readonly string _originalCustomCoverDirectory;
+    private readonly string _originalCustomBookCoverDirectory;
+    private readonly string _originalCoverCacheStateFile;
     private readonly string? _originalDbPathOverride;
     private readonly string _dbPath;
     private readonly DbContextOptions<PaperbunkrDbContext> _dbOptions;
@@ -33,12 +36,18 @@ public class PreferencesScreenViewModelTests : IDisposable
         _originalExtractedDirectory = SkinPaths.ExtractedDirectory;
         _originalThumbnailDirectory = CoverThumbnailPaths.ThumbnailDirectory;
         _originalBookThumbnailDirectory = BookCoverThumbnailPaths.ThumbnailDirectory;
+        _originalCustomCoverDirectory = Paperbunkr.App.Services.Covers.CustomCoverPaths.Directory;
+        _originalCustomBookCoverDirectory = Paperbunkr.App.Services.Covers.CustomBookCoverPaths.Directory;
+        _originalCoverCacheStateFile = Paperbunkr.App.Services.Covers.CoverCacheState.FilePath;
 
         string root = Path.Combine(Path.GetTempPath(), $"paperbunkr_prefsvm_test_{Guid.NewGuid():N}");
         SkinPaths.InstalledDirectory = Path.Combine(root, "skins");
         SkinPaths.ExtractedDirectory = Path.Combine(root, "skins-extracted");
         CoverThumbnailPaths.ThumbnailDirectory = Path.Combine(root, "thumbs");
         BookCoverThumbnailPaths.ThumbnailDirectory = Path.Combine(root, "book-thumbs");
+        Paperbunkr.App.Services.Covers.CustomCoverPaths.Directory = Path.Combine(root, "custom-covers");
+        Paperbunkr.App.Services.Covers.CustomBookCoverPaths.Directory = Path.Combine(root, "custom-book-covers");
+        Paperbunkr.App.Services.Covers.CoverCacheState.FilePath = Path.Combine(root, "cover-cache-state.json");
 
         _dbPath = Path.Combine(Path.GetTempPath(), $"paperbunkr_prefsvm_db_test_{Guid.NewGuid():N}.db");
         _dbOptions = new DbContextOptionsBuilder<PaperbunkrDbContext>().UseSqlite($"Data Source={_dbPath}").Options;
@@ -70,6 +79,9 @@ public class PreferencesScreenViewModelTests : IDisposable
         SkinPaths.ExtractedDirectory = _originalExtractedDirectory;
         CoverThumbnailPaths.ThumbnailDirectory = _originalThumbnailDirectory;
         BookCoverThumbnailPaths.ThumbnailDirectory = _originalBookThumbnailDirectory;
+        Paperbunkr.App.Services.Covers.CustomCoverPaths.Directory = _originalCustomCoverDirectory;
+        Paperbunkr.App.Services.Covers.CustomBookCoverPaths.Directory = _originalCustomBookCoverDirectory;
+        Paperbunkr.App.Services.Covers.CoverCacheState.FilePath = _originalCoverCacheStateFile;
         PaperbunkrDbContext.DatabasePathOverride = _originalDbPathOverride;
         GraphicsBootstrap.CachePathOverride = null;
 
@@ -319,7 +331,6 @@ public class PreferencesScreenViewModelTests : IDisposable
         {
             var settings = context.GetOrCreateAppSettings();
             settings.RestoreSessionOnStartup = false;
-            settings.ScanFoldersOnStartup = true;
             settings.PromptReviewOnFinish = true;
             settings.EnableDragDropImport = false;
             context.SaveChanges();
@@ -329,7 +340,6 @@ public class PreferencesScreenViewModelTests : IDisposable
         vm.EnsureLoaded();
 
         Assert.False(vm.RestoreSessionOnStartup);
-        Assert.True(vm.ScanFoldersOnStartup);
         Assert.True(vm.PromptReviewOnFinish);
         Assert.False(vm.EnableDragDropImport);
     }
@@ -341,14 +351,12 @@ public class PreferencesScreenViewModelTests : IDisposable
         vm.EnsureLoaded();
 
         vm.RestoreSessionOnStartup = false;
-        vm.ScanFoldersOnStartup = true;
         vm.PromptReviewOnFinish = true;
         vm.EnableDragDropImport = false;
 
         using var context = new PaperbunkrDbContext(_dbOptions);
         var settings = context.GetOrCreateAppSettings();
         Assert.False(settings.RestoreSessionOnStartup);
-        Assert.True(settings.ScanFoldersOnStartup);
         Assert.True(settings.PromptReviewOnFinish);
         Assert.False(settings.EnableDragDropImport);
     }

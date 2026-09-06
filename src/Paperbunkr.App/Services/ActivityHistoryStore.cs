@@ -88,8 +88,13 @@ public static class ActivityHistoryStore
             var ageCutoff = DateTime.UtcNow - MaxRetentionAge;
 
             // The Nth-newest row's timestamp - nothing at or after it is ever pruned, so we keep at
-            // least MinRowsRetained even when they are all older than the age cutoff.
+            // least MinRowsRetained even when they are all older than the age cutoff. Successful
+            // *scheduled* runs are excluded from this floor (docs/superpowers/specs/2026-09-06-
+            // scheduled-tasks-and-cover-durability-design.md): they vastly outnumber manual runs and
+            // would otherwise evict real "what did I do last week" history - they are kept by age
+            // only (30 days). Manual runs and every failure keep the row-count floor.
             var nthNewestStarted = context.ActivityRuns
+                .Where(r => !(r.Trigger == ActivityTrigger.Scheduled && r.Status == ActivityRunStatus.Succeeded))
                 .OrderByDescending(r => r.StartedUtc)
                 .Skip(MinRowsRetained - 1)
                 .Select(r => r.StartedUtc)

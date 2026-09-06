@@ -84,17 +84,11 @@ public partial class App : Application
             // under test so a stray Report can never reach the real per-user database.
             CoverAspectRatioStore.ContextFactory = PaperbunkrDb.CreateContext;
 
-            // Auto-backup startup trigger (spec §2) - fire-and-forget on a background thread so a
-            // checkpoint+file-copy never adds to startup latency. This is the fallback trigger; the
-            // primary one fires on clean shutdown below. RunAutoBackupIfDue() is itself gated by
-            // AutoBackupEnabled and the min-interval de-dupe guard, and swallows its own failures.
-            System.Threading.Tasks.Task.Run(() => new BackupService().RunAutoBackupIfDue());
-
-            // Publisher content-type sweep (docs/superpowers/specs/2026-08-30-publisher-content-
-            // type-classification-design.md) - same fire-and-forget, non-blocking shape as the
-            // auto-backup trigger above. RunContentTypeSweepIfDue() is itself gated by the 7-day
-            // interval check and swallows its own failures.
-            System.Threading.Tasks.Task.Run(() => new LibraryFolderScanner().RunContentTypeSweepIfDue());
+            // Auto-backup, the content-type sweep, and the old "scan folders on startup" behaviour
+            // are now catalog tasks driven by the scheduler (docs/superpowers/specs/2026-09-06-
+            // scheduled-tasks-and-cover-durability-design.md, Part 1) - its startup pass runs
+            // anything overdue. The unconditional backup-on-clean-shutdown call below stays as a
+            // belt-and-suspenders (its own 4h floor prevents thrash).
 
             // Activity Center history prune (docs/superpowers/specs/2026-09-03-activity-center-
             // design.md) - same fire-and-forget, self-swallowing shape as the two triggers above.
@@ -142,12 +136,6 @@ public partial class App : Application
             };
             desktop.MainWindow = mainWindow;
 
-            bool scanFoldersOnStartup;
-            using (var startupSettingsContext = PaperbunkrDb.CreateContext())
-            {
-                scanFoldersOnStartup = startupSettingsContext.GetOrCreateAppSettings().ScanFoldersOnStartup;
-            }
-
             // App shell navigation history (docs/superpowers/specs/2026-08-30-app-shell-navigation-
             // history-design.md) - a CLI deep link takes priority over restoring the prior session's
             // last screen; on a fresh install (offerFirstRunMigration below) there's nothing to
@@ -162,31 +150,6 @@ public partial class App : Application
             else
             {
                 mainViewModel.RestoreLastScreen();
-            }
-
-            // "Scan library folders for new files at startup" (docs/superpowers/specs/2026-09-04-
-            // behavior-settings-batch2-design.md §3.2, CE Settings.ScanStartup) - off by default.
-            // Fire-and-forget on a background thread, same non-blocking shape as the auto-backup /
-            // content-type-sweep triggers above; LiveFolderWatchService only catches changes made
-            // while the app was running, this covers changes made while it was closed. No cover
-            // pass - Library generates missing covers lazily on first display.
-            if (scanFoldersOnStartup)
-            {
-                _ = System.Threading.Tasks.Task.Run(async () =>
-                {
-                    using var job = mainViewModel.Activity.StartJob(ActivityJobKind.LibraryScan, "Startup folder scan");
-                    try
-                    {
-                        var noProgress = new Progress<(int Done, int Total)>(_ => { });
-                        await new LibraryFolderScanner().ScanAllAsync(noProgress, job.CancellationToken);
-                        await new BookFolderScanService().ScanAllAsync(noProgress, job.CancellationToken);
-                        job.Succeed("Startup folder scan complete");
-                    }
-                    catch (Exception ex)
-                    {
-                        job.Fail("Startup folder scan failed", ex: ex);
-                    }
-                });
             }
 
             bool welcomeOverlayOpened;
@@ -258,6 +221,13 @@ public partial class App : Application
             mainViewModel.Reader.CanvasResized += (width, height) => _ = pluginHost.RunReaderResizedHookAsync(width, height);
             desktop.Exit += (_, _) => pluginHost.Shutdown();
 
+            // Maintenance scheduler (docs/superpowers/specs/2026-09-06-scheduled-tasks-and-cover-
+            // durability-design.md, Part 1) - seeds task state, runs a startup pass for anything
+            // overdue, then a 15-minute in-session tick. Started after the plugin host so a plugin
+            // can't miss an early scheduled job's hooks.
+            mainViewModel.Scheduler.Start();
+            desktop.Exit += (_, _) => mainViewModel.Scheduler.Stop();
+
             // Auto-backup shutdown trigger (spec §2) - the primary trigger, since it also catches
             // sessions left open all day that never restart. Synchronous and best-effort: a normal
             // checkpoint+file-copy is fast enough not to perceptibly delay exit, and
@@ -285,12 +255,16 @@ public partial class App : Application
         {
             case DatabaseRecoveryOutcome.Restore when selectedBackupPath is not null:
                 DiagnosticsService.LogMilestone($"Restoring database from backup: {selectedBackupPath}");
+                // The restored DB may carry different entity ids - defer a cover-cache purge to the
+                // relaunched process (can't safely attic mid-relaunch).
+                Services.Covers.CoverCacheMaintenance.DeferRebuildPurge();
                 backupService.RestoreBackup(selectedBackupPath);
                 RelaunchAndExit();
                 return false;
 
             case DatabaseRecoveryOutcome.StartFresh:
                 DiagnosticsService.LogMilestone("Starting fresh library - corrupt database renamed aside.");
+                Services.Covers.CoverCacheMaintenance.DeferRebuildPurge();
                 QuarantineCorruptDatabase();
                 return true;
 

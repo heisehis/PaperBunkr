@@ -484,37 +484,58 @@ public class LibraryFolderScanner
         try
         {
             using var context = _contextFactory();
-            var appSettings = context.GetOrCreateAppSettings();
-
-            if (!ShouldRunContentTypeSweep(appSettings.LastContentTypeSweepUtc, DateTime.UtcNow))
+            if (!ShouldRunContentTypeSweep(context.GetOrCreateAppSettings().LastContentTypeSweepUtc, DateTime.UtcNow))
             {
                 return;
             }
+        }
+        catch (Exception)
+        {
+            return;
+        }
 
-            var unclassifiedSeries = context.Series
-                .Where(s => s.ContentType == ContentType.Unknown)
-                .Include(s => s.Issues)
-                .ToList();
-
-            foreach (var series in unclassifiedSeries)
-            {
-                foreach (var issue in series.Issues)
-                {
-                    if (PublisherContentTypeClassifier.TryClassify(issue.Publisher, out var contentType, out var readingMode))
-                    {
-                        series.ContentType = contentType;
-                        series.ReadingMode = readingMode;
-                        break;
-                    }
-                }
-            }
-
-            appSettings.LastContentTypeSweepUtc = DateTime.UtcNow;
-            context.SaveChanges();
+        try
+        {
+            RunContentTypeSweepCore(CancellationToken.None);
         }
         catch (Exception)
         {
         }
+    }
+
+    /// <summary>
+    /// The content-type sweep body, gate-free - retroactively classifies <see cref="ContentType.Unknown"/>
+    /// series and stamps <see cref="AppSettings.LastContentTypeSweepUtc"/>. The scheduler calls this
+    /// directly (it owns the gate); <see cref="RunContentTypeSweepIfDue"/> wraps it with the 7-day
+    /// check for the legacy startup path. Returns how many series it reclassified.
+    /// </summary>
+    public int RunContentTypeSweepCore(CancellationToken ct)
+    {
+        using var context = _contextFactory();
+        var unclassifiedSeries = context.Series
+            .Where(s => s.ContentType == ContentType.Unknown)
+            .Include(s => s.Issues)
+            .ToList();
+
+        int changed = 0;
+        foreach (var series in unclassifiedSeries)
+        {
+            ct.ThrowIfCancellationRequested();
+            foreach (var issue in series.Issues)
+            {
+                if (PublisherContentTypeClassifier.TryClassify(issue.Publisher, out var contentType, out var readingMode))
+                {
+                    series.ContentType = contentType;
+                    series.ReadingMode = readingMode;
+                    changed++;
+                    break;
+                }
+            }
+        }
+
+        context.GetOrCreateAppSettings().LastContentTypeSweepUtc = DateTime.UtcNow;
+        context.SaveChanges();
+        return changed;
     }
 
     /// <summary>Pure gate for <see cref="RunContentTypeSweepIfDue"/> - 7-day interval, unit-testable

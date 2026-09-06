@@ -84,7 +84,7 @@
 
             <!-- Tab strip -->
             <Grid Grid.Row="0" ColumnDefinitions="Auto,Auto,Auto,*,Auto,Auto" Margin="8,8,8,0">
-                <Button Grid.Column="0" Classes="activityTab" Classes.active="{Binding !IsHistory}"
+                <Button Grid.Column="0" Classes="activityTab" Classes.active="{Binding IsActiveTab}"
                         Command="{Binding ShowActiveTabCommand}">
                     <StackPanel Orientation="Horizontal" Spacing="6">
                         <TextBlock Text="Active" />
@@ -96,8 +96,8 @@
                 </Button>
                 <Button Grid.Column="1" Classes="activityTab" Classes.active="{Binding IsHistory}"
                         Command="{Binding ShowHistoryTabCommand}" Content="History" />
-                <Button Grid.Column="2" Classes="activityTab" IsEnabled="False" Content="Scheduled"
-                        ToolTip.Tip="Coming soon" />
+                <Button Grid.Column="2" Classes="activityTab" Classes.active="{Binding IsScheduled}"
+                        Command="{Binding ShowScheduledTabCommand}" Content="Scheduled" />
 
                 <Button Grid.Column="4" Classes="activityLink" Content="Stop all" Margin="0,0,12,0"
                         Command="{Binding StopAllCommand}" IsVisible="{Binding HasRunningJobs}" />
@@ -110,7 +110,7 @@
             <Border Grid.Row="1" Height="1" Background="{DynamicResource PbBorderBrush}" />
 
             <!-- Active tab -->
-            <ScrollViewer Grid.Row="2" Padding="12" IsVisible="{Binding !IsHistory}">
+            <ScrollViewer Grid.Row="2" Padding="12" IsVisible="{Binding IsActiveTab}">
                 <StackPanel Spacing="2">
                     <ItemsControl ItemsSource="{Binding RunningJobs}" ItemTemplate="{StaticResource ActivityJobRowTemplate}" />
 
@@ -163,6 +163,33 @@
                 <Button Grid.Row="2" Classes="activityLink" Content="Load more" Margin="14,8"
                         HorizontalAlignment="Center" Command="{Binding LoadMoreHistoryCommand}"
                         IsVisible="{Binding HistoryHasMore}" />
+            </Grid>
+
+            <!-- Scheduled tab (read-only "up next"; config lives in Preferences → Automation) -->
+            <Grid Grid.Row="2" RowDefinitions="*,Auto" IsVisible="{Binding IsScheduled}">
+                <ScrollViewer Grid.Row="0" Padding="12">
+                    <StackPanel Spacing="2">
+                        <TextBlock Text="UP NEXT" FontSize="{DynamicResource PbFontSizeMicro}" FontWeight="Bold"
+                                   Foreground="{DynamicResource PbTextFaintBrush}" Margin="2,2,0,6" />
+                        <ItemsControl ItemsSource="{Binding UpcomingTasks}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:UpcomingTaskRow">
+                                    <Grid ColumnDefinitions="*,Auto" Margin="0,4">
+                                        <TextBlock Grid.Column="0" Text="{Binding DisplayName}" FontSize="{DynamicResource PbFontSizeControl}"
+                                                   Foreground="{DynamicResource PbTextBrush}" />
+                                        <TextBlock Grid.Column="1" Text="{Binding NextRunLabel}" FontSize="{DynamicResource PbFontSizeOverline}"
+                                                   Foreground="{DynamicResource PbTextMutedBrush}" />
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <TextBlock Text="No tasks are enabled." FontSize="{DynamicResource PbFontSizeControl}"
+                                   Foreground="{DynamicResource PbTextFaintBrush}" Margin="2,20" HorizontalAlignment="Center"
+                                   IsVisible="{Binding !HasUpcoming}" />
+                    </StackPanel>
+                </ScrollViewer>
+                <Button Grid.Row="1" Classes="activityLink" Content="Manage in Preferences →" Margin="14,8"
+                        HorizontalAlignment="Center" Command="{Binding ManageScheduledTasksCommand}" />
             </Grid>
         </Grid>
     </Border>

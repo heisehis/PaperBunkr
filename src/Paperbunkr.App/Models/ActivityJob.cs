@@ -20,6 +20,13 @@ public sealed partial class ActivityJob : ObservableObject
 
     public ActivityTrigger Trigger { get; init; } = ActivityTrigger.Manual;
 
+    /// <summary>
+    /// When this job's completion should surface a transient toast. Normal jobs use
+    /// <see cref="ActivityToastPolicy.Always"/>; scheduled maintenance jobs set this from the
+    /// user's notification-level preference so routine upkeep doesn't nag.
+    /// </summary>
+    public ActivityToastPolicy ToastPolicy { get; init; } = ActivityToastPolicy.Always;
+
     public DateTime StartedUtc { get; init; } = DateTime.UtcNow;
 
     /// <summary>The single ambient rollup row - excluded from aggregate progress, "Clear finished", and never settles.</summary>

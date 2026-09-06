@@ -148,6 +148,9 @@
                             <Button Classes="prefNavItem" Classes.active="{Binding IsLibrarySection}"
                                     Command="{Binding GoLibraryCommand}" Content="Library"
                                     AutomationProperties.AutomationId="PreferencesLibraryNavButton" />
+                            <Button Classes="prefNavItem" Classes.active="{Binding IsAutomationSection}"
+                                    Command="{Binding GoAutomationCommand}" Content="Automation"
+                                    AutomationProperties.AutomationId="PreferencesAutomationNavButton" />
                             <Button Classes="prefNavItem" Classes.active="{Binding IsReaderSection}"
                                     Command="{Binding GoReaderCommand}" Content="Reader" />
                             <Button Classes="prefNavItem" Classes.active="{Binding IsKeyboardShortcutsSection}"
@@ -192,6 +195,7 @@
                 <pref:GeneralSection IsVisible="{Binding IsGeneralSection}" />
                 <pref:AppearanceSection IsVisible="{Binding IsAppearanceSection}" />
                 <pref:LibrarySection IsVisible="{Binding IsLibrarySection}" />
+                <pref:AutomationSection IsVisible="{Binding IsAutomationSection}" />
                 <pref:ReaderSection IsVisible="{Binding IsReaderSection}" />
                 <pref:KeyboardShortcutsSection IsVisible="{Binding IsKeyboardShortcutsSection}" />
                 <pref:ConnectionsSection IsVisible="{Binding IsConnectionsSection}" />

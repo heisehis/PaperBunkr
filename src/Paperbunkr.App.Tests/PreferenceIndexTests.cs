@@ -24,6 +24,7 @@ public class PreferenceIndexTests
             [PreferencesSection.General] = "GeneralSection.axaml",
             [PreferencesSection.Appearance] = "AppearanceSection.axaml",
             [PreferencesSection.Library] = "LibrarySection.axaml",
+            [PreferencesSection.Automation] = "AutomationSection.axaml",
             [PreferencesSection.Reader] = "ReaderSection.axaml",
             [PreferencesSection.KeyboardShortcuts] = "KeyboardShortcutsSection.axaml",
             [PreferencesSection.Connections] = "ConnectionsSection.axaml",

@@ -474,10 +474,12 @@ namespace Paperbunkr.Data.Migrations
                         .HasColumnType("INTEGER")
                         .HasDefaultValue(true);
 
-                    b.Property<bool>("ScanFoldersOnStartup")
+                    b.Property<string>("ScheduledTaskNotificationLevel")
+                        .IsRequired()
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER")
-                        .HasDefaultValue(false);
+                        .HasMaxLength(16)
+                        .HasColumnType("TEXT")
+                        .HasDefaultValue("OnlyFailures");
 
                     b.Property<string>("SelectedFontFamily")
                         .HasColumnType("TEXT");
@@ -1945,6 +1947,43 @@ namespace Paperbunkr.Data.Migrations
                     b.HasIndex("MediaRelationId");
 
                     b.ToTable("RelationEvidence");
+                });
+
+            modelBuilder.Entity("Paperbunkr.Data.Entities.ScheduledTaskState", b =>
+                {
+                    b.Property<string>("TaskId")
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("DailyAtMinutes")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("Enabled")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("IntervalHours")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("LastRunActivityId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("LastRunStatus")
+                        .HasMaxLength(16)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("LastRunUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Mode")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(16)
+                        .HasColumnType("TEXT")
+                        .HasDefaultValue("Interval");
+
+                    b.HasKey("TaskId");
+
+                    b.ToTable("ScheduledTaskStates");
                 });
 
             modelBuilder.Entity("Paperbunkr.Data.Entities.Series", b =>

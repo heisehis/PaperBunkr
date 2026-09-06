@@ -1,98 +1,37 @@
-using System;
-using System.IO;
+using System.Globalization;
 
 namespace Paperbunkr.App.Services;
 
 /// <summary>
-/// Derives a stable identity token ("stem") for a cached cover thumbnail
-/// (docs/superpowers/specs/2026-08-27-cover-thumbnail-identity-validation-design.md).
+/// Derives the cache-file "stem" (name without extension) for a generated cover thumbnail.
 ///
 /// <para>
-/// The cover cache used to be keyed purely by the auto-increment <c>Issue.Id</c>/<c>Book.Id</c>,
-/// so any library rebuild that reassigned primary keys silently served the previous entity's
-/// cover for a reused id. The stem folds the entity's <b>current file identity</b> into the
-/// cache-file name (<c>{id}-{hash}.jpg</c>), so a reader only trusts a file whose id <b>and</b>
-/// file identity both match - a mismatch just misses and regenerates.
+/// <b>History.</b> The cache was once keyed by a <c>{id}-{hash(path)}</c> fingerprint
+/// (docs/superpowers/specs/2026-08-27-cover-thumbnail-identity-validation-design.md) so a library
+/// rebuild that reused an <c>Issue.Id</c> couldn't serve the previous entity's cover. That scheme
+/// destroyed covers on every routine file-path change (metadata write-back, file moves, the
+/// <c>~RF*.TMP</c> watch bug, drive-letter changes), because the orphan GC hard-deleted any file
+/// whose fingerprint no longer matched. Root-fixed 2026-09-06
+/// (docs/superpowers/specs/2026-09-06-scheduled-tasks-and-cover-durability-design.md): the stem is
+/// now just the bare id, the orphan GC only attics files whose id has <b>no</b> row at all, and
+/// id-reuse after a rebuild is handled by a single explicit "library was rebuilt" purge
+/// (<see cref="Covers.CoverCacheState"/>).
 /// </para>
 ///
 /// <para>
-/// Identity = normalized full path + file size in bytes. Comics pass <c>Issue.FileSize</c>
-/// (persisted); Books have no size column, so they pass <see langword="null"/> and get a
-/// path-only stem - still enough to catch id reuse (a different comic lives at a different path).
-/// A fileless placeholder entry (no path at all - a deliberate CE deviation the custom-cover
-/// feature already supports) gets a fixed <c>{id}-nofile</c> stem so its user-picked cover still
-/// has a stable home.
+/// Kept as a thin shim with its original signature so the ~10 call sites that pass it an issue/book
+/// plus its file identity compile unchanged; <paramref name="filePath"/> / <paramref name="fileSizeBytes"/>
+/// are now ignored.
 /// </para>
 /// </summary>
 public static class CoverFingerprint
 {
-    /// <summary>
-    /// Cache-file stem (no extension) for the entity with primary key <paramref name="id"/>
-    /// currently backed by <paramref name="filePath"/> (<paramref name="fileSizeBytes"/> bytes,
-    /// or <see langword="null"/> when unknown). Deterministic and allocation-cheap - safe to call
-    /// per card during a library grid load.
-    /// </summary>
-    public static string Stem(int id, string? filePath, long? fileSizeBytes)
-    {
-        if (string.IsNullOrEmpty(filePath))
-        {
-            return $"{id}-nofile";
-        }
+    /// <summary>Cache-file stem for the entity with primary key <paramref name="id"/>. The file
+    /// identity arguments are ignored (see the type remarks).</summary>
+    public static string Stem(int id, string? filePath, long? fileSizeBytes) =>
+        id.ToString(CultureInfo.InvariantCulture);
 
-        string normalized = Normalize(filePath);
-        string identity = fileSizeBytes is long size
-            ? $"{normalized}|{size}"
-            : normalized;
-
-        return $"{id}-{Fnv1a(identity):x8}";
-    }
-
-    /// <summary>
-    /// Recovers the primary-key prefix from a stem produced by <see cref="Stem"/>, for callers
-    /// (<see cref="Paperbunkr.App.Views.AsyncCoverImage"/>) that only carry the fingerprinted key
-    /// but need the entity id for a keyed-by-id side channel (<c>CoverAspectRatioStore</c>).
-    /// </summary>
-    public static bool TryGetId(string stem, out int id)
-    {
-        int dash = stem.IndexOf('-');
-        if (dash > 0 && int.TryParse(stem.AsSpan(0, dash), out id))
-        {
-            return true;
-        }
-
-        id = 0;
-        return false;
-    }
-
-    private static string Normalize(string path)
-    {
-        string full;
-        try
-        {
-            full = Path.GetFullPath(path);
-        }
-        catch (Exception)
-        {
-            // A malformed path can't be canonicalized - hash it as-is rather than throwing into a
-            // card build. Two entities with the same malformed path still collide identically,
-            // which is the property that matters.
-            full = path;
-        }
-
-        return full.Replace('\\', '/').ToLowerInvariant();
-    }
-
-    // FNV-1a, 32-bit - the same stable, non-cryptographic hash SeriesCardSample.StableHash uses
-    // (string.GetHashCode() is randomized per process and would change the stem every launch).
-    private static uint Fnv1a(string value)
-    {
-        uint hash = 2166136261;
-        foreach (char c in value)
-        {
-            hash ^= c;
-            hash *= 16777619;
-        }
-
-        return hash;
-    }
+    /// <summary>Recovers the primary-key from a stem produced by <see cref="Stem"/>.</summary>
+    public static bool TryGetId(string stem, out int id) =>
+        int.TryParse(stem, NumberStyles.Integer, CultureInfo.InvariantCulture, out id);
 }

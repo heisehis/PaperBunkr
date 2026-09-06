@@ -6,8 +6,10 @@ namespace Paperbunkr.Data.Tests;
 
 /// <summary>
 /// Verifies the <c>LastCoverVerificationUtc</c> migration (docs/superpowers/specs/2026-08-30-cover-
-/// thumbnail-content-verification-design.md) - a plain nullable column add, no data fix. Guards
-/// against the scaffolder emitting anything other than a clean <c>AddColumn</c>/<c>DropColumn</c>.
+/// thumbnail-content-verification-design.md) - a plain nullable column add, no data fix. <c>Down</c>
+/// is a deliberate no-op (see the migration's comment): a <c>DropColumn</c> here would trigger
+/// SQLite's full-table rebuild, silently dropping the orphaned <c>LibraryGroupField</c> family of
+/// columns and breaking later <c>Down()</c> steps in a rollback chain.
 /// </summary>
 public class AddLastCoverVerificationUtcMigrationTests : IDisposable
 {
@@ -40,7 +42,7 @@ public class AddLastCoverVerificationUtcMigrationTests : IDisposable
     }
 
     [Fact]
-    public void Migration_AddsNullableColumn_ThatRoundTrips_AndIsReversible()
+    public void Migration_AddsNullableColumn_ThatRoundTrips_AndDownIsANoOp()
     {
         // Up to HEAD: the singleton settings row gets a nullable LastCoverVerificationUtc, default null.
         using (var context = CreateContext())
@@ -58,7 +60,8 @@ public class AddLastCoverVerificationUtcMigrationTests : IDisposable
             Assert.Equal(new DateTime(2026, 9, 5, 0, 0, 0, DateTimeKind.Utc), context.GetOrCreateAppSettings().LastCoverVerificationUtc);
         }
 
-        // Down one step: the column is dropped, the singleton row survives SQLite's table rebuild.
+        // Down one step: Down() is a deliberate no-op, so the column stays put (left as an orphan)
+        // and the singleton row is untouched.
         using (var context = CreateContext())
         {
             context.GetService<IMigrator>().Migrate(PriorMigration);
@@ -66,7 +69,7 @@ public class AddLastCoverVerificationUtcMigrationTests : IDisposable
             var columns = context.Database
                 .SqlQueryRaw<string>("SELECT name FROM pragma_table_info('AppSettings') WHERE name = 'LastCoverVerificationUtc';")
                 .ToList();
-            Assert.Empty(columns);
+            Assert.Single(columns);
 
             var rowCount = context.Database
                 .SqlQueryRaw<long>("SELECT COUNT(*) AS Value FROM AppSettings WHERE Id = 1")

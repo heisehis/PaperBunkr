@@ -83,6 +83,14 @@ stacked in `PreferencesSection` enum order (Plugins excepted, see below) — no 
 own `Views/Preferences/*Section.axaml` file/control, just all mounted at once instead of one at a
 time via `ContentControl`).
 
+**Every one of the 9 non-Plugins section files currently wraps its own content in its own root
+`<ScrollViewer>`** (confirmed during the codebase survey — all 9 follow the identical pattern
+`GeneralSection.axaml` uses). Each of those 9 needs that wrapper removed (keep just the inner
+`StackPanel` as the section's root), regardless of whether that section's settings convert to
+`SettingsRow` this phase or stay deferred (§4) — a `ScrollViewer` nested inside the shell's single
+one is a real, functional bug (competing/broken scroll capture), not a cosmetic issue, so this
+applies universally across all 9 files this phase touches for that reason alone.
+
 **Tile hub:** a grid of 9 tiles (icon + section label; Plugins is the 10th tile but behaves
 differently, see below), one per section other than the entry itself.  Clicking a tile calls
 `BringIntoView()` on that section's root (the exact mechanism `PreferenceIndex`'s search-jump
@@ -127,19 +135,24 @@ markup:
         Description (optional, one line)
 ```
 
-Properties: `Icon` (a `PbIcon*` glyph key), `Title` (string), `Description` (`string?`), `Content`
-(the control — ComboBox/CheckBox/Slider/Button/etc., unchanged from today per-setting). When
-`Description` is null/empty, that `TextBlock` is `IsVisible="{Binding ..., Converter=
-{x:Static StringConverters.IsNotNullOrEmpty}}"` — the row collapses to just the title+control line,
-no dead space, no visible placeholder. **Every row ships with `Description` unset** — the user
-writes this copy separately, on their own schedule, with no code changes needed to add it later
-(just filling in the XAML attribute). A companion checklist (`docs/preferences-descriptions-todo.md`
-or similar, generated as part of this work) enumerates every row needing copy, grouped by section,
-so it's one place to work through rather than ten files to hunt across.
+Properties: `Icon` (`FluentIcons.Common.Symbol` — **correction from an earlier draft of this doc**,
+which assumed the old `PbIcon*` `StreamGeometry` set; that was replaced app-wide by
+`FluentIcons.Avalonia`'s `fi:SymbolIcon` during the 2026-08-28 fluenticons-migration, confirmed by
+checking `Assets/Icons/icon-mapping.md` during plan-writing), `Title` (string), `Description`
+(`string?`), `Content` (the control — ComboBox/CheckBox/Slider/Button/etc., unchanged from today
+per-setting). When `Description` is null/empty, that `TextBlock` is `IsVisible="{Binding ...,
+Converter={x:Static StringConverters.IsNotNullOrEmpty}}"` — the row collapses to just the
+title+control line, no dead space, no visible placeholder. **Every row ships with `Description`
+unset** — the user writes this copy separately, on their own schedule, with no code changes needed
+to add it later (just filling in the XAML attribute). A companion checklist
+(`docs/preferences-descriptions-todo.md` or similar, generated as part of this work) enumerates
+every row needing copy, grouped by section, so it's one place to work through rather than ten files
+to hunt across.
 
-**Icons:** picked per-setting from the existing `PbIcon*` vector library
-(`Styles/Icons.axaml`/`Assets/Icons/icon-mapping.md`); new geometries added where nothing fitting
-exists, following the standing convention (update `icon-mapping.md`).
+**Icons:** one `Symbol` per setting, picked by reusing an existing mapping from
+`Assets/Icons/icon-mapping.md` where the setting matches an already-mapped action, or adding a new
+row there per its own "one Symbol per action" convention when nothing fits — never forking a
+per-call-site choice.
 
 **Grouping:** the current `Border.groupBox`/`Border.groupHeader` card treatment is dropped in favor
 of a light caption-style label (small, uppercase, `TextBlock.pbTextCaption` or equivalent — no

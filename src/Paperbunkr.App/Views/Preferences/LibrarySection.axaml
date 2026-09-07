@@ -11,6 +11,25 @@
              x:Class="Paperbunkr.App.Views.Preferences.LibrarySection"
              x:DataType="vm:PreferencesScreenViewModel">
 
+    <UserControl.Styles>
+        <!-- Folder management redesign (docs/superpowers/specs/2026-09-07-library-folder-
+             management-redesign-design.md) - Folders/Maintenance segmented tab buttons. No
+             segmented-control primitive exists elsewhere in the app yet, so this is a small local
+             pair of style classes rather than a new shared control. -->
+        <Style Selector="Button.segTab">
+            <Setter Property="Padding" Value="12,5" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextFaintBrush}" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="CornerRadius" Value="6" />
+        </Style>
+        <Style Selector="Button.segTab.active">
+            <Setter Property="Background" Value="{DynamicResource PbSurface3Brush}" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextBrush}" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+        </Style>
+    </UserControl.Styles>
+
     <UserControl.Resources>
         <DataTemplate x:Key="MissingFileRowTemplate" x:DataType="vm:MissingFileRowViewModel">
             <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1" CornerRadius="6" Padding="12,10" Margin="0,0,0,8">
@@ -220,49 +239,64 @@
                 </StackPanel>
             </Border>
 
-            <!-- Comic Library Folders (manages WatchedFolders) -->
+            <!-- Comic Library Folders (manages WatchedFolders; docs/superpowers/specs/2026-09-07-
+                 library-folder-management-redesign-design.md) -->
             <Border Classes="groupBox" Tag="library.comicFolders">
                 <StackPanel>
                     <Border Classes="groupHeader">
-                        <TextBlock Text="Comic Library Folders" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
+                        <Grid ColumnDefinitions="*,Auto">
+                            <TextBlock Grid.Column="0" Text="Comic Library Folders" FontWeight="Bold" FontSize="13"
+                                       Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
+                            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="2">
+                                <Button Classes="segTab" Classes.active="{Binding !IsComicFoldersMaintenanceTabActive}"
+                                        Content="Folders" Command="{Binding ShowComicFoldersFoldersTabCommand}" />
+                                <Button Classes="segTab" Classes.active="{Binding IsComicFoldersMaintenanceTabActive}"
+                                        Content="Maintenance" Command="{Binding ShowComicFoldersMaintenanceTabCommand}" />
+                            </StackPanel>
+                        </Grid>
                     </Border>
-                    <ItemsControl x:Name="WatchedFoldersList" ItemsSource="{Binding WatchedFolders}">
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate x:DataType="models:WatchedFolderSummary">
-                                <Border Classes="skinRow">
-                                    <Grid ColumnDefinitions="*,Auto,Auto,Auto" Margin="14,10">
-                                        <TextBlock Grid.Column="0" Text="{Binding Path}" FontSize="13" TextTrimming="CharacterEllipsis"
-                                                   Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
-                                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" Margin="0,0,10,0" VerticalAlignment="Center">
-                                            <TextBlock Text="Watch for changes" FontSize="12.5" Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
-                                            <ToggleSwitch IsChecked="{Binding Watch}"
+
+                    <StackPanel Margin="14" Spacing="10" IsVisible="{Binding !IsComicFoldersMaintenanceTabActive}">
+                        <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding !HasWatchedFolders}">
+                            <Border Width="22" Height="22" CornerRadius="6" Background="{DynamicResource PbSuccessSoftBrush}">
+                                <fi:SymbolIcon Symbol="Folder" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbSuccessBrush}"
+                                               HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            </Border>
+                            <TextBlock Text="No folders yet — add one to start building your library" FontSize="12.5"
+                                       Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
+                        </StackPanel>
+                        <ItemsControl x:Name="WatchedFoldersList" ItemsSource="{Binding WatchedFolders}" IsVisible="{Binding HasWatchedFolders}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="models:WatchedFolderSummary">
+                                    <Border Classes="skinRow">
+                                        <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto" ColumnSpacing="10" Margin="14,10">
+                                            <Border Grid.Column="0" Width="26" Height="26" CornerRadius="7" Background="{DynamicResource PbAccentSoftBrush}">
+                                                <fi:SymbolIcon Symbol="Folder" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbAccentTextBrush}"
+                                                               HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                            </Border>
+                                            <TextBlock Grid.Column="1" Text="{Binding Path}" FontSize="13" TextTrimming="CharacterEllipsis"
+                                                       Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
+                                            <ToggleSwitch Grid.Column="2" IsChecked="{Binding Watch}"
                                                           Command="{Binding #WatchedFoldersList.((vm:PreferencesScreenViewModel)DataContext).ToggleWatchCommand}"
                                                           CommandParameter="{Binding}"
                                                           OnContent="{x:Null}" OffContent="{x:Null}"
+                                                          ToolTip.Tip="Watch for changes"
                                                           AutomationProperties.AutomationId="WatchedFolderWatchCheckBox" />
-                                        </StackPanel>
-                                        <Button Grid.Column="2" Classes="headerAction ghost" Margin="0,0,6,0"
-                                                Command="{Binding #WatchedFoldersList.((vm:PreferencesScreenViewModel)DataContext).OpenFolderCommand}"
-                                                CommandParameter="{Binding}">
-                                            <StackPanel Orientation="Horizontal" Spacing="5">
+                                            <Button Grid.Column="3" Classes="headerAction ghost" Width="30" Height="30" Padding="0"
+                                                    Command="{Binding #WatchedFoldersList.((vm:PreferencesScreenViewModel)DataContext).OpenFolderCommand}"
+                                                    CommandParameter="{Binding}" ToolTip.Tip="Open in file explorer">
                                                 <fi:SymbolIcon Symbol="FolderOpen" FontSize="{StaticResource PbIconSizeXs}" />
-                                                <TextBlock Text="Open" />
-                                            </StackPanel>
-                                        </Button>
-                                        <Button Grid.Column="3" Classes="headerAction ghost"
-                                                Command="{Binding #WatchedFoldersList.((vm:PreferencesScreenViewModel)DataContext).RemoveFolderCommand}"
-                                                CommandParameter="{Binding}">
-                                            <StackPanel Orientation="Horizontal" Spacing="5">
-                                                <fi:SymbolIcon Symbol="Delete" FontSize="{StaticResource PbIconSizeXs}" />
-                                                <TextBlock Text="Remove" />
-                                            </StackPanel>
-                                        </Button>
-                                    </Grid>
-                                </Border>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                    <StackPanel Margin="14" Spacing="10">
+                                            </Button>
+                                            <Button Grid.Column="4" Classes="headerAction ghost" Width="30" Height="30" Padding="0"
+                                                    Command="{Binding #WatchedFoldersList.((vm:PreferencesScreenViewModel)DataContext).RemoveFolderCommand}"
+                                                    CommandParameter="{Binding}" ToolTip.Tip="Remove from library">
+                                                <fi:SymbolIcon Symbol="Delete" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbDangerBrush}" />
+                                            </Button>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
                         <StackPanel Orientation="Horizontal" Spacing="10">
                             <Button Classes="headerAction primary" Command="{Binding AddFolderCommand}">
                                 <StackPanel Orientation="Horizontal" Spacing="6">
@@ -271,94 +305,116 @@
                                 </StackPanel>
                             </Button>
                             <Button Classes="headerAction ghost" Command="{Binding ScanNowCommand}"
-                                    IsEnabled="{Binding !IsScanning}">
+                                    IsEnabled="{Binding !IsAnyComicFolderOperationRunning}">
                                 <StackPanel Orientation="Horizontal" Spacing="6">
                                     <fi:SymbolIcon Symbol="FolderSearch" />
                                     <TextBlock Text="Scan Now" />
                                 </StackPanel>
                             </Button>
-                            <Button Classes="headerAction ghost" Command="{Binding GenerateCoversCommand}"
-                                    IsEnabled="{Binding !IsGeneratingCovers}">
+                        </StackPanel>
+                    </StackPanel>
+
+                    <StackPanel Margin="14" Spacing="10" IsVisible="{Binding IsComicFoldersMaintenanceTabActive}">
+                        <WrapPanel Orientation="Horizontal">
+                            <Button Classes="headerAction ghost" Margin="0,0,10,10" Command="{Binding GenerateCoversCommand}"
+                                    IsEnabled="{Binding !IsAnyComicFolderOperationRunning}">
                                 <StackPanel Orientation="Horizontal" Spacing="6">
                                     <fi:SymbolIcon Symbol="Book" />
                                     <TextBlock Text="Generate Covers" />
                                 </StackPanel>
                             </Button>
-                            <Button Classes="headerAction ghost" Command="{Binding SyncMetadataCommand}"
-                                    IsEnabled="{Binding !IsSyncingMetadata}"
+                            <Button Classes="headerAction ghost" Margin="0,0,10,10" Command="{Binding SyncMetadataCommand}"
+                                    IsEnabled="{Binding !IsAnyComicFolderOperationRunning}"
                                     ToolTip.Tip="Re-reads embedded ComicInfo.xml for issues already in the library and fills in any blank fields">
                                 <StackPanel Orientation="Horizontal" Spacing="6">
                                     <fi:SymbolIcon Symbol="ArrowClockwise" />
                                     <TextBlock Text="Sync Metadata" />
                                 </StackPanel>
                             </Button>
-                            <Button Classes="headerAction ghost" Command="{Binding RepairMissingCoversCommand}"
-                                    IsEnabled="{Binding !IsRepairingCovers}"
+                            <Button Classes="headerAction ghost" Margin="0,0,10,10" Command="{Binding RepairMissingCoversCommand}"
+                                    IsEnabled="{Binding !IsAnyComicFolderOperationRunning}"
                                     ToolTip.Tip="Regenerates only the covers that are currently blank, for comics and books whose file is available - the quick fix when covers have gone missing">
                                 <StackPanel Orientation="Horizontal" Spacing="6">
                                     <fi:SymbolIcon Symbol="ArrowSync" />
                                     <TextBlock Text="Repair Missing Covers" />
                                 </StackPanel>
                             </Button>
-                            <Button Classes="headerAction ghost" Command="{Binding VerifyCoversCommand}"
-                                    IsEnabled="{Binding !IsVerifyingCovers}"
+                            <Button Classes="headerAction ghost" Margin="0,0,10,10" Command="{Binding VerifyCoversCommand}"
+                                    IsEnabled="{Binding !IsAnyComicFolderOperationRunning}"
                                     ToolTip.Tip="Re-derives comic and book covers whose file has changed since the thumbnail was made - catches an updated archive without re-decoding the whole library">
                                 <StackPanel Orientation="Horizontal" Spacing="6">
                                     <fi:SymbolIcon Symbol="CheckmarkCircle" />
                                     <TextBlock Text="Verify &amp; Repair Covers" />
                                 </StackPanel>
                             </Button>
-                            <Button Classes="headerAction ghost" Content="{Binding ClearComicCoverCacheConfirm.Label}"
+                            <Button Classes="headerAction ghost" Margin="0,0,10,10" Content="{Binding ClearComicCoverCacheConfirm.Label}"
                                     Command="{Binding ClearComicCoverCacheConfirm.TriggerCommand}"
-                                    IsEnabled="{Binding !IsGeneratingCovers}"
+                                    IsEnabled="{Binding !IsAnyComicFolderOperationRunning}"
                                     ToolTip.Tip="Deletes every cached comic cover and rebuilds from your files"
                                     AutomationProperties.AutomationId="PreferencesClearComicCoverCache" />
-                        </StackPanel>
-                        <TextBlock Text="{Binding ScanStatus}" FontSize="12" Foreground="{DynamicResource PbTextFaintBrush}" />
+                        </WrapPanel>
+                        <controls:BusyIndicator Job="{Binding CurrentComicFolderJob}"
+                                                 IsVisible="{Binding IsAnyComicFolderOperationRunning}" />
                     </StackPanel>
                 </StackPanel>
             </Border>
 
-            <!-- Book Folders (novels: EPUB/PDF) -->
+            <!-- Book Folders (novels: EPUB/PDF; docs/superpowers/specs/2026-09-07-library-folder-
+                 management-redesign-design.md) -->
             <Border Classes="groupBox" Tag="library.bookFolders">
                 <StackPanel>
                     <Border Classes="groupHeader">
-                        <StackPanel>
-                            <TextBlock Text="Book Folders" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
-                            <TextBlock Text="EPUB and PDF novels" FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" Margin="0,2,0,0" />
-                        </StackPanel>
+                        <Grid ColumnDefinitions="*,Auto">
+                            <StackPanel Grid.Column="0">
+                                <TextBlock Text="Book Folders" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
+                                <TextBlock Text="EPUB and PDF novels" FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" Margin="0,2,0,0" />
+                            </StackPanel>
+                            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="2" VerticalAlignment="Top">
+                                <Button Classes="segTab" Classes.active="{Binding !IsBookFoldersMaintenanceTabActive}"
+                                        Content="Folders" Command="{Binding ShowBookFoldersFoldersTabCommand}" />
+                                <Button Classes="segTab" Classes.active="{Binding IsBookFoldersMaintenanceTabActive}"
+                                        Content="Maintenance" Command="{Binding ShowBookFoldersMaintenanceTabCommand}" />
+                            </StackPanel>
+                        </Grid>
                     </Border>
-                    <ItemsControl x:Name="BookFoldersList" ItemsSource="{Binding BookFolders}">
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate x:DataType="models:BookFolderSummary">
-                                <Border Classes="skinRow">
-                                    <Grid ColumnDefinitions="*,Auto,Auto" Margin="14,10">
-                                        <TextBlock Grid.Column="0" Text="{Binding Path}" FontSize="13" TextTrimming="CharacterEllipsis"
-                                                   Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
-                                        <Button Grid.Column="1" Classes="headerAction ghost" Margin="0,0,6,0"
-                                                Command="{Binding #BookFoldersList.((vm:PreferencesScreenViewModel)DataContext).OpenBookFolderCommand}"
-                                                CommandParameter="{Binding}"
-                                                AutomationProperties.AutomationId="PreferencesBookFolderOpen">
-                                            <StackPanel Orientation="Horizontal" Spacing="5">
+
+                    <StackPanel Margin="14" Spacing="10" IsVisible="{Binding !IsBookFoldersMaintenanceTabActive}">
+                        <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding !HasBookFolders}">
+                            <Border Width="22" Height="22" CornerRadius="6" Background="{DynamicResource PbSuccessSoftBrush}">
+                                <fi:SymbolIcon Symbol="Folder" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbSuccessBrush}"
+                                               HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            </Border>
+                            <TextBlock Text="No folders yet — add one to start your book collection" FontSize="12.5"
+                                       Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
+                        </StackPanel>
+                        <ItemsControl x:Name="BookFoldersList" ItemsSource="{Binding BookFolders}" IsVisible="{Binding HasBookFolders}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="models:BookFolderSummary">
+                                    <Border Classes="skinRow">
+                                        <Grid ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="10" Margin="14,10">
+                                            <Border Grid.Column="0" Width="26" Height="26" CornerRadius="7" Background="{DynamicResource PbSuccessSoftBrush}">
+                                                <fi:SymbolIcon Symbol="Folder" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbSuccessBrush}"
+                                                               HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                            </Border>
+                                            <TextBlock Grid.Column="1" Text="{Binding Path}" FontSize="13" TextTrimming="CharacterEllipsis"
+                                                       Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
+                                            <Button Grid.Column="2" Classes="headerAction ghost" Width="30" Height="30" Padding="0"
+                                                    Command="{Binding #BookFoldersList.((vm:PreferencesScreenViewModel)DataContext).OpenBookFolderCommand}"
+                                                    CommandParameter="{Binding}" ToolTip.Tip="Open in file explorer"
+                                                    AutomationProperties.AutomationId="PreferencesBookFolderOpen">
                                                 <fi:SymbolIcon Symbol="FolderOpen" FontSize="{StaticResource PbIconSizeXs}" />
-                                                <TextBlock Text="Open" />
-                                            </StackPanel>
-                                        </Button>
-                                        <Button Grid.Column="2" Classes="headerAction ghost"
-                                                Command="{Binding #BookFoldersList.((vm:PreferencesScreenViewModel)DataContext).RemoveBookFolderCommand}"
-                                                CommandParameter="{Binding}"
-                                                AutomationProperties.AutomationId="PreferencesBookFolderRemove">
-                                            <StackPanel Orientation="Horizontal" Spacing="5">
-                                                <fi:SymbolIcon Symbol="Delete" FontSize="{StaticResource PbIconSizeXs}" />
-                                                <TextBlock Text="Remove" />
-                                            </StackPanel>
-                                        </Button>
-                                    </Grid>
-                                </Border>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                    <StackPanel Margin="14" Spacing="10">
+                                            </Button>
+                                            <Button Grid.Column="3" Classes="headerAction ghost" Width="30" Height="30" Padding="0"
+                                                    Command="{Binding #BookFoldersList.((vm:PreferencesScreenViewModel)DataContext).RemoveBookFolderCommand}"
+                                                    CommandParameter="{Binding}" ToolTip.Tip="Remove from library"
+                                                    AutomationProperties.AutomationId="PreferencesBookFolderRemove">
+                                                <fi:SymbolIcon Symbol="Delete" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbDangerBrush}" />
+                                            </Button>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
                         <StackPanel Orientation="Horizontal" Spacing="10">
                             <Button Classes="headerAction primary" Command="{Binding AddBookFolderCommand}"
                                     AutomationProperties.AutomationId="PreferencesAddBookFolder">
@@ -368,20 +424,26 @@
                                 </StackPanel>
                             </Button>
                             <Button Classes="headerAction ghost" Command="{Binding ScanBooksNowCommand}"
-                                    IsEnabled="{Binding !IsScanningBooks}"
+                                    IsEnabled="{Binding !IsAnyBookFolderOperationRunning}"
                                     AutomationProperties.AutomationId="PreferencesScanBooksNow">
                                 <StackPanel Orientation="Horizontal" Spacing="6">
                                     <fi:SymbolIcon Symbol="FolderSearch" />
                                     <TextBlock Text="Scan Now" />
                                 </StackPanel>
                             </Button>
-                            <Button Classes="headerAction ghost" Content="{Binding ClearBookCoverCacheConfirm.Label}"
+                        </StackPanel>
+                    </StackPanel>
+
+                    <StackPanel Margin="14" Spacing="10" IsVisible="{Binding IsBookFoldersMaintenanceTabActive}">
+                        <WrapPanel Orientation="Horizontal">
+                            <Button Classes="headerAction ghost" Margin="0,0,10,10" Content="{Binding ClearBookCoverCacheConfirm.Label}"
                                     Command="{Binding ClearBookCoverCacheConfirm.TriggerCommand}"
-                                    IsEnabled="{Binding !IsClearingBookCoverCache}"
+                                    IsEnabled="{Binding !IsAnyBookFolderOperationRunning}"
                                     ToolTip.Tip="Deletes every cached book cover and rebuilds from your files"
                                     AutomationProperties.AutomationId="PreferencesClearBookCoverCache" />
-                        </StackPanel>
-                        <TextBlock Text="{Binding BookScanStatus}" FontSize="12" Foreground="{DynamicResource PbTextFaintBrush}" />
+                        </WrapPanel>
+                        <controls:BusyIndicator Job="{Binding CurrentBookFolderJob}"
+                                                 IsVisible="{Binding IsAnyBookFolderOperationRunning}" />
                     </StackPanel>
                 </StackPanel>
             </Border>

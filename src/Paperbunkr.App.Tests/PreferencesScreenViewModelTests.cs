@@ -1156,16 +1156,121 @@ public class PreferencesScreenViewModelTests : IDisposable
         Assert.Empty(verify.WatchedFolders);
     }
 
+    // ===================== Folder management redesign (docs/superpowers/specs/2026-09-07-library-
+    // folder-management-redesign-design.md) - empty states, segmented tabs, combined busy flag. =====================
+
     [Fact]
-    public async Task ScanNow_ReportsResultInScanStatus()
+    public async Task HasWatchedFolders_ReflectsListState()
+    {
+        var vm = CreateViewModel(new StubFilePicker { FolderToReturn = @"C:\Comics" });
+        vm.EnsureLoaded();
+
+        Assert.False(vm.HasWatchedFolders);
+
+        await vm.AddFolderCommand.ExecuteAsync(null);
+
+        Assert.True(vm.HasWatchedFolders);
+
+        vm.RemoveFolderCommand.Execute(vm.WatchedFolders[0]);
+
+        Assert.False(vm.HasWatchedFolders);
+    }
+
+    [Fact]
+    public async Task HasBookFolders_ReflectsListState()
+    {
+        var vm = CreateViewModel(new StubFilePicker { FolderToReturn = @"C:\Books" });
+        vm.EnsureLoaded();
+
+        Assert.False(vm.HasBookFolders);
+
+        await vm.AddBookFolderCommand.ExecuteAsync(null);
+
+        Assert.True(vm.HasBookFolders);
+
+        vm.RemoveBookFolderCommand.Execute(vm.BookFolders[0]);
+
+        Assert.False(vm.HasBookFolders);
+    }
+
+    [Fact]
+    public void ComicFoldersTabToggle_SwitchesBetweenFoldersAndMaintenance()
     {
         var vm = CreateViewModel();
         vm.EnsureLoaded();
 
+        Assert.False(vm.IsComicFoldersMaintenanceTabActive);
+
+        vm.ShowComicFoldersMaintenanceTabCommand.Execute(null);
+        Assert.True(vm.IsComicFoldersMaintenanceTabActive);
+
+        vm.ShowComicFoldersFoldersTabCommand.Execute(null);
+        Assert.False(vm.IsComicFoldersMaintenanceTabActive);
+    }
+
+    [Fact]
+    public void BookFoldersTabToggle_SwitchesBetweenFoldersAndMaintenance()
+    {
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+
+        Assert.False(vm.IsBookFoldersMaintenanceTabActive);
+
+        vm.ShowBookFoldersMaintenanceTabCommand.Execute(null);
+        Assert.True(vm.IsBookFoldersMaintenanceTabActive);
+
+        vm.ShowBookFoldersFoldersTabCommand.Execute(null);
+        Assert.False(vm.IsBookFoldersMaintenanceTabActive);
+    }
+
+    [Fact]
+    public void IsAnyComicFolderOperationRunning_ReflectsAnyIndividualFlag()
+    {
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+
+        Assert.False(vm.IsAnyComicFolderOperationRunning);
+
+        vm.IsGeneratingCovers = true;
+        Assert.True(vm.IsAnyComicFolderOperationRunning);
+        vm.IsGeneratingCovers = false;
+
+        vm.IsSyncingMetadata = true;
+        Assert.True(vm.IsAnyComicFolderOperationRunning);
+        vm.IsSyncingMetadata = false;
+
+        Assert.False(vm.IsAnyComicFolderOperationRunning);
+    }
+
+    [Fact]
+    public void IsAnyBookFolderOperationRunning_ReflectsAnyIndividualFlag()
+    {
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+
+        Assert.False(vm.IsAnyBookFolderOperationRunning);
+
+        vm.IsClearingBookCoverCache = true;
+        Assert.True(vm.IsAnyBookFolderOperationRunning);
+        vm.IsClearingBookCoverCache = false;
+
+        Assert.False(vm.IsAnyBookFolderOperationRunning);
+    }
+
+    [Fact]
+    public async Task ScanNow_RunsAsActivityJob_ThatSucceeds()
+    {
+        var activity = new ActivityService(a => a(), _ => { });
+        var vm = CreateViewModel(activity: activity);
+        vm.EnsureLoaded();
+
         await vm.ScanNowCommand.ExecuteAsync(null);
 
-        Assert.Equal("No new issues found.", vm.ScanStatus);
+        var job = Assert.Single(activity.RecentJobs);
+        Assert.Equal(ActivityJobStatus.Succeeded, job.Status);
+        Assert.Equal("No new issues found.", job.ResultSummary);
         Assert.False(vm.IsScanning);
+        Assert.Null(vm.CurrentComicFolderJob);
     }
 
     // ===================== Scanning: missing-file handling (docs/superpowers/specs/2026-09-06-
@@ -1184,7 +1289,8 @@ public class PreferencesScreenViewModelTests : IDisposable
             context.SaveChanges();
         }
 
-        var vm = CreateViewModel();
+        var activity = new ActivityService(a => a(), _ => { });
+        var vm = CreateViewModel(activity: activity);
         vm.EnsureLoaded();
 
         await vm.ScanNowCommand.ExecuteAsync(null);
@@ -1193,7 +1299,8 @@ public class PreferencesScreenViewModelTests : IDisposable
         Assert.Empty(verify.Issues);
         Assert.Single(verify.RemovedLibraryEntries);
         Assert.Single(verify.RemovedFilePaths);
-        Assert.Contains("Automatically removed 1 confirmed-missing file", vm.ScanStatus);
+        var job = Assert.Single(activity.RecentJobs);
+        Assert.Contains("Automatically removed 1 confirmed-missing file", job.ResultSummary);
     }
 
     [Fact]
@@ -1293,15 +1400,19 @@ public class PreferencesScreenViewModelTests : IDisposable
     }
 
     [Fact]
-    public async Task ScanBooksNow_ReportsResultInBookScanStatus()
+    public async Task ScanBooksNow_RunsAsActivityJob_ThatSucceeds()
     {
-        var vm = CreateViewModel();
+        var activity = new ActivityService(a => a(), _ => { });
+        var vm = CreateViewModel(activity: activity);
         vm.EnsureLoaded();
 
         await vm.ScanBooksNowCommand.ExecuteAsync(null);
 
-        Assert.Equal("No new books found.", vm.BookScanStatus);
+        var job = Assert.Single(activity.RecentJobs);
+        Assert.Equal(ActivityJobStatus.Succeeded, job.Status);
+        Assert.Equal("No new books found.", job.ResultSummary);
         Assert.False(vm.IsScanningBooks);
+        Assert.Null(vm.CurrentBookFolderJob);
     }
 
     [Fact]
@@ -1484,12 +1595,14 @@ public class PreferencesScreenViewModelTests : IDisposable
             context.SaveChanges();
         }
 
-        var vm = CreateViewModel();
+        var activity = new ActivityService(a => a(), _ => { });
+        var vm = CreateViewModel(activity: activity);
         vm.EnsureLoaded();
 
         await vm.ScanNowCommand.ExecuteAsync(null);
 
-        Assert.Equal("Added 1 issue across 1 series.", vm.ScanStatus);
+        var job = Assert.Single(activity.RecentJobs);
+        Assert.Equal("Added 1 issue across 1 series.", job.ResultSummary);
         using var verifyContext = new PaperbunkrDbContext(_dbOptions);
         var issue = Assert.Single(verifyContext.Issues);
         string stem = CoverFingerprint.Stem(issue.Id, issue.FilePath, issue.FileSize);

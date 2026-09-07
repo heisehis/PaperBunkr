@@ -1191,10 +1191,35 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     // "Book Folders"; the real novel folders now live in their own region further down. =====================
 
     [ObservableProperty]
-    private string? _scanStatus;
+    [NotifyPropertyChangedFor(nameof(IsAnyComicFolderOperationRunning))]
+    private bool _isScanning;
+
+    /// <summary>Whether any Comic Folders operation (Scan Now or a Maintenance-tab action) is
+    /// currently running - drives the shared <c>BusyIndicator</c>/button-disabling behavior
+    /// (docs/superpowers/specs/2026-09-07-library-folder-management-redesign-design.md §2), since
+    /// these 5 operations don't otherwise guard against each other.</summary>
+    public bool IsAnyComicFolderOperationRunning =>
+        IsScanning || IsGeneratingCovers || IsSyncingMetadata || IsRepairingCovers || IsVerifyingCovers;
+
+    /// <summary>Folder management redesign (docs/superpowers/specs/2026-09-07-library-folder-
+    /// management-redesign-design.md) - the currently-running Comic Folders operation (Scan Now or
+    /// any Maintenance-tab action), for the shared <c>Controls.BusyIndicator</c> to bind to. Every
+    /// one of these operations already auto-toasts on completion via the existing
+    /// <see cref="IActivityService"/> pipeline, so this replaces inline status text rather than
+    /// supplementing it.</summary>
+    [ObservableProperty]
+    private ActivityJob? _currentComicFolderJob;
 
     [ObservableProperty]
-    private bool _isScanning;
+    private bool _isComicFoldersMaintenanceTabActive;
+
+    public bool HasWatchedFolders => WatchedFolders.Count > 0;
+
+    [RelayCommand]
+    private void ShowComicFoldersFoldersTab() => IsComicFoldersMaintenanceTabActive = false;
+
+    [RelayCommand]
+    private void ShowComicFoldersMaintenanceTab() => IsComicFoldersMaintenanceTabActive = true;
 
     // ===================== Scanning: missing-file handling (docs/superpowers/specs/2026-09-06-
     // scan-missing-file-handling-design.md) - CE parity for the Scanning-section checkboxes,
@@ -1244,6 +1269,8 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         {
             WatchedFolders.Add(new WatchedFolderSummary { Id = folder.Id, Path = folder.Path, Watch = folder.Watch });
         }
+
+        OnPropertyChanged(nameof(HasWatchedFolders));
     }
 
     [RelayCommand]
@@ -1349,10 +1376,28 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     // WatchedFolders above: BookFolder has no live-watch, so no Watch column. =====================
 
     [ObservableProperty]
-    private string? _bookScanStatus;
+    [NotifyPropertyChangedFor(nameof(IsAnyBookFolderOperationRunning))]
+    private bool _isScanningBooks;
+
+    /// <summary>Book Folders' own combined running-flag, same rationale as
+    /// <see cref="IsAnyComicFolderOperationRunning"/>.</summary>
+    public bool IsAnyBookFolderOperationRunning => IsScanningBooks || IsClearingBookCoverCache;
+
+    /// <summary>Book Folders' own job reference, same rationale as
+    /// <see cref="CurrentComicFolderJob"/>.</summary>
+    [ObservableProperty]
+    private ActivityJob? _currentBookFolderJob;
 
     [ObservableProperty]
-    private bool _isScanningBooks;
+    private bool _isBookFoldersMaintenanceTabActive;
+
+    public bool HasBookFolders => BookFolders.Count > 0;
+
+    [RelayCommand]
+    private void ShowBookFoldersFoldersTab() => IsBookFoldersMaintenanceTabActive = false;
+
+    [RelayCommand]
+    private void ShowBookFoldersMaintenanceTab() => IsBookFoldersMaintenanceTabActive = true;
 
     private void RefreshBookFolders()
     {
@@ -1362,6 +1407,8 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         {
             BookFolders.Add(new BookFolderSummary { Id = folder.Id, Path = folder.Path });
         }
+
+        OnPropertyChanged(nameof(HasBookFolders));
     }
 
     [RelayCommand]
@@ -1423,44 +1470,23 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         }
 
         IsScanningBooks = true;
-        BookScanStatus = "Scanning…";
         using var job = _activity.StartJob(ActivityJobKind.BookScan, "Scanning book folders");
-        // Guards against a trailing Progress<T> callback (marshalled async) clobbering the final
-        // status message after the scan has already returned - Progress<T> gives no ordering
-        // guarantee relative to the awaited completion.
-        bool scanFinished = false;
+        CurrentBookFolderJob = job.Job;
         try
         {
-            var scanProgress = new Progress<(int Done, int Total)>(p =>
-            {
-                if (!scanFinished)
-                {
-                    BookScanStatus = $"Scanning… {p.Done}/{p.Total}";
-                }
-
-                job.Report(p.Done, p.Total, $"{p.Done} / {p.Total} files");
-            });
+            var scanProgress = new Progress<(int Done, int Total)>(p => job.Report(p.Done, p.Total, $"{p.Done} / {p.Total} files"));
             var result = await new BookFolderScanService().ScanAllAsync(scanProgress, job.CancellationToken);
 
             if (result.BooksAdded > 0)
             {
-                var coverProgress = new Progress<(int Done, int Total)>(p =>
-                {
-                    if (!scanFinished)
-                    {
-                        BookScanStatus = $"Generating covers… {p.Done}/{p.Total}";
-                    }
-
-                    job.Report(p.Done, p.Total, $"Covers {p.Done} / {p.Total}");
-                });
+                var coverProgress = new Progress<(int Done, int Total)>(p => job.Report(p.Done, p.Total, $"Covers {p.Done} / {p.Total}"));
                 await new BookCoverThumbnailService(_contextFactory).GenerateAllAsync(coverProgress, job.CancellationToken);
             }
 
-            scanFinished = true;
-            BookScanStatus = result.BooksAdded == 0
+            string summary = result.BooksAdded == 0
                 ? "No new books found."
                 : $"Added {result.BooksAdded} book{(result.BooksAdded == 1 ? "" : "s")} across {result.SeriesTouched} series.";
-            job.Succeed(BookScanStatus, itemsProcessed: result.BooksAdded);
+            job.Succeed(summary, itemsProcessed: result.BooksAdded);
             _scheduler?.NotifyRan(Services.Scheduling.ScheduledTaskCatalog.BookScan, ScheduledRunStatus.Succeeded);
         }
         catch (OperationCanceledException)
@@ -1469,13 +1495,13 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         }
         catch (Exception ex)
         {
-            BookScanStatus = $"Scan failed: {ex.Message}";
             job.Fail("Book scan failed", ex: ex);
             _scheduler?.NotifyRan(Services.Scheduling.ScheduledTaskCatalog.BookScan, ScheduledRunStatus.Failed);
         }
         finally
         {
             IsScanningBooks = false;
+            CurrentBookFolderJob = null;
             RefreshBookFolders();
         }
     }
@@ -1489,20 +1515,11 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         }
 
         IsScanning = true;
-        ScanStatus = "Scanning…";
         using var job = _activity.StartJob(ActivityJobKind.LibraryScan, "Scanning library folders");
-        bool scanFinished = false;
+        CurrentComicFolderJob = job.Job;
         try
         {
-            var progress = new Progress<(int Done, int Total)>(p =>
-            {
-                if (!scanFinished)
-                {
-                    ScanStatus = $"Scanning… {p.Done}/{p.Total}";
-                }
-
-                job.Report(p.Done, p.Total, $"{p.Done} / {p.Total} files");
-            });
+            var progress = new Progress<(int Done, int Total)>(p => job.Report(p.Done, p.Total, $"{p.Done} / {p.Total} files"));
             var result = await _libraryScanner.ScanAllAsync(progress, job.CancellationToken);
             string summary = result.IssuesAdded == 0
                 ? "No new issues found."
@@ -1513,15 +1530,7 @@ public partial class PreferencesScreenViewModel : ViewModelBase
                 // Newly-added issues have no cached cover yet - generate them now instead of
                 // leaving Library showing blank placeholders until someone finds the separate
                 // "Generate Covers" button on the Library screen (same pipeline it uses).
-                var coverProgress = new Progress<(int Done, int Total)>(p =>
-                {
-                    if (!scanFinished)
-                    {
-                        ScanStatus = $"Generating covers… {p.Done}/{p.Total}";
-                    }
-
-                    job.Report(p.Done, p.Total, $"Covers {p.Done} / {p.Total}");
-                });
+                var coverProgress = new Progress<(int Done, int Total)>(p => job.Report(p.Done, p.Total, $"Covers {p.Done} / {p.Total}"));
                 await new CoverThumbnailService(_contextFactory).GenerateAllAsync(coverProgress, job.CancellationToken);
                 DuplicateAlertHelper.RaiseIfAny(_activity, result.AddedIssueIds);
             }
@@ -1567,8 +1576,6 @@ public partial class PreferencesScreenViewModel : ViewModelBase
                 RefreshLibraryHealth(refreshContext);
             }
 
-            scanFinished = true;
-            ScanStatus = summary;
             job.Succeed(summary, itemsProcessed: result.IssuesAdded);
             _scheduler?.NotifyRan(Services.Scheduling.ScheduledTaskCatalog.LibraryScan, ScheduledRunStatus.Succeeded);
         }
@@ -1578,13 +1585,13 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         }
         catch (Exception ex)
         {
-            ScanStatus = $"Scan failed: {ex.Message}";
             job.Fail("Library scan failed", ex: ex);
             _scheduler?.NotifyRan(Services.Scheduling.ScheduledTaskCatalog.LibraryScan, ScheduledRunStatus.Failed);
         }
         finally
         {
             IsScanning = false;
+            CurrentComicFolderJob = null;
         }
     }
 
@@ -1621,6 +1628,7 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     }
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsAnyComicFolderOperationRunning))]
     private bool _isGeneratingCovers;
 
     /// <summary>
@@ -1641,6 +1649,7 @@ public partial class PreferencesScreenViewModel : ViewModelBase
 
         IsGeneratingCovers = true;
         using var job = _activity.StartJob(ActivityJobKind.GenerateCovers, "Generating covers");
+        CurrentComicFolderJob = job.Job;
         int total = 0;
 
         try
@@ -1666,10 +1675,12 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         finally
         {
             IsGeneratingCovers = false;
+            CurrentComicFolderJob = null;
         }
     }
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsAnyComicFolderOperationRunning))]
     private bool _isVerifyingCovers;
 
     /// <summary>
@@ -1692,6 +1703,7 @@ public partial class PreferencesScreenViewModel : ViewModelBase
 
         IsVerifyingCovers = true;
         using var job = _activity.StartJob(ActivityJobKind.GenerateCovers, "Verifying covers");
+        CurrentComicFolderJob = job.Job;
 
         // Two sequential passes sharing one job - accumulate rather than assign directly, or the
         // second pass's smaller Total would make the bar jump backward and undercount the summary.
@@ -1729,10 +1741,12 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         finally
         {
             IsVerifyingCovers = false;
+            CurrentComicFolderJob = null;
         }
     }
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsAnyComicFolderOperationRunning))]
     private bool _isRepairingCovers;
 
     /// <summary>
@@ -1753,6 +1767,7 @@ public partial class PreferencesScreenViewModel : ViewModelBase
 
         IsRepairingCovers = true;
         using var job = _activity.StartJob(ActivityJobKind.GenerateCovers, "Repairing missing covers");
+        CurrentComicFolderJob = job.Job;
 
         int comicTotal = 0;
         int bookTotal = 0;
@@ -1788,6 +1803,7 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         finally
         {
             IsRepairingCovers = false;
+            CurrentComicFolderJob = null;
         }
     }
 
@@ -1822,6 +1838,7 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         // need for VerifyAllAsync/force here.
         IsGeneratingCovers = true;
         using var job = _activity.StartJob(ActivityJobKind.GenerateCovers, "Rebuilding comic covers");
+        CurrentComicFolderJob = job.Job;
         int total = 0;
         try
         {
@@ -1844,6 +1861,7 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         finally
         {
             IsGeneratingCovers = false;
+            CurrentComicFolderJob = null;
         }
     }
 
@@ -1853,6 +1871,7 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     public TwoStepConfirm ClearBookCoverCacheConfirm { get; }
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsAnyBookFolderOperationRunning))]
     private bool _isClearingBookCoverCache;
 
     private async Task ClearBookCoverCacheAsync()
@@ -1875,6 +1894,7 @@ public partial class PreferencesScreenViewModel : ViewModelBase
 
         IsClearingBookCoverCache = true;
         using var job = _activity.StartJob(ActivityJobKind.GenerateCovers, "Rebuilding book covers");
+        CurrentBookFolderJob = job.Job;
         int total = 0;
         try
         {
@@ -1897,10 +1917,12 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         finally
         {
             IsClearingBookCoverCache = false;
+            CurrentBookFolderJob = null;
         }
     }
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsAnyComicFolderOperationRunning))]
     private bool _isSyncingMetadata;
 
     /// <summary>
@@ -1917,6 +1939,7 @@ public partial class PreferencesScreenViewModel : ViewModelBase
 
         IsSyncingMetadata = true;
         using var job = _activity.StartJob(ActivityJobKind.SyncMetadata, "Syncing metadata");
+        CurrentComicFolderJob = job.Job;
 
         try
         {
@@ -1941,6 +1964,7 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         finally
         {
             IsSyncingMetadata = false;
+            CurrentComicFolderJob = null;
         }
     }
 

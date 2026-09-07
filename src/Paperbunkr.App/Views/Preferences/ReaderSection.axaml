@@ -3,6 +3,7 @@
              xmlns:vm="using:Paperbunkr.App.ViewModels"
              xmlns:entities="using:Paperbunkr.Data.Entities"
              xmlns:conv="using:Avalonia.Data.Converters"
+             xmlns:pref="using:Paperbunkr.App.Views.Preferences"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d" d:DesignWidth="640" d:DesignHeight="900"
@@ -13,152 +14,131 @@
         <StackPanel Margin="28,20,28,40" Spacing="20">
             <TextBlock Classes="pbTextHeading" Text="Reader" />
 
-            <Border Classes="groupBox" Tag="reader.rtl">
-                <StackPanel>
-                    <Border Classes="groupHeader">
-                        <TextBlock Text="Right to Left" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
-                    </Border>
-                    <StackPanel Margin="14" Spacing="12">
-                        <CheckBox IsChecked="{Binding ReverseRtlNavigation}" Foreground="{DynamicResource PbTextBrush}" FontSize="13"
-                                  Content="Reverse left/right page-turn direction for right-to-left books" />
-                    </StackPanel>
-                </StackPanel>
-            </Border>
-
-            <Border Classes="groupBox" Tag="reader.display">
-                <StackPanel>
-                    <Border Classes="groupHeader">
-                        <TextBlock Text="Display" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
-                    </Border>
-                    <StackPanel Margin="14" Spacing="12">
-                        <CheckBox IsChecked="{Binding HighQualityPageDisplay}" Foreground="{DynamicResource PbTextBrush}" FontSize="13"
-                                  Content="High quality page display (smoother scaling, more CPU)" />
-
-                        <Grid ColumnDefinitions="Auto,Auto" ColumnSpacing="10">
-                            <TextBlock Grid.Column="0" Text="Default fit mode" FontSize="13" VerticalAlignment="Center"
-                                       Foreground="{DynamicResource PbTextBrush}" />
-                            <ComboBox Grid.Column="1" ItemsSource="{x:Static vm:PreferencesScreenViewModel.FitModeOptions}"
-                                      SelectedItem="{Binding DefaultPageFitMode}" Width="150" />
-                        </Grid>
-                        <TextBlock Text="Used for any book that hasn't been set to a different fit mode from the reader itself."
-                                   FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" Margin="0,-6,0,0" />
-
-                        <CheckBox IsChecked="{Binding DefaultAutoRotate}" Foreground="{DynamicResource PbTextBrush}" FontSize="13"
-                                  Content="Auto-rotate landscape pages by default" />
-
-                        <Grid ColumnDefinitions="Auto,Auto" ColumnSpacing="10">
-                            <TextBlock Grid.Column="0" Text="Double-page spread" FontSize="13" VerticalAlignment="Center"
-                                       Foreground="{DynamicResource PbTextBrush}" />
-                            <ComboBox Grid.Column="1" ItemsSource="{x:Static vm:PreferencesScreenViewModel.PageLayoutModeOptions}"
-                                      SelectedItem="{Binding DefaultPageLayoutMode}" Width="150" />
-                        </Grid>
-                        <TextBlock Text="Used for any series that hasn't been set to a different double-page mode from the reader toolbar itself."
-                                   FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" Margin="0,-6,0,0" />
-
-                        <Grid ColumnDefinitions="Auto,Auto" ColumnSpacing="10">
-                            <TextBlock Grid.Column="0" Text="Page transition" FontSize="13" VerticalAlignment="Center"
-                                       Foreground="{DynamicResource PbTextBrush}" />
-                            <ComboBox Grid.Column="1" ItemsSource="{x:Static vm:PreferencesScreenViewModel.PageTransitionStyleOptions}"
-                                      SelectedItem="{Binding PageTransitionStyle}" Width="150" />
-                        </Grid>
-                        <TextBlock Text="Animates turning the page (arrow keys, click-zones, flick, scrubber) - jumping to a page (e.g. a thumbnail click) is always instant."
-                                   FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" Margin="0,-6,0,0" />
-
-                        <StackPanel Spacing="4">
-                            <TextBlock Text="{Binding PageTransitionDurationMs, StringFormat='Page transition speed: {0}ms'}" FontSize="13"
-                                       Foreground="{DynamicResource PbTextBrush}" />
-                            <Slider Minimum="100" Maximum="600" TickFrequency="50" IsSnapToTickEnabled="True"
-                                    Value="{Binding PageTransitionDurationMs}" Width="220" HorizontalAlignment="Left" />
-                        </StackPanel>
-                    </StackPanel>
-                </StackPanel>
-            </Border>
-
-            <Border Classes="groupBox" Tag="reader.zoomNav">
-                <StackPanel>
-                    <Border Classes="groupHeader">
-                        <TextBlock Text="Zoom &amp; Navigation" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
-                    </Border>
-                    <StackPanel Margin="14" Spacing="12">
-                        <CheckBox IsChecked="{Binding ResetZoomOnPageChange}" Foreground="{DynamicResource PbTextBrush}" FontSize="13"
-                                  Content="Reset zoom when turning the page" />
-
-                        <StackPanel Spacing="4">
-                            <TextBlock Text="{Binding MouseWheelSpeed, StringFormat='Mouse wheel scroll speed: {0:F1}'}" FontSize="13"
-                                       Foreground="{DynamicResource PbTextBrush}" />
-                            <Slider Minimum="0.5" Maximum="5" Value="{Binding MouseWheelSpeed}" Width="220" HorizontalAlignment="Left" />
-                        </StackPanel>
-                    </StackPanel>
-                </StackPanel>
-            </Border>
-
-            <Border Classes="groupBox" Tag="reader.imageAdjust">
-                <StackPanel>
-                    <Border Classes="groupHeader">
-                        <TextBlock Text="Image Adjustment" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
-                    </Border>
-                    <StackPanel Margin="14" Spacing="12">
-                        <TextBlock Text="Default brightness/contrast/saturation/gamma for every book - a book's own reader toolbar can adjust further from here."
-                                   FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" />
-
-                        <StackPanel Spacing="4">
-                            <TextBlock Text="{Binding DefaultBrightness, StringFormat='Brightness: {0:F0}'}" FontSize="13"
-                                       Foreground="{DynamicResource PbTextBrush}" />
-                            <Slider Minimum="-100" Maximum="100" Value="{Binding DefaultBrightness}" Width="220" HorizontalAlignment="Left" />
-                        </StackPanel>
-                        <StackPanel Spacing="4">
-                            <TextBlock Text="{Binding DefaultContrast, StringFormat='Contrast: {0:F0}'}" FontSize="13"
-                                       Foreground="{DynamicResource PbTextBrush}" />
-                            <Slider Minimum="-100" Maximum="100" Value="{Binding DefaultContrast}" Width="220" HorizontalAlignment="Left" />
-                        </StackPanel>
-                        <StackPanel Spacing="4">
-                            <TextBlock Text="{Binding DefaultSaturation, StringFormat='Saturation: {0:F0}'}" FontSize="13"
-                                       Foreground="{DynamicResource PbTextBrush}" />
-                            <Slider Minimum="-100" Maximum="100" Value="{Binding DefaultSaturation}" Width="220" HorizontalAlignment="Left" />
-                        </StackPanel>
-                        <StackPanel Spacing="4">
-                            <TextBlock Text="{Binding DefaultGamma, StringFormat='Gamma: {0:F0}'}" FontSize="13"
-                                       Foreground="{DynamicResource PbTextBrush}" />
-                            <Slider Minimum="-100" Maximum="100" Value="{Binding DefaultGamma}" Width="220" HorizontalAlignment="Left" />
-                        </StackPanel>
-                    </StackPanel>
-                </StackPanel>
-            </Border>
-
-            <Border Classes="groupBox" Tag="reader.background">
-                <StackPanel>
-                    <Border Classes="groupHeader">
-                        <TextBlock Text="Background &amp; Margin" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
-                    </Border>
-                    <StackPanel Margin="14" Spacing="12">
-                        <Grid ColumnDefinitions="Auto,Auto" ColumnSpacing="10">
-                            <TextBlock Grid.Column="0" Text="Canvas background" FontSize="13" VerticalAlignment="Center"
-                                       Foreground="{DynamicResource PbTextBrush}" />
-                            <ComboBox Grid.Column="1" ItemsSource="{x:Static vm:PreferencesScreenViewModel.BackgroundModeOptions}"
-                                      SelectedItem="{Binding ImageBackgroundMode}" Width="150" />
-                        </Grid>
-                        <TextBlock Text="Auto keeps the app's own background; Color fills the canvas with the color below."
-                                   FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" Margin="0,-6,0,0" />
-
-                        <Grid ColumnDefinitions="Auto,Auto,Auto" ColumnSpacing="10" IsVisible="{Binding ImageBackgroundMode, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:ImageBackgroundMode.Color}}">
-                            <TextBlock Grid.Column="0" Text="Background color" FontSize="13" VerticalAlignment="Center"
-                                       Foreground="{DynamicResource PbTextBrush}" />
-                            <ComboBox Grid.Column="1" ItemsSource="{x:Static vm:PreferencesScreenViewModel.BackgroundColorPresets}"
-                                      SelectedItem="{Binding BackgroundColor}" Width="130" PlaceholderText="Presets" />
-                            <TextBox Grid.Column="2" Text="{Binding BackgroundColor}" Width="130" ToolTip.Tip="A named color (e.g. WhiteSmoke) or hex value (e.g. #F5F5F5)" />
-                        </Grid>
-
-                        <CheckBox IsChecked="{Binding PageMarginEnabled}" Foreground="{DynamicResource PbTextBrush}" FontSize="13"
-                                  Content="Add a margin around the page" />
-
-                        <StackPanel Spacing="4" IsVisible="{Binding PageMarginEnabled}">
-                            <TextBlock Text="{Binding PageMarginPercentWidth, StringFormat='Margin width: {0:P0}'}" FontSize="13"
-                                       Foreground="{DynamicResource PbTextBrush}" />
-                            <Slider Minimum="0" Maximum="0.3" Value="{Binding PageMarginPercentWidth}" Width="220" HorizontalAlignment="Left" />
-                        </StackPanel>
-                    </StackPanel>
-                </StackPanel>
-            </Border>
+        <StackPanel Tag="reader.rtl">
+            <TextBlock Classes="settingsGroupCaption" Text="RIGHT TO LEFT" />
+            <pref:SettingsRow Icon="ArrowLeft" Title="Reverse left/right page-turn direction for right-to-left books">
+                <pref:SettingsRow.SettingsContent>
+                    <ToggleSwitch IsChecked="{Binding ReverseRtlNavigation}" OnContent="{x:Null}" OffContent="{x:Null}" />
+                </pref:SettingsRow.SettingsContent>
+            </pref:SettingsRow>
         </StackPanel>
+
+        <StackPanel Tag="reader.display">
+            <TextBlock Classes="settingsGroupCaption" Text="DISPLAY" />
+            <pref:SettingsRow Icon="Image" Title="High quality page display"
+                               Description="Smoother scaling, more CPU.">
+                <pref:SettingsRow.SettingsContent>
+                    <ToggleSwitch IsChecked="{Binding HighQualityPageDisplay}" OnContent="{x:Null}" OffContent="{x:Null}" />
+                </pref:SettingsRow.SettingsContent>
+            </pref:SettingsRow>
+            <pref:SettingsRow Icon="ArrowFit" Title="Default fit mode"
+                               Description="Used for any book that hasn't been set to a different fit mode from the reader itself.">
+                <pref:SettingsRow.SettingsContent>
+                    <ComboBox ItemsSource="{x:Static vm:PreferencesScreenViewModel.FitModeOptions}"
+                              SelectedItem="{Binding DefaultPageFitMode}" Width="150" />
+                </pref:SettingsRow.SettingsContent>
+            </pref:SettingsRow>
+            <pref:SettingsRow Icon="ArrowRotateClockwise" Title="Auto-rotate landscape pages by default">
+                <pref:SettingsRow.SettingsContent>
+                    <ToggleSwitch IsChecked="{Binding DefaultAutoRotate}" OnContent="{x:Null}" OffContent="{x:Null}" />
+                </pref:SettingsRow.SettingsContent>
+            </pref:SettingsRow>
+            <pref:SettingsRow Icon="DualScreen" Title="Double-page spread"
+                               Description="Used for any series that hasn't been set to a different double-page mode from the reader toolbar itself.">
+                <pref:SettingsRow.SettingsContent>
+                    <ComboBox ItemsSource="{x:Static vm:PreferencesScreenViewModel.PageLayoutModeOptions}"
+                              SelectedItem="{Binding DefaultPageLayoutMode}" Width="150" />
+                </pref:SettingsRow.SettingsContent>
+            </pref:SettingsRow>
+            <pref:SettingsRow Icon="SlideTransition" Title="Page transition"
+                               Description="Animates turning the page (arrow keys, click-zones, flick, scrubber) - jumping to a page (e.g. a thumbnail click) is always instant.">
+                <pref:SettingsRow.SettingsContent>
+                    <ComboBox ItemsSource="{x:Static vm:PreferencesScreenViewModel.PageTransitionStyleOptions}"
+                              SelectedItem="{Binding PageTransitionStyle}" Width="150" />
+                </pref:SettingsRow.SettingsContent>
+            </pref:SettingsRow>
+            <pref:SettingsRow Icon="TopSpeed" Title="{Binding PageTransitionDurationMs, StringFormat='Page transition speed: {0}ms'}">
+                <pref:SettingsRow.SettingsContent>
+                    <Slider Minimum="100" Maximum="600" TickFrequency="50" IsSnapToTickEnabled="True"
+                            Value="{Binding PageTransitionDurationMs}" Width="220" />
+                </pref:SettingsRow.SettingsContent>
+            </pref:SettingsRow>
+        </StackPanel>
+
+        <StackPanel Tag="reader.zoomNav">
+            <TextBlock Classes="settingsGroupCaption" Text="ZOOM &amp; NAVIGATION" />
+            <pref:SettingsRow Icon="ZoomFit" Title="Reset zoom when turning the page">
+                <pref:SettingsRow.SettingsContent>
+                    <ToggleSwitch IsChecked="{Binding ResetZoomOnPageChange}" OnContent="{x:Null}" OffContent="{x:Null}" />
+                </pref:SettingsRow.SettingsContent>
+            </pref:SettingsRow>
+            <pref:SettingsRow Icon="ArrowSort" Title="{Binding MouseWheelSpeed, StringFormat='Mouse wheel scroll speed: {0:F1}'}">
+                <pref:SettingsRow.SettingsContent>
+                    <Slider Minimum="0.5" Maximum="5" Value="{Binding MouseWheelSpeed}" Width="220" />
+                </pref:SettingsRow.SettingsContent>
+            </pref:SettingsRow>
+        </StackPanel>
+
+        <StackPanel Tag="reader.imageAdjust">
+            <TextBlock Classes="settingsGroupCaption" Text="IMAGE ADJUSTMENT" />
+            <TextBlock Text="Default brightness/contrast/saturation/gamma for every book - a book's own reader toolbar can adjust further from here."
+                       FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" Margin="0,0,0,10" />
+            <pref:SettingsRow Icon="BrightnessHigh" Title="{Binding DefaultBrightness, StringFormat='Brightness: {0:F0}'}">
+                <pref:SettingsRow.SettingsContent>
+                    <Slider Minimum="-100" Maximum="100" Value="{Binding DefaultBrightness}" Width="220" />
+                </pref:SettingsRow.SettingsContent>
+            </pref:SettingsRow>
+            <pref:SettingsRow Icon="Options" Title="{Binding DefaultContrast, StringFormat='Contrast: {0:F0}'}">
+                <pref:SettingsRow.SettingsContent>
+                    <Slider Minimum="-100" Maximum="100" Value="{Binding DefaultContrast}" Width="220" />
+                </pref:SettingsRow.SettingsContent>
+            </pref:SettingsRow>
+            <pref:SettingsRow Icon="ColorBackground" Title="{Binding DefaultSaturation, StringFormat='Saturation: {0:F0}'}">
+                <pref:SettingsRow.SettingsContent>
+                    <Slider Minimum="-100" Maximum="100" Value="{Binding DefaultSaturation}" Width="220" />
+                </pref:SettingsRow.SettingsContent>
+            </pref:SettingsRow>
+            <pref:SettingsRow Icon="Gauge" Title="{Binding DefaultGamma, StringFormat='Gamma: {0:F0}'}">
+                <pref:SettingsRow.SettingsContent>
+                    <Slider Minimum="-100" Maximum="100" Value="{Binding DefaultGamma}" Width="220" />
+                </pref:SettingsRow.SettingsContent>
+            </pref:SettingsRow>
+        </StackPanel>
+
+        <StackPanel Tag="reader.background">
+            <TextBlock Classes="settingsGroupCaption" Text="BACKGROUND &amp; MARGIN" />
+            <pref:SettingsRow Icon="ColorBackground" Title="Canvas background"
+                               Description="Auto keeps the app's own background; Color fills the canvas with the color below.">
+                <pref:SettingsRow.SettingsContent>
+                    <ComboBox ItemsSource="{x:Static vm:PreferencesScreenViewModel.BackgroundModeOptions}"
+                              SelectedItem="{Binding ImageBackgroundMode}" Width="150" />
+                </pref:SettingsRow.SettingsContent>
+            </pref:SettingsRow>
+            <!-- Compound content: two controls (presets + freeform hex) for one logical setting
+                 (docs/superpowers/specs/2026-09-07-preferences-tile-hub-redesign-plan.md's own note
+                 on this row) - SettingsContent holds both side by side. -->
+            <pref:SettingsRow Icon="ColorBackground" Title="Background color"
+                               IsVisible="{Binding ImageBackgroundMode, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:ImageBackgroundMode.Color}}">
+                <pref:SettingsRow.SettingsContent>
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <ComboBox ItemsSource="{x:Static vm:PreferencesScreenViewModel.BackgroundColorPresets}"
+                                  SelectedItem="{Binding BackgroundColor}" Width="130" PlaceholderText="Presets" />
+                        <TextBox Text="{Binding BackgroundColor}" Width="130" ToolTip.Tip="A named color (e.g. WhiteSmoke) or hex value (e.g. #F5F5F5)" />
+                    </StackPanel>
+                </pref:SettingsRow.SettingsContent>
+            </pref:SettingsRow>
+            <pref:SettingsRow Icon="BorderAll" Title="Add a margin around the page">
+                <pref:SettingsRow.SettingsContent>
+                    <ToggleSwitch IsChecked="{Binding PageMarginEnabled}" OnContent="{x:Null}" OffContent="{x:Null}" />
+                </pref:SettingsRow.SettingsContent>
+            </pref:SettingsRow>
+            <pref:SettingsRow Icon="ArrowExpand" Title="{Binding PageMarginPercentWidth, StringFormat='Margin width: {0:P0}'}"
+                               IsVisible="{Binding PageMarginEnabled}">
+                <pref:SettingsRow.SettingsContent>
+                    <Slider Minimum="0" Maximum="0.3" Value="{Binding PageMarginPercentWidth}" Width="220" />
+                </pref:SettingsRow.SettingsContent>
+            </pref:SettingsRow>
+        </StackPanel>
+    </StackPanel>
     </ScrollViewer>
 </UserControl>

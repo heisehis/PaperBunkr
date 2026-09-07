@@ -90,8 +90,8 @@ public class ActivityServiceTests
     public void CompletionToast_RaisedWhenPanelClosed_SuppressedWhenOpen()
     {
         var svc = Create(out _);
-        var toasts = new List<string>();
-        svc.CompletionToastRequested += (t, _) => toasts.Add(t);
+        var toasts = new List<ToastRequest>();
+        svc.CompletionToastRequested += toasts.Add;
 
         svc.StartJob(ActivityJobKind.LibraryScan, "Visible").Succeed("done");
         Assert.Single(toasts);
@@ -104,6 +104,20 @@ public class ActivityServiceTests
         svc.PanelIsOpen = false;
         using (svc.StartJob(ActivityJobKind.Import, "Abandoned")) { }
         Assert.Single(toasts);
+    }
+
+    [Fact]
+    public void CompletionToast_Severity_MatchesJobOutcome()
+    {
+        var svc = Create(out _);
+        var toasts = new List<ToastRequest>();
+        svc.CompletionToastRequested += toasts.Add;
+
+        svc.StartJob(ActivityJobKind.LibraryScan, "Succeeds").Succeed("done");
+        svc.StartJob(ActivityJobKind.LibraryScan, "Fails").Fail("nope");
+
+        Assert.Equal(ToastSeverity.Success, toasts[0].Severity);
+        Assert.Equal(ToastSeverity.Error, toasts[1].Severity);
     }
 
     [Fact]

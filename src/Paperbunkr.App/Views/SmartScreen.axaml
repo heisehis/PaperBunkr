@@ -390,7 +390,10 @@
                                     <StackPanel Spacing="10">
                                         <Grid ColumnDefinitions="*,Auto">
                                             <TextBlock Grid.Column="0" Text="{Binding Label}" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}" />
-                                            <CheckBox Grid.Column="1" Content="Skip" IsChecked="{Binding IsSkipped}" />
+                                            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
+                                                <TextBlock Text="Skip" VerticalAlignment="Center" Foreground="{DynamicResource PbTextBrush}" />
+                                                <ToggleSwitch IsChecked="{Binding IsSkipped}" OnContent="{x:Null}" OffContent="{x:Null}" />
+                                            </StackPanel>
                                         </Grid>
                                         <ItemsControl ItemsSource="{Binding Books}" IsEnabled="{Binding !IsSkipped}">
                                             <ItemsControl.ItemsPanel>

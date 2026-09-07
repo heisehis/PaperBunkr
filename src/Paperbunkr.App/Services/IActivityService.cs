@@ -33,7 +33,7 @@ public interface IActivityService
     event EventHandler? Changed;
 
     /// <summary>Raised when a job settles and a toast should surface it (title, message). Not raised while <see cref="PanelIsOpen"/>.</summary>
-    event Action<string, string>? CompletionToastRequested;
+    event Action<ToastRequest>? CompletionToastRequested;
 
     /// <summary>
     /// Start tracking a job. The caller drives it via the returned handle and must dispose it.
@@ -72,6 +72,11 @@ public interface IActivityService
 /// </summary>
 public interface IActivityJobHandle : IDisposable
 {
+    /// <summary>The underlying job record - lets a caller bind UI (e.g. <c>Controls.BusyIndicator</c>)
+    /// directly to its own in-flight job instead of re-deriving it from <see cref="IActivityService.ActiveJobs"/>
+    /// (docs/superpowers/specs/2026-09-07-library-health-redesign-design.md §3).</summary>
+    ActivityJob Job { get; }
+
     /// <summary>Trips when this job is cancelled individually or by <see cref="IActivityService.StopAll"/>.</summary>
     CancellationToken CancellationToken { get; }
 

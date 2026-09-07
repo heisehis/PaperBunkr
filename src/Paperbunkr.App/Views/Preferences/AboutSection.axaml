@@ -4,6 +4,7 @@
              xmlns:vm="using:Paperbunkr.App.ViewModels"
              xmlns:services="using:Paperbunkr.App.Services"
              xmlns:conv="using:Avalonia.Data.Converters"
+             xmlns:pref="using:Paperbunkr.App.Views.Preferences"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d" d:DesignWidth="640" d:DesignHeight="900"
@@ -14,56 +15,98 @@
         <StackPanel Margin="28,20,28,40" Spacing="20">
             <TextBlock Classes="pbTextHeading" Text="About" />
 
-            <!-- Updates (docs/superpowers/specs/2026-09-01-auto-update-and-changelog-design.md) -->
-            <Border Classes="groupBox" Tag="about.updates">
-                <StackPanel>
-                    <Border Classes="groupHeader">
-                        <TextBlock Text="Updates" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
-                    </Border>
-                    <StackPanel Margin="14" Spacing="10">
-                        <StackPanel Orientation="Horizontal" Spacing="6">
-                            <TextBlock Text="Version" FontSize="13" Foreground="{DynamicResource PbTextFaintBrush}" />
-                            <TextBlock Text="{Binding CurrentVersion}" FontSize="13" FontFamily="Consolas,monospace"
-                                       Foreground="{DynamicResource PbTextBrush}" />
-                        </StackPanel>
+        <!-- Updates (docs/superpowers/specs/2026-09-01-auto-update-and-changelog-design.md) -->
+        <StackPanel Tag="about.updates">
+            <TextBlock Classes="settingsGroupCaption" Text="UPDATES" />
+            <pref:SettingsRow Icon="Tag" Title="Version">
+                <pref:SettingsRow.SettingsContent>
+                    <TextBlock Text="{Binding CurrentVersion}" FontSize="13" FontFamily="Consolas,monospace"
+                               Foreground="{DynamicResource PbTextBrush}" />
+                </pref:SettingsRow.SettingsContent>
+            </pref:SettingsRow>
+            <pref:SettingsRow Icon="ArrowSync" Title="Check for updates"
+                               Description="{Binding UpdateCheckResultText}">
+                <pref:SettingsRow.SettingsContent>
+                    <Button Classes="headerAction primary" Command="{Binding CheckForUpdatesCommand}" Content="Check Now" />
+                </pref:SettingsRow.SettingsContent>
+            </pref:SettingsRow>
+            <pref:SettingsRow Icon="ArrowClockwise" Title="Check for updates on startup">
+                <pref:SettingsRow.SettingsContent>
+                    <ToggleSwitch IsChecked="{Binding CheckForUpdatesOnStartup}" OnContent="{x:Null}" OffContent="{x:Null}" />
+                </pref:SettingsRow.SettingsContent>
+            </pref:SettingsRow>
+        </StackPanel>
 
-                        <Button Classes="headerAction primary" Command="{Binding CheckForUpdatesCommand}"
-                                HorizontalAlignment="Left">
+        <!-- Changelog - deferred to its own future redesign (docs/superpowers/specs/2026-09-07-
+             preferences-tile-hub-redesign-design.md §4 item 9) - a read-only repeater with no
+             settings shape, kept exactly as-is. -->
+        <Border Classes="groupBox" Tag="about.changelog">
+            <StackPanel>
+                <Border Classes="groupHeader">
+                    <TextBlock Text="Changelog" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
+                </Border>
+                <ItemsControl ItemsSource="{Binding ChangelogEntries}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="services:ChangelogEntry">
+                            <StackPanel Margin="14,10" Spacing="4">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <TextBlock Text="{Binding Version}" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
+                                    <TextBlock Text="{Binding Date}" FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" />
+                                </StackPanel>
+                                <TextBlock Text="{Binding Body}" FontSize="12.5" TextWrapping="Wrap"
+                                           Foreground="{DynamicResource PbTextFaintBrush}" />
+                            </StackPanel>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
+        </Border>
+
+        <!-- Legal - deferred to its own future redesign (docs/superpowers/specs/2026-09-07-
+             preferences-tile-hub-redesign-design.md §4 item 9) - a document-launcher row with no
+             per-row settings shape, kept exactly as-is. Bundled next to the exe (see csproj) so
+             these open from an installed build, not just a git checkout. -->
+        <Border Classes="groupBox" Tag="about.legal">
+            <StackPanel>
+                <Border Classes="groupHeader">
+                    <TextBlock Text="Legal" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
+                </Border>
+                <StackPanel Margin="14" Spacing="10">
+                    <TextBlock Text="Paperbunkr is self-hosted: your library and settings stay on your machine. These documents cover licensing, third-party metadata connections, and contribution terms."
+                               FontSize="12" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" />
+                    <WrapPanel Orientation="Horizontal">
+                        <Button Classes="headerAction ghost" Margin="0,0,10,10"
+                                Command="{Binding OpenLegalDocumentCommand}" CommandParameter="LICENSE">
                             <StackPanel Orientation="Horizontal" Spacing="6">
-                                <fi:SymbolIcon Symbol="ArrowSync" Foreground="{DynamicResource PbBadgeTextBrush}" />
-                                <TextBlock Text="Check for Updates" />
+                                <fi:SymbolIcon Symbol="DocumentText" FontSize="{StaticResource PbIconSizeXs}" />
+                                <TextBlock Text="License (AGPLv3)" />
                             </StackPanel>
                         </Button>
-                        <TextBlock Text="{Binding UpdateCheckResultText}" FontSize="12" Foreground="{DynamicResource PbTextFaintBrush}"
-                                   IsVisible="{Binding UpdateCheckResultText, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
-
-                        <CheckBox Content="Check for updates on startup" IsChecked="{Binding CheckForUpdatesOnStartup}" Margin="0,6,0,0" />
-                    </StackPanel>
+                        <Button Classes="headerAction ghost" Margin="0,0,10,10"
+                                Command="{Binding OpenLegalDocumentCommand}" CommandParameter="PRIVACY.md">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <fi:SymbolIcon Symbol="DocumentText" FontSize="{StaticResource PbIconSizeXs}" />
+                                <TextBlock Text="Privacy Notice" />
+                            </StackPanel>
+                        </Button>
+                        <Button Classes="headerAction ghost" Margin="0,0,10,10"
+                                Command="{Binding OpenLegalDocumentCommand}" CommandParameter="TERMS.md">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <fi:SymbolIcon Symbol="DocumentText" FontSize="{StaticResource PbIconSizeXs}" />
+                                <TextBlock Text="Terms of Use" />
+                            </StackPanel>
+                        </Button>
+                        <Button Classes="headerAction ghost" Margin="0,0,10,10"
+                                Command="{Binding OpenLegalDocumentCommand}" CommandParameter="COMICVINE_NOTICE.md">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <fi:SymbolIcon Symbol="DocumentText" FontSize="{StaticResource PbIconSizeXs}" />
+                                <TextBlock Text="ComicVine API Notice" />
+                            </StackPanel>
+                        </Button>
+                    </WrapPanel>
                 </StackPanel>
-            </Border>
-
-            <!-- Changelog -->
-            <Border Classes="groupBox" Tag="about.changelog">
-                <StackPanel>
-                    <Border Classes="groupHeader">
-                        <TextBlock Text="Changelog" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
-                    </Border>
-                    <ItemsControl ItemsSource="{Binding ChangelogEntries}">
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate x:DataType="services:ChangelogEntry">
-                                <StackPanel Margin="14,10" Spacing="4">
-                                    <StackPanel Orientation="Horizontal" Spacing="8">
-                                        <TextBlock Text="{Binding Version}" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
-                                        <TextBlock Text="{Binding Date}" FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" />
-                                    </StackPanel>
-                                    <TextBlock Text="{Binding Body}" FontSize="12.5" TextWrapping="Wrap"
-                                               Foreground="{DynamicResource PbTextFaintBrush}" />
-                                </StackPanel>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                </StackPanel>
-            </Border>
-        </StackPanel>
+            </StackPanel>
+        </Border>
+    </StackPanel>
     </ScrollViewer>
 </UserControl>

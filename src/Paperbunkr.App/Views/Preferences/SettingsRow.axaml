@@ -1,0 +1,36 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:fi="using:FluentIcons.Avalonia"
+             xmlns:conv="using:Avalonia.Data.Converters"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="560" d:DesignHeight="60"
+             x:Class="Paperbunkr.App.Views.Preferences.SettingsRow"
+             x:Name="Root">
+
+    <!--
+        Shared icon+title+description+control row (docs/superpowers/specs/2026-09-07-preferences-
+        tile-hub-redesign-{design,plan}.md item 2), replacing the old label+control Grid rows inside
+        each settings group. Title/Description are plain string properties - a consumer can bind
+        either to a live value (e.g. a Slider's current reading, StringFormat'd) exactly the way a
+        literal is set, no special handling needed on this control's side. Description collapses to
+        nothing (no dead space) when null/empty, since most rows ship with it unset until the
+        descriptive copy is written separately.
+    -->
+    <Grid ColumnDefinitions="Auto,*,Auto" Margin="0,0,0,10">
+        <fi:SymbolIcon Grid.Column="0" Symbol="{Binding Icon, ElementName=Root}"
+                       FontSize="{StaticResource PbIconSizeSm}" Foreground="{DynamicResource PbTextMutedBrush}"
+                       VerticalAlignment="Top" Margin="0,2,10,0" />
+
+        <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
+            <TextBlock Text="{Binding Title, ElementName=Root}" FontSize="13"
+                       Foreground="{DynamicResource PbTextBrush}" TextWrapping="Wrap" />
+            <TextBlock Text="{Binding Description, ElementName=Root}" FontSize="11.5"
+                       Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap"
+                       IsVisible="{Binding Description, ElementName=Root, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
+        </StackPanel>
+
+        <ContentPresenter Grid.Column="2" Content="{Binding SettingsContent, ElementName=Root}"
+                          VerticalAlignment="Center" Margin="10,0,0,0" />
+    </Grid>
+</UserControl>

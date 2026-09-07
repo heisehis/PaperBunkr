@@ -51,7 +51,7 @@ public class BookDetailScreenViewModelTests : IDisposable
 
     private int AddBook(string title, string? author = null, string? summary = null,
         BookFormat format = BookFormat.Epub, bool realEpub = false, string? series = null,
-        int chapterCount = 0, int lastChapterIndex = 0, int lastCharacterOffset = 0,
+        int chapterCount = 0, int lastChapterIndex = 0, string? lastBlockId = null,
         bool finished = false, DateTime? lastOpened = null, DateTime? published = null)
     {
         string filePath = realEpub
@@ -79,7 +79,7 @@ public class BookDetailScreenViewModelTests : IDisposable
             PublishedDate = published,
             ChapterCount = chapterCount,
             LastChapterIndex = lastChapterIndex,
-            LastCharacterOffset = lastCharacterOffset,
+            LastBlockId = lastBlockId,
             Finished = finished,
             LastOpenedTime = lastOpened,
         };
@@ -181,7 +181,7 @@ public class BookDetailScreenViewModelTests : IDisposable
     [Fact]
     public void ToggleFinished_FromFinished_ClearsFinishedAndResetsProgress()
     {
-        int id = AddBook("Rewind", chapterCount: 4, lastChapterIndex: 3, lastCharacterOffset: 120, finished: true, lastOpened: DateTime.UtcNow);
+        int id = AddBook("Rewind", chapterCount: 4, lastChapterIndex: 3, lastBlockId: "pb-p12", finished: true, lastOpened: DateTime.UtcNow);
         var vm = CreateViewModel();
         vm.LoadBook(id);
 
@@ -190,7 +190,7 @@ public class BookDetailScreenViewModelTests : IDisposable
         var book = GetBook(id);
         Assert.False(book.Finished);
         Assert.Equal(0, book.LastChapterIndex);
-        Assert.Equal(0, book.LastCharacterOffset);
+        Assert.Null(book.LastBlockId);
         Assert.NotNull(book.LastOpenedTime); // history kept
     }
 
@@ -263,7 +263,7 @@ public class BookDetailScreenViewModelTests : IDisposable
 
         Assert.NotNull(captured);
         Assert.Equal(id, captured!.Value.Id);
-        Assert.Equal(new BookPosition(1, 0), captured.Value.Pos);
+        Assert.Equal(new BookPosition(1), captured.Value.Pos);
     }
 
     [Fact]
@@ -286,8 +286,8 @@ public class BookDetailScreenViewModelTests : IDisposable
         int id = AddBook("Marked", realEpub: true, chapterCount: 2);
         using (var context = PaperbunkrDb.CreateContext())
         {
-            context.BookBookmarks.Add(new BookBookmark { BookId = id, ChapterIndex = 0, CharacterOffset = 5, Excerpt = "older", CreatedTime = DateTime.UtcNow.AddHours(-2) });
-            context.BookBookmarks.Add(new BookBookmark { BookId = id, ChapterIndex = 1, CharacterOffset = 9, Excerpt = "newer", CreatedTime = DateTime.UtcNow });
+            context.BookBookmarks.Add(new BookBookmark { BookId = id, ChapterIndex = 0, BlockId = "pb-p5", Excerpt = "older", CreatedTime = DateTime.UtcNow.AddHours(-2) });
+            context.BookBookmarks.Add(new BookBookmark { BookId = id, ChapterIndex = 1, BlockId = "pb-p9", Excerpt = "newer", CreatedTime = DateTime.UtcNow });
             context.SaveChanges();
         }
 
@@ -313,7 +313,7 @@ public class BookDetailScreenViewModelTests : IDisposable
         int id = AddBook("Marked", realEpub: true, chapterCount: 2);
         using (var context = PaperbunkrDb.CreateContext())
         {
-            context.BookBookmarks.Add(new BookBookmark { BookId = id, ChapterIndex = 1, CharacterOffset = 42, Excerpt = "x", CreatedTime = DateTime.UtcNow });
+            context.BookBookmarks.Add(new BookBookmark { BookId = id, ChapterIndex = 1, BlockId = "pb-p42", Excerpt = "x", CreatedTime = DateTime.UtcNow });
             context.SaveChanges();
         }
         (int Id, BookFormat Fmt, BookPosition? Pos)? captured = null;
@@ -322,7 +322,7 @@ public class BookDetailScreenViewModelTests : IDisposable
 
         vm.OpenBookmarkCommand.Execute(vm.Bookmarks[0]);
 
-        Assert.Equal(new BookPosition(1, 42), captured!.Value.Pos);
+        Assert.Equal(new BookPosition(1, "pb-p42"), captured!.Value.Pos);
     }
 
     [Fact]

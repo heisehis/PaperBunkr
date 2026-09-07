@@ -219,6 +219,14 @@ public sealed partial class SeriesCardSample : ObservableObject, ISelectableCard
             ?? (coverIssue is not null ? CoverAspectRatioStore.Get(coverIssue.Id) : null)
             ?? DefaultCoverAspectRatio;
 
+        // Aggregated across every issue, not just the cover issue - SeriesMetaFields exists
+        // precisely because a single issue (the cover one, here) can have Publisher unset while
+        // others in the series do have it (docs/superpowers/specs/2026-09-04-detail-screen-icons-
+        // and-glyphs-design.md Part 4, "Absolute Batman" bug). series.Publisher itself is stale
+        // (populated once at CE-migration time - Series.cs's own doc comment) and was the Library
+        // Publisher badge's actual bug: it read that stale field directly instead of aggregating.
+        string? publisher = SeriesMetaFields.FromSeries(series).Publisher;
+
         return new SeriesCardSample
         {
             SeriesId = series.Id,
@@ -236,11 +244,11 @@ public sealed partial class SeriesCardSample : ObservableObject, ISelectableCard
                     SeriesStatusLabel = series.Status.ToString(),
                     ReadingStatusLabel = series.ReadingStatus.ToString(),
                     ReadingDirectionLabel = series.ReadingMode.ToString(),
-                    Publisher = series.Publisher,
+                    Publisher = publisher,
                     PanoramaWidth = ComputePanoramaWidth(aspectRatio),
                 },
             Sub = $"{series.ContentType} · {series.Issues.Count} issues",
-            Publisher = series.Publisher,
+            Publisher = publisher,
             ContentTypeLabel = series.ContentType.ToString(),
             SeriesStatusLabel = series.Status.ToString(),
             ReadingStatusLabel = series.ReadingStatus.ToString(),

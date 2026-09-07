@@ -243,11 +243,9 @@
                             <Image x:Name="PanoramaIssueCoverImage" views:AsyncCoverImage.SourceId="{Binding CoverKey}" Stretch="Uniform" />
                             <Border Classes="posterScrim" />
                             <Border IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowUnreadBadge}">
-                                <Border IsVisible="{Binding !IsRead}" Background="#B814161B"
-                                        CornerRadius="999" Padding="6,2" HorizontalAlignment="Right"
-                                        VerticalAlignment="Top" Margin="7">
-                                    <TextBlock Text="●" FontFamily="Consolas,monospace"
-                                               FontSize="10" FontWeight="Bold" Foreground="White" />
+                                <Border Classes="countPill" IsVisible="{Binding !IsRead}"
+                                        HorizontalAlignment="Right" VerticalAlignment="Top" Margin="7">
+                                    <TextBlock Text="●" FontFamily="Consolas,monospace" />
                                 </Border>
                             </Border>
                             <Border IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowPublisherBadge}">
@@ -309,13 +307,25 @@
                             <TextBlock Text="{Binding SeriesName}" FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" Margin="0,2,0,0"
                                        ToolTip.Tip="{Binding SeriesName}" />
                         </StackPanel>
-                        <Border Grid.Column="2" IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowUnreadBadge}">
-                            <Border IsVisible="{Binding !IsRead}" Background="{DynamicResource PbAccentSoftBrush}"
-                                    CornerRadius="999" Padding="8,3" VerticalAlignment="Center">
-                                <TextBlock Text="●" FontFamily="Consolas,monospace" FontSize="11"
-                                           FontWeight="Bold" Foreground="{DynamicResource PbAccentTextBrush}" />
+                        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                            <Border IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowPublisherBadge}">
+                                <controls:BrandMark IsVisible="{Binding HasPublisher}" Family="Publisher" Value="{Binding Publisher}"
+                                                    ShowText="False" MarkSize="14" />
                             </Border>
-                        </Border>
+                            <Border IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowLanguageBadge}">
+                                <Panel IsVisible="{Binding HasLanguage}">
+                                    <TextBlock Text="{Binding LanguageIso}" FontSize="10.5" FontWeight="Bold" Foreground="{DynamicResource PbTextMutedBrush}"
+                                               IsVisible="{Binding !$parent[UserControl].((vm:LibraryScreenViewModel)DataContext).UseLanguageIcon}" />
+                                    <controls:BrandMark Family="Language" Value="{Binding LanguageIso}" ShowText="False" MarkSize="14"
+                                                        IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).UseLanguageIcon}" />
+                                </Panel>
+                            </Border>
+                            <Border IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowUnreadBadge}">
+                                <Border Classes="countPill" IsVisible="{Binding !IsRead}">
+                                    <TextBlock Text="●" FontFamily="Consolas,monospace" />
+                                </Border>
+                            </Border>
+                        </StackPanel>
                     </Grid>
                 </Border>
             </Button>
@@ -370,7 +380,7 @@
                     Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).IssueList.OpenIssueCommand}"
                     CommandParameter="{Binding}" PointerPressed="OnTilePointerPressed">
                 <Border Classes="libRow" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1" CornerRadius="{DynamicResource PbRadius}" Padding="8">
-                    <Grid ColumnDefinitions="Auto,*">
+                    <Grid ColumnDefinitions="Auto,*,Auto">
                         <Panel Grid.Column="0">
                             <!-- Shared-element cover flight (docs/superpowers/specs/2026-09-04-
                                  navigation-transition-system-design.md) - "issue-cover:{Id}". -->
@@ -391,6 +401,25 @@
                                        Foreground="{DynamicResource PbTextBrush}" TextTrimming="CharacterEllipsis" />
                             <TextBlock Text="{Binding SeriesName}" FontSize="10.5" Foreground="{DynamicResource PbTextFaintBrush}"
                                        Margin="0,2,0,0" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding SeriesName}" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center" Margin="8,0,0,0">
+                            <Border IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowPublisherBadge}">
+                                <controls:BrandMark IsVisible="{Binding HasPublisher}" Family="Publisher" Value="{Binding Publisher}"
+                                                    ShowText="False" MarkSize="14" />
+                            </Border>
+                            <Border IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowLanguageBadge}">
+                                <Panel IsVisible="{Binding HasLanguage}">
+                                    <TextBlock Text="{Binding LanguageIso}" FontSize="10.5" FontWeight="Bold" Foreground="{DynamicResource PbTextMutedBrush}"
+                                               IsVisible="{Binding !$parent[UserControl].((vm:LibraryScreenViewModel)DataContext).UseLanguageIcon}" />
+                                    <controls:BrandMark Family="Language" Value="{Binding LanguageIso}" ShowText="False" MarkSize="14"
+                                                        IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).UseLanguageIcon}" />
+                                </Panel>
+                            </Border>
+                            <Border IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowUnreadBadge}">
+                                <Border Classes="countPill" IsVisible="{Binding !IsRead}">
+                                    <TextBlock Text="●" FontFamily="Consolas,monospace" />
+                                </Border>
+                            </Border>
                         </StackPanel>
                     </Grid>
                 </Border>
@@ -420,11 +449,9 @@
                             <Image x:Name="SeriesPanoramaCoverImage" views:AsyncCoverImage.SourceId="{Binding CoverKey}" Stretch="Uniform" />
                             <Border Classes="posterScrim" />
                             <Border IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowUnreadBadge}">
-                                <Border IsVisible="{Binding HasUnread}" Background="#B814161B"
-                                        CornerRadius="999" Padding="6,2" HorizontalAlignment="Right"
-                                        VerticalAlignment="Top" Margin="7">
-                                    <TextBlock Text="{Binding UnreadCount}" FontFamily="Consolas,monospace"
-                                               FontSize="10" FontWeight="Bold" Foreground="White" />
+                                <Border Classes="countPill" IsVisible="{Binding HasUnread}"
+                                        HorizontalAlignment="Right" VerticalAlignment="Top" Margin="7">
+                                    <TextBlock Text="{Binding UnreadCount}" FontFamily="Consolas,monospace" />
                                 </Border>
                             </Border>
                             <Border IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowPublisherBadge}">
@@ -497,13 +524,25 @@
                                        Foreground="{DynamicResource PbTextBrush}" TextTrimming="CharacterEllipsis" />
                             <TextBlock Text="{Binding Sub}" FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" Margin="0,2,0,0" />
                         </StackPanel>
-                        <Border Grid.Column="2" IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowUnreadBadge}">
-                            <Border IsVisible="{Binding HasUnread}" Background="{DynamicResource PbAccentSoftBrush}"
-                                    CornerRadius="999" Padding="8,3" VerticalAlignment="Center">
-                                <TextBlock Text="{Binding UnreadCount}" FontFamily="Consolas,monospace" FontSize="11"
-                                           FontWeight="Bold" Foreground="{DynamicResource PbAccentTextBrush}" />
+                        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                            <Border IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowPublisherBadge}">
+                                <controls:BrandMark IsVisible="{Binding HasPublisher}" Family="Publisher" Value="{Binding Publisher}"
+                                                    ShowText="False" MarkSize="14" />
                             </Border>
-                        </Border>
+                            <Border IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowLanguageBadge}">
+                                <Panel IsVisible="{Binding HasLanguage}">
+                                    <TextBlock Text="{Binding LanguageIso}" FontSize="10.5" FontWeight="Bold" Foreground="{DynamicResource PbTextMutedBrush}"
+                                               IsVisible="{Binding !$parent[UserControl].((vm:LibraryScreenViewModel)DataContext).UseLanguageIcon}" />
+                                    <controls:BrandMark Family="Language" Value="{Binding LanguageIso}" ShowText="False" MarkSize="14"
+                                                        IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).UseLanguageIcon}" />
+                                </Panel>
+                            </Border>
+                            <Border IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowUnreadBadge}">
+                                <Border Classes="countPill" IsVisible="{Binding HasUnread}">
+                                    <TextBlock Text="{Binding UnreadCount}" FontFamily="Consolas,monospace" />
+                                </Border>
+                            </Border>
+                        </StackPanel>
                     </Grid>
                 </Border>
             </Button>
@@ -547,7 +586,7 @@
                     Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SelectCardCommand}"
                     CommandParameter="{Binding}" PointerPressed="OnSeriesTilePointerPressed">
                 <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1" CornerRadius="6" Padding="8">
-                    <Grid ColumnDefinitions="Auto,*">
+                    <Grid ColumnDefinitions="Auto,*,Auto">
                         <!-- Shared-element cover flight (docs/superpowers/specs/2026-09-04-
                              navigation-transition-system-design.md) - "series-cover:{SeriesId}". -->
                         <Border Grid.Column="0" CornerRadius="4"
@@ -569,6 +608,36 @@
                                        Foreground="{DynamicResource PbTextBrush}" TextTrimming="CharacterEllipsis" />
                             <TextBlock Text="{Binding Sub}" FontSize="10.5" Foreground="{DynamicResource PbTextFaintBrush}"
                                        Margin="0,2,0,0" TextTrimming="CharacterEllipsis" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center" Margin="8,0,0,0">
+                            <Border IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowPublisherBadge}">
+                                <controls:BrandMark IsVisible="{Binding HasPublisher}" Family="Publisher" Value="{Binding Publisher}"
+                                                    ShowText="False" MarkSize="14" />
+                            </Border>
+                            <Border IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowLanguageBadge}">
+                                <Panel IsVisible="{Binding HasLanguage}">
+                                    <TextBlock Text="{Binding LanguageIso}" FontSize="10.5" FontWeight="Bold" Foreground="{DynamicResource PbTextMutedBrush}"
+                                               IsVisible="{Binding !$parent[UserControl].((vm:LibraryScreenViewModel)DataContext).UseLanguageIcon}" />
+                                    <controls:BrandMark Family="Language" Value="{Binding LanguageIso}" ShowText="False" MarkSize="14"
+                                                        IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).UseLanguageIcon}" />
+                                </Panel>
+                            </Border>
+                            <Border IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowUnreadBadge}">
+                                <Border Classes="countPill" IsVisible="{Binding HasUnread}">
+                                    <TextBlock Text="{Binding UnreadCount}" FontFamily="Consolas,monospace" />
+                                </Border>
+                            </Border>
+                            <Button Classes="continueReading" Width="22" Height="22"
+                                    Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ContinueReadingCommand}"
+                                    CommandParameter="{Binding}">
+                                <Button.IsVisible>
+                                    <MultiBinding Converter="{x:Static conv:BoolConverters.And}">
+                                        <Binding Path="HasContinueReading" />
+                                        <Binding Path="$parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowContinueReadingButton" />
+                                    </MultiBinding>
+                                </Button.IsVisible>
+                                <fi:SymbolIcon Symbol="Play" FontSize="12" />
+                            </Button>
                         </StackPanel>
                     </Grid>
                 </Border>
@@ -615,6 +684,18 @@
                                 </Border.IsVisible>
                                 <controls:BrandMark Family="Publisher" Value="{Binding Publisher}" ShowText="True"
                                                     MarkSize="12" Foreground="{DynamicResource PbBadgeBrush}" />
+                            </Border>
+                            <Border IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowLanguageBadge}">
+                                <Border IsVisible="{Binding HasLanguage}" Background="#B814161B" CornerRadius="999" Padding="5,2"
+                                        HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="6">
+                                    <Panel>
+                                        <TextBlock Text="{Binding LanguageIso}" FontSize="9" FontWeight="Bold" Foreground="White"
+                                                   IsVisible="{Binding !$parent[UserControl].((vm:LibraryScreenViewModel)DataContext).UseLanguageIcon}" />
+                                        <controls:BrandMark Family="Language" Value="{Binding LanguageIso}" ShowText="False" MarkSize="11"
+                                                            Foreground="White"
+                                                            IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).UseLanguageIcon}" />
+                                    </Panel>
+                                </Border>
                             </Border>
                             <Ellipse Width="9" Height="9" Fill="{DynamicResource PbAccentTextBrush}" Stroke="Black" StrokeThickness="1.5"
                                      HorizontalAlignment="Right" VerticalAlignment="Top" Margin="7">
@@ -670,16 +751,26 @@
                                 <controls:BrandMark Family="Publisher" Value="{Binding Publisher}" ShowText="True"
                                                     MarkSize="12" Foreground="{DynamicResource PbBadgeBrush}" />
                             </Border>
-                            <Border Background="{DynamicResource PbAccentBrush}" CornerRadius="999" Padding="5,1"
-                                    HorizontalAlignment="Right" VerticalAlignment="Top" Margin="6">
+                            <Border IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowLanguageBadge}">
+                                <Border IsVisible="{Binding HasLanguage}" Background="#B814161B" CornerRadius="999" Padding="5,2"
+                                        HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="6">
+                                    <Panel>
+                                        <TextBlock Text="{Binding LanguageIso}" FontSize="9" FontWeight="Bold" Foreground="White"
+                                                   IsVisible="{Binding !$parent[UserControl].((vm:LibraryScreenViewModel)DataContext).UseLanguageIcon}" />
+                                        <controls:BrandMark Family="Language" Value="{Binding LanguageIso}" ShowText="False" MarkSize="11"
+                                                            Foreground="White"
+                                                            IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).UseLanguageIcon}" />
+                                    </Panel>
+                                </Border>
+                            </Border>
+                            <Border Classes="countPill" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="6">
                                 <Border.IsVisible>
                                     <MultiBinding Converter="{x:Static conv:BoolConverters.And}">
                                         <Binding Path="HasUnread" />
                                         <Binding Path="$parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowUnreadBadge" />
                                     </MultiBinding>
                                 </Border.IsVisible>
-                                <TextBlock Text="{Binding UnreadCount}" FontFamily="Consolas,monospace" FontSize="9" FontWeight="Bold"
-                                           Foreground="{DynamicResource PbBadgeTextBrush}" />
+                                <TextBlock Text="{Binding UnreadCount}" FontFamily="Consolas,monospace" />
                             </Border>
                             <Button Classes="continueReading" Width="26" Height="26"
                                     Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ContinueReadingCommand}"
@@ -757,6 +848,7 @@
             <Grid>
                 <Panel IsVisible="{Binding IsIssueGranularity}">
                     <ItemsControl IsVisible="{Binding !IssueList.IsGrouped}" ItemsSource="{Binding IssueList.Rows}"
+                                  controls:EntranceAnimation.Enabled="{Binding PlayEntranceAnimation}"
                                   ItemTemplate="{StaticResource PosterGridIssueTemplate}" Margin="24,22,24,40">
                         <ItemsControl.ItemsPanel>
                             <ItemsPanelTemplate><controls:VirtualizingWrapPanel ItemWidth="{Binding PosterCardWidth}" ItemHeight="{Binding PosterCardHeight}" ItemSpacing="20" LineSpacing="20" /></ItemsPanelTemplate>
@@ -774,7 +866,8 @@
                                         <TextBlock DockPanel.Dock="Left" Text="{Binding Items.Count}" Classes="pbTextCaption" Margin="8,0,0,0" VerticalAlignment="Center" />
                                         <Border Height="1" VerticalAlignment="Center" Margin="14,0,0,0" Background="{DynamicResource PbBorderBrush}" />
                                     </DockPanel>
-                                    <ItemsControl ItemsSource="{Binding Items}" ItemTemplate="{StaticResource PosterGridIssueTemplate}">
+                                    <ItemsControl ItemsSource="{Binding Items}" ItemTemplate="{StaticResource PosterGridIssueTemplate}"
+                                                  controls:EntranceAnimation.Enabled="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PlayEntranceAnimation}">
                                         <ItemsControl.ItemsPanel>
                                             <ItemsPanelTemplate><controls:VirtualizingWrapPanel ItemWidth="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PosterCardWidth}" ItemHeight="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PosterCardHeight}" ItemSpacing="20" LineSpacing="20" /></ItemsPanelTemplate>
                                         </ItemsControl.ItemsPanel>
@@ -786,6 +879,7 @@
                 </Panel>
                 <Panel IsVisible="{Binding IsSeriesGranularity}">
                     <ItemsControl IsVisible="{Binding !IsGrouped}" ItemsSource="{Binding Covers}"
+                                  controls:EntranceAnimation.Enabled="{Binding PlayEntranceAnimation}"
                                   ItemTemplate="{StaticResource PosterGridSeriesTemplate}" Margin="24,22,24,40">
                         <ItemsControl.ItemsPanel>
                             <ItemsPanelTemplate><controls:VirtualizingWrapPanel ItemWidth="{Binding PosterCardWidth}" ItemHeight="{Binding PosterCardHeight}" ItemSpacing="20" LineSpacing="20" /></ItemsPanelTemplate>
@@ -803,7 +897,8 @@
                                         <TextBlock DockPanel.Dock="Left" Text="{Binding Items.Count}" Classes="pbTextCaption" Margin="8,0,0,0" VerticalAlignment="Center" />
                                         <Border Height="1" VerticalAlignment="Center" Margin="14,0,0,0" Background="{DynamicResource PbBorderBrush}" />
                                     </DockPanel>
-                                    <ItemsControl ItemsSource="{Binding Items}" ItemTemplate="{StaticResource PosterGridSeriesTemplate}">
+                                    <ItemsControl ItemsSource="{Binding Items}" ItemTemplate="{StaticResource PosterGridSeriesTemplate}"
+                                                  controls:EntranceAnimation.Enabled="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PlayEntranceAnimation}">
                                         <ItemsControl.ItemsPanel>
                                             <ItemsPanelTemplate><controls:VirtualizingWrapPanel ItemWidth="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PosterCardWidth}" ItemHeight="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PosterCardHeight}" ItemSpacing="20" LineSpacing="20" /></ItemsPanelTemplate>
                                         </ItemsControl.ItemsPanel>
@@ -826,6 +921,7 @@
             <Grid>
                 <Panel IsVisible="{Binding IsIssueGranularity}">
                     <ItemsControl IsVisible="{Binding !IssueList.IsGrouped}" ItemsSource="{Binding IssueList.Rows}"
+                                  controls:EntranceAnimation.Enabled="{Binding PlayEntranceAnimation}"
                                   ItemTemplate="{StaticResource PanoramaGridItemTemplate}" Margin="24,22,24,40">
                         <ItemsControl.ItemsPanel>
                             <ItemsPanelTemplate><controls:VirtualizingVariableWrapPanel ItemHeight="{Binding PanoramaGridItemHeight}" ItemSpacing="20" LineSpacing="20" /></ItemsPanelTemplate>
@@ -839,7 +935,8 @@
                             <DataTemplate x:DataType="models:IssueListRowGroup">
                                 <StackPanel Margin="0,0,0,18">
                                     <DockPanel Margin="0,0,0,10"><TextBlock DockPanel.Dock="Left" Text="{Binding Header}" Classes="pbTextHeading" VerticalAlignment="Center" /><TextBlock DockPanel.Dock="Left" Text="{Binding Items.Count}" Classes="pbTextCaption" Margin="8,0,0,0" VerticalAlignment="Center" /><Border Height="1" VerticalAlignment="Center" Margin="14,0,0,0" Background="{DynamicResource PbBorderBrush}" /></DockPanel>
-                                    <ItemsControl ItemsSource="{Binding Items}" ItemTemplate="{StaticResource PanoramaGridItemTemplate}">
+                                    <ItemsControl ItemsSource="{Binding Items}" ItemTemplate="{StaticResource PanoramaGridItemTemplate}"
+                                                  controls:EntranceAnimation.Enabled="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PlayEntranceAnimation}">
                                         <ItemsControl.ItemsPanel>
                                             <ItemsPanelTemplate><controls:VirtualizingVariableWrapPanel ItemHeight="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PanoramaGridItemHeight}" ItemSpacing="20" LineSpacing="20" /></ItemsPanelTemplate>
                                         </ItemsControl.ItemsPanel>
@@ -851,6 +948,7 @@
                 </Panel>
                 <Panel IsVisible="{Binding IsSeriesGranularity}">
                     <ItemsControl IsVisible="{Binding !IsGrouped}" ItemsSource="{Binding Covers}"
+                                  controls:EntranceAnimation.Enabled="{Binding PlayEntranceAnimation}"
                                   ItemTemplate="{StaticResource SeriesPanoramaGridItemTemplate}" Margin="24,22,24,40">
                         <ItemsControl.ItemsPanel>
                             <ItemsPanelTemplate><controls:VirtualizingVariableWrapPanel ItemHeight="{Binding PanoramaGridItemHeight}" ItemSpacing="20" LineSpacing="20" /></ItemsPanelTemplate>
@@ -864,7 +962,8 @@
                             <DataTemplate x:DataType="models:SeriesCardGroup">
                                 <StackPanel Margin="0,0,0,18">
                                     <DockPanel Margin="0,0,0,10"><TextBlock DockPanel.Dock="Left" Text="{Binding Header}" Classes="pbTextHeading" VerticalAlignment="Center" /><TextBlock DockPanel.Dock="Left" Text="{Binding Items.Count}" Classes="pbTextCaption" Margin="8,0,0,0" VerticalAlignment="Center" /><Border Height="1" VerticalAlignment="Center" Margin="14,0,0,0" Background="{DynamicResource PbBorderBrush}" /></DockPanel>
-                                    <ItemsControl ItemsSource="{Binding Items}" ItemTemplate="{StaticResource SeriesPanoramaGridItemTemplate}">
+                                    <ItemsControl ItemsSource="{Binding Items}" ItemTemplate="{StaticResource SeriesPanoramaGridItemTemplate}"
+                                                  controls:EntranceAnimation.Enabled="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PlayEntranceAnimation}">
                                         <ItemsControl.ItemsPanel>
                                             <ItemsPanelTemplate><controls:VirtualizingVariableWrapPanel ItemHeight="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PanoramaGridItemHeight}" ItemSpacing="20" LineSpacing="20" /></ItemsPanelTemplate>
                                         </ItemsControl.ItemsPanel>
@@ -883,6 +982,7 @@
         <Panel Grid.Row="1" IsVisible="{Binding IsListView}">
             <ListBox x:Name="ListModeIssueBox" Classes="virtualRows" IsVisible="{Binding IsIssueGranularity}"
                      ItemsSource="{Binding IssueList.FlatRows}"
+                     controls:EntranceAnimation.Enabled="{Binding PlayEntranceAnimation}"
                      Padding="24,18,24,40" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
                 <ListBox.ItemsPanel><ItemsPanelTemplate><VirtualizingStackPanel /></ItemsPanelTemplate></ListBox.ItemsPanel>
                 <ListBox.DataTemplates>
@@ -893,6 +993,7 @@
             </ListBox>
             <ListBox x:Name="ListModeSeriesBox" Classes="virtualRows" IsVisible="{Binding IsSeriesGranularity}"
                      ItemsSource="{Binding FlatCovers}"
+                     controls:EntranceAnimation.Enabled="{Binding PlayEntranceAnimation}"
                      Padding="24,18,24,40" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
                 <ListBox.ItemsPanel><ItemsPanelTemplate><VirtualizingStackPanel /></ItemsPanelTemplate></ListBox.ItemsPanel>
                 <ListBox.DataTemplates>
@@ -947,6 +1048,7 @@
             <Panel>
                 <ListBox x:Name="DetailsModeIssueBox" Classes="virtualRows" IsVisible="{Binding IsIssueGranularity}"
                          ItemsSource="{Binding IssueList.FlatRows}"
+                         controls:EntranceAnimation.Enabled="{Binding PlayEntranceAnimation}"
                          Padding="0,0,16,40" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
                     <ListBox.ItemsPanel><ItemsPanelTemplate><VirtualizingStackPanel /></ItemsPanelTemplate></ListBox.ItemsPanel>
                     <ListBox.DataTemplates>
@@ -957,6 +1059,7 @@
                 </ListBox>
                 <ListBox x:Name="DetailsModeSeriesBox" Classes="virtualRows" IsVisible="{Binding IsSeriesGranularity}"
                          ItemsSource="{Binding FlatCovers}"
+                         controls:EntranceAnimation.Enabled="{Binding PlayEntranceAnimation}"
                          Padding="0,0,16,40" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
                     <ListBox.ItemsPanel><ItemsPanelTemplate><VirtualizingStackPanel /></ItemsPanelTemplate></ListBox.ItemsPanel>
                     <ListBox.DataTemplates>
@@ -973,6 +1076,7 @@
             <Grid>
                 <Panel IsVisible="{Binding IsIssueGranularity}">
                     <ItemsControl IsVisible="{Binding !IssueList.IsGrouped}" ItemsSource="{Binding IssueList.Rows}"
+                                  controls:EntranceAnimation.Enabled="{Binding PlayEntranceAnimation}"
                                   ItemTemplate="{StaticResource TilesItemTemplate}" Margin="24,18,24,40">
                         <ItemsControl.ItemsPanel>
                             <ItemsPanelTemplate><controls:VirtualizingWrapPanel ItemWidth="{Binding TilesCardWidth}" ItemHeight="{Binding TilesCardHeight}" ItemSpacing="14" LineSpacing="10" /></ItemsPanelTemplate>
@@ -986,7 +1090,8 @@
                             <DataTemplate x:DataType="models:IssueListRowGroup">
                                 <StackPanel Margin="0,0,0,18">
                                     <DockPanel Margin="0,0,0,10"><TextBlock DockPanel.Dock="Left" Text="{Binding Header}" Classes="pbTextHeading" VerticalAlignment="Center" /><TextBlock DockPanel.Dock="Left" Text="{Binding Items.Count}" Classes="pbTextCaption" Margin="8,0,0,0" VerticalAlignment="Center" /><Border Height="1" VerticalAlignment="Center" Margin="14,0,0,0" Background="{DynamicResource PbBorderBrush}" /></DockPanel>
-                                    <ItemsControl ItemsSource="{Binding Items}" ItemTemplate="{StaticResource TilesItemTemplate}">
+                                    <ItemsControl ItemsSource="{Binding Items}" ItemTemplate="{StaticResource TilesItemTemplate}"
+                                                  controls:EntranceAnimation.Enabled="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PlayEntranceAnimation}">
                                         <ItemsControl.ItemsPanel>
                                             <ItemsPanelTemplate><controls:VirtualizingWrapPanel ItemWidth="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).TilesCardWidth}" ItemHeight="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).TilesCardHeight}" ItemSpacing="14" LineSpacing="10" /></ItemsPanelTemplate>
                                         </ItemsControl.ItemsPanel>
@@ -998,6 +1103,7 @@
                 </Panel>
                 <Panel IsVisible="{Binding IsSeriesGranularity}">
                     <ItemsControl IsVisible="{Binding !IsGrouped}" ItemsSource="{Binding Covers}"
+                                  controls:EntranceAnimation.Enabled="{Binding PlayEntranceAnimation}"
                                   ItemTemplate="{StaticResource SeriesTilesItemTemplate}" Margin="24,18,24,40">
                         <ItemsControl.ItemsPanel>
                             <ItemsPanelTemplate><controls:VirtualizingWrapPanel ItemWidth="{Binding TilesCardWidth}" ItemHeight="{Binding TilesCardHeight}" ItemSpacing="14" LineSpacing="10" /></ItemsPanelTemplate>
@@ -1011,7 +1117,8 @@
                             <DataTemplate x:DataType="models:SeriesCardGroup">
                                 <StackPanel Margin="0,0,0,18">
                                     <DockPanel Margin="0,0,0,10"><TextBlock DockPanel.Dock="Left" Text="{Binding Header}" Classes="pbTextHeading" VerticalAlignment="Center" /><TextBlock DockPanel.Dock="Left" Text="{Binding Items.Count}" Classes="pbTextCaption" Margin="8,0,0,0" VerticalAlignment="Center" /><Border Height="1" VerticalAlignment="Center" Margin="14,0,0,0" Background="{DynamicResource PbBorderBrush}" /></DockPanel>
-                                    <ItemsControl ItemsSource="{Binding Items}" ItemTemplate="{StaticResource SeriesTilesItemTemplate}">
+                                    <ItemsControl ItemsSource="{Binding Items}" ItemTemplate="{StaticResource SeriesTilesItemTemplate}"
+                                                  controls:EntranceAnimation.Enabled="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PlayEntranceAnimation}">
                                         <ItemsControl.ItemsPanel>
                                             <ItemsPanelTemplate><controls:VirtualizingWrapPanel ItemWidth="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).TilesCardWidth}" ItemHeight="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).TilesCardHeight}" ItemSpacing="14" LineSpacing="10" /></ItemsPanelTemplate>
                                         </ItemsControl.ItemsPanel>

@@ -112,6 +112,10 @@ public class PaperbunkrDbContext : DbContext
 
     public DbSet<ScheduledTaskState> ScheduledTaskStates => Set<ScheduledTaskState>();
 
+    public DbSet<RemovedLibraryEntry> RemovedLibraryEntries => Set<RemovedLibraryEntry>();
+
+    public DbSet<RemovedFilePath> RemovedFilePaths => Set<RemovedFilePath>();
+
     public PaperbunkrDbContext(DbContextOptions<PaperbunkrDbContext> options)
         : base(options)
     {
@@ -978,6 +982,16 @@ public class PaperbunkrDbContext : DbContext
             builder.Property(a => a.PromptReviewOnFinish).HasDefaultValue(false);
             builder.Property(a => a.EnableDragDropImport).HasDefaultValue(true);
             builder.Property(a => a.NavRailHoverExpandEnabled).HasDefaultValue(true);
+
+            // Scan-time missing file handling (docs/superpowers/specs/2026-09-06-scan-missing-file-
+            // handling-design.md) - both false matches SQLite's own bare-column default, but
+            // configured explicitly here for consistency with every other AppSettings column.
+            builder.Property(a => a.AutoRemoveMissingOnScan).HasDefaultValue(false);
+            builder.Property(a => a.DontReimportRemovedFiles).HasDefaultValue(false);
+
+            // Library Health redesign (docs/superpowers/specs/2026-09-07-library-health-redesign-
+            // design.md §7) - 2 preserves the prior hardcoded LibraryHealthService constant.
+            builder.Property(a => a.LibraryHealthConfirmedMissingThreshold).HasDefaultValue(2);
         });
 
         modelBuilder.Entity<VirtualTagDefinition>(builder =>
@@ -1041,6 +1055,9 @@ public class PaperbunkrDbContext : DbContext
             // 2026-09-05-insights-dashboard-design.md §6).
             builder.Property(b => b.CharacterCount);
             builder.HasIndex(b => b.FilePath);
+            // LastBlockId (docs/superpowers/specs/2026-09-07-books-reader-pagination-and-position-fix-
+            // design.md) - nullable, same maxLength convention as BookHighlight.BlockId/BookBookmark.BlockId.
+            builder.Property(b => b.LastBlockId).HasMaxLength(64);
 
             // Per-book reader-ergonomics overrides (docs/superpowers/specs/2026-09-01-books-reader-
             // ergonomics-and-annotations-design.md) - nullable, no HasDefaultValue/HasSentinel needed,
@@ -1070,6 +1087,9 @@ public class PaperbunkrDbContext : DbContext
         {
             builder.HasKey(bm => bm.Id);
             builder.HasIndex(bm => bm.BookId);
+            // BlockId (docs/superpowers/specs/2026-09-07-books-reader-pagination-and-position-fix-
+            // design.md) - same convention as BookHighlight.BlockId below.
+            builder.Property(bm => bm.BlockId).IsRequired().HasMaxLength(64);
         });
 
         modelBuilder.Entity<BookHighlight>(builder =>
@@ -1141,6 +1161,30 @@ public class PaperbunkrDbContext : DbContext
                 .HasDefaultValue(ScheduleMode.Interval)
                 .HasSentinel(ScheduleMode.Interval);
             builder.Property(s => s.LastRunStatus).HasConversion<string>().HasMaxLength(16);
+        });
+
+        // Library Health "Recently Removed" log (docs/superpowers/specs/2026-09-06-missing-files-
+        // library-health-design.md) - brand-new table, no existing rows to backfill, so its
+        // enum-as-string column needs only the conversion. No FK to Series - SeriesId is an
+        // advisory hint for Restore, not a real relationship (see the entity's own doc comment).
+        // Indexed on RemovedAtUtc for the 30-day retention trim and the "last 30 days" list query.
+        modelBuilder.Entity<RemovedLibraryEntry>(builder =>
+        {
+            builder.HasKey(r => r.Id);
+            builder.Property(r => r.SeriesName).IsRequired();
+            builder.Property(r => r.Reason).HasConversion<string>().HasMaxLength(32);
+            builder.HasIndex(r => r.RemovedAtUtc);
+        });
+
+        // Permanent removed-files blacklist (docs/superpowers/specs/2026-09-06-scan-missing-file-
+        // handling-design.md) - brand-new table, no existing rows to backfill. Unique on FilePath so
+        // LibraryDeletionHelper's upsert (query-then-update-or-insert) never creates a duplicate row
+        // for the same path removed more than once.
+        modelBuilder.Entity<RemovedFilePath>(builder =>
+        {
+            builder.HasKey(r => r.Id);
+            builder.Property(r => r.FilePath).IsRequired();
+            builder.HasIndex(r => r.FilePath).IsUnique();
         });
     }
 

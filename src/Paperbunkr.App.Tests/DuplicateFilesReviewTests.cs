@@ -50,7 +50,7 @@ public class DuplicateFilesReviewTests : IDisposable
         }
     }
 
-    private static NeedsReviewViewModel CreateViewModel() => new(onOpenSeriesDetail: _ => { }, filePicker: new NoOpFilePicker());
+    private static NeedsReviewViewModel CreateViewModel() => new(onOpenSeriesDetail: _ => { });
 
     private PaperbunkrDbContext OpenContext() => new(_dbOptions);
 

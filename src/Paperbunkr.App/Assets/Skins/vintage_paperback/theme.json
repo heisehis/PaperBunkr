@@ -1,0 +1,29 @@
+{
+  "name": "Vintage Paperback",
+  "colors": {
+    "bg": "#12100D",
+    "chrome": "#1C1712",
+    "border": "#3A2F22",
+    "text": "#EDE0C8",
+    "textMuted": "#B0A084",
+    "textFaint": "#786D58",
+    "accent": "#8C3B2E",
+    "accentText": "#C98A52",
+    "accentSoft": "#298C3B2E",
+    "badge": "#B8763D",
+    "badgeText": "#241505",
+    "success": "#6B8F5C",
+    "surface0": "#000000",
+    "surface1": "#12100D",
+    "surface2": "#1C1712",
+    "surface3": "#241D16",
+    "glow": "#66B8763D",
+    "heroGradientStart": "#00000000",
+    "heroGradientEnd": "#FF12100D"
+  },
+  "spacingUnit": 4,
+  "radius": 7,
+  "radiusSm": 5,
+  "radiusLg": 14,
+  "icons": {}
+}

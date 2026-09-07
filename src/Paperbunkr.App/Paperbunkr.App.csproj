@@ -32,6 +32,13 @@
          design.md) - bundled so the About section can render full update history offline; only the
          "is there a newer version" check itself needs a network call. -->
     <None Include="..\..\CHANGELOG.md" CopyToOutputDirectory="PreserveNewest" Link="CHANGELOG.md" />
+
+    <!-- Legal/community docs (repo root) - bundled so the About → Legal group can open them from an
+         installed build, not just a git checkout. -->
+    <None Include="..\..\LICENSE" CopyToOutputDirectory="PreserveNewest" Link="LICENSE" />
+    <None Include="..\..\PRIVACY.md" CopyToOutputDirectory="PreserveNewest" Link="PRIVACY.md" />
+    <None Include="..\..\TERMS.md" CopyToOutputDirectory="PreserveNewest" Link="TERMS.md" />
+    <None Include="..\..\COMICVINE_NOTICE.md" CopyToOutputDirectory="PreserveNewest" Link="COMICVINE_NOTICE.md" />
   </ItemGroup>
 
   <ItemGroup>

@@ -1,0 +1,97 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="using:Paperbunkr.App.Controls"
+        xmlns:fi="using:FluentIcons.Avalonia">
+    <!--
+        The badge/pill system (docs/superpowers/specs/2026-09-06-feedback-notification-system-
+        design.md §4). Three constructs, one visual language:
+          - StatusBadge: icon-driven state (Read/InProgress/New) - a real control, ControlTheme below.
+          - Border.countPill: plain number-in-a-pill (unread counts, alert counts, match counts).
+          - Border.tagPill / Button.tagPill: content/metadata tag chips.
+        CountPill/TagPill are plain Style selectors, not controls - matches the existing
+        Button.toolbarPill precedent (LibraryToolbar.axaml) rather than introducing a control for
+        something this simple.
+    -->
+    <Styles.Resources>
+        <ControlTheme x:Key="{x:Type controls:StatusBadge}" TargetType="controls:StatusBadge">
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Panel>
+                        <fi:SymbolIcon Symbol="CheckmarkCircle"
+                                       FontSize="{TemplateBinding IconSize}"
+                                       Foreground="{DynamicResource PbSuccessBrush}"
+                                       ToolTip.Tip="Read" AutomationProperties.AccessibilityView="Raw"
+                                       IsVisible="{TemplateBinding IsRead}" />
+                        <fi:SymbolIcon Symbol="CircleHalfFill"
+                                       FontSize="{TemplateBinding IconSize}"
+                                       Foreground="{DynamicResource PbAccentBrush}"
+                                       ToolTip.Tip="In progress" AutomationProperties.AccessibilityView="Raw"
+                                       IsVisible="{TemplateBinding IsInProgress}" />
+                        <Border CornerRadius="3" Padding="4,0" VerticalAlignment="Center"
+                                Background="{DynamicResource PbAccentBrush}"
+                                IsVisible="{TemplateBinding IsNew}">
+                            <TextBlock Text="NEW" FontSize="8" FontWeight="Bold"
+                                       Foreground="{DynamicResource PbBadgeTextBrush}" />
+                        </Border>
+                    </Panel>
+                </ControlTemplate>
+            </Setter>
+        </ControlTheme>
+    </Styles.Resources>
+
+    <Style Selector="Border.countPill">
+        <!-- Solid black, not the translucent PbAccentSoftBrush this originally used - amber text on
+             a semi-transparent amber background (often over busy cover art) was nearly illegible;
+             user direction 2026-09-07. -->
+        <Setter Property="Background" Value="{DynamicResource PbSurface0Brush}" />
+        <Setter Property="CornerRadius" Value="999" />
+        <Setter Property="Padding" Value="7,2" />
+        <Setter Property="MinWidth" Value="16" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="HorizontalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="Border.countPill > TextBlock">
+        <Setter Property="FontSize" Value="10" />
+        <Setter Property="FontWeight" Value="Bold" />
+        <Setter Property="Foreground" Value="{DynamicResource PbAccentTextBrush}" />
+        <Setter Property="HorizontalAlignment" Value="Center" />
+    </Style>
+    <!-- Destructive variant (e.g. status-bar alert count) - Classes.destructive="True" -->
+    <Style Selector="Border.countPill.destructive">
+        <Setter Property="Background" Value="{DynamicResource PbBadgeBrush}" />
+    </Style>
+    <Style Selector="Border.countPill.destructive > TextBlock">
+        <Setter Property="Foreground" Value="{DynamicResource PbBadgeTextBrush}" />
+    </Style>
+
+    <!-- Squircle (PbRadius), not a capsule - user direction 2026-09-07 after seeing the capsule
+         shape land in the real app (both this and DetailBand's bandChip had briefly gone to a
+         999 capsule during the badge-unification pass; reverted here). -->
+    <Style Selector="Border.tagPill">
+        <Setter Property="Background" Value="{DynamicResource PbSurface2Brush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="{DynamicResource PbRadius}" />
+        <Setter Property="Padding" Value="10,4" />
+    </Style>
+    <Style Selector="Button.tagPill">
+        <Setter Property="Background" Value="{DynamicResource PbSurface2Brush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="{DynamicResource PbRadius}" />
+        <Setter Property="Padding" Value="10,4" />
+        <Setter Property="Margin" Value="0,0,6,6" />
+        <Setter Property="Cursor" Value="Hand" />
+    </Style>
+    <Style Selector="Button.tagPill:pointerover">
+        <Setter Property="BorderBrush" Value="{DynamicResource PbBadgeBrush}" />
+    </Style>
+    <Style Selector="Button.tagPill:pointerover /template/ ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource PbSurface3Brush}" />
+    </Style>
+    <Style Selector="TextBlock.tagPillText">
+        <Setter Property="FontSize" Value="11" />
+        <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
+    </Style>
+</Styles>

@@ -293,6 +293,17 @@ public class Issue
     public bool MissingAcknowledged { get; set; }
 
     /// <summary>
+    /// Consecutive <c>LibraryHealthService.VerifyAsync</c> passes (docs/superpowers/specs/
+    /// 2026-09-06-missing-files-library-health-design.md) that found this file still absent.
+    /// Incremented each pass the file is missing; reset to 0 the moment a pass finds it present
+    /// again (Relink also resets it, since it sets <see cref="FileIsMissing"/> false directly).
+    /// Reaching 2 is the "two-strikes" grace window that makes an issue eligible for Library
+    /// Health's bulk "Remove All Confirmed Missing" action - a single Verify pass is not enough,
+    /// protecting against a disconnected drive or a cloud folder mid-sync.
+    /// </summary>
+    public int MissingVerificationCount { get; set; }
+
+    /// <summary>
     /// True once the user has dismissed this issue's duplicate-cluster state from the Needs Review
     /// "Duplicate Files" queue ("these aren't actually duplicates I want flagged") without deleting
     /// it (docs/superpowers/specs/2026-09-05-duplicate-files-review-design.md). Same review-queue-

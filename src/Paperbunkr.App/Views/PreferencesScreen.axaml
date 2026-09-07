@@ -10,6 +10,16 @@
              x:Name="Root"
              x:DataType="vm:PreferencesScreenViewModel">
 
+    <!--
+        Sidebar + hard-switch pane (docs/superpowers/specs/2026-08-28-preferences-rework-design.md).
+        The single-scroll/tile-hub shell from 2026-09-07-preferences-tile-hub-redesign-design.md was
+        tried and reverted the same session - too annoying to navigate once actually built (user
+        feedback) - so this is back to one section visible at a time. Kept from that pass: sidebar
+        items now show an icon (a literal fi:SymbolIcon per button - no converter needed since each
+        item is a distinct hardcoded button, not a data-templated repeater) instead of plain text;
+        every section's individual settings restructured onto SettingsRow where they fit (see each
+        *Section.axaml); the Windows 11 skin fix and 3 new skins.
+    -->
     <UserControl.Styles>
         <!-- Sidebar section nav -->
         <Style Selector="Button.prefNavItem">
@@ -50,7 +60,9 @@
             <Setter Property="VerticalContentAlignment" Value="Center" />
         </Style>
 
-        <!-- Settings group card (design-language restyle of the old groupBox/groupHeader) -->
+        <!-- Settings group card (design-language restyle of the old groupBox/groupHeader) - still
+             used by every group not yet converted to SettingsRow (docs/superpowers/specs/2026-09-07-
+             preferences-tile-hub-redesign-design.md §4's deferred list). -->
         <Style Selector="Border.groupBox">
             <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
             <Setter Property="BorderThickness" Value="1" />
@@ -60,6 +72,17 @@
         <Style Selector="Border.groupHeader">
             <Setter Property="Background" Value="{DynamicResource PbSurface2Brush}" />
             <Setter Property="Padding" Value="14,11" />
+        </Style>
+
+        <!-- Light caption-style group label (design.md item 2) - replaces groupBox/groupHeader's
+             card chrome for groups converted to SettingsRow: small, uppercase, no border/background,
+             so long sections stay scannable without the heavier old card treatment. -->
+        <Style Selector="TextBlock.settingsGroupCaption">
+            <Setter Property="FontSize" Value="{DynamicResource PbFontSizeMicro}" />
+            <Setter Property="FontWeight" Value="Bold" />
+            <Setter Property="LetterSpacing" Value="0.6" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextFaintBrush}" />
+            <Setter Property="Margin" Value="0,0,0,8" />
         </Style>
 
         <!-- Header-row action buttons (kept: already token-based) -->
@@ -142,27 +165,77 @@
                     <ScrollViewer IsVisible="{Binding !IsSearching}">
                         <StackPanel Margin="0,10">
                             <Button Classes="prefNavItem" Classes.active="{Binding IsGeneralSection}"
-                                    Command="{Binding GoGeneralCommand}" Content="General" />
+                                    Command="{Binding GoGeneralCommand}">
+                                <StackPanel Orientation="Horizontal" Spacing="10">
+                                    <fi:SymbolIcon Symbol="Settings" FontSize="{StaticResource PbIconSizeSm}" VerticalAlignment="Center" />
+                                    <TextBlock Text="General" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </Button>
                             <Button Classes="prefNavItem" Classes.active="{Binding IsAppearanceSection}"
-                                    Command="{Binding GoAppearanceCommand}" Content="Appearance" />
+                                    Command="{Binding GoAppearanceCommand}">
+                                <StackPanel Orientation="Horizontal" Spacing="10">
+                                    <fi:SymbolIcon Symbol="PaintBrush" FontSize="{StaticResource PbIconSizeSm}" VerticalAlignment="Center" />
+                                    <TextBlock Text="Appearance" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </Button>
                             <Button Classes="prefNavItem" Classes.active="{Binding IsLibrarySection}"
-                                    Command="{Binding GoLibraryCommand}" Content="Library"
-                                    AutomationProperties.AutomationId="PreferencesLibraryNavButton" />
+                                    Command="{Binding GoLibraryCommand}"
+                                    AutomationProperties.AutomationId="PreferencesLibraryNavButton">
+                                <StackPanel Orientation="Horizontal" Spacing="10">
+                                    <fi:SymbolIcon Symbol="Folder" FontSize="{StaticResource PbIconSizeSm}" VerticalAlignment="Center" />
+                                    <TextBlock Text="Library" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </Button>
                             <Button Classes="prefNavItem" Classes.active="{Binding IsAutomationSection}"
-                                    Command="{Binding GoAutomationCommand}" Content="Automation"
-                                    AutomationProperties.AutomationId="PreferencesAutomationNavButton" />
+                                    Command="{Binding GoAutomationCommand}"
+                                    AutomationProperties.AutomationId="PreferencesAutomationNavButton">
+                                <StackPanel Orientation="Horizontal" Spacing="10">
+                                    <fi:SymbolIcon Symbol="Clock" FontSize="{StaticResource PbIconSizeSm}" VerticalAlignment="Center" />
+                                    <TextBlock Text="Automation" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </Button>
                             <Button Classes="prefNavItem" Classes.active="{Binding IsReaderSection}"
-                                    Command="{Binding GoReaderCommand}" Content="Reader" />
+                                    Command="{Binding GoReaderCommand}">
+                                <StackPanel Orientation="Horizontal" Spacing="10">
+                                    <fi:SymbolIcon Symbol="Book" FontSize="{StaticResource PbIconSizeSm}" VerticalAlignment="Center" />
+                                    <TextBlock Text="Reader" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </Button>
                             <Button Classes="prefNavItem" Classes.active="{Binding IsKeyboardShortcutsSection}"
-                                    Command="{Binding GoKeyboardShortcutsCommand}" Content="Keyboard Shortcuts" />
+                                    Command="{Binding GoKeyboardShortcutsCommand}">
+                                <StackPanel Orientation="Horizontal" Spacing="10">
+                                    <fi:SymbolIcon Symbol="Keyboard" FontSize="{StaticResource PbIconSizeSm}" VerticalAlignment="Center" />
+                                    <TextBlock Text="Keyboard Shortcuts" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </Button>
                             <Button Classes="prefNavItem" Classes.active="{Binding IsConnectionsSection}"
-                                    Command="{Binding GoConnectionsCommand}" Content="Connections" />
+                                    Command="{Binding GoConnectionsCommand}">
+                                <StackPanel Orientation="Horizontal" Spacing="10">
+                                    <fi:SymbolIcon Symbol="Link" FontSize="{StaticResource PbIconSizeSm}" VerticalAlignment="Center" />
+                                    <TextBlock Text="Connections" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </Button>
                             <Button Classes="prefNavItem" Classes.active="{Binding IsPluginsSection}"
-                                    Command="{Binding GoPluginsCommand}" Content="Plugins" />
+                                    Command="{Binding GoPluginsCommand}">
+                                <StackPanel Orientation="Horizontal" Spacing="10">
+                                    <fi:SymbolIcon Symbol="PuzzlePiece" FontSize="{StaticResource PbIconSizeSm}" VerticalAlignment="Center" />
+                                    <TextBlock Text="Plugins" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </Button>
                             <Button Classes="prefNavItem" Classes.active="{Binding IsAdvancedSection}"
-                                    Command="{Binding GoAdvancedCommand}" Content="Advanced" />
+                                    Command="{Binding GoAdvancedCommand}">
+                                <StackPanel Orientation="Horizontal" Spacing="10">
+                                    <fi:SymbolIcon Symbol="Wrench" FontSize="{StaticResource PbIconSizeSm}" VerticalAlignment="Center" />
+                                    <TextBlock Text="Advanced" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </Button>
                             <Button Classes="prefNavItem" Classes.active="{Binding IsAboutSection}"
-                                    Command="{Binding GoAboutCommand}" Content="About" />
+                                    Command="{Binding GoAboutCommand}">
+                                <StackPanel Orientation="Horizontal" Spacing="10">
+                                    <fi:SymbolIcon Symbol="Info" FontSize="{StaticResource PbIconSizeSm}" VerticalAlignment="Center" />
+                                    <TextBlock Text="About" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </Button>
                         </StackPanel>
                     </ScrollViewer>
 

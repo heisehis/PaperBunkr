@@ -27,16 +27,19 @@ public partial class PluginScreenViewModel : ViewModelBase
 {
     private readonly IFilePickerService _filePicker;
     private readonly PluginPackageService _packageService;
+    private readonly IDialogService _dialogs;
     private PluginHostService? _host;
 
-    public PluginScreenViewModel(IFilePickerService filePicker) : this(filePicker, new PluginPackageService())
+    public PluginScreenViewModel(IFilePickerService filePicker, IDialogService dialogs)
+        : this(filePicker, dialogs, new PluginPackageService())
     {
     }
 
     /// <summary>Test seam - substitute a <see cref="PluginPackageService"/> pointed at an isolated folder pair instead of the real %AppData% one.</summary>
-    internal PluginScreenViewModel(IFilePickerService filePicker, PluginPackageService packageService)
+    internal PluginScreenViewModel(IFilePickerService filePicker, IDialogService dialogs, PluginPackageService packageService)
     {
         _filePicker = filePicker;
+        _dialogs = dialogs;
         _packageService = packageService;
     }
 
@@ -104,9 +107,10 @@ public partial class PluginScreenViewModel : ViewModelBase
 
         if (_packageService.PackageFileExists(file))
         {
-            int answer = PluginQuestionDialog.ShowModal(
-                "A plugin package with this name is already installed. Overwrite it?", "Overwrite", "Cancel");
-            if (answer != 0)
+            bool overwrite = await _dialogs.ConfirmAsync(
+                "A plugin package with this name is already installed. Overwrite it?",
+                confirmLabel: "Overwrite", cancelLabel: "Cancel");
+            if (!overwrite)
             {
                 return;
             }

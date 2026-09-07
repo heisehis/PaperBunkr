@@ -403,7 +403,10 @@
                                         <ComboBox HorizontalAlignment="Stretch" ItemsSource="{Binding ColorModeOptions}" SelectedItem="{Binding ColorModeText}" />
                                     </StackPanel>
                                     <StackPanel Classes="field" VerticalAlignment="Bottom">
-                                        <CheckBox Content="Final issue" IsChecked="{Binding IsFinalIssue}" />
+                                        <Grid ColumnDefinitions="*,Auto">
+                                            <TextBlock Grid.Column="0" Text="Final issue" VerticalAlignment="Center" Foreground="{DynamicResource PbTextBrush}" Margin="0,0,8,0" />
+                                            <ToggleSwitch Grid.Column="1" IsChecked="{Binding IsFinalIssue}" OnContent="{x:Null}" OffContent="{x:Null}" />
+                                        </Grid>
                                     </StackPanel>
                                 </WrapPanel>
                             </StackPanel>

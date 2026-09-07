@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using cYo.Projects.ComicRack.Engine;
 using cYo.Projects.ComicRack.Engine.IO.Provider;
 using Microsoft.EntityFrameworkCore;
+using Paperbunkr.App.Models;
 using Paperbunkr.App.Services;
 using Paperbunkr.Data;
 using Paperbunkr.Data.Entities;
@@ -77,11 +78,12 @@ public class MetadataWriteBackQueueTests : IDisposable
         return ((IInfoStorage)provider).LoadInfo(InfoLoadingMethod.Complete)?.Summary ?? string.Empty;
     }
 
-    private MetadataWriteBackQueue CreateQueue(List<(string, string)> toasts) => new(
+    private MetadataWriteBackQueue CreateQueue(List<(string, string)> toasts, IActivityService? activity = null) => new(
         () => new PaperbunkrDbContext(_dbOptions),
         new MetadataFileWriteBackService(() => new PaperbunkrDbContext(_dbOptions)),
         (t, m) => toasts.Add((t, m)),
-        TimeSpan.FromMilliseconds(30));
+        TimeSpan.FromMilliseconds(30),
+        activity);
 
     [Fact]
     public async Task Drain_MasterOff_WritesNothing()
@@ -125,7 +127,8 @@ public class MetadataWriteBackQueueTests : IDisposable
         SetSettings(master: true, automatic: true);
         int id = SeedIssue("c.cbz", "coalesced");
         var toasts = new List<(string, string)>();
-        var queue = CreateQueue(toasts);
+        var activity = new ActivityService(a => a(), _ => { });
+        var queue = CreateQueue(toasts, activity);
 
         queue.Enqueue(id);
         queue.Enqueue(id);
@@ -133,8 +136,12 @@ public class MetadataWriteBackQueueTests : IDisposable
         await queue.DrainNowAsync();
 
         Assert.Equal("coalesced", ReadSummary(Path.Combine(_dir, "c.cbz")));
-        var toast = Assert.Single(toasts);
-        Assert.Contains("1 file updated", toast.Item2);
+        // The general-summary outcome is Job-tracked now, not a direct toast (docs/superpowers/
+        // specs/2026-09-06-feedback-notification-system-design.md §6/plan Step 17).
+        Assert.Empty(toasts);
+        var job = Assert.Single(activity.RecentJobs);
+        Assert.Equal(ActivityJobStatus.Succeeded, job.Status);
+        Assert.Contains("1 file updated", job.ResultSummary);
     }
 
     [Fact]
@@ -155,14 +162,17 @@ public class MetadataWriteBackQueueTests : IDisposable
         }
 
         var toasts = new List<(string, string)>();
-        var queue = CreateQueue(toasts);
+        var activity = new ActivityService(a => a(), _ => { });
+        var queue = CreateQueue(toasts, activity);
         queue.Enqueue(good, manual: true);
         queue.Enqueue(bad, manual: true);
         await queue.DrainNowAsync();
 
-        var toast = Assert.Single(toasts);
-        Assert.Contains("1 file updated", toast.Item2);
-        Assert.Contains("1 skipped", toast.Item2);
+        Assert.Empty(toasts);
+        var job = Assert.Single(activity.RecentJobs);
+        Assert.Equal(ActivityJobStatus.Succeeded, job.Status);
+        Assert.Contains("1 file updated", job.ResultSummary);
+        Assert.Contains("1 skipped", job.ResultSummary);
     }
 
     [Fact]

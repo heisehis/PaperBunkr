@@ -5,6 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Timers;
 using Paperbunkr.Data;
+using Paperbunkr.Data.Entities;
 using Timer = System.Timers.Timer;
 
 namespace Paperbunkr.App.Services;
@@ -28,6 +29,7 @@ public class MetadataWriteBackQueue : IDisposable
     private readonly Func<PaperbunkrDbContext> _contextFactory;
     private readonly MetadataFileWriteBackService _service;
     private readonly Action<string, string> _showToast;
+    private readonly IActivityService _activity;
     private readonly TimeSpan _debounceWindow;
 
     private readonly object _pendingLock = new();
@@ -36,8 +38,8 @@ public class MetadataWriteBackQueue : IDisposable
     private readonly Timer _debounceTimer;
     private bool _disposed;
 
-    public MetadataWriteBackQueue(Action<string, string> showToast)
-        : this(PaperbunkrDb.CreateContext, new MetadataFileWriteBackService(), showToast, TimeSpan.FromMilliseconds(300))
+    public MetadataWriteBackQueue(Action<string, string> showToast, IActivityService? activity = null)
+        : this(PaperbunkrDb.CreateContext, new MetadataFileWriteBackService(), showToast, TimeSpan.FromMilliseconds(300), activity)
     {
     }
 
@@ -46,11 +48,13 @@ public class MetadataWriteBackQueue : IDisposable
         Func<PaperbunkrDbContext> contextFactory,
         MetadataFileWriteBackService service,
         Action<string, string> showToast,
-        TimeSpan debounceWindow)
+        TimeSpan debounceWindow,
+        IActivityService? activity = null)
     {
         _contextFactory = contextFactory;
         _service = service;
         _showToast = showToast;
+        _activity = activity ?? new ActivityService();
         _debounceWindow = debounceWindow;
 
         _debounceTimer = new Timer(_debounceWindow.TotalMilliseconds) { AutoReset = false };
@@ -209,7 +213,22 @@ public class MetadataWriteBackQueue : IDisposable
             message += $" Last error: {lastFailureMessage}";
         }
 
-        _showToast(failed > 0 ? "Metadata write-back had errors" : "Metadata written to files", message);
+        // Job-tracked (docs/superpowers/specs/2026-09-06-feedback-notification-system-design.md
+        // §6) - created here, only once the batch's real outcome is known, not before the loop
+        // above ran. That's deliberate: the single-skip toast just above and the true-no-op early
+        // return before it must keep their own toast behavior exactly as today, and
+        // IActivityJobHandle's ToastPolicy is fixed at StartJob() - there's no single policy that
+        // covers all three paths. Resolving it here (lazily, once this is provably the "general
+        // summary" outcome) sidesteps that entirely instead of forcing one policy on all three.
+        using var job = _activity.StartJob(ActivityJobKind.SyncMetadata, "Writing metadata to files");
+        if (failed > 0)
+        {
+            job.Fail(message);
+        }
+        else
+        {
+            job.Succeed(message);
+        }
     }
 
     public void Dispose()

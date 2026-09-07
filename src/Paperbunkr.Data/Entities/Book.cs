@@ -36,7 +36,15 @@ public class Book
 
     public int LastChapterIndex { get; set; }
 
-    public int LastCharacterOffset { get; set; }
+    /// <summary>Block-ID anchor for resume-on-load (docs/superpowers/specs/2026-09-07-books-reader-
+    /// pagination-and-position-fix-design.md) - a <c>BlockIdInjector</c>-assigned <c>id="pb-p&lt;n&gt;"</c>
+    /// within <see cref="LastChapterIndex"/>. Null means "land at the chapter start" (replaces the old,
+    /// pre-WebView-redesign <c>LastCharacterOffset</c> flattened-text offset, which stopped being
+    /// meaningful once chapters render as real HTML).</summary>
+    public string? LastBlockId { get; set; }
+
+    /// <summary>Coarse fallback (0-1, scroll/page fraction) for when <see cref="LastBlockId"/> can't be resolved on reload - see that property's own doc comment.</summary>
+    public double? LastProgressionFraction { get; set; }
 
     /// <summary>Read to the end at least once (docs/superpowers/specs/2026-08-27-books-screen-chrome-
     /// and-home-strip-design.md). Set by the reader when paging past the last chapter; cleared when

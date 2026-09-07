@@ -85,7 +85,7 @@ public sealed class PluginScreenViewModelTests : IDisposable
             host.Engine.Discover(root, MakeEnvironment());
             Assert.All(host.Engine.AllCommands, c => Assert.False(c.IsBroken));
 
-            var vm = new PluginScreenViewModel(new NoOpFilePicker(), MakeIsolatedPackageService());
+            var vm = new PluginScreenViewModel(new NoOpFilePicker(), new FakeDialogService(), MakeIsolatedPackageService());
             vm.AttachHost(host);
 
             Assert.True(vm.HasPlugins);
@@ -112,7 +112,7 @@ public sealed class PluginScreenViewModelTests : IDisposable
     [Fact]
     public void Refresh_WithNoHost_LeavesHasPluginsFalse()
     {
-        var vm = new PluginScreenViewModel(new NoOpFilePicker(), MakeIsolatedPackageService());
+        var vm = new PluginScreenViewModel(new NoOpFilePicker(), new FakeDialogService(), MakeIsolatedPackageService());
         vm.Refresh();
         Assert.False(vm.HasPlugins);
         Assert.Empty(vm.Groups);
@@ -139,7 +139,7 @@ public sealed class PluginScreenViewModelTests : IDisposable
 
             var host = new PluginHostService();
             host.InitializeForTests(MakeEnvironment()); // empty root so far - PluginPaths.RootDirectory isn't touched by this
-            var vm = new PluginScreenViewModel(new FakeFilePicker(zipPath), new PluginPackageService(root, staging));
+            var vm = new PluginScreenViewModel(new FakeFilePicker(zipPath), new FakeDialogService(), new PluginPackageService(root, staging));
             vm.AttachHost(host);
             Assert.Empty(vm.Packages);
 
@@ -183,7 +183,7 @@ public sealed class PluginScreenViewModelTests : IDisposable
         File.WriteAllText(badFile, "definitely not a zip file");
         try
         {
-            var vm = new PluginScreenViewModel(new FakeFilePicker(badFile), new PluginPackageService(root, staging));
+            var vm = new PluginScreenViewModel(new FakeFilePicker(badFile), new FakeDialogService(), new PluginPackageService(root, staging));
 
             await vm.InstallPackageCommand.ExecuteAsync(null);
 
@@ -211,7 +211,7 @@ public sealed class PluginScreenViewModelTests : IDisposable
                 ["package.ini"] = "Name = Removable Pack",
             });
 
-            var vm = new PluginScreenViewModel(new FakeFilePicker(zipPath), new PluginPackageService(root, staging));
+            var vm = new PluginScreenViewModel(new FakeFilePicker(zipPath), new FakeDialogService(), new PluginPackageService(root, staging));
             await vm.InstallPackageCommand.ExecuteAsync(null);
             var row = Assert.Single(vm.Packages);
             string installedPath = Path.Combine(root, "Removable Pack");
@@ -274,6 +274,16 @@ public sealed class PluginScreenViewModelTests : IDisposable
         public Task<string?> PickSaveFileAsync(string title, string suggestedFileName, string extension, string extensionLabel) => Task.FromResult<string?>(null);
         public Task<string?> PickFolderAsync(string title) => Task.FromResult<string?>(null);
         public Task SetClipboardTextAsync(string text) => Task.CompletedTask;
+    }
+
+    /// <summary>Always confirms - none of these tests install into a folder that already has a
+    /// same-named package, so the overwrite-prompt branch never actually executes; this just needs
+    /// to satisfy the constructor and not throw if it ever does.</summary>
+    private sealed class FakeDialogService : IDialogService
+    {
+        public Task<int> ShowAsync(ConfirmDialogRequest request) => Task.FromResult(0);
+        public Task<bool> ConfirmAsync(string message, string? title = null, string confirmLabel = "Confirm",
+            string cancelLabel = "Cancel", bool isDestructive = false) => Task.FromResult(true);
     }
 
     private sealed class FakeFilePicker : IFilePickerService

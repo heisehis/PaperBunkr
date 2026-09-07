@@ -24,12 +24,16 @@
         <!-- Squircle chips (PbRadius, matching the Library toolbar's own squircled chips - commit
              07a93af), with a smooth amber-glow reaction on hover: the app's established
              "reactive" idiom (design-language-foundation-design.md - glow ring, no scale-lift). -->
+        <!-- Squircle (PbRadius), not a capsule - user direction 2026-09-07 after seeing a 999
+             capsule land in the real app (this briefly changed shape during the badge-unification
+             pass; reverted). Everything else here (weight-class colors, hover/focus states,
+             transitions, the Border variant's glow ring below) is untouched. -->
         <Style Selector="Border.bandChip">
             <Setter Property="Background" Value="{DynamicResource PbChromeBrush}" />
             <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
             <Setter Property="BorderThickness" Value="1" />
             <Setter Property="CornerRadius" Value="{DynamicResource PbRadius}" />
-            <Setter Property="Padding" Value="10,3" />
+            <Setter Property="Padding" Value="10,4" />
             <Setter Property="Margin" Value="0,0,6,6" />
         </Style>
         <Style Selector="Button.bandChip">
@@ -37,7 +41,7 @@
             <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
             <Setter Property="BorderThickness" Value="1" />
             <Setter Property="CornerRadius" Value="{DynamicResource PbRadius}" />
-            <Setter Property="Padding" Value="10,3" />
+            <Setter Property="Padding" Value="10,4" />
             <Setter Property="Margin" Value="0,0,6,6" />
             <Setter Property="Cursor" Value="Hand" />
             <Setter Property="FontSize" Value="{StaticResource PbFontSizeMeta}" />

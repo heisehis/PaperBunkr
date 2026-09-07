@@ -47,7 +47,51 @@ everywhere at once — don't fork.
 | Reading Lists (nav) | `Bookmark` | |
 | Story Events / layers | `Layer` | also Books rail |
 | Preferences (nav) | `Settings` | |
-| Plugins (nav & empty-state) | `PuzzlePiece` | |
+| Plugins (nav & empty-state) | `PuzzlePiece` | also Preferences' sidebar Plugins item |
+| Preferences sidebar: General | `Settings` | same glyph as the Preferences nav item itself |
+| Preferences sidebar: Appearance | `PaintBrush` | |
+| Preferences sidebar: Library | `Folder` | |
+| Preferences sidebar: Automation | `Clock` | |
+| Preferences sidebar: Reader | `Book` | |
+| Preferences sidebar: Keyboard Shortcuts | `Keyboard` | |
+| Preferences sidebar: Connections | `Link` | |
+| Preferences sidebar: Advanced | `Wrench` | |
+| Preferences sidebar: About | `Info` | |
+| Preferences → General: reopen last screen on startup | `Play` | |
+| Preferences → General: resume where left off | `Book` | |
+| Preferences → General: auto-advance to next issue | `ArrowNext` | |
+| Preferences → General: prompt to rate on finish | `Star` | |
+| Preferences → General: drag-and-drop import | `ArrowUpload` | |
+| Preferences → General: minimize to tray | `WindowArrowUp` | |
+| Preferences → Appearance: install/open skin folder | `FolderOpen` | same as other folder-open actions |
+| Preferences → Appearance: font family | `TextFont` | |
+| Preferences → Appearance: reduce motion | `Pulse` | |
+| Preferences → Appearance: nav rail hover-expand | `Navigation` | |
+| Preferences → Appearance: developer/design showcase | `Code` | |
+| Preferences → Reader: RTL page-turn direction | `ArrowLeft` | |
+| Preferences → Reader: high quality page display | `Image` | |
+| Preferences → Reader: default fit mode | `ArrowFit` | |
+| Preferences → Reader: auto-rotate landscape | `ArrowRotateClockwise` | |
+| Preferences → Reader: double-page spread | `DualScreen` | |
+| Preferences → Reader: page transition style | `SlideTransition` | |
+| Preferences → Reader: page transition speed | `TopSpeed` | |
+| Preferences → Reader: reset zoom on page change | `ZoomFit` | |
+| Preferences → Reader: mouse wheel scroll speed | `ArrowSort` | |
+| Preferences → Reader: brightness | `BrightnessHigh` | |
+| Preferences → Reader: contrast/saturation (no dedicated glyph) | `Options` | contrast; `ColorBackground` for saturation, `Gauge` for gamma |
+| Preferences → Reader: canvas/margin background color | `ColorBackground` | also saturation slider above |
+| Preferences → Reader: gamma | `Gauge` | |
+| Preferences → Reader: page margin toggle | `BorderAll` | |
+| Preferences → Reader: page margin width | `ArrowExpand` | |
+| Preferences → Advanced: graphics backend | `DeveloperBoard` | |
+| Preferences → Advanced: prefer native OpenGL | `Cube` | |
+| Preferences → Advanced: write metadata to files | `DocumentData` | |
+| Preferences → Advanced: write metadata automatically | `ArrowSync` | |
+| Preferences → Advanced: write paperbunkr.json sidecar | `DocumentDatabase` | |
+| Preferences → Advanced: write all metadata now | `Save` | |
+| Preferences → About: version number | `Tag` | |
+| Preferences → About: check for updates | `ArrowSync` | same as write-metadata-automatically |
+| Preferences → About: check for updates on startup | `ArrowClockwise` | |
 | Pin / unpin the nav rail | `Pin` | |
 | Sort (view menu) | `ArrowSort` | |
 | Sort ascending (explicit) | `TextSortAscending` | |

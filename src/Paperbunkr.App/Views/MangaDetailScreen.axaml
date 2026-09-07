@@ -102,12 +102,6 @@
             <Setter Property="Foreground" Value="{DynamicResource PbTextFaintBrush}" />
             <Setter Property="VerticalAlignment" Value="Center" />
         </Style>
-        <Style Selector="Border.newBadge">
-            <Setter Property="Background" Value="{DynamicResource PbAccentBrush}" />
-            <Setter Property="CornerRadius" Value="3" />
-            <Setter Property="Padding" Value="4,0" />
-            <Setter Property="VerticalAlignment" Value="Center" />
-        </Style>
         <Style Selector="ProgressBar.chapterProgress">
             <Setter Property="Height" Value="3" />
             <Setter Property="Foreground" Value="{DynamicResource PbAccentBrush}" />
@@ -221,9 +215,7 @@
                                                             <TextBlock Grid.Column="0" Classes="chapterNumber" Text="{Binding DisplayNumber}" />
                                                             <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="7" Margin="8,0">
                                                                 <TextBlock Classes="chapterTitle" Text="{Binding Title}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
-                                                                <Border Classes="newBadge" IsVisible="{Binding IsNew}">
-                                                                    <TextBlock Text="NEW" FontSize="8" FontWeight="Bold" Foreground="{DynamicResource PbBadgeTextBrush}" />
-                                                                </Border>
+                                                                <controls:StatusBadge Variant="New" IsVisible="{Binding IsNew}" />
                                                             </StackPanel>
                                                             <fi:SymbolIcon Grid.Column="2" Symbol="Checkmark" FontSize="{StaticResource PbIconSizeXs}" Margin="0,0,8,0"
                                                                     Foreground="{DynamicResource PbTextFaintBrush}" IsVisible="{Binding ShowReadGlyph}"

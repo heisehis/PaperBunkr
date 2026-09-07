@@ -42,12 +42,16 @@ public partial class BookReaderScreen : UserControl
 
     private bool _isPageReady;
 
+    /// <summary>A block to scroll/page to once the reading pane is next ready - see <see cref="OnPositionRestoreRequested"/>'s own doc comment.</summary>
+    private string? _pendingScrollBlockId;
+
     private void OnDataContextChanged(object? sender, EventArgs e)
     {
         if (_viewModel is not null)
         {
             _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
             _viewModel.Settings.PropertyChanged -= OnSettingsPropertyChanged;
+            _viewModel.PositionRestoreRequested -= OnPositionRestoreRequested;
         }
 
         _viewModel = DataContext as BookReaderScreenViewModel;
@@ -56,6 +60,7 @@ public partial class BookReaderScreen : UserControl
             _viewModel.PropertyChanged += OnViewModelPropertyChanged;
             _viewModel.Settings.PropertyChanged += OnSettingsPropertyChanged;
             _viewModel.Highlights.CollectionChanged += OnHighlightsCollectionChanged;
+            _viewModel.PositionRestoreRequested += OnPositionRestoreRequested;
             PushCurrentChapterHtml();
         }
     }
@@ -113,6 +118,19 @@ public partial class BookReaderScreen : UserControl
             return;
         }
 
+        if (type == "position")
+        {
+            // Topmost-visible-block report (docs/superpowers/specs/2026-09-07-books-reader-
+            // pagination-and-position-fix-design.md) - fired on every page-turn and from a debounced
+            // scroll listener in the vertical-scroll fallback mode (see HighlightScript's own
+            // pbSchedulePositionCapture/pbReportPosition).
+            _viewModel.OnPositionCaptured(
+                root.GetProperty("blockId").GetString() ?? string.Empty,
+                root.GetProperty("fraction").GetDouble(),
+                root.GetProperty("excerpt").GetString() ?? string.Empty);
+            return;
+        }
+
         var rectInWebView = new Rect(
             root.GetProperty("rectX").GetDouble(), root.GetProperty("rectY").GetDouble(),
             root.GetProperty("rectWidth").GetDouble(), root.GetProperty("rectHeight").GetDouble());
@@ -154,20 +172,17 @@ public partial class BookReaderScreen : UserControl
     private void OnSettingsPropertyChanged(object? sender, PropertyChangedEventArgs e) => PushTypographyCss();
 
     /// <summary>
-    /// Books reflow reader WebView redesign (docs/superpowers/specs/2026-09-02-books-reflow-reader-
-    /// webview-redesign-design.md, Step 5) - **vertical scroll, not CSS multi-column.** The design's
-    /// original plan (CSS `column-width`, matching Thorium/Readium) was tried twice, two different
-    /// ways - once relying on `vw` units, once having JS measure the real rendered box and set
-    /// `column-width` as an exact pixel value - and *both* produced the identical symptom against the
-    /// real running app (the next column's text visibly bleeding in at the right edge). Two different,
-    /// individually sound fixes failing identically is a strong signal the actual defect is somewhere
-    /// in how this specific WebView hosting mode handles multi-column layout + horizontal overflow
-    /// clipping generally, not in either fix's own math - not diagnosable further without live
-    /// devtools access this session doesn't have. Switched to `#pb-content` as a single vertically-
-    /// scrollable block (`overflow-y: auto`) instead: no columns, no horizontal-overflow-clipping
-    /// question to get wrong, and plain vertical scroll is about as basic and reliably-implemented a
-    /// browser behavior as exists. "Page turn" becomes a one-viewport-height `scrollTop` jump instead
-    /// of a `scrollLeft` one - see <see cref="NextPageScript"/>/<see cref="PreviousPageScript"/>.
+    /// Third pagination attempt (docs/superpowers/specs/2026-09-07-books-reader-pagination-and-
+    /// position-fix-design.md), replacing the 2026-09-02 vertical-scroll fallback. The original design
+    /// (CSS `column-width`, `scrollLeft` page-turns) was tried twice and both attempts produced the
+    /// identical symptom - the next column's text visibly bleeding in at the right edge - regardless of
+    /// how the column width was computed, which points at the *scroll* mechanism itself (a known class
+    /// of embedded-control repaint bug when native-scrolling multi-column content) rather than either
+    /// fix's math. This attempt keeps CSS `column-width` for layout but drives page-turns via
+    /// `transform: translateX()` on <c>#pb-content</c> instead - no native scroll happens at all, so
+    /// that repaint path can't be hit. <see cref="UseColumnPaging"/> is a one-line flip back to the
+    /// vertical-scroll fallback (now dressed with CSS scroll-snap) if this doesn't hold up on-screen -
+    /// see that field's own doc comment.
     /// </summary>
     private void PushCurrentChapterHtml()
     {
@@ -179,10 +194,26 @@ public partial class BookReaderScreen : UserControl
 
         _isPageReady = false;
 
+        // #pb-viewport is always the fixed-size clipping/scrolling frame; #pb-content is always the
+        // actual flowing chapter content - unified across both modes so HighlightScript's JS doesn't
+        // need two different DOM shapes. Column geometry (column-width/height) is set by JS at
+        // runtime (HighlightScript's pbApplyPagination), not here, since it needs the real rendered
+        // viewport size, not a guessed CSS unit - the same "vw vs exact pixel" question that didn't
+        // matter for the previous scrollLeft attempts is sidestepped by measuring directly either way.
+        string modeCss = UseColumnPaging
+            ? """
+              #pb-content { column-gap: 0; will-change: transform; }
+              """
+            : """
+              #pb-viewport { overflow-y: auto; }
+              #pb-content { scroll-snap-type: y proximity; }
+              #pb-content > * { scroll-snap-align: start; }
+              """;
+
         // pb-base-style: pagination mechanics only, never changes. pb-user-style: the live typography/
-        // theme layer (Step 6) - baked in here for the *initial* render of each chapter (no
-        // NavigationCompleted race to wait out), then re-injected in place via InvokeScript by
-        // PushTypographyCss whenever a setting changes without needing a full reload.
+        // theme layer (Step 6 of the parent WebView redesign) - baked in here for the *initial* render
+        // of each chapter (no NavigationCompleted race to wait out), then re-injected in place via
+        // InvokeScript by PushTypographyCss whenever a setting changes without needing a full reload.
         string document = $$"""
             <!DOCTYPE html>
             <html>
@@ -190,7 +221,9 @@ public partial class BookReaderScreen : UserControl
             <meta charset="utf-8" />
             <style id="pb-base-style">
               html, body { margin: 0; padding: 0; height: 100vh; overflow: hidden; }
-              #pb-content { height: 100vh; overflow-y: auto; overflow-x: hidden; box-sizing: border-box; }
+              #pb-viewport { width: 100vw; height: 100vh; overflow: hidden; position: relative; box-sizing: border-box; }
+              #pb-content { box-sizing: border-box; }
+              {{modeCss}}
               img { max-width: 100%; height: auto; }
             </style>
             <style id="pb-user-style">{{BuildTypographyCss(_viewModel.Settings)}}</style>
@@ -202,13 +235,34 @@ public partial class BookReaderScreen : UserControl
               .pb-color-Pink { background: rgba(240, 98, 146, 0.55); }
             </style>
             </head>
-            <body><div id="pb-content">{{chapterHtml}}</div></body>
+            <body><div id="pb-viewport"><div id="pb-content">{{chapterHtml}}</div></div></body>
+            <script>window.pbPageMode = {{(UseColumnPaging ? "true" : "false")}};</script>
             <script>{{HighlightScript}}</script>
             </html>
             """;
 
         ReaderWebView.NavigateToString(document);
     }
+
+    /// <summary>
+    /// True: attempt CSS-column + <c>transform</c> paging (see <see cref="PushCurrentChapterHtml"/>'s
+    /// own doc comment). False: fall back to vertical scroll dressed with CSS scroll-snap.
+    ///
+    /// <b>Flipped to false 2026-09-07 after real on-screen verification</b> (docs/superpowers/specs/
+    /// 2026-09-07-books-reader-pagination-and-position-fix-design.md's disclosed fallback chain): the
+    /// transform-based attempt hit the *same* next-column-bleeding-in-at-the-right-edge symptom as both
+    /// of the original design's scrollLeft-based attempts, screenshotted live in a real Dune EPUB. This
+    /// rules out the leading theory (that a native-scroll-triggered repaint bug in this specific WebView
+    /// hosting mode was the cause, since transform never scrolls at all) - the defect is evidently
+    /// something more fundamental about how `Avalonia.Controls.WebView` composites CSS multi-column
+    /// layout + `overflow: hidden` clipping in general, not the page-turn mechanism. Three independently
+    /// reasoned attempts (vw sizing, exact-pixel sizing, transform-instead-of-scroll) failing with the
+    /// identical visual symptom is a strong enough signal to stop trying blind - this needs live
+    /// devtools access neither this nor any prior session has had. Per the design's own fallback chain,
+    /// this item is now closed out on vertical scroll (dressed with CSS scroll-snap), same status as the
+    /// magnifier: permanently declined, not silently left half-done.
+    /// </summary>
+    private const bool UseColumnPaging = false;
 
     // Books reflow reader WebView redesign (docs/superpowers/specs/2026-09-02-books-reflow-reader-
     // webview-redesign-design.md, Step 7). Selection capture: on mouseup inside #pb-content, resolves
@@ -331,6 +385,142 @@ public partial class BookReaderScreen : UserControl
             if (sel && !sel.isCollapsed) return;
             invokeCSharpAction(JSON.stringify({ type: 'contentTap' }));
         });
+        // Pagination + position capture/restore (docs/superpowers/specs/2026-09-07-books-reader-
+        // pagination-and-position-fix-design.md). window.pbPageMode (set inline by
+        // BookReaderScreen.axaml.cs's PushCurrentChapterHtml, mirroring UseColumnPaging) picks between
+        // two independent page-turn implementations: column+transform (no native scroll, sidestepping
+        // the scrollLeft-driven repaint bug the previous two pagination attempts hit) or plain vertical
+        // scroll on #pb-viewport (the disclosed fallback). Both report position the same way, through
+        // pbReportPosition - the topmost-visible-block check (getBoundingClientRect against
+        // #pb-viewport's own rect) works identically regardless of which mode moved the viewport.
+        function pbApplyPagination() {
+            if (!window.pbPageMode) return;
+            var viewport = document.getElementById('pb-viewport');
+            var content = document.getElementById('pb-content');
+            if (!viewport || !content) return;
+            var width = viewport.clientWidth;
+            var height = viewport.clientHeight;
+            content.style.columnWidth = width + 'px';
+            content.style.height = height + 'px';
+            window.pbPageWidth = width;
+            window.pbPageCount = Math.max(1, Math.round(content.scrollWidth / width));
+            if (typeof window.pbCurrentPage !== 'number') window.pbCurrentPage = 0;
+            window.pbCurrentPage = Math.max(0, Math.min(window.pbCurrentPage, window.pbPageCount - 1));
+            content.style.transform = 'translateX(-' + (window.pbCurrentPage * width) + 'px)';
+        }
+        function pbSetPageTransform() {
+            var content = document.getElementById('pb-content');
+            if (content) content.style.transform = 'translateX(-' + (window.pbCurrentPage * window.pbPageWidth) + 'px)';
+        }
+        function pbNextPageColumn() {
+            if (window.pbCurrentPage + 1 >= window.pbPageCount) return 'end';
+            window.pbCurrentPage += 1;
+            pbSetPageTransform();
+            var fraction = 'moved:' + (window.pbPageCount > 1 ? window.pbCurrentPage / (window.pbPageCount - 1) : 0);
+            pbReportPosition();
+            return fraction;
+        }
+        function pbPreviousPageColumn() {
+            if (window.pbCurrentPage <= 0) return 'start';
+            window.pbCurrentPage -= 1;
+            pbSetPageTransform();
+            var fraction = 'moved:' + (window.pbPageCount > 1 ? window.pbCurrentPage / (window.pbPageCount - 1) : 0);
+            pbReportPosition();
+            return fraction;
+        }
+        function pbNextPageScroll() {
+            var viewport = document.getElementById('pb-viewport');
+            if (!viewport) return 'end';
+            var step = viewport.clientHeight;
+            var before = viewport.scrollTop;
+            viewport.scrollTop += step;
+            if (viewport.scrollTop <= before) return 'end';
+            var maxScroll = viewport.scrollHeight - step;
+            var result = 'moved:' + (maxScroll > 0 ? (viewport.scrollTop / maxScroll) : 0);
+            pbReportPosition();
+            return result;
+        }
+        function pbPreviousPageScroll() {
+            var viewport = document.getElementById('pb-viewport');
+            if (!viewport) return 'start';
+            var step = viewport.clientHeight;
+            var before = viewport.scrollTop;
+            viewport.scrollTop -= step;
+            if (viewport.scrollTop >= before) return 'start';
+            var maxScroll = viewport.scrollHeight - step;
+            var result = 'moved:' + (maxScroll > 0 ? (viewport.scrollTop / maxScroll) : 0);
+            pbReportPosition();
+            return result;
+        }
+        window.pbNextPage = function () { return window.pbPageMode ? pbNextPageColumn() : pbNextPageScroll(); };
+        window.pbPreviousPage = function () { return window.pbPageMode ? pbPreviousPageColumn() : pbPreviousPageScroll(); };
+        function pbFindTopmostVisibleBlock() {
+            var viewport = document.getElementById('pb-viewport');
+            if (!viewport) return null;
+            var vRect = viewport.getBoundingClientRect();
+            var blocks = document.querySelectorAll('#pb-content [id^="pb-p"]');
+            for (var i = 0; i < blocks.length; i++) {
+                var r = blocks[i].getBoundingClientRect();
+                if (r.bottom > vRect.top && r.top < vRect.bottom && r.right > vRect.left && r.left < vRect.right) {
+                    return { blockId: blocks[i].id, excerpt: (blocks[i].textContent || '').trim().slice(0, 140) };
+                }
+            }
+            return null;
+        }
+        function pbReportPosition() {
+            var found = pbFindTopmostVisibleBlock();
+            if (!found) return;
+            var fraction = 0;
+            if (window.pbPageMode) {
+                fraction = window.pbPageCount > 1 ? window.pbCurrentPage / (window.pbPageCount - 1) : 0;
+            } else {
+                var v = document.getElementById('pb-viewport');
+                var max = v ? v.scrollHeight - v.clientHeight : 0;
+                fraction = v && max > 0 ? v.scrollTop / max : 0;
+            }
+            invokeCSharpAction(JSON.stringify({ type: 'position', blockId: found.blockId, fraction: fraction, excerpt: found.excerpt }));
+        }
+        var pbPositionDebounceTimer = null;
+        function pbSchedulePositionCapture() {
+            if (pbPositionDebounceTimer) clearTimeout(pbPositionDebounceTimer);
+            pbPositionDebounceTimer = setTimeout(pbReportPosition, 500);
+        }
+        // Restore ("jump to a saved position") - called by BookReaderScreen.axaml.cs after resume-on-
+        // load, a bookmark jump, or a highlight jump. Column mode: temporarily clears the transform to
+        // read the target's natural (untransformed) layout position - transform never affects layout,
+        // only paint, so this is a same-tick read with no visible flash - then computes which page
+        // that offset falls in and jumps there directly, since CSS multi-column layout exposes no
+        // "which column is this element in" API. Scroll mode: plain scrollIntoView.
+        window.pbScrollToBlock = function (blockId) {
+            if (!blockId) return;
+            var target = document.getElementById(blockId);
+            if (!target) return;
+            if (!window.pbPageMode) {
+                target.scrollIntoView({ block: 'start' });
+                pbReportPosition();
+                return;
+            }
+            var content = document.getElementById('pb-content');
+            var savedTransform = content.style.transform;
+            content.style.transform = 'none';
+            var contentLeft = content.getBoundingClientRect().left;
+            var targetLeft = target.getBoundingClientRect().left;
+            content.style.transform = savedTransform;
+            var naturalOffset = targetLeft - contentLeft;
+            window.pbCurrentPage = Math.max(0, Math.min(window.pbPageCount - 1, Math.floor(naturalOffset / window.pbPageWidth)));
+            pbSetPageTransform();
+            pbReportPosition();
+        };
+        window.addEventListener('resize', function () {
+            if (window.pbPageMode) pbApplyPagination();
+        });
+        if (window.pbPageMode) {
+            pbApplyPagination();
+        } else {
+            var pbViewportEl = document.getElementById('pb-viewport');
+            if (pbViewportEl) pbViewportEl.addEventListener('scroll', pbSchedulePositionCapture);
+        }
+        pbReportPosition();
         """;
 
     /// <summary>Re-renders every highlight in the current chapter from scratch - called after the chapter's initial load and after any create/delete, per <see cref="HighlightScript"/>'s own doc comment on why "clear and reapply" beats incremental patching here.</summary>
@@ -409,40 +599,24 @@ public partial class BookReaderScreen : UserControl
         }
 
         string css = BuildTypographyCss(_viewModel.Settings);
-        string script = "var el = document.getElementById('pb-user-style'); if (el) el.textContent = " + JsonSerializer.Serialize(css) + ";";
+        // Font-size/spacing changes reflow the chapter's content, changing how many columns it spans
+        // in paged mode - re-run pbApplyPagination right after so window.pbPageCount/pbCurrentPage
+        // stay correct instead of drifting stale until the next explicit page-turn (docs/superpowers/
+        // specs/2026-09-07-books-reader-pagination-and-position-fix-design.md). A no-op in scroll mode
+        // (pbApplyPagination itself checks window.pbPageMode).
+        string script = "var el = document.getElementById('pb-user-style'); if (el) el.textContent = " + JsonSerializer.Serialize(css) +
+            "; if (window.pbApplyPagination) window.pbApplyPagination();";
         _ = ReaderWebView.InvokeScript(script);
     }
 
-    // "moved:<fraction>" reports the new scrollTop/scrollHeight position after a successful
-    // within-chapter scroll; "end"/"start" means the WebView is already at that chapter's boundary -
-    // the caller falls back to the ViewModel's chapter-advance commands in that case. Vertical
-    // scrollTop, not horizontal scrollLeft - see PushCurrentChapterHtml's doc comment for why this
-    // isn't CSS-multi-column-based anymore.
-    private const string NextPageScript = """
-        (function() {
-            var el = document.getElementById('pb-content');
-            if (!el) return 'end';
-            var step = el.clientHeight;
-            var before = el.scrollTop;
-            el.scrollTop += step;
-            if (el.scrollTop <= before) return 'end';
-            var maxScroll = el.scrollHeight - step;
-            return 'moved:' + (maxScroll > 0 ? (el.scrollTop / maxScroll) : 0);
-        })();
-        """;
+    // "moved:<fraction>" reports the new page/scroll position after a successful within-chapter
+    // page-turn; "end"/"start" means the WebView is already at that chapter's boundary - the caller
+    // falls back to the ViewModel's chapter-advance commands in that case. window.pbNextPage/
+    // pbPreviousPage (HighlightScript) pick the column-transform or vertical-scroll implementation
+    // based on window.pbPageMode - see PushCurrentChapterHtml's own doc comment.
+    private const string NextPageScript = "window.pbNextPage();";
 
-    private const string PreviousPageScript = """
-        (function() {
-            var el = document.getElementById('pb-content');
-            if (!el) return 'start';
-            var step = el.clientHeight;
-            var before = el.scrollTop;
-            el.scrollTop -= step;
-            if (el.scrollTop >= before) return 'start';
-            var maxScroll = el.scrollHeight - step;
-            return 'moved:' + (maxScroll > 0 ? (el.scrollTop / maxScroll) : 0);
-        })();
-        """;
+    private const string PreviousPageScript = "window.pbPreviousPage();";
 
     // ReaderChrome.PreviousRequested/NextRequested (docs/superpowers/specs/2026-09-03-books-reader-
     // hud-redesign-design.md) - plain EventHandler, not RoutedEventArgs, since these fire from the
@@ -542,6 +716,39 @@ public partial class BookReaderScreen : UserControl
         _isPageReady = true;
         PushTypographyCss();
         ApplyHighlightsToWebView();
+        FlushPendingScroll();
+    }
+
+    /// <summary>
+    /// The ViewModel wants the reading pane scrolled/paged to a specific block - resume-on-load, a
+    /// bookmark jump, a highlight jump (docs/superpowers/specs/2026-09-07-books-reader-pagination-and-
+    /// position-fix-design.md). Fired *after* <c>RecomputeCurrentPage()</c> already ran, so
+    /// <see cref="_isPageReady"/> correctly reflects whether a chapter reload is now in flight (set
+    /// false by <see cref="PushCurrentChapterHtml"/> if <c>CurrentChapterHtml</c> changed) or the
+    /// target chapter was already the one on screen (no reload, DOM still there right now).
+    /// </summary>
+    private void OnPositionRestoreRequested(string? blockId)
+    {
+        _pendingScrollBlockId = blockId;
+        if (_isPageReady)
+        {
+            FlushPendingScroll();
+        }
+
+        // else: OnReaderNavigationCompleted flushes it once the new chapter finishes loading.
+    }
+
+    private void FlushPendingScroll()
+    {
+        if (string.IsNullOrEmpty(_pendingScrollBlockId))
+        {
+            _pendingScrollBlockId = null;
+            return;
+        }
+
+        string blockId = _pendingScrollBlockId;
+        _pendingScrollBlockId = null;
+        _ = ReaderWebView.InvokeScript($"if (window.pbScrollToBlock) window.pbScrollToBlock({JsonSerializer.Serialize(blockId)});");
     }
 
     private void OnRootPointerMoved(object? sender, PointerEventArgs e)

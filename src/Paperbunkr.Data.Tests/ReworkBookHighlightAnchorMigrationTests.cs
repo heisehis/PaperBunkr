@@ -48,7 +48,12 @@ public class ReworkBookHighlightAnchorMigrationTests : IDisposable
     {
         using (var context = CreateContext())
         {
-            context.Database.Migrate();
+            // Straight to PriorMigration from an empty database, not "up to latest, then back down" -
+            // going all the way up first would apply every later migration's Up(), including any with
+            // a deliberate no-op Down() (this project's own orphan-column rule); rolling back afterward
+            // wouldn't remove what that Up() added, so the eventual catch-up-to-latest step further
+            // down would collide with it and fail with "duplicate column name". Migrating directly to
+            // the target never creates that column in the first place.
             context.GetService<IMigrator>().Migrate(PriorMigration);
 
             // Written via raw SQL rather than context.Books.Add(...), since the current Book entity
@@ -75,7 +80,13 @@ public class ReworkBookHighlightAnchorMigrationTests : IDisposable
 
         using (var context = CreateContext())
         {
-            context.Database.Migrate();
+            // Targets this migration specifically, not "whatever's latest" - context.Database.Migrate()
+            // would re-run every later migration too, including any with a deliberate no-op Down()
+            // (this project's own orphan-column rule). Since Down() doesn't remove such a column, a
+            // second Up() pass over it (which the up-down-up shape above requires) fails with
+            // "duplicate column name" - this is what was actually behind the previously-tracked
+            // "duplicate column name: CharacterCount" failure, not a genuine EF/SQLite rebuild bug.
+            context.GetService<IMigrator>().Migrate("20260902162546_ReworkBookHighlightAnchor");
 
             Assert.Empty(context.BookHighlights);
 
@@ -85,6 +96,15 @@ public class ReworkBookHighlightAnchorMigrationTests : IDisposable
             Assert.Contains("BlockId", cols);
             Assert.Contains("Length", cols);
             Assert.DoesNotContain("EndOffset", cols);
+        }
+
+        // Catches the schema up to whatever's actually newest (deliberately unpinned, unlike the
+        // block above) - everything from here on uses plain typed EF operations against the
+        // *current* model, which only work once the physical schema has every later migration's
+        // columns too (e.g. Book.LastBlockId from ReworkBookPositionAnchor).
+        using (var context = CreateContext())
+        {
+            context.Database.Migrate();
         }
 
         using (var context = CreateContext())

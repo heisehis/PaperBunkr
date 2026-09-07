@@ -1,0 +1,29 @@
+{
+  "name": "Cool & Technical",
+  "colors": {
+    "bg": "#0B0E14",
+    "chrome": "#12151C",
+    "border": "#232A36",
+    "text": "#E4E7EC",
+    "textMuted": "#9BA3B0",
+    "textFaint": "#626B7A",
+    "accent": "#5EA7F0",
+    "accentText": "#7FBBF5",
+    "accentSoft": "#295EA7F0",
+    "badge": "#4FC3D9",
+    "badgeText": "#071824",
+    "success": "#4FA87F",
+    "surface0": "#060810",
+    "surface1": "#0B0E14",
+    "surface2": "#12151C",
+    "surface3": "#1A1F29",
+    "glow": "#665EA7F0",
+    "heroGradientStart": "#00000000",
+    "heroGradientEnd": "#FF06080D"
+  },
+  "spacingUnit": 4,
+  "radius": 7,
+  "radiusSm": 5,
+  "radiusLg": 14,
+  "icons": {}
+}

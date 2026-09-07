@@ -182,7 +182,7 @@ public static class HomeFeedResolver
             .Include(b => b.BookSeries)
             .Where(b => b.LastOpenedTime != null
                         && !b.Finished
-                        && (b.LastChapterIndex > 0 || b.LastCharacterOffset > 0))
+                        && (b.LastChapterIndex > 0 || !string.IsNullOrEmpty(b.LastBlockId)))
             .OrderByDescending(b => b.LastOpenedTime)
             .Take(limit)
             .ToList();

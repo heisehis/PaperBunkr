@@ -58,10 +58,14 @@
             <Setter Property="Foreground" Value="{DynamicResource PbAccentTextBrush}" />
         </Style>
         <Style Selector="Border#DrawerRoot">
+            <!-- Audit fix (docs/superpowers/specs/2026-09-07-chrome-content-motion-polish-design.md
+                 item 6): these were hardcoded literals, immune to Reduced Motion even though the
+                 easing curve was already correctly token-based - now wired to the same
+                 PbMotionStandard/PbMotionFast tokens SkinService.ApplyReducedMotion zeroes. -->
             <Setter Property="Transitions">
                 <Transitions>
-                    <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.22" Easing="{StaticResource PbMotionEase}" />
-                    <DoubleTransition Property="Opacity" Duration="0:0:0.18" />
+                    <TransformOperationsTransition Property="RenderTransform" Duration="{DynamicResource PbMotionStandard}" Easing="{StaticResource PbMotionEase}" />
+                    <DoubleTransition Property="Opacity" Duration="{DynamicResource PbMotionFast}" />
                 </Transitions>
             </Setter>
             <!-- Avalonia's transform mini-language has no % unit - the drawer is 360px tall, so
@@ -147,8 +151,10 @@
                               ItemsSource="{Binding HistoryKindOptions}" />
                     <ComboBox Grid.Column="2" SelectedItem="{Binding HistoryAge}" MinWidth="120"
                               ItemsSource="{Binding HistoryAgeOptions}" />
-                    <CheckBox Grid.Column="3" Content="Failures only" IsChecked="{Binding HistoryFailuresOnly}"
-                              FontSize="{DynamicResource PbFontSizeControl}" VerticalAlignment="Center" />
+                    <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                        <TextBlock Text="Failures only" FontSize="{DynamicResource PbFontSizeControl}" VerticalAlignment="Center" Foreground="{DynamicResource PbTextBrush}" />
+                        <ToggleSwitch IsChecked="{Binding HistoryFailuresOnly}" OnContent="{x:Null}" OffContent="{x:Null}" />
+                    </StackPanel>
                 </Grid>
 
                 <ScrollViewer Grid.Row="1">

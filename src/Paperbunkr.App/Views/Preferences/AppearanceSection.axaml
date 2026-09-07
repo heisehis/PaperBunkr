@@ -3,6 +3,7 @@
              xmlns:fi="using:FluentIcons.Avalonia"
              xmlns:vm="using:Paperbunkr.App.ViewModels"
              xmlns:models="using:Paperbunkr.App.Models"
+             xmlns:pref="using:Paperbunkr.App.Views.Preferences"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d" d:DesignWidth="640" d:DesignHeight="720"
@@ -13,115 +14,94 @@
         <StackPanel Margin="28,20,28,40" Spacing="20">
             <TextBlock Classes="pbTextHeading" Text="Appearance" />
 
-            <!-- Skins -->
-            <Border Classes="groupBox" Tag="appearance.skin">
-                <StackPanel>
-                    <Border Classes="groupHeader">
-                        <TextBlock Text="Skins" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
-                    </Border>
-                    <ItemsControl x:Name="SkinsList" ItemsSource="{Binding Skins}">
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate x:DataType="models:SkinSummary">
-                                <Border Classes="skinRow">
-                                    <Button Classes="sideItemButton"
-                                            Command="{Binding #SkinsList.((vm:PreferencesScreenViewModel)DataContext).SelectSkinCommand}"
-                                            CommandParameter="{Binding}">
-                                        <Grid ColumnDefinitions="*,Auto">
-                                            <TextBlock Grid.Column="0" Text="{Binding Name}" FontSize="13"
-                                                       Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
-                                            <TextBlock Grid.Column="1" Text="Active" IsVisible="{Binding IsActive}"
-                                                       FontSize="11" FontWeight="Bold" Foreground="{DynamicResource PbAccentTextBrush}"
-                                                       VerticalAlignment="Center" />
-                                        </Grid>
-                                    </Button>
-                                </Border>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                </StackPanel>
-            </Border>
+        <!-- Skins - deferred to its own future redesign (docs/superpowers/specs/2026-09-07-
+             preferences-tile-hub-redesign-design.md §4 item 8) - a dynamic repeater over a
+             data-bound collection doesn't fit SettingsRow's fixed-row shape, kept exactly as-is. -->
+        <Border Classes="groupBox" Tag="appearance.skin">
+            <StackPanel>
+                <Border Classes="groupHeader">
+                    <TextBlock Text="Skins" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
+                </Border>
+                <ItemsControl x:Name="SkinsList" ItemsSource="{Binding Skins}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="models:SkinSummary">
+                            <Border Classes="skinRow">
+                                <Button Classes="sideItemButton"
+                                        Command="{Binding #SkinsList.((vm:PreferencesScreenViewModel)DataContext).SelectSkinCommand}"
+                                        CommandParameter="{Binding}">
+                                    <Grid ColumnDefinitions="*,Auto">
+                                        <TextBlock Grid.Column="0" Text="{Binding Name}" FontSize="13"
+                                                   Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
+                                        <TextBlock Grid.Column="1" Text="Active" IsVisible="{Binding IsActive}"
+                                                   FontSize="11" FontWeight="Bold" Foreground="{DynamicResource PbAccentTextBrush}"
+                                                   VerticalAlignment="Center" />
+                                    </Grid>
+                                </Button>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
+        </Border>
 
-            <!-- Install Skin -->
-            <Border Classes="groupBox" Tag="appearance.installSkin">
-                <StackPanel>
-                    <Border Classes="groupHeader">
-                        <TextBlock Text="Install Skin" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
-                    </Border>
-                    <StackPanel Margin="14" Spacing="10">
-                        <StackPanel Orientation="Horizontal" Spacing="10">
-                            <Button Classes="headerAction primary" Command="{Binding BrowseForSkinCommand}">
-                                <StackPanel Orientation="Horizontal" Spacing="6">
-                                    <fi:SymbolIcon Symbol="FolderOpen" Foreground="{DynamicResource PbBadgeTextBrush}" />
-                                    <TextBlock Text="Browse…" />
-                                </StackPanel>
-                            </Button>
-                            <Button Classes="headerAction ghost" Command="{Binding OpenSkinsFolderCommand}">
-                                <StackPanel Orientation="Horizontal" Spacing="6">
-                                    <fi:SymbolIcon Symbol="FolderOpen" />
-                                    <TextBlock Text="Open Skins Folder" />
-                                </StackPanel>
-                            </Button>
-                        </StackPanel>
-                        <StackPanel Orientation="Horizontal" Spacing="5" IsVisible="{Binding HasInstallSkinError}">
-                            <fi:SymbolIcon Symbol="Warning" FontSize="{StaticResource PbIconSizeXs}" Foreground="#D96C6C" />
-                            <TextBlock Text="{Binding InstallSkinError}" Foreground="#D96C6C" FontSize="12" TextWrapping="Wrap" />
-                        </StackPanel>
-                    </StackPanel>
-                </StackPanel>
-            </Border>
-
-            <!-- Font -->
-            <Border Classes="groupBox" Tag="appearance.font">
-                <StackPanel>
-                    <Border Classes="groupHeader">
-                        <TextBlock Text="Font" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
-                    </Border>
-                    <StackPanel Margin="14">
-                        <ComboBox ItemsSource="{Binding FontFamilies}" SelectedItem="{Binding SelectedFontFamily}" Width="280" />
-                    </StackPanel>
-                </StackPanel>
-            </Border>
-
-            <!-- Motion -->
-            <Border Classes="groupBox" Tag="appearance.motion">
-                <StackPanel>
-                    <Border Classes="groupHeader">
-                        <TextBlock Text="Motion" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
-                    </Border>
-                    <StackPanel Margin="14">
-                        <CheckBox Content="Reduce motion" IsChecked="{Binding ReducedMotion}" />
-                        <TextBlock Text="Shortens UI transitions to effectively instant." FontSize="11.5"
-                                   Foreground="{DynamicResource PbTextFaintBrush}" Margin="0,4,0,0" />
-                    </StackPanel>
-                </StackPanel>
-            </Border>
-
-            <!-- Navigation (docs/superpowers/specs/2026-08-24-navigation-shell-motion-system-design.md's
-                 hover-expand mechanism) - added 2026-09-05, user-requested opt-out. -->
-            <Border Classes="groupBox" Tag="appearance.navigation">
-                <StackPanel>
-                    <Border Classes="groupHeader">
-                        <TextBlock Text="Navigation" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
-                    </Border>
-                    <StackPanel Margin="14">
-                        <CheckBox Content="Expand nav rail on hover" IsChecked="{Binding NavRailHoverExpandEnabled}" />
-                        <TextBlock Text="When off, the rail only expands while pinned open." FontSize="11.5"
-                                   Foreground="{DynamicResource PbTextFaintBrush}" Margin="0,4,0,0" />
-                    </StackPanel>
-                </StackPanel>
-            </Border>
-
-            <!-- Developer - debug-only, hidden entirely in Release builds. -->
-            <Border Classes="groupBox" Tag="appearance.developer" IsVisible="{Binding IsDebugBuild}">
-                <StackPanel>
-                    <Border Classes="groupHeader">
-                        <TextBlock Text="Developer" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
-                    </Border>
-                    <StackPanel Margin="14">
-                        <Button Content="Open Design Showcase" Command="{Binding OpenDesignShowcaseCommand}" />
-                    </StackPanel>
-                </StackPanel>
-            </Border>
+        <StackPanel Tag="appearance.installSkin">
+            <TextBlock Classes="settingsGroupCaption" Text="INSTALL SKIN" />
+            <pref:SettingsRow Icon="FolderOpen" Title="Install a skin from a file">
+                <pref:SettingsRow.SettingsContent>
+                    <Button Classes="headerAction primary" Command="{Binding BrowseForSkinCommand}" Content="Browse…" />
+                </pref:SettingsRow.SettingsContent>
+            </pref:SettingsRow>
+            <pref:SettingsRow Icon="FolderOpen" Title="Open the folder where installed skins live">
+                <pref:SettingsRow.SettingsContent>
+                    <Button Classes="headerAction ghost" Command="{Binding OpenSkinsFolderCommand}" Content="Open Skins Folder" />
+                </pref:SettingsRow.SettingsContent>
+            </pref:SettingsRow>
+            <StackPanel Orientation="Horizontal" Spacing="5" Margin="0,4,0,0" IsVisible="{Binding HasInstallSkinError}">
+                <fi:SymbolIcon Symbol="Warning" FontSize="{StaticResource PbIconSizeXs}" Foreground="#D96C6C" />
+                <TextBlock Text="{Binding InstallSkinError}" Foreground="#D96C6C" FontSize="12" TextWrapping="Wrap" />
+            </StackPanel>
         </StackPanel>
+
+        <StackPanel Tag="appearance.font">
+            <TextBlock Classes="settingsGroupCaption" Text="FONT" />
+            <pref:SettingsRow Icon="TextFont" Title="Font family">
+                <pref:SettingsRow.SettingsContent>
+                    <ComboBox ItemsSource="{Binding FontFamilies}" SelectedItem="{Binding SelectedFontFamily}" Width="280" />
+                </pref:SettingsRow.SettingsContent>
+            </pref:SettingsRow>
+        </StackPanel>
+
+        <StackPanel Tag="appearance.motion">
+            <TextBlock Classes="settingsGroupCaption" Text="MOTION" />
+            <pref:SettingsRow Icon="Pulse" Title="Reduce motion"
+                               Description="Shortens UI transitions to effectively instant.">
+                <pref:SettingsRow.SettingsContent>
+                    <ToggleSwitch IsChecked="{Binding ReducedMotion}" OnContent="{x:Null}" OffContent="{x:Null}" />
+                </pref:SettingsRow.SettingsContent>
+            </pref:SettingsRow>
+        </StackPanel>
+
+        <!-- Navigation (docs/superpowers/specs/2026-08-24-navigation-shell-motion-system-design.md's
+             hover-expand mechanism) - added 2026-09-05, user-requested opt-out. -->
+        <StackPanel Tag="appearance.navigation">
+            <TextBlock Classes="settingsGroupCaption" Text="NAVIGATION" />
+            <pref:SettingsRow Icon="Navigation" Title="Expand nav rail on hover"
+                               Description="When off, the rail only expands while pinned open.">
+                <pref:SettingsRow.SettingsContent>
+                    <ToggleSwitch IsChecked="{Binding NavRailHoverExpandEnabled}" OnContent="{x:Null}" OffContent="{x:Null}" />
+                </pref:SettingsRow.SettingsContent>
+            </pref:SettingsRow>
+        </StackPanel>
+
+        <!-- Developer - debug-only, hidden entirely in Release builds. -->
+        <StackPanel Tag="appearance.developer" IsVisible="{Binding IsDebugBuild}">
+            <TextBlock Classes="settingsGroupCaption" Text="DEVELOPER" />
+            <pref:SettingsRow Icon="Code" Title="Open the internal component/style showcase">
+                <pref:SettingsRow.SettingsContent>
+                    <Button Content="Open Design Showcase" Command="{Binding OpenDesignShowcaseCommand}" />
+                </pref:SettingsRow.SettingsContent>
+            </pref:SettingsRow>
+        </StackPanel>
+    </StackPanel>
     </ScrollViewer>
 </UserControl>

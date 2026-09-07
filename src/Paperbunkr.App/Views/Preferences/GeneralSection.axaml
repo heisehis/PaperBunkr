@@ -1,6 +1,8 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Paperbunkr.App.ViewModels"
+             xmlns:fi="using:FluentIcons.Avalonia"
+             xmlns:pref="using:Paperbunkr.App.Views.Preferences"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d" d:DesignWidth="640" d:DesignHeight="480"
@@ -11,59 +13,53 @@
         <StackPanel Margin="28,20,28,40" Spacing="20">
             <TextBlock Classes="pbTextHeading" Text="General" />
 
-            <Border Classes="groupBox" Tag="general.startup">
-                <StackPanel>
-                    <Border Classes="groupHeader">
-                        <TextBlock Text="Startup" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
-                    </Border>
-                    <StackPanel Margin="14" Spacing="12">
-                        <CheckBox IsChecked="{Binding RestoreSessionOnStartup}" Foreground="{DynamicResource PbTextBrush}" FontSize="13"
-                                  Content="Reopen the screen I was on last time" />
-                        <TextBlock Text="Scanning folders for new files at startup is now a scheduled task — set it up under Automation."
-                                   FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" />
-                    </StackPanel>
-                </StackPanel>
-            </Border>
-
-            <Border Classes="groupBox" Tag="general.reading">
-                <StackPanel>
-                    <Border Classes="groupHeader">
-                        <TextBlock Text="Reading" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
-                    </Border>
-                    <StackPanel Margin="14" Spacing="12">
-                        <CheckBox IsChecked="{Binding OpenLastPage}" Foreground="{DynamicResource PbTextBrush}" FontSize="13"
-                                  Content="Resume issues where you left off" />
-                        <CheckBox IsChecked="{Binding AutoNavigateComics}" Foreground="{DynamicResource PbTextBrush}" FontSize="13"
-                                  Content="Reading past the last page opens the next issue" />
-                        <CheckBox IsChecked="{Binding PromptReviewOnFinish}" Foreground="{DynamicResource PbTextBrush}" FontSize="13"
-                                  Content="Ask me to rate a comic when I finish it" />
-                    </StackPanel>
-                </StackPanel>
-            </Border>
-
-            <Border Classes="groupBox" Tag="general.library">
-                <StackPanel>
-                    <Border Classes="groupHeader">
-                        <TextBlock Text="Library" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
-                    </Border>
-                    <StackPanel Margin="14" Spacing="12">
-                        <CheckBox IsChecked="{Binding EnableDragDropImport}" Foreground="{DynamicResource PbTextBrush}" FontSize="13"
-                                  Content="Allow importing files by dragging them into the window" />
-                    </StackPanel>
-                </StackPanel>
-            </Border>
-
-            <Border Classes="groupBox" Tag="general.window">
-                <StackPanel>
-                    <Border Classes="groupHeader">
-                        <TextBlock Text="Window" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
-                    </Border>
-                    <StackPanel Margin="14" Spacing="12">
-                        <CheckBox IsChecked="{Binding MinimizeToTray}" Foreground="{DynamicResource PbTextBrush}" FontSize="13"
-                                  Content="Minimize to tray (closing the window also minimizes to tray while this is on)" />
-                    </StackPanel>
-                </StackPanel>
-            </Border>
+        <StackPanel Tag="general.startup">
+            <TextBlock Classes="settingsGroupCaption" Text="STARTUP" />
+            <pref:SettingsRow Icon="Play" Title="Reopen the screen I was on last time"
+                               Description="Scanning folders for new files at startup is now a scheduled task — set it up under Automation.">
+                <pref:SettingsRow.SettingsContent>
+                    <ToggleSwitch IsChecked="{Binding RestoreSessionOnStartup}" OnContent="{x:Null}" OffContent="{x:Null}" />
+                </pref:SettingsRow.SettingsContent>
+            </pref:SettingsRow>
         </StackPanel>
+
+        <StackPanel Tag="general.reading">
+            <TextBlock Classes="settingsGroupCaption" Text="READING" />
+            <pref:SettingsRow Icon="Book" Title="Resume issues where you left off">
+                <pref:SettingsRow.SettingsContent>
+                    <ToggleSwitch IsChecked="{Binding OpenLastPage}" OnContent="{x:Null}" OffContent="{x:Null}" />
+                </pref:SettingsRow.SettingsContent>
+            </pref:SettingsRow>
+            <pref:SettingsRow Icon="ArrowNext" Title="Reading past the last page opens the next issue">
+                <pref:SettingsRow.SettingsContent>
+                    <ToggleSwitch IsChecked="{Binding AutoNavigateComics}" OnContent="{x:Null}" OffContent="{x:Null}" />
+                </pref:SettingsRow.SettingsContent>
+            </pref:SettingsRow>
+            <pref:SettingsRow Icon="Star" Title="Ask me to rate a comic when I finish it">
+                <pref:SettingsRow.SettingsContent>
+                    <ToggleSwitch IsChecked="{Binding PromptReviewOnFinish}" OnContent="{x:Null}" OffContent="{x:Null}" />
+                </pref:SettingsRow.SettingsContent>
+            </pref:SettingsRow>
+        </StackPanel>
+
+        <StackPanel Tag="general.library">
+            <TextBlock Classes="settingsGroupCaption" Text="LIBRARY" />
+            <pref:SettingsRow Icon="ArrowUpload" Title="Allow importing files by dragging them into the window">
+                <pref:SettingsRow.SettingsContent>
+                    <ToggleSwitch IsChecked="{Binding EnableDragDropImport}" OnContent="{x:Null}" OffContent="{x:Null}" />
+                </pref:SettingsRow.SettingsContent>
+            </pref:SettingsRow>
+        </StackPanel>
+
+        <StackPanel Tag="general.window">
+            <TextBlock Classes="settingsGroupCaption" Text="WINDOW" />
+            <pref:SettingsRow Icon="WindowArrowUp" Title="Minimize to tray"
+                               Description="Closing the window also minimizes to tray while this is on.">
+                <pref:SettingsRow.SettingsContent>
+                    <ToggleSwitch IsChecked="{Binding MinimizeToTray}" OnContent="{x:Null}" OffContent="{x:Null}" />
+                </pref:SettingsRow.SettingsContent>
+            </pref:SettingsRow>
+        </StackPanel>
+    </StackPanel>
     </ScrollViewer>
 </UserControl>

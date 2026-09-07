@@ -196,7 +196,7 @@ public class SchedulerServiceTests : IDisposable
         var toasts = new List<string>();
         var okCatalog = new[] { Task("ok", 1, SchedulerResourceClass.Db) };
         var (scheduler, activity) = Build(okCatalog);
-        activity.CompletionToastRequested += (t, _) => toasts.Add(t);
+        activity.CompletionToastRequested += request => toasts.Add(request.Title);
 
         // default AppSettings.ScheduledTaskNotificationLevel is OnlyFailures
         scheduler.RunStartupPassForTest();
@@ -204,7 +204,7 @@ public class SchedulerServiceTests : IDisposable
 
         var boomCatalog = new[] { Task("boom", 1, SchedulerResourceClass.Db, () => throw new InvalidOperationException()) };
         var (scheduler2, activity2) = Build(boomCatalog);
-        activity2.CompletionToastRequested += (t, _) => toasts.Add(t);
+        activity2.CompletionToastRequested += request => toasts.Add(request.Title);
         scheduler2.RunStartupPassForTest();
         Assert.Contains(toasts, t => t.Contains("failed"));
     }

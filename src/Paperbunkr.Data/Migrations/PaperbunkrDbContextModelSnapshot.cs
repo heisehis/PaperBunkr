@@ -98,6 +98,11 @@ namespace Paperbunkr.Data.Migrations
                         .HasColumnType("INTEGER")
                         .HasDefaultValue(true);
 
+                    b.Property<bool>("AutoRemoveMissingOnScan")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasDefaultValue(false);
+
                     b.Property<string>("BackgroundColor")
                         .IsRequired()
                         .ValueGeneratedOnAdd()
@@ -231,6 +236,11 @@ namespace Paperbunkr.Data.Migrations
                         .HasColumnType("REAL")
                         .HasDefaultValue(0.0);
 
+                    b.Property<bool>("DontReimportRemovedFiles")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasDefaultValue(false);
+
                     b.Property<bool>("EnableDragDropImport")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER")
@@ -252,6 +262,9 @@ namespace Paperbunkr.Data.Migrations
                         .HasColumnType("TEXT");
 
                     b.Property<DateTime?>("LastCoverVerificationUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("LastLibraryHealthVerifyUtc")
                         .HasColumnType("TEXT");
 
                     b.Property<int?>("LastScreenEntityId")
@@ -299,6 +312,10 @@ namespace Paperbunkr.Data.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("REAL")
                         .HasDefaultValue(1.0);
+
+                    b.Property<int>("LibraryHealthConfirmedMissingThreshold")
+                        .HasColumnType("INTEGER")
+                        .HasDefaultValue(2);
 
                     b.Property<string>("LibraryIssueListGroupField")
                         .IsRequired()
@@ -559,14 +576,18 @@ namespace Paperbunkr.Data.Migrations
                         .HasMaxLength(32)
                         .HasColumnType("TEXT");
 
-                    b.Property<int>("LastChapterIndex")
-                        .HasColumnType("INTEGER");
+                    b.Property<string>("LastBlockId")
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
 
-                    b.Property<int>("LastCharacterOffset")
+                    b.Property<int>("LastChapterIndex")
                         .HasColumnType("INTEGER");
 
                     b.Property<DateTime?>("LastOpenedTime")
                         .HasColumnType("TEXT");
+
+                    b.Property<double?>("LastProgressionFraction")
+                        .HasColumnType("REAL");
 
                     b.Property<string>("LineSpacingOverride")
                         .HasMaxLength(32)
@@ -651,13 +672,15 @@ namespace Paperbunkr.Data.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("BlockId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
                     b.Property<int>("BookId")
                         .HasColumnType("INTEGER");
 
                     b.Property<int>("ChapterIndex")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<int>("CharacterOffset")
                         .HasColumnType("INTEGER");
 
                     b.Property<DateTime>("CreatedTime")
@@ -666,6 +689,9 @@ namespace Paperbunkr.Data.Migrations
                     b.Property<string>("Excerpt")
                         .IsRequired()
                         .HasColumnType("TEXT");
+
+                    b.Property<double?>("ProgressionFraction")
+                        .HasColumnType("REAL");
 
                     b.HasKey("Id");
 
@@ -1346,6 +1372,9 @@ namespace Paperbunkr.Data.Migrations
                     b.Property<bool>("MissingAcknowledged")
                         .HasColumnType("INTEGER");
 
+                    b.Property<int>("MissingVerificationCount")
+                        .HasColumnType("INTEGER");
+
                     b.Property<int?>("Month")
                         .HasColumnType("INTEGER");
 
@@ -1947,6 +1976,67 @@ namespace Paperbunkr.Data.Migrations
                     b.HasIndex("MediaRelationId");
 
                     b.ToTable("RelationEvidence");
+                });
+
+            modelBuilder.Entity("Paperbunkr.Data.Entities.RemovedFilePath", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("FilePath")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("RemovedAtUtc")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FilePath")
+                        .IsUnique();
+
+                    b.ToTable("RemovedFilePaths");
+                });
+
+            modelBuilder.Entity("Paperbunkr.Data.Entities.RemovedLibraryEntry", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("FilePath")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Number")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("RemovedAtUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("SeriesId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("SeriesName")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Title")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Volume")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RemovedAtUtc");
+
+                    b.ToTable("RemovedLibraryEntries");
                 });
 
             modelBuilder.Entity("Paperbunkr.Data.Entities.ScheduledTaskState", b =>

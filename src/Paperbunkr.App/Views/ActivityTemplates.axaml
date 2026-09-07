@@ -3,7 +3,8 @@
                     xmlns:fi="using:FluentIcons.Avalonia"
                     xmlns:views="using:Paperbunkr.App.Views"
                     xmlns:vm="using:Paperbunkr.App.ViewModels"
-                    xmlns:models="using:Paperbunkr.App.Models">
+                    xmlns:models="using:Paperbunkr.App.Models"
+                    xmlns:controls="using:Paperbunkr.App.Controls">
 
     <!-- Shared row templates for the Activity Center peek + drawer (docs/superpowers/specs/
          2026-09-03-activity-center-design.md). Each host ItemsControl's DataContext is the
@@ -41,8 +42,7 @@
                            Foreground="{DynamicResource PbTextMutedBrush}" TextTrimming="CharacterEllipsis"
                            IsVisible="{Binding Detail, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
 
-                <ProgressBar Minimum="0" Maximum="1" Value="{Binding Fraction}" Height="3" CornerRadius="2"
-                             IsIndeterminate="{Binding IsIndeterminate}" IsVisible="{Binding IsRunning}" />
+                <controls:BusyIndicator Job="{Binding}" IsVisible="{Binding IsRunning}" />
 
                 <Button Classes="activityLink"
                         IsVisible="{Binding ResultLink, Converter={x:Static ObjectConverters.IsNotNull}}"

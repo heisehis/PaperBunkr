@@ -41,22 +41,6 @@
             <Setter Property="Foreground" Value="{DynamicResource PbBadgeTextBrush}" />
         </Style>
 
-        <Style Selector="Button.tagPillButton">
-            <Setter Property="Background" Value="{DynamicResource PbSurface2Brush}" />
-            <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
-            <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="CornerRadius" Value="999" />
-            <Setter Property="Padding" Value="10,4" />
-            <Setter Property="Margin" Value="0,0,6,6" />
-            <Setter Property="Cursor" Value="Hand" />
-        </Style>
-        <Style Selector="Button.tagPillButton:pointerover">
-            <Setter Property="BorderBrush" Value="{DynamicResource PbBadgeBrush}" />
-        </Style>
-        <Style Selector="TextBlock.tagPillText">
-            <Setter Property="FontSize" Value="11" />
-            <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
-        </Style>
 
         <!-- Issue row: calm at rest, management cluster fades in on hover (fixed column, no layout shift). -->
         <Style Selector="Border.itemRow">
@@ -145,7 +129,7 @@
                     </ItemsControl.ItemsPanel>
                     <ItemsControl.ItemTemplate>
                         <DataTemplate x:DataType="vm:TagPillViewModel">
-                            <Button Classes="tagPillButton" Command="{Binding SearchCommand}" ToolTip.Tip="{Binding Category}">
+                            <Button Classes="tagPill" Command="{Binding SearchCommand}" ToolTip.Tip="{Binding Category}">
                                 <TextBlock Classes="tagPillText" Text="{Binding Value}" FontWeight="{Binding TextWeight}" Opacity="{Binding WeightOpacity}" />
                             </Button>
                         </DataTemplate>

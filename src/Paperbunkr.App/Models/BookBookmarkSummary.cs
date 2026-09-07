@@ -9,7 +9,7 @@ public sealed class BookBookmarkSummary
 
     public int ChapterIndex { get; init; }
 
-    public int CharacterOffset { get; init; }
+    public string BlockId { get; init; } = string.Empty;
 
     public string ChapterTitle { get; init; } = string.Empty;
 

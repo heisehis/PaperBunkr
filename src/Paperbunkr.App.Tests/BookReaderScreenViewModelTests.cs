@@ -162,7 +162,7 @@ public class BookReaderScreenViewModelTests : IDisposable
 
         PaperbunkrDbContext.DatabasePathOverride = _dbPath;
         var vm = new BookReaderScreenViewModel(() => { });
-        vm.LoadBook(bookId, new Paperbunkr.App.Models.BookPosition(1, 0));
+        vm.LoadBook(bookId, new Paperbunkr.App.Models.BookPosition(1));
         vm.UpdateViewportSize(new Size(700, 800));
 
         Assert.Equal("The End", vm.ChapterTitle);
@@ -175,7 +175,7 @@ public class BookReaderScreenViewModelTests : IDisposable
 
         PaperbunkrDbContext.DatabasePathOverride = _dbPath;
         var vm = new BookReaderScreenViewModel(() => { });
-        vm.LoadBook(bookId, new Paperbunkr.App.Models.BookPosition(99, 0));
+        vm.LoadBook(bookId, new Paperbunkr.App.Models.BookPosition(99));
         vm.UpdateViewportSize(new Size(700, 800));
 
         Assert.Equal("The End", vm.ChapterTitle); // clamped to the last chapter (index 1)

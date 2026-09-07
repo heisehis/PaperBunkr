@@ -6,6 +6,7 @@ using System.Net.Http;
 using System.Reflection;
 using System.Threading.Tasks;
 using Avalonia.Media.Imaging;
+using Avalonia.Threading;
 using Microsoft.EntityFrameworkCore;
 using Paperbunkr.App.Models;
 using Paperbunkr.App.Services;
@@ -144,14 +145,36 @@ public sealed class PaperbunkrApplication : IApplication
     }
 
     /// <summary>
-    /// Shows the native question dialog and returns the chosen option index (0 = primary button,
-    /// 1 = secondary). Answering affirmatively (index 0) also opens the per-invocation write
-    /// confirmation gate for a <c>confirmWrites="true"</c> command (docs/superpowers/specs/2026-08-28-
-    /// plugin-api-v3-data-manager-design.md §5) - the one native primitive that gate reuses.
+    /// Shows the shared in-page confirm dialog (<see cref="MainViewModel.Dialogs"/>) and returns
+    /// the chosen option index (0 = primary button, 1 = secondary). Answering affirmatively
+    /// (index 0) also opens the per-invocation write confirmation gate for a
+    /// <c>confirmWrites="true"</c> command (docs/superpowers/specs/2026-08-28-plugin-api-v3-data-
+    /// manager-design.md §5) - the one native primitive that gate reuses.
+    ///
+    /// <see cref="IApplication.AskQuestion"/> is a synchronous, versioned plugin-facing contract -
+    /// plugin authors call it expecting an immediate return, so this pumps a
+    /// <see cref="DispatcherFrame"/> while awaiting <see cref="IDialogService.ShowAsync"/>, the
+    /// same blocking-pump technique <c>CrashReportWindow.ShowModal</c> uses around a native
+    /// Window's <c>Closed</c> event - here it pumps around a <see cref="Task"/> instead
+    /// (docs/superpowers/specs/2026-09-06-feedback-notification-system-design.md §2). Replaced the
+    /// old dedicated native-Window <c>PluginQuestionDialog</c>, which is deleted.
     /// </summary>
     public int AskQuestion(string question, string buttonText, string optionText)
     {
-        int answer = PluginQuestionDialog.ShowModal(question, buttonText, optionText);
+        int answer = -1;
+        var frame = new DispatcherFrame();
+
+        async Task RunAsync()
+        {
+            answer = await _main.Dialogs.ShowAsync(new ConfirmDialogRequest(question,
+                PrimaryLabel: buttonText,
+                SecondaryLabel: string.IsNullOrEmpty(optionText) ? null : optionText));
+            frame.Continue = false;
+        }
+
+        _ = RunAsync();
+        Dispatcher.UIThread.PushFrame(frame);
+
         if (answer == 0 && Paperbunkr.Plugins.PluginInvocationContext.Current is { RequiresWriteConfirmation: true } ctx)
         {
             ctx.WritesConfirmed = true;

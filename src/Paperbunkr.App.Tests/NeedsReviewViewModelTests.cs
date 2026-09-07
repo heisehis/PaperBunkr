@@ -55,7 +55,7 @@ public class NeedsReviewViewModelTests : IDisposable
         }
     }
 
-    private static NeedsReviewViewModel CreateViewModel() => new(onOpenSeriesDetail: _ => { }, filePicker: new NoOpFilePicker());
+    private static NeedsReviewViewModel CreateViewModel() => new(onOpenSeriesDetail: _ => { });
 
     private void AddProposal(MetadataProposalField field, string proposedValue, MetadataProposalStatus status)
     {

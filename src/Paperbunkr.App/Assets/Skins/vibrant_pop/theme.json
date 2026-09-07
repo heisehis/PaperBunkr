@@ -1,0 +1,29 @@
+{
+  "name": "Vibrant & Pop",
+  "colors": {
+    "bg": "#0D0B12",
+    "chrome": "#17131F",
+    "border": "#2E2540",
+    "text": "#F5F0E8",
+    "textMuted": "#B0A5AE",
+    "textFaint": "#766B75",
+    "accent": "#E85D4E",
+    "accentText": "#F0806F",
+    "accentSoft": "#29E85D4E",
+    "badge": "#F0C14C",
+    "badgeText": "#241505",
+    "success": "#5FA889",
+    "surface0": "#000000",
+    "surface1": "#0D0B12",
+    "surface2": "#17131F",
+    "surface3": "#201A2C",
+    "glow": "#66E85D4E",
+    "heroGradientStart": "#00000000",
+    "heroGradientEnd": "#FF0D0B12"
+  },
+  "spacingUnit": 4,
+  "radius": 7,
+  "radiusSm": 5,
+  "radiusLg": 14,
+  "icons": {}
+}

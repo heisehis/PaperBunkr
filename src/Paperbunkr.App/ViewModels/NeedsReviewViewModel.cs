@@ -25,14 +25,11 @@ namespace Paperbunkr.App.ViewModels;
 public partial class NeedsReviewViewModel : ViewModelBase
 {
     private readonly Action<int> _onOpenSeriesDetail;
-    private readonly IFilePickerService _filePicker;
 
-    public NeedsReviewViewModel(Action<int> onOpenSeriesDetail, IFilePickerService filePicker)
+    public NeedsReviewViewModel(Action<int> onOpenSeriesDetail)
     {
         _onOpenSeriesDetail = onOpenSeriesDetail;
-        _filePicker = filePicker;
         ContentTypeItems = new ObservableCollection<SeriesReviewItem>();
-        MissingFileItems = new ObservableCollection<MissingFileRowViewModel>();
         SeriesConflicts = new ObservableCollection<SeriesConflictRowViewModel>();
         MetadataProposalItems = new ObservableCollection<MetadataProposalRowViewModel>();
         DuplicateGroupItems = new ObservableCollection<DuplicateGroupRowViewModel>();
@@ -40,8 +37,6 @@ public partial class NeedsReviewViewModel : ViewModelBase
     }
 
     public ObservableCollection<SeriesReviewItem> ContentTypeItems { get; }
-
-    public ObservableCollection<MissingFileRowViewModel> MissingFileItems { get; }
 
     public ObservableCollection<SeriesConflictRowViewModel> SeriesConflicts { get; }
 
@@ -51,20 +46,18 @@ public partial class NeedsReviewViewModel : ViewModelBase
 
     public bool HasContentTypeItems => ContentTypeItems.Count > 0;
 
-    public bool HasMissingFileItems => MissingFileItems.Count > 0;
-
     public bool HasSeriesConflictItems => SeriesConflicts.Count > 0;
 
     public bool HasMetadataProposalItems => MetadataProposalItems.Count > 0;
 
     public bool HasDuplicateFileItems => DuplicateGroupItems.Count > 0;
 
-    public bool HasPendingItems => HasContentTypeItems || HasMissingFileItems || HasSeriesConflictItems || HasMetadataProposalItems || HasDuplicateFileItems;
+    /// <summary>Missing Files moved to Preferences → Library Health (docs/superpowers/specs/2026-09-06-missing-files-library-health-design.md) - deliberately not part of this formula any more.</summary>
+    public bool HasPendingItems => HasContentTypeItems || HasSeriesConflictItems || HasMetadataProposalItems || HasDuplicateFileItems;
 
     private void NotifyCountsChanged()
     {
         OnPropertyChanged(nameof(HasContentTypeItems));
-        OnPropertyChanged(nameof(HasMissingFileItems));
         OnPropertyChanged(nameof(HasSeriesConflictItems));
         OnPropertyChanged(nameof(HasMetadataProposalItems));
         OnPropertyChanged(nameof(HasDuplicateFileItems));
@@ -103,7 +96,6 @@ public partial class NeedsReviewViewModel : ViewModelBase
         using var context = PaperbunkrDb.CreateContext();
 
         RefreshContentTypeItems(context);
-        RefreshMissingFileItems(context);
         RefreshSeriesConflicts(context);
         RefreshMetadataProposalItems(context);
         RefreshDuplicateFileItems(context);
@@ -138,85 +130,6 @@ public partial class NeedsReviewViewModel : ViewModelBase
         {
             ContentTypeItems.Add(new SeriesReviewItem { SeriesId = series.Id, SeriesName = series.Name });
         }
-    }
-
-    private void RefreshMissingFileItems(PaperbunkrDbContext context)
-    {
-        var missingFilesListId = context.SmartLists
-            .Where(s => s.IsSystem && s.Name == "Missing Files")
-            .Select(s => (int?)s.Id)
-            .FirstOrDefault();
-
-        MissingFileItems.Clear();
-        if (missingFilesListId is not int listId
-            || SmartListTreeLoader.LoadWithTree(context, listId) is not { } missingFilesList)
-        {
-            return;
-        }
-
-        // MissingAcknowledged is a review-queue concept, not a library-wide filter - the system
-        // smart list itself is untouched, so browsing it directly still shows every missing file.
-        var issues = SmartListQueryBuilder.Build(context, missingFilesList)
-            .Where(i => !i.MissingAcknowledged)
-            .OrderBy(i => i.Series?.Name);
-
-        foreach (var issue in issues)
-        {
-            int issueId = issue.Id;
-            MissingFileItems.Add(new MissingFileRowViewModel(
-                issueId,
-                $"{issue.Series?.Name ?? "Unknown"} #{issue.EffectiveNumber()}",
-                onRelink: RelinkMissingFile,
-                onRemove: _ => RemoveMissingFile(issueId),
-                onDismiss: _ => DismissMissingFile(issueId)));
-        }
-    }
-
-    private async Task RelinkMissingFile(MissingFileRowViewModel row)
-    {
-        string? path = await _filePicker.PickOpenFileAsync("Locate the file", "cbz", "Comic Archive");
-        if (path is null)
-        {
-            return;
-        }
-
-        using var context = PaperbunkrDb.CreateContext();
-        var issue = context.Issues.Find(row.IssueId);
-        if (issue is not null)
-        {
-            issue.FilePath = path;
-            issue.FileIsMissing = false;
-            issue.IsPlaceholder = false;
-            context.SaveChanges();
-        }
-
-        Refresh();
-    }
-
-    private void RemoveMissingFile(int issueId)
-    {
-        using var context = PaperbunkrDb.CreateContext();
-        var issue = context.Issues.Find(issueId);
-        if (issue is not null)
-        {
-            LibraryDeletionHelper.RemoveIssue(context, issue);
-            context.SaveChanges();
-        }
-
-        Refresh();
-    }
-
-    private void DismissMissingFile(int issueId)
-    {
-        using var context = PaperbunkrDb.CreateContext();
-        var issue = context.Issues.Find(issueId);
-        if (issue is not null)
-        {
-            issue.MissingAcknowledged = true;
-            context.SaveChanges();
-        }
-
-        Refresh();
     }
 
     /// <summary>

@@ -33,20 +33,6 @@
             </Border>
         </DataTemplate>
 
-        <DataTemplate x:Key="MissingFileRowTemplate" x:DataType="vm:MissingFileRowViewModel">
-            <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1" CornerRadius="6" Padding="12,10" Margin="0,0,0,8">
-                <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto">
-                    <TextBlock Grid.Column="0" Text="{Binding DisplayLabel}" FontSize="13" Foreground="{DynamicResource PbTextMutedBrush}"
-                               VerticalAlignment="Center" />
-                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
-                        <Button Classes="rowAction" Content="Relink…" Command="{Binding RelinkCommand}" />
-                        <Button Classes="rowAction" Content="Dismiss" Command="{Binding DismissCommand}" />
-                        <Button Classes="rowAction destructive" Content="{Binding DeleteConfirm.Label}" Command="{Binding DeleteConfirm.TriggerCommand}" />
-                    </StackPanel>
-                </Grid>
-            </Border>
-        </DataTemplate>
-
         <DataTemplate x:Key="DuplicateGroupRowTemplate" x:DataType="vm:DuplicateGroupRowViewModel">
             <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1" CornerRadius="6" Padding="12,10" Margin="0,0,0,8">
                 <StackPanel Spacing="6">
@@ -325,11 +311,6 @@
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
-                        </StackPanel>
-
-                        <StackPanel IsVisible="{Binding NeedsReview.HasMissingFileItems}">
-                            <TextBlock Classes="sectionHeading" Text="Missing Files" />
-                            <ItemsControl ItemsSource="{Binding NeedsReview.MissingFileItems}" ItemTemplate="{StaticResource MissingFileRowTemplate}" />
                         </StackPanel>
 
                         <StackPanel IsVisible="{Binding NeedsReview.HasDuplicateFileItems}">

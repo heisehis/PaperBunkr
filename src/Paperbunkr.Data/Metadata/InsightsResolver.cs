@@ -431,7 +431,7 @@ public static class InsightsResolver
             {
                 read++;
             }
-            else if (book.LastOpenedTime != null && (book.LastChapterIndex > 0 || book.LastCharacterOffset > 0))
+            else if (book.LastOpenedTime != null && (book.LastChapterIndex > 0 || !string.IsNullOrEmpty(book.LastBlockId)))
             {
                 inProgress++;
             }

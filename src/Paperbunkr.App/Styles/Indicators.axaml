@@ -1,0 +1,21 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="using:Paperbunkr.App.Controls">
+    <!--
+        BusyIndicator (docs/superpowers/specs/2026-09-06-feedback-notification-system-design.md
+        §3) - Activity Center's job-row progress bar, extracted from ActivityTemplates.axaml's
+        inline markup into a named reusable control. Same visual as before: a thin determinate/
+        indeterminate ProgressBar reading Job.Fraction/Job.IsIndeterminate.
+    -->
+    <Styles.Resources>
+        <ControlTheme x:Key="{x:Type controls:BusyIndicator}" TargetType="controls:BusyIndicator">
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <ProgressBar Minimum="0" Maximum="1" Height="3" CornerRadius="2"
+                                 Value="{Binding Job.Fraction, RelativeSource={RelativeSource TemplatedParent}}"
+                                 IsIndeterminate="{Binding Job.IsIndeterminate, RelativeSource={RelativeSource TemplatedParent}}" />
+                </ControlTemplate>
+            </Setter>
+        </ControlTheme>
+    </Styles.Resources>
+</Styles>

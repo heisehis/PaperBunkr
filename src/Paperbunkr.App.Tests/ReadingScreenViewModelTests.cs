@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Paperbunkr.App.Models;
 using Paperbunkr.App.Services;
 using Paperbunkr.App.ViewModels;
 using Paperbunkr.Data;
@@ -758,8 +759,8 @@ public class ReadingScreenViewModelTests : IDisposable
         try
         {
             string cbz = CbzFixture.Create(Path.Combine(root.FullName, "Kilo Station 001 (2020).cbz"), pageCount: 1);
-            (string Title, string Message)? toast = null;
-            var vm = new ReadingScreenViewModel(_filePicker, (_, _) => { }, showToast: (t, m) => toast = (t, m));
+            var activity = new ActivityService(a => a(), _ => { });
+            var vm = new ReadingScreenViewModel(_filePicker, (_, _) => { }, activity: activity);
             vm.CreateNewCommand.Execute(null);
             int listId;
             using (var context = PaperbunkrDb.CreateContext())
@@ -773,7 +774,10 @@ public class ReadingScreenViewModelTests : IDisposable
             Assert.Single(db.Issues);
             Assert.Single(db.ReadingListItems.Where(i => i.ReadingListId == listId));
             Assert.Equal(1, vm.TotalCount);
-            Assert.NotNull(toast);
+            // Job-tracked, not a direct toast (docs/superpowers/specs/2026-09-06-feedback-
+            // notification-system-design.md §6) - the import now settles as an ActivityJob.
+            var job = Assert.Single(activity.RecentJobs);
+            Assert.Equal(ActivityJobStatus.Succeeded, job.Status);
         }
         finally
         {

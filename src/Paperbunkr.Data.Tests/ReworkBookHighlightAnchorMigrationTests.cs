@@ -46,7 +46,6 @@ public class ReworkBookHighlightAnchorMigrationTests : IDisposable
     [Fact]
     public void Migration_DeletesExistingHighlights_AndNewColumnsWorkAfterward()
     {
-        long bookId;
         using (var context = CreateContext())
         {
             // Straight to PriorMigration from an empty database, not "up to latest, then back down" -
@@ -57,16 +56,20 @@ public class ReworkBookHighlightAnchorMigrationTests : IDisposable
             // the target never creates that column in the first place.
             context.GetService<IMigrator>().Migrate(PriorMigration);
 
-            // Written under the pre-migration schema via raw SQL throughout, not context.Books.Add -
-            // the physical schema is rolled back to PriorMigration here, which predates unrelated later
-            // additions to Books' own columns (docs/superpowers/specs/2026-09-07-books-reader-
-            // pagination-and-position-fix-design.md's ReworkBookPositionAnchor), so an EF-model insert
-            // against the *current* mapped Book type would throw "no such column" against this
-            // older physical table shape.
+            // Written via raw SQL rather than context.Books.Add(...), since the current Book entity
+            // is mapped to columns (e.g. CharacterCount, added later by AddReadingEventLog) that
+            // don't exist in the schema at this rolled-back point - an EF-generated INSERT would
+            // reference them and fail with "no such column".
             context.Database.ExecuteSqlRaw(
-                "INSERT INTO Books (Title, Format, FilePath, AddedTime, LastChapterIndex, LastCharacterOffset) VALUES ('Legacy Book', 'Epub', 'C:\\x.epub', {0}, 0, 0)",
-                DateTime.UtcNow.ToString("O"));
-            bookId = context.Database.SqlQueryRaw<long>("SELECT last_insert_rowid()").ToList().Single();
+                "INSERT INTO Books (Title, FilePath, Format, AddedTime, LastChapterIndex, LastCharacterOffset) VALUES ({0}, {1}, {2}, {3}, 0, 0)",
+                "Legacy Book", @"C:\x.epub", nameof(BookFormat.Epub), DateTime.UtcNow.ToString("O"));
+
+            // Looked up by Title rather than last_insert_rowid(), which is scoped to whichever
+            // physical connection executes it - not guaranteed to be the same one that ran the
+            // INSERT above once EF's connection pooling is involved.
+            var bookId = context.Database
+                .SqlQueryRaw<int>("SELECT Id AS Value FROM Books WHERE Title = {0}", "Legacy Book")
+                .Single();
 
             // Written under the pre-migration schema (StartOffset/EndOffset, no BlockId) via raw SQL,
             // since the current Book Highlight entity no longer has those columns to write through.

@@ -37,6 +37,21 @@ this file itself already did once (see the note below).
 > updated to assert the no-op. `Paperbunkr.Data.Tests` now 881/881 green. Pre-existing bug, unrelated
 > to any feature work (found during the Insights dashboard session 2026-09-05). P0–P7 unchanged.
 >
+> **Correction (2026-09-06, later same day, commit `eb43b66`):** the note above is wrong about
+> `AddReadingEventLog` — it does *not* match the no-op pattern, and applying that pattern to it by
+> analogy was itself a bug. `Books.CharacterCount` (added by `AddReadingEventLog.Up()`) is a live,
+> EF-mapped `Book` property, not an unmapped orphan the way `LibraryGroupField` etc. are — nothing
+> else on `Books` was ever silently unmapped, so the SQLite full-table-rebuild collateral-damage risk
+> the no-op pattern guards against doesn't apply here. Leaving the column in place on `Down()` instead
+> broke the opposite direction: rolling back past `AddReadingEventLog` and migrating forward again
+> re-ran `Up()`'s `AddColumn` against a column that never went away, failing with "duplicate column
+> name: CharacterCount" (`ReworkBookHighlightAnchorMigrationTests`, whose rollback target predates
+> this migration). Fix: `AddReadingEventLog.Down()` now does a real `DropColumn`; the test's legacy
+> row-insert was updated to raw SQL matching the pre-migration schema. Verified 2026-09-07: the
+> targeted test and the full `Paperbunkr.Data.Tests` suite both pass (906/906, no other migration
+> boundary currently hits this). Scoped, reactive fix per the same triage precedent as the note
+> above — not a full audit of every no-op-`Down()` migration in the schema.
+>
 > **Manual session note (2026-09-05, Duplicate Finder shipped + grouped review/bulk delete/scan
 > alerts):** follow-up to the Plugin API v2 backlog-finish note directly below. Duplicate Finder
 > moved from a `Paperbunkr.Plugins.Tests`-only fixture to a real, downloadable plugin

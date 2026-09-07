@@ -1,0 +1,52 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:fi="using:FluentIcons.Avalonia"
+             xmlns:models="using:Paperbunkr.App.Models"
+             xmlns:views="using:Paperbunkr.App.Views"
+             mc:Ignorable="d" d:DesignWidth="300"
+             x:Class="Paperbunkr.App.Views.PbToastView"
+             x:DataType="models:ToastRequest">
+
+    <Border Width="300" Background="{DynamicResource PbSurface3Brush}" BorderBrush="{DynamicResource PbBorderBrush}"
+            BorderThickness="1,1,1,1" CornerRadius="8" Padding="12,10">
+        <Border.Styles>
+            <Style Selector="Border.severityStripe">
+                <Setter Property="Background" Value="{Binding Severity, Converter={x:Static views:ToastSeverityBrushConverter.Instance}}" />
+            </Style>
+        </Border.Styles>
+        <Grid ColumnDefinitions="3,*">
+            <Border Grid.Column="0" Classes="severityStripe" CornerRadius="2" Margin="0,0,10,0" />
+            <StackPanel Grid.Column="1" Spacing="6">
+                <StackPanel Orientation="Horizontal" Spacing="7">
+                    <Border Width="16" Height="16" CornerRadius="8"
+                            Background="{Binding Severity, Converter={x:Static views:ToastSeverityBrushConverter.Instance}}">
+                        <fi:SymbolIcon Symbol="{Binding Severity, Converter={x:Static views:ToastSeverityIconConverter.Instance}}"
+                                       FontSize="10" Foreground="{DynamicResource PbSurface0Brush}"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    </Border>
+                    <TextBlock Text="{Binding Title}" FontSize="12.5" FontWeight="SemiBold"
+                               Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center"
+                               TextWrapping="Wrap" />
+                </StackPanel>
+                <TextBlock Text="{Binding Message}" FontSize="11" Foreground="{DynamicResource PbTextMutedBrush}"
+                           TextWrapping="Wrap" Margin="23,0,0,0"
+                           IsVisible="{Binding Message, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                <ItemsControl ItemsSource="{Binding Actions}" Margin="23,2,0,0"
+                              IsVisible="{Binding Actions, Converter={x:Static ObjectConverters.IsNotNull}}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <StackPanel Orientation="Horizontal" Spacing="6" HorizontalAlignment="Right" />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="models:ToastAction">
+                            <Button Classes="headerAction ghost" Content="{Binding Label}" Command="{Binding Command}" />
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
+        </Grid>
+    </Border>
+</UserControl>

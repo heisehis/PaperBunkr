@@ -3,15 +3,222 @@
              xmlns:fi="using:FluentIcons.Avalonia"
              xmlns:vm="using:Paperbunkr.App.ViewModels"
              xmlns:models="using:Paperbunkr.App.Models"
+             xmlns:pref="using:Paperbunkr.App.Views.Preferences"
+             xmlns:controls="using:Paperbunkr.App.Controls"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d" d:DesignWidth="640" d:DesignHeight="900"
              x:Class="Paperbunkr.App.Views.Preferences.LibrarySection"
              x:DataType="vm:PreferencesScreenViewModel">
 
+    <UserControl.Resources>
+        <DataTemplate x:Key="MissingFileRowTemplate" x:DataType="vm:MissingFileRowViewModel">
+            <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1" CornerRadius="6" Padding="12,10" Margin="0,0,0,8">
+                <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto">
+                    <TextBlock Grid.Column="0" Text="{Binding DisplayLabel}" FontSize="13" Foreground="{DynamicResource PbTextMutedBrush}"
+                               VerticalAlignment="Center" />
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
+                        <Button Classes="headerAction ghost" Command="{Binding RelinkCommand}">
+                            <StackPanel Orientation="Horizontal" Spacing="5">
+                                <fi:SymbolIcon Symbol="Link" FontSize="{StaticResource PbIconSizeXs}" />
+                                <TextBlock Text="Relink" />
+                            </StackPanel>
+                        </Button>
+                        <Button Classes="headerAction ghost" Command="{Binding DismissCommand}">
+                            <StackPanel Orientation="Horizontal" Spacing="5">
+                                <fi:SymbolIcon Symbol="Dismiss" FontSize="{StaticResource PbIconSizeXs}" />
+                                <TextBlock Text="Dismiss" />
+                            </StackPanel>
+                        </Button>
+                        <Button Classes="headerAction ghost" Foreground="{DynamicResource PbDangerBrush}" Command="{Binding DeleteConfirm.TriggerCommand}">
+                            <StackPanel Orientation="Horizontal" Spacing="5">
+                                <fi:SymbolIcon Symbol="Delete" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbDangerBrush}" />
+                                <TextBlock Text="{Binding DeleteConfirm.Label}" />
+                            </StackPanel>
+                        </Button>
+                    </StackPanel>
+                </Grid>
+            </Border>
+        </DataTemplate>
+
+        <DataTemplate x:Key="RemovedLibraryEntryRowTemplate" x:DataType="vm:RemovedLibraryEntryRowViewModel">
+            <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1" CornerRadius="6" Padding="12,10" Margin="0,0,0,8">
+                <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto">
+                    <TextBlock Grid.Row="0" Grid.Column="0" Text="{Binding DisplayLabel}" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}" />
+                    <TextBlock Grid.Row="1" Grid.Column="0" Text="{Binding FilePath}" FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" />
+                    <TextBlock Grid.Row="2" Grid.Column="0" Text="{Binding RemovedWhenLabel, StringFormat='Removed {0}'}" FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" />
+                    <Button Grid.Row="0" Grid.RowSpan="3" Grid.Column="1" Classes="headerAction ghost" Command="{Binding RestoreCommand}" VerticalAlignment="Center">
+                        <StackPanel Orientation="Horizontal" Spacing="5">
+                            <fi:SymbolIcon Symbol="ArrowUndo" FontSize="{StaticResource PbIconSizeXs}" />
+                            <TextBlock Text="Restore" />
+                        </StackPanel>
+                    </Button>
+                </Grid>
+            </Border>
+        </DataTemplate>
+    </UserControl.Resources>
+
     <ScrollViewer>
         <StackPanel Margin="28,20,28,40" Spacing="20">
             <TextBlock Classes="pbTextHeading" Text="Library" />
+
+            <!-- Library Health (docs/superpowers/specs/2026-09-07-library-health-redesign-design.md) -->
+            <Border Classes="groupBox" Tag="library.health">
+                <StackPanel>
+                    <Border Classes="groupHeader">
+                        <StackPanel>
+                            <TextBlock Text="Library Health" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
+                            <TextBlock Text="Find and clean up comics whose files are genuinely gone" FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" Margin="0,2,0,0" />
+                        </StackPanel>
+                    </Border>
+                    <StackPanel Margin="14" Spacing="12">
+                        <Grid ColumnDefinitions="*,*,*,*">
+                            <Border Grid.Column="0" Background="{DynamicResource PbSurface2Brush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1" CornerRadius="10" Padding="12,10" Margin="0,0,6,0">
+                                <StackPanel Spacing="8">
+                                    <Border Width="28" Height="28" CornerRadius="8" Background="{DynamicResource PbAccentSoftBrush}" HorizontalAlignment="Left">
+                                        <fi:SymbolIcon Symbol="List" FontSize="{StaticResource PbIconSizeSm}" Foreground="{DynamicResource PbAccentTextBrush}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                    </Border>
+                                    <TextBlock Text="{Binding LibraryHealthChecked}" FontSize="20" FontWeight="Bold" Foreground="{DynamicResource PbTextBrush}" />
+                                    <TextBlock Text="Issues checked" FontSize="10.5" Foreground="{DynamicResource PbTextMutedBrush}" />
+                                </StackPanel>
+                            </Border>
+                            <Border Grid.Column="1" Background="{DynamicResource PbSurface2Brush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1" CornerRadius="10" Padding="12,10" Margin="6,0,6,0">
+                                <StackPanel Spacing="8">
+                                    <Border Width="28" Height="28" CornerRadius="8" Background="{DynamicResource PbBadgeSoftBrush}" HorizontalAlignment="Left">
+                                        <fi:SymbolIcon Symbol="Warning" FontSize="{StaticResource PbIconSizeSm}" Foreground="{DynamicResource PbBadgeBrush}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                    </Border>
+                                    <TextBlock Text="{Binding LibraryHealthMissingNow}" FontSize="20" FontWeight="Bold" Foreground="{DynamicResource PbTextBrush}" />
+                                    <TextBlock Text="Currently missing" FontSize="10.5" Foreground="{DynamicResource PbTextMutedBrush}" />
+                                </StackPanel>
+                            </Border>
+                            <Border Grid.Column="2" Background="{DynamicResource PbSurface2Brush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1" CornerRadius="10" Padding="12,10" Margin="6,0,6,0">
+                                <StackPanel Spacing="8">
+                                    <Border Width="28" Height="28" CornerRadius="8" Background="{DynamicResource PbDangerSoftBrush}" HorizontalAlignment="Left">
+                                        <fi:SymbolIcon Symbol="Warning" FontSize="{StaticResource PbIconSizeSm}" Foreground="{DynamicResource PbDangerBrush}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                    </Border>
+                                    <TextBlock Text="{Binding LibraryHealthConfirmedMissing}" FontSize="20" FontWeight="Bold" Foreground="{DynamicResource PbDangerBrush}" />
+                                    <TextBlock Text="Confirmed missing" FontSize="10.5" Foreground="{DynamicResource PbTextMutedBrush}" />
+                                </StackPanel>
+                            </Border>
+                            <Border Grid.Column="3" Background="{DynamicResource PbSurface2Brush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1" CornerRadius="10" Padding="12,10" Margin="6,0,0,0">
+                                <StackPanel Spacing="8">
+                                    <Border Width="28" Height="28" CornerRadius="8" Background="{DynamicResource PbSuccessSoftBrush}" HorizontalAlignment="Left">
+                                        <fi:SymbolIcon Symbol="Clock" FontSize="{StaticResource PbIconSizeSm}" Foreground="{DynamicResource PbSuccessBrush}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                    </Border>
+                                    <TextBlock Text="{Binding LibraryHealthLastVerifiedLabel}" FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}" TextTrimming="CharacterEllipsis" />
+                                    <TextBlock Text="Last verified" FontSize="10.5" Foreground="{DynamicResource PbTextMutedBrush}" />
+                                </StackPanel>
+                            </Border>
+                        </Grid>
+
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <Button Classes="headerAction primary" Command="{Binding VerifyLibraryHealthNowCommand}" IsEnabled="{Binding !IsVerifyingLibraryHealth}"
+                                    AutomationProperties.AutomationId="LibraryHealthVerifyNowButton">
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <fi:SymbolIcon Symbol="ArrowClockwise" Foreground="{DynamicResource PbBadgeTextBrush}" />
+                                    <TextBlock Text="Verify Now" />
+                                </StackPanel>
+                            </Button>
+                            <Button Classes="headerAction ghost" Foreground="{DynamicResource PbDangerBrush}" BorderBrush="{DynamicResource PbDangerSoftBrush}"
+                                    Command="{Binding OpenBulkRemoveConfirmCommand}" IsEnabled="{Binding HasConfirmedMissingItems}"
+                                    AutomationProperties.AutomationId="LibraryHealthRemoveAllConfirmedButton">
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <fi:SymbolIcon Symbol="Delete" Foreground="{DynamicResource PbDangerBrush}" />
+                                    <TextBlock Text="Remove All Confirmed Missing" />
+                                </StackPanel>
+                            </Button>
+                        </StackPanel>
+                        <controls:BusyIndicator Job="{Binding CurrentLibraryHealthJob}" IsVisible="{Binding IsVerifyingLibraryHealth}" />
+
+                        <pref:SettingsRow Icon="Warning" Title="Confirm missing after this many checks"
+                                           Description="How many consecutive Verify passes a file must be missing for before it's eligible for Remove All Confirmed Missing or unattended auto-remove during Scan.">
+                            <pref:SettingsRow.SettingsContent>
+                                <NumericUpDown Value="{Binding LibraryHealthConfirmedMissingThreshold}" Minimum="1" Maximum="5" Width="120"
+                                               AutomationProperties.AutomationId="LibraryHealthConfirmedMissingThresholdInput" />
+                            </pref:SettingsRow.SettingsContent>
+                        </pref:SettingsRow>
+                    </StackPanel>
+
+                    <StackPanel Margin="14,0,14,14" Spacing="10" Tag="library.healthMissing">
+                        <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,1,0,0" Margin="0,0,0,10" />
+                        <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding !HasMissingFileItems}">
+                            <Border Width="22" Height="22" CornerRadius="6" Background="{DynamicResource PbSuccessSoftBrush}">
+                                <fi:SymbolIcon Symbol="Checkmark" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbSuccessBrush}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            </Border>
+                            <TextBlock Text="Missing Files · No missing files" FontWeight="SemiBold" FontSize="12.5" Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
+                        </StackPanel>
+                        <StackPanel Spacing="10" IsVisible="{Binding HasMissingFileItems}">
+                            <StackPanel Orientation="Horizontal" Spacing="10">
+                                <TextBlock Text="Missing Files" FontWeight="SemiBold" FontSize="12.5" Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
+                                <Button Classes="headerAction ghost" Content="Dismiss All" Command="{Binding BulkDismissMissingFilesCommand}"
+                                        AutomationProperties.AutomationId="LibraryHealthDismissAllButton" />
+                                <Button Classes="headerAction ghost" Content="Relink All from Folder…" Command="{Binding BulkRelinkMissingFilesCommand}"
+                                        AutomationProperties.AutomationId="LibraryHealthRelinkAllButton" />
+                            </StackPanel>
+                            <ItemsControl ItemsSource="{Binding MissingFileItems}" ItemTemplate="{StaticResource MissingFileRowTemplate}" />
+                        </StackPanel>
+                    </StackPanel>
+
+                    <StackPanel Margin="14,0,14,14" Spacing="10" Tag="library.healthRecentlyRemoved">
+                        <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,1,0,0" Margin="0,0,0,10" />
+                        <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding !HasRecentlyRemovedItems}">
+                            <Border Width="22" Height="22" CornerRadius="6" Background="{DynamicResource PbSuccessSoftBrush}">
+                                <fi:SymbolIcon Symbol="Checkmark" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbSuccessBrush}" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            </Border>
+                            <TextBlock Text="Recently Removed · All clear" FontWeight="SemiBold" FontSize="12.5" Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
+                        </StackPanel>
+                        <StackPanel Spacing="10" IsVisible="{Binding HasRecentlyRemovedItems}">
+                            <Button Classes="sideItemButton" Command="{Binding ToggleRecentlyRemovedExpandedCommand}"
+                                    HorizontalContentAlignment="Stretch" Padding="0"
+                                    AutomationProperties.AutomationId="LibraryHealthRecentlyRemovedToggle">
+                                <Grid ColumnDefinitions="*,Auto">
+                                    <TextBlock Grid.Column="0" FontWeight="SemiBold" FontSize="12.5" Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center"
+                                               Text="{Binding RecentlyRemovedItems.Count, StringFormat='Recently Removed · {0}'}" />
+                                    <fi:SymbolIcon Grid.Column="1" Symbol="ChevronUp" IsVisible="{Binding IsRecentlyRemovedExpanded}" FontSize="{StaticResource PbIconSizeXs}" />
+                                    <fi:SymbolIcon Grid.Column="1" Symbol="ChevronDown" IsVisible="{Binding !IsRecentlyRemovedExpanded}" FontSize="{StaticResource PbIconSizeXs}" />
+                                </Grid>
+                            </Button>
+                            <TextBlock Text="Removals made from Library Health, kept for 30 days." FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}"
+                                       IsVisible="{Binding IsRecentlyRemovedExpanded}" />
+                            <ItemsControl ItemsSource="{Binding RecentlyRemovedItems}" ItemTemplate="{StaticResource RemovedLibraryEntryRowTemplate}"
+                                          IsVisible="{Binding IsRecentlyRemovedExpanded}" />
+                        </StackPanel>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
+            <!-- Scanning: missing-file handling (docs/superpowers/specs/2026-09-06-scan-missing-file-handling-design.md) -->
+            <Border Classes="groupBox" Tag="library.scanning">
+                <StackPanel>
+                    <Border Classes="groupHeader">
+                        <StackPanel>
+                            <TextBlock Text="Scanning" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
+                            <TextBlock Text="What Scan Now does about missing and manually-removed files" FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" Margin="0,2,0,0" />
+                        </StackPanel>
+                    </Border>
+                    <StackPanel Margin="14" Spacing="4">
+                        <pref:SettingsRow Icon="Delete" Title="Automatically remove confirmed-missing files during Scan"
+                                           Description="After a Scan Now, runs Library Health's Verify and removes anything that's confirmed missing (two checks in a row), skipping the confirmation dialog.">
+                            <pref:SettingsRow.SettingsContent>
+                                <ToggleSwitch IsChecked="{Binding AutoRemoveMissingOnScan}" OnContent="{x:Null}" OffContent="{x:Null}"
+                                              AutomationProperties.AutomationId="AutoRemoveMissingOnScanCheckBox" />
+                            </pref:SettingsRow.SettingsContent>
+                        </pref:SettingsRow>
+                        <pref:SettingsRow Icon="Dismiss" Title="Don't re-add files that were manually removed"
+                                           Description="Files you remove from the library (from anywhere in the app) are remembered and skipped on future scans, so they won't silently come back.">
+                            <pref:SettingsRow.SettingsContent>
+                                <ToggleSwitch IsChecked="{Binding DontReimportRemovedFiles}" OnContent="{x:Null}" OffContent="{x:Null}"
+                                              AutomationProperties.AutomationId="DontReimportRemovedFilesCheckBox" />
+                            </pref:SettingsRow.SettingsContent>
+                        </pref:SettingsRow>
+                        <Button Classes="headerAction ghost" Content="{Binding ClearRemovedFilesListConfirm.Label}"
+                                Command="{Binding ClearRemovedFilesListConfirm.TriggerCommand}"
+                                ToolTip.Tip="Forgets every manually-removed file, so they can be re-added by a future scan"
+                                HorizontalAlignment="Left" Margin="0,6,0,0"
+                                AutomationProperties.AutomationId="ClearRemovedFilesListButton" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
 
             <!-- Comic Library Folders (manages WatchedFolders) -->
             <Border Classes="groupBox" Tag="library.comicFolders">
@@ -26,12 +233,14 @@
                                     <Grid ColumnDefinitions="*,Auto,Auto,Auto" Margin="14,10">
                                         <TextBlock Grid.Column="0" Text="{Binding Path}" FontSize="13" TextTrimming="CharacterEllipsis"
                                                    Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
-                                        <CheckBox Grid.Column="1" Margin="0,0,10,0" FontSize="12.5" Content="Watch for changes"
-                                                  Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center"
-                                                  IsChecked="{Binding Watch}"
-                                                  Command="{Binding #WatchedFoldersList.((vm:PreferencesScreenViewModel)DataContext).ToggleWatchCommand}"
-                                                  CommandParameter="{Binding}"
-                                                  AutomationProperties.AutomationId="WatchedFolderWatchCheckBox" />
+                                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" Margin="0,0,10,0" VerticalAlignment="Center">
+                                            <TextBlock Text="Watch for changes" FontSize="12.5" Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
+                                            <ToggleSwitch IsChecked="{Binding Watch}"
+                                                          Command="{Binding #WatchedFoldersList.((vm:PreferencesScreenViewModel)DataContext).ToggleWatchCommand}"
+                                                          CommandParameter="{Binding}"
+                                                          OnContent="{x:Null}" OffContent="{x:Null}"
+                                                          AutomationProperties.AutomationId="WatchedFolderWatchCheckBox" />
+                                        </StackPanel>
                                         <Button Grid.Column="2" Classes="headerAction ghost" Margin="0,0,6,0"
                                                 Command="{Binding #WatchedFoldersList.((vm:PreferencesScreenViewModel)DataContext).OpenFolderCommand}"
                                                 CommandParameter="{Binding}">
@@ -242,7 +451,10 @@
                             <TextBlock Text="Caption Format (e.g. {Series} #{Number})" FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" />
                             <TextBox Text="{Binding VirtualTagCaptionFormat}" Width="320" HorizontalAlignment="Left" />
 
-                            <CheckBox IsChecked="{Binding VirtualTagIsEnabled}" Foreground="{DynamicResource PbTextBrush}" FontSize="13" Content="Enabled" />
+                            <Grid ColumnDefinitions="*,Auto">
+                                <TextBlock Grid.Column="0" Text="Enabled" VerticalAlignment="Center" Foreground="{DynamicResource PbTextBrush}" FontSize="13" Margin="0,0,10,0" />
+                                <ToggleSwitch Grid.Column="1" IsChecked="{Binding VirtualTagIsEnabled}" OnContent="{x:Null}" OffContent="{x:Null}" />
+                            </Grid>
 
                             <TextBlock Text="Preview" FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" />
                             <TextBlock Text="{Binding VirtualTagPreview}" FontFamily="Consolas,monospace" FontSize="13"

@@ -1,0 +1,76 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:fi="using:FluentIcons.Avalonia"
+             xmlns:vm="using:Paperbunkr.App.ViewModels"
+             mc:Ignorable="d" d:DesignWidth="420"
+             x:Class="Paperbunkr.App.Views.ConfirmDialogView"
+             x:DataType="vm:ConfirmDialogViewModel">
+
+    <UserControl.Styles>
+        <!-- Same shape as MainWindow.axaml's discardConfirm button styles - this is the app's
+             other existing confirm/cancel pattern; kept local to this view since ConfirmDialogView
+             is hosted inside a shared OverlayShell, not inside MainWindow's own Window.Styles scope. -->
+        <Style Selector="Button.confirmDialog">
+            <Setter Property="Padding" Value="14,8" />
+            <Setter Property="CornerRadius" Value="5" />
+            <Setter Property="FontSize" Value="12.5" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style Selector="Button.confirmDialog.ghost">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
+        </Style>
+        <Style Selector="Button.confirmDialog.primary">
+            <Setter Property="Background" Value="{DynamicResource PbAccentBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Foreground" Value="{DynamicResource PbBadgeTextBrush}" />
+        </Style>
+        <Style Selector="Button.confirmDialog.destructive">
+            <Setter Property="Background" Value="{DynamicResource PbDangerBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource PbDangerBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Foreground" Value="#241505" />
+        </Style>
+    </UserControl.Styles>
+
+    <Border Width="420" Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}"
+            BorderThickness="1" CornerRadius="8" Padding="20">
+        <StackPanel Spacing="14">
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <fi:SymbolIcon Symbol="Warning" FontSize="{StaticResource PbIconSizeLg}"
+                               Foreground="{DynamicResource PbDangerBrush}"
+                               IsVisible="{Binding IsDestructive}" />
+                <TextBlock Text="{Binding Title}" FontSize="15" FontWeight="Bold"
+                           Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center"
+                           IsVisible="{Binding Title, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+            </StackPanel>
+
+            <TextBlock Text="{Binding Message}" FontSize="12.5" Foreground="{DynamicResource PbTextMutedBrush}"
+                       TextWrapping="Wrap" />
+
+            <ScrollViewer MaxHeight="140" IsVisible="{Binding HasItems}">
+                <ItemsControl ItemsSource="{Binding Items}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="x:String">
+                            <TextBlock Text="{Binding}" FontSize="11.5" Foreground="{DynamicResource PbTextMutedBrush}"
+                                       TextTrimming="CharacterEllipsis" Margin="0,1" />
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+
+            <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+                <Button Classes="confirmDialog ghost" Content="{Binding SecondaryLabel}"
+                        Command="{Binding SecondaryCommand}" IsVisible="{Binding HasSecondary}" />
+                <Button Classes="confirmDialog primary" Classes.destructive="{Binding IsDestructive}"
+                        Content="{Binding PrimaryLabel}" Command="{Binding PrimaryCommand}" />
+            </StackPanel>
+        </StackPanel>
+    </Border>
+</UserControl>

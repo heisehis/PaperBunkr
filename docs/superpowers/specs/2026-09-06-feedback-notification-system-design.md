@@ -278,8 +278,8 @@ differently, and the sibling is the one that's right:
 |---|---|---|---|
 | `ReadingScreenViewModel.cs:376` (drag-and-drop import) | Toast | **Job-tracked** | Real duration; should be an `ActivityJob` from the start, with completion following the normal toast-policy path, rather than a fire-and-forget toast at the end |
 | `LibraryScreenViewModel.cs:2245` (drag-and-drop import) | Toast | **Job-tracked** | Same operation, same reasoning |
-| `MetadataWriteBackQueue.cs:212` (write-back batch finished) | Toast | **Job-tracked** | A batch across many items with possible per-item errors — the same shape as any other tracked job |
-| `PluginCommandRowViewModel.cs:92` (plugin scan finds issues) | Toast | **Alert** | `PluginScanAlertService.cs:69` already treats the same kind of event ("scan found matches") as an Alert; this one was missed |
+| `MetadataWriteBackQueue.cs:212` (write-back batch finished) | Toast | **Job-tracked** | Same reasoning as the drag-and-drop imports — resolved by constructing the job only once the outcome is known (see implementation plan Step 17), sidestepping the toast-policy conflict that first blocked this |
+| ~~`PluginCommandRowViewModel.cs:92` (plugin scan finds issues)~~ | Toast | **Toast (no change — see implementation plan)** | Corrected during implementation: this fires from a user-initiated, foreground button click, unlike `PluginScanAlertService.cs:69`'s automatic post-scan check. Superficially similar "found N results" messages, different trigger context — the taxonomy's own foreground/background distinction says these aren't actually the same case |
 | `LiveFolderWatchService.cs:268` (watcher found new comics) | Toast | **Alert** | Its own siblings in the same watcher family (`MainViewModel.cs:180,203` — missing/reconnected files) already use Alert |
 
 ## Interaction with Library Health

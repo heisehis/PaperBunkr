@@ -38,7 +38,7 @@ namespace Paperbunkr.App.ViewModels;
 /// happened yet (matches how a lot of readers already behave for in-session "back").
 ///
 /// Phase 3 (design spec §6/§7): resume position, bookmarks, in-book search. Resume/bookmarks are
-/// persisted via <see cref="Book.LastChapterIndex"/>/<see cref="Book.LastCharacterOffset"/>/
+/// persisted via <see cref="Book.LastChapterIndex"/>/<see cref="Book.LastBlockId"/>/
 /// <see cref="BookBookmark"/> - same "open a fresh context, write, SaveChanges" shape
 /// <c>ReaderScreenViewModel.GoToPage</c> already uses for <c>Issue.LastPageRead</c>. Position is only
 /// persisted on an actual navigation (chapter/page/bookmark/search jump), not from
@@ -54,6 +54,13 @@ public partial class BookReaderScreenViewModel : ViewModelBase
     private IBookTextSource? _source;
     private Book? _book;
     private BookPosition _position;
+
+    /// <summary>Excerpt text of whichever block <see cref="_position"/>'s <c>BlockId</c> currently
+    /// points at, kept in lockstep by <see cref="OnPositionCaptured"/> - lets <see cref="ToggleBookmark"/>
+    /// build a bookmark's excerpt without its own JS round-trip (docs/superpowers/specs/2026-09-07-
+    /// books-reader-pagination-and-position-fix-design.md).</summary>
+    private string _currentBlockExcerpt = string.Empty;
+
     private Size _viewportSize;
     private readonly Stack<BookPosition> _history = new();
 
@@ -331,7 +338,7 @@ public partial class BookReaderScreenViewModel : ViewModelBase
 
     /// <param name="startAt">When non-null, the reader opens here (a chapter jump or a bookmark
     /// from the Book Details screen - docs/superpowers/specs/2026-08-27-book-details-screen-design.md)
-    /// instead of resuming from <see cref="Book.LastChapterIndex"/>/<see cref="Book.LastCharacterOffset"/>.
+    /// instead of resuming from <see cref="Book.LastChapterIndex"/>/<see cref="Book.LastBlockId"/>.
     /// Nothing new is persisted until the reader itself navigates.</param>
     public void LoadBook(int bookId, BookPosition? startAt = null)
     {
@@ -416,18 +423,19 @@ public partial class BookReaderScreenViewModel : ViewModelBase
             Highlights.Add(ToSummary(highlight));
         }
 
-        // Resume position (design spec §6): clamp the stored chapter index in case the book
-        // changed on disk since it was last saved - FindParagraphIndex already clamps a stale
-        // CharacterOffset safely, so only ChapterIndex needs guarding here.
+        // Resume position (design spec §6, anchor reworked by docs/superpowers/specs/2026-09-07-books-
+        // reader-pagination-and-position-fix-design.md): clamp the stored chapter index in case the
+        // book changed on disk since it was last saved - a stale/unresolvable BlockId is handled later
+        // by the restore script itself (falls back to ProgressionFraction, then chapter start).
         if (startAt is { } start)
         {
             int clamped = Math.Clamp(start.ChapterIndex, 0, Math.Max(0, _source.Chapters.Count - 1));
-            _position = new BookPosition(clamped, start.CharacterOffset);
+            _position = new BookPosition(clamped, start.BlockId, start.ProgressionFraction);
         }
         else
         {
             int chapterIndex = Math.Clamp(_book.LastChapterIndex, 0, Math.Max(0, _source.Chapters.Count - 1));
-            _position = new BookPosition(chapterIndex, _book.LastCharacterOffset);
+            _position = new BookPosition(chapterIndex, _book.LastBlockId, _book.LastProgressionFraction ?? 0);
         }
 
         _book.LastOpenedTime = DateTime.UtcNow;
@@ -453,6 +461,7 @@ public partial class BookReaderScreenViewModel : ViewModelBase
         IsSearchOpen = false;
         IsHighlightPopupOpen = false;
         RecomputeCurrentPage();
+        PositionRestoreRequested?.Invoke(_position.BlockId);
     }
 
     public void UpdateViewportSize(Size size)
@@ -632,14 +641,11 @@ public partial class BookReaderScreenViewModel : ViewModelBase
         }
 
         _history.Push(_position);
-        // Jumps to the chapter start, not the precise highlight position - BookPosition's
-        // CharacterOffset is still the pre-redesign global-flattened-text scheme (Step 8 replaces it
-        // with the same BlockId-based locator BookHighlight now uses); a real known simplification
-        // until that lands, not a silently-wrong value.
-        _position = new BookPosition(highlight.ChapterIndex, 0);
+        _position = new BookPosition(highlight.ChapterIndex, highlight.BlockId);
         IsHighlightsOpen = false;
         RecomputeCurrentPage();
         PersistPosition();
+        PositionRestoreRequested?.Invoke(highlight.BlockId);
     }
 
     [RelayCommand]
@@ -698,6 +704,26 @@ public partial class BookReaderScreenViewModel : ViewModelBase
         HighlightPopupNote = summary.Note ?? string.Empty;
         HighlightPopupAnchorRect = anchorRectInRootGrid;
         IsHighlightPopupOpen = true;
+    }
+
+    /// <summary>
+    /// The WebView reported a new topmost-visible block (docs/superpowers/specs/2026-09-07-books-
+    /// reader-pagination-and-position-fix-design.md) - fired on every page-turn and from a debounced
+    /// scroll/page-move JS listener, and once right after a chapter finishes loading so
+    /// <see cref="_position"/>'s <c>BlockId</c> is never left stale from before the chapter change.
+    /// Persists immediately: this is already debounced upstream in JS, not a per-scroll-tick DB write.
+    /// </summary>
+    public void OnPositionCaptured(string blockId, double progressionFraction, string excerpt)
+    {
+        if (_source is null)
+        {
+            return;
+        }
+
+        _position = new BookPosition(_position.ChapterIndex, blockId, progressionFraction);
+        _currentBlockExcerpt = excerpt;
+        IsCurrentPositionBookmarked = Bookmarks.Any(b => b.ChapterIndex == _position.ChapterIndex && b.BlockId == blockId);
+        PersistPosition();
     }
 
     [RelayCommand]
@@ -793,7 +819,7 @@ public partial class BookReaderScreenViewModel : ViewModelBase
         }
 
         _history.Push(_position);
-        _position = new BookPosition(chapter.Index, 0);
+        _position = new BookPosition(chapter.Index);
         IsTocOpen = false;
         RecomputeCurrentPage();
         PersistPosition();
@@ -821,7 +847,7 @@ public partial class BookReaderScreenViewModel : ViewModelBase
 
         if (_position.ChapterIndex + 1 < _source.Chapters.Count)
         {
-            _position = new BookPosition(_position.ChapterIndex + 1, 0);
+            _position = new BookPosition(_position.ChapterIndex + 1);
         }
         else
         {
@@ -867,14 +893,12 @@ public partial class BookReaderScreenViewModel : ViewModelBase
     private void SetTheme(BookTheme theme) => Settings.Theme = theme;
 
     /// <summary>
-    /// Toggles a bookmark for the current chapter. Matches (and creates) by <c>ChapterIndex</c> alone
-    /// now - a real, disclosed granularity narrowing from the WebView redesign (docs/superpowers/
-    /// specs/2026-09-02-books-reflow-reader-webview-redesign-design.md): <see cref="BookPosition.CharacterOffset"/>
-    /// no longer tracks a real within-chapter position (Step 5 made page-turn chapter-granular; the
-    /// design's own precise block-anchored locator - the same one <c>BookHighlight</c> now uses - is
-    /// a deferred follow-up for bookmarks/resume-position specifically, not yet wired here). One
-    /// bookmark per chapter is an honest reflection of what's actually trackable right now, not a
-    /// silently-narrower version of the old per-paragraph behavior.
+    /// Toggles a bookmark at the currently-tracked block. Matches (and creates) by
+    /// <c>(ChapterIndex, BlockId)</c> (docs/superpowers/specs/2026-09-07-books-reader-pagination-and-
+    /// position-fix-design.md) - restores the pre-WebView-redesign ability to have multiple bookmarks
+    /// in one chapter. <see cref="_position"/>'s <c>BlockId</c>/excerpt stay fresh via
+    /// <see cref="OnPositionCaptured"/> (fired on every page-turn and from a debounced WebView scroll
+    /// listener), so this reads synchronously without its own JS round-trip.
     /// </summary>
     [RelayCommand]
     private void ToggleBookmark()
@@ -884,7 +908,12 @@ public partial class BookReaderScreenViewModel : ViewModelBase
             return;
         }
 
-        var existing = Bookmarks.FirstOrDefault(b => b.ChapterIndex == _position.ChapterIndex);
+        // _position.BlockId is nullable (no capture has happened yet, e.g. in a test harness with no
+        // live WebView); BookBookmark.BlockId is a required non-null column. Normalized to "" here so
+        // the two compare consistently everywhere below, rather than null-vs-"" silently mismatching.
+        string blockId = _position.BlockId ?? string.Empty;
+
+        var existing = Bookmarks.FirstOrDefault(b => b.ChapterIndex == _position.ChapterIndex && b.BlockId == blockId);
         if (existing is not null)
         {
             DeleteBookmark(existing);
@@ -892,15 +921,15 @@ public partial class BookReaderScreenViewModel : ViewModelBase
         }
 
         var chapter = _source.Chapters[_position.ChapterIndex];
-        int paragraphIndex = BookPaginator.FindParagraphIndex(chapter.Paragraphs, _position.CharacterOffset);
-        string excerpt = paragraphIndex < chapter.Paragraphs.Count ? Truncate(chapter.Paragraphs[paragraphIndex].Text, 140) : string.Empty;
+        string excerpt = string.IsNullOrEmpty(_currentBlockExcerpt) ? chapter.Title : _currentBlockExcerpt;
 
         using var context = PaperbunkrDb.CreateContext();
         var bookmark = new BookBookmark
         {
             BookId = _bookId,
             ChapterIndex = _position.ChapterIndex,
-            CharacterOffset = _position.CharacterOffset,
+            BlockId = blockId,
+            ProgressionFraction = _position.ProgressionFraction,
             Excerpt = excerpt,
             CreatedTime = DateTime.UtcNow,
         };
@@ -928,11 +957,22 @@ public partial class BookReaderScreenViewModel : ViewModelBase
         }
 
         Bookmarks.Remove(bookmark);
-        if (bookmark.ChapterIndex == _position.ChapterIndex && bookmark.CharacterOffset == _position.CharacterOffset)
+        if (bookmark.ChapterIndex == _position.ChapterIndex && bookmark.BlockId == (_position.BlockId ?? string.Empty))
         {
             IsCurrentPositionBookmarked = false;
         }
     }
+
+    /// <summary>
+    /// Raised whenever the ViewModel wants the reading pane scrolled/paged to a specific block -
+    /// resume-on-load, bookmark jumps, highlight jumps (docs/superpowers/specs/2026-09-07-books-
+    /// reader-pagination-and-position-fix-design.md). <c>BookReaderScreen.axaml.cs</c> handles the
+    /// timing: if the target chapter is already loaded, it scrolls immediately; if a chapter change is
+    /// also in flight (<see cref="CurrentChapterHtml"/> just changed), it waits for the WebView's
+    /// navigation-completed event first. A null/empty argument means "no specific block - land at the
+    /// chapter start" and is a no-op for the handler.
+    /// </summary>
+    public event Action<string?>? PositionRestoreRequested;
 
     [RelayCommand]
     private void GoToBookmark(BookBookmarkSummary? bookmark)
@@ -943,10 +983,11 @@ public partial class BookReaderScreenViewModel : ViewModelBase
         }
 
         _history.Push(_position);
-        _position = new BookPosition(bookmark.ChapterIndex, bookmark.CharacterOffset);
+        _position = new BookPosition(bookmark.ChapterIndex, bookmark.BlockId);
         IsBookmarksOpen = false;
         RecomputeCurrentPage();
         PersistPosition();
+        PositionRestoreRequested?.Invoke(bookmark.BlockId);
     }
 
     [RelayCommand]
@@ -958,7 +999,13 @@ public partial class BookReaderScreenViewModel : ViewModelBase
         }
 
         _history.Push(_position);
-        _position = new BookPosition(result.ChapterIndex, result.CharacterOffset);
+        // BookPosition no longer carries a raw character offset (docs/superpowers/specs/2026-09-07-
+        // books-reader-pagination-and-position-fix-design.md) - search results still land at the
+        // chapter start only, same practical behavior as before this fix (the old CharacterOffset was
+        // never actually wired to a WebView scroll target either, just carried in the position value).
+        // Converting search to a BlockId anchor is explicitly deferred - see that design doc's
+        // Background section.
+        _position = new BookPosition(result.ChapterIndex);
         IsSearchOpen = false;
         SearchQuery = string.Empty;
         RecomputeCurrentPage();
@@ -1034,7 +1081,7 @@ public partial class BookReaderScreenViewModel : ViewModelBase
     {
         Id = bookmark.Id,
         ChapterIndex = bookmark.ChapterIndex,
-        CharacterOffset = bookmark.CharacterOffset,
+        BlockId = bookmark.BlockId,
         ChapterTitle = chapterTitle,
         Excerpt = bookmark.Excerpt,
         CreatedTime = bookmark.CreatedTime,
@@ -1076,7 +1123,8 @@ public partial class BookReaderScreenViewModel : ViewModelBase
         }
 
         book.LastChapterIndex = _position.ChapterIndex;
-        book.LastCharacterOffset = _position.CharacterOffset;
+        book.LastBlockId = string.IsNullOrEmpty(_position.BlockId) ? null : _position.BlockId;
+        book.LastProgressionFraction = _position.ProgressionFraction;
         book.LastOpenedTime = DateTime.UtcNow;
         if (markFinished)
         {
@@ -1141,7 +1189,13 @@ public partial class BookReaderScreenViewModel : ViewModelBase
 
         if (chapterIndex < _source.Chapters.Count)
         {
-            total += Math.Clamp(position.CharacterOffset, 0, (int)ChapterChars(_source.Chapters[chapterIndex]));
+            // BookPosition no longer carries a raw character offset (docs/superpowers/specs/2026-09-
+            // 07-books-reader-pagination-and-position-fix-design.md) - ProgressionFraction (0-1, within
+            // the current chapter) scaled by the chapter's own char count is the closest equivalent for
+            // this "pages read" estimate, and a real one now that ProgressionFraction is actually
+            // tracked (unlike the pre-fix CharacterOffset, which stayed 0 through most navigation paths).
+            long chapterChars = ChapterChars(_source.Chapters[chapterIndex]);
+            total += (long)(Math.Clamp(position.ProgressionFraction, 0, 1) * chapterChars);
         }
 
         return total;
@@ -1199,7 +1253,7 @@ public partial class BookReaderScreenViewModel : ViewModelBase
                 .FirstOrDefault(i => !CurrentChapterHasNothingToShow(i), -1);
             if (firstWithContent >= 0 && firstWithContent != _position.ChapterIndex)
             {
-                _position = new BookPosition(firstWithContent, 0);
+                _position = new BookPosition(firstWithContent);
             }
         }
 
@@ -1234,8 +1288,9 @@ public partial class BookReaderScreenViewModel : ViewModelBase
             ? (double)_position.ChapterIndex / _source.Chapters.Count * 100
             : 0;
 
-        // Chapter-only match - see ToggleBookmark's doc comment for why CharacterOffset no longer
-        // meaningfully distinguishes positions within a chapter.
-        IsCurrentPositionBookmarked = Bookmarks.Any(b => b.ChapterIndex == _position.ChapterIndex);
+        // (ChapterIndex, BlockId) match (docs/superpowers/specs/2026-09-07-books-reader-pagination-
+        // and-position-fix-design.md) - a real value only once OnPositionCaptured has fired for this
+        // chapter; until then this correctly reads as "not bookmarked" rather than guessing.
+        IsCurrentPositionBookmarked = Bookmarks.Any(b => b.ChapterIndex == _position.ChapterIndex && b.BlockId == (_position.BlockId ?? string.Empty));
     }
 }

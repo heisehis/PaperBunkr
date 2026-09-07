@@ -1,4 +1,5 @@
 using System.IO.Compression;
+using System.Linq;
 using Avalonia;
 using Microsoft.EntityFrameworkCore;
 using Paperbunkr.App.Services;
@@ -77,16 +78,54 @@ public class SkinServiceTests : IDisposable
         return crpckPath;
     }
 
+    /// <summary>Updated for docs/superpowers/specs/2026-09-07-preferences-tile-hub-redesign-design.md
+    /// §3 - GetAvailableSkins now returns all 5 embedded built-in skins (not just Default) even with
+    /// nothing installed; the previous version of this test asserted exactly one, which no longer
+    /// holds now that Default is one of several built-ins instead of a single special case.</summary>
     [Fact]
-    public void GetAvailableSkins_ListsBuiltInDefault_WhenNothingInstalled()
+    public void GetAvailableSkins_ListsAllBuiltIns_WhenNothingInstalled()
     {
         var service = CreateService();
 
         var skins = service.GetAvailableSkins();
 
-        Assert.Single(skins);
-        Assert.Equal(SkinService.DefaultSkinKey, skins[0].Key);
-        Assert.True(skins[0].IsActive);
+        Assert.Equal(5, skins.Count);
+        Assert.Contains(skins, s => s.Key == SkinService.DefaultSkinKey && s.IsActive);
+        Assert.Contains(skins, s => s.Key == "windows_11");
+        Assert.Contains(skins, s => s.Key == "cool_technical");
+        Assert.Contains(skins, s => s.Key == "vibrant_pop");
+        Assert.Contains(skins, s => s.Key == "vintage_paperback");
+    }
+
+    /// <summary>Windows 11 existed as a real theme.json on disk but was never actually reachable
+    /// from GetAvailableSkins/LoadSkin before this fix (found during the codebase survey for the
+    /// design doc above) - this is the regression test for that specific bug.</summary>
+    [Theory]
+    [InlineData("windows_11")]
+    [InlineData("cool_technical")]
+    [InlineData("vibrant_pop")]
+    [InlineData("vintage_paperback")]
+    public void LoadSkin_EveryNewBuiltIn_ParsesWithoutThrowing(string key)
+    {
+        var service = CreateService();
+
+        var theme = service.LoadSkin(key);
+
+        Assert.False(string.IsNullOrWhiteSpace(theme.Name));
+        Assert.False(string.IsNullOrWhiteSpace(theme.Colors.Accent));
+    }
+
+    [Theory]
+    [InlineData("cool_technical")]
+    [InlineData("vibrant_pop")]
+    [InlineData("vintage_paperback")]
+    public void ApplySkin_EveryNewBuiltIn_AppliesWithoutThrowing(string key)
+    {
+        var service = CreateService();
+
+        service.ApplySkin(key);
+
+        Assert.Equal(key, service.GetAvailableSkins().Single(s => s.IsActive).Key);
     }
 
     [Fact]

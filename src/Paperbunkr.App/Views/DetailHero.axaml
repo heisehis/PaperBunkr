@@ -39,7 +39,7 @@
 
     <Border Height="{Binding #Hero.HeroHeight}" ClipToBounds="True" Background="{Binding CoverBrush}">
         <Grid>
-            <Image Source="{Binding BackdropImage}" Stretch="UniformToFill"
+            <Image x:Name="Backdrop" Source="{Binding BackdropImage}" Stretch="UniformToFill"
                    IsVisible="{Binding BackdropImage, Converter={x:Static conv:ObjectConverters.IsNotNull}}" />
 
             <Border Background="#59000000" IsVisible="{Binding #Hero.MutedBackdrop}" />

@@ -44,7 +44,7 @@ public class AnnotationExportServiceTests : IDisposable
 
         context.BookBookmarks.Add(new BookBookmark
         {
-            BookId = _bookId, ChapterIndex = 0, CharacterOffset = 10, Excerpt = "A bookmarked line.", CreatedTime = DateTime.UtcNow,
+            BookId = _bookId, ChapterIndex = 0, BlockId = "pb-p10", Excerpt = "A bookmarked line.", CreatedTime = DateTime.UtcNow,
         });
         context.BookHighlights.Add(new BookHighlight
         {

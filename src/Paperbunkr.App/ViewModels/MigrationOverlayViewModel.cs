@@ -22,7 +22,7 @@ public partial class MigrationOverlayViewModel : ViewModelBase
 {
     public MigrationOverlayViewModel(IFilePickerService filePicker, Action<int> onOpenSeriesDetail)
     {
-        NeedsReview = new NeedsReviewViewModel(onOpenSeriesDetail, filePicker);
+        NeedsReview = new NeedsReviewViewModel(onOpenSeriesDetail);
         Migration = new MigrationViewModel(filePicker, onCompleted: () => NeedsReview.Refresh());
     }
 

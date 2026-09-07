@@ -27,7 +27,21 @@ public class SkinService
 {
     public const string DefaultSkinKey = "default";
 
-    private const string DefaultSkinAssetRoot = "avares://Paperbunkr.App/Assets/Skins/default/";
+    /// <summary>
+    /// Embedded built-in skins (docs/superpowers/specs/2026-09-07-preferences-tile-hub-redesign-
+    /// design.md §3) - <see cref="DefaultSkinKey"/> used to be the only one read from an
+    /// <c>avares://</c> resource here; everything else fell through to <c>SkinPaths.ExtractedDirectory</c>
+    /// (user-installed skins only). That meant "windows_11" existed as a real
+    /// <c>Assets/Skins/windows_11/theme.json</c> file on disk but was never actually reachable from
+    /// <see cref="GetAvailableSkins"/> - found and fixed as part of adding the 3 new built-in skins,
+    /// since this method needed generalizing to a list anyway.
+    /// </summary>
+    private static readonly string[] BuiltInSkinKeys =
+    {
+        DefaultSkinKey, "windows_11", "cool_technical", "vibrant_pop", "vintage_paperback",
+    };
+
+    private static string BuiltInSkinAssetRoot(string key) => $"avares://Paperbunkr.App/Assets/Skins/{key}/";
 
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
 
@@ -52,19 +66,27 @@ public class SkinService
 
         var summaries = new List<SkinSummary>();
 
-        var defaultTheme = TryLoadSkin(DefaultSkinKey);
-        summaries.Add(new SkinSummary
+        foreach (string key in BuiltInSkinKeys)
         {
-            Key = DefaultSkinKey,
-            Name = defaultTheme?.Name ?? "Default",
-            IsActive = activeKey == DefaultSkinKey,
-        });
+            var theme = TryLoadSkin(key);
+            if (theme is not null)
+            {
+                summaries.Add(new SkinSummary { Key = key, Name = theme.Name, IsActive = activeKey == key });
+            }
+        }
 
         if (Directory.Exists(SkinPaths.ExtractedDirectory))
         {
             foreach (string dir in Directory.GetDirectories(SkinPaths.ExtractedDirectory).OrderBy(d => d, StringComparer.OrdinalIgnoreCase))
             {
                 string key = Path.GetFileName(dir);
+                if (BuiltInSkinKeys.Contains(key, StringComparer.OrdinalIgnoreCase))
+                {
+                    // An installed skin can't shadow a built-in key - the built-in embedded copy
+                    // above already won.
+                    continue;
+                }
+
                 var theme = TryLoadSkin(key);
                 if (theme is not null)
                 {
@@ -86,8 +108,8 @@ public class SkinService
     {
         try
         {
-            string json = key == DefaultSkinKey
-                ? ReadEmbeddedText(DefaultSkinAssetRoot + "theme.json")
+            string json = BuiltInSkinKeys.Contains(key, StringComparer.OrdinalIgnoreCase)
+                ? ReadEmbeddedText(BuiltInSkinAssetRoot(key) + "theme.json")
                 : File.ReadAllText(Path.Combine(SkinPaths.ExtractedDirectory, key, "theme.json"));
 
             return JsonSerializer.Deserialize<SkinTheme>(json, JsonOptions);
@@ -364,8 +386,8 @@ public class SkinService
 
         try
         {
-            Bitmap bitmap = skinKey == DefaultSkinKey
-                ? new Bitmap(AssetLoader.Open(new Uri(DefaultSkinAssetRoot + relativePath)))
+            Bitmap bitmap = BuiltInSkinKeys.Contains(skinKey, StringComparer.OrdinalIgnoreCase)
+                ? new Bitmap(AssetLoader.Open(new Uri(BuiltInSkinAssetRoot(skinKey) + relativePath)))
                 : new Bitmap(Path.Combine(SkinPaths.ExtractedDirectory, skinKey, relativePath));
 
             _iconCache[cacheKey] = bitmap;

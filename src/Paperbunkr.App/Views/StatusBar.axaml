@@ -60,6 +60,25 @@
                 </Animation>
             </Style.Animations>
         </Style>
+
+        <!-- Peek popover entrance (docs/superpowers/specs/2026-09-07-chrome-content-motion-polish-
+             design.md item 6) - "open" is re-added on every AttachedToVisualTree in
+             StatusBar.axaml.cs, not driven by a bound property, since the Popup itself already gates
+             mount/unmount. -->
+        <Style Selector="Border.activityPeekPopover">
+            <Setter Property="Opacity" Value="0" />
+            <Setter Property="RenderTransform" Value="translateY(8px)" />
+            <Setter Property="Transitions">
+                <Transitions>
+                    <DoubleTransition Property="Opacity" Duration="{DynamicResource PbMotionFast}" Easing="{StaticResource PbMotionEase}" />
+                    <TransformOperationsTransition Property="RenderTransform" Duration="{DynamicResource PbMotionFast}" Easing="{StaticResource PbMotionEase}" />
+                </Transitions>
+            </Setter>
+        </Style>
+        <Style Selector="Border.activityPeekPopover.open">
+            <Setter Property="Opacity" Value="1" />
+            <Setter Property="RenderTransform" Value="none" />
+        </Style>
     </UserControl.Styles>
 
     <Panel>
@@ -86,10 +105,8 @@
                         <TextBlock Text="{Binding StatusBar.IndicatorText}" VerticalAlignment="Center"
                                    FontSize="{DynamicResource PbFontSizeMicro}" Foreground="{DynamicResource PbTextMutedBrush}"
                                    IsVisible="{Binding StatusBar.HasActiveJobs}" />
-                        <Border CornerRadius="999" Background="{DynamicResource PbBadgeBrush}" Padding="5,0" MinWidth="14"
-                                VerticalAlignment="Center" IsVisible="{Binding StatusBar.HasAlerts}">
-                            <TextBlock Text="{Binding StatusBar.UnreadAlertCount}" FontSize="9.5" HorizontalAlignment="Center"
-                                       Foreground="{DynamicResource PbBadgeTextBrush}" />
+                        <Border Classes="countPill destructive" VerticalAlignment="Center" IsVisible="{Binding StatusBar.HasAlerts}">
+                            <TextBlock Text="{Binding StatusBar.UnreadAlertCount}" />
                         </Border>
                         <fi:SymbolIcon Symbol="ChevronUp" FontSize="{StaticResource PbIconSizeXs}" VerticalAlignment="Center"
                                        Foreground="{DynamicResource PbTextFaintBrush}" />
@@ -102,7 +119,13 @@
         <Popup PlacementTarget="{Binding #ActivityIndicatorButton}" Placement="TopEdgeAlignedRight"
                VerticalOffset="-6" IsLightDismissEnabled="True"
                IsOpen="{Binding ActivityCenter.IsPeekOpen, Mode=TwoWay}">
-            <Border Width="320" MaxHeight="420" Background="{DynamicResource PbSurface2Brush}"
+            <!-- Entrance-only best-effort (docs/superpowers/specs/2026-09-07-chrome-content-motion-
+                 polish-design.md item 6, implementation-time-verification note): Popup unmounts its
+                 content when IsOpen flips false, so an exit Transitions leg never gets a chance to
+                 play the way Border#DrawerRoot's own Classes.open toggle does on an always-mounted
+                 element - StatusBar.axaml.cs re-adds "open" on every AttachedToVisualTree (i.e. every
+                 popup open) instead, which still gets a real fade+slide-in each time. -->
+            <Border x:Name="PeekCard" Classes="activityPeekPopover" Width="320" MaxHeight="420" Background="{DynamicResource PbSurface2Brush}"
                     BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
                     CornerRadius="{DynamicResource PbRadius}" BoxShadow="0 8 30 0 #80000000"
                     DataContext="{Binding ActivityCenter}">

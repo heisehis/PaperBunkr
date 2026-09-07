@@ -971,4 +971,29 @@ public class MainViewModelTests : IDisposable
 
         Assert.Equal("smart", vm.CurrentScreen);
     }
+
+    /// <summary>
+    /// Both the missing-files live-watch alert and the startup path-repair alert relocated their
+    /// <see cref="Paperbunkr.App.Models.ActivityLink"/> from <c>MigrationReview</c> to
+    /// <c>Preferences</c>/"LibraryHealth" (docs/superpowers/specs/2026-09-06-missing-files-library-
+    /// health-design.md) - this exercises the resolver's handling of that payload the same way
+    /// <see cref="FollowLink_WithPluginGroupedReview_NavigatesToSmartLists"/> exercises
+    /// PluginGroupedReview, since <c>ResolveActivityLink</c> itself is private. Library Health lives
+    /// inside the Library tab (not its own section, per a later user decision), so this lands on
+    /// <see cref="Paperbunkr.App.Models.PreferencesSection.Library"/> and scrolls/pulses the
+    /// "library.health" anchor, same mechanism a Preferences search hit uses.
+    /// </summary>
+    [Fact]
+    public void FollowLink_WithLibraryHealthPreferencesPayload_OpensPreferencesOnLibraryTabAndScrollsToHealthAnchor()
+    {
+        var vm = new MainViewModel();
+        string? anchor = null;
+        vm.Preferences.ScrollToAnchorRequested += a => anchor = a;
+
+        vm.ActivityCenter.FollowLinkCommand.Execute(new Paperbunkr.App.Models.ActivityLink(Paperbunkr.App.Models.ActivityLinkKind.Preferences, "LibraryHealth"));
+
+        Assert.True(vm.IsPreferences);
+        Assert.True(vm.Preferences.IsLibrarySection);
+        Assert.Equal("library.health", anchor);
+    }
 }

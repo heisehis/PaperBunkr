@@ -33,6 +33,14 @@
              for the discard-confirm primary button in MainWindow. -->
         <Color x:Key="PbDangerColor">#D96C6C</Color>
 
+        <!-- Icon-chip tints for Library Health's stat tiles (docs/superpowers/specs/2026-09-07-
+             library-health-redesign-design.md §2) - ~18% alpha of the existing badge/danger/success
+             colors above, matching PbAccentSoftColor's own ~16% alpha convention. The amber chip
+             reuses PbAccentSoftBrush directly rather than adding a 4th. -->
+        <Color x:Key="PbBadgeSoftColor">#2ED7AC4C</Color>
+        <Color x:Key="PbDangerSoftColor">#2ED96C6C</Color>
+        <Color x:Key="PbSuccessSoftColor">#2E5FA889</Color>
+
         <SolidColorBrush x:Key="PbBgBrush" Color="{StaticResource PbBgColor}" />
         <SolidColorBrush x:Key="PbChromeBrush" Color="{StaticResource PbChromeColor}" />
         <SolidColorBrush x:Key="PbBorderBrush" Color="{StaticResource PbBorderColor}" />
@@ -46,6 +54,9 @@
         <SolidColorBrush x:Key="PbBadgeTextBrush" Color="{StaticResource PbBadgeTextColor}" />
         <SolidColorBrush x:Key="PbSuccessBrush" Color="{StaticResource PbSuccessColor}" />
         <SolidColorBrush x:Key="PbDangerBrush" Color="{StaticResource PbDangerColor}" />
+        <SolidColorBrush x:Key="PbBadgeSoftBrush" Color="{StaticResource PbBadgeSoftColor}" />
+        <SolidColorBrush x:Key="PbDangerSoftBrush" Color="{StaticResource PbDangerSoftColor}" />
+        <SolidColorBrush x:Key="PbSuccessSoftBrush" Color="{StaticResource PbSuccessSoftColor}" />
 
         <!-- Elevation scale + glow/hero-gradient tokens (docs/superpowers/specs/2026-08-24-design-
              language-foundation-design.md). WCAG AA contrast checked by hand against these exact
@@ -213,6 +224,9 @@
         <StyleInclude Source="avares://Paperbunkr.App/Styles/FormControls.axaml" />
         <StyleInclude Source="avares://Paperbunkr.App/Styles/Icons.axaml" />
         <StyleInclude Source="avares://Paperbunkr.App/Styles/Marks.axaml" />
+        <StyleInclude Source="avares://Paperbunkr.App/Styles/Overlays.axaml" />
+        <StyleInclude Source="avares://Paperbunkr.App/Styles/Indicators.axaml" />
+        <StyleInclude Source="avares://Paperbunkr.App/Styles/Badges.axaml" />
         <StyleInclude Source="avares://Paperbunkr.App/Styles/DetailChrome.axaml" />
         <StyleInclude Source="avares://Paperbunkr.App/Styles/ScreenChrome.axaml" />
         <StyleInclude Source="avares://Paperbunkr.App/Styles/Menu.axaml" />

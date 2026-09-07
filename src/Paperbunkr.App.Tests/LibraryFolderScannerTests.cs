@@ -124,6 +124,67 @@ public class LibraryFolderScannerTests : IDisposable
         Assert.Single(context.Issues);
     }
 
+    // ===================== Scanning: missing-file handling (docs/superpowers/specs/2026-09-06-
+    // scan-missing-file-handling-design.md) - the removed-files blacklist. =====================
+
+    [Fact]
+    public async Task ScanAllAsync_DontReimportRemovedFiles_On_SkipsBlacklistedPath()
+    {
+        string path = Path.Combine(_scanRoot, "Kilo Station 012 (2021).cbz");
+        CbzFixture.Create(path, pageCount: 1);
+        AddWatchedFolder(_scanRoot);
+
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            context.GetOrCreateAppSettings().DontReimportRemovedFiles = true;
+            context.RemovedFilePaths.Add(new RemovedFilePath { FilePath = path, RemovedAtUtc = DateTime.UtcNow });
+            context.SaveChanges();
+        }
+
+        var result = await CreateScanner().ScanAllAsync(new Progress<(int, int)>());
+
+        Assert.Equal(0, result.IssuesAdded);
+        using var verifyContext = new PaperbunkrDbContext(_dbOptions);
+        Assert.Empty(verifyContext.Issues);
+    }
+
+    [Fact]
+    public async Task ScanAllAsync_DontReimportRemovedFiles_Off_ImportsBlacklistedPathNormally()
+    {
+        string path = Path.Combine(_scanRoot, "Kilo Station 012 (2021).cbz");
+        CbzFixture.Create(path, pageCount: 1);
+        AddWatchedFolder(_scanRoot);
+
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            // Setting stays at its default (false) - the blacklist row exists but is unconsulted.
+            context.RemovedFilePaths.Add(new RemovedFilePath { FilePath = path, RemovedAtUtc = DateTime.UtcNow });
+            context.SaveChanges();
+        }
+
+        var result = await CreateScanner().ScanAllAsync(new Progress<(int, int)>());
+
+        Assert.Equal(1, result.IssuesAdded);
+    }
+
+    [Fact]
+    public async Task ImportNewFilesAsync_DontReimportRemovedFiles_On_SkipsBlacklistedPath()
+    {
+        string path = Path.Combine(_scanRoot, "Kilo Station 012 (2021).cbz");
+        CbzFixture.Create(path, pageCount: 1);
+
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            context.GetOrCreateAppSettings().DontReimportRemovedFiles = true;
+            context.RemovedFilePaths.Add(new RemovedFilePath { FilePath = path, RemovedAtUtc = DateTime.UtcNow });
+            context.SaveChanges();
+        }
+
+        var result = await CreateScanner().ImportNewFilesAsync(new[] { path }, new Progress<(int, int)>());
+
+        Assert.Equal(0, result.IssuesAdded);
+    }
+
     [Fact]
     public async Task ScanAllAsync_MultipleNewIssuesSameSeries_ShareOneSeriesRow()
     {

@@ -18,7 +18,8 @@ public partial class DetailTabs : UserControl
     /// §1) - direct pointer-event handling, same as <see cref="PageCanvas"/>, since Shift-range
     /// selection needs <see cref="PointerEventArgs.KeyModifiers"/> that a plain Button/ICommand
     /// binding can't carry. Only the left button toggles selection; right-clicks fall through
-    /// untouched so the tile's own <c>ContextMenu</c> still opens normally. Attached in all three
+    /// untouched so the screen's <see cref="Paperbunkr.App.Controls.ContextMenuHost"/> (bubbling
+    /// from the <c>DetailTabs</c> root) still picks them up. Attached in all three
     /// Issues-tab view-mode templates (Poster/List/Card) - <c>sender</c> is whichever tile control
     /// carries the <see cref="IssueCardSample"/> DataContext.
     /// </summary>

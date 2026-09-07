@@ -145,8 +145,10 @@
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
 
-                            <CheckBox Content="Auto-hide toolbar when idle" IsChecked="{Binding #Root.AutoHideToggle}"
-                                      IsVisible="{Binding #Root.HasAutoHideToggle}" Foreground="{Binding #Root.SheetForeground}" />
+                            <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding #Root.HasAutoHideToggle}">
+                                <TextBlock Grid.Column="0" Text="Auto-hide toolbar when idle" VerticalAlignment="Center" Foreground="{Binding #Root.SheetForeground}" Margin="0,0,8,0" />
+                                <ToggleSwitch Grid.Column="1" IsChecked="{Binding #Root.AutoHideToggle}" OnContent="{x:Null}" OffContent="{x:Null}" />
+                            </Grid>
                         </StackPanel>
                     </Border>
 

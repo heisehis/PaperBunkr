@@ -109,13 +109,12 @@
                     <Grid>
                         <Image Source="{Binding CoverImage}" Stretch="UniformToFill" />
                         <Border Classes="posterScrim" />
-                        <Border Height="3" VerticalAlignment="Bottom" Background="{DynamicResource PbAccentBrush}"
-                                IsVisible="{Binding IsInProgress}" HorizontalAlignment="Left" Width="70" />
-                        <fi:SymbolIcon Symbol="CheckmarkCircle" FontSize="{StaticResource PbIconSizeMd}"
-                                       Foreground="{DynamicResource PbSuccessBrush}"
-                                       HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,5,5,0"
-                                       ToolTip.Tip="Read" AutomationProperties.AccessibilityView="Raw"
-                                       IsVisible="{Binding IsRead}" />
+                        <pbc:StatusBadge Variant="InProgress" IconSize="{StaticResource PbIconSizeMd}"
+                                         HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,5,5,0"
+                                         IsVisible="{Binding IsInProgress}" />
+                        <pbc:StatusBadge Variant="Read" IconSize="{StaticResource PbIconSizeMd}"
+                                         HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,5,5,0"
+                                         IsVisible="{Binding IsRead}" />
                     </Grid>
                 </Border>
                 <TextBlock Text="{Binding Title}" FontSize="12" FontWeight="Bold" Foreground="{DynamicResource PbTextBrush}" />
@@ -128,18 +127,13 @@
         <DataTemplate x:Key="IssueListRowTemplate" x:DataType="models:IssueCardSample">
             <Grid Classes="issueRow" Classes.selected="{Binding IsSelected}" Classes.read="{Binding IsRead}"
                   ColumnDefinitions="20,44,*,150,80,50" Height="30" Focusable="True"
-                  ContextMenu="{StaticResource IssueContextMenu}"
                   PointerPressed="OnIssueTilePointerPressed" DoubleTapped="OnIssueTileDoubleTapped"
                   KeyDown="OnIssueTileKeyDown">
                 <Panel Grid.Column="0" VerticalAlignment="Center">
-                    <fi:SymbolIcon Symbol="CheckmarkCircle" FontSize="{StaticResource PbIconSizeXs}"
-                                   Foreground="{DynamicResource PbSuccessBrush}"
-                                   ToolTip.Tip="Read" AutomationProperties.AccessibilityView="Raw"
-                                   IsVisible="{Binding TileGlyph, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static models:IssueTileGlyph.Read}}" />
-                    <fi:SymbolIcon Symbol="CircleHalfFill" FontSize="{StaticResource PbIconSizeXs}"
-                                   Foreground="{DynamicResource PbAccentBrush}"
-                                   ToolTip.Tip="In progress" AutomationProperties.AccessibilityView="Raw"
-                                   IsVisible="{Binding TileGlyph, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static models:IssueTileGlyph.InProgress}}" />
+                    <pbc:StatusBadge Variant="Read" IconSize="{StaticResource PbIconSizeXs}"
+                                     IsVisible="{Binding TileGlyph, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static models:IssueTileGlyph.Read}}" />
+                    <pbc:StatusBadge Variant="InProgress" IconSize="{StaticResource PbIconSizeXs}"
+                                     IsVisible="{Binding TileGlyph, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static models:IssueTileGlyph.InProgress}}" />
                 </Panel>
                 <TextBlock Grid.Column="1" Text="{Binding Title}" FontWeight="Bold" VerticalAlignment="Center"
                            Foreground="{DynamicResource PbTextBrush}" />
@@ -156,7 +150,7 @@
 
         <DataTemplate x:Key="IssueCardTileTemplate" x:DataType="models:IssueCardSample">
             <Border Classes="issueCard" Classes.selected="{Binding IsSelected}" Width="250" Margin="0,0,12,12"
-                    Focusable="True" ContextMenu="{StaticResource IssueContextMenu}"
+                    Focusable="True"
                     PointerPressed="OnIssueTilePointerPressed" DoubleTapped="OnIssueTileDoubleTapped"
                     KeyDown="OnIssueTileKeyDown">
                 <Grid ColumnDefinitions="54,*">
@@ -166,10 +160,9 @@
                     </Border>
                     <StackPanel Grid.Column="1" Margin="10,0,0,0" Spacing="4">
                         <Grid ColumnDefinitions="Auto,*">
-                            <fi:SymbolIcon Grid.Column="0" Symbol="CheckmarkCircle" FontSize="{StaticResource PbIconSizeXs}"
-                                           Foreground="{DynamicResource PbSuccessBrush}" VerticalAlignment="Top" Margin="0,2,5,0"
-                                           ToolTip.Tip="Read" AutomationProperties.AccessibilityView="Raw"
-                                           IsVisible="{Binding IsRead}" />
+                            <pbc:StatusBadge Grid.Column="0" Variant="Read" IconSize="{StaticResource PbIconSizeXs}"
+                                             VerticalAlignment="Top" Margin="0,2,5,0"
+                                             IsVisible="{Binding IsRead}" />
                             <TextBlock Grid.Column="1" Text="{Binding FullTitle}" FontSize="12.5" FontWeight="SemiBold"
                                        Foreground="{DynamicResource PbTextBrush}" TextWrapping="Wrap" MaxLines="2" TextTrimming="CharacterEllipsis" />
                         </Grid>

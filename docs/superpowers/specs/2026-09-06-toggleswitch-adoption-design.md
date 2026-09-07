@@ -7,7 +7,10 @@ respects Reduced Motion at all. Inspired by Komikku's settings screens (screensh
 chat), which use this exact control shape throughout. Sub-project B of the Komikku-inspired
 settings work - Design A (Connections dialog redesign) is a separate, independent spec.
 
-Date: 2026-09-06. Status: design, approved via grilling round in chat (B1/B2 both answered). Not
+Date: 2026-09-06. Status: design, approved via grilling round in chat (B1/B2 both answered);
+implemented, then the File Association row (Advanced tab) reverted back to `CheckBox` per user
+feedback after seeing it on screen ("just replace that section back with checkboxes") - see the
+post-implementation note at the end of this doc. Not
 yet approved for `writing-plans`.
 
 ---
@@ -99,3 +102,17 @@ literal `IsStaged` property name.
   slides. Spot-check one converted row per bucket (a Preferences setting, a `LibraryToolbar` filter,
   `ReaderSettingsSheet`) and confirm the label still reads correctly beside the switch. Confirm a
   per-row selection checkbox (Library grid) and a bulk-edit stage checkbox are visually unchanged.
+
+## Post-implementation note (2026-09-06)
+
+After implementing, `ToggleSwitchPreContentMargin`/`ToggleSwitchPostContentMargin` were found (via
+FluentAvalonia's real source, `ToggleSwitchStyles.axaml`) to reserve 10px empty space above and
+below the 20px switch track for `OnContent`/`OffContent` labels - dead space for every converted
+control here, which all use a bare switch with the label in an adjacent `TextBlock` instead. Fixed
+app-wide via a `<Styles.Resources>` override in `FormControls.axaml` zeroing both keys, rather than
+per call site.
+
+Separately, on seeing the on-screen result, the user asked for the **File Association** row
+(Advanced tab's `FileAssociationsList` `DataTemplate`) reverted back to `CheckBox` - reverted as
+asked. That file/row is now an exception to the "Advanced tab (6)" conversion count in the table
+above (5 converted, 1 reverted) - everything else in the original scope stands as designed.

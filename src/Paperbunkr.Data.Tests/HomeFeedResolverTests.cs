@@ -324,7 +324,7 @@ public class HomeFeedResolverTests : IDisposable
     // strip-design.md) ---
 
     private static void SeedBook(PaperbunkrDbContext context, string title, DateTime? lastOpened = null,
-        int lastChapter = 0, int lastOffset = 0, bool finished = false)
+        int lastChapter = 0, string? lastBlockId = null, bool finished = false)
     {
         context.Books.Add(new Book
         {
@@ -334,7 +334,7 @@ public class HomeFeedResolverTests : IDisposable
             AddedTime = DateTime.UtcNow,
             LastOpenedTime = lastOpened,
             LastChapterIndex = lastChapter,
-            LastCharacterOffset = lastOffset,
+            LastBlockId = lastBlockId,
             Finished = finished,
             ChapterCount = 10,
         });
@@ -346,7 +346,7 @@ public class HomeFeedResolverTests : IDisposable
     {
         using var context = new PaperbunkrDbContext(_dbOptions);
         SeedBook(context, "Older", lastOpened: new DateTime(2024, 1, 1), lastChapter: 2);
-        SeedBook(context, "Newer", lastOpened: new DateTime(2024, 6, 1), lastOffset: 500);
+        SeedBook(context, "Newer", lastOpened: new DateTime(2024, 6, 1), lastBlockId: "pb-p5");
         SeedBook(context, "Finished", lastOpened: new DateTime(2024, 5, 1), lastChapter: 9, finished: true);
         SeedBook(context, "Opened but not started", lastOpened: new DateTime(2024, 7, 1)); // position 0/0
         SeedBook(context, "Never opened"); // LastOpenedTime null

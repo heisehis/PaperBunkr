@@ -57,6 +57,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
     private readonly Action<IReadOnlyList<int>> _goBulkIssueProperties;
     private readonly Action<IReadOnlyList<int>> _goBulkSeriesProperties;
     private readonly Action<string, string> _showToast;
+    private readonly IActivityService _activity;
     private readonly Action<int, bool> _enqueueMetadataWriteBack;
     private readonly Action _goLibraryFolders;
     private readonly Action<int> _openCollectionProperties;
@@ -176,8 +177,10 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         LibraryFolderScanner? libraryScanner = null,
         Action<string?, Action<string>>? promptForName = null,
         WorkspaceService? workspaceService = null,
-        Action<int, bool>? enqueueMetadataWriteBack = null)
+        Action<int, bool>? enqueueMetadataWriteBack = null,
+        IActivityService? activity = null)
     {
+        _activity = activity ?? new ActivityService();
         _enqueueMetadataWriteBack = enqueueMetadataWriteBack ?? ((_, _) => { });
         _goDetail = goDetail;
         _goReaderForIssue = goReaderForIssue;
@@ -1155,6 +1158,13 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         OnPropertyChanged(nameof(EmptyStateMessage));
         OnPropertyChanged(nameof(EmptyStateActionLabel));
         OnPropertyChanged(nameof(EmptyStateActionCommand));
+
+        // Staggered entrance (docs/superpowers/specs/2026-09-07-chrome-content-motion-polish-
+        // design.md item 1) - RebuildView is the one path every real trigger (nav-in reload via
+        // LoadFromDatabase, search/sort/group/filter) funnels through, per this method's own doc
+        // comment. Consumers (LibraryScreen.axaml.cs's ContainerPrepared handlers) read this once
+        // per container preparation, not as a live binding - see EntranceAnimation.Prepare.
+        PlayEntranceAnimation = true;
 
         KickCoverReconcile();
     }
@@ -2216,6 +2226,11 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
             return;
         }
 
+        // Job-tracked, not a fire-and-forget toast (docs/superpowers/specs/2026-09-06-feedback-
+        // notification-system-design.md §6) - same reasoning as ReadingScreenViewModel's own
+        // ImportDroppedPathsAsync: DragImportService has no progress callback, so this is an
+        // indeterminate job, but completion now follows the normal toast-policy path.
+        using var job = _activity.StartJob(ActivityJobKind.Import, "Importing dropped files");
         var result = await new DragImportService().ImportAsync(paths);
         LoadFromDatabase();
 
@@ -2240,10 +2255,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
             parts.Add($"{result.ReadingListsImported} reading list{(result.ReadingListsImported == 1 ? "" : "s")} imported");
         }
 
-        if (parts.Count > 0)
-        {
-            _showToast("Drag-and-drop import", string.Join(", ", parts) + ".");
-        }
+        job.Succeed(parts.Count > 0 ? string.Join(", ", parts) + "." : "Nothing to import.");
     }
 
     // --- Chips row + empty state ---
@@ -3156,6 +3168,17 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
     [ObservableProperty]
     private LibraryViewMode _viewMode = LibraryViewMode.PosterGrid;
 
+    /// <summary>Staggered entrance trigger (docs/superpowers/specs/2026-09-07-chrome-content-motion-
+    /// polish-design.md item 1) - set true by <see cref="RebuildView"/> (nav-in reload, search/sort/
+    /// group/filter) and by <see cref="OnViewModeChanged"/> (switching Poster/Panorama/List/Details/
+    /// Tiles). Read once per container preparation by LibraryScreen.axaml.cs's ContainerPrepared
+    /// handlers via <see cref="Controls.EntranceAnimation.Prepare"/> - not a live binding, so
+    /// ordinary scroll-driven virtualization recycling never replays the entrance; only a fresh
+    /// trigger setting this back to true (right after whichever container-preparation burst it
+    /// caused has already read it) does.</summary>
+    [ObservableProperty]
+    private bool _playEntranceAnimation;
+
     /// <summary>Phase 4a: the single poster grid, replacing Compact/Comfortable/Cover-only (docs/
     /// superpowers/specs/2026-08-27-library-browsing-4a-poster-grid-design.md).</summary>
     /// <summary>Every normal view-mode grid is suppressed while <see cref="IsCollectionView"/> - the
@@ -3174,6 +3197,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         OnPropertyChanged(nameof(IsDetailsView));
         OnPropertyChanged(nameof(IsTilesView));
         OnPropertyChanged(nameof(DisplayModeLabel));
+        PlayEntranceAnimation = true;
         SaveLibrarySettings();
     }
 

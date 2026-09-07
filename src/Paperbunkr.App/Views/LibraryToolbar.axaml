@@ -316,9 +316,18 @@
                IsOpen="{Binding IsAddFilterOpen}" IsLightDismissEnabled="True">
             <Border Classes="dropdown" Width="210">
                 <StackPanel Spacing="4">
-                    <CheckBox Content="Unread only" FontSize="12.5" IsChecked="{Binding FilterUnreadOnly}" AutomationProperties.AutomationId="LibraryFilterUnreadOnly" />
-                    <CheckBox Content="Missing issues" FontSize="12.5" IsChecked="{Binding FilterMissingIssues}" AutomationProperties.AutomationId="LibraryFilterMissingIssues" />
-                    <CheckBox Content="Tracked series" FontSize="12.5" IsChecked="{Binding FilterTrackedOnly}" AutomationProperties.AutomationId="LibraryFilterTrackedOnly" />
+                    <Grid ColumnDefinitions="*,Auto">
+                        <TextBlock Grid.Column="0" Text="Unread only" FontSize="12.5" VerticalAlignment="Center" Foreground="{DynamicResource PbTextBrush}" />
+                        <ToggleSwitch Grid.Column="1" IsChecked="{Binding FilterUnreadOnly}" OnContent="{x:Null}" OffContent="{x:Null}" AutomationProperties.AutomationId="LibraryFilterUnreadOnly" />
+                    </Grid>
+                    <Grid ColumnDefinitions="*,Auto">
+                        <TextBlock Grid.Column="0" Text="Missing issues" FontSize="12.5" VerticalAlignment="Center" Foreground="{DynamicResource PbTextBrush}" />
+                        <ToggleSwitch Grid.Column="1" IsChecked="{Binding FilterMissingIssues}" OnContent="{x:Null}" OffContent="{x:Null}" AutomationProperties.AutomationId="LibraryFilterMissingIssues" />
+                    </Grid>
+                    <Grid ColumnDefinitions="*,Auto">
+                        <TextBlock Grid.Column="0" Text="Tracked series" FontSize="12.5" VerticalAlignment="Center" Foreground="{DynamicResource PbTextBrush}" />
+                        <ToggleSwitch Grid.Column="1" IsChecked="{Binding FilterTrackedOnly}" OnContent="{x:Null}" OffContent="{x:Null}" AutomationProperties.AutomationId="LibraryFilterTrackedOnly" />
+                    </Grid>
                 </StackPanel>
             </Border>
         </Popup>
@@ -414,8 +423,10 @@
 
                             <Border Height="1" Background="{DynamicResource PbBorderBrush}" Margin="0,10" />
 
-                            <CheckBox Content="Show titles" IsChecked="{Binding ShowTileTitles}" Margin="0,2,0,0"
-                                      IsVisible="{Binding IsPosterGrid}" AutomationProperties.AutomationId="LibraryShowTitlesToggle" />
+                            <Grid ColumnDefinitions="*,Auto" Margin="0,2,0,0" IsVisible="{Binding IsPosterGrid}">
+                                <TextBlock Grid.Column="0" Text="Show titles" VerticalAlignment="Center" Foreground="{DynamicResource PbTextBrush}" />
+                                <CheckBox Grid.Column="1" IsChecked="{Binding ShowTileTitles}" AutomationProperties.AutomationId="LibraryShowTitlesToggle" />
+                            </Grid>
                             <TextBlock Classes="dropdownRow" Text="Grid density" Foreground="{DynamicResource PbTextBrush}" Margin="0,6,0,0"
                                        IsVisible="{Binding IsPosterGrid}" />
                             <Slider Minimum="0.6" Maximum="1.6" Value="{Binding GridDensity}" IsVisible="{Binding IsPosterGrid}" />
@@ -423,12 +434,26 @@
                             <Border Height="1" Background="{DynamicResource PbBorderBrush}" Margin="0,10" />
 
                             <TextBlock Classes="dropdownRow" Text="Overlay" Foreground="{DynamicResource PbTextBrush}" Margin="0,0,0,4" />
-                            <CheckBox Content="Unread badge" FontSize="12.5" IsChecked="{Binding ShowUnreadBadge}" />
-                            <CheckBox Content="Publisher badge" FontSize="12.5" IsChecked="{Binding ShowPublisherBadge}" />
-                            <CheckBox Content="Language badge" FontSize="12.5" IsChecked="{Binding ShowLanguageBadge}" />
-                            <CheckBox Content="Show language flag" FontSize="12.5" IsChecked="{Binding UseLanguageIcon}" />
-                            <CheckBox Content="Continue reading button" FontSize="12.5" IsChecked="{Binding ShowContinueReadingButton}"
-                                      IsVisible="{Binding IsSeriesGranularity}" />
+                            <Grid ColumnDefinitions="*,Auto">
+                                <TextBlock Grid.Column="0" Text="Unread badge" FontSize="12.5" VerticalAlignment="Center" Foreground="{DynamicResource PbTextBrush}" />
+                                <CheckBox Grid.Column="1" IsChecked="{Binding ShowUnreadBadge}" />
+                            </Grid>
+                            <Grid ColumnDefinitions="*,Auto">
+                                <TextBlock Grid.Column="0" Text="Publisher badge" FontSize="12.5" VerticalAlignment="Center" Foreground="{DynamicResource PbTextBrush}" />
+                                <CheckBox Grid.Column="1" IsChecked="{Binding ShowPublisherBadge}" />
+                            </Grid>
+                            <Grid ColumnDefinitions="*,Auto">
+                                <TextBlock Grid.Column="0" Text="Language badge" FontSize="12.5" VerticalAlignment="Center" Foreground="{DynamicResource PbTextBrush}" />
+                                <CheckBox Grid.Column="1" IsChecked="{Binding ShowLanguageBadge}" />
+                            </Grid>
+                            <Grid ColumnDefinitions="*,Auto">
+                                <TextBlock Grid.Column="0" Text="Show language flag" FontSize="12.5" VerticalAlignment="Center" Foreground="{DynamicResource PbTextBrush}" />
+                                <CheckBox Grid.Column="1" IsChecked="{Binding UseLanguageIcon}" />
+                            </Grid>
+                            <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding IsSeriesGranularity}">
+                                <TextBlock Grid.Column="0" Text="Continue reading button" FontSize="12.5" VerticalAlignment="Center" Foreground="{DynamicResource PbTextBrush}" />
+                                <CheckBox Grid.Column="1" IsChecked="{Binding ShowContinueReadingButton}" />
+                            </Grid>
                         </StackPanel>
 
                         <!-- Sort tab - one shared field pool for both granularities (2026-09-03);

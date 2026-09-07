@@ -396,7 +396,7 @@ public partial class BookDetailScreenViewModel : ViewModelBase, IDetailHeaderSou
             {
                 Id = bookmark.Id,
                 ChapterIndex = bookmark.ChapterIndex,
-                CharacterOffset = bookmark.CharacterOffset,
+                BlockId = bookmark.BlockId,
                 ChapterTitle = chapterTitle,
                 Excerpt = bookmark.Excerpt,
                 CreatedTime = bookmark.CreatedTime,
@@ -497,7 +497,7 @@ public partial class BookDetailScreenViewModel : ViewModelBase, IDetailHeaderSou
     {
         if (chapter is not null)
         {
-            _goReaderForBook(_bookId, _format, new BookPosition(chapter.Index, 0));
+            _goReaderForBook(_bookId, _format, new BookPosition(chapter.Index));
         }
     }
 
@@ -506,7 +506,7 @@ public partial class BookDetailScreenViewModel : ViewModelBase, IDetailHeaderSou
     {
         if (bookmark is not null)
         {
-            _goReaderForBook(_bookId, _format, new BookPosition(bookmark.ChapterIndex, bookmark.CharacterOffset));
+            _goReaderForBook(_bookId, _format, new BookPosition(bookmark.ChapterIndex, bookmark.BlockId));
         }
     }
 
@@ -650,7 +650,8 @@ public partial class BookDetailScreenViewModel : ViewModelBase, IDetailHeaderSou
         {
             book.Finished = false;
             book.LastChapterIndex = 0;
-            book.LastCharacterOffset = 0;
+            book.LastBlockId = null;
+            book.LastProgressionFraction = null;
         }
         else
         {

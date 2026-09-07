@@ -66,6 +66,9 @@ public static class PreferenceIndex
         new(PreferencesSection.Library, "Virtual Tags", "Virtual Tags",
             new[] { "virtual tag", "caption format", "computed tag" },
             "library.virtualTags"),
+        new(PreferencesSection.Library, "Library Health", "Library Health",
+            new[] { "missing files", "verify", "confirmed missing", "recently removed", "restore", "relink", "dismiss all", "ghost", "library health" },
+            "library.health"),
 
         new(PreferencesSection.Automation, "Scheduled Tasks", "Scheduled Tasks",
             new[] { "schedule", "scheduled task", "automation", "automatic", "recurring", "background job", "backup", "scan on startup", "periodic", "cron" },

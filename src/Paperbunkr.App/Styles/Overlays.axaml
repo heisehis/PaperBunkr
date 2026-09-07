@@ -1,0 +1,35 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="using:Paperbunkr.App.Controls"
+        xmlns:fi="using:FluentIcons.Avalonia">
+    <!--
+        OverlayShell (docs/superpowers/specs/2026-09-06-feedback-notification-system-design.md §2) -
+        the one control every borderless overlay popup uses. Code-only TemplatedControl
+        (Controls/OverlayShell.cs); this implicit ControlTheme is its template, same pattern as
+        BrandMark in Styles/Marks.axaml. Scrim + centered content + corner close button, matching
+        the chrome every overlay block in MainWindow.axaml used to hand-copy.
+    -->
+    <Styles.Resources>
+        <ControlTheme x:Key="{x:Type controls:OverlayShell}" TargetType="controls:OverlayShell">
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Border Name="PART_Scrim" Background="#B0000000">
+                        <Grid HorizontalAlignment="{TemplateBinding ContentHorizontalAlignment}"
+                              VerticalAlignment="{TemplateBinding ContentVerticalAlignment}">
+                            <ContentPresenter Content="{TemplateBinding Content}"
+                                               ContentTemplate="{TemplateBinding ContentTemplate}" />
+                            <Button Classes="rail" Width="28" Height="28"
+                                    HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-14,-14,0"
+                                    Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
+                                    Command="{TemplateBinding CloseCommand}" ToolTip.Tip="Close"
+                                    AutomationProperties.AutomationId="{TemplateBinding CloseButtonAutomationId}"
+                                    IsVisible="{TemplateBinding ShowCloseButton}">
+                                <fi:SymbolIcon Symbol="DismissCircle" FontSize="{StaticResource PbIconSizeSm}" />
+                            </Button>
+                        </Grid>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+        </ControlTheme>
+    </Styles.Resources>
+</Styles>

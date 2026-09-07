@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using Avalonia.Controls;
 using Avalonia.Layout;
+using Avalonia.Threading;
 using Paperbunkr.App.ViewModels;
 
 namespace Paperbunkr.App.Views;
@@ -50,6 +51,12 @@ public partial class Breadcrumb : UserControl
             return;
         }
 
+        // Fade+slide (docs/superpowers/specs/2026-09-07-chrome-content-motion-polish-design.md
+        // item 4) - drop "entered" now, re-add on the next dispatcher tick (post-rebuild) so the
+        // Transitions on Styles/Primitives.axaml's shared entranceReady/entered pair actually
+        // observe a real false->true flip instead of coalescing within one synchronous call.
+        segments.Classes.Remove("entered");
+
         segments.Children.Clear();
 
         if (_boundViewModel is not MainViewModel vm)
@@ -67,6 +74,8 @@ public partial class Breadcrumb : UserControl
             bool isCurrent = i == trail.Count - 1;
             segments.Children.Add(MakeSegment(trail[i].Label, i, isCurrent, vm));
         }
+
+        Dispatcher.UIThread.Post(() => segments.Classes.Add("entered"));
     }
 
     private static Button MakeSegment(string label, int index, bool isCurrent, MainViewModel vm)

@@ -144,6 +144,15 @@ public class LibraryFolderScanner
         // Read once, not per-file - the policy doesn't change mid-scan.
         var appSettings = context.GetOrCreateAppSettings();
 
+        // Removed-files blacklist (docs/superpowers/specs/2026-09-06-scan-missing-file-handling-
+        // design.md) - only queried when the setting is on, so a user who never enables it pays no
+        // extra query cost. Applies to both ScanAll and ImportNewFilesAsync (live-watch), unlike
+        // AutoRemoveMissingOnScan below which is Scan-Now-only - "don't bring this back" should hold
+        // regardless of how the file was rediscovered.
+        var removedPaths = appSettings.DontReimportRemovedFiles
+            ? new HashSet<string>(context.RemovedFilePaths.Select(r => r.FilePath), StringComparer.OrdinalIgnoreCase)
+            : null;
+
         // Loaded once and updated in-memory as new series are created within this run, so multiple
         // new issues for the same not-yet-existing series in one scan land on the same Series row
         // instead of creating a duplicate per file.
@@ -162,6 +171,12 @@ public class LibraryFolderScanner
         foreach (string file in candidateFiles)
         {
             ct.ThrowIfCancellationRequested();
+
+            if (removedPaths?.Contains(file) == true)
+            {
+                progress.Report((++done, total));
+                continue;
+            }
 
             try
             {

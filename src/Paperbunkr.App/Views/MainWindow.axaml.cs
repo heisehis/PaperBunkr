@@ -4,11 +4,12 @@ using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
-using Avalonia.Controls.Notifications;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
+using Paperbunkr.App.Controls;
+using Paperbunkr.App.Models;
 using Paperbunkr.App.Services;
 using Paperbunkr.App.ViewModels;
 
@@ -16,12 +17,17 @@ namespace Paperbunkr.App.Views;
 
 public partial class MainWindow : Window
 {
-    private WindowNotificationManager? _notificationManager;
+    // App-owned replacement for WindowNotificationManager (docs/superpowers/specs/2026-09-07-
+    // chrome-content-motion-polish-design.md item 5) - same PbToastView content/positioning/
+    // persistent-toast tracking below, only the hosting/animation layer changed.
+    private ToastPresenter? _toastPresenter;
 
     // Close(object content) needs the exact content instance passed to Show(object content, ...) -
-    // this maps each live UpdateReadyToastViewModel back to the view instance actually shown for it
-    // (docs/superpowers/specs/2026-09-01-auto-update-and-changelog-design.md).
-    private readonly Dictionary<UpdateReadyToastViewModel, UpdateReadyToastView> _updateReadyToasts = new();
+    // this maps a live ToastRequest back to the view instance actually shown for it, for any
+    // actionable toast (Actions is not null) that closes itself explicitly rather than
+    // auto-dismissing (docs/superpowers/specs/2026-09-06-feedback-notification-system-design.md
+    // §5 - generalized from the old update-ready-toast-only UpdateReadyToastViewModel/View pair).
+    private readonly Dictionary<ToastRequest, Control> _persistentToasts = new();
 
     /// <summary>
     /// Minimize-to-tray (docs/superpowers/specs/2026-08-23-app-chrome-crash-reporter-and-tray-
@@ -351,6 +357,17 @@ public partial class MainWindow : Window
             return;
         }
 
+        // The sidebar now stays in the visual tree at Width=0 when collapsed rather than going
+        // IsVisible=false (docs/superpowers/specs/2026-09-07-chrome-content-motion-polish-design.md
+        // item 3, needed for the Width transition to animate at all) - IsEffectivelyVisible below
+        // only checks the IsVisible flag chain, not actual width/clipping, so a button that had
+        // focus right before the sidebar collapsed could otherwise still drive this handler. Found
+        // via a self-audit after a user flagged real bugs in this same session's other new code.
+        if (sidebarBorder.Bounds.Width <= 0)
+        {
+            return;
+        }
+
         var rows = sidebarBorder.GetVisualDescendants()
             .OfType<Button>()
             .Where(b => b.Classes.Contains("sideItemButton") && b.IsEffectivelyVisible && b.IsEffectivelyEnabled)
@@ -429,26 +446,58 @@ public partial class MainWindow : Window
             return;
         }
 
-        _notificationManager ??= new WindowNotificationManager(this) { Position = NotificationPosition.BottomRight, MaxItems = 3 };
-        viewModel.ToastRequested += (title, message) =>
-            _notificationManager.Show(new Notification(title, message, NotificationType.Success));
-
-        // Update-ready toast (docs/superpowers/specs/2026-09-01-auto-update-and-changelog-design.md) -
-        // it maps each live UpdateReadyToastViewModel back to its shown view instance so
-        // UpdateReadyToastCloseRequested can close the right one. Shown with expiration TimeSpan.Zero
-        // (Avalonia treats zero/negative as "don't auto-close") so it stays until Later/Restart/
-        // What's New close it explicitly rather than timing out mid-decision.
-        viewModel.UpdateReadyToastRequested += toastVm =>
+        // Shared toast template (docs/superpowers/specs/2026-09-06-feedback-notification-system-
+        // design.md §5) - PbToastView renders its own severity icon/accent color, so NotificationType
+        // is passed as a uniform Information here rather than mapped from Severity, to avoid a
+        // second built-in icon from NotificationCard's own chrome doubling up with it (verify this
+        // empirically in a manual GUI pass - Avalonia's NotificationCard behavior with custom
+        // content wasn't confirmed via static inspection).
+        //
+        // A toast with Actions (e.g. update-ready's Restart/Later/What's New) is shown with
+        // expiration TimeSpan.Zero (Avalonia treats zero/negative as "don't auto-close") and
+        // tracked in _persistentToasts so ToastCloseRequested can close it by identity once one of
+        // its actions runs - generalized from the old update-ready-only close mechanism so any
+        // future actionable toast gets the same behavior for free.
+        if (_toastPresenter is null)
         {
-            var view = new UpdateReadyToastView { DataContext = toastVm };
-            _updateReadyToasts[toastVm] = view;
-            _notificationManager.Show(view, NotificationType.Information, expiration: System.TimeSpan.Zero);
-        };
-        viewModel.UpdateReadyToastCloseRequested += toastVm =>
-        {
-            if (_updateReadyToasts.Remove(toastVm, out var view))
+            _toastPresenter = new ToastPresenter(this.FindControl<Panel>("ToastStack")!);
+            _toastPresenter.Closed += view =>
             {
-                _notificationManager.Close(view);
+                // Prune _persistentToasts on every close path, not just the explicit
+                // ToastCloseRequested one - a MaxVisible eviction otherwise leaves this entry (and
+                // everything it roots) referenced forever, a real leak found via a user memory-usage
+                // report on the very first pass of this feature.
+                foreach (var entry in _persistentToasts)
+                {
+                    if (ReferenceEquals(entry.Value, view))
+                    {
+                        _persistentToasts.Remove(entry.Key);
+                        break;
+                    }
+                }
+            };
+        }
+
+        viewModel.ToastRequested += request =>
+        {
+            var view = new PbToastView { DataContext = request };
+            bool persistent = request.Actions is not null;
+            if (persistent)
+            {
+                _persistentToasts[request] = view;
+            }
+
+            // 5s approximates WindowNotificationManager's own prior default for a non-actionable
+            // toast (its exact internal value wasn't recoverable via static inspection - not
+            // exposed as a documented constant) - persistent (actionable) toasts still pass Zero,
+            // meaning "don't auto-close," same as before.
+            _toastPresenter.Show(view, expiration: persistent ? System.TimeSpan.Zero : System.TimeSpan.FromSeconds(5));
+        };
+        viewModel.ToastCloseRequested += request =>
+        {
+            if (_persistentToasts.Remove(request, out var view))
+            {
+                _toastPresenter.Close(view);
             }
         };
     }

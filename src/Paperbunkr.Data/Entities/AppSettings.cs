@@ -512,4 +512,39 @@ public class AppSettings
     /// a persistently-failing task should be visible.
     /// </summary>
     public ScheduledTaskNotificationLevel ScheduledTaskNotificationLevel { get; set; } = ScheduledTaskNotificationLevel.OnlyFailures;
+
+    /// <summary>
+    /// UTC timestamp of the last completed Library Health Verify pass (docs/superpowers/specs/
+    /// 2026-09-06-missing-files-library-health-design.md). Null means never run ("Never" in the
+    /// summary row). Only set on successful completion, same contract as
+    /// <see cref="LastCoverVerificationUtc"/> - an interrupted pass retries next time, not marked
+    /// done early.
+    /// </summary>
+    public DateTime? LastLibraryHealthVerifyUtc { get; set; }
+
+    /// <summary>
+    /// Consecutive missing Verify passes before an issue is eligible for "Remove All Confirmed
+    /// Missing" (docs/superpowers/specs/2026-09-07-library-health-redesign-design.md §7). Was a
+    /// hardcoded <c>LibraryHealthService.ConfirmedMissingThreshold</c> constant; surfaced as a
+    /// setting in this redesign. Default 2 preserves the prior hardcoded behavior.
+    /// </summary>
+    public int LibraryHealthConfirmedMissingThreshold { get; set; } = 2;
+
+    /// <summary>
+    /// Whether a Scan Now automatically runs Library Health's "Remove All Confirmed Missing" (same
+    /// two-strikes eligibility, no confirmation dialog) once the scan completes (docs/superpowers/
+    /// specs/2026-09-06-scan-missing-file-handling-design.md). CE: Settings
+    /// .RemoveMissingFilesOnFullScan, default false. Deliberately goes through the existing
+    /// two-strikes grace window rather than CE's immediate single-pass removal, plus an additional
+    /// drive-reachability check the manual button doesn't need - see design doc.
+    /// </summary>
+    public bool AutoRemoveMissingOnScan { get; set; }
+
+    /// <summary>
+    /// Whether a file path recorded in <see cref="Entities.RemovedFilePath"/> is skipped during
+    /// import instead of being silently re-added (docs/superpowers/specs/2026-09-06-scan-missing-
+    /// file-handling-design.md). CE: Settings.DontAddRemoveFiles, default false. The table itself is
+    /// always populated on removal regardless of this setting - see design doc.
+    /// </summary>
+    public bool DontReimportRemovedFiles { get; set; }
 }

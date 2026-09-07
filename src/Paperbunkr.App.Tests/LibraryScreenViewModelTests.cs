@@ -200,6 +200,55 @@ public class LibraryScreenViewModelTests : IDisposable
         Assert.False(vm.HasCollections);
     }
 
+    // ===================== Staggered entrance trigger (docs/superpowers/specs/2026-09-07-chrome-
+    // content-motion-polish-design.md item 1) =====================
+
+    [Fact]
+    public void Constructor_LoadsFromDatabase_SetsPlayEntranceAnimation()
+    {
+        CreateSeries("Series A", ContentType.Comic);
+
+        var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { }, goToNewIssueProperties: (_, _, _) => { });
+
+        Assert.True(vm.PlayEntranceAnimation);
+    }
+
+    [Fact]
+    public void LoadFromDatabase_CalledAgain_ResetsPlayEntranceAnimation()
+    {
+        CreateSeries("Series A", ContentType.Comic);
+        var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { }, goToNewIssueProperties: (_, _, _) => { });
+        vm.PlayEntranceAnimation = false;
+
+        vm.LoadFromDatabase();
+
+        Assert.True(vm.PlayEntranceAnimation);
+    }
+
+    [Fact]
+    public void FilterChange_ResetsPlayEntranceAnimation()
+    {
+        CreateSeriesWithIssue("Series A", contentType: ContentType.Comic);
+        var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { }, goToNewIssueProperties: (_, _, _) => { });
+        vm.PlayEntranceAnimation = false;
+
+        vm.FilterUnreadOnly = true;
+
+        Assert.True(vm.PlayEntranceAnimation);
+    }
+
+    [Fact]
+    public void ViewModeChange_ResetsPlayEntranceAnimation()
+    {
+        CreateSeriesWithIssue("Series A", contentType: ContentType.Comic);
+        var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { }, goToNewIssueProperties: (_, _, _) => { });
+        vm.PlayEntranceAnimation = false;
+
+        vm.ViewMode = LibraryViewMode.List;
+
+        Assert.True(vm.PlayEntranceAnimation);
+    }
+
     [Fact]
     public void SelectContentType_FiltersRows_AndSetsIsActive()
     {
@@ -2518,16 +2567,16 @@ public class LibraryScreenViewModelTests : IDisposable
     }
 
     [Fact]
-    public async Task ImportDroppedPathsAsync_ImportsComicsRefreshesGridAndToasts()
+    public async Task ImportDroppedPathsAsync_ImportsComicsRefreshesGridAndSettlesAJob()
     {
         var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), $"pb_lib_drop_{Guid.NewGuid():N}"));
         try
         {
             string cbz = CbzFixture.Create(Path.Combine(root.FullName, "Kilo Station 001 (2020).cbz"), pageCount: 1);
-            (string Title, string Message)? toast = null;
+            var activity = new ActivityService(a => a(), _ => { });
             var vm = new LibraryScreenViewModel(
                 goDetail: _ => { }, goReaderForIssue: _ => { }, goToNewIssueProperties: (_, _, _) => { },
-                showToast: (t, m) => toast = (t, m));
+                activity: activity);
 
             await vm.ImportDroppedPathsAsync(new[] { cbz });
 
@@ -2535,8 +2584,11 @@ public class LibraryScreenViewModelTests : IDisposable
             Assert.Single(context.Issues);
             // Dropped as a folder-free loose file, so no WatchedFolder row.
             Assert.Empty(context.WatchedFolders);
-            Assert.NotNull(toast);
-            Assert.Contains("1 comic imported", toast!.Value.Message);
+            // Job-tracked, not a direct toast (docs/superpowers/specs/2026-09-06-feedback-
+            // notification-system-design.md §6).
+            var job = Assert.Single(activity.RecentJobs);
+            Assert.Equal(ActivityJobStatus.Succeeded, job.Status);
+            Assert.Contains("1 comic imported", job.ResultSummary);
         }
         finally
         {

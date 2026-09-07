@@ -1,5 +1,25 @@
 # Books Reflow Reader — Pagination Retry + Position/Bookmark Precision Fix — Design
 
+## Outcome (2026-09-07, after implementation and real on-screen verification)
+
+**Position/bookmark precision: shipped and working as designed.** BlockId-anchored resume/bookmark
+tracking, one-bookmark-per-block, and the bookmark/highlight same-chapter-jump fix are all in place
+per this doc's Decisions table below.
+
+**Pagination: the transform-based retry (Decisions table, "Pagination mechanism" row) also failed
+on-screen** — the user's own screenshot of a real Dune EPUB in paged mode showed the *identical*
+next-column-bleeding-in-at-the-right-edge symptom as both of the original 2026-09-02 attempts, even
+though this attempt used `transform: translateX()` specifically to avoid a native scroll ever
+happening. That rules out the leading theory (a native-scroll-triggered WebView2 repaint bug) as the
+sole cause - three independently-reasoned attempts (vw sizing, exact-pixel sizing, transform-instead-
+of-scroll) hitting the same visual defect points at something more fundamental in how
+`Avalonia.Controls.WebView` composites CSS multi-column layout + `overflow: hidden` clipping, not
+diagnosable further without live devtools access no session in this project's history has had. Per
+this doc's own disclosed fallback chain, `BookReaderScreen.axaml.cs`'s `UseColumnPaging` const is
+flipped to `false` - vertical scroll (dressed with CSS scroll-snap) is the shipped, final behavior.
+**True CSS-column pagination for the Books reader is now closed out as permanently declined**, same
+status as the magnifier - not a gap to revisit blind a fourth time.
+
 ## Background
 
 The 2026-09-02 WebView rewrite (`docs/superpowers/specs/2026-09-02-books-reflow-reader-webview-

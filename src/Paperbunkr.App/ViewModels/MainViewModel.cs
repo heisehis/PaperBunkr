@@ -88,13 +88,19 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         WorkspaceName = new WorkspaceNameViewModel(CloseWorkspaceNameOverlay);
         QuickOpen = new QuickOpenViewModel(ActivateQuickOpenEntry, CloseQuickOpenOverlay);
 
-        MetadataWriteBack = new MetadataWriteBackQueue(ShowToast);
+        MetadataWriteBack = new MetadataWriteBackQueue(ShowToast, Activity);
 
         // Activity Center (docs/superpowers/specs/2026-09-03-activity-center-design.md) - the
         // app-wide background-job registry, constructed here alongside the other manually-composed
         // services. Screen VMs that start background work take Activity; the shell owns the two
         // presentation VMs and the link resolver.
         Activity = new ActivityService();
+
+        // Shared confirm dialog (docs/superpowers/specs/2026-09-06-feedback-notification-system-
+        // design.md §2) - constructed early since PaperbunkrApplication.AskQuestion (wired later,
+        // in PluginHostService) needs Dialogs available via this VM's reference.
+        ConfirmDialog = new ConfirmDialogViewModel();
+        Dialogs = new DialogService(ConfirmDialog);
 
         // Reading-event log recorder (docs/superpowers/specs/2026-09-05-insights-dashboard-design.md
         // §5) - one instance, shared by the three reader VMs that write events and the Insights
@@ -107,7 +113,7 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
 
         ActivityCenter = new ActivityCenterViewModel(Activity, ResolveActivityLink, Scheduler);
         StatusBar = new StatusBarViewModel(Activity, QueryLibraryStats, () => ActivityCenter.TogglePeekCommand.Execute(null));
-        Activity.CompletionToastRequested += (title, message) => ShowToast(title, message);
+        Activity.CompletionToastRequested += ShowToast;
 
         // Ambient "Background upkeep" rollup (docs/superpowers/specs/2026-09-03-activity-center-
         // design.md) - one always-present job, flipped active while the live folder-watch is
@@ -118,7 +124,7 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         _upkeepIdleTimer.Tick += (_, _) => { _upkeepIdleTimer.Stop(); _upkeep.SetIdle(); };
 
         Home = new HomeScreenViewModel(GoDetailForSeries, GoReaderForIssue, GoLibraryWithSearch, GoReaderForIssueInReadingList, GoBookReaderForBook, GoLibraryWithCollection);
-        Library = new LibraryScreenViewModel(GoDetailForSeries, GoReaderForIssue, GoNewIssuePropertiesForPlaceholder, OpenQuickRateOverlay, GoIssuePropertiesForIssue, GoBulkIssuePropertiesForIssues, ShowToast, GoBulkSeriesPropertiesForSeries, GoLibraryFoldersPreferences, OpenCollectionPropertiesOverlay, GoBookDetailForBook, promptForName: PromptWorkspaceName, enqueueMetadataWriteBack: EnqueueMetadataWriteBack);
+        Library = new LibraryScreenViewModel(GoDetailForSeries, GoReaderForIssue, GoNewIssuePropertiesForPlaceholder, OpenQuickRateOverlay, GoIssuePropertiesForIssue, GoBulkIssuePropertiesForIssues, ShowToast, GoBulkSeriesPropertiesForSeries, GoLibraryFoldersPreferences, OpenCollectionPropertiesOverlay, GoBookDetailForBook, promptForName: PromptWorkspaceName, enqueueMetadataWriteBack: EnqueueMetadataWriteBack, activity: Activity);
         Books = new BooksScreenViewModel(GoBookDetailForBook, GoBookSeriesDetailForSeries, GoBookPropertiesForBook, GoBulkBookPropertiesForBooks, GoBookSeriesPropertiesForSeries, GoLibraryFoldersPreferences, ShowToast, promptForName: PromptWorkspaceName);
         BookDetail = new BookDetailScreenViewModel(NavigateBack, GoBookReaderForBook, GoBookPropertiesForBook, GoBulkBookPropertiesForBooks, GoBookSeriesPropertiesForSeries);
         BookProperties = new BookPropertiesScreenViewModel(CloseBookPropertiesOverlay, ShowToast);
@@ -139,10 +145,10 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         BulkIssueProperties = new BulkIssuePropertiesScreenViewModel(CloseBulkIssuePropertiesOverlayAndReload, ShowToast, enqueueMetadataWriteBack: id => EnqueueMetadataWriteBack(id));
         BulkSeriesProperties = new BulkSeriesPropertiesScreenViewModel(CloseBulkSeriesPropertiesOverlayAndReload, id => EnqueueMetadataWriteBack(id));
         Smart = new SmartScreenViewModel(GoDetailForSeries, GoBookDetailForBook);
-        Reading = new ReadingScreenViewModel(new FilePickerService(), GoReaderForIssueInReadingList, OpenReadingListPropertiesOverlay, ShowToast);
+        Reading = new ReadingScreenViewModel(new FilePickerService(), GoReaderForIssueInReadingList, OpenReadingListPropertiesOverlay, activity: Activity);
         Events = new EventsScreenViewModel(GoDetailForSeries, GoReaderForIssue, GoReadingWithList, ShowToast);
         Insights = new InsightsScreenViewModel(GoReaderForIssue, GoDetailForSeries, GoLibraryWithSearch, ReadingEvents);
-        Plugin = new PluginScreenViewModel(new FilePickerService());
+        Plugin = new PluginScreenViewModel(new FilePickerService(), Dialogs);
         Migration = new MigrationOverlayViewModel(new FilePickerService(), OpenSeriesDetailFromReview);
         // First-run onboarding (docs/superpowers/specs/2026-08-31-first-run-onboarding-design.md) -
         // constructed here like every other overlay VM; LiveFolderWatch.Reload/OpenMigrationOverlay
@@ -169,7 +175,17 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         // Library itself already reloads its data on every navigation (an earlier real bug fix), so
         // no separate push-refresh is needed there.
         LiveFolderWatch = new LiveFolderWatchService(
-            ShowToast,
+            // "Found new comics" - reclassified from Toast to Alert (docs/superpowers/specs/
+            // 2026-09-06-feedback-notification-system-design.md §6): its own sibling events on
+            // this same watcher (onFilesMissing below, and the startup self-heal further down)
+            // already use RaiseAlert - this one was the odd one out for no principled reason.
+            (title, message) => Activity.RaiseAlert(new ActivityAlert
+            {
+                Severity = ActivityAlertSeverity.Info,
+                Title = title,
+                Detail = message,
+                DedupeKey = "new-comics-found",
+            }),
             () =>
             {
                 _upkeep.SetActive("Reacting to a watched-folder change");
@@ -185,7 +201,7 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
                     ? "A watched file disappeared from disk."
                     : $"{count} watched files disappeared from disk.",
                 ActionLabel = "Review",
-                ActionLink = new ActivityLink(ActivityLinkKind.MigrationReview),
+                ActionLink = new ActivityLink(ActivityLinkKind.Preferences, "LibraryHealth"),
                 DedupeKey = "missing-files",
             }),
             onFilesImported: ids => DuplicateAlertHelper.RaiseIfAny(Activity, ids));
@@ -208,7 +224,7 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
                         ? $"{repair.Reconnected} comic{(repair.Reconnected == 1 ? "" : "s")} reconnected after a metadata write-back issue; {repair.NeedsManualReview} still need a manual relink."
                         : $"{repair.Reconnected} comic{(repair.Reconnected == 1 ? "" : "s")} reconnected to {(repair.Reconnected == 1 ? "its file" : "their files")} after a metadata write-back issue.",
                     ActionLabel = repair.NeedsManualReview > 0 ? "Review" : null,
-                    ActionLink = repair.NeedsManualReview > 0 ? new ActivityLink(ActivityLinkKind.MigrationReview) : null,
+                    ActionLink = repair.NeedsManualReview > 0 ? new ActivityLink(ActivityLinkKind.Preferences, "LibraryHealth") : null,
                     DedupeKey = "library-path-repair",
                 });
             }
@@ -230,6 +246,7 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
             Plugin,
             OpenMigrationOverlay,
             Activity,
+            Dialogs,
             LiveFolderWatch.Reload,
             OpenDesignShowcaseOverlay,
             _updateService,
@@ -321,9 +338,18 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
     /// created once a real <c>Window</c> exists, which happens after this ViewModel is constructed
     /// (see App.axaml.cs). <see cref="Views.MainWindow"/> subscribes once its own DataContext is set.
     /// </summary>
-    public event Action<string, string>? ToastRequested;
+    /// <summary>
+    /// Event type is <see cref="ToastRequest"/>, not the old bare (string,string) pair
+    /// (docs/superpowers/specs/2026-09-06-feedback-notification-system-design.md §5) - every
+    /// caller still calls the plain <see cref="ShowToast(string,string)"/> overload below
+    /// unchanged, this only changed what MainWindow.axaml.cs's WindowNotificationManager wiring
+    /// receives.
+    /// </summary>
+    public event Action<ToastRequest>? ToastRequested;
 
-    private void ShowToast(string title, string message) => ToastRequested?.Invoke(title, message);
+    private void ShowToast(string title, string message) => ShowToast(new ToastRequest(title, message));
+
+    private void ShowToast(ToastRequest request) => ToastRequested?.Invoke(request);
 
     /// <summary>Plugin-facing entry point for surfacing a broken/failed command (docs/superpowers/specs/2026-08-24-plugin-api-v2-design.md §8) - same toast, reachable from <c>Paperbunkr.App.Plugins.PluginHostService</c>.</summary>
     public void ShowToastForPlugin(string title, string message) => ShowToast(title, message);
@@ -339,14 +365,17 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         ShowToast("Still running", "Paperbunkr is still running in the tray. Right-click the tray icon to exit.");
 
     /// <summary>
-    /// "Update ready - restart to apply" toast plumbing, same event-pair pattern as
-    /// <see cref="ProgressToastRequested"/>/<see cref="ProgressToastCloseRequested"/> above but a
-    /// distinct type - <see cref="UpdateReadyToastViewModel"/> carries actions, not progress
-    /// (docs/superpowers/specs/2026-09-01-auto-update-and-changelog-design.md).
+    /// Lets a <see cref="ToastRequest"/> with <see cref="ToastRequest.Actions"/> (e.g. update-ready's
+    /// Restart/Later/What's New) close itself explicitly instead of waiting for auto-dismiss -
+    /// MainWindow.axaml.cs's WindowNotificationManager wiring maps a ToastRequest instance back to
+    /// its shown view the same way it used to map UpdateReadyToastViewModel (docs/superpowers/specs/
+    /// 2026-09-06-feedback-notification-system-design.md §5, folding the old dedicated
+    /// UpdateReadyToastRequested/UpdateReadyToastCloseRequested event pair into the general toast
+    /// pipeline).
     /// </summary>
-    public event Action<UpdateReadyToastViewModel>? UpdateReadyToastRequested;
+    public event Action<ToastRequest>? ToastCloseRequested;
 
-    public event Action<UpdateReadyToastViewModel>? UpdateReadyToastCloseRequested;
+    private void CloseToast(ToastRequest request) => ToastCloseRequested?.Invoke(request);
 
     public HomeScreenViewModel Home { get; }
     public LibraryScreenViewModel Library { get; }
@@ -371,6 +400,11 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
     public PluginScreenViewModel Plugin { get; }
     public PreferencesScreenViewModel Preferences { get; }
     public MigrationOverlayViewModel Migration { get; }
+    /// <summary>Backs the single shared confirm-dialog OverlayShell mounted in MainWindow.axaml -
+    /// drive it through <see cref="Dialogs"/>, never directly (docs/superpowers/specs/2026-09-06-
+    /// feedback-notification-system-design.md §2).</summary>
+    public ConfirmDialogViewModel ConfirmDialog { get; }
+    public IDialogService Dialogs { get; }
     public WelcomeOverlayViewModel Welcome { get; }
     public UpdateAvailableOverlayViewModel Update { get; }
     public WelcomeTourOverlayViewModel WelcomeTour { get; }
@@ -1747,7 +1781,8 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
     /// <summary>
     /// Download+apply flow, started from <see cref="Update"/>'s Download button. The download runs
     /// as an Activity Center job (a 0-100 percent callback maps cleanly onto <c>Report</c>). On
-    /// completion, fires the <see cref="UpdateReadyToastRequested"/> toast; <c>ApplyUpdatesAndRestart</c>
+    /// completion, fires the update-ready <see cref="ToastRequest"/> via <c>ShowToast</c>;
+    /// <c>ApplyUpdatesAndRestart</c>
     /// only ever runs from that toast's own explicit Restart-now action - never automatically here.
     /// </summary>
     private async Task DownloadUpdateAsync(AppCastItem item)
@@ -1758,18 +1793,19 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
 
         job.Succeed("Update downloaded", new ActivityLink(ActivityLinkKind.UpdateChangelog));
 
-        UpdateReadyToastViewModel? readyToast = null;
-        readyToast = new UpdateReadyToastViewModel(
-            item,
-            downloadPath,
-            _updateService,
-            onClose: () => UpdateReadyToastCloseRequested?.Invoke(readyToast!),
-            onWhatsNew: () =>
-            {
-                GoPreferencesCommand.Execute(null);
-                Preferences.GoAboutCommand.Execute(null);
-            });
-        UpdateReadyToastRequested?.Invoke(readyToast);
+        ToastRequest? readyToast = null;
+        var restartCommand = new RelayCommand(() => _updateService.ApplyUpdatesAndRestart(item, downloadPath));
+        var laterCommand = new RelayCommand(() => CloseToast(readyToast!));
+        var whatsNewCommand = new RelayCommand(() =>
+        {
+            GoPreferencesCommand.Execute(null);
+            Preferences.GoAboutCommand.Execute(null);
+            Preferences.RequestScrollToAnchor("about.changelog");
+            CloseToast(readyToast!);
+        });
+        readyToast = new ToastRequest("Update ready", "Restart to apply the update.", ToastSeverity.Info,
+            new[] { new ToastAction("Restart", restartCommand), new ToastAction("Later", laterCommand), new ToastAction("What's New", whatsNewCommand) });
+        ShowToast(readyToast);
     }
 
     /// <summary>Where <see cref="NavigateBack"/>/<see cref="NavigateToBreadcrumbIndex"/> land when the
@@ -2224,6 +2260,10 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
                 if (link.Payload == "Automation")
                 {
                     Preferences.GoAutomationCommand.Execute(null);
+                }
+                else if (link.Payload == "LibraryHealth")
+                {
+                    Preferences.GoLibraryHealthCommand.Execute(null);
                 }
 
                 break;

@@ -46,25 +46,44 @@ public class ReworkBookHighlightAnchorMigrationTests : IDisposable
     [Fact]
     public void Migration_DeletesExistingHighlights_AndNewColumnsWorkAfterward()
     {
+        long bookId;
         using (var context = CreateContext())
         {
-            context.Database.Migrate();
+            // Straight to PriorMigration from an empty database, not "up to latest, then back down" -
+            // going all the way up first would apply every later migration's Up(), including any with
+            // a deliberate no-op Down() (this project's own orphan-column rule); rolling back afterward
+            // wouldn't remove what that Up() added, so the eventual catch-up-to-latest step further
+            // down would collide with it and fail with "duplicate column name". Migrating directly to
+            // the target never creates that column in the first place.
             context.GetService<IMigrator>().Migrate(PriorMigration);
 
-            var book = new Book { Title = "Legacy Book", Format = BookFormat.Epub, FilePath = @"C:\x.epub", AddedTime = DateTime.UtcNow };
-            context.Books.Add(book);
-            context.SaveChanges();
+            // Written under the pre-migration schema via raw SQL throughout, not context.Books.Add -
+            // the physical schema is rolled back to PriorMigration here, which predates unrelated later
+            // additions to Books' own columns (docs/superpowers/specs/2026-09-07-books-reader-
+            // pagination-and-position-fix-design.md's ReworkBookPositionAnchor), so an EF-model insert
+            // against the *current* mapped Book type would throw "no such column" against this
+            // older physical table shape.
+            context.Database.ExecuteSqlRaw(
+                "INSERT INTO Books (Title, Format, FilePath, AddedTime, LastChapterIndex, LastCharacterOffset) VALUES ('Legacy Book', 'Epub', 'C:\\x.epub', {0}, 0, 0)",
+                DateTime.UtcNow.ToString("O"));
+            bookId = context.Database.SqlQueryRaw<long>("SELECT last_insert_rowid()").ToList().Single();
 
             // Written under the pre-migration schema (StartOffset/EndOffset, no BlockId) via raw SQL,
             // since the current Book Highlight entity no longer has those columns to write through.
             context.Database.ExecuteSqlRaw(
                 "INSERT INTO BookHighlights (BookId, ChapterIndex, StartOffset, EndOffset, Color, Excerpt, CreatedTime) VALUES ({0}, 0, 10, 20, 'Yellow', 'legacy excerpt', {1})",
-                book.Id, DateTime.UtcNow.ToString("O"));
+                bookId, DateTime.UtcNow.ToString("O"));
         }
 
         using (var context = CreateContext())
         {
-            context.Database.Migrate();
+            // Targets this migration specifically, not "whatever's latest" - context.Database.Migrate()
+            // would re-run every later migration too, including any with a deliberate no-op Down()
+            // (this project's own orphan-column rule). Since Down() doesn't remove such a column, a
+            // second Up() pass over it (which the up-down-up shape above requires) fails with
+            // "duplicate column name" - this is what was actually behind the previously-tracked
+            // "duplicate column name: CharacterCount" failure, not a genuine EF/SQLite rebuild bug.
+            context.GetService<IMigrator>().Migrate("20260902162546_ReworkBookHighlightAnchor");
 
             Assert.Empty(context.BookHighlights);
 
@@ -74,6 +93,15 @@ public class ReworkBookHighlightAnchorMigrationTests : IDisposable
             Assert.Contains("BlockId", cols);
             Assert.Contains("Length", cols);
             Assert.DoesNotContain("EndOffset", cols);
+        }
+
+        // Catches the schema up to whatever's actually newest (deliberately unpinned, unlike the
+        // block above) - everything from here on uses plain typed EF operations against the
+        // *current* model, which only work once the physical schema has every later migration's
+        // columns too (e.g. Book.LastBlockId from ReworkBookPositionAnchor).
+        using (var context = CreateContext())
+        {
+            context.Database.Migrate();
         }
 
         using (var context = CreateContext())

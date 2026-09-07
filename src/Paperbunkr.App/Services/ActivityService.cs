@@ -60,7 +60,7 @@ public sealed class ActivityService : IActivityService
 
     public event EventHandler? Changed;
 
-    public event Action<string, string>? CompletionToastRequested;
+    public event Action<ToastRequest>? CompletionToastRequested;
 
     public IActivityJobHandle StartJob(ActivityJobKind kind, string title, bool cancellable = true, ActivityTrigger trigger = ActivityTrigger.Manual, ActivityToastPolicy toastPolicy = ActivityToastPolicy.Always, bool startQueued = false)
     {
@@ -240,7 +240,8 @@ public sealed class ActivityService : IActivityService
 
             if (ShouldToast(job, status))
             {
-                CompletionToastRequested?.Invoke(TitleForToast(job, status), summary);
+                var severity = status == ActivityJobStatus.Failed ? ToastSeverity.Error : ToastSeverity.Success;
+                CompletionToastRequested?.Invoke(new ToastRequest(TitleForToast(job, status), summary, severity));
             }
         });
 

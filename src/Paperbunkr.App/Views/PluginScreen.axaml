@@ -99,17 +99,17 @@
                                 <ItemsControl ItemsSource="{Binding Commands}">
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate>
-                                            <Grid ColumnDefinitions="Auto,*,140,Auto,Auto" Margin="0,4,0,4"
+                                            <Grid ColumnDefinitions="*,Auto,140,Auto,Auto" Margin="0,4,0,4"
                                                   ToolTip.Tip="{Binding Description}" ToolTip.ShowDelay="400">
-                                                <CheckBox Grid.Column="0" IsChecked="{Binding IsEnabled}" VerticalAlignment="Top" />
-
-                                                <StackPanel Grid.Column="1" Spacing="2" Margin="8,0,8,0">
+                                                <StackPanel Grid.Column="0" Spacing="2" Margin="0,0,8,0">
                                                     <TextBlock Text="{Binding Name}" FontSize="13" FontWeight="Medium"
                                                                Foreground="{DynamicResource PbTextBrush}" />
                                                     <TextBlock Text="{Binding CompileError}" FontSize="12"
                                                                Foreground="#E06060"
                                                                TextWrapping="Wrap" IsVisible="{Binding IsBroken}" />
                                                 </StackPanel>
+
+                                                <ToggleSwitch Grid.Column="1" IsChecked="{Binding IsEnabled}" VerticalAlignment="Top" Margin="0,0,8,0" OnContent="{x:Null}" OffContent="{x:Null}" />
 
                                                 <TextBlock Grid.Column="2" Text="{Binding Package}" FontSize="12"
                                                            Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Top" />

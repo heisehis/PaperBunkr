@@ -4,6 +4,7 @@ using Paperbunkr.App.Models;
 using Paperbunkr.App.Services;
 using Paperbunkr.App.ViewModels;
 using Paperbunkr.Data;
+using Paperbunkr.Data.Credentials;
 using Paperbunkr.Data.Entities;
 
 namespace Paperbunkr.App.Tests;
@@ -103,6 +104,7 @@ public class PreferencesScreenViewModelTests : IDisposable
         MigrationOverlayViewModel? migration = null,
         Action? openMigration = null,
         IActivityService? activity = null,
+        IDialogService? dialogService = null,
         Action? reloadFolderWatch = null,
         Action<int, bool>? enqueueMetadataWriteBack = null)
     {
@@ -120,15 +122,20 @@ public class PreferencesScreenViewModelTests : IDisposable
             keyBindingService,
             showToast ?? ((_, _) => { }),
             migration ?? new MigrationOverlayViewModel(filePicker ?? new NoOpFilePicker(), _ => { }),
-            new PluginScreenViewModel(filePicker ?? new NoOpFilePicker()),
+            new PluginScreenViewModel(filePicker ?? new NoOpFilePicker(), new FakeDialogService()),
             openMigration ?? (() => { }),
             activity ?? new ActivityService(a => a(), _ => { }),
+            dialogService ?? new FakeDialogService(),
             reloadFolderWatch ?? (() => { }),
             () => { },
             new UpdateService(),
             () => new PaperbunkrDbContext(_dbOptions),
             enqueueMetadataWriteBack ?? ((_, _) => { }));
     }
+
+    // ===================== Sidebar hard-switch (reverted back from the single-scroll shell -
+    // docs/superpowers/specs/2026-09-07-preferences-tile-hub-redesign-design.md's shell was tried
+    // and reverted the same session, too annoying to navigate once actually built) =====================
 
     [Fact]
     public void GoAppearance_SetsActiveSectionFlag()
@@ -172,6 +179,182 @@ public class PreferencesScreenViewModelTests : IDisposable
 
         Assert.True(vm.IsConnectionsSection);
         Assert.False(vm.IsGeneralSection);
+    }
+
+    [Fact]
+    public void RequestScrollToAnchor_RaisesScrollToAnchorRequested()
+    {
+        var vm = CreateViewModel();
+        string? anchor = null;
+        vm.ScrollToAnchorRequested += a => anchor = a;
+
+        vm.RequestScrollToAnchor("library.comicFolders");
+
+        Assert.Equal("library.comicFolders", anchor);
+    }
+
+    // ===================== Connections list+dialog (docs/superpowers/specs/2026-09-06-connections-
+    // tracker-dialog-redesign-design.md) =====================
+
+    [Fact]
+    public void EnsureLoaded_PopulatesSourceAndTrackerProviderRows()
+    {
+        var vm = CreateViewModel();
+
+        vm.EnsureLoaded();
+
+        Assert.Equal(2, vm.SourceProviderRows.Count);
+        Assert.Equal(7, vm.TrackerProviderRows.Count);
+        Assert.Contains(vm.SourceProviderRows, r => r.Id == "ComicVine");
+        Assert.Contains(vm.SourceProviderRows, r => r.Id == "Metron");
+        Assert.Contains(vm.TrackerProviderRows, r => r.Id == nameof(TrackingService.AniList));
+    }
+
+    [Fact]
+    public void OpenConnectionDialogCommand_SetsSelectedProviderAndOpensDialog()
+    {
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+        var row = vm.TrackerProviderRows.Single(r => r.Id == nameof(TrackingService.AniList));
+
+        vm.OpenConnectionDialogCommand.Execute(row);
+
+        Assert.Same(row, vm.SelectedConnectionProvider);
+        Assert.True(vm.IsConnectionDialogOpen);
+    }
+
+    [Fact]
+    public void OpenConnectionDialogCommand_SwitchingProviders_ClearsStalePasteBackFields()
+    {
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+        var aniList = vm.TrackerProviderRows.Single(r => r.Id == nameof(TrackingService.AniList));
+        var myAnimeList = vm.TrackerProviderRows.Single(r => r.Id == nameof(TrackingService.MyAnimeList));
+
+        vm.OpenConnectionDialogCommand.Execute(aniList);
+        vm.AniListPastedToken = "stale-token";
+
+        vm.OpenConnectionDialogCommand.Execute(myAnimeList);
+
+        Assert.Equal(string.Empty, vm.AniListPastedToken);
+        Assert.Same(myAnimeList, vm.SelectedConnectionProvider);
+    }
+
+    [Fact]
+    public void CloseConnectionDialogCommand_ClearsSelectionAndCloses()
+    {
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+        vm.OpenConnectionDialogCommand.Execute(vm.TrackerProviderRows[0]);
+
+        vm.CloseConnectionDialogCommand.Execute(null);
+
+        Assert.Null(vm.SelectedConnectionProvider);
+        Assert.False(vm.IsConnectionDialogOpen);
+    }
+
+    [Fact]
+    public void DisconnectAniList_ClearsCredentialAndFlipsConnectedFlag()
+    {
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            CredentialStore.Set(context, nameof(TrackingService.AniList), CredentialKind.OAuthAccessToken, "token");
+        }
+
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+        Assert.True(vm.IsAniListConnected);
+        Assert.True(vm.TrackerProviderRows.Single(r => r.Id == nameof(TrackingService.AniList)).IsConnected);
+
+        vm.DisconnectAniListCommand.Execute(null);
+
+        Assert.False(vm.IsAniListConnected);
+        Assert.False(vm.TrackerProviderRows.Single(r => r.Id == nameof(TrackingService.AniList)).IsConnected);
+        using var verify = new PaperbunkrDbContext(_dbOptions);
+        Assert.Null(CredentialStore.Get(verify, nameof(TrackingService.AniList), CredentialKind.OAuthAccessToken));
+    }
+
+    [Fact]
+    public void DisconnectBangumi_ClearsCredentialAndFlipsConnectedFlag()
+    {
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            CredentialStore.Set(context, nameof(TrackingService.Bangumi), CredentialKind.ApiKey, "pat");
+        }
+
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+        vm.BangumiPersonalAccessToken = "pat";
+
+        vm.DisconnectBangumiCommand.Execute(null);
+
+        Assert.False(vm.IsBangumiConnected);
+        Assert.Equal(string.Empty, vm.BangumiPersonalAccessToken);
+        using var verify = new PaperbunkrDbContext(_dbOptions);
+        Assert.Null(CredentialStore.Get(verify, nameof(TrackingService.Bangumi), CredentialKind.ApiKey));
+    }
+
+    [Fact]
+    public void DisconnectKitsu_ClearsSessionTokenAndUiFields()
+    {
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            CredentialStore.Set(context, nameof(TrackingService.Kitsu), CredentialKind.OAuthAccessToken, "access");
+            CredentialStore.Set(context, nameof(TrackingService.Kitsu), CredentialKind.OAuthRefreshToken, "refresh");
+        }
+
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+        vm.KitsuUsername = "someone";
+        vm.KitsuPassword = "hunter2";
+
+        vm.DisconnectKitsuCommand.Execute(null);
+
+        Assert.False(vm.IsKitsuConnected);
+        Assert.Equal(string.Empty, vm.KitsuUsername);
+        Assert.Equal(string.Empty, vm.KitsuPassword);
+        using var verify = new PaperbunkrDbContext(_dbOptions);
+        Assert.Null(CredentialStore.Get(verify, nameof(TrackingService.Kitsu), CredentialKind.OAuthAccessToken));
+        Assert.Null(CredentialStore.Get(verify, nameof(TrackingService.Kitsu), CredentialKind.OAuthRefreshToken));
+    }
+
+    [Fact]
+    public void RefreshSourceCredentials_ComicVineAndMetron_ReportConnectedState()
+    {
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            CredentialStore.Set(context, "ComicVine", CredentialKind.ApiKey, "key");
+        }
+
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+
+        Assert.True(vm.IsComicVineConnected);
+        Assert.False(vm.IsMetronConnected);
+        Assert.True(vm.SourceProviderRows.Single(r => r.Id == "ComicVine").IsConnected);
+        Assert.False(vm.SourceProviderRows.Single(r => r.Id == "Metron").IsConnected);
+    }
+
+    [Fact]
+    public void DisconnectMetron_ClearsCredentialsAndFlipsNewConnectedFlag()
+    {
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            CredentialStore.Set(context, "Metron", CredentialKind.Username, "someone");
+            CredentialStore.Set(context, "Metron", CredentialKind.Password, "hunter2");
+        }
+
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+        Assert.True(vm.IsMetronConnected);
+
+        vm.DisconnectMetronCommand.Execute(null);
+
+        Assert.False(vm.IsMetronConnected);
+        Assert.Equal(string.Empty, vm.MetronUsername);
+        Assert.Equal(string.Empty, vm.MetronPassword);
+        using var verify = new PaperbunkrDbContext(_dbOptions);
+        Assert.Null(CredentialStore.Get(verify, "Metron", CredentialKind.Username));
     }
 
     [Fact]
@@ -229,7 +412,11 @@ public class PreferencesScreenViewModelTests : IDisposable
         int skinCountAfterFirstLoad = vm.Skins.Count;
         vm.EnsureLoaded();
 
-        Assert.Single(vm.Skins);
+        // 5 built-ins now (docs/superpowers/specs/2026-09-07-preferences-tile-hub-redesign-
+        // design.md §3 - Default + Windows 11 + 3 new), not just Default - the "Once" in this
+        // test's name is about EnsureLoaded's own idempotency guard, asserted by the equality
+        // check below, not about the skin count itself.
+        Assert.Equal(5, vm.Skins.Count);
         Assert.Equal(skinCountAfterFirstLoad, vm.Skins.Count);
         Assert.Contains("System Default", vm.FontFamilies);
         Assert.Equal("System Default", vm.SelectedFontFamily);
@@ -391,17 +578,6 @@ public class PreferencesScreenViewModelTests : IDisposable
     }
 
     [Fact]
-    public void GoReader_SetsActiveSectionFlag()
-    {
-        var vm = CreateViewModel();
-
-        vm.GoReaderCommand.Execute(null);
-
-        Assert.True(vm.IsReaderSection);
-        Assert.False(vm.IsGeneralSection);
-    }
-
-    [Fact]
     public void EnsureLoaded_PopulatesReverseRtlNavigationFromAppSettings()
     {
         using (var context = new PaperbunkrDbContext(_dbOptions))
@@ -454,6 +630,17 @@ public class PreferencesScreenViewModelTests : IDisposable
 
         using var context = new PaperbunkrDbContext(_dbOptions);
         Assert.False(context.GetOrCreateAppSettings().CheckForUpdatesOnStartup);
+    }
+
+    [Fact]
+    public void GoReader_SetsActiveSectionFlag()
+    {
+        var vm = CreateViewModel();
+
+        vm.GoReaderCommand.Execute(null);
+
+        Assert.True(vm.IsReaderSection);
+        Assert.False(vm.IsGeneralSection);
     }
 
     [Fact]
@@ -981,6 +1168,83 @@ public class PreferencesScreenViewModelTests : IDisposable
         Assert.False(vm.IsScanning);
     }
 
+    // ===================== Scanning: missing-file handling (docs/superpowers/specs/2026-09-06-
+    // scan-missing-file-handling-design.md) - AutoRemoveMissingOnScan's effect on Scan Now.
+    // Reuses SeedMissingIssue above (already scopes FilePath under _scanRoot). =====================
+
+    [Fact]
+    public async Task ScanNow_AutoRemoveMissingOnScan_On_ReachesTwoStrikes_AutoRemoves()
+    {
+        // Already at one strike from a prior Verify - Scan Now's own auto-triggered Verify supplies
+        // the second, crossing the two-strikes threshold.
+        SeedMissingIssue("gone.cbz", missingVerificationCount: 1);
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            context.GetOrCreateAppSettings().AutoRemoveMissingOnScan = true;
+            context.SaveChanges();
+        }
+
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+
+        await vm.ScanNowCommand.ExecuteAsync(null);
+
+        using var verify = new PaperbunkrDbContext(_dbOptions);
+        Assert.Empty(verify.Issues);
+        Assert.Single(verify.RemovedLibraryEntries);
+        Assert.Single(verify.RemovedFilePaths);
+        Assert.Contains("Automatically removed 1 confirmed-missing file", vm.ScanStatus);
+    }
+
+    [Fact]
+    public async Task ScanNow_AutoRemoveMissingOnScan_Off_LeavesConfirmedMissingIssueInPlace()
+    {
+        // Setting stays at its default (false) - no AppSettings write.
+        SeedMissingIssue("gone.cbz", missingVerificationCount: 1);
+
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+
+        await vm.ScanNowCommand.ExecuteAsync(null);
+
+        using var verify = new PaperbunkrDbContext(_dbOptions);
+        var issue = Assert.Single(verify.Issues);
+        Assert.True(issue.FileIsMissing);
+        Assert.Empty(verify.RemovedLibraryEntries);
+    }
+
+    [Fact]
+    public async Task ScanNow_AutoRemoveMissingOnScan_On_UnreachableDriveRoot_LeavesIssueForManualReview()
+    {
+        // "?:" is not a valid drive letter on any real Windows install - stands in for "unplugged",
+        // same trick LibraryHealthServiceTests uses for IsPathRootReachable. Built inline (not via
+        // SeedMissingIssue, which always scopes the path under _scanRoot) so the path stays exactly
+        // this bogus root.
+        int issueId;
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            context.GetOrCreateAppSettings().AutoRemoveMissingOnScan = true;
+            var series = new Series { Name = "Ghost Series" };
+            var issue = new Issue { Series = series, Number = "1", FilePath = @"?:\comics\gone.cbz", FileIsMissing = true, MissingVerificationCount = 1 };
+            context.Series.Add(series);
+            context.Issues.Add(issue);
+            context.SaveChanges();
+            issueId = issue.Id;
+        }
+
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+
+        await vm.ScanNowCommand.ExecuteAsync(null);
+
+        using var verify = new PaperbunkrDbContext(_dbOptions);
+        var issueAfter = verify.Issues.Find(issueId);
+        Assert.NotNull(issueAfter);
+        Assert.True(issueAfter!.FileIsMissing);
+        Assert.Equal(2, issueAfter.MissingVerificationCount);
+        Assert.Empty(verify.RemovedLibraryEntries);
+    }
+
     // --- Book Folders (novels) - moved here from the Books screen
     // (docs/superpowers/specs/2026-08-27-books-section-restyle-and-folders-to-preferences-plan.md) ---
 
@@ -1059,8 +1323,8 @@ public class PreferencesScreenViewModelTests : IDisposable
     public async Task GenerateCoversCommand_RunsAsActivityJob_ThatSucceeds()
     {
         var activity = new ActivityService(a => a(), _ => { });
-        (string Title, string Message)? completionToast = null;
-        activity.CompletionToastRequested += (t, m) => completionToast = (t, m);
+        ToastRequest? completionToast = null;
+        activity.CompletionToastRequested += request => completionToast = request;
         var vm = CreateViewModel(activity: activity);
 
         await vm.GenerateCoversCommand.ExecuteAsync(null);
@@ -1069,7 +1333,7 @@ public class PreferencesScreenViewModelTests : IDisposable
         Assert.Equal(ActivityJobStatus.Succeeded, job.Status);
         Assert.False(vm.IsGeneratingCovers);
         Assert.NotNull(completionToast);
-        Assert.Equal("Generating covers finished", completionToast!.Value.Title);
+        Assert.Equal("Generating covers finished", completionToast!.Title);
     }
 
     /// <summary>
@@ -1092,8 +1356,8 @@ public class PreferencesScreenViewModelTests : IDisposable
         }
 
         var activity = new ActivityService(a => a(), _ => { });
-        (string Title, string Message)? completionToast = null;
-        activity.CompletionToastRequested += (t, m) => completionToast = (t, m);
+        ToastRequest? completionToast = null;
+        activity.CompletionToastRequested += request => completionToast = request;
         var vm = CreateViewModel(activity: activity);
 
         await vm.VerifyCoversCommand.ExecuteAsync(null);
@@ -1102,8 +1366,8 @@ public class PreferencesScreenViewModelTests : IDisposable
         Assert.Equal(ActivityJobStatus.Succeeded, job.Status);
         Assert.False(vm.IsVerifyingCovers);
         Assert.NotNull(completionToast);
-        Assert.Equal("Verifying covers finished", completionToast!.Value.Title);
-        Assert.Equal("Re-checked 2 covers", completionToast!.Value.Message); // 1 issue + 1 book
+        Assert.Equal("Verifying covers finished", completionToast!.Title);
+        Assert.Equal("Re-checked 2 covers", completionToast!.Message); // 1 issue + 1 book
     }
 
     // --- Clear Cover Cache (docs/superpowers/specs/2026-08-30-cover-thumbnail-content-
@@ -1143,8 +1407,8 @@ public class PreferencesScreenViewModelTests : IDisposable
         File.WriteAllBytes(strayFile, new byte[] { 1 });
 
         var activity = new ActivityService(a => a(), _ => { });
-        (string Title, string Message)? completionToast = null;
-        activity.CompletionToastRequested += (t, m) => completionToast = (t, m);
+        ToastRequest? completionToast = null;
+        activity.CompletionToastRequested += request => completionToast = request;
         var vm = CreateViewModel(activity: activity);
 
         vm.ClearComicCoverCacheConfirm.TriggerCommand.Execute(null); // arm
@@ -1154,7 +1418,7 @@ public class PreferencesScreenViewModelTests : IDisposable
         Assert.False(File.Exists(strayFile)); // wiped, not just skipped
         Assert.False(vm.IsGeneratingCovers);
         Assert.NotNull(completionToast);
-        Assert.Equal("Rebuilding comic covers finished", completionToast!.Value.Title);
+        Assert.Equal("Rebuilding comic covers finished", completionToast!.Title);
         var stem = CoverFingerprint.Stem(issueId, Path.Combine(_scanRoot, "1.cbz"), 1);
         Assert.True(File.Exists(CoverThumbnailPaths.GetCachePath(stem))); // regenerated, not left blank
     }
@@ -1181,8 +1445,8 @@ public class PreferencesScreenViewModelTests : IDisposable
         File.WriteAllBytes(strayFile, new byte[] { 1 });
 
         var activity = new ActivityService(a => a(), _ => { });
-        (string Title, string Message)? completionToast = null;
-        activity.CompletionToastRequested += (t, m) => completionToast = (t, m);
+        ToastRequest? completionToast = null;
+        activity.CompletionToastRequested += request => completionToast = request;
         var vm = CreateViewModel(activity: activity);
 
         vm.ClearBookCoverCacheConfirm.TriggerCommand.Execute(null); // arm
@@ -1192,7 +1456,7 @@ public class PreferencesScreenViewModelTests : IDisposable
         Assert.False(File.Exists(strayFile));
         Assert.False(vm.IsClearingBookCoverCache);
         Assert.NotNull(completionToast);
-        Assert.Equal("Rebuilding book covers finished", completionToast!.Value.Title);
+        Assert.Equal("Rebuilding book covers finished", completionToast!.Title);
     }
 
     [Fact]
@@ -1242,7 +1506,8 @@ public class PreferencesScreenViewModelTests : IDisposable
         Assert.True(vm.IsAdvancedSection);
     }
 
-    /// <summary>docs/superpowers/specs/2026-08-24-navigation-shell-motion-system-design.md - Plugins moved from a standalone rail screen into this section.</summary>
+    /// <summary>docs/superpowers/specs/2026-08-24-navigation-shell-motion-system-design.md - Plugins
+    /// moved from a standalone rail screen into this section.</summary>
     [Fact]
     public void GoPlugins_SetsActiveSectionFlag()
     {
@@ -1414,6 +1679,23 @@ public class PreferencesScreenViewModelTests : IDisposable
         public Task SetClipboardTextAsync(string text) => Task.CompletedTask;
     }
 
+    private sealed class FakeDialogService : IDialogService
+    {
+        private readonly int _answer;
+        public ConfirmDialogRequest? LastRequest { get; private set; }
+
+        public FakeDialogService(int answer = 0) => _answer = answer;
+
+        public Task<int> ShowAsync(ConfirmDialogRequest request)
+        {
+            LastRequest = request;
+            return Task.FromResult(_answer);
+        }
+
+        public Task<bool> ConfirmAsync(string message, string? title = null, string confirmLabel = "Confirm",
+            string cancelLabel = "Cancel", bool isDestructive = false) => Task.FromResult(_answer == 0);
+    }
+
     private sealed class StubFilePicker : IFilePickerService
     {
         public string? FolderToReturn { get; set; }
@@ -1467,6 +1749,282 @@ public class PreferencesScreenViewModelTests : IDisposable
 
         Assert.Equal(2, enqueued.Count);
         Assert.All(enqueued, e => Assert.True(e.Manual));
+    }
+
+    // --- Library Health (docs/superpowers/specs/2026-09-06-missing-files-library-health-design.md) ---
+
+    private int SeedMissingIssue(string fileName = "gone.cbz", int missingVerificationCount = 0, bool missingAcknowledged = false, string seriesName = "Ghost Series")
+    {
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        var series = new Series { Name = seriesName };
+        var issue = new Issue
+        {
+            Series = series,
+            Number = "1",
+            FilePath = Path.Combine(_scanRoot, fileName),
+            FileIsMissing = true,
+            MissingVerificationCount = missingVerificationCount,
+            MissingAcknowledged = missingAcknowledged,
+        };
+        context.Series.Add(series);
+        context.Issues.Add(issue);
+        context.SaveChanges();
+        return issue.Id;
+    }
+
+    [Fact]
+    public async Task VerifyLibraryHealthNow_UpdatesSummaryCountsAndLastVerified()
+    {
+        SeedMissingIssue();
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+
+        await vm.VerifyLibraryHealthNowCommand.ExecuteAsync(null);
+
+        Assert.Equal(1, vm.LibraryHealthChecked);
+        Assert.Equal(1, vm.LibraryHealthMissingNow);
+        Assert.NotEqual("Never", vm.LibraryHealthLastVerifiedLabel);
+        Assert.False(vm.IsVerifyingLibraryHealth);
+        Assert.Null(vm.CurrentLibraryHealthJob);
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        Assert.NotNull(context.GetOrCreateAppSettings().LastLibraryHealthVerifyUtc);
+    }
+
+    [Fact]
+    public void ChangingConfirmedMissingThreshold_PersistsAndRecomputesCounts()
+    {
+        SeedMissingIssue(missingVerificationCount: 2);
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+
+        Assert.Equal(2, vm.LibraryHealthConfirmedMissingThreshold);
+        Assert.True(vm.HasConfirmedMissingItems);
+
+        vm.LibraryHealthConfirmedMissingThreshold = 3;
+
+        Assert.False(vm.HasConfirmedMissingItems);
+        Assert.Equal(0, vm.LibraryHealthConfirmedMissing);
+
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        Assert.Equal(3, context.GetOrCreateAppSettings().LibraryHealthConfirmedMissingThreshold);
+    }
+
+    [Fact]
+    public async Task RemoveFolder_RunsScopedVerify_OnThatFoldersIssues()
+    {
+        int issueId;
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            context.WatchedFolders.Add(new WatchedFolder { Path = _scanRoot });
+            var series = new Series { Name = "Ghost Series" };
+            var issue = new Issue { Series = series, Number = "1", FilePath = Path.Combine(_scanRoot, "gone.cbz") };
+            context.Series.Add(series);
+            context.Issues.Add(issue);
+            context.SaveChanges();
+            issueId = issue.Id;
+        }
+
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+        var folder = vm.WatchedFolders[0];
+
+        await vm.RemoveFolderCommand.ExecuteAsync(folder);
+
+        Assert.Empty(vm.WatchedFolders);
+        using var verify = new PaperbunkrDbContext(_dbOptions);
+        var issueAfter = verify.Issues.Find(issueId)!;
+        Assert.True(issueAfter.FileIsMissing);
+        Assert.Equal(1, issueAfter.MissingVerificationCount);
+    }
+
+    [Fact]
+    public void RelinkMissingFile_ClearsMissingFlagAndResetsCount()
+    {
+        int issueId = SeedMissingIssue(missingVerificationCount: 3);
+        string newPath = Path.Combine(_scanRoot, "found.cbz");
+        var vm = CreateViewModel(new FileRoundTripPicker { OpenPathToReturn = newPath });
+        vm.EnsureLoaded();
+        var row = Assert.Single(vm.MissingFileItems);
+
+        row.RelinkCommand.Execute(null);
+
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        var issue = context.Issues.Find(issueId)!;
+        Assert.False(issue.FileIsMissing);
+        Assert.Equal(0, issue.MissingVerificationCount);
+        Assert.Equal(newPath, issue.FilePath);
+    }
+
+    [Fact]
+    public void DismissMissingFile_SetsAcknowledged_AndDropsFromList()
+    {
+        SeedMissingIssue();
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+        var row = Assert.Single(vm.MissingFileItems);
+
+        row.DismissCommand.Execute(null);
+
+        Assert.Empty(vm.MissingFileItems);
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        Assert.True(context.Issues.Single().MissingAcknowledged);
+    }
+
+    [Fact]
+    public void RemoveMissingFile_WritesRemovedLibraryEntry_ThenDeletesIssue()
+    {
+        int issueId = SeedMissingIssue();
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+        var row = Assert.Single(vm.MissingFileItems);
+
+        row.DeleteConfirm.TriggerCommand.Execute(null);
+        row.DeleteConfirm.TriggerCommand.Execute(null);
+
+        Assert.Empty(vm.MissingFileItems);
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        Assert.Null(context.Issues.Find(issueId));
+        var entry = Assert.Single(context.RemovedLibraryEntries);
+        Assert.Equal("Ghost Series", entry.SeriesName);
+        Assert.Equal(RemovedLibraryEntryReason.MissingFileCleanup, entry.Reason);
+        Assert.Single(vm.RecentlyRemovedItems);
+    }
+
+    [Fact]
+    public void BulkDismissMissingFiles_AcknowledgesEveryListedItem_RegardlessOfStrikeCount()
+    {
+        int notYetConfirmedId = SeedMissingIssue("recent-gone.cbz", missingVerificationCount: 0);
+        int confirmedId = SeedMissingIssue("confirmed-gone.cbz", missingVerificationCount: 2);
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+
+        vm.BulkDismissMissingFilesCommand.Execute(null);
+
+        Assert.Empty(vm.MissingFileItems);
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        Assert.True(context.Issues.Find(notYetConfirmedId)!.MissingAcknowledged);
+        Assert.True(context.Issues.Find(confirmedId)!.MissingAcknowledged);
+    }
+
+    [Fact]
+    public async Task BulkRelinkMissingFiles_MatchesByFileNameUnderChosenFolder()
+    {
+        SeedMissingIssue("kilo-station-012.cbz");
+        string newRoot = Path.Combine(_scanRoot, "reorganized");
+        Directory.CreateDirectory(newRoot);
+        string newPath = Path.Combine(newRoot, "kilo-station-012.cbz");
+        File.WriteAllText(newPath, "fixture");
+        var toasts = new List<(string Title, string Message)>();
+        var vm = CreateViewModel(new StubFilePicker { FolderToReturn = newRoot }, showToast: (title, message) => toasts.Add((title, message)));
+        vm.EnsureLoaded();
+
+        await vm.BulkRelinkMissingFilesCommand.ExecuteAsync(null);
+
+        Assert.Empty(vm.MissingFileItems);
+        Assert.Single(toasts);
+        Assert.Equal("Relinked 1 of 1 missing issue.", toasts[0].Message);
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        var issue = context.Issues.Single();
+        Assert.False(issue.FileIsMissing);
+        Assert.Equal(newPath, issue.FilePath);
+    }
+
+    [Fact]
+    public async Task BulkRelinkMissingFiles_UserCancels_DoesNothing()
+    {
+        SeedMissingIssue();
+        var toasts = new List<(string Title, string Message)>();
+        var vm = CreateViewModel(new StubFilePicker { FolderToReturn = null }, showToast: (title, message) => toasts.Add((title, message)));
+        vm.EnsureLoaded();
+
+        await vm.BulkRelinkMissingFilesCommand.ExecuteAsync(null);
+
+        Assert.Single(vm.MissingFileItems);
+        Assert.Empty(toasts);
+    }
+
+    [Fact]
+    public void ToggleRecentlyRemovedExpanded_FlipsTheBool()
+    {
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+        Assert.False(vm.IsRecentlyRemovedExpanded);
+
+        vm.ToggleRecentlyRemovedExpandedCommand.Execute(null);
+        Assert.True(vm.IsRecentlyRemovedExpanded);
+
+        vm.ToggleRecentlyRemovedExpandedCommand.Execute(null);
+        Assert.False(vm.IsRecentlyRemovedExpanded);
+    }
+
+    [Fact]
+    public async Task OpenBulkRemoveConfirm_ShowsSharedDialog_WithEligibleIssuesOnly()
+    {
+        SeedMissingIssue("confirmed-gone.cbz", missingVerificationCount: 2);
+        SeedMissingIssue("recent-gone.cbz", missingVerificationCount: 1);
+        var dialog = new FakeDialogService();
+        var vm = CreateViewModel(dialogService: dialog);
+        vm.EnsureLoaded();
+
+        await vm.OpenBulkRemoveConfirmCommand.ExecuteAsync(null);
+
+        Assert.NotNull(dialog.LastRequest);
+        Assert.Single(dialog.LastRequest!.Items!);
+        Assert.Contains("confirmed-gone.cbz", dialog.LastRequest.Items![0]);
+        Assert.True(dialog.LastRequest.IsDestructive);
+    }
+
+    [Fact]
+    public async Task OpenBulkRemoveConfirm_PrimaryAnswer_RemovesOnlyConfirmedMissingIssues()
+    {
+        int confirmedId = SeedMissingIssue("confirmed-gone.cbz", missingVerificationCount: 2);
+        int notYetConfirmedId = SeedMissingIssue("recent-gone.cbz", missingVerificationCount: 1);
+        var vm = CreateViewModel(dialogService: new FakeDialogService(answer: 0));
+        vm.EnsureLoaded();
+
+        await vm.OpenBulkRemoveConfirmCommand.ExecuteAsync(null);
+
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        Assert.Null(context.Issues.Find(confirmedId));
+        Assert.NotNull(context.Issues.Find(notYetConfirmedId));
+        Assert.Single(context.RemovedLibraryEntries);
+    }
+
+    [Fact]
+    public async Task OpenBulkRemoveConfirm_NonPrimaryAnswer_RemovesNothing()
+    {
+        int confirmedId = SeedMissingIssue("confirmed-gone.cbz", missingVerificationCount: 2);
+        var vm = CreateViewModel(dialogService: new FakeDialogService(answer: 1));
+        vm.EnsureLoaded();
+
+        await vm.OpenBulkRemoveConfirmCommand.ExecuteAsync(null);
+
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        Assert.NotNull(context.Issues.Find(confirmedId));
+        Assert.Empty(context.RemovedLibraryEntries);
+    }
+
+    [Fact]
+    public void RestoreRemovedEntry_RecreatesIssue_StillFlaggedMissing()
+    {
+        SeedMissingIssue();
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+        var row = Assert.Single(vm.MissingFileItems);
+        row.DeleteConfirm.TriggerCommand.Execute(null);
+        row.DeleteConfirm.TriggerCommand.Execute(null);
+        var removedRow = Assert.Single(vm.RecentlyRemovedItems);
+
+        removedRow.RestoreCommand.Execute(null);
+
+        Assert.Empty(vm.RecentlyRemovedItems);
+        Assert.Single(vm.MissingFileItems);
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        Assert.Empty(context.RemovedLibraryEntries);
+        var restored = Assert.Single(context.Issues);
+        Assert.True(restored.FileIsMissing);
+        Assert.Equal(0, restored.MissingVerificationCount);
+        Assert.Equal("Ghost Series", context.Series.Single().Name);
     }
 
     /// <summary>Returns a configurable file path for both open/save dialogs - used by the keyboard-shortcut import/export round-trip tests, neither existing fake above supports this.</summary>

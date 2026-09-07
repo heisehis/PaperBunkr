@@ -42,7 +42,7 @@ public partial class ReadingScreenViewModel : ViewModelBase, IContextMenuProvide
     private readonly IFilePickerService _filePicker;
     private readonly Action<int, int> _goReaderForIssueInReadingList;
     private readonly Action<int> _openProperties;
-    private readonly Action<string, string> _showToast;
+    private readonly IActivityService _activity;
     private int? _activeReadingListId;
     private IReadingListSource? _currentArcSource;
     private string? _currentArcSourceKey;
@@ -50,12 +50,12 @@ public partial class ReadingScreenViewModel : ViewModelBase, IContextMenuProvide
     /// <summary>All lists from the last <see cref="RefreshSidebar"/> query, before any tag filter - <see cref="Lists"/> is the filtered view actually shown.</summary>
     private List<ReadingListSummary> _allListSummaries = new();
 
-    public ReadingScreenViewModel(IFilePickerService filePicker, Action<int, int> goReaderForIssueInReadingList, Action<int>? openProperties = null, Action<string, string>? showToast = null)
+    public ReadingScreenViewModel(IFilePickerService filePicker, Action<int, int> goReaderForIssueInReadingList, Action<int>? openProperties = null, IActivityService? activity = null)
     {
         _filePicker = filePicker;
         _goReaderForIssueInReadingList = goReaderForIssueInReadingList;
         _openProperties = openProperties ?? (_ => { });
-        _showToast = showToast ?? ((_, _) => { });
+        _activity = activity ?? new ActivityService();
         Lists = new ObservableCollection<ReadingListSummary>();
         Groups = new ObservableCollection<ReadingListGroupViewModel>();
         SearchResults = new ObservableCollection<IssueSearchResult>();
@@ -324,6 +324,12 @@ public partial class ReadingScreenViewModel : ViewModelBase, IContextMenuProvide
             return;
         }
 
+        // Job-tracked, not a fire-and-forget toast (docs/superpowers/specs/2026-09-06-feedback-
+        // notification-system-design.md §6) - DragImportService exposes no progress callback, so
+        // this is an indeterminate job (no Done/Total set) rather than a real percentage, but it's
+        // still tracked in the Activity Center and its completion follows the normal toast-policy
+        // path instead of an unconditional direct toast.
+        using var job = _activity.StartJob(ActivityJobKind.Import, "Importing dropped files");
         var result = await new DragImportService().ImportAsync(paths);
 
         int added = 0;
@@ -371,10 +377,7 @@ public partial class ReadingScreenViewModel : ViewModelBase, IContextMenuProvide
             parts.Add($"{result.ReadingListsImported} reading list{(result.ReadingListsImported == 1 ? "" : "s")} imported");
         }
 
-        if (parts.Count > 0)
-        {
-            _showToast("Drag-and-drop import", string.Join(", ", parts) + ".");
-        }
+        job.Succeed(parts.Count > 0 ? string.Join(", ", parts) + "." : "Nothing to import.");
     }
 
     [RelayCommand]

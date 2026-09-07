@@ -46,6 +46,11 @@
             Padding="16,6"
             HorizontalAlignment="Stretch"
             VerticalAlignment="Top">
-        <StackPanel x:Name="Segments" Orientation="Horizontal" />
+        <!-- Fade+slide on trail change (docs/superpowers/specs/2026-09-07-chrome-content-motion-
+             polish-design.md item 4) - reuses the same entranceReady/entered class pair Library's
+             staggered entrance uses (Styles/Primitives.axaml); here it's one whole-bar toggle rather
+             than per-item indexing, matching Rebuild()'s own existing "cheap enough, no diffing"
+             reasoning. Breadcrumb.axaml.cs's Rebuild() flips the classes around each rebuild. -->
+        <StackPanel x:Name="Segments" Classes="entranceReady" Orientation="Horizontal" />
     </Border>
 </UserControl>

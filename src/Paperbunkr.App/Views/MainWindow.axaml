@@ -78,6 +78,22 @@
             <Setter Property="VerticalAlignment" Value="Center" />
         </Style>
 
+        <!-- Contextual sidebar slide (docs/superpowers/specs/2026-09-07-chrome-content-motion-
+             polish-design.md item 3) - same Width-transition mechanism as Border.navRail above,
+             PbMotionStandard per App.axaml:124's own documented (previously unimplemented) intent
+             for this specific surface. -->
+        <Style Selector="Border.contextualSidebar">
+            <Setter Property="Width" Value="0" />
+            <Setter Property="Transitions">
+                <Transitions>
+                    <DoubleTransition Property="Width" Duration="{DynamicResource PbMotionStandard}" Easing="{StaticResource PbMotionEase}" />
+                </Transitions>
+            </Setter>
+        </Style>
+        <Style Selector="Border.contextualSidebar.expanded">
+            <Setter Property="Width" Value="236" />
+        </Style>
+
         <!-- Sidebar nav row -->
         <Style Selector="Button.sideItemButton">
             <Setter Property="Background" Value="Transparent" />
@@ -119,13 +135,6 @@
         <Style Selector="TextBlock.count">
             <Setter Property="FontFamily" Value="Consolas,monospace" />
             <Setter Property="FontSize" Value="10.5" />
-        </Style>
-
-        <Style Selector="Border.countBadge">
-            <Setter Property="Background" Value="#30353F" />
-            <Setter Property="CornerRadius" Value="8" />
-            <Setter Property="Padding" Value="6,1" />
-            <Setter Property="VerticalAlignment" Value="Center" />
         </Style>
 
         <!-- Discard-confirm banner buttons, styled to match IssuePropertiesScreen's headerAction ghost/primary pair -->
@@ -267,9 +276,17 @@
         </Border>
 
         <!-- ============ Contextual sidebar (236px) ============ -->
-        <Border DockPanel.Dock="Left" Width="236" Background="{DynamicResource PbChromeBrush}"
+        <!-- Width transition (docs/superpowers/specs/2026-09-07-chrome-content-motion-polish-
+             design.md item 3), mirroring Border.navRail's own expand/collapse mechanism above but
+             on PbMotionStandard per App.axaml's own token comment naming "sidebar" as a
+             PbMotionStandard consumer. Stays in the tree at Width=0 rather than IsVisible-toggled
+             (an IsVisible-toggled element can't animate a width transition - it leaves/enters the
+             layout tree instantly either way) - IsHitTestVisible bound the same as before so a
+             collapsed, zero-width sidebar can't intercept input or receive focus. -->
+        <Border Classes="contextualSidebar" Classes.expanded="{Binding ShowContextualSidebar}"
+                DockPanel.Dock="Left" ClipToBounds="True" Background="{DynamicResource PbChromeBrush}"
                 BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,0,1,0"
-                IsVisible="{Binding ShowContextualSidebar}"
+                IsHitTestVisible="{Binding ShowContextualSidebar}"
                 KeyDown="OnSidebarKeyDown">
             <ScrollViewer Padding="12,18">
                 <StackPanel Spacing="2">
@@ -441,7 +458,7 @@
                                                 CommandParameter="{Binding}">
                                             <Grid ColumnDefinitions="*,Auto">
                                                 <TextBlock Grid.Column="0" Classes="sideItemLabel" Text="{Binding Name}" FontSize="13" Foreground="{DynamicResource PbTextMutedBrush}" />
-                                                <Border Grid.Column="1" Classes="countBadge"><TextBlock Classes="count" Text="{Binding MatchCount}" Foreground="{DynamicResource PbTextFaintBrush}" /></Border>
+                                                <Border Grid.Column="1" Classes="countPill"><TextBlock Classes="count" Text="{Binding MatchCount}" /></Border>
                                             </Grid>
                                         </Button>
                                     </Border>
@@ -461,7 +478,7 @@
                                                     CommandParameter="{Binding}">
                                                 <Grid ColumnDefinitions="*,Auto">
                                                     <TextBlock Grid.Column="0" Classes="sideItemLabel" Text="{Binding Name}" FontSize="13" Foreground="{DynamicResource PbTextMutedBrush}" />
-                                                    <Border Grid.Column="1" Classes="countBadge"><TextBlock Classes="count" Text="{Binding MatchCount}" Foreground="{DynamicResource PbTextFaintBrush}" /></Border>
+                                                    <Border Grid.Column="1" Classes="countPill"><TextBlock Classes="count" Text="{Binding MatchCount}" /></Border>
                                                 </Grid>
                                             </Button>
                                             <Button Grid.Column="1" Classes="headerAction ghost smDelete" Padding="6" Margin="2,0,4,0" VerticalAlignment="Center"
@@ -527,7 +544,7 @@
                                                     CommandParameter="{Binding}">
                                                 <Grid ColumnDefinitions="*,Auto">
                                                     <TextBlock Grid.Column="0" Classes="sideItemLabel" Text="{Binding Name}" FontSize="13" Foreground="{DynamicResource PbTextMutedBrush}" />
-                                                    <Border Grid.Column="1" Classes="countBadge"><TextBlock Classes="count" Text="{Binding MatchCount}" Foreground="{DynamicResource PbTextFaintBrush}" /></Border>
+                                                    <Border Grid.Column="1" Classes="countPill"><TextBlock Classes="count" Text="{Binding MatchCount}" /></Border>
                                                 </Grid>
                                             </Button>
                                             <Button Grid.Column="1" Classes="headerAction ghost smDelete" Padding="6" Margin="2,0,4,0" VerticalAlignment="Center"
@@ -561,7 +578,7 @@
                                                     CommandParameter="{Binding}">
                                                 <Grid ColumnDefinitions="*,Auto">
                                                     <TextBlock Grid.Column="0" Classes="sideItemLabel" Text="{Binding Name}" FontSize="13" Foreground="{DynamicResource PbTextMutedBrush}" />
-                                                    <Border Grid.Column="1" Classes="countBadge"><TextBlock Classes="count" Text="{Binding MatchCount}" Foreground="{DynamicResource PbTextFaintBrush}" /></Border>
+                                                    <Border Grid.Column="1" Classes="countPill"><TextBlock Classes="count" Text="{Binding MatchCount}" /></Border>
                                                 </Grid>
                                             </Button>
                                             <Button Grid.Column="1" Classes="headerAction ghost smDelete" Padding="6" Margin="2,0,4,0" VerticalAlignment="Center"
@@ -880,228 +897,128 @@
                               VerticalAlignment="Bottom" />
 
     <!-- ============ Migration overlay (docs/superpowers/specs/2026-08-06-migration-ux-design.md §B) ============ -->
-    <Border IsVisible="{Binding IsMigrationOverlayOpen}" Background="#B0000000">
-        <Grid HorizontalAlignment="Center" VerticalAlignment="Center">
-            <views:MigrationOverlay DataContext="{Binding Migration}" />
-            <Button Classes="rail" Width="28" Height="28"
-                    HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-14,-14,0"
-                    Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
-                    Command="{Binding CloseMigrationOverlayCommand}" ToolTip.Tip="Close"
-                    AutomationProperties.AutomationId="MigrationOverlayCloseButton">
-                <fi:SymbolIcon Symbol="DismissCircle" FontSize="{StaticResource PbIconSizeSm}" />
-            </Button>
-        </Grid>
-    </Border>
+    <controls:OverlayShell IsOpen="{Binding IsMigrationOverlayOpen}" CloseCommand="{Binding CloseMigrationOverlayCommand}"
+                            CloseButtonAutomationId="MigrationOverlayCloseButton">
+        <views:MigrationOverlay DataContext="{Binding Migration}" />
+    </controls:OverlayShell>
+
+    <!-- ============ Shared confirm dialog (docs/superpowers/specs/2026-09-06-feedback-
+         notification-system-design.md §2) - the one OverlayShell/ConfirmDialogView instance every
+         IDialogService.ShowAsync call drives, including PaperbunkrApplication.AskQuestion (plugin
+         bridge) and any future core-app confirm (e.g. Library Health's bulk-delete prompt).
+         Scrim-click resolves as "dismissed" (-1), same as clicking neither button. ============ -->
+    <controls:OverlayShell IsOpen="{Binding ConfirmDialog.IsOpen}" CloseCommand="{Binding ConfirmDialog.DismissCommand}">
+        <views:ConfirmDialogView DataContext="{Binding ConfirmDialog}" />
+    </controls:OverlayShell>
 
     <!-- ============ Reading List properties overlay (docs/superpowers/specs/2026-08-23-reading-
          list-tags-design.md) - same backdrop-popup pattern as the Migration overlay above, not a
          screen swap ============ -->
-    <Border IsVisible="{Binding IsReadingListPropertiesOverlayOpen}" Background="#B0000000">
-        <Grid HorizontalAlignment="Center" VerticalAlignment="Center">
-            <views:ReadingListPropertiesOverlay DataContext="{Binding ReadingListProperties}" />
-            <Button Classes="rail" Width="28" Height="28"
-                    HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-14,-14,0"
-                    Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
-                    Command="{Binding CloseReadingListPropertiesOverlayCommand}" ToolTip.Tip="Close"
-                    AutomationProperties.AutomationId="ReadingListPropertiesOverlayCloseButton">
-                <fi:SymbolIcon Symbol="DismissCircle" FontSize="{StaticResource PbIconSizeSm}" />
-            </Button>
-        </Grid>
-    </Border>
+    <controls:OverlayShell IsOpen="{Binding IsReadingListPropertiesOverlayOpen}" CloseCommand="{Binding CloseReadingListPropertiesOverlayCommand}"
+                            CloseButtonAutomationId="ReadingListPropertiesOverlayCloseButton">
+        <views:ReadingListPropertiesOverlay DataContext="{Binding ReadingListProperties}" />
+    </controls:OverlayShell>
 
     <!-- ============ Collection properties overlay (docs/superpowers/specs/2026-08-27-collections-
          design.md, step 8) - same backdrop-popup pattern as the Reading List overlay above ============ -->
-    <Border IsVisible="{Binding IsCollectionPropertiesOverlayOpen}" Background="#B0000000">
-        <Grid HorizontalAlignment="Center" VerticalAlignment="Center">
-            <views:CollectionPropertiesOverlay DataContext="{Binding CollectionProperties}" />
-            <Button Classes="rail" Width="28" Height="28"
-                    HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-14,-14,0"
-                    Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
-                    Command="{Binding CloseCollectionPropertiesOverlayCommand}" ToolTip.Tip="Close"
-                    AutomationProperties.AutomationId="CollectionPropertiesOverlayCloseButton">
-                <fi:SymbolIcon Symbol="DismissCircle" FontSize="{StaticResource PbIconSizeSm}" />
-            </Button>
-        </Grid>
-    </Border>
+    <controls:OverlayShell IsOpen="{Binding IsCollectionPropertiesOverlayOpen}" CloseCommand="{Binding CloseCollectionPropertiesOverlayCommand}"
+                            CloseButtonAutomationId="CollectionPropertiesOverlayCloseButton">
+        <views:CollectionPropertiesOverlay DataContext="{Binding CollectionProperties}" />
+    </controls:OverlayShell>
 
     <!-- ============ New Reading List dialog (docs/superpowers/specs/2026-08-28-reading-lists-
          screen-redesign-design.md → v2) - the sidebar "＋" opens this ============ -->
-    <Border IsVisible="{Binding IsNewReadingListDialogOpen}" Background="#B0000000">
-        <Grid HorizontalAlignment="Center" VerticalAlignment="Center">
-            <views:NewReadingListOverlay DataContext="{Binding NewReadingList}" />
-            <Button Classes="rail" Width="28" Height="28"
-                    HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-14,-14,0"
-                    Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
-                    Command="{Binding CloseNewReadingListDialogCommand}" ToolTip.Tip="Close"
-                    AutomationProperties.AutomationId="NewReadingListOverlayCloseButton">
-                <fi:SymbolIcon Symbol="DismissCircle" FontSize="{StaticResource PbIconSizeSm}" />
-            </Button>
-        </Grid>
-    </Border>
+    <controls:OverlayShell IsOpen="{Binding IsNewReadingListDialogOpen}" CloseCommand="{Binding CloseNewReadingListDialogCommand}"
+                            CloseButtonAutomationId="NewReadingListOverlayCloseButton">
+        <views:NewReadingListOverlay DataContext="{Binding NewReadingList}" />
+    </controls:OverlayShell>
 
     <!-- ============ Name-this-workspace dialog (docs/superpowers/specs/2026-09-03-library-saved-
          workspaces-design.md) - shared by the Library and Books workspace switchers ============ -->
-    <Border IsVisible="{Binding IsWorkspaceNameOverlayOpen}" Background="#B0000000">
-        <Grid HorizontalAlignment="Center" VerticalAlignment="Center">
-            <views:WorkspaceNameOverlay DataContext="{Binding WorkspaceName}" />
-            <Button Classes="rail" Width="28" Height="28"
-                    HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-14,-14,0"
-                    Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
-                    Command="{Binding CloseWorkspaceNameOverlayCommand}" ToolTip.Tip="Close"
-                    AutomationProperties.AutomationId="WorkspaceNameOverlayCloseButton">
-                <fi:SymbolIcon Symbol="DismissCircle" FontSize="{StaticResource PbIconSizeSm}" />
-            </Button>
-        </Grid>
-    </Border>
+    <controls:OverlayShell IsOpen="{Binding IsWorkspaceNameOverlayOpen}" CloseCommand="{Binding CloseWorkspaceNameOverlayCommand}"
+                            CloseButtonAutomationId="WorkspaceNameOverlayCloseButton">
+        <views:WorkspaceNameOverlay DataContext="{Binding WorkspaceName}" />
+    </controls:OverlayShell>
 
     <!-- ============ Quick Open command palette (docs/superpowers/specs/2026-09-03-quick-open-
          command-palette-design.md) - Ctrl+P from any shell screen ============ -->
-    <Border IsVisible="{Binding IsQuickOpenOverlayOpen}" Background="#B0000000">
-        <Grid HorizontalAlignment="Center" VerticalAlignment="Stretch">
-            <views:QuickOpenOverlay DataContext="{Binding QuickOpen}" />
-        </Grid>
-    </Border>
+    <controls:OverlayShell IsOpen="{Binding IsQuickOpenOverlayOpen}" CloseCommand="{Binding CloseQuickOpenOverlayCommand}"
+                            ContentVerticalAlignment="Stretch" ShowCloseButton="False">
+        <views:QuickOpenOverlay DataContext="{Binding QuickOpen}" />
+    </controls:OverlayShell>
 
     <!-- ============ New Event / New Continuity dialog (docs/superpowers/specs/2026-08-28-events-
          continuity-screen-redesign-design.md) ============ -->
-    <Border IsVisible="{Binding IsNewEventDialogOpen}" Background="#B0000000">
-        <Grid HorizontalAlignment="Center" VerticalAlignment="Center">
-            <views:NewEventOrContinuityOverlay DataContext="{Binding NewEventOrContinuity}" />
-            <Button Classes="rail" Width="28" Height="28"
-                    HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-14,-14,0"
-                    Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
-                    Command="{Binding CloseNewEventDialogCommand}" ToolTip.Tip="Close">
-                <fi:SymbolIcon Symbol="DismissCircle" FontSize="{StaticResource PbIconSizeSm}" />
-            </Button>
-        </Grid>
-    </Border>
+    <controls:OverlayShell IsOpen="{Binding IsNewEventDialogOpen}" CloseCommand="{Binding CloseNewEventDialogCommand}">
+        <views:NewEventOrContinuityOverlay DataContext="{Binding NewEventOrContinuity}" />
+    </controls:OverlayShell>
 
     <!-- ============ Book Properties editor overlay (docs/superpowers/specs/2026-08-27-book-
          properties-editor-design.md) - same backdrop-popup pattern as Reading List Properties above ============ -->
-    <Border IsVisible="{Binding IsBookPropertiesOverlayOpen}" Background="#B0000000">
-        <Grid HorizontalAlignment="Center" VerticalAlignment="Center">
-            <views:BookPropertiesOverlay DataContext="{Binding BookProperties}" />
-            <Button Classes="rail" Width="28" Height="28"
-                    HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-14,-14,0"
-                    Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
-                    Command="{Binding CloseBookPropertiesOverlayCommand}" ToolTip.Tip="Close"
-                    AutomationProperties.AutomationId="BookPropertiesOverlayCloseButton">
-                <fi:SymbolIcon Symbol="DismissCircle" FontSize="{StaticResource PbIconSizeSm}" />
-            </Button>
-        </Grid>
-    </Border>
+    <controls:OverlayShell IsOpen="{Binding IsBookPropertiesOverlayOpen}" CloseCommand="{Binding CloseBookPropertiesOverlayCommand}"
+                            CloseButtonAutomationId="BookPropertiesOverlayCloseButton">
+        <views:BookPropertiesOverlay DataContext="{Binding BookProperties}" />
+    </controls:OverlayShell>
 
     <!-- ============ Bulk book properties overlay (docs/superpowers/specs/2026-08-27-books-bulk-
          series-editing-design.md, component b) ============ -->
-    <Border IsVisible="{Binding IsBulkBookPropertiesOverlayOpen}" Background="#B0000000">
-        <Grid HorizontalAlignment="Center" VerticalAlignment="Center">
-            <views:BulkBookPropertiesOverlay DataContext="{Binding BulkBookProperties}" />
-            <Button Classes="rail" Width="28" Height="28"
-                    HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-14,-14,0"
-                    Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
-                    Command="{Binding CloseBulkBookPropertiesOverlayCommand}" ToolTip.Tip="Close"
-                    AutomationProperties.AutomationId="BulkBookPropertiesOverlayCloseButton">
-                <fi:SymbolIcon Symbol="DismissCircle" FontSize="{StaticResource PbIconSizeSm}" />
-            </Button>
-        </Grid>
-    </Border>
+    <controls:OverlayShell IsOpen="{Binding IsBulkBookPropertiesOverlayOpen}" CloseCommand="{Binding CloseBulkBookPropertiesOverlayCommand}"
+                            CloseButtonAutomationId="BulkBookPropertiesOverlayCloseButton">
+        <views:BulkBookPropertiesOverlay DataContext="{Binding BulkBookProperties}" />
+    </controls:OverlayShell>
 
     <!-- ============ BookSeries properties overlay (docs/superpowers/specs/2026-08-27-books-bulk-
          series-editing-design.md, component c) ============ -->
-    <Border IsVisible="{Binding IsBookSeriesPropertiesOverlayOpen}" Background="#B0000000">
-        <Grid HorizontalAlignment="Center" VerticalAlignment="Center">
-            <views:BookSeriesPropertiesOverlay DataContext="{Binding BookSeriesProperties}" />
-            <Button Classes="rail" Width="28" Height="28"
-                    HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-14,-14,0"
-                    Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
-                    Command="{Binding CloseBookSeriesPropertiesOverlayCommand}" ToolTip.Tip="Close"
-                    AutomationProperties.AutomationId="BookSeriesPropertiesOverlayCloseButton">
-                <fi:SymbolIcon Symbol="DismissCircle" FontSize="{StaticResource PbIconSizeSm}" />
-            </Button>
-        </Grid>
-    </Border>
+    <controls:OverlayShell IsOpen="{Binding IsBookSeriesPropertiesOverlayOpen}" CloseCommand="{Binding CloseBookSeriesPropertiesOverlayCommand}"
+                            CloseButtonAutomationId="BookSeriesPropertiesOverlayCloseButton">
+        <views:BookSeriesPropertiesOverlay DataContext="{Binding BookSeriesProperties}" />
+    </controls:OverlayShell>
 
     <!-- ============ Quick Rate overlay (docs/ce-feature-inventory.md §A "Quick Rating + free-text
          Review in one popup") - same backdrop-popup pattern as Reading List Properties above ============ -->
-    <Border IsVisible="{Binding IsQuickRateOverlayOpen}" Background="#B0000000">
-        <Grid HorizontalAlignment="Center" VerticalAlignment="Center">
-            <views:QuickRateOverlay DataContext="{Binding QuickRate}" />
-            <Button Classes="rail" Width="28" Height="28"
-                    HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-14,-14,0"
-                    Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
-                    Command="{Binding CloseQuickRateOverlayCommand}" ToolTip.Tip="Close"
-                    AutomationProperties.AutomationId="QuickRateOverlayCloseButton">
-                <fi:SymbolIcon Symbol="DismissCircle" FontSize="{StaticResource PbIconSizeSm}" />
-            </Button>
-        </Grid>
-    </Border>
+    <controls:OverlayShell IsOpen="{Binding IsQuickRateOverlayOpen}" CloseCommand="{Binding CloseQuickRateOverlayCommand}"
+                            CloseButtonAutomationId="QuickRateOverlayCloseButton">
+        <views:QuickRateOverlay DataContext="{Binding QuickRate}" />
+    </controls:OverlayShell>
 
     <!-- ============ Design Showcase overlay (docs/superpowers/specs/2026-08-24-design-language-
          foundation-design.md, debug-only) - same backdrop-popup pattern as Quick Rate above ============ -->
-    <Border IsVisible="{Binding IsDesignShowcaseOverlayOpen}" Background="#B0000000">
-        <Grid HorizontalAlignment="Center" VerticalAlignment="Center">
-            <views:DesignShowcaseOverlay DataContext="{Binding DesignShowcase}" />
-            <Button Classes="rail" Width="28" Height="28"
-                    HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-14,-14,0"
-                    Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
-                    Command="{Binding CloseDesignShowcaseOverlayCommand}" ToolTip.Tip="Close"
-                    AutomationProperties.AutomationId="DesignShowcaseOverlayCloseButton">
-                <fi:SymbolIcon Symbol="DismissCircle" FontSize="{StaticResource PbIconSizeSm}" />
-            </Button>
-        </Grid>
-    </Border>
+    <controls:OverlayShell IsOpen="{Binding IsDesignShowcaseOverlayOpen}" CloseCommand="{Binding CloseDesignShowcaseOverlayCommand}"
+                            CloseButtonAutomationId="DesignShowcaseOverlayCloseButton">
+        <views:DesignShowcaseOverlay DataContext="{Binding DesignShowcase}" />
+    </controls:OverlayShell>
 
     <!-- ============ Issue Properties overlay (docs/superpowers/specs/2026-08-23-issue-editor-
          borderless-overlay-design.md) - same backdrop-popup pattern as Migration/Reading List
          Properties above, replacing the old full-screen CurrentScreen swap ============ -->
-    <Border IsVisible="{Binding IsIssuePropertiesOverlayOpen}" Background="#B0000000">
-        <Grid HorizontalAlignment="Center" VerticalAlignment="Center">
-            <views:IssuePropertiesScreen DataContext="{Binding IssueProperties}" />
-            <Button Classes="rail" Width="28" Height="28"
-                    HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-14,-14,0"
-                    Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
-                    Command="{Binding CloseIssuePropertiesOverlayCommand}" ToolTip.Tip="Close"
-                    AutomationProperties.AutomationId="IssuePropertiesOverlayCloseButton">
-                <fi:SymbolIcon Symbol="DismissCircle" FontSize="{StaticResource PbIconSizeSm}" />
-            </Button>
-        </Grid>
-    </Border>
+    <controls:OverlayShell IsOpen="{Binding IsIssuePropertiesOverlayOpen}" CloseCommand="{Binding CloseIssuePropertiesOverlayCommand}"
+                            CloseButtonAutomationId="IssuePropertiesOverlayCloseButton">
+        <views:IssuePropertiesScreen DataContext="{Binding IssueProperties}" />
+    </controls:OverlayShell>
 
     <!-- ============ Bulk Issue Editing overlay (docs/superpowers/specs/2026-08-23-issue-editor-
          borderless-overlay-design.md) ============ -->
-    <Border IsVisible="{Binding IsBulkIssuePropertiesOverlayOpen}" Background="#B0000000">
-        <Grid HorizontalAlignment="Center" VerticalAlignment="Center">
-            <views:BulkIssuePropertiesScreen DataContext="{Binding BulkIssueProperties}" />
-            <Button Classes="rail" Width="28" Height="28"
-                    HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-14,-14,0"
-                    Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
-                    Command="{Binding CloseBulkIssuePropertiesOverlayCommand}" ToolTip.Tip="Close"
-                    AutomationProperties.AutomationId="BulkIssuePropertiesOverlayCloseButton">
-                <fi:SymbolIcon Symbol="DismissCircle" FontSize="{StaticResource PbIconSizeSm}" />
-            </Button>
-        </Grid>
-    </Border>
+    <controls:OverlayShell IsOpen="{Binding IsBulkIssuePropertiesOverlayOpen}" CloseCommand="{Binding CloseBulkIssuePropertiesOverlayCommand}"
+                            CloseButtonAutomationId="BulkIssuePropertiesOverlayCloseButton">
+        <views:BulkIssuePropertiesScreen DataContext="{Binding BulkIssueProperties}" />
+    </controls:OverlayShell>
 
     <!-- ============ Bulk Series Editing overlay (docs/superpowers/specs/2026-08-24-library-
          multiselect-slice3-design.md) ============ -->
-    <Border IsVisible="{Binding IsBulkSeriesPropertiesOverlayOpen}" Background="#B0000000">
-        <Grid HorizontalAlignment="Center" VerticalAlignment="Center">
-            <views:BulkSeriesPropertiesScreen DataContext="{Binding BulkSeriesProperties}" />
-            <Button Classes="rail" Width="28" Height="28"
-                    HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-14,-14,0"
-                    Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
-                    Command="{Binding CloseBulkSeriesPropertiesOverlayCommand}" ToolTip.Tip="Close"
-                    AutomationProperties.AutomationId="BulkSeriesPropertiesOverlayCloseButton">
-                <fi:SymbolIcon Symbol="DismissCircle" FontSize="{StaticResource PbIconSizeSm}" />
-            </Button>
-        </Grid>
-    </Border>
+    <controls:OverlayShell IsOpen="{Binding IsBulkSeriesPropertiesOverlayOpen}" CloseCommand="{Binding CloseBulkSeriesPropertiesOverlayCommand}"
+                            CloseButtonAutomationId="BulkSeriesPropertiesOverlayCloseButton">
+        <views:BulkSeriesPropertiesScreen DataContext="{Binding BulkSeriesProperties}" />
+    </controls:OverlayShell>
 
     <!-- ============ Unsaved-changes discard confirm (P6 follow-up, docs/alpha-todo.md) - guards
          the rail nav against silently abandoning an in-progress Issue Properties/Bulk Editing edit,
          see MainViewModel.TryLeaveCurrentEditor ============ -->
-    <Border IsVisible="{Binding IsDiscardConfirmOpen}" Background="#B0000000">
-        <Border HorizontalAlignment="Center" VerticalAlignment="Center" Width="360"
+    <!-- Fade+scale (docs/superpowers/specs/2026-09-07-chrome-content-motion-polish-design.md item 4)
+         - Classes.open rather than IsVisible so the exit leg actually plays; IsHitTestVisible bound
+         the same way so a closed-but-still-fading-out scrim can't intercept clicks once its opacity
+         has settled to 0. -->
+    <Border Classes="modalScrim" Classes.open="{Binding IsDiscardConfirmOpen}" IsHitTestVisible="{Binding IsDiscardConfirmOpen}" Background="#B0000000">
+        <Border Classes="modalCard" HorizontalAlignment="Center" VerticalAlignment="Center" Width="360"
                 Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}"
                 BorderThickness="1" CornerRadius="8" Padding="20">
             <StackPanel Spacing="14">
@@ -1123,40 +1040,24 @@
     <!-- ============ First-run welcome overlay (docs/superpowers/specs/2026-08-31-first-run-
          onboarding-design.md) - same backdrop-popup pattern as the Migration overlay above, opened
          from App.axaml.cs in place of the old CE-only auto-migration launch ============ -->
-    <Border IsVisible="{Binding IsWelcomeOverlayOpen}" Background="#B0000000">
-        <Grid HorizontalAlignment="Center" VerticalAlignment="Center">
-            <views:WelcomeOverlay DataContext="{Binding Welcome}" />
-            <Button Classes="rail" Width="28" Height="28"
-                    HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-14,-14,0"
-                    Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
-                    Command="{Binding Welcome.SkipCommand}" ToolTip.Tip="Close"
-                    AutomationProperties.AutomationId="WelcomeOverlayCloseButton">
-                <fi:SymbolIcon Symbol="DismissCircle" FontSize="{StaticResource PbIconSizeSm}" />
-            </Button>
-        </Grid>
-    </Border>
+    <controls:OverlayShell IsOpen="{Binding IsWelcomeOverlayOpen}" CloseCommand="{Binding Welcome.SkipCommand}"
+                            CloseButtonAutomationId="WelcomeOverlayCloseButton">
+        <views:WelcomeOverlay DataContext="{Binding Welcome}" />
+    </controls:OverlayShell>
 
     <!-- ============ Auto-update: update-available prompt (docs/superpowers/specs/
          2026-09-01-auto-update-and-changelog-design.md) - same backdrop-popup pattern as Welcome
          above ============ -->
-    <Border IsVisible="{Binding IsUpdateAvailableOverlayOpen}" Background="#B0000000">
-        <Grid HorizontalAlignment="Center" VerticalAlignment="Center">
-            <views:UpdateAvailableOverlay DataContext="{Binding Update}" />
-            <Button Classes="rail" Width="28" Height="28"
-                    HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-14,-14,0"
-                    Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
-                    Command="{Binding Update.NotNowCommand}" ToolTip.Tip="Close"
-                    AutomationProperties.AutomationId="UpdateAvailableOverlayCloseButton">
-                <fi:SymbolIcon Symbol="DismissCircle" FontSize="{StaticResource PbIconSizeSm}" />
-            </Button>
-        </Grid>
-    </Border>
+    <controls:OverlayShell IsOpen="{Binding IsUpdateAvailableOverlayOpen}" CloseCommand="{Binding Update.NotNowCommand}"
+                            CloseButtonAutomationId="UpdateAvailableOverlayCloseButton">
+        <views:UpdateAvailableOverlay DataContext="{Binding Update}" />
+    </controls:OverlayShell>
 
     <!-- ============ Post-welcome tour offer (docs/superpowers/specs/2026-08-31-first-run-
          onboarding-design.md) - same small centered card pattern as the discard-confirm block above,
          shown once regardless of which welcome-screen path (including Skip) was taken ============ -->
-    <Border IsVisible="{Binding IsTourOfferOpen}" Background="#B0000000">
-        <Border HorizontalAlignment="Center" VerticalAlignment="Center" Width="360"
+    <Border Classes="modalScrim" Classes.open="{Binding IsTourOfferOpen}" IsHitTestVisible="{Binding IsTourOfferOpen}" Background="#B0000000">
+        <Border Classes="modalCard" HorizontalAlignment="Center" VerticalAlignment="Center" Width="360"
                 Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}"
                 BorderThickness="1" CornerRadius="8" Padding="20">
             <StackPanel Spacing="14">
@@ -1185,5 +1086,14 @@
     <Panel IsVisible="{Binding IsWelcomeTourOverlayOpen}">
         <views:WelcomeTourOverlay DataContext="{Binding WelcomeTour}" />
     </Panel>
+
+    <!-- ============ Toast host (docs/superpowers/specs/2026-09-07-chrome-content-motion-polish-
+         design.md item 5) - app-owned replacement for WindowNotificationManager, wired up in
+         MainWindow.axaml.cs's OnDataContextChanged via ToastPresenter. Topmost so a toast can never
+         be hidden behind any screen or overlay; IsHitTestVisible defaults true but the panel only
+         ever occupies its own children's bounds (bottom-right corner), so it can't intercept clicks
+         anywhere else. ============ -->
+    <controls:AnimatedStackPanel x:Name="ToastStack" HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                                  Margin="0,0,16,16" Spacing="8" />
     </Grid>
 </Window>

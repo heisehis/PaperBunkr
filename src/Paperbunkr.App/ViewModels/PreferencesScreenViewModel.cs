@@ -15,6 +15,7 @@ using Paperbunkr.App.Services;
 using Paperbunkr.Data;
 using Paperbunkr.Data.Credentials;
 using Paperbunkr.Data.Entities;
+using Paperbunkr.Data.Metadata;
 using Paperbunkr.Data.Tracking;
 using Paperbunkr.Data.Tracking.Adapters;
 using Paperbunkr.Data.VirtualTags;
@@ -36,6 +37,7 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     private readonly SkinService _skinService;
     private readonly IFilePickerService _filePicker;
     private readonly LibraryFolderScanner _libraryScanner;
+    private readonly LibraryHealthService _libraryHealth;
     private readonly FileAssociationService _fileAssociationService;
     private readonly BackupService _backupService;
     private readonly KeyBindingService _keyBindingService;
@@ -45,6 +47,7 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     private readonly Action _openMigration;
     private readonly Action _openDesignShowcase;
     private readonly IActivityService _activity;
+    private readonly IDialogService _dialogService;
     private readonly Action _reloadFolderWatch;
     private readonly Func<PaperbunkrDbContext> _contextFactory;
     private bool _isLoaded;
@@ -68,11 +71,13 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         PluginScreenViewModel plugin,
         Action openMigration,
         IActivityService activity,
+        IDialogService dialogService,
         Action reloadFolderWatch,
         Action openDesignShowcase,
         UpdateService updateService,
-        Action<int, bool>? enqueueMetadataWriteBack = null)
-        : this(skinService, filePicker, libraryScanner, fileAssociationService, backupService, keyBindingService, showToast, migration, plugin, openMigration, activity, reloadFolderWatch, openDesignShowcase, updateService, PaperbunkrDb.CreateContext, enqueueMetadataWriteBack)
+        Action<int, bool>? enqueueMetadataWriteBack = null,
+        LibraryHealthService? libraryHealth = null)
+        : this(skinService, filePicker, libraryScanner, fileAssociationService, backupService, keyBindingService, showToast, migration, plugin, openMigration, activity, dialogService, reloadFolderWatch, openDesignShowcase, updateService, PaperbunkrDb.CreateContext, enqueueMetadataWriteBack, libraryHealth)
     {
     }
 
@@ -89,17 +94,20 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         PluginScreenViewModel plugin,
         Action openMigration,
         IActivityService activity,
+        IDialogService dialogService,
         Action reloadFolderWatch,
         Action openDesignShowcase,
         UpdateService updateService,
         Func<PaperbunkrDbContext> contextFactory,
-        Action<int, bool>? enqueueMetadataWriteBack = null)
+        Action<int, bool>? enqueueMetadataWriteBack = null,
+        LibraryHealthService? libraryHealth = null)
     {
         _enqueueMetadataWriteBack = enqueueMetadataWriteBack ?? ((_, _) => { });
         _openDesignShowcase = openDesignShowcase;
         _skinService = skinService;
         _filePicker = filePicker;
         _libraryScanner = libraryScanner;
+        _libraryHealth = libraryHealth ?? new LibraryHealthService(contextFactory);
         _fileAssociationService = fileAssociationService;
         _backupService = backupService;
         _keyBindingService = keyBindingService;
@@ -109,6 +117,7 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         Plugin = plugin;
         _openMigration = openMigration;
         _activity = activity;
+        _dialogService = dialogService;
         _reloadFolderWatch = reloadFolderWatch;
         _contextFactory = contextFactory;
         Skins = new ObservableCollection<SkinSummary>();
@@ -123,6 +132,14 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         DisplayKeyBindings = new ObservableCollection<KeyBindingRowViewModel>();
         ChangelogEntries = new ObservableCollection<ChangelogEntry>();
         ScheduledTasks = new ObservableCollection<ScheduledTaskRow>();
+        MissingFileItems = new ObservableCollection<MissingFileRowViewModel>();
+        RecentlyRemovedItems = new ObservableCollection<RemovedLibraryEntryRowViewModel>();
+
+        // Connections list+dialog (docs/superpowers/specs/2026-09-06-connections-tracker-dialog-
+        // redesign-design.md) - fresh row instances per VM instance, never the shared static catalog
+        // (see ConnectionProviderRow's own doc comment on why).
+        SourceProviderRows = new ObservableCollection<ConnectionProviderRow>(ConnectionProviderRow.CreateSourceProviders());
+        TrackerProviderRows = new ObservableCollection<ConnectionProviderRow>(ConnectionProviderRow.CreateTrackerProviders());
 
         // Clear Cover Cache (docs/superpowers/specs/2026-08-30-cover-thumbnail-content-
         // verification-design.md) - manual escape hatch, independent of VerifyCovers' detection
@@ -136,6 +153,14 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         ClearBookCoverCacheConfirm = new TwoStepConfirm(
             onConfirmed: () => _ = ClearBookCoverCacheAsync(),
             idleLabel: "Clear Book Cover Cache",
+            armedLabel: "Confirm clear?");
+
+        // Removed-files blacklist escape hatch (docs/superpowers/specs/2026-09-06-scan-missing-
+        // file-handling-design.md) - same two-step inline confirm pattern as the cover-cache clears
+        // above; no per-path browse/unblock UI in v1, just a wipe-the-whole-table button.
+        ClearRemovedFilesListConfirm = new TwoStepConfirm(
+            onConfirmed: ClearRemovedFilesList,
+            idleLabel: "Clear Removed-Files List",
             armedLabel: "Confirm clear?");
     }
 
@@ -237,6 +262,10 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     public bool IsDebugBuild => false;
 #endif
 
+    /// <summary>Reverted back to the sidebar + hard-switch pane (docs/superpowers/specs/2026-09-07-
+    /// preferences-tile-hub-redesign-design.md's single-scroll shell turned out too annoying to
+    /// navigate once actually tried - user feedback, same session) - one section visible at a time,
+    /// same as the original 2026-08-28 preferences rework.</summary>
     [ObservableProperty]
     private PreferencesSection _activeSection = PreferencesSection.General;
 
@@ -268,6 +297,11 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     /// <summary>Raised when a search result is opened - the shell scrolls the group with this anchor
     /// <c>Tag</c> into view and pulses it. Argument is <see cref="PreferenceIndexEntry.AnchorKey"/>.</summary>
     public event Action<string>? ScrollToAnchorRequested;
+
+    /// <summary>Public wrapper so callers outside this class (MainViewModel's deep-links) can trigger
+    /// the same scroll+pulse a search result or a tile click does - an event can't be raised from
+    /// outside its declaring class.</summary>
+    public void RequestScrollToAnchor(string anchorKey) => ScrollToAnchorRequested?.Invoke(anchorKey);
 
     partial void OnSearchQueryChanged(string value)
     {
@@ -514,6 +548,19 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     [RelayCommand]
     private void GoAutomation() => ActiveSection = PreferencesSection.Automation;
 
+    /// <summary>
+    /// Library Health lives inside the Library tab, not as its own section (per user decision,
+    /// 2026-09-06) - deep-links (the missing-files alert, the startup path-repair alert) still need
+    /// somewhere to land, so this switches to Library and scrolls/pulses the Library Health group,
+    /// same mechanism <see cref="OpenSearchResult"/> uses for a search hit.
+    /// </summary>
+    [RelayCommand]
+    private void GoLibraryHealth()
+    {
+        ActiveSection = PreferencesSection.Library;
+        ScrollToAnchorRequested?.Invoke("library.health");
+    }
+
     [RelayCommand]
     private void GoReader() => ActiveSection = PreferencesSection.Reader;
 
@@ -596,6 +643,9 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         WriteMetadataToFiles = settings.WriteMetadataToFiles;
         WriteMetadataAutomatically = settings.WriteMetadataAutomatically;
         WriteNativeSidecar = settings.WriteNativeSidecar;
+        AutoRemoveMissingOnScan = settings.AutoRemoveMissingOnScan;
+        DontReimportRemovedFiles = settings.DontReimportRemovedFiles;
+        LibraryHealthConfirmedMissingThreshold = settings.LibraryHealthConfirmedMissingThreshold;
         _suppressBehaviorApply = false;
 
         var firstIssue = context.Issues.Include(i => i.Series).OrderBy(i => i.Id).FirstOrDefault();
@@ -621,6 +671,7 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         RefreshKeyBindings();
         RefreshSourceCredentials(context);
         RefreshTrackerConnectionState(context);
+        RefreshLibraryHealth(context);
     }
 
     // ===================== Keyboard Shortcuts (docs/Paperbunkr-Roadmap.md P5 follow-up) =====================
@@ -742,6 +793,29 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         foreach (var entry in ChangelogParser.Parse(File.ReadAllText(path)))
         {
             ChangelogEntries.Add(entry);
+        }
+    }
+
+    /// <summary>
+    /// Opens one of the repo-root legal/community documents (LICENSE, PRIVACY.md, TERMS.md,
+    /// COMICVINE_NOTICE.md) bundled next to the exe (see the csproj's CopyToOutputDirectory items)
+    /// in the user's default handler for that file. Same "missing file just does nothing" tolerance
+    /// as <see cref="RefreshChangelog"/> - a dev build run before the csproj copy step shouldn't crash.
+    /// </summary>
+    [RelayCommand]
+    private void OpenLegalDocument(string fileName)
+    {
+        try
+        {
+            string path = Path.Combine(AppContext.BaseDirectory, fileName);
+            if (File.Exists(path))
+            {
+                Process.Start(new ProcessStartInfo { FileName = path, UseShellExecute = true });
+            }
+        }
+        catch
+        {
+            // No shell/file association available - nothing more we can do.
         }
     }
 
@@ -1122,6 +1196,46 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     [ObservableProperty]
     private bool _isScanning;
 
+    // ===================== Scanning: missing-file handling (docs/superpowers/specs/2026-09-06-
+    // scan-missing-file-handling-design.md) - CE parity for the Scanning-section checkboxes,
+    // extending Library Health further down with an auto-triggered variant of its own "Remove All
+    // Confirmed Missing" plus a permanent removed-files blacklist. =====================
+
+    /// <summary>CE <c>Settings.RemoveMissingFilesOnFullScan</c> - see <see cref="AppSettings.AutoRemoveMissingOnScan"/>'s doc comment for how this deliberately diverges from CE.</summary>
+    [ObservableProperty]
+    private bool _autoRemoveMissingOnScan;
+
+    /// <summary>CE <c>Settings.DontAddRemoveFiles</c> - see <see cref="AppSettings.DontReimportRemovedFiles"/>'s doc comment.</summary>
+    [ObservableProperty]
+    private bool _dontReimportRemovedFiles;
+
+    public TwoStepConfirm ClearRemovedFilesListConfirm { get; }
+
+    partial void OnAutoRemoveMissingOnScanChanged(bool value) => PersistBehaviorSetting(s => s.AutoRemoveMissingOnScan = value);
+
+    partial void OnDontReimportRemovedFilesChanged(bool value) => PersistBehaviorSetting(s => s.DontReimportRemovedFiles = value);
+
+    partial void OnLibraryHealthConfirmedMissingThresholdChanged(int value)
+    {
+        _libraryHealth.ConfirmedMissingThreshold = value;
+        PersistBehaviorSetting(s => s.LibraryHealthConfirmedMissingThreshold = value);
+
+        if (_suppressBehaviorApply)
+        {
+            return;
+        }
+
+        using var context = _contextFactory();
+        RefreshLibraryHealth(context);
+    }
+
+    private void ClearRemovedFilesList()
+    {
+        using var context = _contextFactory();
+        context.RemovedFilePaths.RemoveRange(context.RemovedFilePaths);
+        context.SaveChanges();
+    }
+
     private void RefreshWatchedFolders()
     {
         using var context = _contextFactory();
@@ -1155,8 +1269,29 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     }
 
     [RelayCommand]
-    private void RemoveFolder(WatchedFolderSummary folder)
+    private async Task RemoveFolder(WatchedFolderSummary folder)
     {
+        // Library Health folder-removal hook (docs/superpowers/specs/2026-09-06-missing-files-
+        // library-health-design.md): a removed folder's issues previously went silently stale
+        // forever - nothing ever re-checked them again. Verify just this folder's issues first, so
+        // if the files (and folder) are genuinely gone, they're flagged and counted immediately
+        // instead of waiting for someone to notice and run a full Verify later. If the folder is
+        // still present on disk (user just stopped tracking it), this is a cheap no-op confirmation
+        // pass.
+        List<int> scopedIssueIds;
+        using (var context = _contextFactory())
+        {
+            scopedIssueIds = context.Issues
+                .Where(i => i.FilePath != null && i.FilePath.StartsWith(folder.Path))
+                .Select(i => i.Id)
+                .ToList();
+        }
+
+        if (scopedIssueIds.Count > 0)
+        {
+            await _libraryHealth.VerifyAsync(scopedIssueIds, new Progress<(int Done, int Total)>());
+        }
+
         using (var context = _contextFactory())
         {
             var entity = context.WatchedFolders.FirstOrDefault(w => w.Id == folder.Id);
@@ -1169,6 +1304,9 @@ public partial class PreferencesScreenViewModel : ViewModelBase
 
         RefreshWatchedFolders();
         _reloadFolderWatch();
+
+        using var refreshContext = _contextFactory();
+        RefreshLibraryHealth(refreshContext);
     }
 
     /// <summary>
@@ -1388,6 +1526,47 @@ public partial class PreferencesScreenViewModel : ViewModelBase
                 DuplicateAlertHelper.RaiseIfAny(_activity, result.AddedIssueIds);
             }
 
+            // Auto-remove-missing-on-scan (docs/superpowers/specs/2026-09-06-scan-missing-file-
+            // handling-design.md) - Scan Now only, never the live-watch path (LiveFolderWatchService
+            // never calls ScanNow). Runs the same full-library VerifyAsync Verify Now uses (Scan Now
+            // already covers every library folder, so no new scoped variant needed), then the same
+            // two-strikes eligibility ConfirmBulkRemove already uses, plus a drive-reachability
+            // guard the unattended path needs that the human-reviewed manual button doesn't.
+            bool autoRemoveOnScan;
+            using (var settingsContext = _contextFactory())
+            {
+                autoRemoveOnScan = settingsContext.GetOrCreateAppSettings().AutoRemoveMissingOnScan;
+            }
+
+            if (autoRemoveOnScan)
+            {
+                var healthProgress = new Progress<(int Done, int Total)>(p => job.Report(p.Done, p.Total, $"Verifying {p.Done} / {p.Total}"));
+                var healthResult = await _libraryHealth.VerifyAsync(healthProgress, job.CancellationToken);
+
+                using (var healthContext = _contextFactory())
+                {
+                    healthContext.GetOrCreateAppSettings().LastLibraryHealthVerifyUtc = DateTime.UtcNow;
+                    healthContext.SaveChanges();
+                }
+
+                if (healthResult.ConfirmedMissingCount > 0)
+                {
+                    int removedCount;
+                    using (var removeContext = _contextFactory())
+                    {
+                        removedCount = AutoRemoveConfirmedMissing(removeContext);
+                    }
+
+                    if (removedCount > 0)
+                    {
+                        summary += $" Automatically removed {removedCount} confirmed-missing file{(removedCount == 1 ? "" : "s")}.";
+                    }
+                }
+
+                using var refreshContext = _contextFactory();
+                RefreshLibraryHealth(refreshContext);
+            }
+
             scanFinished = true;
             ScanStatus = summary;
             job.Succeed(summary, itemsProcessed: result.IssuesAdded);
@@ -1407,6 +1586,38 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         {
             IsScanning = false;
         }
+    }
+
+    /// <summary>
+    /// The auto-remove-on-scan body (docs/superpowers/specs/2026-09-06-scan-missing-file-handling-
+    /// design.md) - same confirmed-missing eligibility <see cref="ConfirmBulkRemove"/> uses, but
+    /// unattended: no confirmation dialog, and an additional <see cref="LibraryHealthService.IsPathRootReachable"/>
+    /// check <see cref="ConfirmBulkRemove"/> doesn't need (a human already reviews that list before
+    /// confirming - nothing reviews this one). An item whose drive isn't currently reachable is left
+    /// in place for manual review rather than removed. Returns how many were actually removed.
+    /// </summary>
+    private int AutoRemoveConfirmedMissing(PaperbunkrDbContext context)
+    {
+        var eligible = context.Issues
+            .Where(i => i.FileIsMissing && i.MissingVerificationCount >= _libraryHealth.ConfirmedMissingThreshold && !i.MissingAcknowledged)
+            .Include(i => i.Series)
+            .ToList();
+
+        int removed = 0;
+        foreach (var issue in eligible)
+        {
+            if (!LibraryHealthService.IsPathRootReachable(issue.FilePath))
+            {
+                continue;
+            }
+
+            RecordRemoval(context, issue);
+            LibraryDeletionHelper.RemoveIssue(context, issue);
+            removed++;
+        }
+
+        context.SaveChanges();
+        return removed;
     }
 
     [ObservableProperty]
@@ -1889,11 +2100,29 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     [ObservableProperty]
     private string? _sourcesStatus;
 
+    [ObservableProperty]
+    private bool _isComicVineConnected;
+
+    [ObservableProperty]
+    private bool _isMetronConnected;
+
+    /// <summary>Row list backing the Connections screen's "Reading List Sources" section (docs/superpowers/specs/2026-09-06-connections-tracker-dialog-redesign-design.md).</summary>
+    public ObservableCollection<ConnectionProviderRow> SourceProviderRows { get; }
+
     private void RefreshSourceCredentials(PaperbunkrDbContext context)
     {
         ComicVineApiKey = CredentialStore.Get(context, "ComicVine", CredentialKind.ApiKey) ?? string.Empty;
         MetronUsername = CredentialStore.Get(context, "Metron", CredentialKind.Username) ?? string.Empty;
         MetronPassword = CredentialStore.Get(context, "Metron", CredentialKind.Password) ?? string.Empty;
+
+        // New (docs/superpowers/specs/2026-09-06-connections-tracker-dialog-redesign-design.md) -
+        // ComicVine/Metron previously had no "connected" concept at all, just a one-line status
+        // message after Save. Same CredentialStore.HasCredentials check the Trackers already use.
+        IsComicVineConnected = CredentialStore.HasCredentials(context, "ComicVine", CredentialKind.ApiKey);
+        IsMetronConnected = CredentialStore.HasCredentials(context, "Metron", CredentialKind.Username, CredentialKind.Password);
+
+        SyncProviderRowConnectedState(SourceProviderRows, "ComicVine", IsComicVineConnected);
+        SyncProviderRowConnectedState(SourceProviderRows, "Metron", IsMetronConnected);
     }
 
     [RelayCommand]
@@ -1902,6 +2131,7 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         using var context = _contextFactory();
         CredentialStore.Set(context, "ComicVine", CredentialKind.ApiKey, ComicVineApiKey);
         SourcesStatus = "ComicVine API key saved.";
+        RefreshSourceCredentials(context);
     }
 
     [RelayCommand]
@@ -1911,6 +2141,29 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         CredentialStore.Set(context, "Metron", CredentialKind.Username, MetronUsername);
         CredentialStore.Set(context, "Metron", CredentialKind.Password, MetronPassword);
         SourcesStatus = "Metron credentials saved.";
+        RefreshSourceCredentials(context);
+    }
+
+    [RelayCommand]
+    private void DisconnectComicVine()
+    {
+        using var context = _contextFactory();
+        CredentialStore.Delete(context, "ComicVine", CredentialKind.ApiKey);
+        ComicVineApiKey = string.Empty;
+        SourcesStatus = "ComicVine disconnected.";
+        RefreshSourceCredentials(context);
+    }
+
+    [RelayCommand]
+    private void DisconnectMetron()
+    {
+        using var context = _contextFactory();
+        CredentialStore.Delete(context, "Metron", CredentialKind.Username);
+        CredentialStore.Delete(context, "Metron", CredentialKind.Password);
+        MetronUsername = string.Empty;
+        MetronPassword = string.Empty;
+        SourcesStatus = "Metron disconnected.";
+        RefreshSourceCredentials(context);
     }
 
     // ===================== Trackers (docs/superpowers/specs/2026-08-23-tracker-write-back-sync-
@@ -1950,6 +2203,49 @@ public partial class PreferencesScreenViewModel : ViewModelBase
 
     [ObservableProperty] private string? _trackersStatus;
 
+    /// <summary>Row list backing the Connections screen's "Trackers" section (docs/superpowers/specs/2026-09-06-connections-tracker-dialog-redesign-design.md).</summary>
+    public ObservableCollection<ConnectionProviderRow> TrackerProviderRows { get; }
+
+    // ===================== Connections list+dialog (docs/superpowers/specs/2026-09-06-connections-
+    // tracker-dialog-redesign-design.md) - the row-list/dialog state shared by both the Reading List
+    // Sources and Trackers sections. =====================
+
+    [ObservableProperty]
+    private ConnectionProviderRow? _selectedConnectionProvider;
+
+    [ObservableProperty]
+    private bool _isConnectionDialogOpen;
+
+    [RelayCommand]
+    private void OpenConnectionDialog(ConnectionProviderRow row)
+    {
+        // Clear ephemeral paste-back fields (never the persisted Client ID/Secret/Username fields -
+        // those are meant to survive switching providers and reopening the same one) so a stale
+        // code/token from a previous dialog session can't bleed into a different provider's dialog.
+        AniListPastedToken = string.Empty;
+        MyAnimeListPastedCode = string.Empty;
+        ShikimoriPastedCode = string.Empty;
+
+        SelectedConnectionProvider = row;
+        IsConnectionDialogOpen = true;
+    }
+
+    [RelayCommand]
+    private void CloseConnectionDialog()
+    {
+        IsConnectionDialogOpen = false;
+        SelectedConnectionProvider = null;
+    }
+
+    private static void SyncProviderRowConnectedState(ObservableCollection<ConnectionProviderRow> rows, string id, bool isConnected)
+    {
+        var row = rows.FirstOrDefault(r => r.Id == id);
+        if (row is not null)
+        {
+            row.IsConnected = isConnected;
+        }
+    }
+
     private void RefreshTrackerConnectionState(PaperbunkrDbContext context)
     {
         IsAniListConnected = CredentialStore.HasCredentials(context, nameof(TrackingService.AniList), CredentialKind.OAuthAccessToken);
@@ -1964,6 +2260,14 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         MyAnimeListClientId = CredentialStore.Get(context, nameof(TrackingService.MyAnimeList), CredentialKind.OAuthClientId) ?? string.Empty;
         ShikimoriClientId = CredentialStore.Get(context, nameof(TrackingService.Shikimori), CredentialKind.OAuthClientId) ?? string.Empty;
         ShikimoriClientSecret = CredentialStore.Get(context, nameof(TrackingService.Shikimori), CredentialKind.OAuthClientSecret) ?? string.Empty;
+
+        SyncProviderRowConnectedState(TrackerProviderRows, nameof(TrackingService.AniList), IsAniListConnected);
+        SyncProviderRowConnectedState(TrackerProviderRows, nameof(TrackingService.MyAnimeList), IsMyAnimeListConnected);
+        SyncProviderRowConnectedState(TrackerProviderRows, nameof(TrackingService.Shikimori), IsShikimoriConnected);
+        SyncProviderRowConnectedState(TrackerProviderRows, nameof(TrackingService.Bangumi), IsBangumiConnected);
+        SyncProviderRowConnectedState(TrackerProviderRows, nameof(TrackingService.MangaBaka), IsMangaBakaConnected);
+        SyncProviderRowConnectedState(TrackerProviderRows, nameof(TrackingService.MangaUpdates), IsMangaUpdatesConnected);
+        SyncProviderRowConnectedState(TrackerProviderRows, nameof(TrackingService.Kitsu), IsKitsuConnected);
     }
 
     [RelayCommand]
@@ -2082,6 +2386,84 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         KitsuPassword = string.Empty;
         RefreshTrackerConnectionState(context);
         TrackersStatus = connected ? "Kitsu connected." : "Couldn't connect to Kitsu. Check your username/password and try again.";
+    }
+
+    // ===================== Disconnect commands (docs/superpowers/specs/2026-09-06-connections-
+    // tracker-dialog-redesign-design.md) - new, didn't exist before this spec (there was previously
+    // no UI way to clear a saved credential). OAuth providers clear only the access/refresh token(s),
+    // deliberately keeping the registered Client ID/Secret so reconnecting doesn't need re-pasting
+    // it from the provider's own developer settings page. =====================
+
+    [RelayCommand]
+    private void DisconnectAniList()
+    {
+        using var context = _contextFactory();
+        CredentialStore.Delete(context, nameof(TrackingService.AniList), CredentialKind.OAuthAccessToken);
+        RefreshTrackerConnectionState(context);
+        TrackersStatus = "AniList disconnected.";
+    }
+
+    [RelayCommand]
+    private void DisconnectMyAnimeList()
+    {
+        using var context = _contextFactory();
+        CredentialStore.Delete(context, nameof(TrackingService.MyAnimeList), CredentialKind.OAuthAccessToken);
+        CredentialStore.Delete(context, nameof(TrackingService.MyAnimeList), CredentialKind.OAuthRefreshToken);
+        RefreshTrackerConnectionState(context);
+        TrackersStatus = "MyAnimeList disconnected.";
+    }
+
+    [RelayCommand]
+    private void DisconnectShikimori()
+    {
+        using var context = _contextFactory();
+        CredentialStore.Delete(context, nameof(TrackingService.Shikimori), CredentialKind.OAuthAccessToken);
+        CredentialStore.Delete(context, nameof(TrackingService.Shikimori), CredentialKind.OAuthRefreshToken);
+        RefreshTrackerConnectionState(context);
+        TrackersStatus = "Shikimori disconnected.";
+    }
+
+    [RelayCommand]
+    private void DisconnectBangumi()
+    {
+        using var context = _contextFactory();
+        CredentialStore.Delete(context, nameof(TrackingService.Bangumi), CredentialKind.ApiKey);
+        BangumiPersonalAccessToken = string.Empty;
+        RefreshTrackerConnectionState(context);
+        TrackersStatus = "Bangumi disconnected.";
+    }
+
+    [RelayCommand]
+    private void DisconnectMangaBaka()
+    {
+        using var context = _contextFactory();
+        CredentialStore.Delete(context, nameof(TrackingService.MangaBaka), CredentialKind.ApiKey);
+        MangaBakaPersonalAccessToken = string.Empty;
+        RefreshTrackerConnectionState(context);
+        TrackersStatus = "MangaBaka disconnected.";
+    }
+
+    [RelayCommand]
+    private void DisconnectMangaUpdates()
+    {
+        using var context = _contextFactory();
+        CredentialStore.Delete(context, nameof(TrackingService.MangaUpdates), CredentialKind.OAuthAccessToken);
+        MangaUpdatesUsername = string.Empty;
+        MangaUpdatesPassword = string.Empty;
+        RefreshTrackerConnectionState(context);
+        TrackersStatus = "MangaUpdates disconnected.";
+    }
+
+    [RelayCommand]
+    private void DisconnectKitsu()
+    {
+        using var context = _contextFactory();
+        CredentialStore.Delete(context, nameof(TrackingService.Kitsu), CredentialKind.OAuthAccessToken);
+        CredentialStore.Delete(context, nameof(TrackingService.Kitsu), CredentialKind.OAuthRefreshToken);
+        KitsuUsername = string.Empty;
+        KitsuPassword = string.Empty;
+        RefreshTrackerConnectionState(context);
+        TrackersStatus = "Kitsu disconnected.";
     }
 
     // ===================== Automation tab (docs/superpowers/specs/2026-09-06-scheduled-tasks-and-
@@ -2214,5 +2596,424 @@ public partial class PreferencesScreenViewModel : ViewModelBase
                     break;
             }
         };
+    }
+
+    // ===================== Library Health tab (docs/superpowers/specs/2026-09-06-missing-files-
+    //                       library-health-design.md) =====================
+    //
+    // The sole home for missing-file review, replacing (not duplicating) Needs Review's old
+    // "Missing Files" section. MissingFileRowViewModel is reused as-is - same component, new host.
+
+    private const int RecentlyRemovedRetentionDays = 30;
+
+    public ObservableCollection<MissingFileRowViewModel> MissingFileItems { get; }
+
+    public ObservableCollection<RemovedLibraryEntryRowViewModel> RecentlyRemovedItems { get; }
+
+    public bool HasMissingFileItems => MissingFileItems.Count > 0;
+
+    public bool HasRecentlyRemovedItems => RecentlyRemovedItems.Count > 0;
+
+    /// <summary>Recently Removed is collapsed by default (docs/superpowers/specs/2026-09-07-
+    /// library-health-redesign-design.md §6) - it's an audit trail, not an actionable list like
+    /// Missing Files, so it doesn't need to stay expanded to earn its space.</summary>
+    [ObservableProperty]
+    private bool _isRecentlyRemovedExpanded;
+
+    [RelayCommand]
+    private void ToggleRecentlyRemovedExpanded() => IsRecentlyRemovedExpanded = !IsRecentlyRemovedExpanded;
+
+    [ObservableProperty]
+    private int _libraryHealthChecked;
+
+    [ObservableProperty]
+    private int _libraryHealthMissingNow;
+
+    [ObservableProperty]
+    private int _libraryHealthConfirmedMissing;
+
+    public bool HasConfirmedMissingItems => LibraryHealthConfirmedMissing > 0;
+
+    /// <summary>Consecutive missing Verify passes before an issue counts as confirmed-missing
+    /// (docs/superpowers/specs/2026-09-07-library-health-redesign-design.md §7) - was a hardcoded
+    /// <see cref="LibraryHealthService.ConfirmedMissingThreshold"/> constant, now a real setting.</summary>
+    [ObservableProperty]
+    private int _libraryHealthConfirmedMissingThreshold = 2;
+
+    [ObservableProperty]
+    private string _libraryHealthLastVerifiedLabel = "Never";
+
+    [ObservableProperty]
+    private bool _isVerifyingLibraryHealth;
+
+    /// <summary>The in-flight Verify job, for <c>Controls.BusyIndicator</c> to bind to while
+    /// <see cref="IsVerifyingLibraryHealth"/> is true. Null the rest of the time. Completion/failure
+    /// already surfaces as a toast via the existing <see cref="IActivityService"/> pipeline (default
+    /// <c>ActivityToastPolicy.Always</c>), so no separate status text is needed here.</summary>
+    [ObservableProperty]
+    private ActivityJob? _currentLibraryHealthJob;
+
+    /// <summary>
+    /// Reloads every Library Health surface from the current DB state - the missing-files list, the
+    /// summary counts, the last-verified label, and Recently Removed. Called from <see cref="Reload"/>
+    /// (Preferences screen open) and after every Verify/Relink/Remove/Dismiss/Restore, same
+    /// "always re-query, never patch in place" approach <see cref="NeedsReviewViewModel.Refresh"/>
+    /// uses. Also does Recently Removed's 30-day retention trim, lazily on load rather than via a
+    /// separate scheduled sweep - simplest correct place given how often this tab is likely to be
+    /// opened, matching this feature's own "manual, attended" tone (no automatic Verify by default).
+    /// </summary>
+    private void RefreshLibraryHealth(PaperbunkrDbContext context)
+    {
+        LibraryHealthLastVerifiedLabel = context.GetOrCreateAppSettings().LastLibraryHealthVerifyUtc is { } lastVerified
+            ? lastVerified.ToLocalTime().ToString("MMM d, yyyy h:mm tt")
+            : "Never";
+
+        var trackedIssues = context.Issues.Where(i => !i.IsPlaceholder && i.FilePath != null);
+        LibraryHealthChecked = trackedIssues.Count();
+        LibraryHealthMissingNow = trackedIssues.Count(i => i.FileIsMissing);
+        LibraryHealthConfirmedMissing = trackedIssues.Count(i =>
+            i.FileIsMissing && i.MissingVerificationCount >= _libraryHealth.ConfirmedMissingThreshold && !i.MissingAcknowledged);
+
+        MissingFileItems.Clear();
+        foreach (var issue in trackedIssues.Where(i => i.FileIsMissing && !i.MissingAcknowledged).Include(i => i.Series).OrderBy(i => i.Series!.Name))
+        {
+            int issueId = issue.Id;
+            bool confirmedMissing = issue.MissingVerificationCount >= _libraryHealth.ConfirmedMissingThreshold;
+            MissingFileItems.Add(new MissingFileRowViewModel(
+                issueId,
+                $"{issue.Series?.Name ?? "Unknown"} #{issue.EffectiveNumber()}{(confirmedMissing ? " · confirmed missing" : "")}",
+                onRelink: RelinkMissingFile,
+                onRemove: _ => RemoveMissingFile(issueId),
+                onDismiss: _ => DismissMissingFile(issueId)));
+        }
+
+        var cutoff = DateTime.UtcNow.AddDays(-RecentlyRemovedRetentionDays);
+        var stale = context.RemovedLibraryEntries.Where(e => e.RemovedAtUtc < cutoff);
+        context.RemovedLibraryEntries.RemoveRange(stale);
+        context.SaveChanges();
+
+        RecentlyRemovedItems.Clear();
+        foreach (var entry in context.RemovedLibraryEntries.OrderByDescending(e => e.RemovedAtUtc).ToList())
+        {
+            int entryId = entry.Id;
+            string label = $"{entry.SeriesName} #{entry.Number ?? "?"}";
+            RecentlyRemovedItems.Add(new RemovedLibraryEntryRowViewModel(entryId, label, entry.FilePath, entry.RemovedAtUtc, RestoreRemovedEntry));
+        }
+
+        NotifyLibraryHealthCountsChanged();
+    }
+
+    private void NotifyLibraryHealthCountsChanged()
+    {
+        OnPropertyChanged(nameof(HasMissingFileItems));
+        OnPropertyChanged(nameof(HasRecentlyRemovedItems));
+        OnPropertyChanged(nameof(HasConfirmedMissingItems));
+    }
+
+    [RelayCommand]
+    private async Task VerifyLibraryHealthNow()
+    {
+        if (IsVerifyingLibraryHealth)
+        {
+            return;
+        }
+
+        IsVerifyingLibraryHealth = true;
+        using var job = _activity.StartJob(ActivityJobKind.LibraryVerify, "Verifying library files");
+        CurrentLibraryHealthJob = job.Job;
+        try
+        {
+            var progress = new Progress<(int Done, int Total)>(p =>
+            {
+                job.Report(p.Done, p.Total, $"{p.Done} / {p.Total} files");
+            });
+            var result = await _libraryHealth.VerifyAsync(progress, job.CancellationToken);
+
+            using (var context = _contextFactory())
+            {
+                context.GetOrCreateAppSettings().LastLibraryHealthVerifyUtc = DateTime.UtcNow;
+                context.SaveChanges();
+            }
+
+            string summary = result.MissingNow == 0
+                ? $"Checked {result.Checked} issues - all files present."
+                : $"Checked {result.Checked} issues - {result.MissingNow} missing ({result.ConfirmedMissingCount} confirmed).";
+            job.Succeed(summary, itemsProcessed: result.Checked);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            job.Fail("Library Health verify failed", ex: ex);
+        }
+        finally
+        {
+            IsVerifyingLibraryHealth = false;
+            CurrentLibraryHealthJob = null;
+            using var context = _contextFactory();
+            RefreshLibraryHealth(context);
+        }
+    }
+
+    private async Task RelinkMissingFile(MissingFileRowViewModel row)
+    {
+        string? path = await _filePicker.PickOpenFileAsync("Locate the file", "cbz", "Comic Archive");
+        if (path is null)
+        {
+            return;
+        }
+
+        using (var context = _contextFactory())
+        {
+            var issue = context.Issues.Find(row.IssueId);
+            if (issue is not null)
+            {
+                issue.FilePath = path;
+                issue.FileIsMissing = false;
+                issue.IsPlaceholder = false;
+                issue.MissingVerificationCount = 0;
+                context.SaveChanges();
+            }
+        }
+
+        using var refreshContext = _contextFactory();
+        RefreshLibraryHealth(refreshContext);
+    }
+
+    private void RemoveMissingFile(int issueId)
+    {
+        using (var context = _contextFactory())
+        {
+            var issue = context.Issues.Include(i => i.Series).FirstOrDefault(i => i.Id == issueId);
+            if (issue is not null)
+            {
+                RecordRemoval(context, issue);
+                LibraryDeletionHelper.RemoveIssue(context, issue);
+                context.SaveChanges();
+            }
+        }
+
+        using var refreshContext = _contextFactory();
+        RefreshLibraryHealth(refreshContext);
+    }
+
+    private void DismissMissingFile(int issueId)
+    {
+        using (var context = _contextFactory())
+        {
+            var issue = context.Issues.Find(issueId);
+            if (issue is not null)
+            {
+                issue.MissingAcknowledged = true;
+                context.SaveChanges();
+            }
+        }
+
+        using var refreshContext = _contextFactory();
+        RefreshLibraryHealth(refreshContext);
+    }
+
+    /// <summary>
+    /// Dismisses every currently-listed missing file at once ("I know these are gone, stop asking")
+    /// - unlike the bulk Remove action below, this isn't gated by the two-strikes threshold, since
+    /// Dismiss never touches the file or the Issue row, just the review-queue flag. Same semantics
+    /// as dismissing each row individually.
+    /// </summary>
+    [RelayCommand]
+    private void BulkDismissMissingFiles()
+    {
+        using (var context = _contextFactory())
+        {
+            var ids = MissingFileItems.Select(r => r.IssueId).ToList();
+            foreach (var issue in context.Issues.Where(i => ids.Contains(i.Id)))
+            {
+                issue.MissingAcknowledged = true;
+            }
+
+            context.SaveChanges();
+        }
+
+        using var refreshContext = _contextFactory();
+        RefreshLibraryHealth(refreshContext);
+    }
+
+    /// <summary>
+    /// "The library got reorganized onto a new drive/folder - go find everything that moved."
+    /// Picks one folder, then matches every currently-missing issue to a file under that folder
+    /// (recursively) by filename alone - deliberately not by full relative path, since a
+    /// reorganization is exactly the case where the path changed but the filename usually didn't.
+    /// A false-positive match (same filename, different comic) is possible but rare enough not to
+    /// warrant per-match confirmation here; Relink's per-row picker remains available for anything
+    /// this misses or gets wrong.
+    /// </summary>
+    [RelayCommand]
+    private async Task BulkRelinkMissingFiles()
+    {
+        if (MissingFileItems.Count == 0)
+        {
+            return;
+        }
+
+        string? folder = await _filePicker.PickFolderAsync("Locate the reorganized folder");
+        if (folder is null || !Directory.Exists(folder))
+        {
+            return;
+        }
+
+        var byFileName = Directory.EnumerateFiles(folder, "*", SearchOption.AllDirectories)
+            .GroupBy(Path.GetFileName, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key!, g => g.First(), StringComparer.OrdinalIgnoreCase);
+
+        int total = MissingFileItems.Count;
+        int relinked = 0;
+        using (var context = _contextFactory())
+        {
+            foreach (int issueId in MissingFileItems.Select(r => r.IssueId).ToList())
+            {
+                var issue = context.Issues.Find(issueId);
+                if (issue?.FilePath is null)
+                {
+                    continue;
+                }
+
+                if (byFileName.TryGetValue(Path.GetFileName(issue.FilePath), out string? matchPath))
+                {
+                    issue.FilePath = matchPath;
+                    issue.FileIsMissing = false;
+                    issue.IsPlaceholder = false;
+                    issue.MissingVerificationCount = 0;
+                    relinked++;
+                }
+            }
+
+            context.SaveChanges();
+        }
+
+        string summary = relinked == 0
+            ? $"No matching files found in that folder for {total} missing issue{(total == 1 ? "" : "s")}."
+            : $"Relinked {relinked} of {total} missing issue{(total == 1 ? "" : "s")}.";
+        _showToast("Library Health", summary);
+
+        using var refreshContext = _contextFactory();
+        RefreshLibraryHealth(refreshContext);
+    }
+
+    /// <summary>Snapshots an about-to-be-deleted issue into <see cref="RemovedLibraryEntry"/>, inside the caller's transaction, immediately before <see cref="LibraryDeletionHelper.RemoveIssue"/> - every Library Health removal writes one of these, single-item or bulk.</summary>
+    private static void RecordRemoval(PaperbunkrDbContext context, Issue issue)
+    {
+        context.RemovedLibraryEntries.Add(new RemovedLibraryEntry
+        {
+            SeriesName = issue.Series?.Name ?? "Unknown",
+            SeriesId = issue.SeriesId,
+            Number = issue.Number,
+            Volume = issue.Volume,
+            Title = issue.Title,
+            FilePath = issue.FilePath,
+            RemovedAtUtc = DateTime.UtcNow,
+            Reason = RemovedLibraryEntryReason.MissingFileCleanup,
+        });
+    }
+
+    /// <summary>Confirms via the shared <see cref="IDialogService"/> (docs/superpowers/specs/
+    /// 2026-09-07-library-health-redesign-design.md §4) instead of the old bespoke inline panel -
+    /// <see cref="ConfirmDialogRequest.Items"/> was built for exactly this call site.</summary>
+    [RelayCommand]
+    private async Task OpenBulkRemoveConfirm()
+    {
+        List<Issue> eligible;
+        using (var context = _contextFactory())
+        {
+            eligible = context.Issues.Include(i => i.Series)
+                .Where(i => i.FileIsMissing && i.MissingVerificationCount >= _libraryHealth.ConfirmedMissingThreshold && !i.MissingAcknowledged)
+                .OrderBy(i => i.Series!.Name)
+                .ToList();
+        }
+
+        if (eligible.Count == 0)
+        {
+            return;
+        }
+
+        var preview = eligible
+            .Select(issue => $"{issue.Series?.Name ?? "Unknown"} #{issue.EffectiveNumber()} — {issue.FilePath}")
+            .ToList();
+
+        int answer = await _dialogService.ShowAsync(new ConfirmDialogRequest(
+            Message: "Remove every confirmed-missing issue below? This cannot be undone directly, but each one is logged in Recently Removed for 30 days with a Restore option.",
+            Items: preview,
+            PrimaryLabel: "Confirm Remove All",
+            IsDestructive: true));
+
+        if (answer != 0)
+        {
+            return;
+        }
+
+        using (var context = _contextFactory())
+        {
+            var toRemove = context.Issues
+                .Where(i => i.FileIsMissing && i.MissingVerificationCount >= _libraryHealth.ConfirmedMissingThreshold && !i.MissingAcknowledged)
+                .Include(i => i.Series)
+                .ToList();
+
+            foreach (var issue in toRemove)
+            {
+                RecordRemoval(context, issue);
+                LibraryDeletionHelper.RemoveIssue(context, issue);
+            }
+
+            context.SaveChanges();
+        }
+
+        using var refreshContext = _contextFactory();
+        RefreshLibraryHealth(refreshContext);
+    }
+
+    /// <summary>
+    /// Recreates the Issue row with <c>FileIsMissing = true</c> (the file is still actually absent -
+    /// this is "undo the removal," not "the file reappeared") - it lands right back in Library
+    /// Health's missing-files list, not silently marked fixed. Links to the still-existing Series by
+    /// id when possible, otherwise finds-or-creates one by name. Does not attempt to recover reading
+    /// progress / collection membership / reading-list entries - those cross-references were removed
+    /// by LibraryDeletionHelper.RemoveIssue and were never snapshotted (v1-minimal, per the design's
+    /// non-goals).
+    /// </summary>
+    private void RestoreRemovedEntry(RemovedLibraryEntryRowViewModel row)
+    {
+        using (var context = _contextFactory())
+        {
+            var entry = context.RemovedLibraryEntries.Find(row.EntryId);
+            if (entry is null)
+            {
+                return;
+            }
+
+            var series = (entry.SeriesId is int seriesId ? context.Series.Find(seriesId) : null)
+                ?? context.Series.FirstOrDefault(s => s.Name == entry.SeriesName);
+            if (series is null)
+            {
+                series = new Series { Name = entry.SeriesName };
+                context.Series.Add(series);
+            }
+
+            context.Issues.Add(new Issue
+            {
+                Series = series,
+                Number = entry.Number,
+                Volume = entry.Volume,
+                Title = entry.Title,
+                FilePath = entry.FilePath,
+                FileIsMissing = true,
+                MissingVerificationCount = 0,
+            });
+
+            context.RemovedLibraryEntries.Remove(entry);
+            context.SaveChanges();
+        }
+
+        using var refreshContext = _contextFactory();
+        RefreshLibraryHealth(refreshContext);
     }
 }

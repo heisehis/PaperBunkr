@@ -44,6 +44,33 @@
         <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
     </Style>
 
+    <!-- ToggleSwitch (docs/superpowers/specs/2026-09-06-toggleswitch-adoption-design.md) - only the
+         thumb-slide duration is overridden, via the real KnobTransitions property FluentAvalonia's
+         own ControlTheme already exposes directly on ToggleSwitch (confirmed against FluentAvalonia's
+         source, ToggleSwitchStyles.axaml - no /template/ part targeting needed). Track/thumb colors,
+         sizing, and every other visual stay FluentAvalonia's defaults. Same DynamicResource-bound-
+         Duration convention as every BrushTransition/DoubleTransition in Primitives.axaml above -
+         closes the gap where Reduced Motion previously had zero effect on this control. -->
+    <Styles.Resources>
+        <!-- FluentAvalonia's own ToggleSwitchStyles.axaml reserves these as GridLength *rows* above
+             and below the 20px switch track (10px each = 20px total) for OnContent/OffContent labels
+             sitting beside the switch. Every conversion in this app uses a bare switch with the label
+             in a separate adjacent TextBlock instead (OnContent/OffContent left null) - without this
+             override, that reserved space still renders as dead empty space in every converted
+             control's bounding box, making rows look taller than intended and the label center
+             against the wrong height. Zeroed here once, app-wide, instead of overriding per instance. -->
+        <GridLength x:Key="ToggleSwitchPreContentMargin">0</GridLength>
+        <GridLength x:Key="ToggleSwitchPostContentMargin">0</GridLength>
+    </Styles.Resources>
+
+    <Style Selector="ToggleSwitch">
+        <Setter Property="KnobTransitions">
+            <Transitions>
+                <DoubleTransition Property="Canvas.Left" Duration="{DynamicResource PbMotionFast}" Easing="{StaticResource PbMotionEase}" />
+            </Transitions>
+        </Setter>
+    </Style>
+
     <!-- Text-box spinner arrows (Behaviors/TextSpinner.cs) - two stacked RepeatButtons docked in
          TextBox.InnerRightContent. Tiny, borderless, muted; accent on hover. -->
     <Style Selector="RepeatButton.textSpinner">

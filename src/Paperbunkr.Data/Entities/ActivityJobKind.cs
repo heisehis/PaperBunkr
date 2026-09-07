@@ -9,6 +9,7 @@ namespace Paperbunkr.Data.Entities;
 public enum ActivityJobKind
 {
     LibraryScan,
+    LibraryVerify,
     BookScan,
     GenerateCovers,
     SyncMetadata,

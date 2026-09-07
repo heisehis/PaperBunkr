@@ -9,6 +9,57 @@
         cover/title/badge/progress) is a UserControl instead - see Views/PosterTile.axaml.
     -->
 
+    <!-- Staggered grid/list item entrance (docs/superpowers/specs/2026-09-07-chrome-content-motion-
+         polish-design.md item 1) - Controls/EntranceAnimation.cs adds "entranceReady" only to
+         containers actually participating in a given entrance, then "entered" after that
+         container's computed per-index delay. A container this never touches is untagged and
+         therefore always fully visible - the initial hidden/offset state below only ever applies to
+         a container that's about to be animated in. -->
+    <Style Selector="Control.entranceReady:not(.entered)">
+        <Setter Property="Opacity" Value="0" />
+        <Setter Property="RenderTransform" Value="translateY(8px)" />
+    </Style>
+    <Style Selector="Control.entranceReady">
+        <Setter Property="Transitions">
+            <Transitions>
+                <DoubleTransition Property="Opacity" Duration="{DynamicResource PbMotionStandard}" Easing="{StaticResource PbMotionEase}" />
+                <TransformOperationsTransition Property="RenderTransform" Duration="{DynamicResource PbMotionStandard}" Easing="{StaticResource PbMotionEase}" />
+            </Transitions>
+        </Setter>
+    </Style>
+    <Style Selector="Control.entranceReady.entered">
+        <Setter Property="Opacity" Value="1" />
+        <Setter Property="RenderTransform" Value="none" />
+    </Style>
+
+    <!-- Discard-changes / tour-offer modal fade+scale (docs/superpowers/specs/2026-09-07-chrome-
+         content-motion-polish-design.md item 4) - these two are the only remaining overlays still on
+         the old hand-copied Border/#B0000000 pattern (everything else migrated to OverlayShell,
+         which has no animation of its own either - not reused here to avoid silently animating every
+         other OverlayShell consumer app-wide, a bigger blast radius than this item scoped for). -->
+    <Style Selector="Border.modalScrim">
+        <Setter Property="Opacity" Value="0" />
+        <Setter Property="Transitions">
+            <Transitions>
+                <DoubleTransition Property="Opacity" Duration="{DynamicResource PbMotionFast}" Easing="{StaticResource PbMotionEase}" />
+            </Transitions>
+        </Setter>
+    </Style>
+    <Style Selector="Border.modalScrim.open">
+        <Setter Property="Opacity" Value="1" />
+    </Style>
+    <Style Selector="Border.modalCard">
+        <Setter Property="RenderTransform" Value="scale(0.96)" />
+        <Setter Property="Transitions">
+            <Transitions>
+                <TransformOperationsTransition Property="RenderTransform" Duration="{DynamicResource PbMotionFast}" Easing="{StaticResource PbMotionEase}" />
+            </Transitions>
+        </Setter>
+    </Style>
+    <Style Selector="Border.modalScrim.open Border.modalCard">
+        <Setter Property="RenderTransform" Value="scale(1)" />
+    </Style>
+
     <!-- Button variants - replace default FluentTheme button chrome with Pb* tokens + motion. -->
     <Style Selector="Button.primary">
         <Setter Property="Background" Value="{DynamicResource PbAccentBrush}" />

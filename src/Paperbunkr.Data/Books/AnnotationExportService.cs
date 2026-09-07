@@ -43,7 +43,7 @@ public static class AnnotationExportService
             sb.AppendLine($"## {title}");
             sb.AppendLine();
 
-            foreach (var bookmark in book.Bookmarks.Where(b => b.ChapterIndex == chapterIndex).OrderBy(b => b.CharacterOffset))
+            foreach (var bookmark in book.Bookmarks.Where(b => b.ChapterIndex == chapterIndex).OrderBy(b => b.CreatedTime))
             {
                 sb.AppendLine("> 🔖 " + bookmark.Excerpt.Replace("\n", "\n> "));
                 sb.AppendLine();
@@ -91,7 +91,7 @@ public static class AnnotationExportService
         var sb = new StringBuilder();
         sb.AppendLine("Type,ChapterOrPage,Excerpt,Note,Color,CreatedTime");
 
-        foreach (var bookmark in book.Bookmarks.OrderBy(b => b.ChapterIndex).ThenBy(b => b.CharacterOffset))
+        foreach (var bookmark in book.Bookmarks.OrderBy(b => b.ChapterIndex).ThenBy(b => b.CreatedTime))
         {
             sb.AppendLine(CsvRow("Bookmark", (bookmark.ChapterIndex + 1).ToString(CultureInfo.InvariantCulture),
                 bookmark.Excerpt, string.Empty, string.Empty, bookmark.CreatedTime));
@@ -121,7 +121,7 @@ public static class AnnotationExportService
         {
             book.Title,
             book.Author,
-            Bookmarks = book.Bookmarks.Select(b => new { b.ChapterIndex, b.CharacterOffset, b.Excerpt, b.CreatedTime }),
+            Bookmarks = book.Bookmarks.Select(b => new { b.ChapterIndex, b.BlockId, b.Excerpt, b.CreatedTime }),
             Highlights = book.Highlights.Select(h => new
             {
                 h.ChapterIndex, h.BlockId, h.StartOffset, h.Length, Color = h.Color.ToString(), h.Note, h.Excerpt, h.CreatedTime,

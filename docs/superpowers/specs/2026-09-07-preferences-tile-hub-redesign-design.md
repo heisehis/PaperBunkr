@@ -1,5 +1,12 @@
 # Preferences Tile-Hub Redesign — Design (Phase 1 of Preferences)
 
+**§1 (the shell - tile hub / single scroll / sticky strip) was implemented, then reverted the same
+session** - tried on screen and found too annoying to navigate ("infinite scroll," losing track of
+where things are), per direct user feedback. Reverted back to the original sidebar + hard-switch
+pane, with one kept improvement: sidebar items now show an icon next to the label. **§2
+(`SettingsRow` for genuinely-simple settings), §3 (new skins + the Windows 11 fix), and §4 (the 9
+deferred areas) all stand as designed and shipped** - only the navigation shell itself changed.
+
 **Sub-project 1 of "Whole UI Re-Architecture"** — a multi-sub-project visual/structural refresh
 decided in chat 2026-09-07, decomposed into: (1) **Preferences** (this doc + 9 more phases, see
 below), (2) Navigation & shell, (3) Library browsing structure, (4) Cross-screen consistency pass.
@@ -117,13 +124,20 @@ panes first.
 
 ### 2. Settings row primitive
 
-**In scope this phase** (confirmed via a full per-section survey during plan-writing — file/group
-counts in that survey's own notes, not repeated here): all of **General**'s 4 groups; **Reader**'s
-5 groups except the live-updating Slider labels need `SettingsRow.Title` to support a bound string,
-not just a literal; **Appearance**'s Font/Motion/Navigation/Developer groups (not Skins or Install
-Skin — see §4); **Advanced**'s Rendering and Comic File Metadata groups (not File Association or
-Backup Manager — see §4); **About**'s Updates group's one toggle (not Changelog/Legal — see §4).
-Everything else keeps its exact current `Border.groupBox` layout for this phase.
+**In scope this phase** (confirmed via a full per-section survey during plan-writing): all of
+**General**'s 4 groups; **Reader**'s 5 groups except the live-updating Slider labels need
+`SettingsRow.Title` to support a bound string, not just a literal; **Appearance**'s Font/Motion/
+Navigation/Developer/**Install Skin** groups (not Skins — see §4; Install Skin's 2 rows are both
+just an icon+title+action-button, the same shape `SettingsRow` already handles, no reason to
+exclude it as originally drafted); **Advanced**'s Rendering and Comic File Metadata groups (not
+File Association or Backup Manager — see §4); **About**'s Updates group's one toggle **and** its
+"Check for Updates" action-button row (same reasoning as Install Skin — not Changelog/Legal, see
+§4). The real dividing line isn't "has a bound setting vs. an action button" (a `SettingsRow` fits
+an action-button row just as well as a toggle — `Content` accepts any control) — it's **a small,
+fixed number of static rows known at XAML-authoring time vs. a dynamic repeater over a data-bound
+collection** (the Skins list, folder lists, key-binding lists, etc.), which is what actually doesn't
+fit the primitive and is deferred to §4. Everything deferred keeps its exact current `Border.groupBox`
+layout for this phase.
 
 New shared control, e.g. `Views/Preferences/SettingsRow.axaml` (a small `UserControl` or
 `ControlTemplate`, whichever fits the existing `pref:` namespace convention in
@@ -239,8 +253,9 @@ genuine redesign, not a reskin:
    checkbox-per-extension repeater.
 8. **Appearance: Skins picker** — currently a repeater of skin-choice buttons (the picker itself,
    not the 5 skins it lists — those are in scope, see §3).
-9. **About section as a whole** — Updates' non-toggle parts (version display, Check for Updates
-   button), Changelog, and Legal.
+9. **About: Changelog and Legal groups** — Changelog is a read-only repeater, Legal is a
+   document-launcher row of buttons with no per-row settings shape; Updates' own toggle + action
+   button are in scope (see above), only these other two groups defer.
 
 ## ViewModel changes (summary)
 

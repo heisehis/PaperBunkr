@@ -1,9 +1,15 @@
-# Preferences Tile-Hub Redesign — Design
+# Preferences Tile-Hub Redesign — Design (Phase 1 of Preferences)
 
 **Sub-project 1 of "Whole UI Re-Architecture"** — a multi-sub-project visual/structural refresh
-decided in chat 2026-09-07, decomposed into: (1) **Preferences** (this doc), (2) Navigation &
-shell, (3) Library browsing structure, (4) Cross-screen consistency pass. Each gets its own full
-design → plan → implementation cycle; this is the first.
+decided in chat 2026-09-07, decomposed into: (1) **Preferences** (this doc + 9 more phases, see
+below), (2) Navigation & shell, (3) Library browsing structure, (4) Cross-screen consistency pass.
+Each gets its own full design → plan → implementation cycle.
+
+**Preferences itself turned out too large for one design** (confirmed in the same chat session,
+after a codebase survey found roughly half its content is repeaters/dashboards/modals that a shared
+row primitive can't represent — see "Phasing" below). This doc covers only the shell restructuring +
+the genuinely-simple settings + new skins; §4 lists the 9 further phases, each deferred to its own
+future design cycle.
 
 Supersedes the shell/IA parts of
 [2026-08-28-preferences-rework-design.md](2026-08-28-preferences-rework-design.md) (which shipped
@@ -24,25 +30,47 @@ Settled via a brainstorming session with the visual companion (mockups in
 not a reaction to any specific bug or IA complaint with what's *in* each section — this is a pure
 restructuring of navigation and per-setting layout.
 
-## Goals
+## Phasing (added after a fact-finding survey during plan-writing)
+
+A survey of all 9 non-Plugins section files found the original Goal 2 ("every individual setting")
+doesn't hold: roughly half of Preferences' actual content isn't a simple setting at all — it's
+repeaters, dashboards, a 9-provider modal-form system, and a master/detail editor. Forcing those
+into an icon+title+description+control row would look wrong or silently drop functionality. The
+user confirmed (chat, same session): every one of these areas gets a **genuine individual
+redesign**, not a reskin — but each is a different enough shape (list vs. dashboard vs. modal system
+vs. editor) that it needs its own brainstorm, not a shared row primitive. Sequencing decided:
+**this phase ships what's below; each area listed in §4 "Deferred" gets its own future design → plan
+cycle, one at a time.**
+
+## Goals (this phase)
 
 1. Replace the sidebar + hard-switch pane with a **single continuous scrolling page**, entered via
    a **tile-grid hub** that **collapses to a sticky icon strip** once scrolled past.
-2. Restructure **every individual setting** (not just every group) onto a shared row layout: icon +
-   title + optional description + control.
-3. Add **3 new built-in skins** to the existing Skins picker, alongside Default (unchanged) and
-   Windows 11.
+2. Restructure every **genuinely simple** setting (a single bound control with a static label — see
+   the per-section breakdown in §2) onto a shared row layout: icon + title + optional description +
+   control. This covers all of General; most of Reader; Appearance's Font/Motion/Navigation/
+   Developer groups; Advanced's Rendering and Comic File Metadata groups; About's Updates group's
+   one toggle. Everything else in §4 keeps its current layout for this phase.
+3. Add **3 new built-in skins** to the existing Skins picker, alongside Default (unchanged).
+   **Finding:** Windows 11 (`Assets/Skins/windows_11/theme.json`) exists on disk but isn't actually
+   wired into `SkinService.GetAvailableSkins()` today — only `default` is special-cased as embedded;
+   everything else in that method only scans `SkinPaths.ExtractedDirectory` (user-*installed* skins).
+   Since this phase already has to build a proper "list of embedded built-in skins" mechanism to add
+   the 3 new ones, Windows 11 is fixed to be a real 5th option in that same list as a natural
+   byproduct — not new scope, just completing the mechanism this phase already touches.
 
-## Non-goals
+## Non-goals (this phase)
 
-- Any change to what settings exist, what they do, or which section they live in — pure
-  layout/navigation restructuring, section membership from `PreferencesScreen.axaml` today carries
-  over unchanged.
-- Search granularity — stays group-level (`PreferenceIndex.cs`'s existing ~20 entries), per the
+- Any change to what settings exist or what they do — pure layout/navigation restructuring for the
+  in-scope items; section membership from `PreferencesScreen.axaml` today carries over unchanged.
+- Search granularity — stays group-level (`PreferenceIndex.cs`'s existing ~30 entries), per the
   original rework's own explicit non-goal. Per-setting granularity remains a future add-on.
-- The Windows 11 skin and the installable-skin `.crpck`/`theme.json` mechanism — untouched.
+- The installable-skin `.crpck`/`theme.json` mechanism itself (`TryInstallSkin`) — untouched, only
+  the built-in-skins list changes.
 - Writing the description text itself — see §2 below; this ships with descriptions empty by design.
 - `PluginScreen`'s own internals — unchanged, still a real screen (see §1).
+- Everything in §4 "Deferred to future sub-projects" — explicitly not reskinned or restructured this
+  phase; each keeps its exact current layout until its own design cycle happens.
 
 ## Architecture
 
@@ -81,10 +109,18 @@ panes first.
 
 ### 2. Settings row primitive
 
+**In scope this phase** (confirmed via a full per-section survey during plan-writing — file/group
+counts in that survey's own notes, not repeated here): all of **General**'s 4 groups; **Reader**'s
+5 groups except the live-updating Slider labels need `SettingsRow.Title` to support a bound string,
+not just a literal; **Appearance**'s Font/Motion/Navigation/Developer groups (not Skins or Install
+Skin — see §4); **Advanced**'s Rendering and Comic File Metadata groups (not File Association or
+Backup Manager — see §4); **About**'s Updates group's one toggle (not Changelog/Legal — see §4).
+Everything else keeps its exact current `Border.groupBox` layout for this phase.
+
 New shared control, e.g. `Views/Preferences/SettingsRow.axaml` (a small `UserControl` or
 `ControlTemplate`, whichever fits the existing `pref:` namespace convention in
-`PreferencesScreen.axaml`), replacing every individual setting's current ad-hoc
-label-then-control markup across all 10 sections:
+`PreferencesScreen.axaml`), replacing the in-scope settings' current ad-hoc label-then-control
+markup:
 
 ```
 [icon]  Title                              [control]
@@ -116,10 +152,14 @@ chrome the old design used.
 Three new `Assets/Skins/<key>/theme.json` files (schema identical to `default`/`windows_11` — see
 those two for the full field set: `colors.{bg,chrome,border,text,textMuted,textFaint,accent,
 accentText,accentSoft,badge,badgeText,success,surface0-3,glow,heroGradientStart,heroGradientEnd}`,
-`spacingUnit`, `radius`, `radiusSm`, `radiusLg`), registered as built-in the same way `windows_11`
-is (`SkinService.GetAvailableSkins()`), appearing in the existing Skins picker in the Appearance
-section's "Active Skin" row. Default is untouched. Starting values (refined during implementation/
-visual QA, not pixel-final):
+`spacingUnit`, `radius`, `radiusSm`, `radiusLg`). `SkinService.GetAvailableSkins()`/`TryLoadSkin()`
+gain a small embedded-built-in-skins list (`default`, `windows_11`, plus these 3 new keys, each
+loaded via its own `avares://Paperbunkr.App/Assets/Skins/<key>/` root the same way
+`DefaultSkinAssetRoot` already does for `default`) instead of `default` being the only special case
+— this is what also makes Windows 11 a real, selectable option for the first time (see the Goals §3
+finding above). All 5 appear in the existing Skins picker in the Appearance section's "Active Skin"
+row/repeater. Starting values for the 3 new skins (refined during implementation/visual QA, not
+pixel-final):
 
 **Cool & Technical** — blue-gray surfaces, crisp blue accent:
 ```json
@@ -169,6 +209,26 @@ visual QA, not pixel-final):
 }
 ```
 
+## 4. Deferred to future sub-projects
+
+Each of these keeps its *exact current layout* this phase (shell restructuring in §1 still applies
+around it — it just sits in the scrolling page unchanged, the way it sits in the hard-switch pane
+today) and gets its own future brainstorm → design → plan cycle, confirmed in chat as needing a
+genuine redesign, not a reskin:
+
+1. **Library folder management** — Comic Library Folders + Book Folders repeaters.
+2. **Library Health dashboard** — stat tiles + missing-files/recently-removed repeaters.
+3. **Virtual Tags editor** — master/detail tag picker + edit form.
+4. **Connections** — 2 provider-picker lists + 9 per-provider modal connection forms.
+5. **Keyboard Shortcuts** — 3 key-binding repeaters (label + key-picker ComboBox rows).
+6. **Automation task list** — scheduled-tasks repeater with per-row mode-dependent controls.
+7. **Advanced: Backup Manager + File Association** — the backup sub-UI and the
+   checkbox-per-extension repeater.
+8. **Appearance: Skins picker** — currently a repeater of skin-choice buttons (the picker itself,
+   not the 5 skins it lists — those are in scope, see §3).
+9. **About section as a whole** — Updates' non-toggle parts (version display, Check for Updates
+   button), Changelog, and Legal.
+
 ## ViewModel changes (summary)
 
 - `ActiveSection` (and every `Is<Section>Section`/`Go<Section>Command`, except Plugins') removed —
@@ -183,6 +243,13 @@ visual QA, not pixel-final):
   target changes (position in one page vs. a pane switch).
 - No changes to any `Persist*` helper or any setting's own command/binding — every row's `Content`
   is the exact same control wired the exact same way, just re-hosted inside `SettingsRow`.
+- **External caller found during the codebase survey:** `MainViewModel.GoLibraryFoldersPreferences()`
+  (`MainViewModel.cs:821-827`) sets `Preferences.ActiveSection = PreferencesSection.Library` to open
+  Preferences straight to Library's folders (Library's own empty-state "Scan folders" CTA). With
+  `ActiveSection` gone, this becomes a new `PreferencesScreenViewModel.RequestScrollToAnchor(string)`
+  public method wrapping `ScrollToAnchorRequested?.Invoke(...)` (events can't be raised from outside
+  their declaring class), called with `"library.comicFolders"` instead of setting the now-gone
+  property.
 
 ## Testing
 

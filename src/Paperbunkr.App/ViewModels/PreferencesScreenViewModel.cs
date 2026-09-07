@@ -1079,6 +1079,8 @@ public partial class PreferencesScreenViewModel : ViewModelBase
 
     public bool HasSelectedVirtualTag => SelectedVirtualTagId is not null;
 
+    public bool HasVirtualTags => VirtualTags.Count > 0;
+
     partial void OnSelectedVirtualTagIdChanged(int? value) => OnPropertyChanged(nameof(HasSelectedVirtualTag));
 
     private void RefreshVirtualTags()
@@ -1087,8 +1089,16 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         VirtualTags.Clear();
         foreach (var tag in context.VirtualTagDefinitions.OrderBy(v => v.SortOrder))
         {
-            VirtualTags.Add(new VirtualTagSummary { Id = tag.Id, Name = tag.Name, IsEnabled = tag.IsEnabled });
+            VirtualTags.Add(new VirtualTagSummary
+            {
+                Id = tag.Id,
+                Name = tag.Name,
+                IsEnabled = tag.IsEnabled,
+                IsSelected = tag.Id == SelectedVirtualTagId,
+            });
         }
+
+        OnPropertyChanged(nameof(HasVirtualTags));
     }
 
     private void RefreshVirtualTagPreview() => VirtualTagPreview = VirtualTagTemplateEvaluator.Evaluate(VirtualTagCaptionFormat, _previewIssue, _previewSeries);
@@ -1111,6 +1121,7 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         _suppressVirtualTagApply = false;
 
         RefreshVirtualTagPreview();
+        RefreshVirtualTags();
     }
 
     [RelayCommand]

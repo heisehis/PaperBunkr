@@ -1111,6 +1111,42 @@ public class PreferencesScreenViewModelTests : IDisposable
     }
 
     [Fact]
+    public void HasVirtualTags_ReflectsListState()
+    {
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+
+        Assert.False(vm.HasVirtualTags);
+
+        vm.AddVirtualTagCommand.Execute(null);
+
+        Assert.True(vm.HasVirtualTags);
+
+        vm.DeleteVirtualTagCommand.Execute(null);
+
+        Assert.False(vm.HasVirtualTags);
+    }
+
+    [Fact]
+    public void SelectVirtualTag_MarksOnlyThatRowSelected()
+    {
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+        vm.AddVirtualTagCommand.Execute(null);
+        var first = vm.VirtualTags[0];
+        vm.AddVirtualTagCommand.Execute(null);
+        var second = vm.VirtualTags[1];
+
+        Assert.False(vm.VirtualTags.Single(t => t.Id == first.Id).IsSelected);
+        Assert.True(vm.VirtualTags.Single(t => t.Id == second.Id).IsSelected);
+
+        vm.SelectVirtualTagCommand.Execute(first);
+
+        Assert.True(vm.VirtualTags.Single(t => t.Id == first.Id).IsSelected);
+        Assert.False(vm.VirtualTags.Single(t => t.Id == second.Id).IsSelected);
+    }
+
+    [Fact]
     public async Task AddFolder_UserPicksFolder_PersistsAndRefreshesList()
     {
         var picker = new StubFilePicker { FolderToReturn = @"C:\Comics" };

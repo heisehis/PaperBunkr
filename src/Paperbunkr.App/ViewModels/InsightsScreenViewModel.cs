@@ -11,18 +11,21 @@ using Paperbunkr.Data.Metadata;
 namespace Paperbunkr.App.ViewModels;
 
 /// <summary>
-/// The Insights dashboard (docs/superpowers/specs/2026-09-05-insights-dashboard-design.md).
-/// Holds one <see cref="InsightsSnapshot"/> per range for the session, rebuilt on first view of a
-/// range and dropped whenever a reading event fires while the app is running. All computation is in
-/// <see cref="InsightsResolver"/>; this class is presentation glue + the session cache.
+/// The Insights screen (docs/superpowers/specs/2026-09-08-stats-v2-mangabaka-design.md §5, revised
+/// after the first on-screen pass to keep Stats a *tab* on this screen rather than a separate
+/// nav-rail destination - matches this project's established "discrete section switching over
+/// scattering related content across destinations" preference). Two tabs sharing one nav-rail entry:
+/// **Overview** (READING attention cards + Collection health - unchanged) and **Stats** (the
+/// MangaBaka-style analytics, hosted by <see cref="Stats"/>). All computation is in
+/// <see cref="InsightsResolver"/>/<see cref="StatsResolver"/>; this class is presentation glue + the
+/// session cache for the Overview tab (Stats owns its own cache).
 /// </summary>
 public partial class InsightsScreenViewModel : ViewModelBase
 {
     private readonly Action<int> _goReaderForIssue;
     private readonly Action<int> _goDetailForSeries;
-    private readonly Action<string> _goLibraryWithSearch;
     private readonly Func<DateTime> _nowUtc;
-    private readonly Dictionary<InsightsRange, InsightsSnapshot> _cache = new();
+    private InsightsSnapshot? _cache;
 
     public InsightsScreenViewModel(
         Action<int> goReaderForIssue,
@@ -33,14 +36,14 @@ public partial class InsightsScreenViewModel : ViewModelBase
     {
         _goReaderForIssue = goReaderForIssue;
         _goDetailForSeries = goDetailForSeries;
-        _goLibraryWithSearch = goLibraryWithSearch;
         _nowUtc = nowUtc ?? (() => DateTime.UtcNow);
+        Stats = new StatsScreenViewModel(goLibraryWithSearch, readingEventRecorder, nowUtc);
 
         if (readingEventRecorder is not null)
         {
             readingEventRecorder.ReadingEventRecorded += () =>
             {
-                _cache.Clear();
+                _cache = null;
                 // Cheap: only recompute if the screen is the one on show. The shell calls Refresh()
                 // on navigation anyway, so a stale cache while elsewhere is harmless.
                 if (IsActive)
@@ -54,22 +57,30 @@ public partial class InsightsScreenViewModel : ViewModelBase
     /// <summary>Set by the shell while the Insights screen is the visible lateral screen.</summary>
     public bool IsActive { get; set; }
 
+    /// <summary>The Stats tab's own view-model - separate cache/range from the Overview tab above,
+    /// since most of its tiles are range-aware and none of Overview's are.</summary>
+    public StatsScreenViewModel Stats { get; }
+
     [ObservableProperty]
-    private InsightsRange _range = InsightsRange.Days90;
+    private bool _isStatsTabSelected;
+
+    partial void OnIsStatsTabSelectedChanged(bool value)
+    {
+        Stats.IsActive = value;
+        if (value)
+        {
+            Stats.Refresh();
+        }
+    }
+
+    [RelayCommand]
+    private void SelectOverviewTab() => IsStatsTabSelected = false;
+
+    [RelayCommand]
+    private void SelectStatsTab() => IsStatsTabSelected = true;
 
     [ObservableProperty]
     private InsightsSnapshot? _snapshot;
-
-    public IReadOnlyList<RangeOption> RangeOptions { get; } = new[]
-    {
-        new RangeOption(InsightsRange.Days30, "30d"),
-        new RangeOption(InsightsRange.Days90, "90d") { IsActive = true },
-        new RangeOption(InsightsRange.Months12, "12mo"),
-        new RangeOption(InsightsRange.AllTime, "All time"),
-    };
-
-    [RelayCommand]
-    private void SetRange(InsightsRange value) => Range = value;
 
     public ObservableCollection<AttentionRow> ContinueRows { get; } = new();
     public ObservableCollection<AttentionRow> AlmostDoneRows { get; } = new();
@@ -86,58 +97,39 @@ public partial class InsightsScreenViewModel : ViewModelBase
     public bool DiveInEmpty => DiveInCount == 0;
     public bool GapEmpty => GapCount == 0;
 
-    /// <summary>Nothing to read-next in any of the three "Reading" cards (gaps live in At a Glance, not here).</summary>
+    /// <summary>Nothing to read-next in any of the three "Reading" cards (gaps live in Collection health, not here).</summary>
     public bool ReadingAllClear => ContinueEmpty && AlmostDoneEmpty && DiveInEmpty;
 
     public string GapLine => GapCount == 0
         ? "No near-complete runs with holes."
         : $"{GapCount} near-complete {(GapCount == 1 ? "run has" : "runs have")} a few issues missing.";
 
-    public int CompositionMax => Math.Max(1, Snapshot?.Composition.ByPublisher.Select(s => s.Count).DefaultIfEmpty(1).Max() ?? 1);
-
-    public bool HasPaceData => Snapshot?.Pace.Any(b => b.Finished > 0 || b.Pages > 0) == true;
-    public bool HasStreakData => (Snapshot?.ReadingDayStreak.Longest ?? 0) > 0;
-    public bool HasRatings => Snapshot?.Ratings.Any(r => r.Count > 0) == true;
-
-    partial void OnRangeChanged(InsightsRange value)
-    {
-        foreach (var option in RangeOptions)
-        {
-            option.IsActive = option.Value == value;
-        }
-
-        Refresh();
-    }
-
     public void Refresh()
     {
-        if (!_cache.TryGetValue(Range, out var snap))
+        if (_cache is null)
         {
             using var context = PaperbunkrDb.CreateContext();
-            snap = InsightsResolver.Build(context, Range, _nowUtc());
-            _cache[Range] = snap;
+            _cache = InsightsResolver.Build(context, _nowUtc());
         }
 
-        Snapshot = snap;
-        PopulateLists(snap);
+        Snapshot = _cache;
+        PopulateLists(_cache);
 
         foreach (var name in new[]
         {
             nameof(ContinueCount), nameof(AlmostDoneCount), nameof(DiveInCount), nameof(GapCount),
             nameof(ContinueEmpty), nameof(AlmostDoneEmpty), nameof(DiveInEmpty), nameof(GapEmpty),
             nameof(ReadingAllClear), nameof(GapLine),
-            nameof(HasPaceData), nameof(HasStreakData), nameof(HasRatings), nameof(CompositionMax),
         })
         {
             OnPropertyChanged(name);
         }
 
-        PaceOrRatingsChanged?.Invoke(snap);
+        if (IsStatsTabSelected)
+        {
+            Stats.Refresh();
+        }
     }
-
-    /// <summary>Raised after <see cref="Refresh"/> so the view's code-behind can re-render the two
-    /// ScottPlot bar charts (imperative API - no binding).</summary>
-    public event Action<InsightsSnapshot>? PaceOrRatingsChanged;
 
     private void PopulateLists(InsightsSnapshot snap)
     {
@@ -188,31 +180,6 @@ public partial class InsightsScreenViewModel : ViewModelBase
 
     [RelayCommand]
     private void OpenSeries(int seriesId) => _goDetailForSeries(seriesId);
-
-    [RelayCommand]
-    private void OpenCompositionValue(string? value)
-    {
-        if (!string.IsNullOrWhiteSpace(value) && value != "Unknown")
-        {
-            _goLibraryWithSearch(value);
-        }
-    }
-}
-
-public sealed partial class RangeOption : ObservableObject
-{
-    public RangeOption(InsightsRange value, string label)
-    {
-        Value = value;
-        Label = label;
-    }
-
-    public InsightsRange Value { get; }
-
-    public string Label { get; }
-
-    [ObservableProperty]
-    private bool _isActive;
 }
 
 public sealed record AttentionRow(string Title, string Subtitle, int? ResumeIssueId, int SeriesId);

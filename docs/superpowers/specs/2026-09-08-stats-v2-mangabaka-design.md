@@ -1,10 +1,16 @@
 # Stats v2 — Insights/Stats split, MangaBaka-inspired analytics — design
 
 **Date:** 2026-09-08
-**Status:** design — awaiting user review before `writing-plans`
+**Status:** shipped 2026-09-08, revised after the first on-screen pass — **§4/§10 below are
+superseded.** Stats did not stay a separate nav-rail destination: after seeing it live, the user
+rolled it back into a **tab on the Insights screen** (matches this project's established
+"discrete section switching over scattering related content across destinations" preference). The
+data layer (§6-8) and content split rule (§4's *content*, not its nav placement) are unchanged and
+accurate; only "own nav-rail destination" is wrong. See `docs/Paperbunkr-Roadmap.md`'s "Stats v2"
+entry for the actual shipped shape and what was fixed.
 **Topic:** split the existing "Insights" screen into a lean actionable "Insights" and a new
-analytics-only "Stats" nav-rail destination, expanding the curiosity content to a MangaBaka-style
-section set, using only data the app already has or can cheaply derive.
+analytics-only "Stats" section, expanding the curiosity content to a MangaBaka-style section set,
+using only data the app already has or can cheaply derive.
 
 ---
 

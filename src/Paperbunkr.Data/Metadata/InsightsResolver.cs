@@ -7,16 +7,16 @@ using Paperbunkr.Data.Entities;
 namespace Paperbunkr.Data.Metadata;
 
 /// <summary>
-/// Read-only query/compute layer for the Insights dashboard (docs/superpowers/specs/
-/// 2026-09-05-insights-dashboard-design.md §7). Mirrors <see cref="HomeFeedResolver"/> /
-/// <see cref="RecommendationResolver"/>'s shape: static, no persistence of its own, a pure function
-/// of <c>(db state, range, now)</c> so every tile is independently unit-testable against an
-/// in-memory context.
+/// Read-only query/compute layer for the Insights screen (docs/superpowers/specs/2026-09-08-
+/// stats-v2-mangabaka-design.md §5) - the actionable "what should I read next" content only.
+/// Everything else that used to live here (lifetime totals, streaks, pace, composition, ratings)
+/// moved to <see cref="StatsResolver"/> when Insights and Stats became separate nav-rail screens;
+/// see that file's own header for the split rationale.
 ///
-/// One <see cref="EntityFrameworkQueryableExtensions.AsNoTracking{T}"/> pass each over
-/// <see cref="PaperbunkrDbContext.Issues"/>, <see cref="PaperbunkrDbContext.Books"/>, and the whole
-/// (small, never-pruned) <see cref="PaperbunkrDbContext.ReadingEvents"/> table; all further work is
-/// in memory. The App-side <c>InsightsScreenViewModel</c> caches the returned snapshot per range.
+/// Mirrors <see cref="HomeFeedResolver"/> / <see cref="RecommendationResolver"/>'s shape: static, no
+/// persistence of its own, a pure function of <c>(db state, now)</c> so every tile is independently
+/// unit-testable against an in-memory context. Unlike <see cref="StatsResolver"/> this has no date
+/// range - none of Continue/AlmostDone/DiveIn/Gaps have ever varied by one.
 /// </summary>
 public static class InsightsResolver
 {
@@ -24,15 +24,15 @@ public static class InsightsResolver
     internal const int AlmostDoneMax = 3;
     internal const int AttentionListLimit = 12;
 
-    // "Reading" section (design §8.3, reframed 2026-09-06) - for a big mostly-unread library, the
-    // useful question is "what do I read next", not "what needs fixing".
+    // "Reading" section (design §8.3 of the original v1 doc, reframed 2026-09-06) - for a big
+    // mostly-unread library, the useful question is "what do I read next", not "what needs fixing".
     internal const double GapOwnershipFloor = 0.75;   // gaps: only flag a run you own most of
     internal const int GapMissingCap = 10;            // ...with just a handful of holes
     internal const int DiveInMinIssues = 5;           // "dive in": a run worth sitting down with
     internal const int DiveInStartsBy = 2;            // ...that you own the start of (#1 or #2)
     internal const double DiveInOwnershipFloor = 0.7; // ...and own most of, contiguously enough
 
-    public static InsightsSnapshot Build(PaperbunkrDbContext context, InsightsRange range, DateTime nowUtc)
+    public static InsightsSnapshot Build(PaperbunkrDbContext context, DateTime nowUtc)
     {
         // AsNoTrackingWithIdentityResolution so every Issue that shares a Series row also shares the
         // same Series CLR instance - the attention tiles group issues by their Series, and plain
@@ -41,41 +41,15 @@ public static class InsightsResolver
             .Include(i => i.Series)
             .Include(i => i.Tags)
             .ToList();
-        var books = context.Books.AsNoTracking()
-            .Include(b => b.BookSeries)
-            .ToList();
         var events = context.ReadingEvents.AsNoTracking().ToList();
 
-        DateTime? rangeStart = RangeStartUtc(range, nowUtc);
-        var inRange = rangeStart is { } start
-            ? events.Where(e => e.TimestampUtc >= start).ToList()
-            : events;
-
         return new InsightsSnapshot(
-            Range: range,
             GeneratedUtc: nowUtc,
             Continue: ComputeContinue(issues, events, nowUtc),
             AlmostDone: ComputeAlmostDone(issues),
             DiveIn: ComputeDiveIn(issues, events),
-            Gaps: ComputeGaps(issues),
-            Lifetime: ComputeLifetime(issues, books, events),
-            ReadingDayStreak: ComputeStreak(events, nowUtc, finishOnly: false),
-            FinishStreak: ComputeStreak(events, nowUtc, finishOnly: true),
-            FinishedInRange: ComputeFinishedInRange(inRange, issues, books),
-            Pace: ComputePace(inRange, range, nowUtc),
-            Completion: ComputeCompletion(issues, books),
-            Composition: ComputeComposition(issues, books),
-            Ratings: ComputeRatings(issues));
+            Gaps: ComputeGaps(issues));
     }
-
-    internal static DateTime? RangeStartUtc(InsightsRange range, DateTime nowUtc) => range switch
-    {
-        InsightsRange.Days30 => nowUtc.AddDays(-30),
-        InsightsRange.Days90 => nowUtc.AddDays(-90),
-        InsightsRange.Months12 => nowUtc.AddMonths(-12),
-        InsightsRange.AllTime => null,
-        _ => nowUtc.AddDays(-90),
-    };
 
     // --- Reading (what to read next) --------------------------------------------------------
 
@@ -271,277 +245,15 @@ public static class InsightsResolver
             .Take(AttentionListLimit)
             .ToList();
     }
-
-    // --- At a glance -----------------------------------------------------------------------
-
-    private static LifetimeTotals ComputeLifetime(List<Issue> issues, List<Book> books, List<ReadingEvent> events)
-    {
-        var finishedComicIds = events.Where(e => e.Kind == ReadingEventKind.Finished && e.ItemType == ReadingItemType.Comic)
-            .Select(e => e.ItemId).ToHashSet();
-        var finishedNovelIds = events.Where(e => e.Kind == ReadingEventKind.Finished && e.ItemType == ReadingItemType.Novel)
-            .Select(e => e.ItemId).ToHashSet();
-
-        var issueById = issues.ToDictionary(i => i.Id);
-        var bookById = books.ToDictionary(b => b.Id);
-
-        int itemsRead = 0;
-        long pages = 0;
-        var seriesRead = new HashSet<string>();
-
-        foreach (int id in finishedComicIds)
-        {
-            itemsRead++;
-            if (issueById.TryGetValue(id, out var issue))
-            {
-                pages += issue.PageCount ?? 0;
-                if (issue.Series is { } s)
-                {
-                    seriesRead.Add("c:" + s.Id);
-                }
-            }
-        }
-
-        foreach (int id in finishedNovelIds)
-        {
-            itemsRead++;
-            if (bookById.TryGetValue(id, out var book))
-            {
-                pages += EstimateBookPages(book);
-                if (book.BookSeriesId is { } sid)
-                {
-                    seriesRead.Add("n:" + sid);
-                }
-            }
-        }
-
-        return new LifetimeTotals(itemsRead, pages, seriesRead.Count);
-    }
-
-    private static StreakInfo ComputeStreak(List<ReadingEvent> events, DateTime nowUtc, bool finishOnly)
-    {
-        var days = events
-            .Where(e => !finishOnly || e.Kind == ReadingEventKind.Finished)
-            .Select(e => e.TimestampUtc.ToLocalTime().Date)
-            .ToHashSet();
-
-        if (days.Count == 0)
-        {
-            return new StreakInfo(0, 0);
-        }
-
-        // Current streak: walk back from today (or yesterday, so a day with no reading yet doesn't
-        // instantly zero a live streak) while consecutive days are present.
-        DateTime today = nowUtc.ToLocalTime().Date;
-        int current = 0;
-        DateTime probe = days.Contains(today) ? today : today.AddDays(-1);
-        while (days.Contains(probe))
-        {
-            current++;
-            probe = probe.AddDays(-1);
-        }
-
-        // Longest streak ever.
-        int longest = 0;
-        foreach (var day in days)
-        {
-            if (days.Contains(day.AddDays(-1)))
-            {
-                continue; // not a run start
-            }
-
-            int run = 1;
-            var d = day.AddDays(1);
-            while (days.Contains(d))
-            {
-                run++;
-                d = d.AddDays(1);
-            }
-
-            longest = Math.Max(longest, run);
-        }
-
-        return new StreakInfo(current, Math.Max(longest, current));
-    }
-
-    private static FinishedInRange ComputeFinishedInRange(List<ReadingEvent> inRange, List<Issue> issues, List<Book> books)
-    {
-        var finished = inRange.Where(e => e.Kind == ReadingEventKind.Finished).ToList();
-        int count = finished.Count;
-        long pages = finished.Sum(e => (long)(e.PagesRead ?? 0));
-        return new FinishedInRange(count, pages);
-    }
-
-    private static IReadOnlyList<PaceBucket> ComputePace(List<ReadingEvent> inRange, InsightsRange range, DateTime nowUtc)
-    {
-        bool monthly = range is InsightsRange.Months12 or InsightsRange.AllTime;
-        var finished = inRange.Where(e => e.Kind == ReadingEventKind.Finished)
-            .Select(e => (Local: e.TimestampUtc.ToLocalTime(), Pages: e.PagesRead ?? 0))
-            .ToList();
-
-        DateTime nowLocal = nowUtc.ToLocalTime();
-        var buckets = new List<PaceBucket>();
-
-        if (monthly)
-        {
-            int months = range == InsightsRange.Months12 ? 12 : MonthsSpan(finished, nowLocal);
-            for (int i = months - 1; i >= 0; i--)
-            {
-                var monthStart = new DateTime(nowLocal.Year, nowLocal.Month, 1).AddMonths(-i);
-                var monthEnd = monthStart.AddMonths(1);
-                var hits = finished.Where(f => f.Local >= monthStart && f.Local < monthEnd).ToList();
-                buckets.Add(new PaceBucket(monthStart, monthStart.ToString("MMM"), hits.Count, hits.Sum(h => h.Pages)));
-            }
-        }
-        else
-        {
-            int weeks = range == InsightsRange.Days30 ? 5 : 13;
-            DateTime thisWeekStart = nowLocal.Date.AddDays(-(int)nowLocal.DayOfWeek);
-            for (int i = weeks - 1; i >= 0; i--)
-            {
-                var weekStart = thisWeekStart.AddDays(-7 * i);
-                var weekEnd = weekStart.AddDays(7);
-                var hits = finished.Where(f => f.Local >= weekStart && f.Local < weekEnd).ToList();
-                buckets.Add(new PaceBucket(weekStart, weekStart.ToString("MMM d"), hits.Count, hits.Sum(h => h.Pages)));
-            }
-        }
-
-        return buckets;
-    }
-
-    private static int MonthsSpan(List<(DateTime Local, int Pages)> finished, DateTime nowLocal)
-    {
-        if (finished.Count == 0)
-        {
-            return 1;
-        }
-
-        var earliest = finished.Min(f => f.Local);
-        return Math.Max(1, ((nowLocal.Year - earliest.Year) * 12) + nowLocal.Month - earliest.Month + 1);
-    }
-
-    private static CompletionCounts ComputeCompletion(List<Issue> issues, List<Book> books)
-    {
-        int read = issues.Count(i => i.HasBeenRead());
-        int inProgress = issues.Count(i => i.IsInProgress());
-        int unread = issues.Count(i => i.IsUnread());
-
-        foreach (var book in books)
-        {
-            if (book.Finished)
-            {
-                read++;
-            }
-            else if (book.LastOpenedTime != null && (book.LastChapterIndex > 0 || !string.IsNullOrEmpty(book.LastBlockId)))
-            {
-                inProgress++;
-            }
-            else
-            {
-                unread++;
-            }
-        }
-
-        return new CompletionCounts(read, inProgress, unread);
-    }
-
-    private static CompositionData ComputeComposition(List<Issue> issues, List<Book> books)
-    {
-        IReadOnlyList<CompositionSlice> Top(IEnumerable<string?> raw)
-        {
-            return raw
-                .Select(v => string.IsNullOrWhiteSpace(v) ? "Unknown" : v!.Trim())
-                .GroupBy(v => v)
-                .Select(g => new CompositionSlice(g.Key, g.Count()))
-                .OrderByDescending(s => s.Count)
-                .Take(12)
-                .ToList();
-        }
-
-        var publisher = Top(issues.Select(i => string.IsNullOrWhiteSpace(i.Publisher) ? i.Series?.Publisher : i.Publisher));
-        var genre = Top(issues.SelectMany(i => i.Tags.Where(t => t.Field == IssueTagField.Genre).Select(t => t.Value)));
-        var format = Top(
-            issues.Select(i => i.EffectiveFormat() ?? "Comic")
-                .Concat(books.Select(b => b.Format.ToString())));
-        var decade = Top(
-            issues.Select(i => DecadeLabel(i.EffectiveYear()))
-                .Concat(books.Select(b => DecadeLabel(b.PublishedDate?.Year))));
-
-        return new CompositionData(publisher, genre, format, decade);
-    }
-
-    private static string DecadeLabel(int? year)
-        => year is > 0 ? $"{year.Value / 10 * 10}s" : "Unknown";
-
-    private static IReadOnlyList<RatingBucket> ComputeRatings(List<Issue> issues)
-    {
-        var counts = new int[6]; // index 1..5
-        foreach (var issue in issues)
-        {
-            if (issue.Rating is { } r and > 0)
-            {
-                int star = Math.Clamp((int)Math.Round(r, MidpointRounding.AwayFromZero), 1, 5);
-                counts[star]++;
-            }
-        }
-
-        return Enumerable.Range(1, 5).Select(s => new RatingBucket(s, counts[s])).ToList();
-    }
-
-    private static long EstimateBookPages(Book book)
-    {
-        if (book.Format == BookFormat.Pdf)
-        {
-            return book.ChapterCount > 0 ? book.ChapterCount : 0; // PDF ChapterCount is unused; real count unknown here
-        }
-
-        return ReadingPageMath.EstimatePagesFromChars(book.CharacterCount ?? 0);
-    }
-}
-
-public enum InsightsRange
-{
-    Days30 = 0,
-    Days90 = 1,
-    Months12 = 2,
-    AllTime = 3,
 }
 
 public sealed record InsightsSnapshot(
-    InsightsRange Range,
     DateTime GeneratedUtc,
     IReadOnlyList<AttentionSeries> Continue,
     IReadOnlyList<AttentionSeries> AlmostDone,
     IReadOnlyList<AttentionSeries> DiveIn,
-    IReadOnlyList<CollectionGap> Gaps,
-    LifetimeTotals Lifetime,
-    StreakInfo ReadingDayStreak,
-    StreakInfo FinishStreak,
-    FinishedInRange FinishedInRange,
-    IReadOnlyList<PaceBucket> Pace,
-    CompletionCounts Completion,
-    CompositionData Composition,
-    IReadOnlyList<RatingBucket> Ratings);
+    IReadOnlyList<CollectionGap> Gaps);
 
 public sealed record AttentionSeries(int SeriesId, string SeriesName, string Subtitle, int? ResumeIssueId);
 
 public sealed record CollectionGap(int SeriesId, string SeriesName, IReadOnlyList<int> MissingNumbers);
-
-public sealed record LifetimeTotals(int ItemsRead, long PagesRead, int SeriesRead);
-
-public sealed record StreakInfo(int Current, int Longest);
-
-public sealed record FinishedInRange(int Items, long Pages);
-
-public sealed record PaceBucket(DateTime Start, string Label, int Finished, int Pages);
-
-public sealed record CompletionCounts(int Read, int InProgress, int Unread);
-
-public sealed record CompositionSlice(string Label, int Count);
-
-public sealed record CompositionData(
-    IReadOnlyList<CompositionSlice> ByPublisher,
-    IReadOnlyList<CompositionSlice> ByGenre,
-    IReadOnlyList<CompositionSlice> ByFormat,
-    IReadOnlyList<CompositionSlice> ByDecade);
-
-public sealed record RatingBucket(int Stars, int Count);

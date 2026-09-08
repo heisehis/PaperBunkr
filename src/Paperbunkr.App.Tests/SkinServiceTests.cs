@@ -97,6 +97,27 @@ public class SkinServiceTests : IDisposable
         Assert.Contains(skins, s => s.Key == "vintage_paperback");
     }
 
+    /// <summary>docs/superpowers/specs/2026-09-07-appearance-redesign-design.md - the preview-card
+    /// brushes GetAvailableSkins now populates must actually reflect each skin's real theme.json
+    /// colors, not just be non-null.</summary>
+    [Fact]
+    public void GetAvailableSkins_PopulatesPreviewBrushes_MatchingTheme()
+    {
+        var service = CreateService();
+
+        var skins = service.GetAvailableSkins();
+
+        var defaultSkin = skins.Single(s => s.Key == SkinService.DefaultSkinKey);
+        Assert.Equal(Avalonia.Media.Color.Parse("#0A0B0D"), ((Avalonia.Media.SolidColorBrush)defaultSkin.BackgroundBrush).Color);
+        Assert.Equal(Avalonia.Media.Color.Parse("#131519"), ((Avalonia.Media.SolidColorBrush)defaultSkin.ChromeBrush).Color);
+        Assert.Equal(Avalonia.Media.Color.Parse("#C9803F"), ((Avalonia.Media.SolidColorBrush)defaultSkin.AccentBrush).Color);
+        Assert.Equal(Avalonia.Media.Color.Parse("#1B1E24"), ((Avalonia.Media.SolidColorBrush)defaultSkin.SurfaceBrush).Color);
+        Assert.Equal(Avalonia.Media.Color.Parse("#B3ADA0"), ((Avalonia.Media.SolidColorBrush)defaultSkin.TextMutedBrush).Color);
+
+        var windows11 = skins.Single(s => s.Key == "windows_11");
+        Assert.Equal(Avalonia.Media.Color.Parse("#0078D4"), ((Avalonia.Media.SolidColorBrush)windows11.AccentBrush).Color);
+    }
+
     /// <summary>Windows 11 existed as a real theme.json on disk but was never actually reachable
     /// from GetAvailableSkins/LoadSkin before this fix (found during the codebase survey for the
     /// design doc above) - this is the regression test for that specific bug.</summary>
@@ -163,6 +184,11 @@ public class SkinServiceTests : IDisposable
             Assert.Equal(Avalonia.Media.Color.Parse("#000000"), resources["PbSurface0Color"]);
             Assert.Equal(Avalonia.Media.Color.Parse("#66E0995A"), resources["PbGlowColor"]);
             Assert.Equal(new CornerRadius(5), resources["PbRadiusSm"]);
+
+            // docs/superpowers/specs/2026-09-08-stats-v2-mangabaka-design.md §8 - ChartBlue/
+            // ChartViolet are additive the same way; this fixture predates them too.
+            Assert.Equal(Avalonia.Media.Color.Parse("#5B8DBE"), resources["PbChartBlueColor"]);
+            Assert.Equal(Avalonia.Media.Color.Parse("#9B7EBD"), resources["PbChartVioletColor"]);
         }
         finally
         {
@@ -191,6 +217,24 @@ public class SkinServiceTests : IDisposable
         {
             if (File.Exists(crpckPath)) File.Delete(crpckPath);
         }
+    }
+
+    /// <summary>docs/superpowers/specs/2026-09-08-stats-v2-mangabaka-design.md §8 - each built-in
+    /// skin defines its own ChartBlue/ChartViolet rather than falling back to the default's.</summary>
+    [Theory]
+    [InlineData("windows_11", "#038387", "#8764B8")]
+    [InlineData("cool_technical", "#6E7FD8", "#B085D9")]
+    [InlineData("vibrant_pop", "#4E9DE8", "#B14EE8")]
+    [InlineData("vintage_paperback", "#5B7A94", "#7A5B78")]
+    public void ApplySkin_SetsChartColors_PerSkin(string key, string expectedBlue, string expectedViolet)
+    {
+        var service = CreateService();
+
+        service.ApplySkin(key);
+
+        var resources = Avalonia.Application.Current!.Resources;
+        Assert.Equal(Avalonia.Media.Color.Parse(expectedBlue), resources["PbChartBlueColor"]);
+        Assert.Equal(Avalonia.Media.Color.Parse(expectedViolet), resources["PbChartVioletColor"]);
     }
 
     [Fact]

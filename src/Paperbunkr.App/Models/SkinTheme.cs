@@ -46,6 +46,14 @@ public class SkinColors
     public string BadgeText { get; set; } = "#241505";
     public string Success { get; set; } = "#5FA889";
 
+    // Added by docs/superpowers/specs/2026-09-08-stats-v2-mangabaka-design.md §8 - categorical
+    // chart colors for the Stats screen's multi-segment donuts (7-value ReadingStatus, 5-value
+    // ContentType) where the four names above aren't enough distinct hues on their own. Additive,
+    // same "a theme.json predating this simply omits the key and gets the default" rule as the
+    // elevation-scale keys below.
+    public string ChartBlue { get; set; } = "#5B8DBE";
+    public string ChartViolet { get; set; } = "#9B7EBD";
+
     // Elevation scale + glow/hero-gradient tokens added by docs/superpowers/specs/2026-08-24-
     // design-language-foundation-design.md. Additive - a theme.json predating this change simply
     // omits these keys and gets the defaults below (matching the "default" skin's own values, the

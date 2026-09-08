@@ -10,56 +10,84 @@
              x:Class="Paperbunkr.App.Views.Preferences.AppearanceSection"
              x:DataType="vm:PreferencesScreenViewModel">
 
+    <UserControl.Styles>
+        <!-- Appearance redesign (docs/superpowers/specs/2026-09-07-appearance-redesign-design.md) -
+             the active skin's mini-mockup card gets an accent border ring; the app's own current
+             accent (not the previewed skin's own accent), so the selection affordance always reads
+             consistently regardless of which skin's colors a given card is displaying. -->
+        <Style Selector="Border.skinActive">
+            <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
+            <Setter Property="BorderThickness" Value="2" />
+        </Style>
+    </UserControl.Styles>
+
     <ScrollViewer>
         <StackPanel Margin="28,20,28,40" Spacing="20">
             <TextBlock Classes="pbTextHeading" Text="Appearance" />
 
-        <!-- Skins - deferred to its own future redesign (docs/superpowers/specs/2026-09-07-
-             preferences-tile-hub-redesign-design.md §4 item 8) - a dynamic repeater over a
-             data-bound collection doesn't fit SettingsRow's fixed-row shape, kept exactly as-is. -->
-        <Border Classes="groupBox" Tag="appearance.skin">
-            <StackPanel>
-                <Border Classes="groupHeader">
-                    <TextBlock Text="Skins" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
-                </Border>
-                <ItemsControl x:Name="SkinsList" ItemsSource="{Binding Skins}">
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate x:DataType="models:SkinSummary">
-                            <Border Classes="skinRow">
-                                <Button Classes="sideItemButton"
-                                        Command="{Binding #SkinsList.((vm:PreferencesScreenViewModel)DataContext).SelectSkinCommand}"
-                                        CommandParameter="{Binding}">
-                                    <Grid ColumnDefinitions="*,Auto">
-                                        <TextBlock Grid.Column="0" Text="{Binding Name}" FontSize="13"
-                                                   Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
-                                        <TextBlock Grid.Column="1" Text="Active" IsVisible="{Binding IsActive}"
-                                                   FontSize="11" FontWeight="Bold" Foreground="{DynamicResource PbAccentTextBrush}"
-                                                   VerticalAlignment="Center" />
-                                    </Grid>
-                                </Button>
-                            </Border>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
-            </StackPanel>
-        </Border>
+        <!-- Skins - grid of mini UI-mockup preview cards, real theme.json colors per skin
+             (docs/superpowers/specs/2026-09-07-appearance-redesign-design.md). Install Skin folded
+             in here (header actions) rather than its own separate group. -->
+        <StackPanel Tag="appearance.skin" Spacing="10">
+            <Grid ColumnDefinitions="*,Auto,Auto">
+                <TextBlock Grid.Column="0" Classes="settingsGroupCaption" Text="SKINS" VerticalAlignment="Center" Margin="0" />
+                <Button Grid.Column="1" Classes="headerAction ghost" Content="Install…" Margin="0,0,8,0"
+                        Command="{Binding BrowseForSkinCommand}" AutomationProperties.AutomationId="InstallSkinButton" />
+                <Button Grid.Column="2" Classes="headerAction ghost" Command="{Binding OpenSkinsFolderCommand}"
+                        AutomationProperties.Name="Open Skins Folder" ToolTip.Tip="Open Skins Folder"
+                        AutomationProperties.AutomationId="OpenSkinsFolderButton">
+                    <fi:SymbolIcon Symbol="FolderOpen" FontSize="{StaticResource PbIconSizeXs}" />
+                </Button>
+            </Grid>
 
-        <StackPanel Tag="appearance.installSkin">
-            <TextBlock Classes="settingsGroupCaption" Text="INSTALL SKIN" />
-            <pref:SettingsRow Icon="FolderOpen" Title="Install a skin from a file">
-                <pref:SettingsRow.SettingsContent>
-                    <Button Classes="headerAction primary" Command="{Binding BrowseForSkinCommand}" Content="Browse…" />
-                </pref:SettingsRow.SettingsContent>
-            </pref:SettingsRow>
-            <pref:SettingsRow Icon="FolderOpen" Title="Open the folder where installed skins live">
-                <pref:SettingsRow.SettingsContent>
-                    <Button Classes="headerAction ghost" Command="{Binding OpenSkinsFolderCommand}" Content="Open Skins Folder" />
-                </pref:SettingsRow.SettingsContent>
-            </pref:SettingsRow>
-            <StackPanel Orientation="Horizontal" Spacing="5" Margin="0,4,0,0" IsVisible="{Binding HasInstallSkinError}">
-                <fi:SymbolIcon Symbol="Warning" FontSize="{StaticResource PbIconSizeXs}" Foreground="#D96C6C" />
-                <TextBlock Text="{Binding InstallSkinError}" Foreground="#D96C6C" FontSize="12" TextWrapping="Wrap" />
+            <StackPanel Orientation="Horizontal" Spacing="5" IsVisible="{Binding HasInstallSkinError}">
+                <fi:SymbolIcon Symbol="Warning" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbDangerBrush}" />
+                <TextBlock Text="{Binding InstallSkinError}" Foreground="{DynamicResource PbDangerBrush}" FontSize="12" TextWrapping="Wrap" />
             </StackPanel>
+
+            <ItemsControl x:Name="SkinsList" ItemsSource="{Binding Skins}">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <WrapPanel Orientation="Horizontal" />
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="models:SkinSummary">
+                        <Button Background="Transparent" BorderThickness="0" Padding="0" Margin="0,0,10,10" Cursor="Hand"
+                                Command="{Binding #SkinsList.((vm:PreferencesScreenViewModel)DataContext).SelectSkinCommand}"
+                                CommandParameter="{Binding}">
+                            <StackPanel Width="140">
+                                <Grid>
+                                    <Border Classes.skinActive="{Binding IsActive}" CornerRadius="{StaticResource PbRadiusSm}"
+                                            Background="{Binding BackgroundBrush}" Width="140" Height="90" ClipToBounds="True">
+                                        <StackPanel>
+                                            <Border Height="18" Background="{Binding ChromeBrush}">
+                                                <Ellipse Width="6" Height="6" Fill="{Binding AccentBrush}" HorizontalAlignment="Left" Margin="8,0,0,0" />
+                                            </Border>
+                                            <Grid ColumnDefinitions="10,*" Margin="8">
+                                                <Border Grid.Column="0" Background="{Binding SurfaceBrush}" CornerRadius="2" Height="56" />
+                                                <StackPanel Grid.Column="1" Margin="8,4,0,0" Spacing="6">
+                                                    <Border Height="4" Width="70" Background="{Binding TextMutedBrush}" CornerRadius="2" HorizontalAlignment="Left" />
+                                                    <Border Height="4" Width="90" Background="{Binding TextMutedBrush}" CornerRadius="2" HorizontalAlignment="Left" />
+                                                    <Border Height="4" Width="50" Background="{Binding TextMutedBrush}" CornerRadius="2" HorizontalAlignment="Left" />
+                                                </StackPanel>
+                                            </Grid>
+                                        </StackPanel>
+                                    </Border>
+                                    <Border Width="16" Height="16" CornerRadius="8" Background="{DynamicResource PbSuccessBrush}"
+                                            HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-4,-4,0"
+                                            IsVisible="{Binding IsActive}">
+                                        <fi:SymbolIcon Symbol="Checkmark" FontSize="{StaticResource PbIconSizeXs}" Foreground="White"
+                                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                    </Border>
+                                </Grid>
+                                <TextBlock Text="{Binding Name}" FontSize="12" Margin="2,6,0,0"
+                                           Foreground="{DynamicResource PbTextBrush}" HorizontalAlignment="Left" />
+                            </StackPanel>
+                        </Button>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
         </StackPanel>
 
         <StackPanel Tag="appearance.font">
@@ -69,34 +97,28 @@
                     <ComboBox ItemsSource="{Binding FontFamilies}" SelectedItem="{Binding SelectedFontFamily}" Width="280" />
                 </pref:SettingsRow.SettingsContent>
             </pref:SettingsRow>
+            <TextBlock Text="The quick brown fox jumps over the lazy dog" FontFamily="{Binding SelectedFontFamily}"
+                       FontSize="14" Foreground="{DynamicResource PbTextMutedBrush}" Margin="0,8,0,0" />
         </StackPanel>
 
-        <StackPanel Tag="appearance.motion">
-            <TextBlock Classes="settingsGroupCaption" Text="MOTION" />
+        <!-- Interface - Motion/Navigation/Developer consolidated from 3 single-row groups into one
+             (docs/superpowers/specs/2026-09-07-appearance-redesign-design.md §4/Goal 6). Developer's
+             row keeps its own IsDebugBuild visibility rather than the whole group needing it. -->
+        <StackPanel Tag="appearance.interface">
+            <TextBlock Classes="settingsGroupCaption" Text="INTERFACE" />
             <pref:SettingsRow Icon="Pulse" Title="Reduce motion"
                                Description="Shortens UI transitions to effectively instant.">
                 <pref:SettingsRow.SettingsContent>
                     <ToggleSwitch IsChecked="{Binding ReducedMotion}" OnContent="{x:Null}" OffContent="{x:Null}" />
                 </pref:SettingsRow.SettingsContent>
             </pref:SettingsRow>
-        </StackPanel>
-
-        <!-- Navigation (docs/superpowers/specs/2026-08-24-navigation-shell-motion-system-design.md's
-             hover-expand mechanism) - added 2026-09-05, user-requested opt-out. -->
-        <StackPanel Tag="appearance.navigation">
-            <TextBlock Classes="settingsGroupCaption" Text="NAVIGATION" />
             <pref:SettingsRow Icon="Navigation" Title="Expand nav rail on hover"
                                Description="When off, the rail only expands while pinned open.">
                 <pref:SettingsRow.SettingsContent>
                     <ToggleSwitch IsChecked="{Binding NavRailHoverExpandEnabled}" OnContent="{x:Null}" OffContent="{x:Null}" />
                 </pref:SettingsRow.SettingsContent>
             </pref:SettingsRow>
-        </StackPanel>
-
-        <!-- Developer - debug-only, hidden entirely in Release builds. -->
-        <StackPanel Tag="appearance.developer" IsVisible="{Binding IsDebugBuild}">
-            <TextBlock Classes="settingsGroupCaption" Text="DEVELOPER" />
-            <pref:SettingsRow Icon="Code" Title="Open the internal component/style showcase">
+            <pref:SettingsRow Icon="Code" Title="Open the internal component/style showcase" IsVisible="{Binding IsDebugBuild}">
                 <pref:SettingsRow.SettingsContent>
                     <Button Content="Open Design Showcase" Command="{Binding OpenDesignShowcaseCommand}" />
                 </pref:SettingsRow.SettingsContent>

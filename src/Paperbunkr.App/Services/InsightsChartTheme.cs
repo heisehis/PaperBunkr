@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using Avalonia;
 using Avalonia.Styling;
 using ScottPlot;
@@ -31,7 +32,25 @@ public static class InsightsChartTheme
 
     public static ScottPlot.Color Accent => Resolve("PbAccentColor", "#5b8def");
 
+    public static ScottPlot.Color Badge => Resolve("PbBadgeColor", "#d7ac4c");
+
+    public static ScottPlot.Color Success => Resolve("PbSuccessColor", "#5fa889");
+
+    public static ScottPlot.Color Danger => Resolve("PbDangerColor", "#d96c6c");
+
+    public static ScottPlot.Color Blue => Resolve("PbChartBlueColor", "#5b8dbe");
+
+    public static ScottPlot.Color Violet => Resolve("PbChartVioletColor", "#9b7ebd");
+
     public static ScottPlot.Color Grid => Resolve("PbBorderColor", "#33353d");
+
+    /// <summary>
+    /// Fixed-order categorical palette for any Stats chart needing more than one series/segment
+    /// color (docs/superpowers/specs/2026-09-08-stats-v2-mangabaka-design.md §8) - a donut/bar
+    /// assigns colors by list index, so the same category always gets the same slot across renders
+    /// and app sessions rather than a color being randomly reassigned each time.
+    /// </summary>
+    public static IReadOnlyList<ScottPlot.Color> CategoricalPalette => new[] { Accent, Blue, Badge, Success, Violet, Danger };
 
     /// <summary>Applies figure/axis/grid colours and a transparent background to a plot. Call before adding data.</summary>
     public static void Apply(Plot plot)

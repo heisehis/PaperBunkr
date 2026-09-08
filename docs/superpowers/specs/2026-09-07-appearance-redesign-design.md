@@ -127,16 +127,18 @@ nothing-under-it case to handle.
 
 **`PreferenceIndex.cs` updates** (confirmed by direct read of `Models/PreferenceIndex.cs`: exactly
 5 real entries exist for Appearance today — Skin, Install Skin, Font, Motion, Developer; there is no
-existing search entry for Navigation at all, a pre-existing gap):
-- The `"Motion"` and `"Developer"` entries' `Tag` changes from `"appearance.motion"`/
-  `"appearance.developer"` to `"appearance.interface"` (both now resolve to the merged group,
-  jumping to its top rather than pixel-precise to one row - the same resolution granularity every
-  other multi-row group's search hit already has).
+existing search entry for Navigation at all, a pre-existing gap). **Correction found during plan-
+writing:** `PreferenceIndexTests.AnchorKeysAreUnique` enforces every `AnchorKey` is globally unique
+across the whole catalog — three separate entries can't all point at `"appearance.interface"`. The
+actual fix is better than the original draft anyway: since Motion/Navigation/Developer become one
+UI group, they become **one** consolidated search entry, not three:
+- The `"Motion"` and `"Developer"` entries are removed; a single new `"Interface"` entry
+  (`GroupTitle`/`Title` = `"Interface"`, `Tag: "appearance.interface"`) replaces both, with combined
+  keywords (`"motion", "reduce motion", "animation", "transitions", "nav rail", "hover", "expand",
+  "developer", "design showcase", "debug"`) — also closing the pre-existing gap of Navigation having
+  no search entry at all, since its terms fold into this same merged one.
 - The `"Install Skin"` entry's `Tag` changes from `"appearance.installSkin"` to `"appearance.skin"`
   (same search terms, now pointing at the merged Skins group per Architecture §3).
-- New: a `"Navigation"` entry (search terms `"nav rail", "hover", "expand"`, `Tag:
-  "appearance.interface"`) - closing the pre-existing gap as a low-cost side effect of already
-  editing this exact file for the other two Tag changes, not separate scope.
 
 ### 5. Font preview
 
@@ -161,8 +163,9 @@ None beyond what Architecture §1 already covers (colors computed in `SkinServic
 - `SkinServiceTests`: new assertions that `GetAvailableSkins()`'s returned `SkinSummary` rows carry
   non-null brush properties matching each skin's actual `theme.json` colors (spot-check 2-3 skins,
   e.g. Default's `ChromeBrush` resolves to `#131519`).
-- `PreferenceIndexTests`: Motion/Developer/Install Skin's updated `Tag` values resolve correctly;
-  the new Navigation entry resolves to `appearance.interface` and its search terms match.
+- `PreferenceIndexTests`: the new merged "Interface" entry resolves to `appearance.interface` and
+  the existing `AnchorKeysAreUnique`/`EveryEntryAnchorResolvesToATagInItsSection` tests still pass
+  with 4 Appearance entries instead of 5 (Skin, Install Skin, Font, Interface).
 - Manual on-screen pass (standing no-unattended-GUI caveat): all 5 skins render distinguishable
   mini-mockups; clicking a card applies that skin and moves the accent-ring+checkmark to it; Install…
   and Open Skins Folder both still work from their new header location; a bad file still shows the

@@ -28,6 +28,11 @@
         <Color x:Key="PbBadgeColor">#D7AC4C</Color>
         <Color x:Key="PbBadgeTextColor">#241505</Color>
         <Color x:Key="PbSuccessColor">#5FA889</Color>
+        <!-- Categorical chart colors (docs/superpowers/specs/2026-09-08-stats-v2-mangabaka-design.md
+             §8) - live-updated by SkinService.ApplySkinResources like the accent/badge/success colors
+             above; these static values are only the pre-first-ApplyPersistedSettings fallback. -->
+        <Color x:Key="PbChartBlueColor">#5B8DBE</Color>
+        <Color x:Key="PbChartVioletColor">#9B7EBD</Color>
         <!-- Failure/error accent (Activity Center failed-job chips + error alerts, docs/superpowers/
              specs/2026-09-03-activity-center-design.md). Matches the muted red already used inline
              for the discard-confirm primary button in MainWindow. -->
@@ -53,6 +58,8 @@
         <SolidColorBrush x:Key="PbBadgeBrush" Color="{StaticResource PbBadgeColor}" />
         <SolidColorBrush x:Key="PbBadgeTextBrush" Color="{StaticResource PbBadgeTextColor}" />
         <SolidColorBrush x:Key="PbSuccessBrush" Color="{StaticResource PbSuccessColor}" />
+        <SolidColorBrush x:Key="PbChartBlueBrush" Color="{StaticResource PbChartBlueColor}" />
+        <SolidColorBrush x:Key="PbChartVioletBrush" Color="{StaticResource PbChartVioletColor}" />
         <SolidColorBrush x:Key="PbDangerBrush" Color="{StaticResource PbDangerColor}" />
         <SolidColorBrush x:Key="PbBadgeSoftBrush" Color="{StaticResource PbBadgeSoftColor}" />
         <SolidColorBrush x:Key="PbDangerSoftBrush" Color="{StaticResource PbDangerSoftColor}" />

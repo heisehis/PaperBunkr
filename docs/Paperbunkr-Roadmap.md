@@ -1210,6 +1210,54 @@ slices all green (194 + 97 + …). **On-screen GUI verification not done** — s
 every other Beta feature (no computer-use); needs a user click-through of the new screen, the range
 switch, the attention deep-links, and the two charts rendering under a real library.
 
+### Stats v2 — Insights/Stats split + MangaBaka-inspired analytics (shipped 2026-09-08)
+Design/plan: `docs/superpowers/specs/2026-09-08-stats-v2-mangabaka-{design,plan}.md` — **revised
+after the first on-screen pass**, twice. First revision: the initial `StatCard` control rendered
+every card blank (a self-referencing `#Root.X` element binding inside a plain `UserControl`, never
+verified on screen before shipping — see `feedback_no_computer_use`, this is exactly the kind of bug
+that check would have caught). Second revision: the design doc's own choice of a separate **Stats**
+nav-rail destination didn't hold up once seen live — rolled back into a **tab on the Insights
+screen** instead, matching this project's established "discrete section switching over scattering
+related content across destinations" preference ([[feedback_dislikes_infinite_scroll_navigation]]).
+
+Shipped shape: one **Insights** nav-rail entry, two tabs — **Overview** (READING attention cards +
+Collection health, unchanged from before this work) and **Stats** (everything that's a number to
+look at, no click-through action). Insights' old range selector is removed from the Overview tab
+entirely (nothing there varied by range); the Stats tab gets its own. `InsightsResolver`/
+`InsightsSnapshot` shrink to just Overview's content; the moved content plus a much larger
+MangaBaka-style section set moves into a new `StatsResolver`/`StatsSnapshot`, owned by a
+`StatsScreenViewModel` embedded as `InsightsScreenViewModel.Stats` rather than its own nav screen: a
+Highlights row (Highest rated, Most reread,
+Longest journey, Fastest completion, Plan to read, Zero progress), Reading Activity averages, an
+Activity Heatmap, Library Growth over time (stacked by reading state/media type/content rating,
+using each item's *current* status — no historical status-change tracking exists), a real
+`ReadingStatus`/`ContentType` Library Breakdown (replaces the old 3-bucket Completion donut), Score
+Distribution + Content Rating + Publication Year, and Top Genres/Tags/Publishers/Authors/Artists.
+Licensed %, Has-Anime-Adaptation %, and "You vs Community" were explicitly dropped/deferred — no
+clean data source, or (You vs Community) needs new adapter work to populate the already-schema'd but
+dormant `ExternalRating` table, not just a UI change.
+
+New "Longest journey"/"Fastest completion" logic pairs each item's real `Opened`→`Finished`
+`ReadingEvent`s and **excludes backfilled pairs** (same timestamp on both ends — the exact signature
+`ReadingEventBackfill` writes) so pre-2026-09-05 history can't produce a false "0-day journey"
+record; "Most reread" ships without that exclusion (undercounts old rereads, same self-correcting
+footnote treatment the pace chart already had). Two new categorical chart colors
+(`PbChartBlueBrush`/`PbChartVioletBrush`) added the same additive, per-skin-`theme.json` way every
+other skin token works, across all 5 built-in skins. New shared `CategoryDonut`/`ActivityHeatmap`
+controls under `Views/Stats/` (generalizes the old 3-segment `CompletionDonut`); Stats-tab cards use
+plain inline `Border.card` markup (the same proven pattern the Overview tab's own cards already
+use) rather than a reusable card control — the first attempt at one (`StatCard`, using a
+self-referencing `#Root.X` element binding) rendered every card blank on screen and was dropped.
+
+Verified: full solution builds clean (forced rebuild, not just 0-errors-could-be-stale) after every
+step, including after the tab-merge rework; `Paperbunkr.Data.Tests` `InsightsResolverTests`/
+`StatsResolverTests` 29/29 green (incl. the backfill-exclusion case); `Paperbunkr.App.Tests`
+Insights/Stats/Skin/ChartTheme slices 35/35 green. **On-screen GUI verification: partially done** —
+the user caught the blank-`StatCard` bug and the nav-rail-vs-tab call live, both fixed and
+rebuilt; the *rebuilt* Stats tab itself still needs a click-through (the range switch, the heatmap/
+donuts/charts rendering under a real library, and at least one non-default skin to confirm the new
+chart colors read correctly).
+
 ### Auto-update + changelog + customized installer (shipped 2026-09-01, `32d82bf`) — 0.2.0-beta
 Design/plan: `docs/superpowers/specs/2026-09-01-auto-update-and-changelog-{design,plan}.md`.
 **In-app auto-update via `NetSparkleUpdater.SparkleUpdater`** — checks for new releases on startup

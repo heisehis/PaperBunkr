@@ -3,23 +3,25 @@ using Paperbunkr.App.Services;
 using Paperbunkr.App.ViewModels;
 using Paperbunkr.Data;
 using Paperbunkr.Data.Entities;
+using Paperbunkr.Data.Metadata;
 
 namespace Paperbunkr.App.Tests;
 
 /// <summary>
-/// Exercises <see cref="InsightsScreenViewModel"/> - the session cache and event-driven
-/// invalidation (docs/superpowers/specs/2026-09-08-stats-v2-mangabaka-design.md §5). The tile
-/// computation itself is covered by <c>InsightsResolverTests</c> (Paperbunkr.Data.Tests).
+/// Exercises <see cref="StatsScreenViewModel"/> - the session cache and event-driven invalidation
+/// (docs/superpowers/specs/2026-09-08-stats-v2-mangabaka-design.md §7). Mirrors
+/// <see cref="InsightsScreenViewModelTests"/>'s shape; tile computation itself is covered by
+/// <c>StatsResolverTests</c> (Paperbunkr.Data.Tests).
 /// </summary>
-public class InsightsScreenViewModelTests : IDisposable
+public class StatsScreenViewModelTests : IDisposable
 {
     private readonly string? _originalOverride;
     private readonly string _dbPath;
 
-    public InsightsScreenViewModelTests()
+    public StatsScreenViewModelTests()
     {
         _originalOverride = PaperbunkrDbContext.DatabasePathOverride;
-        _dbPath = Path.Combine(Path.GetTempPath(), $"paperbunkr_insights_vm_test_{Guid.NewGuid():N}.db");
+        _dbPath = Path.Combine(Path.GetTempPath(), $"paperbunkr_stats_vm_test_{Guid.NewGuid():N}.db");
         PaperbunkrDbContext.DatabasePathOverride = _dbPath;
         using var ctx = PaperbunkrDb.CreateContext();
         ctx.Database.EnsureCreated();
@@ -38,29 +40,33 @@ public class InsightsScreenViewModelTests : IDisposable
         }
     }
 
-    private static InsightsScreenViewModel NewVm(IReadingEventRecorder? recorder = null)
-        => new(_ => { }, _ => { }, _ => { }, recorder, () => new DateTime(2026, 9, 5, 12, 0, 0, DateTimeKind.Utc));
+    private static StatsScreenViewModel NewVm(IReadingEventRecorder? recorder = null)
+        => new(_ => { }, recorder, () => new DateTime(2026, 9, 5, 12, 0, 0, DateTimeKind.Utc));
 
     [Fact]
-    public void Refresh_OnEmptyLibrary_DoesNotThrow()
+    public void Refresh_OnEmptyLibrary_DoesNotThrow_AndDefaultsToNinetyDays()
     {
         var vm = NewVm();
         vm.Refresh();
 
+        Assert.Equal(InsightsRange.Days90, vm.Range);
         Assert.NotNull(vm.Snapshot);
-        Assert.Equal(0, vm.ContinueCount);
-        Assert.True(vm.ReadingAllClear);
+        Assert.False(vm.HasPaceData);
+        Assert.False(vm.HasRatings);
     }
 
     [Fact]
-    public void Refresh_ServesFromCache_UntilInvalidated()
+    public void SwitchingRange_BuildsAndCachesEachRangeOnce()
     {
         var vm = NewVm();
         vm.Refresh();
-        var first = vm.Snapshot;
+        var first90 = vm.Snapshot;
 
-        vm.Refresh();
-        Assert.Same(first, vm.Snapshot); // no recorder event fired - still cached
+        vm.Range = InsightsRange.Days30;
+        Assert.NotSame(first90, vm.Snapshot);
+
+        vm.Range = InsightsRange.Days90;
+        Assert.Same(first90, vm.Snapshot); // served from cache, same instance
     }
 
     [Fact]
@@ -72,27 +78,14 @@ public class InsightsScreenViewModelTests : IDisposable
         vm.Refresh();
         var before = vm.Snapshot;
 
-        // A new in-progress issue lands, which Continue should now pick up.
-        int seriesId;
-        int issueId;
         using (var ctx = PaperbunkrDb.CreateContext())
         {
-            var series = new Series { Name = "New" };
-            ctx.Series.Add(series);
-            ctx.SaveChanges();
-            var issue = new Issue { SeriesId = series.Id, PageCount = 100, LastPageRead = 50 };
-            ctx.Issues.Add(issue);
-            ctx.SaveChanges();
-            seriesId = series.Id;
-            issueId = issue.Id;
-
             ctx.ReadingEvents.Add(new ReadingEvent
             {
                 ItemType = ReadingItemType.Comic,
-                ItemId = issueId,
-                Kind = ReadingEventKind.Opened,
+                ItemId = 1,
+                Kind = ReadingEventKind.Finished,
                 TimestampUtc = new DateTime(2026, 9, 4, 0, 0, 0, DateTimeKind.Utc),
-                SeriesId = seriesId,
             });
             ctx.SaveChanges();
         }
@@ -100,7 +93,7 @@ public class InsightsScreenViewModelTests : IDisposable
         recorder.Raise();
 
         Assert.NotSame(before, vm.Snapshot);
-        Assert.Equal(1, vm.ContinueCount);
+        Assert.Equal(1, vm.Snapshot!.FinishedInRange.Items);
     }
 
     private sealed class FakeRecorder : IReadingEventRecorder

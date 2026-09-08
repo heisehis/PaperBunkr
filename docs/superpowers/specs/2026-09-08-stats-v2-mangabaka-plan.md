@@ -44,6 +44,14 @@ Survey notes (things confirmed against the real code, not assumed):
 StatsResolver.cs` (new), `src/Paperbunkr.Data.Tests/InsightsResolverTests.cs` (edit — trim),
 `src/Paperbunkr.Data.Tests/StatsResolverTests.cs` (new — receives the moved test cases)
 
+**Correction found during implementation:** none of `Continue`/`AlmostDone`/`DiveIn`/`Gaps` ever
+consumed the `range`/`inRange`-filtered events — only the tiles moving to Stats did. Once those
+move out, Insights' range selector has zero effect on anything left on the screen. Removing it
+entirely rather than shipping dead UI: `InsightsResolver.Build` drops its `range` parameter (now
+just `(context, nowUtc)`), `InsightsScreenViewModel` drops `Range`/`RangeOptions`/`SetRange`, and
+`InsightsScreen.axaml`'s fixed header drops the range-chip `ItemsControl` (Step 11). `InsightsRange`
+the enum type moves to `StatsResolver.cs` unchanged (Stats is the only screen that still needs it).
+
 **What:** Move `Lifetime`, `ReadingDayStreak`, `FinishStreak`, `FinishedInRange`, `Pace`,
 `Completion`, `Composition`, `Ratings` (and their `Compute*` methods, `ComputeStreak`,
 `ComputePace`, `ComputeCompletion`, `ComputeComposition`, `ComputeRatings`, `EstimateBookPages`,

@@ -2,7 +2,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:fi="using:FluentIcons.Avalonia"
              xmlns:vm="using:Paperbunkr.App.ViewModels"
-             xmlns:insights="using:Paperbunkr.App.Views.Insights"
+             xmlns:stats="using:Paperbunkr.App.Views.Stats"
              xmlns:meta="using:Paperbunkr.Data.Metadata"
              xmlns:sp="using:ScottPlot.Avalonia"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
@@ -45,18 +45,11 @@
             <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
             <Setter Property="TextWrapping" Value="Wrap" />
         </Style>
-        <Style Selector="Button.rangeChip">
-            <Setter Property="Background" Value="{DynamicResource PbSurface2Brush}" />
-            <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
-            <Setter Property="BorderThickness" Value="0" />
-            <Setter Property="CornerRadius" Value="6" />
-            <Setter Property="Padding" Value="10,5" />
-            <Setter Property="Margin" Value="4,0,0,0" />
-            <Setter Property="Cursor" Value="Hand" />
-        </Style>
-        <Style Selector="Button.rangeChip.active">
-            <Setter Property="Background" Value="{DynamicResource PbAccentBrush}" />
-            <Setter Property="Foreground" Value="{DynamicResource PbAccentTextBrush}" />
+        <Style Selector="TextBlock.hlTitle">
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextBrush}" />
+            <Setter Property="TextTrimming" Value="CharacterEllipsis" />
         </Style>
         <Style Selector="Button.attnRow">
             <Setter Property="Background" Value="Transparent" />
@@ -71,15 +64,57 @@
             <Setter Property="Foreground" Value="{DynamicResource PbTextBrush}" />
             <Setter Property="Margin" Value="0,0,0,8" />
         </Style>
+        <Style Selector="Button.tab">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0,0,0,2" />
+            <Setter Property="BorderBrush" Value="Transparent" />
+            <Setter Property="CornerRadius" Value="0" />
+            <Setter Property="Padding" Value="4,6" />
+            <Setter Property="Margin" Value="0,0,20,0" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style Selector="Button.tab.active">
+            <Setter Property="Foreground" Value="{DynamicResource PbTextBrush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
+        </Style>
+        <Style Selector="Button.rangeChip">
+            <Setter Property="Background" Value="{DynamicResource PbSurface2Brush}" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="CornerRadius" Value="6" />
+            <Setter Property="Padding" Value="10,5" />
+            <Setter Property="Margin" Value="4,0,0,0" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style Selector="Button.rangeChip.active">
+            <Setter Property="Background" Value="{DynamicResource PbAccentBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource PbAccentTextBrush}" />
+        </Style>
+        <Style Selector="Button.filterRow">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="0,2" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
     </UserControl.Styles>
 
-    <Grid RowDefinitions="Auto,*">
+    <Grid RowDefinitions="Auto,Auto,*">
 
-        <!-- Fixed header + range selector (does not scroll) -->
-        <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="28,20,28,14">
-            <TextBlock Grid.Column="0" Text="Insights" FontSize="20" FontWeight="Bold"
-                       Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
-            <ItemsControl Grid.Column="1" ItemsSource="{Binding RangeOptions}" VerticalAlignment="Center">
+        <!-- Fixed header -->
+        <TextBlock Grid.Row="0" Text="Insights" FontSize="20" FontWeight="Bold"
+                   Foreground="{DynamicResource PbTextBrush}" Margin="28,20,28,10" />
+
+        <!-- Tab strip + (Stats-only) range selector -->
+        <Grid Grid.Row="1" ColumnDefinitions="*,Auto" Margin="28,0,28,14">
+            <StackPanel Grid.Column="0" Orientation="Horizontal">
+                <Button Classes="tab" Classes.active="{Binding !IsStatsTabSelected}" Content="Overview" Command="{Binding SelectOverviewTabCommand}" />
+                <Button Classes="tab" Classes.active="{Binding IsStatsTabSelected}" Content="Stats" Command="{Binding SelectStatsTabCommand}" />
+            </StackPanel>
+            <ItemsControl Grid.Column="1" ItemsSource="{Binding Stats.RangeOptions}" VerticalAlignment="Center" IsVisible="{Binding IsStatsTabSelected}">
                 <ItemsControl.ItemsPanel>
                     <ItemsPanelTemplate><StackPanel Orientation="Horizontal" /></ItemsPanelTemplate>
                 </ItemsControl.ItemsPanel>
@@ -87,17 +122,17 @@
                     <DataTemplate x:DataType="vm:RangeOption">
                         <Button Classes="rangeChip" Content="{Binding Label}"
                                 Classes.active="{Binding IsActive}"
-                                Command="{Binding $parent[ItemsControl].((vm:InsightsScreenViewModel)DataContext).SetRangeCommand}"
+                                Command="{Binding $parent[ItemsControl].((vm:InsightsScreenViewModel)DataContext).Stats.SetRangeCommand}"
                                 CommandParameter="{Binding Value}" />
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
         </Grid>
 
-        <ScrollViewer Grid.Row="1">
+        <!-- Overview tab -->
+        <ScrollViewer Grid.Row="2" IsVisible="{Binding !IsStatsTabSelected}">
             <StackPanel Margin="28,4,28,28" Spacing="20">
 
-                <!-- Reading: what to read next -->
                 <StackPanel>
                     <TextBlock Classes="sectionLabel" Text="READING" />
 
@@ -109,8 +144,6 @@
                     </Border>
 
                     <WrapPanel IsVisible="{Binding !ReadingAllClear}">
-
-                        <!-- Continue -->
                         <Border Classes="card attnCard" IsVisible="{Binding !ContinueEmpty}">
                             <StackPanel Spacing="4">
                                 <TextBlock Classes="cardHeading" Text="CONTINUE" />
@@ -133,7 +166,6 @@
                             </StackPanel>
                         </Border>
 
-                        <!-- Almost done -->
                         <Border Classes="card attnCard" IsVisible="{Binding !AlmostDoneEmpty}">
                             <StackPanel Spacing="4">
                                 <TextBlock Classes="cardHeading" Text="ALMOST DONE" />
@@ -156,7 +188,6 @@
                             </StackPanel>
                         </Border>
 
-                        <!-- Dive in -->
                         <Border Classes="card attnCard" IsVisible="{Binding !DiveInEmpty}">
                             <StackPanel Spacing="4">
                                 <TextBlock Classes="cardHeading" Text="DIVE IN" />
@@ -178,119 +209,207 @@
                                 </ItemsControl>
                             </StackPanel>
                         </Border>
-
                     </WrapPanel>
                 </StackPanel>
 
-                <!-- At a glance -->
-                <StackPanel>
-                    <TextBlock Classes="sectionLabel" Text="AT A GLANCE" />
-                    <Grid ColumnDefinitions="*,*,*,*" ColumnSpacing="12">
-                        <Border Grid.Column="0" Classes="card">
-                            <StackPanel>
-                                <TextBlock Classes="sub" Text="Read all time" />
-                                <TextBlock Classes="bigNumber" Text="{Binding Snapshot.Lifetime.ItemsRead, FallbackValue=0}" />
-                                <TextBlock Classes="sub">
-                                    <TextBlock.Text>
-                                        <MultiBinding StringFormat="{}{0} pages · {1} series">
-                                            <Binding Path="Snapshot.Lifetime.PagesRead" FallbackValue="0" />
-                                            <Binding Path="Snapshot.Lifetime.SeriesRead" FallbackValue="0" />
-                                        </MultiBinding>
-                                    </TextBlock.Text>
-                                </TextBlock>
-                            </StackPanel>
-                        </Border>
-                        <Border Grid.Column="1" Classes="card">
-                            <StackPanel>
-                                <TextBlock Classes="sub" Text="Reading-day streak" />
-                                <TextBlock Classes="bigNumber" Text="{Binding Snapshot.ReadingDayStreak.Current, FallbackValue=0}" />
-                                <TextBlock Classes="sub" Text="{Binding Snapshot.ReadingDayStreak.Longest, StringFormat='best {0}', FallbackValue=''}" />
-                            </StackPanel>
-                        </Border>
-                        <Border Grid.Column="2" Classes="card">
-                            <StackPanel>
-                                <TextBlock Classes="sub" Text="Finish streak" />
-                                <TextBlock Classes="bigNumber" Text="{Binding Snapshot.FinishStreak.Current, FallbackValue=0}" />
-                                <TextBlock Classes="sub" Text="{Binding Snapshot.FinishStreak.Longest, StringFormat='best {0}', FallbackValue=''}" />
-                            </StackPanel>
-                        </Border>
-                        <Border Grid.Column="3" Classes="card">
-                            <StackPanel>
-                                <TextBlock Classes="sub" Text="Finished · this range" />
-                                <TextBlock Classes="bigNumber" Text="{Binding Snapshot.FinishedInRange.Items, FallbackValue=0}" />
-                                <TextBlock Classes="sub" Text="{Binding Snapshot.FinishedInRange.Pages, StringFormat='{}{0} pages', FallbackValue=''}" />
-                            </StackPanel>
-                        </Border>
-                    </Grid>
+                <Border Classes="card">
+                    <StackPanel Spacing="4">
+                        <Grid ColumnDefinitions="*,Auto">
+                            <TextBlock Grid.Column="0" Classes="panelTitle" Text="Collection health" Margin="0" />
+                            <TextBlock Grid.Column="1" Classes="bigNumber" FontSize="18" Text="{Binding GapCount}" IsVisible="{Binding !GapEmpty}" />
+                        </Grid>
+                        <TextBlock Classes="sub" Text="{Binding GapLine}" />
+                        <ItemsControl ItemsSource="{Binding GapRows}" IsVisible="{Binding !GapEmpty}" Margin="0,4,0,0">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:GapRow">
+                                    <Button Classes="attnRow"
+                                            Command="{Binding $parent[ItemsControl].((vm:InsightsScreenViewModel)DataContext).OpenSeriesCommand}"
+                                            CommandParameter="{Binding SeriesId}">
+                                        <Grid ColumnDefinitions="180,*">
+                                            <TextBlock Grid.Column="0" Text="{Binding Title}" Foreground="{DynamicResource PbTextBrush}" FontSize="11" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                            <TextBlock Grid.Column="1" Text="{Binding Missing}" Classes="sub" VerticalAlignment="Center" />
+                                        </Grid>
+                                    </Button>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </Border>
 
-                    <!-- Collection health (demoted from the top - a completionist stat, not a reading prompt) -->
-                    <Border Classes="card" Margin="0,12,0,0">
-                        <StackPanel Spacing="4">
-                            <Grid ColumnDefinitions="*,Auto">
-                                <TextBlock Grid.Column="0" Classes="panelTitle" Text="Collection health" Margin="0" />
-                                <TextBlock Grid.Column="1" Classes="bigNumber" FontSize="18" Text="{Binding GapCount}" IsVisible="{Binding !GapEmpty}" />
+            </StackPanel>
+        </ScrollViewer>
+
+        <!-- Stats tab -->
+        <ScrollViewer Grid.Row="2" IsVisible="{Binding IsStatsTabSelected}">
+            <StackPanel Margin="28,4,28,28" Spacing="16">
+
+                <StackPanel>
+                    <TextBlock Classes="sectionLabel" Text="HIGHLIGHTS" />
+                    <UniformGrid Columns="3" Rows="2">
+                        <Border Classes="card" Margin="0,0,10,10">
+                            <StackPanel Spacing="6">
+                                <Grid ColumnDefinitions="*,Auto"><TextBlock Grid.Column="0" Classes="panelTitle" Text="Highest rated" Margin="0" /><TextBlock Grid.Column="1" Classes="bigNumber" Text="{Binding Stats.Snapshot.Highlights.HighestRated.Detail}" /></Grid>
+                                <TextBlock Classes="hlTitle" Text="{Binding Stats.Snapshot.Highlights.HighestRated.DisplayTitle, FallbackValue='Not enough data yet'}" />
+                            </StackPanel>
+                        </Border>
+                        <Border Classes="card" Margin="0,0,10,10">
+                            <StackPanel Spacing="6">
+                                <Grid ColumnDefinitions="*,Auto"><TextBlock Grid.Column="0" Classes="panelTitle" Text="Most reread" Margin="0" /><TextBlock Grid.Column="1" Classes="bigNumber" Text="{Binding Stats.Snapshot.Highlights.MostReread.Detail}" /></Grid>
+                                <TextBlock Classes="hlTitle" Text="{Binding Stats.Snapshot.Highlights.MostReread.DisplayTitle, FallbackValue='—'}" />
+                            </StackPanel>
+                        </Border>
+                        <Border Classes="card" Margin="0,0,0,10">
+                            <StackPanel Spacing="6">
+                                <Grid ColumnDefinitions="*,Auto"><TextBlock Grid.Column="0" Classes="panelTitle" Text="Longest journey" Margin="0" /><TextBlock Grid.Column="1" Classes="bigNumber" Text="{Binding Stats.Snapshot.Highlights.LongestJourney.Detail}" /></Grid>
+                                <TextBlock Classes="hlTitle" Text="{Binding Stats.Snapshot.Highlights.LongestJourney.DisplayTitle, FallbackValue='—'}" />
+                            </StackPanel>
+                        </Border>
+                        <Border Classes="card" Margin="0,0,10,0">
+                            <StackPanel Spacing="6">
+                                <Grid ColumnDefinitions="*,Auto"><TextBlock Grid.Column="0" Classes="panelTitle" Text="Fastest completion" Margin="0" /><TextBlock Grid.Column="1" Classes="bigNumber" Text="{Binding Stats.Snapshot.Highlights.FastestCompletion.Detail}" /></Grid>
+                                <TextBlock Classes="hlTitle" Text="{Binding Stats.Snapshot.Highlights.FastestCompletion.DisplayTitle, FallbackValue='—'}" />
+                            </StackPanel>
+                        </Border>
+                        <Border Classes="card" Margin="0,0,10,0">
+                            <StackPanel Spacing="6">
+                                <Grid ColumnDefinitions="*,Auto"><TextBlock Grid.Column="0" Classes="panelTitle" Text="Plan to read" Margin="0" /><TextBlock Grid.Column="1" Classes="bigNumber" Text="{Binding Stats.Snapshot.Highlights.PlanToReadCount}" /></Grid>
+                                <TextBlock Classes="sub" Text="series" />
+                            </StackPanel>
+                        </Border>
+                        <Border Classes="card">
+                            <StackPanel Spacing="6">
+                                <Grid ColumnDefinitions="*,Auto"><TextBlock Grid.Column="0" Classes="panelTitle" Text="Zero progress" Margin="0" /><TextBlock Grid.Column="1" Classes="bigNumber" Text="{Binding Stats.Snapshot.Highlights.ZeroProgressCount}" /></Grid>
+                                <TextBlock Classes="sub" Text="added, never started" />
+                            </StackPanel>
+                        </Border>
+                    </UniformGrid>
+                </StackPanel>
+
+                <StackPanel>
+                    <TextBlock Classes="sectionLabel" Text="READING ACTIVITY" />
+                    <Grid ColumnDefinitions="*,*,*,*,*,*" ColumnSpacing="10">
+                        <Border Grid.Column="0" Classes="card"><StackPanel Spacing="6"><TextBlock Classes="panelTitle" Text="Read all time" /><TextBlock Classes="bigNumber" Text="{Binding Stats.Snapshot.Lifetime.ItemsRead, FallbackValue=0}" /><TextBlock Classes="sub"><TextBlock.Text><MultiBinding StringFormat="{}{0} pages · {1} series"><Binding Path="Stats.Snapshot.Lifetime.PagesRead" FallbackValue="0" /><Binding Path="Stats.Snapshot.Lifetime.SeriesRead" FallbackValue="0" /></MultiBinding></TextBlock.Text></TextBlock></StackPanel></Border>
+                        <Border Grid.Column="1" Classes="card"><StackPanel Spacing="6"><TextBlock Classes="panelTitle" Text="Day streak" /><TextBlock Classes="bigNumber" Text="{Binding Stats.Snapshot.ReadingDayStreak.Current, FallbackValue=0}" /><TextBlock Classes="sub" Text="{Binding Stats.Snapshot.ReadingDayStreak.Longest, StringFormat='best {0}', FallbackValue=''}" /></StackPanel></Border>
+                        <Border Grid.Column="2" Classes="card"><StackPanel Spacing="6"><TextBlock Classes="panelTitle" Text="Finish streak" /><TextBlock Classes="bigNumber" Text="{Binding Stats.Snapshot.FinishStreak.Current, FallbackValue=0}" /><TextBlock Classes="sub" Text="{Binding Stats.Snapshot.FinishStreak.Longest, StringFormat='best {0}', FallbackValue=''}" /></StackPanel></Border>
+                        <Border Grid.Column="3" Classes="card"><StackPanel Spacing="6"><TextBlock Classes="panelTitle" Text="Finished · range" /><TextBlock Classes="bigNumber" Text="{Binding Stats.Snapshot.FinishedInRange.Items, FallbackValue=0}" /><TextBlock Classes="sub" Text="{Binding Stats.Snapshot.FinishedInRange.Pages, StringFormat='{}{0} pages', FallbackValue=''}" /></StackPanel></Border>
+                        <Border Grid.Column="4" Classes="card"><StackPanel Spacing="6"><TextBlock Classes="panelTitle" Text="Avg to finish" /><TextBlock Classes="bigNumber" Text="{Binding Stats.Snapshot.ReadingActivity.AvgDaysToComplete, StringFormat='{}{0:0.#}d', FallbackValue='—'}" /><TextBlock Classes="sub" Text="days, real sessions only" /></StackPanel></Border>
+                        <Border Grid.Column="5" Classes="card"><StackPanel Spacing="6"><TextBlock Classes="panelTitle" Text="Pace" /><TextBlock Classes="bigNumber" Text="{Binding Stats.Snapshot.ReadingActivity.AvgIssuesPerDay, StringFormat='{}{0:0.00}', FallbackValue='—'}" /><TextBlock Classes="sub" Text="issues/day, this range" /></StackPanel></Border>
+                    </Grid>
+                </StackPanel>
+
+                <Border Classes="card">
+                    <StackPanel Spacing="6">
+                        <TextBlock Classes="panelTitle" Text="Activity heatmap" />
+                        <Panel Height="110">
+                            <stats:ActivityHeatmap Data="{Binding Stats.Snapshot.Heatmap}" IsVisible="{Binding Stats.HasHeatmapData}" />
+                            <TextBlock Text="Not enough history yet — check back after a few reading sessions."
+                                       Classes="sub" VerticalAlignment="Center" HorizontalAlignment="Center"
+                                       IsVisible="{Binding !Stats.HasHeatmapData}" />
+                        </Panel>
+                    </StackPanel>
+                </Border>
+
+                <Grid ColumnDefinitions="*,*" ColumnSpacing="12">
+                    <Border Grid.Column="0" Classes="card">
+                        <StackPanel Spacing="6">
+                            <Grid ColumnDefinitions="Auto,*">
+                                <TextBlock Grid.Column="0" Classes="panelTitle" Text="Library growth" Margin="0,0,10,0" />
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right" IsVisible="{Binding Stats.HasGrowthData}">
+                                    <ItemsControl ItemsSource="{Binding Stats.GrowthMeasureOptions}">
+                                        <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Orientation="Horizontal" /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate x:DataType="vm:GrowthMeasureOption">
+                                                <Button Classes="rangeChip" Content="{Binding Label}" Classes.active="{Binding IsActive}"
+                                                        Command="{Binding $parent[ItemsControl].((vm:InsightsScreenViewModel)DataContext).Stats.SetGrowthMeasureCommand}"
+                                                        CommandParameter="{Binding Value}" />
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </StackPanel>
                             </Grid>
-                            <TextBlock Classes="sub" Text="{Binding GapLine}" />
-                            <ItemsControl ItemsSource="{Binding GapRows}" IsVisible="{Binding !GapEmpty}" Margin="0,4,0,0">
+                            <ItemsControl ItemsSource="{Binding Stats.GrowthStackByOptions}" IsVisible="{Binding Stats.HasGrowthData}">
+                                <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
                                 <ItemsControl.ItemTemplate>
-                                    <DataTemplate x:DataType="vm:GapRow">
-                                        <Button Classes="attnRow"
-                                                Command="{Binding $parent[ItemsControl].((vm:InsightsScreenViewModel)DataContext).OpenSeriesCommand}"
-                                                CommandParameter="{Binding SeriesId}">
-                                            <Grid ColumnDefinitions="180,*">
-                                                <TextBlock Grid.Column="0" Text="{Binding Title}" Foreground="{DynamicResource PbTextBrush}" FontSize="11" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
-                                                <TextBlock Grid.Column="1" Text="{Binding Missing}" Classes="sub" VerticalAlignment="Center" />
-                                            </Grid>
-                                        </Button>
+                                    <DataTemplate x:DataType="vm:GrowthStackByOption">
+                                        <Button Classes="rangeChip" Content="{Binding Label}" Classes.active="{Binding IsActive}"
+                                                Command="{Binding $parent[ItemsControl].((vm:InsightsScreenViewModel)DataContext).Stats.SetGrowthStackByCommand}"
+                                                CommandParameter="{Binding Value}" />
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
-                        </StackPanel>
-                    </Border>
-                </StackPanel>
-
-                <!-- Charts -->
-                <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto" ColumnSpacing="12" RowSpacing="12">
-                    <Border Grid.Row="0" Grid.Column="0" Classes="card">
-                        <StackPanel>
-                            <TextBlock Classes="panelTitle" Text="Reading pace" />
                             <Panel Height="160">
-                                <sp:AvaPlot x:Name="PaceChart" IsVisible="{Binding HasPaceData}" />
-                                <TextBlock Text="Not enough history yet — check back after a few reading sessions."
-                                           Classes="sub" VerticalAlignment="Center" HorizontalAlignment="Center"
-                                           IsVisible="{Binding !HasPaceData}" />
+                                <sp:AvaPlot x:Name="GrowthChart" IsVisible="{Binding Stats.HasGrowthData}" />
+                                <TextBlock Text="Nothing added yet." Classes="sub" VerticalAlignment="Center" HorizontalAlignment="Center"
+                                           IsVisible="{Binding !Stats.HasGrowthData}" />
                             </Panel>
-                            <TextBlock Classes="sub" Text="issues finished per period" Margin="0,6,0,0" />
                         </StackPanel>
                     </Border>
-                    <Border Grid.Row="0" Grid.Column="1" Classes="card">
-                        <StackPanel>
-                            <TextBlock Classes="panelTitle" Text="Completion" />
-                            <insights:CompletionDonut Height="150"
-                                                      ReadCount="{Binding Snapshot.Completion.Read, FallbackValue=0}"
-                                                      InProgressCount="{Binding Snapshot.Completion.InProgress, FallbackValue=0}"
-                                                      UnreadCount="{Binding Snapshot.Completion.Unread, FallbackValue=0}" />
-                            <TextBlock Classes="sub" HorizontalAlignment="Center" Margin="0,6,0,0">
-                                <TextBlock.Text>
-                                    <MultiBinding StringFormat="{}Read {0} · In progress {1} · Unread {2}">
-                                        <Binding Path="Snapshot.Completion.Read" FallbackValue="0" />
-                                        <Binding Path="Snapshot.Completion.InProgress" FallbackValue="0" />
-                                        <Binding Path="Snapshot.Completion.Unread" FallbackValue="0" />
-                                    </MultiBinding>
-                                </TextBlock.Text>
-                            </TextBlock>
+                    <Border Grid.Column="1" Classes="card">
+                        <StackPanel Spacing="6">
+                            <TextBlock Classes="panelTitle" Text="Reading pace" />
+                            <Panel Height="140">
+                                <sp:AvaPlot x:Name="PaceChart" IsVisible="{Binding Stats.HasPaceData}" />
+                                <TextBlock Text="Not enough history yet." Classes="sub" VerticalAlignment="Center" HorizontalAlignment="Center"
+                                           IsVisible="{Binding !Stats.HasPaceData}" />
+                            </Panel>
+                            <TextBlock Classes="sub" Text="issues finished per period" />
                         </StackPanel>
                     </Border>
-                    <Border Grid.Row="1" Grid.Column="0" Classes="card">
-                        <StackPanel>
-                            <TextBlock Classes="panelTitle" Text="Library composition — by publisher" />
-                            <ItemsControl ItemsSource="{Binding Snapshot.Composition.ByPublisher}">
+                </Grid>
+
+                <Grid ColumnDefinitions="*,*" ColumnSpacing="12">
+                    <Border Grid.Column="0" Classes="card">
+                        <StackPanel Spacing="6">
+                            <TextBlock Classes="panelTitle" Text="Reading state" />
+                            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="14">
+                                <stats:CategoryDonut Grid.Column="0" Width="100" Height="100" Slices="{Binding Stats.Snapshot.Breakdown.ByReadingStatus}" />
+                                <ItemsControl Grid.Column="1" ItemsSource="{Binding Stats.Snapshot.Breakdown.ByReadingStatus}" VerticalAlignment="Center">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="meta:CompositionSlice">
+                                            <TextBlock Classes="sub" Text="{Binding Label}" />
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+                    <Border Grid.Column="1" Classes="card">
+                        <StackPanel Spacing="6">
+                            <TextBlock Classes="panelTitle" Text="Media type" />
+                            <Grid ColumnDefinitions="Auto,*" ColumnSpacing="14">
+                                <stats:CategoryDonut Grid.Column="0" Width="100" Height="100" Slices="{Binding Stats.Snapshot.Breakdown.ByMediaType}" />
+                                <ItemsControl Grid.Column="1" ItemsSource="{Binding Stats.Snapshot.Breakdown.ByMediaType}" VerticalAlignment="Center">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="meta:CompositionSlice">
+                                            <TextBlock Classes="sub" Text="{Binding Label}" />
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+                </Grid>
+
+                <Grid ColumnDefinitions="*,*" ColumnSpacing="12">
+                    <Border Grid.Column="0" Classes="card">
+                        <StackPanel Spacing="6">
+                            <TextBlock Classes="panelTitle" Text="Score distribution" />
+                            <Panel Height="140">
+                                <sp:AvaPlot x:Name="RatingsChart" IsVisible="{Binding Stats.HasRatings}" />
+                                <TextBlock Text="No ratings yet." Classes="sub" VerticalAlignment="Center" HorizontalAlignment="Center"
+                                           IsVisible="{Binding !Stats.HasRatings}" />
+                            </Panel>
+                        </StackPanel>
+                    </Border>
+                    <Border Grid.Column="1" Classes="card">
+                        <StackPanel Spacing="6">
+                            <TextBlock Classes="panelTitle" Text="Content rating" />
+                            <ItemsControl ItemsSource="{Binding Stats.Snapshot.ContentRating}">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate x:DataType="meta:CompositionSlice">
                                         <Grid ColumnDefinitions="96,*,Auto" Margin="0,2">
                                             <TextBlock Grid.Column="0" Text="{Binding Label}" Classes="sub" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
-                                            <ProgressBar Grid.Column="1" Minimum="0"
-                                                         Maximum="{Binding $parent[ItemsControl].((vm:InsightsScreenViewModel)DataContext).CompositionMax}"
+                                            <ProgressBar Grid.Column="1" Minimum="0" Maximum="{Binding $parent[ItemsControl].((vm:InsightsScreenViewModel)DataContext).Stats.CompositionMax}"
                                                          Value="{Binding Count}" Height="8" Margin="6,0" VerticalAlignment="Center" />
                                             <TextBlock Grid.Column="2" Text="{Binding Count}" Classes="sub" VerticalAlignment="Center" />
                                         </Grid>
@@ -299,19 +418,127 @@
                             </ItemsControl>
                         </StackPanel>
                     </Border>
-                    <Border Grid.Row="1" Grid.Column="1" Classes="card">
-                        <StackPanel>
-                            <TextBlock Classes="panelTitle" Text="Your ratings" />
-                            <Panel Height="160">
-                                <sp:AvaPlot x:Name="RatingsChart" IsVisible="{Binding HasRatings}" />
-                                <TextBlock Text="No ratings yet." Classes="sub" VerticalAlignment="Center" HorizontalAlignment="Center"
-                                           IsVisible="{Binding !HasRatings}" />
-                            </Panel>
+                </Grid>
+
+                <Border Classes="card">
+                    <StackPanel Spacing="6">
+                        <TextBlock Classes="panelTitle" Text="Publication year" />
+                        <Panel Height="140">
+                            <sp:AvaPlot x:Name="PublicationYearChart" IsVisible="{Binding Stats.HasPublicationYearData}" />
+                            <TextBlock Text="No publication years recorded yet." Classes="sub" VerticalAlignment="Center" HorizontalAlignment="Center"
+                                       IsVisible="{Binding !Stats.HasPublicationYearData}" />
+                        </Panel>
+                    </StackPanel>
+                </Border>
+
+                <Grid ColumnDefinitions="*,*" ColumnSpacing="12">
+                    <Border Grid.Column="0" Classes="card">
+                        <StackPanel Spacing="6">
+                            <TextBlock Classes="panelTitle" Text="Top genres" />
+                            <ItemsControl ItemsSource="{Binding Stats.Snapshot.Composition.ByGenre}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="meta:CompositionSlice">
+                                        <Button Classes="filterRow"
+                                                Command="{Binding $parent[ItemsControl].((vm:InsightsScreenViewModel)DataContext).Stats.OpenLibraryFilterCommand}"
+                                                CommandParameter="{Binding Label}">
+                                            <Grid ColumnDefinitions="96,*,Auto" Margin="0,2">
+                                                <TextBlock Grid.Column="0" Text="{Binding Label}" Classes="sub" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                                <ProgressBar Grid.Column="1" Minimum="0" Maximum="{Binding $parent[ItemsControl].((vm:InsightsScreenViewModel)DataContext).Stats.TopGenresMax}"
+                                                             Value="{Binding Count}" Height="8" Margin="6,0" VerticalAlignment="Center" />
+                                                <TextBlock Grid.Column="2" Text="{Binding Count}" Classes="sub" VerticalAlignment="Center" />
+                                            </Grid>
+                                        </Button>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </Border>
+                    <Border Grid.Column="1" Classes="card">
+                        <StackPanel Spacing="6">
+                            <TextBlock Classes="panelTitle" Text="Top tags" />
+                            <ItemsControl ItemsSource="{Binding Stats.Snapshot.Composition.ByTags}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="meta:CompositionSlice">
+                                        <Button Classes="filterRow"
+                                                Command="{Binding $parent[ItemsControl].((vm:InsightsScreenViewModel)DataContext).Stats.OpenLibraryFilterCommand}"
+                                                CommandParameter="{Binding Label}">
+                                            <Grid ColumnDefinitions="96,*,Auto" Margin="0,2">
+                                                <TextBlock Grid.Column="0" Text="{Binding Label}" Classes="sub" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                                <ProgressBar Grid.Column="1" Minimum="0" Maximum="{Binding $parent[ItemsControl].((vm:InsightsScreenViewModel)DataContext).Stats.TopTagsMax}"
+                                                             Value="{Binding Count}" Height="8" Margin="6,0" VerticalAlignment="Center" />
+                                                <TextBlock Grid.Column="2" Text="{Binding Count}" Classes="sub" VerticalAlignment="Center" />
+                                            </Grid>
+                                        </Button>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
                         </StackPanel>
                     </Border>
                 </Grid>
 
-                <TextBlock Classes="sub" Text="Pages for reflowed EPUBs are estimated at ~1,800 characters per page." />
+                <Grid ColumnDefinitions="*,*,*" ColumnSpacing="12">
+                    <Border Grid.Column="0" Classes="card">
+                        <StackPanel Spacing="6">
+                            <TextBlock Classes="panelTitle" Text="Top publishers" />
+                            <ItemsControl ItemsSource="{Binding Stats.Snapshot.Composition.ByPublisher}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="meta:CompositionSlice">
+                                        <Button Classes="filterRow"
+                                                Command="{Binding $parent[ItemsControl].((vm:InsightsScreenViewModel)DataContext).Stats.OpenLibraryFilterCommand}"
+                                                CommandParameter="{Binding Label}">
+                                            <Grid ColumnDefinitions="*,Auto" Margin="0,2">
+                                                <TextBlock Grid.Column="0" Text="{Binding Label}" Classes="sub" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                                <TextBlock Grid.Column="1" Text="{Binding Count}" Classes="sub" VerticalAlignment="Center" />
+                                            </Grid>
+                                        </Button>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </Border>
+                    <Border Grid.Column="1" Classes="card">
+                        <StackPanel Spacing="6">
+                            <TextBlock Classes="panelTitle" Text="Top authors" />
+                            <ItemsControl ItemsSource="{Binding Stats.Snapshot.TopAuthors}" IsVisible="{Binding Stats.HasTopAuthors}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="meta:CompositionSlice">
+                                        <Button Classes="filterRow"
+                                                Command="{Binding $parent[ItemsControl].((vm:InsightsScreenViewModel)DataContext).Stats.OpenLibraryFilterCommand}"
+                                                CommandParameter="{Binding Label}">
+                                            <Grid ColumnDefinitions="*,Auto" Margin="0,2">
+                                                <TextBlock Grid.Column="0" Text="{Binding Label}" Classes="sub" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                                <TextBlock Grid.Column="1" Text="{Binding Count}" Classes="sub" VerticalAlignment="Center" />
+                                            </Grid>
+                                        </Button>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <TextBlock Text="No credited writers yet." Classes="sub" IsVisible="{Binding !Stats.HasTopAuthors}" />
+                        </StackPanel>
+                    </Border>
+                    <Border Grid.Column="2" Classes="card">
+                        <StackPanel Spacing="6">
+                            <TextBlock Classes="panelTitle" Text="Top artists" />
+                            <ItemsControl ItemsSource="{Binding Stats.Snapshot.TopArtists}" IsVisible="{Binding Stats.HasTopArtists}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="meta:CompositionSlice">
+                                        <Button Classes="filterRow"
+                                                Command="{Binding $parent[ItemsControl].((vm:InsightsScreenViewModel)DataContext).Stats.OpenLibraryFilterCommand}"
+                                                CommandParameter="{Binding Label}">
+                                            <Grid ColumnDefinitions="*,Auto" Margin="0,2">
+                                                <TextBlock Grid.Column="0" Text="{Binding Label}" Classes="sub" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                                <TextBlock Grid.Column="1" Text="{Binding Count}" Classes="sub" VerticalAlignment="Center" />
+                                            </Grid>
+                                        </Button>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <TextBlock Text="No credited artists yet." Classes="sub" IsVisible="{Binding !Stats.HasTopArtists}" />
+                        </StackPanel>
+                    </Border>
+                </Grid>
+
+                <TextBlock Classes="sub" Text="Pages for reflowed EPUBs are estimated at ~1,800 characters per page. Highlights and pace reflect real reading sessions logged since 2026-09-05; earlier history was backfilled from a single timestamp per item and is excluded from journey-length records." />
             </StackPanel>
         </ScrollViewer>
     </Grid>

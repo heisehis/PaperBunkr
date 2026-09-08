@@ -5,8 +5,10 @@ using Paperbunkr.Data.Metadata;
 namespace Paperbunkr.Data.Tests;
 
 /// <summary>
-/// Exercises <see cref="InsightsResolver"/> (docs/superpowers/specs/2026-09-05-insights-dashboard-
-/// design.md) against a real SQLite database - same fixture rationale as <see cref="HomeFeedResolverTests"/>.
+/// Exercises <see cref="InsightsResolver"/> (docs/superpowers/specs/2026-09-08-stats-v2-mangabaka-
+/// design.md §5) against a real SQLite database - same fixture rationale as <see cref="HomeFeedResolverTests"/>.
+/// Lifetime/streaks/pace/composition/ratings coverage moved to <see cref="StatsResolverTests"/> along
+/// with the tiles themselves.
 /// </summary>
 public class InsightsResolverTests : IDisposable
 {
@@ -36,7 +38,7 @@ public class InsightsResolverTests : IDisposable
 
     private PaperbunkrDbContext NewContext() => new(_dbOptions);
 
-    private static Series SeedSeries(PaperbunkrDbContext ctx, string name, ReadingStatus status = ReadingStatus.Unknown, string? publisher = null)
+    internal static Series SeedSeries(PaperbunkrDbContext ctx, string name, ReadingStatus status = ReadingStatus.Unknown, string? publisher = null)
     {
         var s = new Series { Name = name, ReadingStatus = status, Publisher = publisher };
         ctx.Series.Add(s);
@@ -44,7 +46,7 @@ public class InsightsResolverTests : IDisposable
         return s;
     }
 
-    private static Issue SeedIssue(PaperbunkrDbContext ctx, int seriesId, string? number = null, int? lastPageRead = null,
+    internal static Issue SeedIssue(PaperbunkrDbContext ctx, int seriesId, string? number = null, int? lastPageRead = null,
         int pageCount = 100, DateTime? addedTime = null, DateTime? openedTime = null, float? rating = null, string? genre = null)
     {
         var i = new Issue
@@ -68,7 +70,7 @@ public class InsightsResolverTests : IDisposable
         return i;
     }
 
-    private static void SeedEvent(PaperbunkrDbContext ctx, ReadingItemType type, int itemId, ReadingEventKind kind, DateTime whenUtc, int? pages = null, int? seriesId = null)
+    internal static void SeedEvent(PaperbunkrDbContext ctx, ReadingItemType type, int itemId, ReadingEventKind kind, DateTime whenUtc, int? pages = null, int? seriesId = null)
     {
         ctx.ReadingEvents.Add(new ReadingEvent
         {
@@ -86,16 +88,12 @@ public class InsightsResolverTests : IDisposable
     public void EmptyLibrary_ProducesZeroedSnapshot_WithoutThrowing()
     {
         using var ctx = NewContext();
-        var snap = InsightsResolver.Build(ctx, InsightsRange.Days90, Now);
+        var snap = InsightsResolver.Build(ctx, Now);
 
         Assert.Empty(snap.Continue);
         Assert.Empty(snap.AlmostDone);
         Assert.Empty(snap.DiveIn);
         Assert.Empty(snap.Gaps);
-        Assert.Equal(0, snap.Lifetime.ItemsRead);
-        Assert.Equal(0, snap.ReadingDayStreak.Current);
-        Assert.Equal(0, snap.FinishStreak.Current);
-        Assert.Equal(0, snap.Completion.Read + snap.Completion.InProgress + snap.Completion.Unread);
     }
 
     [Fact]
@@ -114,7 +112,7 @@ public class InsightsResolverTests : IDisposable
         SeedEvent(ctx, ReadingItemType.Comic, i2.Id, ReadingEventKind.Opened, Now.AddDays(-40));
         SeedEvent(ctx, ReadingItemType.Comic, i3.Id, ReadingEventKind.Opened, Now.AddDays(-40));
 
-        var cont = InsightsResolver.Build(ctx, InsightsRange.Days90, Now).Continue;
+        var cont = InsightsResolver.Build(ctx, Now).Continue;
 
         Assert.Equal(2, cont.Count);
         Assert.Equal(new[] { live.Id, stale.Id }, cont.Select(c => c.SeriesId)); // most-recently-touched first
@@ -138,7 +136,7 @@ public class InsightsResolverTests : IDisposable
             SeedIssue(ctx, s.Id, number: (n + 2).ToString(), lastPageRead: null);
         }
 
-        var snap = InsightsResolver.Build(ctx, InsightsRange.Days90, Now);
+        var snap = InsightsResolver.Build(ctx, Now);
         Assert.Equal(expected, snap.AlmostDone.Any(a => a.SeriesId == s.Id));
     }
 
@@ -152,7 +150,7 @@ public class InsightsResolverTests : IDisposable
             SeedIssue(ctx, s.Id, number: n);
         }
 
-        var snap = InsightsResolver.Build(ctx, InsightsRange.Days90, Now);
+        var snap = InsightsResolver.Build(ctx, Now);
         var gap = Assert.Single(snap.Gaps);
         Assert.Equal(new[] { 3 }, gap.MissingNumbers);
     }
@@ -167,7 +165,7 @@ public class InsightsResolverTests : IDisposable
             SeedIssue(ctx, s.Id, number: n);
         }
 
-        Assert.Empty(InsightsResolver.Build(ctx, InsightsRange.Days90, Now).Gaps);
+        Assert.Empty(InsightsResolver.Build(ctx, Now).Gaps);
     }
 
     [Fact]
@@ -179,7 +177,7 @@ public class InsightsResolverTests : IDisposable
         for (int n = 1; n <= 4; n++) SeedIssue(ctx, s.Id, number: n.ToString());
         for (int n = 16; n <= 40; n++) SeedIssue(ctx, s.Id, number: n.ToString());
 
-        Assert.Empty(InsightsResolver.Build(ctx, InsightsRange.Days90, Now).Gaps);
+        Assert.Empty(InsightsResolver.Build(ctx, Now).Gaps);
     }
 
     [Fact]
@@ -198,7 +196,7 @@ public class InsightsResolverTests : IDisposable
         var noStart = SeedSeries(ctx, "No #1");        // own #5-20, never opened -> out (doesn't start at #1/#2)
         for (int n = 5; n <= 20; n++) SeedIssue(ctx, noStart.Id, number: n.ToString());
 
-        var diveIn = InsightsResolver.Build(ctx, InsightsRange.Days90, Now).DiveIn;
+        var diveIn = InsightsResolver.Build(ctx, Now).DiveIn;
 
         Assert.Equal(new[] { big.Id, small.Id }, diveIn.Select(d => d.SeriesId));
         Assert.Null(diveIn[0].ResumeIssueId);
@@ -215,109 +213,6 @@ public class InsightsResolverTests : IDisposable
             SeedIssue(ctx, s.Id, number: n);
         }
 
-        Assert.Empty(InsightsResolver.Build(ctx, InsightsRange.Days90, Now).DiveIn);
-    }
-
-    [Fact]
-    public void Lifetime_CountsDistinctFinishedItems_RereadsDoNotInflate()
-    {
-        using var ctx = NewContext();
-        var s = SeedSeries(ctx, "S");
-        var i = SeedIssue(ctx, s.Id, pageCount: 20);
-        SeedEvent(ctx, ReadingItemType.Comic, i.Id, ReadingEventKind.Finished, Now.AddDays(-10));
-        SeedEvent(ctx, ReadingItemType.Comic, i.Id, ReadingEventKind.Finished, Now.AddDays(-1)); // re-read
-
-        var snap = InsightsResolver.Build(ctx, InsightsRange.Days90, Now);
-        Assert.Equal(1, snap.Lifetime.ItemsRead);
-        Assert.Equal(20, snap.Lifetime.PagesRead);
-    }
-
-    [Fact]
-    public void Lifetime_KeepsCountingWhenTheItemRowIsGone()
-    {
-        using var ctx = NewContext();
-        SeedEvent(ctx, ReadingItemType.Comic, itemId: 9999, ReadingEventKind.Finished, Now.AddDays(-3));
-
-        var snap = InsightsResolver.Build(ctx, InsightsRange.Days90, Now);
-        Assert.Equal(1, snap.Lifetime.ItemsRead); // no Issue row, still counted
-    }
-
-    [Fact]
-    public void ReadingDayStreak_CountsConsecutiveLocalDays_FinishStreakIsFinishOnly()
-    {
-        using var ctx = NewContext();
-        // Opened on each of the last 3 days; finished only today and yesterday.
-        SeedEvent(ctx, ReadingItemType.Comic, 1, ReadingEventKind.Opened, Now);
-        SeedEvent(ctx, ReadingItemType.Comic, 1, ReadingEventKind.Opened, Now.AddDays(-1));
-        SeedEvent(ctx, ReadingItemType.Comic, 1, ReadingEventKind.Opened, Now.AddDays(-2));
-        SeedEvent(ctx, ReadingItemType.Comic, 1, ReadingEventKind.Finished, Now);
-        SeedEvent(ctx, ReadingItemType.Comic, 1, ReadingEventKind.Finished, Now.AddDays(-1));
-
-        var snap = InsightsResolver.Build(ctx, InsightsRange.Days90, Now);
-        Assert.Equal(3, snap.ReadingDayStreak.Current);
-        Assert.Equal(2, snap.FinishStreak.Current);
-    }
-
-    [Fact]
-    public void Pace_WeeklyBucketsForNinetyDays_MonthlyForTwelveMonths()
-    {
-        using var ctx = NewContext();
-        SeedEvent(ctx, ReadingItemType.Comic, 1, ReadingEventKind.Finished, Now.AddDays(-3), pages: 40);
-        SeedEvent(ctx, ReadingItemType.Comic, 2, ReadingEventKind.Finished, Now.AddDays(-40), pages: 10);
-
-        var weekly = InsightsResolver.Build(ctx, InsightsRange.Days90, Now).Pace;
-        Assert.Equal(13, weekly.Count);
-        Assert.Equal(2, weekly.Sum(b => b.Finished));
-        Assert.Equal(50, weekly.Sum(b => b.Pages));
-
-        var monthly = InsightsResolver.Build(ctx, InsightsRange.Months12, Now).Pace;
-        Assert.Equal(12, monthly.Count);
-    }
-
-    [Fact]
-    public void FinishedInRange_ExcludesEventsOutsideTheWindow()
-    {
-        using var ctx = NewContext();
-        SeedEvent(ctx, ReadingItemType.Comic, 1, ReadingEventKind.Finished, Now.AddDays(-10), pages: 30);
-        SeedEvent(ctx, ReadingItemType.Comic, 2, ReadingEventKind.Finished, Now.AddDays(-200), pages: 30);
-
-        var snap = InsightsResolver.Build(ctx, InsightsRange.Days90, Now);
-        Assert.Equal(1, snap.FinishedInRange.Items);
-        Assert.Equal(30, snap.FinishedInRange.Pages);
-    }
-
-    [Fact]
-    public void Completion_CountsAcrossComicsAndNovels()
-    {
-        using var ctx = NewContext();
-        var s = SeedSeries(ctx, "S");
-        SeedIssue(ctx, s.Id, pageCount: 100, lastPageRead: 100); // read
-        SeedIssue(ctx, s.Id, pageCount: 100, lastPageRead: 50);  // in progress
-        SeedIssue(ctx, s.Id, pageCount: 100, lastPageRead: null); // unread
-
-        ctx.Books.Add(new Book { Title = "Done", FilePath = "a", Finished = true });
-        ctx.Books.Add(new Book { Title = "Mid", FilePath = "b", LastOpenedTime = Now, LastChapterIndex = 3 });
-        ctx.Books.Add(new Book { Title = "Fresh", FilePath = "c" });
-        ctx.SaveChanges();
-
-        var c = InsightsResolver.Build(ctx, InsightsRange.Days90, Now).Completion;
-        Assert.Equal(2, c.Read);
-        Assert.Equal(2, c.InProgress);
-        Assert.Equal(2, c.Unread);
-    }
-
-    [Fact]
-    public void Ratings_BucketsRoundedStarsAndExcludesUnrated()
-    {
-        using var ctx = NewContext();
-        var s = SeedSeries(ctx, "S");
-        SeedIssue(ctx, s.Id, rating: 4.4f);
-        SeedIssue(ctx, s.Id, rating: 4.5f);
-        SeedIssue(ctx, s.Id, rating: null);
-
-        var ratings = InsightsResolver.Build(ctx, InsightsRange.Days90, Now).Ratings;
-        Assert.Equal(5, ratings.Count);
-        Assert.Equal(1, ratings.Single(r => r.Stars == 4).Count);
-        Assert.Equal(1, ratings.Single(r => r.Stars == 5).Count);
+        Assert.Empty(InsightsResolver.Build(ctx, Now).DiveIn);
     }
 }

@@ -71,7 +71,7 @@ public class SkinService
             var theme = TryLoadSkin(key);
             if (theme is not null)
             {
-                summaries.Add(new SkinSummary { Key = key, Name = theme.Name, IsActive = activeKey == key });
+                summaries.Add(SummaryFrom(key, theme, activeKey));
             }
         }
 
@@ -90,13 +90,28 @@ public class SkinService
                 var theme = TryLoadSkin(key);
                 if (theme is not null)
                 {
-                    summaries.Add(new SkinSummary { Key = key, Name = theme.Name, IsActive = activeKey == key });
+                    summaries.Add(SummaryFrom(key, theme, activeKey));
                 }
             }
         }
 
         return summaries;
     }
+
+    /// <summary>Preview-card colors (docs/superpowers/specs/2026-09-07-appearance-redesign-design.md) - parsed once here alongside the theme.json read this method already does for the skin's Name, rather than re-parsing hex on every View bind.</summary>
+    private static SkinSummary SummaryFrom(string key, SkinTheme theme, string activeKey) => new()
+    {
+        Key = key,
+        Name = theme.Name,
+        IsActive = activeKey == key,
+        BackgroundBrush = Brush(theme.Colors.Bg),
+        ChromeBrush = Brush(theme.Colors.Chrome),
+        AccentBrush = Brush(theme.Colors.Accent),
+        SurfaceBrush = Brush(theme.Colors.Surface3),
+        TextMutedBrush = Brush(theme.Colors.TextMuted),
+    };
+
+    private static IBrush Brush(string hex) => new SolidColorBrush(Color.Parse(hex));
 
     /// <summary>Parses the given skin's <c>theme.json</c>. Throws if the skin doesn't exist or is invalid.</summary>
     public SkinTheme LoadSkin(string key)
@@ -169,6 +184,8 @@ public class SkinService
         SetColorAndBrush(resources, "PbBadge", theme.Colors.Badge);
         SetColorAndBrush(resources, "PbBadgeText", theme.Colors.BadgeText);
         SetColorAndBrush(resources, "PbSuccess", theme.Colors.Success);
+        SetColorAndBrush(resources, "PbChartBlue", theme.Colors.ChartBlue);
+        SetColorAndBrush(resources, "PbChartViolet", theme.Colors.ChartViolet);
         SetColorAndBrush(resources, "PbSurface0", theme.Colors.Surface0);
         SetColorAndBrush(resources, "PbSurface1", theme.Colors.Surface1);
         SetColorAndBrush(resources, "PbSurface2", theme.Colors.Surface2);

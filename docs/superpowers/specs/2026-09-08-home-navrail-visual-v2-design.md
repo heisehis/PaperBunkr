@@ -1,11 +1,12 @@
-# Home Screen & NavRail — Visual v2 (Icons + "Kinetic Rail")
+# Home Screen & NavRail — Visual v2 (Icons + "Kinetic Rail" + Theme Fix)
 
 **Date:** 2026-09-08
 **Status:** Design approved, plan pending.
 
 ## Background
 
-Two independent visual passes, brainstormed together because the user raised them in one session:
+Three things, brainstormed together in one session (the third was flagged after the first two were
+already designed, and folds cleanly into the masthead work already planned there):
 
 1. **NavRail icon overhaul.** The rail (`MainWindow.axaml:182-276`) currently has Library and Books
    sharing the identical `Symbol="Book"` glyph (no differentiation), and Continuity uses
@@ -24,6 +25,20 @@ Two independent visual passes, brainstormed together because the user raised the
    [2026-08-24-design-language-foundation-design.md](2026-08-24-design-language-foundation-design.md)
    already uses to describe the nav/motion system — i.e. this is a continuation of an existing
    pillar, not a new one.
+3. **Masthead isn't actually skin-aware — a real bug, not a preference.** The user reported Home
+   "looks off" on the `windows_11` skin. Root-caused, not guessed: `windows_11` is the only one of
+   the 5 skins with a light background (`bg`/`surface0` `#F3F3F3`, `text` `#1A1A1A`) — the other 4
+   (`default`, `cool_technical`, `vibrant_pop`, `vintage_paperback`) are all dark. The masthead
+   backdrop is never actually theme-reactive: `CoverWallRenderer.cs` bakes a fixed near-black scrim +
+   vignette straight into the rendered bitmap via raw SkiaSharp `SKColor` literals (`SKColor(8, 8,
+   10, 205)` etc. — pixel data, no resource system involved), and the `HomeScreen.axaml:142-146`
+   fallback `RadialGradientBrush` (shown when there's no cover-wall yet) hardcodes `#241812`/
+   `#0C0B0A`/`#060606` instead of a skin token. On the 4 dark skins this coincidentally blends in. On
+   `windows_11` it's a genuine contrast failure, not just a mismatched vibe: "Your Library" renders
+   in `PbTextBrush`, which correctly resolves to that skin's `#1A1A1A` (confirmed `PbTextBrush` is
+   properly skin-reactive elsewhere — `SkinService.cs` rebuilds real `SolidColorBrush` objects per
+   skin switch), sitting on a masthead band that stays near-black regardless of skin. Near-black text
+   on a near-forced-black band.
 
 ## Out of scope
 
@@ -85,12 +100,32 @@ binding already uses.
   confirm at implementation time that the wordmark isn't set `IsHitTestVisible="False"` or similar,
   which would suppress `:pointerover` from firing.
 
-## 3. Spotlight hero
+## 3. Masthead theme compatibility (fixes the Windows 11 contrast bug)
+
+- **`CoverWallRenderer.Render(...)`** gains a `SKColor baseColor` parameter (or equivalent), supplied
+  by the caller from the active skin's `surface0`/`bg` token converted to `SKColor`. Replaces the 3
+  hardcoded literals (`SKColor(8, 8, 10)` tile-clear, `SKColor(8, 8, 10, 205)` scrim, the
+  `SKColor(6, 6, 6, 235)` vignette end-stop) with values derived from `baseColor` — darkened for the
+  4 dark skins (visually near-identical to today, so no regression there), correctly light-derived
+  for `windows_11`. The blur/tiling/vignette *shape* is unchanged, only the color source.
+- **`HomeScreen.axaml:142-146` fallback gradient**: the 3 literal `GradientStop` colors become
+  `DynamicResource`-bound to skin tokens (e.g. blending `PbSurface2Color`/`PbSurface3Color` toward
+  `PbAccentSoftColor`, tuned at implementation time to keep the same moody-vignette *feel* on dark
+  skins while actually tracking `windows_11`'s light palette instead of overriding it).
+- **Re-render trigger**: `CoverWallRenderer` must be invoked again whenever the active skin changes,
+  not just on Home load/Refresh — `HomeScreenViewModel` needs a subscription to the skin-change
+  notification (`SkinService` already raises one for the rest of the app's live-reskin behavior) so
+  switching skins while already on Home updates the masthead without requiring a navigate-away/back.
+- This shares the exact same call site as the §2 ambient-recolor work (both need the current cover
+  data and both write into the same masthead scrim), so implementing them together is intentional,
+  not incidental scope creep.
+
+## 4. Spotlight hero
 
 - Auto-rotation (the existing `DispatcherTimer` in `HomeScreenViewModel`) pauses while the pointer is
   over the hero card or any dot, resumes on pointer-leave. No visual changes to `DetailHero` itself.
 
-## 4. Shelf cards
+## 5. Shelf cards
 
 *(Continue Reading, Continue Reading — Books, Recently Added, Collections, Because You Read rows)*
 
@@ -112,7 +147,7 @@ binding already uses.
   literal, not the shared `PbElevationShadow` token) is otherwise untouched — no regression risk to
   its rest-state shadow.
 
-## 5. Reduced Motion
+## 6. Reduced Motion
 
 Every new animation gets an explicit, verified-not-assumed off switch:
 
@@ -135,17 +170,21 @@ Every new animation gets an explicit, verified-not-assumed off switch:
 **Changed:**
 - `Views/MainWindow.axaml` — 3 `Symbol=` swaps, rail icon `FontSize` 20→22, active-state
   `IconVariant` binding on all 9 rail buttons.
-- `Views/HomeScreen.axaml` — masthead scrim binding, pan/scale `RenderTransform` + trigger, shelf
-  `EntranceAnimation` attached properties on each rail's `ItemsControl`/container, widened hover
-  glow + scale-pop on the shared shelf-card style.
+- `Views/HomeScreen.axaml` — masthead scrim binding, pan/scale `RenderTransform` + trigger, fallback
+  `RadialGradientBrush` stops swapped to `DynamicResource`, shelf `EntranceAnimation` attached
+  properties on each rail's `ItemsControl`/container, widened hover glow + scale-pop on the shared
+  shelf-card style.
+- `Services/CoverWallRenderer.cs` — `Render(...)` takes a skin-derived base color instead of 3
+  hardcoded `SKColor` literals; shape/blur/vignette math unchanged.
 - `ViewModels/HomeScreenViewModel.cs` — `PlayEntranceAnimation` one-shot flag, hero hover
-  pause/resume state, spotlight-cover average-color property.
+  pause/resume state, spotlight-cover average-color property, subscription to `SkinService`'s
+  skin-change notification to re-render the masthead on live skin switch.
 - `ViewModels/MainViewModel.cs` — no logic change expected; `IsLibrary`/`IsBooks`/etc. already exist
   and are reused as-is for the new `IconVariant` bindings.
 
 **Unchanged:** `HomeFeedResolver`, `RecommendationResolver`, `PosterTile`, `DetailHero` (structure —
-only consumed, not modified), `CoverWallRenderer`'s existing collage behavior, all 5 skins' token
-files.
+only consumed, not modified), `CoverWallRenderer`'s tiling/blur/vignette *shape* (only its color
+source changes), all 5 skins' token *files* (no new tokens needed — the fix consumes existing ones).
 
 ## Testing
 
@@ -155,17 +194,24 @@ files.
   color; handles a null/missing spotlight cover by leaving the scrim unblended); `PlayEntranceAnimation`
   flips true on navigation and false after being consumed once (guards against virtualization
   replaying the entrance on scroll, the exact failure mode the motion subskill's "Common Mistakes"
-  section warns about).
+  section warns about); `CoverWallRenderer.Render(...)` given each of the 5 skins' actual `bg`/
+  `surface0` values produces a masthead whose sampled corner pixel is meaningfully closer to that
+  skin's own tone than to the old hardcoded near-black (the concrete regression test for the
+  Windows 11 bug — asserted numerically, not just "doesn't crash").
 - `EntranceAnimation` and the rail's `IconVariant` binding are visual-state changes without a strong
   unit-test story — verified via the project's standing FlaUI/UIA3 `HomeScreenTests` /
   `MainWindowTests`-style suites (automation-id presence, `IconVariant` property value after a
   simulated `IsLibrary` toggle) plus **on-screen visual verification by the user**, per the
   project's standing computer-use gap (memory: `feedback_no_computer_use`) — this phase leans on the
-  user's own screenshots, same as the 2026-08-28 Home spec did.
+  user's own screenshots, same as the 2026-08-28 Home spec did. For the theme-compatibility fix
+  specifically, the user should check Home under **at least `windows_11` and one dark skin** (the
+  bug this section fixes), not just the default skin.
 - Build clean (0 new warnings), full `dotnet test` green, crash-free direct-exe launch — same bar as
   every prior UI-rework phase.
 
 ## Open questions
 
-None blocking. Two implementation-time calls, both noted above: the exact average-color helper's
-shape/location, and confirming the wordmark's `SplitText` instance isn't hit-test-suppressed.
+None blocking. Three implementation-time calls, all noted above: the exact average-color helper's
+shape/location, confirming the wordmark's `SplitText` instance isn't hit-test-suppressed, and tuning
+the fallback gradient's exact token blend so dark skins keep their current look while `windows_11`
+actually changes.

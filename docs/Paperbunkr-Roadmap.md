@@ -1252,11 +1252,12 @@ self-referencing `#Root.X` element binding) rendered every card blank on screen 
 Verified: full solution builds clean (forced rebuild, not just 0-errors-could-be-stale) after every
 step, including after the tab-merge rework; `Paperbunkr.Data.Tests` `InsightsResolverTests`/
 `StatsResolverTests` 29/29 green (incl. the backfill-exclusion case); `Paperbunkr.App.Tests`
-Insights/Stats/Skin/ChartTheme slices 35/35 green. **On-screen GUI verification: partially done** —
-the user caught the blank-`StatCard` bug and the nav-rail-vs-tab call live, both fixed and
-rebuilt; the *rebuilt* Stats tab itself still needs a click-through (the range switch, the heatmap/
-donuts/charts rendering under a real library, and at least one non-default skin to confirm the new
-chart colors read correctly).
+Insights/Stats/Skin/ChartTheme slices 35/35 green. **On-screen GUI verification: done** — the user
+caught the blank-`StatCard` bug, the nav-rail-vs-tab call, and the still-a-placeholder Library
+Growth card live across three passes, all fixed and confirmed working ("it works, this is good
+enough for a redesign atp"). Merged to master via
+[PR #66](https://github.com/heisehis/PaperBunkr/pull/66) 2026-09-08. Not separately re-verified on a
+non-default skin.
 
 ### Auto-update + changelog + customized installer (shipped 2026-09-01, `32d82bf`) — 0.2.0-beta
 Design/plan: `docs/superpowers/specs/2026-09-01-auto-update-and-changelog-{design,plan}.md`.

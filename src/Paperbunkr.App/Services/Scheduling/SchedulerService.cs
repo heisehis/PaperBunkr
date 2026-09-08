@@ -345,6 +345,7 @@ public sealed class SchedulerService : ISchedulerService, IDisposable
                 TaskId = d.Id,
                 DisplayName = d.DisplayName,
                 Description = d.Description,
+                ActivityKind = d.ActivityKind,
                 Enabled = state.Enabled,
                 Mode = state.Mode,
                 IntervalHours = Math.Max(1, state.IntervalHours),

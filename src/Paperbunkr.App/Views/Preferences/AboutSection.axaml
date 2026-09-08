@@ -5,15 +5,67 @@
              xmlns:services="using:Paperbunkr.App.Services"
              xmlns:conv="using:Avalonia.Data.Converters"
              xmlns:pref="using:Paperbunkr.App.Views.Preferences"
+             xmlns:views="using:Paperbunkr.App.Views"
+             xmlns:controls="using:Paperbunkr.App.Controls"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d" d:DesignWidth="640" d:DesignHeight="900"
              x:Class="Paperbunkr.App.Views.Preferences.AboutSection"
              x:DataType="vm:PreferencesScreenViewModel">
 
+    <UserControl.Styles>
+        <!-- About redesign (docs/superpowers/specs/2026-09-07-about-redesign-design.md) - the
+             changelog accordion's header is a ToggleButton stripped of its default chrome so it
+             reads as a plain row, not a checkbox-shaped control. No prior ToggleButton usage exists
+             elsewhere in this codebase to mirror, so this reset is scoped to this file. -->
+        <Style Selector="ToggleButton.changelogExpandHeader">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="HorizontalAlignment" Value="Stretch" />
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style Selector="ToggleButton.changelogExpandHeader:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="Transparent" />
+        </Style>
+        <Style Selector="fi|SymbolIcon.changelogChevron">
+            <Setter Property="RenderTransform" Value="rotate(0deg)" />
+            <Setter Property="Transitions">
+                <Transitions>
+                    <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.12" />
+                </Transitions>
+            </Setter>
+        </Style>
+        <Style Selector="fi|SymbolIcon.changelogChevron.expanded">
+            <Setter Property="RenderTransform" Value="rotate(90deg)" />
+        </Style>
+        <Style Selector="Border.changelogCurrentBadge">
+            <Setter Property="Background" Value="{DynamicResource PbAccentSoftBrush}" />
+            <Setter Property="CornerRadius" Value="{StaticResource PbRadiusSm}" />
+            <Setter Property="Padding" Value="8,2" />
+        </Style>
+        <Style Selector="Border.changelogCategoryTag">
+            <Setter Property="Background" Value="{DynamicResource PbAccentSoftBrush}" />
+            <Setter Property="CornerRadius" Value="{StaticResource PbRadiusSm}" />
+            <Setter Property="Padding" Value="7,2" />
+        </Style>
+    </UserControl.Styles>
+
+    <Panel>
     <ScrollViewer>
-        <StackPanel Margin="28,20,28,40" Spacing="20">
-            <TextBlock Classes="pbTextHeading" Text="About" />
+        <StackPanel Name="Root" Margin="28,20,28,40" Spacing="20">
+
+        <!-- Identity header (docs/superpowers/specs/2026-09-07-about-redesign-design.md §Architecture 1) -->
+        <StackPanel Orientation="Horizontal" Spacing="14">
+            <Image Source="avares://Paperbunkr.App/Assets/paperbunkr-logo-source.png" Width="48" Height="48" />
+            <StackPanel VerticalAlignment="Center" Spacing="2">
+                <TextBlock Text="Paperbunkr" Classes="pbTextHeading" />
+                <TextBlock FontSize="13" Foreground="{DynamicResource PbTextFaintBrush}">
+                    <Run Text="Version " /><Run Text="{Binding CurrentVersion}" /><Run Text=" · Comic and manga library" />
+                </TextBlock>
+            </StackPanel>
+        </StackPanel>
 
         <!-- Updates (docs/superpowers/specs/2026-09-01-auto-update-and-changelog-design.md) -->
         <StackPanel Tag="about.updates">
@@ -37,9 +89,11 @@
             </pref:SettingsRow>
         </StackPanel>
 
-        <!-- Changelog - deferred to its own future redesign (docs/superpowers/specs/2026-09-07-
-             preferences-tile-hub-redesign-design.md §4 item 9) - a read-only repeater with no
-             settings shape, kept exactly as-is. -->
+        <!-- Changelog (docs/superpowers/specs/2026-09-07-about-redesign-design.md §Architecture 3) -
+             per-version accordion, current version expanded by default with a "Current" badge, any
+             number can be open at once. Category tags parsed from Body's "### Added" sub-headings
+             at the view layer only - ChangelogParser/ChangelogEntry (shared with the
+             update-available overlay) are untouched. -->
         <Border Classes="groupBox" Tag="about.changelog">
             <StackPanel>
                 <Border Classes="groupHeader">
@@ -48,13 +102,55 @@
                 <ItemsControl ItemsSource="{Binding ChangelogEntries}">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate x:DataType="services:ChangelogEntry">
-                            <StackPanel Margin="14,10" Spacing="4">
-                                <StackPanel Orientation="Horizontal" Spacing="8">
-                                    <TextBlock Text="{Binding Version}" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
-                                    <TextBlock Text="{Binding Date}" FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" />
+                            <StackPanel Margin="14,6">
+                                <ToggleButton Name="ExpandToggle" Classes="changelogExpandHeader">
+                                    <ToggleButton.IsChecked>
+                                        <MultiBinding Converter="{x:Static views:VersionEqualsCurrentConverter.Instance}" Mode="OneTime">
+                                            <Binding Path="Version" />
+                                            <Binding Path="#Root.((vm:PreferencesScreenViewModel)DataContext).CurrentVersion" />
+                                        </MultiBinding>
+                                    </ToggleButton.IsChecked>
+                                    <Grid ColumnDefinitions="Auto,Auto,Auto,*,Auto">
+                                        <fi:SymbolIcon Grid.Column="0" Symbol="ChevronRight" FontSize="14"
+                                                       Classes="changelogChevron" Classes.expanded="{Binding $parent[ToggleButton].IsChecked}"
+                                                       Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" />
+                                        <TextBlock Grid.Column="1" Text="{Binding Version}" FontWeight="Bold" FontSize="13"
+                                                   Foreground="{DynamicResource PbTextBrush}" Margin="8,0" VerticalAlignment="Center" />
+                                        <TextBlock Grid.Column="2" Text="{Binding Date}" FontSize="11.5"
+                                                   Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" />
+                                        <Border Grid.Column="4" Classes="changelogCurrentBadge">
+                                            <Border.IsVisible>
+                                                <MultiBinding Converter="{x:Static views:VersionEqualsCurrentConverter.Instance}">
+                                                    <Binding Path="Version" />
+                                                    <Binding Path="#Root.((vm:PreferencesScreenViewModel)DataContext).CurrentVersion" />
+                                                </MultiBinding>
+                                            </Border.IsVisible>
+                                            <TextBlock Text="Current" FontSize="11" Foreground="{DynamicResource PbAccentBrush}" />
+                                        </Border>
+                                    </Grid>
+                                </ToggleButton>
+                                <StackPanel IsVisible="{Binding #ExpandToggle.IsChecked}" Margin="22,8,0,0" Spacing="8">
+                                    <ItemsControl ItemsSource="{Binding Body, Converter={x:Static views:ChangelogBodyToGroupsConverter.Instance}}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate x:DataType="services:ChangelogBodyGroup">
+                                                <StackPanel Spacing="4" Margin="0,0,0,4">
+                                                    <Border Classes="changelogCategoryTag" HorizontalAlignment="Left"
+                                                            IsVisible="{Binding Category, Converter={x:Static ObjectConverters.IsNotNull}}">
+                                                        <TextBlock Text="{Binding Category}" FontSize="11" Foreground="{DynamicResource PbAccentBrush}" />
+                                                    </Border>
+                                                    <ItemsControl ItemsSource="{Binding Lines}">
+                                                        <ItemsControl.ItemTemplate>
+                                                            <DataTemplate x:DataType="x:String">
+                                                                <TextBlock Text="{Binding}" FontSize="12.5" TextWrapping="Wrap"
+                                                                           Foreground="{DynamicResource PbTextFaintBrush}" Margin="0,2" />
+                                                            </DataTemplate>
+                                                        </ItemsControl.ItemTemplate>
+                                                    </ItemsControl>
+                                                </StackPanel>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
                                 </StackPanel>
-                                <TextBlock Text="{Binding Body}" FontSize="12.5" TextWrapping="Wrap"
-                                           Foreground="{DynamicResource PbTextFaintBrush}" />
                             </StackPanel>
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
@@ -62,51 +158,42 @@
             </StackPanel>
         </Border>
 
-        <!-- Legal - deferred to its own future redesign (docs/superpowers/specs/2026-09-07-
-             preferences-tile-hub-redesign-design.md §4 item 9) - a document-launcher row with no
-             per-row settings shape, kept exactly as-is. Bundled next to the exe (see csproj) so
-             these open from an installed build, not just a git checkout. -->
-        <Border Classes="groupBox" Tag="about.legal">
-            <StackPanel>
-                <Border Classes="groupHeader">
-                    <TextBlock Text="Legal" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
-                </Border>
-                <StackPanel Margin="14" Spacing="10">
-                    <TextBlock Text="Paperbunkr is self-hosted: your library and settings stay on your machine. These documents cover licensing, third-party metadata connections, and contribution terms."
-                               FontSize="12" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" />
-                    <WrapPanel Orientation="Horizontal">
-                        <Button Classes="headerAction ghost" Margin="0,0,10,10"
-                                Command="{Binding OpenLegalDocumentCommand}" CommandParameter="LICENSE">
-                            <StackPanel Orientation="Horizontal" Spacing="6">
-                                <fi:SymbolIcon Symbol="DocumentText" FontSize="{StaticResource PbIconSizeXs}" />
-                                <TextBlock Text="License (AGPLv3)" />
-                            </StackPanel>
-                        </Button>
-                        <Button Classes="headerAction ghost" Margin="0,0,10,10"
-                                Command="{Binding OpenLegalDocumentCommand}" CommandParameter="PRIVACY.md">
-                            <StackPanel Orientation="Horizontal" Spacing="6">
-                                <fi:SymbolIcon Symbol="DocumentText" FontSize="{StaticResource PbIconSizeXs}" />
-                                <TextBlock Text="Privacy Notice" />
-                            </StackPanel>
-                        </Button>
-                        <Button Classes="headerAction ghost" Margin="0,0,10,10"
-                                Command="{Binding OpenLegalDocumentCommand}" CommandParameter="TERMS.md">
-                            <StackPanel Orientation="Horizontal" Spacing="6">
-                                <fi:SymbolIcon Symbol="DocumentText" FontSize="{StaticResource PbIconSizeXs}" />
-                                <TextBlock Text="Terms of Use" />
-                            </StackPanel>
-                        </Button>
-                        <Button Classes="headerAction ghost" Margin="0,0,10,10"
-                                Command="{Binding OpenLegalDocumentCommand}" CommandParameter="COMICVINE_NOTICE.md">
-                            <StackPanel Orientation="Horizontal" Spacing="6">
-                                <fi:SymbolIcon Symbol="DocumentText" FontSize="{StaticResource PbIconSizeXs}" />
-                                <TextBlock Text="ComicVine API Notice" />
-                            </StackPanel>
-                        </Button>
-                    </WrapPanel>
-                </StackPanel>
-            </StackPanel>
-        </Border>
+        <!-- Legal (docs/superpowers/specs/2026-09-07-about-redesign-design.md §Architecture 2) -
+             SettingsRow-per-document, opening the in-app viewer below instead of shelling out. -->
+        <StackPanel Tag="about.legal">
+            <TextBlock Classes="settingsGroupCaption" Text="LEGAL" />
+            <pref:SettingsRow Icon="DocumentText" Title="License"
+                               Description="AGPLv3, the terms this project is released under">
+                <pref:SettingsRow.SettingsContent>
+                    <Button Classes="headerAction ghost" Command="{Binding OpenLegalDocumentCommand}" CommandParameter="LICENSE" Content="Open" />
+                </pref:SettingsRow.SettingsContent>
+            </pref:SettingsRow>
+            <pref:SettingsRow Icon="Shield" Title="Privacy notice"
+                               Description="What stays local and what leaves your machine">
+                <pref:SettingsRow.SettingsContent>
+                    <Button Classes="headerAction ghost" Command="{Binding OpenLegalDocumentCommand}" CommandParameter="PRIVACY.md" Content="Open" />
+                </pref:SettingsRow.SettingsContent>
+            </pref:SettingsRow>
+            <pref:SettingsRow Icon="DocumentText" Title="Terms of use"
+                               Description="Community contribution and usage terms">
+                <pref:SettingsRow.SettingsContent>
+                    <Button Classes="headerAction ghost" Command="{Binding OpenLegalDocumentCommand}" CommandParameter="TERMS.md" Content="Open" />
+                </pref:SettingsRow.SettingsContent>
+            </pref:SettingsRow>
+            <pref:SettingsRow Icon="Warning" Title="ComicVine API notice"
+                               Description="Bring-your-own-key rules and rate limits for the ComicVine integration">
+                <pref:SettingsRow.SettingsContent>
+                    <Button Classes="headerAction ghost" Command="{Binding OpenLegalDocumentCommand}" CommandParameter="COMICVINE_NOTICE.md" Content="Open" />
+                </pref:SettingsRow.SettingsContent>
+            </pref:SettingsRow>
+        </StackPanel>
     </StackPanel>
     </ScrollViewer>
+
+    <controls:OverlayShell IsOpen="{Binding IsLegalDocumentViewerOpen}"
+                            CloseCommand="{Binding CloseLegalDocumentViewerCommand}"
+                            ShowCloseButton="False">
+        <views:LegalDocumentViewerOverlay />
+    </controls:OverlayShell>
+    </Panel>
 </UserControl>

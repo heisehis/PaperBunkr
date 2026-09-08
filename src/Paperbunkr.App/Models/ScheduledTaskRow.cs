@@ -19,6 +19,10 @@ public sealed partial class ScheduledTaskRow : ObservableObject
 
     public required string Description { get; init; }
 
+    /// <summary>Drives the row's icon via <see cref="Paperbunkr.App.Views.ActivityKindIconConverter"/>
+    /// (docs/superpowers/specs/2026-09-08-automation-tasks-redesign-design.md).</summary>
+    public required ActivityJobKind ActivityKind { get; init; }
+
     [ObservableProperty]
     private bool _enabled;
 
@@ -55,6 +59,14 @@ public sealed partial class ScheduledTaskRow : ObservableObject
         ? RelativeTime(t) + (LastRunStatus == ScheduledRunStatus.Failed ? " (failed)" : "")
         : "Never run";
 
+    /// <summary>True while the task is actually executing or waiting in the scheduler's queue -
+    /// backs both the card's accent-tint class and the Run now button's disabled state (disabling
+    /// on either state, not just IsRunning, avoids double-queuing the same TaskId).</summary>
+    public bool IsActive => IsRunning || IsQueued;
+
+    /// <summary>Run now button label (docs/superpowers/specs/2026-09-08-automation-tasks-redesign-plan.md).</summary>
+    public string RunButtonLabel => IsRunning ? "Running" : IsQueued ? "Queued" : "Run now";
+
     /// <summary>Set by the VM; runs the task immediately via <see cref="Scheduling.ISchedulerService.RunNowAsync"/>.</summary>
     public IAsyncRelayCommand? RunNowCommand { get; set; }
 
@@ -67,6 +79,18 @@ public sealed partial class ScheduledTaskRow : ObservableObject
     partial void OnLastRunUtcChanged(DateTime? value) => OnPropertyChanged(nameof(LastRunLabel));
 
     partial void OnLastRunStatusChanged(ScheduledRunStatus? value) => OnPropertyChanged(nameof(LastRunLabel));
+
+    partial void OnIsRunningChanged(bool value)
+    {
+        OnPropertyChanged(nameof(IsActive));
+        OnPropertyChanged(nameof(RunButtonLabel));
+    }
+
+    partial void OnIsQueuedChanged(bool value)
+    {
+        OnPropertyChanged(nameof(IsActive));
+        OnPropertyChanged(nameof(RunButtonLabel));
+    }
 
     private static string RelativeTime(DateTime utc)
     {

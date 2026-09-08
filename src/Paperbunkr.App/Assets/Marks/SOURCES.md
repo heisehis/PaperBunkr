@@ -18,11 +18,23 @@ respective owners; the license column is the copyright status of the SVG file it
 | `comicvine.svg` | comicvine.gamespot.com — inline masthead SVG (`svg.symbol-logo-comicvine`), full-colour wordmark | brand asset |
 | `animeplanet.svg` | anime-planet.com — the `#mobile` group of their inline `#logo` SVG (the `a‿p` smiley mark), recoloured to their `#FC5342` | brand asset |
 | `shikimori.svg` | github.com/shikimori/shikimori — `app/assets/images/src/glyph_logo.svg` (赤SHIKIMORI wordmark) | project asset (repo is source-available) |
+| `mangabaka.svg` | Vector-traced (see below) from the user's local MangaBaka PWA `.ico` (256×256 PNG frame) | derived from app icon (trademark of MangaBaka) |
 
-Not found as usable SVG (fall back to letter-mark): `mangabaka`, `gcd`, `locg`,
-`cbro`, `readingorders`, `readthingsright`.
-- MangaBaka: mangabaka.dev is behind a Cloudflare bot wall; the only public assets (app repo
-  `Oazzies/MangaBaka-App`, `myanili`, etc.) are all PNG. No SVG anywhere.
+**`mangabaka.svg` is a deliberate outlier — full-color trace, not a wordmark.** mangabaka.dev is
+behind a Cloudflare bot wall and ships no SVG anywhere; the only asset available (2026-09-08) was
+the user's own installed PWA icon, a shaded anime-mascot portrait rather than a flat logo like
+every other entry in this table. Upscaled 256→1024px (Lanczos + light unsharp) and vector-traced
+with `vtracer` (color mode, spline, no posterize/flatten pass — flattening for a smaller file
+introduced visible speckle artifacts in the shaded skin, tried and rejected). Result: 942 KB /
+1122 paths, ~70x the size of every other file in this table, but artifact-free even at true
+~20px mark size (verified the same way the Formats icon set was — render through the app's actual
+`Svg.Skia` path at mark size, not just eyeballed at full size). The user explicitly chose this
+over the letter-mark fallback and over a smaller-but-artifact-y flattened trace, accepting the
+size cost as a one-off for this mark only. Not in `MonochromeAssets` — renders full color, same
+treatment as `mangadex.svg`.
+
+Not found as usable SVG (fall back to letter-mark): `gcd`, `locg`, `cbro`, `readingorders`,
+`readthingsright`.
 - League of Comic Geeks: header logo is `logo-white.png` (raster).
 - Grand Comics Database (comics.org): behind a Cloudflare bot wall; historically PNG-only anyway.
 - CBRO / ReadingOrders.net / ReadThingsRight: small WordPress sites, no SVG branding — the

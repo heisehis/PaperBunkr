@@ -1012,7 +1012,10 @@ public class PaperbunkrDbContext : DbContext
             builder.HasKey(k => k.Id);
             builder.Property(k => k.CommandId).IsRequired();
             builder.Property(k => k.Key).IsRequired();
-            builder.HasIndex(k => k.CommandId).IsUnique();
+            // Unique on (CommandId, Key), not CommandId alone (docs/superpowers/specs/2026-09-07-
+            // keyboard-shortcuts-redesign-design.md) - a command may now have more than one bound
+            // gesture; this still prevents the exact same gesture being added twice to one command.
+            builder.HasIndex(k => new { k.CommandId, k.Key }).IsUnique();
         });
 
         // Saved Workspaces (docs/superpowers/specs/2026-09-03-library-saved-workspaces-design.md) -

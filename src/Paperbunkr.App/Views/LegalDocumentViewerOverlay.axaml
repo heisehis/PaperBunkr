@@ -1,0 +1,107 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:fi="using:FluentIcons.Avalonia"
+             xmlns:vm="using:Paperbunkr.App.ViewModels"
+             xmlns:services="using:Paperbunkr.App.Services"
+             mc:Ignorable="d" d:DesignWidth="520" d:DesignHeight="480"
+             x:Class="Paperbunkr.App.Views.LegalDocumentViewerOverlay"
+             x:DataType="vm:PreferencesScreenViewModel">
+
+    <!--
+        About redesign (docs/superpowers/specs/2026-09-07-about-redesign-design.md) legal-doc viewer.
+        Follows ConfirmDialogView's proven shape (its own root Border with explicit modal-card
+        styling, hosted by the shared OverlayShell) rather than the ad hoc groupBox/DockPanel this
+        started as - that version left the close button landing mid-box instead of top-right and had
+        no visual distinction between headings/quotes/bullets and plain paragraphs.
+    -->
+    <UserControl.Styles>
+        <Style Selector="TextBlock.runBold">
+            <Setter Property="FontWeight" Value="Bold" />
+        </Style>
+        <Style Selector="TextBlock.runCode">
+            <Setter Property="FontFamily" Value="Consolas,monospace" />
+        </Style>
+        <Style Selector="Border.legalHeading1 TextBlock">
+            <Setter Property="FontSize" Value="16" />
+            <Setter Property="FontWeight" Value="Bold" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextBrush}" />
+        </Style>
+        <Style Selector="Border.legalHeading1">
+            <Setter Property="Margin" Value="0,10,0,2" />
+        </Style>
+        <Style Selector="Border.legalHeading2 TextBlock">
+            <Setter Property="FontSize" Value="14" />
+            <Setter Property="FontWeight" Value="Bold" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextBrush}" />
+        </Style>
+        <Style Selector="Border.legalHeading2">
+            <Setter Property="Margin" Value="0,8,0,2" />
+        </Style>
+        <Style Selector="Border.legalQuote TextBlock">
+            <Setter Property="FontStyle" Value="Italic" />
+        </Style>
+        <Style Selector="Border.legalQuote">
+            <Setter Property="BorderThickness" Value="2,0,0,0" />
+            <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
+            <Setter Property="Padding" Value="10,2,0,2" />
+            <Setter Property="Margin" Value="0,4" />
+        </Style>
+        <Style Selector="Border.legalBlock">
+            <Setter Property="Margin" Value="0,2" />
+        </Style>
+    </UserControl.Styles>
+
+    <Border Width="520" MaxHeight="560" Background="{DynamicResource PbChromeBrush}"
+            BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1" CornerRadius="8" Padding="20"
+            BoxShadow="{StaticResource PbElevationShadow}">
+        <DockPanel>
+            <!-- Own close button, not OverlayShell's built-in one (ShowCloseButton="False" in
+                 AboutSection.axaml) - the shell's corner button sizes its Grid cell around this
+                 view's free-flowing wrapped-text content rather than the fixed-width card, so it
+                 landed mid-box instead of top-right. Placing it directly in this header row's own
+                 Grid guarantees correct positioning regardless of body content. -->
+            <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto" Margin="0,0,0,14">
+                <TextBlock Grid.Column="0" Text="{Binding SelectedLegalDocumentTitle}" FontWeight="Bold" FontSize="15"
+                           Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
+                <Button Grid.Column="1" Classes="overlayCloseButton" Width="28" Height="28" VerticalAlignment="Top" Margin="10,-6,-6,0"
+                        Command="{Binding CloseLegalDocumentViewerCommand}" ToolTip.Tip="Close"
+                        AutomationProperties.AutomationId="LegalDocumentViewerCloseButton">
+                    <fi:SymbolIcon Symbol="Dismiss" FontSize="{StaticResource PbIconSizeSm}" />
+                </Button>
+            </Grid>
+            <ScrollViewer>
+                <ItemsControl ItemsSource="{Binding SelectedLegalDocumentBlocks}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="services:LegalDocumentBlock">
+                            <Border Classes="legalBlock"
+                                    Classes.legalHeading1="{Binding Kind, Converter={x:Static ObjectConverters.Equal}, ConverterParameter={x:Static services:LegalBlockKind.Heading1}}"
+                                    Classes.legalHeading2="{Binding Kind, Converter={x:Static ObjectConverters.Equal}, ConverterParameter={x:Static services:LegalBlockKind.Heading2}}"
+                                    Classes.legalQuote="{Binding Kind, Converter={x:Static ObjectConverters.Equal}, ConverterParameter={x:Static services:LegalBlockKind.Quote}}">
+                                <DockPanel LastChildFill="True">
+                                    <TextBlock DockPanel.Dock="Left" Text="•" Margin="0,0,8,0" FontSize="13"
+                                               Foreground="{DynamicResource PbTextBrush}"
+                                               IsVisible="{Binding Kind, Converter={x:Static ObjectConverters.Equal}, ConverterParameter={x:Static services:LegalBlockKind.Bullet}}" />
+                                    <ItemsControl ItemsSource="{Binding Runs}">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate>
+                                                <WrapPanel />
+                                            </ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate x:DataType="services:LegalInlineRun">
+                                                <TextBlock Text="{Binding Text}" Classes.runBold="{Binding Bold}" Classes.runCode="{Binding Code}"
+                                                           TextWrapping="Wrap" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </DockPanel>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+        </DockPanel>
+    </Border>
+</UserControl>

@@ -9,6 +9,31 @@
         BrandMark in Styles/Marks.axaml. Scrim + centered content + corner close button, matching
         the chrome every overlay block in MainWindow.axaml used to hand-copy.
     -->
+    <!--
+        Close button - flat icon, no circle glyph/chrome at rest, danger-red on hover only
+        (feedback from the About redesign's legal-doc viewer, 2026-09-08: the old DismissCircle
+        glyph plus a bordered background square read as a heavier "circle" than intended). A plain
+        Style (not scoped inside the ControlTheme above) so it's reusable by any button carrying
+        this class, not just OverlayShell's own template - LegalDocumentViewerOverlay's own
+        close button (positioned locally rather than via OverlayShell's, see its own doc comment)
+        shares this exact look via the same class.
+    -->
+    <Style Selector="Button.overlayCloseButton">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="CornerRadius" Value="0" />
+    </Style>
+    <Style Selector="Button.overlayCloseButton:pointerover /template/ ContentPresenter">
+        <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="Button.overlayCloseButton fi|SymbolIcon">
+        <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
+    </Style>
+    <Style Selector="Button.overlayCloseButton:pointerover fi|SymbolIcon">
+        <Setter Property="Foreground" Value="{DynamicResource PbDangerBrush}" />
+    </Style>
+
     <Styles.Resources>
         <ControlTheme x:Key="{x:Type controls:OverlayShell}" TargetType="controls:OverlayShell">
             <Setter Property="Template">
@@ -18,13 +43,12 @@
                               VerticalAlignment="{TemplateBinding ContentVerticalAlignment}">
                             <ContentPresenter Content="{TemplateBinding Content}"
                                                ContentTemplate="{TemplateBinding ContentTemplate}" />
-                            <Button Classes="rail" Width="28" Height="28"
+                            <Button Classes="overlayCloseButton" Width="28" Height="28"
                                     HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-14,-14,0"
-                                    Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
                                     Command="{TemplateBinding CloseCommand}" ToolTip.Tip="Close"
                                     AutomationProperties.AutomationId="{TemplateBinding CloseButtonAutomationId}"
                                     IsVisible="{TemplateBinding ShowCloseButton}">
-                                <fi:SymbolIcon Symbol="DismissCircle" FontSize="{StaticResource PbIconSizeSm}" />
+                                <fi:SymbolIcon Symbol="Dismiss" FontSize="{StaticResource PbIconSizeSm}" />
                             </Button>
                         </Grid>
                     </Border>

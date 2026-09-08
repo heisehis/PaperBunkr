@@ -10,6 +10,16 @@
              x:Class="Paperbunkr.App.Views.Preferences.AdvancedSection"
              x:DataType="vm:PreferencesScreenViewModel">
 
+    <UserControl.Styles>
+        <!-- Advanced redesign (docs/superpowers/specs/2026-09-08-advanced-backup-file-association-
+             redesign-design.md) - Restore's armed "Confirm restore?" state gets the same danger-soft
+             recipe every other destructive-action confirm this session uses. -->
+        <Style Selector="Button.restoreArmed">
+            <Setter Property="BorderBrush" Value="{DynamicResource PbDangerBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource PbDangerBrush}" />
+        </Style>
+    </UserControl.Styles>
+
     <ScrollViewer>
         <StackPanel Margin="28,20,28,40" Spacing="20">
             <TextBlock Classes="pbTextHeading" Text="Advanced" />
@@ -33,32 +43,36 @@
                        Foreground="{DynamicResource PbTextFaintBrush}" FontStyle="Italic" Margin="0,-6,0,0" />
         </StackPanel>
 
-        <!-- File Association - deferred to its own future redesign (docs/superpowers/specs/2026-09-07-
-             preferences-tile-hub-redesign-design.md §4 item 7) - a checkbox-per-extension repeater
-             doesn't fit SettingsRow's fixed-row shape, kept exactly as-is. -->
-        <Border Classes="groupBox" Tag="advanced.fileAssociation">
-            <StackPanel>
-                <Border Classes="groupHeader">
-                    <TextBlock Text="File Association" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
-                </Border>
-                <ItemsControl x:Name="FileAssociationsList" ItemsSource="{Binding FileAssociations}">
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate x:DataType="models:FileAssociationSummary">
-                            <CheckBox IsChecked="{Binding IsAssociated, Mode=OneWay}"
-                                      Command="{Binding #FileAssociationsList.((vm:PreferencesScreenViewModel)DataContext).ToggleFileAssociationCommand}"
-                                      CommandParameter="{Binding}"
-                                      Padding="14,7" Margin="0">
-                                <StackPanel Orientation="Horizontal" Spacing="6">
+        <!-- File Association (docs/superpowers/specs/2026-09-08-advanced-backup-file-association-
+             redesign-design.md) - ToggleSwitch for consistency with every other boolean setting in
+             Preferences (this was the one remaining CheckBox), plus a generic document icon (per-
+             format branding isn't feasible - see the design doc's investigation). -->
+        <StackPanel Tag="advanced.fileAssociation">
+            <TextBlock Classes="settingsGroupCaption" Text="FILE ASSOCIATION" />
+            <ItemsControl x:Name="FileAssociationsList" ItemsSource="{Binding FileAssociations}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="models:FileAssociationSummary">
+                        <Button Classes="sideItemButton" HorizontalAlignment="Stretch"
+                                Command="{Binding #FileAssociationsList.((vm:PreferencesScreenViewModel)DataContext).ToggleFileAssociationCommand}"
+                                CommandParameter="{Binding}">
+                            <Grid ColumnDefinitions="Auto,*,Auto">
+                                <Border Grid.Column="0" Width="26" Height="26" CornerRadius="7" Background="{DynamicResource PbSurface3Brush}">
+                                    <fi:SymbolIcon Symbol="Document" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextMutedBrush}"
+                                                   HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                </Border>
+                                <StackPanel Grid.Column="1" Margin="10,0,0,0" VerticalAlignment="Center">
                                     <TextBlock Text="{Binding Name}" FontSize="12.5" Foreground="{DynamicResource PbTextBrush}" />
                                     <TextBlock Text="{Binding ExtensionList}" FontSize="11" FontFamily="Consolas,monospace"
-                                               Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" />
+                                               Foreground="{DynamicResource PbTextFaintBrush}" />
                                 </StackPanel>
-                            </CheckBox>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
-            </StackPanel>
-        </Border>
+                                <ToggleSwitch Grid.Column="2" IsChecked="{Binding IsAssociated, Mode=OneWay}" IsHitTestVisible="False"
+                                              OnContent="{x:Null}" OffContent="{x:Null}" />
+                            </Grid>
+                        </Button>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </StackPanel>
 
         <StackPanel Tag="advanced.fileMetadata">
             <TextBlock Classes="settingsGroupCaption" Text="COMIC FILE METADATA" />
@@ -91,18 +105,17 @@
             </pref:SettingsRow>
         </StackPanel>
 
-        <!-- Backup Manager - deferred to its own future redesign (docs/superpowers/specs/2026-09-07-
-             preferences-tile-hub-redesign-design.md §4 item 7) - browse/numeric/toggle/action/file-list
-             sub-UI doesn't fit SettingsRow's fixed-row shape, kept exactly as-is. -->
-        <Border Classes="groupBox" Tag="advanced.backup">
-            <StackPanel>
-                <Border Classes="groupHeader">
-                    <TextBlock Text="Backup Manager" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
-                </Border>
-                <StackPanel Margin="14" Spacing="10">
-                    <TextBlock Text="Backup Location" FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" />
+        <!-- Backup Manager (docs/superpowers/specs/2026-09-08-advanced-backup-file-association-
+             redesign-design.md) - the 5 fixed fields below are each a small, known-at-authoring-time
+             row (the same dividing line Phase 1 itself drew), so they became real SettingsRows; only
+             the backup-file list itself stays a dynamic repeater. -->
+        <StackPanel Tag="advanced.backup">
+            <TextBlock Classes="settingsGroupCaption" Text="BACKUP" />
+
+            <pref:SettingsRow Icon="FolderOpen" Title="Backup location">
+                <pref:SettingsRow.SettingsContent>
                     <StackPanel Orientation="Horizontal" Spacing="10">
-                        <TextBox Text="{Binding BackupLocation}" Width="320" IsReadOnly="True" />
+                        <TextBox Text="{Binding BackupLocation}" Width="280" IsReadOnly="True" />
                         <Button Classes="headerAction ghost" Command="{Binding BrowseBackupLocationCommand}">
                             <StackPanel Orientation="Horizontal" Spacing="6">
                                 <fi:SymbolIcon Symbol="FolderOpen" FontSize="{StaticResource PbIconSizeXs}" />
@@ -110,49 +123,62 @@
                             </StackPanel>
                         </Button>
                     </StackPanel>
+                </pref:SettingsRow.SettingsContent>
+            </pref:SettingsRow>
 
-                    <TextBlock Text="Backups to Keep" FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" Margin="0,6,0,0" />
-                    <NumericUpDown Value="{Binding BackupsToKeep}" Minimum="0" Maximum="99" Width="120" HorizontalAlignment="Left" />
+            <pref:SettingsRow Icon="Archive" Title="Backups to keep">
+                <pref:SettingsRow.SettingsContent>
+                    <NumericUpDown Value="{Binding BackupsToKeep}" Minimum="0" Maximum="99" Width="120" />
+                </pref:SettingsRow.SettingsContent>
+            </pref:SettingsRow>
 
-                    <Grid ColumnDefinitions="*,Auto" Margin="0,6,0,0">
-                        <TextBlock Grid.Column="0" Text="Automatically back up on startup and shutdown" VerticalAlignment="Center" Foreground="{DynamicResource PbTextBrush}" FontSize="13" Margin="0,0,10,0" />
-                        <ToggleSwitch Grid.Column="1" IsChecked="{Binding AutoBackupEnabled}" OnContent="{x:Null}" OffContent="{x:Null}" />
-                    </Grid>
-                    <TextBlock Text="Minimum Hours Between Automatic Backups" FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}"
-                               IsVisible="{Binding AutoBackupEnabled}" />
-                    <NumericUpDown Value="{Binding AutoBackupMinIntervalHours}" Minimum="1" Maximum="168" Width="120" HorizontalAlignment="Left"
-                                   IsVisible="{Binding AutoBackupEnabled}" />
+            <pref:SettingsRow Icon="History" Title="Automatically back up on startup and shutdown">
+                <pref:SettingsRow.SettingsContent>
+                    <ToggleSwitch IsChecked="{Binding AutoBackupEnabled}" OnContent="{x:Null}" OffContent="{x:Null}" />
+                </pref:SettingsRow.SettingsContent>
+            </pref:SettingsRow>
 
-                    <Button Classes="headerAction primary" Command="{Binding BackupNowCommand}"
-                            HorizontalAlignment="Left" Margin="0,6,0,0">
+            <pref:SettingsRow Icon="Clock" Title="Minimum hours between automatic backups" IsVisible="{Binding AutoBackupEnabled}">
+                <pref:SettingsRow.SettingsContent>
+                    <NumericUpDown Value="{Binding AutoBackupMinIntervalHours}" Minimum="1" Maximum="168" Width="120" />
+                </pref:SettingsRow.SettingsContent>
+            </pref:SettingsRow>
+
+            <pref:SettingsRow Icon="Save" Title="Backup now" Description="{Binding BackupStatus}">
+                <pref:SettingsRow.SettingsContent>
+                    <Button Classes="headerAction primary" Command="{Binding BackupNowCommand}">
                         <StackPanel Orientation="Horizontal" Spacing="6">
                             <fi:SymbolIcon Symbol="Archive" Foreground="{DynamicResource PbBadgeTextBrush}" />
                             <TextBlock Text="Backup Now" />
                         </StackPanel>
                     </Button>
-                    <TextBlock Text="{Binding BackupStatus}" FontSize="12" Foreground="{DynamicResource PbTextFaintBrush}" />
-                </StackPanel>
+                </pref:SettingsRow.SettingsContent>
+            </pref:SettingsRow>
 
-                <ItemsControl ItemsSource="{Binding Backups}">
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate x:DataType="vm:BackupRowViewModel">
-                            <Border Classes="skinRow">
-                                <Grid ColumnDefinitions="*,Auto" Margin="14,10">
-                                    <TextBlock Grid.Column="0" Text="{Binding FileName}" FontSize="13" FontFamily="Consolas,monospace"
-                                               Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
-                                    <Button Grid.Column="1" Classes="headerAction ghost" Command="{Binding RestoreCommand}">
-                                        <StackPanel Orientation="Horizontal" Spacing="6">
-                                            <fi:SymbolIcon Symbol="ArrowUndo" FontSize="{StaticResource PbIconSizeXs}" />
-                                            <TextBlock Text="{Binding RestoreLabel}" />
-                                        </StackPanel>
-                                    </Button>
-                                </Grid>
-                            </Border>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
-            </StackPanel>
-        </Border>
+            <ItemsControl ItemsSource="{Binding Backups}" Margin="0,10,0,0">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:BackupRowViewModel">
+                        <Border Classes="skinRow">
+                            <Grid ColumnDefinitions="*,Auto" Margin="14,10">
+                                <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                    <TextBlock Text="{Binding DisplayDate}" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
+                                    <TextBlock Text="{Binding DisplaySize}" FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" />
+                                </StackPanel>
+                                <Button Grid.Column="1" Classes="headerAction ghost" Classes.restoreArmed="{Binding IsArmed}" Command="{Binding RestoreCommand}">
+                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                        <fi:SymbolIcon Symbol="ArrowUndo" FontSize="{StaticResource PbIconSizeXs}" />
+                                        <TextBlock Text="{Binding RestoreLabel}" />
+                                    </StackPanel>
+                                </Button>
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+            <TextBlock Text="Restoring a backup requires restarting Paperbunkr to take effect."
+                       FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" Margin="0,8,0,0"
+                       IsVisible="{Binding HasBackups}" />
+        </StackPanel>
     </StackPanel>
     </ScrollViewer>
 </UserControl>

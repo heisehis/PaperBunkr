@@ -314,6 +314,7 @@ namespace Paperbunkr.Data.Migrations
                         .HasDefaultValue(1.0);
 
                     b.Property<int>("LibraryHealthConfirmedMissingThreshold")
+                        .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER")
                         .HasDefaultValue(2);
 
@@ -1603,7 +1604,7 @@ namespace Paperbunkr.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("CommandId")
+                    b.HasIndex("CommandId", "Key")
                         .IsUnique();
 
                     b.ToTable("KeyBindings");

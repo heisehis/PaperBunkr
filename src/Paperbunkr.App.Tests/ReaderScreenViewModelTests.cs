@@ -240,7 +240,7 @@ public class ReaderScreenViewModelTests : IDisposable
     }
 
     private static void SetKeyBinding(string commandId, KeyGesture gesture) =>
-        new KeyBindingService().SetKey(commandId, gesture);
+        new KeyBindingService().AddKey(commandId, gesture);
 
     private void SetSeriesReadingMode(ReadingMode mode)
     {
@@ -663,14 +663,14 @@ public class ReaderScreenViewModelTests : IDisposable
     {
         var vm = new ReaderScreenViewModel(goBack: () => { });
         vm.LoadIssue(_issue1Id);
-        Assert.Equal(new KeyGesture(Key.Left), vm.PageTurnLeftKey);
-        Assert.Equal(new KeyGesture(Key.Right), vm.PageTurnRightKey);
+        Assert.Equal([new KeyGesture(Key.Left)], vm.PageTurnLeftKey);
+        Assert.Equal([new KeyGesture(Key.Right)], vm.PageTurnRightKey);
 
         SetKeyBinding(KeyboardCommandRegistry.ReaderPageTurnLeft, new KeyGesture(Key.J));
         vm.LoadIssue(_issue1Id);
 
-        Assert.Equal(new KeyGesture(Key.J), vm.PageTurnLeftKey);
-        Assert.Equal(new KeyGesture(Key.Right), vm.PageTurnRightKey); // untouched
+        Assert.Equal([new KeyGesture(Key.J)], vm.PageTurnLeftKey);
+        Assert.Equal([new KeyGesture(Key.Right)], vm.PageTurnRightKey); // untouched
     }
 
     [Fact]
@@ -680,18 +680,18 @@ public class ReaderScreenViewModelTests : IDisposable
         // docs/superpowers/specs/2026-08-16-remappable-reader-shortcuts-design.md.
         var vm = new ReaderScreenViewModel(goBack: () => { });
         vm.LoadIssue(_issue1Id);
-        Assert.Equal(new KeyGesture(Key.Left), vm.PanLeftKey);
-        Assert.Equal(new KeyGesture(Key.Z), vm.ZoomInKey);
-        Assert.Equal(new KeyGesture(Key.F), vm.ToggleFullscreenKey);
+        Assert.Equal([new KeyGesture(Key.Left)], vm.PanLeftKey);
+        Assert.Equal([new KeyGesture(Key.Z)], vm.ZoomInKey);
+        Assert.Equal([new KeyGesture(Key.F)], vm.ToggleFullscreenKey);
 
         SetKeyBinding(KeyboardCommandRegistry.ReaderPanLeft, new KeyGesture(Key.A));
         SetKeyBinding(KeyboardCommandRegistry.ReaderZoomIn, new KeyGesture(Key.OemComma));
         SetKeyBinding(KeyboardCommandRegistry.ReaderToggleFullscreen, new KeyGesture(Key.OemPeriod));
         vm.LoadIssue(_issue1Id);
 
-        Assert.Equal(new KeyGesture(Key.A), vm.PanLeftKey);
-        Assert.Equal(new KeyGesture(Key.OemComma), vm.ZoomInKey);
-        Assert.Equal(new KeyGesture(Key.OemPeriod), vm.ToggleFullscreenKey);
+        Assert.Equal([new KeyGesture(Key.A)], vm.PanLeftKey);
+        Assert.Equal([new KeyGesture(Key.OemComma)], vm.ZoomInKey);
+        Assert.Equal([new KeyGesture(Key.OemPeriod)], vm.ToggleFullscreenKey);
     }
 
     [Fact]
@@ -1309,7 +1309,7 @@ public class ReaderScreenViewModelTests : IDisposable
         var vm = new ReaderScreenViewModel(goBack: () => { }, keyBindingService);
         string before = vm.GetShortcutHint(KeyboardCommandRegistry.ReaderRotateClockwise);
 
-        keyBindingService.SetKey(KeyboardCommandRegistry.ReaderRotateClockwise, new KeyGesture(Key.J));
+        keyBindingService.AddKey(KeyboardCommandRegistry.ReaderRotateClockwise, new KeyGesture(Key.J));
         string after = vm.GetShortcutHint(KeyboardCommandRegistry.ReaderRotateClockwise);
 
         Assert.NotEqual(before, after);

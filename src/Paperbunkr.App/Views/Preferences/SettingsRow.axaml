@@ -17,20 +17,24 @@
         nothing (no dead space) when null/empty, since most rows ship with it unset until the
         descriptive copy is written separately.
     -->
-    <Grid ColumnDefinitions="Auto,*,Auto" Margin="0,0,0,10">
-        <fi:SymbolIcon Grid.Column="0" Symbol="{Binding Icon, ElementName=Root}"
+    <Grid ColumnDefinitions="Auto,*,Auto" RowDefinitions="Auto,Auto" Margin="0,0,0,10">
+        <!-- Icon shares Row 0 with the title only (docs/superpowers/specs/2026-09-07-about-redesign-
+             design.md follow-up polish) - previously VerticalAlignment="Top" + a fudge-factor Margin
+             approximated the title's cap-height for the common single-line case, but visibly
+             misaligned once a Description line was present (every row in this codebase's About/
+             Legal group has one). Pinning the icon to the title's own row and centering within it
+             is correct regardless of whether Description exists. -->
+        <fi:SymbolIcon Grid.Column="0" Grid.Row="0" Symbol="{Binding Icon, ElementName=Root}"
                        FontSize="{StaticResource PbIconSizeSm}" Foreground="{DynamicResource PbTextMutedBrush}"
-                       VerticalAlignment="Top" Margin="0,2,10,0" />
+                       VerticalAlignment="Center" HorizontalAlignment="Center" Margin="0,0,10,0" />
 
-        <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
-            <TextBlock Text="{Binding Title, ElementName=Root}" FontSize="13"
-                       Foreground="{DynamicResource PbTextBrush}" TextWrapping="Wrap" />
-            <TextBlock Text="{Binding Description, ElementName=Root}" FontSize="11.5"
-                       Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap"
-                       IsVisible="{Binding Description, ElementName=Root, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
-        </StackPanel>
+        <TextBlock Grid.Column="1" Grid.Row="0" Text="{Binding Title, ElementName=Root}" FontSize="13"
+                   Foreground="{DynamicResource PbTextBrush}" TextWrapping="Wrap" VerticalAlignment="Center" />
+        <TextBlock Grid.Column="1" Grid.Row="1" Text="{Binding Description, ElementName=Root}" FontSize="11.5"
+                   Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" Margin="0,2,0,0"
+                   IsVisible="{Binding Description, ElementName=Root, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
 
-        <ContentPresenter Grid.Column="2" Content="{Binding SettingsContent, ElementName=Root}"
+        <ContentPresenter Grid.Column="2" Grid.Row="0" Grid.RowSpan="2" Content="{Binding SettingsContent, ElementName=Root}"
                           VerticalAlignment="Center" Margin="10,0,0,0" />
     </Grid>
 </UserControl>

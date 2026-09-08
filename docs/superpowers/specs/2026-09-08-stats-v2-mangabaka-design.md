@@ -146,8 +146,12 @@ Cumulative stacked-area chart. X-axis = calendar date, bucketed from `Issue.Adde
 - **Measure** (switchable): Series added · Issues added. (No "Volumes" — `Issue.Volume` is a free
   string label on an issue, not a distinct countable unit; dropped, see §2.)
 - **Stack by** (switchable): Total · Reading state (`ReadingStatus`) · Media type (`ContentType`) ·
-  Content rating (`Issue.AgeRating`, canonicalized via the existing `age-rating-aliases.tsv` table
-  `MarkResolver` already loads — reused, not reinvented).
+  Content rating (`Issue.AgeRating`, raw-grouped the same way `InsightsResolver.ComputeComposition`
+  already buckets `Format`/`Decade` — trim + "Unknown" fallback, no cross-spelling canonicalization.
+  **Correction from the original plan:** `MarkResolver`'s alias table lives in `Paperbunkr.App`,
+  which `Paperbunkr.Data` cannot reference — reusing it isn't architecturally possible from
+  `StatsResolver`. This is the same acceptable-simplification tier as the Format/Decade buckets
+  already ship with.)
 
 **Accepted simplification:** stacking reflects each item's **current** status/type/rating, not its
 value at the historical add-date (Paperbunkr doesn't track status-change history). An item added
@@ -174,7 +178,8 @@ excludes unrated) — relocated to Stats, restyled with the new palette (§8).
 
 ### 6.7 Content Rating
 
-Donut over canonicalized `Issue.AgeRating` values (same alias table as §6.4's stack-by option).
+Donut over raw-grouped `Issue.AgeRating` values (same simple bucketing as §6.4's stack-by option —
+no `MarkResolver` alias-table reuse, see the correction there).
 
 ### 6.8 Publication Year
 

@@ -137,8 +137,12 @@ UI group, they become **one** consolidated search entry, not three:
   keywords (`"motion", "reduce motion", "animation", "transitions", "nav rail", "hover", "expand",
   "developer", "design showcase", "debug"`) — also closing the pre-existing gap of Navigation having
   no search entry at all, since its terms fold into this same merged one.
-- The `"Install Skin"` entry's `Tag` changes from `"appearance.installSkin"` to `"appearance.skin"`
-  (same search terms, now pointing at the merged Skins group per Architecture §3).
+- **Further correction, found while running the tests:** `AnchorKeysAreUnique` also forbids
+  `"Install Skin"` keeping its own entry pointed at `"appearance.skin"`, since `"Skins"` already
+  uses that exact key. Same fix as Motion/Developer: `"Install Skin"`'s entry is deleted and its
+  search terms (`"install skin", "crpck", "browse skin", "skins folder"`) fold into the `"Skins"`
+  entry's own keyword list — one entry per `Tag`, always, is the real rule this whole section
+  should have started from.
 
 ### 5. Font preview
 
@@ -165,7 +169,8 @@ None beyond what Architecture §1 already covers (colors computed in `SkinServic
   e.g. Default's `ChromeBrush` resolves to `#131519`).
 - `PreferenceIndexTests`: the new merged "Interface" entry resolves to `appearance.interface` and
   the existing `AnchorKeysAreUnique`/`EveryEntryAnchorResolvesToATagInItsSection` tests still pass
-  with 4 Appearance entries instead of 5 (Skin, Install Skin, Font, Interface).
+  with 3 Appearance entries instead of 5 (Skin — now also covering Install Skin's search terms,
+  Font, Interface).
 - Manual on-screen pass (standing no-unattended-GUI caveat): all 5 skins render distinguishable
   mini-mockups; clicking a card applies that skin and moves the accent-ring+checkmark to it; Install…
   and Open Skins Folder both still work from their new header location; a bad file still shows the

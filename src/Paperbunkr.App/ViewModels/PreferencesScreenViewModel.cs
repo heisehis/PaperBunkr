@@ -141,6 +141,33 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         SourceProviderRows = new ObservableCollection<ConnectionProviderRow>(ConnectionProviderRow.CreateSourceProviders());
         TrackerProviderRows = new ObservableCollection<ConnectionProviderRow>(ConnectionProviderRow.CreateTrackerProviders());
 
+        // Wire each row's command references to the matching [RelayCommand]-generated command
+        // (docs/superpowers/specs/2026-09-07-connections-redesign-design.md) - the dialog's generic
+        // per-Kind template binds to these instead of a hardcoded per-provider command name. Command
+        // bodies are unchanged.
+        ComicVineRow.SaveCommand = SaveComicVineCredentialsCommand;
+        ComicVineRow.DisconnectCommand = DisconnectComicVineCommand;
+        MetronRow.PrimaryCommand = SaveMetronCredentialsCommand;
+        MetronRow.DisconnectCommand = DisconnectMetronCommand;
+
+        AniListRow.ConnectCommand = ConnectAniListCommand;
+        AniListRow.CompleteCommand = CompleteAniListConnectCommand;
+        AniListRow.DisconnectCommand = DisconnectAniListCommand;
+        MyAnimeListRow.ConnectCommand = ConnectMyAnimeListCommand;
+        MyAnimeListRow.CompleteCommand = CompleteMyAnimeListConnectCommand;
+        MyAnimeListRow.DisconnectCommand = DisconnectMyAnimeListCommand;
+        ShikimoriRow.ConnectCommand = ConnectShikimoriCommand;
+        ShikimoriRow.CompleteCommand = CompleteShikimoriConnectCommand;
+        ShikimoriRow.DisconnectCommand = DisconnectShikimoriCommand;
+        BangumiRow.SaveCommand = SaveBangumiTokenCommand;
+        BangumiRow.DisconnectCommand = DisconnectBangumiCommand;
+        MangaBakaRow.SaveCommand = SaveMangaBakaTokenCommand;
+        MangaBakaRow.DisconnectCommand = DisconnectMangaBakaCommand;
+        MangaUpdatesRow.PrimaryCommand = ConnectMangaUpdatesCommand;
+        MangaUpdatesRow.DisconnectCommand = DisconnectMangaUpdatesCommand;
+        KitsuRow.PrimaryCommand = ConnectKitsuCommand;
+        KitsuRow.DisconnectCommand = DisconnectKitsuCommand;
+
         // Clear Cover Cache (docs/superpowers/specs/2026-08-30-cover-thumbnail-content-
         // verification-design.md) - manual escape hatch, independent of VerifyCovers' detection
         // logic. Two-step inline confirm, same pattern every other destructive action in this
@@ -682,9 +709,9 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         ZoomFitKeyBindings.Clear();
         DisplayKeyBindings.Clear();
 
-        foreach (var (command, currentKey) in _keyBindingService.GetAllBindings())
+        foreach (var (command, currentKeys) in _keyBindingService.GetAllBindings())
         {
-            var row = new KeyBindingRowViewModel(command, currentKey, _keyBindingService, RecomputeKeyBindingConflict);
+            var row = new KeyBindingRowViewModel(command, currentKeys, _keyBindingService, RecomputeKeyBindingConflict);
             var targetCollection = command.Group switch
             {
                 KeyboardCommandRegistry.NavigationGroup => NavigationKeyBindings,
@@ -740,39 +767,71 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     }
 
     /// <summary>
+    /// Whole-layout revert (docs/superpowers/specs/2026-09-07-keyboard-shortcuts-redesign-design.md)
+    /// - matches CE's own "Restore Default Keyboard Layout" menu action. No confirmation dialog:
+    /// this section already applies every change immediately with no Save/Cancel step, and the
+    /// action is fully recoverable via Import if the user has a previously-exported layout.
+    /// </summary>
+    [RelayCommand]
+    private void ResetKeyBindings()
+    {
+        _keyBindingService.ResetToDefaults();
+        RefreshKeyBindings();
+        _showToast("Keyboard shortcuts reset", "Every shortcut is back to its default.");
+    }
+
+    /// <summary>
     /// Soft validation, not a hard block - the row already persisted its new key by the time this
     /// runs (matches every other Preferences toggle's immediate-persist behavior). Two commands
-    /// conflict iff their gestures are equal AND (their <see cref="ConflictContext"/>s match OR
-    /// either is <see cref="ConflictContext.Always"/>) - see that enum's own doc comment for why:
+    /// conflict iff any of their gestures are equal AND (their <see cref="ConflictContext"/>s match
+    /// OR either is <see cref="ConflictContext.Always"/>) - see that enum's own doc comment for why:
     /// mode-specific contexts (paged/zoomed/continuous) are mutually exclusive at runtime, so
     /// sharing a gesture across two of them is never actually reachable, but an Always command
-    /// unconditionally shadows every mode-specific one it collides with.
+    /// unconditionally shadows every mode-specific one it collides with. Every conflicting row gets
+    /// <see cref="KeyBindingRowViewModel.IsConflicted"/> flagged (docs/superpowers/specs/2026-09-07-
+    /// keyboard-shortcuts-redesign-design.md §4) - the loop doesn't return on the first match so a
+    /// row conflicting with more than one other row (more likely now that multi-binding exists)
+    /// still ends up correctly flagged, even though only the first conflict's message shows in the
+    /// single-line banner.
     /// </summary>
     private void RecomputeKeyBindingConflict()
     {
         var all = NavigationKeyBindings.Concat(ZoomFitKeyBindings).Concat(DisplayKeyBindings).ToList();
+        foreach (var row in all)
+        {
+            row.IsConflicted = false;
+        }
+
+        string? firstConflict = null;
         for (int i = 0; i < all.Count; i++)
         {
             for (int j = i + 1; j < all.Count; j++)
             {
                 var a = all[i];
                 var b = all[j];
-                if (a.SelectedKey.Gesture != b.SelectedKey.Gesture)
-                {
-                    continue;
-                }
-
                 if (a.Context != ConflictContext.Always && b.Context != ConflictContext.Always && a.Context != b.Context)
                 {
                     continue;
                 }
 
-                KeyBindingConflictError = $"\"{a.SelectedKey.Label}\" is assigned to both \"{a.Label}\" and \"{b.Label}\".";
-                return;
+                foreach (var keyA in a.BoundKeys)
+                {
+                    foreach (var keyB in b.BoundKeys)
+                    {
+                        if (keyA.Gesture != keyB.Gesture)
+                        {
+                            continue;
+                        }
+
+                        a.IsConflicted = true;
+                        b.IsConflicted = true;
+                        firstConflict ??= $"\"{keyA.Label}\" is assigned to both \"{a.Label}\" and \"{b.Label}\".";
+                    }
+                }
             }
         }
 
-        KeyBindingConflictError = null;
+        KeyBindingConflictError = firstConflict;
     }
 
     /// <summary>
@@ -796,28 +855,45 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         }
     }
 
+    [ObservableProperty]
+    private string? _selectedLegalDocumentTitle;
+
+    [ObservableProperty]
+    private IReadOnlyList<LegalDocumentBlock> _selectedLegalDocumentBlocks = Array.Empty<LegalDocumentBlock>();
+
+    [ObservableProperty]
+    private bool _isLegalDocumentViewerOpen;
+
     /// <summary>
     /// Opens one of the repo-root legal/community documents (LICENSE, PRIVACY.md, TERMS.md,
     /// COMICVINE_NOTICE.md) bundled next to the exe (see the csproj's CopyToOutputDirectory items)
-    /// in the user's default handler for that file. Same "missing file just does nothing" tolerance
-    /// as <see cref="RefreshChangelog"/> - a dev build run before the csproj copy step shouldn't crash.
+    /// in the in-app viewer overlay (docs/superpowers/specs/2026-09-07-about-redesign-design.md) -
+    /// no external-launch path is kept. Same "missing file just does nothing" tolerance as
+    /// <see cref="RefreshChangelog"/> - a dev build run before the csproj copy step shouldn't crash.
     /// </summary>
     [RelayCommand]
     private void OpenLegalDocument(string fileName)
     {
-        try
+        string path = Path.Combine(AppContext.BaseDirectory, fileName);
+        if (!File.Exists(path))
         {
-            string path = Path.Combine(AppContext.BaseDirectory, fileName);
-            if (File.Exists(path))
-            {
-                Process.Start(new ProcessStartInfo { FileName = path, UseShellExecute = true });
-            }
+            return;
         }
-        catch
+
+        SelectedLegalDocumentTitle = fileName switch
         {
-            // No shell/file association available - nothing more we can do.
-        }
+            "LICENSE" => "License",
+            "PRIVACY.md" => "Privacy notice",
+            "TERMS.md" => "Terms of use",
+            "COMICVINE_NOTICE.md" => "ComicVine API notice",
+            _ => fileName,
+        };
+        SelectedLegalDocumentBlocks = LegalDocumentParser.Parse(File.ReadAllText(path));
+        IsLegalDocumentViewerOpen = true;
     }
+
+    [RelayCommand]
+    private void CloseLegalDocumentViewer() => IsLegalDocumentViewerOpen = false;
 
     private void RefreshSkins()
     {
@@ -2020,6 +2096,9 @@ public partial class PreferencesScreenViewModel : ViewModelBase
 
     public ObservableCollection<BackupRowViewModel> Backups { get; }
 
+    /// <summary>docs/superpowers/specs/2026-09-08-advanced-backup-file-association-redesign-design.md §3 - feeds the "requires a restart" note's visibility.</summary>
+    public bool HasBackups => Backups.Count > 0;
+
     [ObservableProperty]
     private string _backupLocation = string.Empty;
 
@@ -2044,6 +2123,8 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         {
             Backups.Add(new BackupRowViewModel(path, OnRestoreBackupConfirmed));
         }
+
+        OnPropertyChanged(nameof(HasBackups));
     }
 
     private void OnRestoreBackupConfirmed(BackupRowViewModel row)
@@ -2121,19 +2202,9 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     }
 
     // ===================== Reading List Sources (docs/superpowers/specs/2026-08-22-cbl-manager-
-    // arc-lookup-design.md §5) - ComicVine/Metron credentials, backed by CredentialStore. =====================
-
-    [ObservableProperty]
-    private string _comicVineApiKey = string.Empty;
-
-    [ObservableProperty]
-    private string _metronUsername = string.Empty;
-
-    [ObservableProperty]
-    private string _metronPassword = string.Empty;
-
-    [ObservableProperty]
-    private string? _sourcesStatus;
+    // arc-lookup-design.md §5) - ComicVine/Metron credentials, backed by CredentialStore. Credential
+    // *values* live on the row itself (docs/superpowers/specs/2026-09-07-connections-redesign-
+    // design.md) - ComicVineRow.SecretValue / MetronRow.Username+Password. =====================
 
     [ObservableProperty]
     private bool _isComicVineConnected;
@@ -2144,11 +2215,14 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     /// <summary>Row list backing the Connections screen's "Reading List Sources" section (docs/superpowers/specs/2026-09-06-connections-tracker-dialog-redesign-design.md).</summary>
     public ObservableCollection<ConnectionProviderRow> SourceProviderRows { get; }
 
+    private ConnectionProviderRow ComicVineRow => SourceProviderRows.Single(r => r.Id == "ComicVine");
+    private ConnectionProviderRow MetronRow => SourceProviderRows.Single(r => r.Id == "Metron");
+
     private void RefreshSourceCredentials(PaperbunkrDbContext context)
     {
-        ComicVineApiKey = CredentialStore.Get(context, "ComicVine", CredentialKind.ApiKey) ?? string.Empty;
-        MetronUsername = CredentialStore.Get(context, "Metron", CredentialKind.Username) ?? string.Empty;
-        MetronPassword = CredentialStore.Get(context, "Metron", CredentialKind.Password) ?? string.Empty;
+        ComicVineRow.SecretValue = CredentialStore.Get(context, "ComicVine", CredentialKind.ApiKey) ?? string.Empty;
+        MetronRow.Username = CredentialStore.Get(context, "Metron", CredentialKind.Username) ?? string.Empty;
+        MetronRow.Password = CredentialStore.Get(context, "Metron", CredentialKind.Password) ?? string.Empty;
 
         // New (docs/superpowers/specs/2026-09-06-connections-tracker-dialog-redesign-design.md) -
         // ComicVine/Metron previously had no "connected" concept at all, just a one-line status
@@ -2164,8 +2238,8 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     private void SaveComicVineCredentials()
     {
         using var context = _contextFactory();
-        CredentialStore.Set(context, "ComicVine", CredentialKind.ApiKey, ComicVineApiKey);
-        SourcesStatus = "ComicVine API key saved.";
+        CredentialStore.Set(context, "ComicVine", CredentialKind.ApiKey, ComicVineRow.SecretValue);
+        ConnectionDialogStatus = "ComicVine API key saved.";
         RefreshSourceCredentials(context);
     }
 
@@ -2173,9 +2247,9 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     private void SaveMetronCredentials()
     {
         using var context = _contextFactory();
-        CredentialStore.Set(context, "Metron", CredentialKind.Username, MetronUsername);
-        CredentialStore.Set(context, "Metron", CredentialKind.Password, MetronPassword);
-        SourcesStatus = "Metron credentials saved.";
+        CredentialStore.Set(context, "Metron", CredentialKind.Username, MetronRow.Username);
+        CredentialStore.Set(context, "Metron", CredentialKind.Password, MetronRow.Password);
+        ConnectionDialogStatus = "Metron credentials saved.";
         RefreshSourceCredentials(context);
     }
 
@@ -2184,8 +2258,8 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     {
         using var context = _contextFactory();
         CredentialStore.Delete(context, "ComicVine", CredentialKind.ApiKey);
-        ComicVineApiKey = string.Empty;
-        SourcesStatus = "ComicVine disconnected.";
+        ComicVineRow.SecretValue = string.Empty;
+        ConnectionDialogStatus = "ComicVine disconnected.";
         RefreshSourceCredentials(context);
     }
 
@@ -2195,9 +2269,9 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         using var context = _contextFactory();
         CredentialStore.Delete(context, "Metron", CredentialKind.Username);
         CredentialStore.Delete(context, "Metron", CredentialKind.Password);
-        MetronUsername = string.Empty;
-        MetronPassword = string.Empty;
-        SourcesStatus = "Metron disconnected.";
+        MetronRow.Username = string.Empty;
+        MetronRow.Password = string.Empty;
+        ConnectionDialogStatus = "Metron disconnected.";
         RefreshSourceCredentials(context);
     }
 
@@ -2208,38 +2282,28 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     // (deliberate asymmetry - see the design spec's own "why the four aren't uniform" section).
     // =====================
 
-    [ObservableProperty] private string _aniListClientId = string.Empty;
-    [ObservableProperty] private string _aniListPastedToken = string.Empty;
+    // Credential *values* live on the row itself (docs/superpowers/specs/2026-09-07-connections-
+    // redesign-design.md) - see ConnectionProviderRow.ClientId/.ClientSecret/.PastedValue/
+    // .SecretValue/.Username/.Password. Only the "connected" flags and the code-verifier stay here.
     [ObservableProperty] private bool _isAniListConnected;
-
-    [ObservableProperty] private string _myAnimeListClientId = string.Empty;
-    [ObservableProperty] private string _myAnimeListPastedCode = string.Empty;
     [ObservableProperty] private bool _isMyAnimeListConnected;
     private string? _myAnimeListCodeVerifier;
-
-    [ObservableProperty] private string _shikimoriClientId = string.Empty;
-    [ObservableProperty] private string _shikimoriClientSecret = string.Empty;
-    [ObservableProperty] private string _shikimoriPastedCode = string.Empty;
     [ObservableProperty] private bool _isShikimoriConnected;
-
-    [ObservableProperty] private string _bangumiPersonalAccessToken = string.Empty;
     [ObservableProperty] private bool _isBangumiConnected;
-
-    [ObservableProperty] private string _mangaBakaPersonalAccessToken = string.Empty;
     [ObservableProperty] private bool _isMangaBakaConnected;
-
-    [ObservableProperty] private string _mangaUpdatesUsername = string.Empty;
-    [ObservableProperty] private string _mangaUpdatesPassword = string.Empty;
     [ObservableProperty] private bool _isMangaUpdatesConnected;
-
-    [ObservableProperty] private string _kitsuUsername = string.Empty;
-    [ObservableProperty] private string _kitsuPassword = string.Empty;
     [ObservableProperty] private bool _isKitsuConnected;
-
-    [ObservableProperty] private string? _trackersStatus;
 
     /// <summary>Row list backing the Connections screen's "Trackers" section (docs/superpowers/specs/2026-09-06-connections-tracker-dialog-redesign-design.md).</summary>
     public ObservableCollection<ConnectionProviderRow> TrackerProviderRows { get; }
+
+    private ConnectionProviderRow AniListRow => TrackerProviderRows.Single(r => r.Id == nameof(TrackingService.AniList));
+    private ConnectionProviderRow MyAnimeListRow => TrackerProviderRows.Single(r => r.Id == nameof(TrackingService.MyAnimeList));
+    private ConnectionProviderRow ShikimoriRow => TrackerProviderRows.Single(r => r.Id == nameof(TrackingService.Shikimori));
+    private ConnectionProviderRow BangumiRow => TrackerProviderRows.Single(r => r.Id == nameof(TrackingService.Bangumi));
+    private ConnectionProviderRow MangaBakaRow => TrackerProviderRows.Single(r => r.Id == nameof(TrackingService.MangaBaka));
+    private ConnectionProviderRow MangaUpdatesRow => TrackerProviderRows.Single(r => r.Id == nameof(TrackingService.MangaUpdates));
+    private ConnectionProviderRow KitsuRow => TrackerProviderRows.Single(r => r.Id == nameof(TrackingService.Kitsu));
 
     // ===================== Connections list+dialog (docs/superpowers/specs/2026-09-06-connections-
     // tracker-dialog-redesign-design.md) - the row-list/dialog state shared by both the Reading List
@@ -2251,15 +2315,27 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     [ObservableProperty]
     private bool _isConnectionDialogOpen;
 
+    /// <summary>
+    /// One shared status line for whichever dialog is currently open (docs/superpowers/specs/
+    /// 2026-09-07-connections-redesign-design.md) - replaces the old TrackersStatus/SourcesStatus
+    /// pair, which were both always-rendered in the dialog regardless of which provider was open,
+    /// so a stale message from the last provider touched could bleed into an unrelated one.
+    /// </summary>
+    [ObservableProperty]
+    private string? _connectionDialogStatus;
+
     [RelayCommand]
     private void OpenConnectionDialog(ConnectionProviderRow row)
     {
         // Clear ephemeral paste-back fields (never the persisted Client ID/Secret/Username fields -
         // those are meant to survive switching providers and reopening the same one) so a stale
         // code/token from a previous dialog session can't bleed into a different provider's dialog.
-        AniListPastedToken = string.Empty;
-        MyAnimeListPastedCode = string.Empty;
-        ShikimoriPastedCode = string.Empty;
+        // Also clear the shared status line for the same reason (see ConnectionDialogStatus's own
+        // doc comment).
+        AniListRow.PastedValue = string.Empty;
+        MyAnimeListRow.PastedValue = string.Empty;
+        ShikimoriRow.PastedValue = string.Empty;
+        ConnectionDialogStatus = string.Empty;
 
         SelectedConnectionProvider = row;
         IsConnectionDialogOpen = true;
@@ -2291,10 +2367,10 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         IsMangaUpdatesConnected = CredentialStore.HasCredentials(context, nameof(TrackingService.MangaUpdates), CredentialKind.OAuthAccessToken);
         IsKitsuConnected = CredentialStore.HasCredentials(context, nameof(TrackingService.Kitsu), CredentialKind.OAuthAccessToken);
 
-        AniListClientId = CredentialStore.Get(context, nameof(TrackingService.AniList), CredentialKind.OAuthClientId) ?? string.Empty;
-        MyAnimeListClientId = CredentialStore.Get(context, nameof(TrackingService.MyAnimeList), CredentialKind.OAuthClientId) ?? string.Empty;
-        ShikimoriClientId = CredentialStore.Get(context, nameof(TrackingService.Shikimori), CredentialKind.OAuthClientId) ?? string.Empty;
-        ShikimoriClientSecret = CredentialStore.Get(context, nameof(TrackingService.Shikimori), CredentialKind.OAuthClientSecret) ?? string.Empty;
+        AniListRow.ClientId = CredentialStore.Get(context, nameof(TrackingService.AniList), CredentialKind.OAuthClientId) ?? string.Empty;
+        MyAnimeListRow.ClientId = CredentialStore.Get(context, nameof(TrackingService.MyAnimeList), CredentialKind.OAuthClientId) ?? string.Empty;
+        ShikimoriRow.ClientId = CredentialStore.Get(context, nameof(TrackingService.Shikimori), CredentialKind.OAuthClientId) ?? string.Empty;
+        ShikimoriRow.ClientSecret = CredentialStore.Get(context, nameof(TrackingService.Shikimori), CredentialKind.OAuthClientSecret) ?? string.Empty;
 
         SyncProviderRowConnectedState(TrackerProviderRows, nameof(TrackingService.AniList), IsAniListConnected);
         SyncProviderRowConnectedState(TrackerProviderRows, nameof(TrackingService.MyAnimeList), IsMyAnimeListConnected);
@@ -2309,33 +2385,33 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     private void ConnectAniList()
     {
         using var context = _contextFactory();
-        CredentialStore.Set(context, nameof(TrackingService.AniList), CredentialKind.OAuthClientId, AniListClientId);
-        Process.Start(new ProcessStartInfo { FileName = AniListTrackerAdapter.BuildAuthorizationUrl(AniListClientId), UseShellExecute = true });
-        TrackersStatus = "Complete sign-in in your browser, then paste the token back here.";
+        CredentialStore.Set(context, nameof(TrackingService.AniList), CredentialKind.OAuthClientId, AniListRow.ClientId);
+        Process.Start(new ProcessStartInfo { FileName = AniListTrackerAdapter.BuildAuthorizationUrl(AniListRow.ClientId), UseShellExecute = true });
+        ConnectionDialogStatus = "Complete sign-in in your browser, then paste the token back here.";
     }
 
     [RelayCommand]
     private void CompleteAniListConnect()
     {
         using var context = _contextFactory();
-        AniListTrackerAdapter.CompleteConnect(context, AniListPastedToken);
-        AniListPastedToken = string.Empty;
+        AniListTrackerAdapter.CompleteConnect(context, AniListRow.PastedValue);
+        AniListRow.PastedValue = string.Empty;
         RefreshTrackerConnectionState(context);
-        TrackersStatus = "AniList connected.";
+        ConnectionDialogStatus = "AniList connected.";
     }
 
     [RelayCommand]
     private void ConnectMyAnimeList()
     {
         using var context = _contextFactory();
-        CredentialStore.Set(context, nameof(TrackingService.MyAnimeList), CredentialKind.OAuthClientId, MyAnimeListClientId);
+        CredentialStore.Set(context, nameof(TrackingService.MyAnimeList), CredentialKind.OAuthClientId, MyAnimeListRow.ClientId);
         _myAnimeListCodeVerifier = MyAnimeListTrackerAdapter.GenerateCodeVerifier();
         Process.Start(new ProcessStartInfo
         {
-            FileName = MyAnimeListTrackerAdapter.BuildAuthorizationUrl(MyAnimeListClientId, _myAnimeListCodeVerifier),
+            FileName = MyAnimeListTrackerAdapter.BuildAuthorizationUrl(MyAnimeListRow.ClientId, _myAnimeListCodeVerifier),
             UseShellExecute = true,
         });
-        TrackersStatus = "The page after sign-in will fail to load - that's expected. Copy the \"code\" value from its address bar and paste it back here.";
+        ConnectionDialogStatus = "The page after sign-in will fail to load - that's expected. Copy the \"code\" value from its address bar and paste it back here.";
     }
 
     [RelayCommand]
@@ -2343,28 +2419,28 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     {
         if (_myAnimeListCodeVerifier is null)
         {
-            TrackersStatus = "Click Connect first.";
+            ConnectionDialogStatus = "Click Connect first.";
             return;
         }
 
         using var context = _contextFactory();
-        var adapter = new MyAnimeListTrackerAdapter(TrackerHttpClients.MyAnimeList, MyAnimeListClientId);
-        bool connected = await adapter.CompleteConnectAsync(context, MyAnimeListClientId, _myAnimeListCodeVerifier, MyAnimeListPastedCode, default);
+        var adapter = new MyAnimeListTrackerAdapter(TrackerHttpClients.MyAnimeList, MyAnimeListRow.ClientId);
+        bool connected = await adapter.CompleteConnectAsync(context, MyAnimeListRow.ClientId, _myAnimeListCodeVerifier, MyAnimeListRow.PastedValue, default);
 
-        MyAnimeListPastedCode = string.Empty;
+        MyAnimeListRow.PastedValue = string.Empty;
         _myAnimeListCodeVerifier = null;
         RefreshTrackerConnectionState(context);
-        TrackersStatus = connected ? "MyAnimeList connected." : "Couldn't connect to MyAnimeList. Check your Client ID and try again.";
+        ConnectionDialogStatus = connected ? "MyAnimeList connected." : "Couldn't connect to MyAnimeList. Check your Client ID and try again.";
     }
 
     [RelayCommand]
     private void ConnectShikimori()
     {
         using var context = _contextFactory();
-        CredentialStore.Set(context, nameof(TrackingService.Shikimori), CredentialKind.OAuthClientId, ShikimoriClientId);
-        CredentialStore.Set(context, nameof(TrackingService.Shikimori), CredentialKind.OAuthClientSecret, ShikimoriClientSecret);
-        Process.Start(new ProcessStartInfo { FileName = ShikimoriTrackerAdapter.BuildAuthorizationUrl(ShikimoriClientId), UseShellExecute = true });
-        TrackersStatus = "Shikimori will show you a code to copy - paste it back here.";
+        CredentialStore.Set(context, nameof(TrackingService.Shikimori), CredentialKind.OAuthClientId, ShikimoriRow.ClientId);
+        CredentialStore.Set(context, nameof(TrackingService.Shikimori), CredentialKind.OAuthClientSecret, ShikimoriRow.ClientSecret);
+        Process.Start(new ProcessStartInfo { FileName = ShikimoriTrackerAdapter.BuildAuthorizationUrl(ShikimoriRow.ClientId), UseShellExecute = true });
+        ConnectionDialogStatus = "Shikimori will show you a code to copy - paste it back here.";
     }
 
     [RelayCommand]
@@ -2372,31 +2448,31 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     {
         using var context = _contextFactory();
         var adapter = new ShikimoriTrackerAdapter(TrackerHttpClients.Shikimori);
-        bool connected = await adapter.CompleteConnectAsync(context, ShikimoriClientId, ShikimoriClientSecret, ShikimoriPastedCode, default);
+        bool connected = await adapter.CompleteConnectAsync(context, ShikimoriRow.ClientId, ShikimoriRow.ClientSecret, ShikimoriRow.PastedValue, default);
 
-        ShikimoriPastedCode = string.Empty;
+        ShikimoriRow.PastedValue = string.Empty;
         RefreshTrackerConnectionState(context);
-        TrackersStatus = connected ? "Shikimori connected." : "Couldn't connect to Shikimori. Check your Client ID/Secret and try again.";
+        ConnectionDialogStatus = connected ? "Shikimori connected." : "Couldn't connect to Shikimori. Check your Client ID/Secret and try again.";
     }
 
     [RelayCommand]
     private void SaveBangumiToken()
     {
         using var context = _contextFactory();
-        BangumiTrackerAdapter.CompleteConnect(context, BangumiPersonalAccessToken);
-        BangumiPersonalAccessToken = string.Empty;
+        BangumiTrackerAdapter.CompleteConnect(context, BangumiRow.SecretValue);
+        BangumiRow.SecretValue = string.Empty;
         RefreshTrackerConnectionState(context);
-        TrackersStatus = "Bangumi token saved.";
+        ConnectionDialogStatus = "Bangumi token saved.";
     }
 
     [RelayCommand]
     private void SaveMangaBakaToken()
     {
         using var context = _contextFactory();
-        MangaBakaTrackerAdapter.CompleteConnect(context, MangaBakaPersonalAccessToken);
-        MangaBakaPersonalAccessToken = string.Empty;
+        MangaBakaTrackerAdapter.CompleteConnect(context, MangaBakaRow.SecretValue);
+        MangaBakaRow.SecretValue = string.Empty;
         RefreshTrackerConnectionState(context);
-        TrackersStatus = "MangaBaka token saved.";
+        ConnectionDialogStatus = "MangaBaka token saved.";
     }
 
     [RelayCommand]
@@ -2404,11 +2480,11 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     {
         using var context = _contextFactory();
         var adapter = new MangaUpdatesTrackerAdapter(TrackerHttpClients.MangaUpdates);
-        bool connected = await adapter.CompleteConnectAsync(context, MangaUpdatesUsername, MangaUpdatesPassword, default);
+        bool connected = await adapter.CompleteConnectAsync(context, MangaUpdatesRow.Username, MangaUpdatesRow.Password, default);
 
-        MangaUpdatesPassword = string.Empty;
+        MangaUpdatesRow.Password = string.Empty;
         RefreshTrackerConnectionState(context);
-        TrackersStatus = connected ? "MangaUpdates connected." : "Couldn't connect to MangaUpdates. Check your username/password and try again.";
+        ConnectionDialogStatus = connected ? "MangaUpdates connected." : "Couldn't connect to MangaUpdates. Check your username/password and try again.";
     }
 
     [RelayCommand]
@@ -2416,11 +2492,11 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     {
         using var context = _contextFactory();
         var adapter = new KitsuTrackerAdapter(TrackerHttpClients.Kitsu, accessToken: null);
-        bool connected = await adapter.CompleteConnectAsync(context, KitsuUsername, KitsuPassword, default);
+        bool connected = await adapter.CompleteConnectAsync(context, KitsuRow.Username, KitsuRow.Password, default);
 
-        KitsuPassword = string.Empty;
+        KitsuRow.Password = string.Empty;
         RefreshTrackerConnectionState(context);
-        TrackersStatus = connected ? "Kitsu connected." : "Couldn't connect to Kitsu. Check your username/password and try again.";
+        ConnectionDialogStatus = connected ? "Kitsu connected." : "Couldn't connect to Kitsu. Check your username/password and try again.";
     }
 
     // ===================== Disconnect commands (docs/superpowers/specs/2026-09-06-connections-
@@ -2435,7 +2511,7 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         using var context = _contextFactory();
         CredentialStore.Delete(context, nameof(TrackingService.AniList), CredentialKind.OAuthAccessToken);
         RefreshTrackerConnectionState(context);
-        TrackersStatus = "AniList disconnected.";
+        ConnectionDialogStatus = "AniList disconnected.";
     }
 
     [RelayCommand]
@@ -2445,7 +2521,7 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         CredentialStore.Delete(context, nameof(TrackingService.MyAnimeList), CredentialKind.OAuthAccessToken);
         CredentialStore.Delete(context, nameof(TrackingService.MyAnimeList), CredentialKind.OAuthRefreshToken);
         RefreshTrackerConnectionState(context);
-        TrackersStatus = "MyAnimeList disconnected.";
+        ConnectionDialogStatus = "MyAnimeList disconnected.";
     }
 
     [RelayCommand]
@@ -2455,7 +2531,7 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         CredentialStore.Delete(context, nameof(TrackingService.Shikimori), CredentialKind.OAuthAccessToken);
         CredentialStore.Delete(context, nameof(TrackingService.Shikimori), CredentialKind.OAuthRefreshToken);
         RefreshTrackerConnectionState(context);
-        TrackersStatus = "Shikimori disconnected.";
+        ConnectionDialogStatus = "Shikimori disconnected.";
     }
 
     [RelayCommand]
@@ -2463,9 +2539,9 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     {
         using var context = _contextFactory();
         CredentialStore.Delete(context, nameof(TrackingService.Bangumi), CredentialKind.ApiKey);
-        BangumiPersonalAccessToken = string.Empty;
+        BangumiRow.SecretValue = string.Empty;
         RefreshTrackerConnectionState(context);
-        TrackersStatus = "Bangumi disconnected.";
+        ConnectionDialogStatus = "Bangumi disconnected.";
     }
 
     [RelayCommand]
@@ -2473,9 +2549,9 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     {
         using var context = _contextFactory();
         CredentialStore.Delete(context, nameof(TrackingService.MangaBaka), CredentialKind.ApiKey);
-        MangaBakaPersonalAccessToken = string.Empty;
+        MangaBakaRow.SecretValue = string.Empty;
         RefreshTrackerConnectionState(context);
-        TrackersStatus = "MangaBaka disconnected.";
+        ConnectionDialogStatus = "MangaBaka disconnected.";
     }
 
     [RelayCommand]
@@ -2483,10 +2559,10 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     {
         using var context = _contextFactory();
         CredentialStore.Delete(context, nameof(TrackingService.MangaUpdates), CredentialKind.OAuthAccessToken);
-        MangaUpdatesUsername = string.Empty;
-        MangaUpdatesPassword = string.Empty;
+        MangaUpdatesRow.Username = string.Empty;
+        MangaUpdatesRow.Password = string.Empty;
         RefreshTrackerConnectionState(context);
-        TrackersStatus = "MangaUpdates disconnected.";
+        ConnectionDialogStatus = "MangaUpdates disconnected.";
     }
 
     [RelayCommand]
@@ -2495,10 +2571,10 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         using var context = _contextFactory();
         CredentialStore.Delete(context, nameof(TrackingService.Kitsu), CredentialKind.OAuthAccessToken);
         CredentialStore.Delete(context, nameof(TrackingService.Kitsu), CredentialKind.OAuthRefreshToken);
-        KitsuUsername = string.Empty;
-        KitsuPassword = string.Empty;
+        KitsuRow.Username = string.Empty;
+        KitsuRow.Password = string.Empty;
         RefreshTrackerConnectionState(context);
-        TrackersStatus = "Kitsu disconnected.";
+        ConnectionDialogStatus = "Kitsu disconnected.";
     }
 
     // ===================== Automation tab (docs/superpowers/specs/2026-09-06-scheduled-tasks-and-
@@ -2631,6 +2707,61 @@ public partial class PreferencesScreenViewModel : ViewModelBase
                     break;
             }
         };
+    }
+
+    /// <summary>Session-only pre-pause snapshot of each task's own <see cref="ScheduledTaskRow.Enabled"/>
+    /// (docs/superpowers/specs/2026-09-08-automation-tasks-redesign-design.md) - non-null while
+    /// paused. Deliberately not persisted: resets to "not paused" on app restart, and Resume
+    /// restores exactly this snapshot rather than blindly re-enabling every task (several tasks
+    /// default to disabled; a blind resume would incorrectly turn those back on).</summary>
+    private Dictionary<string, bool>? _prePauseEnabledSnapshot;
+
+    public bool IsSchedulerPaused => _prePauseEnabledSnapshot is not null;
+
+    [RelayCommand]
+    private void RunAllScheduledTasksNow()
+    {
+        if (_scheduler is null)
+        {
+            return;
+        }
+
+        // Iterates the scheduler's own live Tasks, not this VM's ScheduledTasks cache - the cache
+        // is only refreshed via a dispatcher round-trip off the scheduler's Changed event, so
+        // reading it here could act on a stale/empty snapshot immediately after AttachScheduler.
+        foreach (var row in _scheduler.Tasks)
+        {
+            _ = _scheduler.RunNowAsync(row.TaskId);
+        }
+    }
+
+    [RelayCommand]
+    private void TogglePauseAllScheduledTasks()
+    {
+        if (_scheduler is null)
+        {
+            return;
+        }
+
+        if (_prePauseEnabledSnapshot is null)
+        {
+            _prePauseEnabledSnapshot = _scheduler.Tasks.ToDictionary(r => r.TaskId, r => r.Enabled);
+            foreach (var row in _scheduler.Tasks)
+            {
+                _scheduler.SetEnabled(row.TaskId, false);
+            }
+        }
+        else
+        {
+            foreach (var (taskId, wasEnabled) in _prePauseEnabledSnapshot)
+            {
+                _scheduler.SetEnabled(taskId, wasEnabled);
+            }
+
+            _prePauseEnabledSnapshot = null;
+        }
+
+        OnPropertyChanged(nameof(IsSchedulerPaused));
     }
 
     // ===================== Library Health tab (docs/superpowers/specs/2026-09-06-missing-files-

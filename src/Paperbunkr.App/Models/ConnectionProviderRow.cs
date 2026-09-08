@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Windows.Input;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Paperbunkr.Data.Entities;
 
@@ -52,6 +53,59 @@ public partial class ConnectionProviderRow : ObservableObject
     [ObservableProperty]
     private bool _isConnected;
 
+    // ===================== Generic per-Kind bindable fields (docs/superpowers/specs/2026-09-07-
+    // connections-redesign-design.md) - lets the dialog use one template per Kind instead of 9
+    // DisplayName-gated copies. Only the fields for this row's own Kind are ever populated/read;
+    // the rest sit unused at their default, which is harmless for 9 rows on one small model. =====================
+
+    /// <summary>OAuth only.</summary>
+    [ObservableProperty]
+    private string _clientId = string.Empty;
+
+    /// <summary>OAuth only - populated only when <see cref="RequiresClientSecret"/> (Shikimori).</summary>
+    [ObservableProperty]
+    private string _clientSecret = string.Empty;
+
+    /// <summary>OAuth only - the pasted-back code/token from the provider's authorization page.</summary>
+    [ObservableProperty]
+    private string _pastedValue = string.Empty;
+
+    /// <summary>OAuth only - "Paste token here" (AniList) vs "Paste code here" (MyAnimeList, Shikimori).</summary>
+    public string PasteWatermark { get; init; } = string.Empty;
+
+    /// <summary>Token only - the single pasted secret (PAT or API key).</summary>
+    [ObservableProperty]
+    private string _secretValue = string.Empty;
+
+    /// <summary>Credential only.</summary>
+    [ObservableProperty]
+    private string _username = string.Empty;
+
+    /// <summary>Credential only.</summary>
+    [ObservableProperty]
+    private string _password = string.Empty;
+
+    /// <summary>
+    /// OAuth/Token/Credential command references, assigned once by
+    /// <c>PreferencesScreenViewModel</c>'s constructor to the existing per-provider
+    /// <c>[RelayCommand]</c>-generated command for this row - the dialog's generic per-Kind
+    /// template binds to these instead of a hardcoded per-provider command name. Command bodies
+    /// are unchanged; this only tells the view which one applies to which row.
+    /// </summary>
+    public ICommand? ConnectCommand { get; set; }
+
+    /// <summary>OAuth only - completes the paste-back handshake.</summary>
+    public ICommand? CompleteCommand { get; set; }
+
+    /// <summary>Token only.</summary>
+    public ICommand? SaveCommand { get; set; }
+
+    /// <summary>Credential only - label ("Save" vs "Connect") comes from <see cref="PrimaryActionLabel"/>.</summary>
+    public ICommand? PrimaryCommand { get; set; }
+
+    /// <summary>All three shapes.</summary>
+    public ICommand? DisconnectCommand { get; set; }
+
     /// <summary>
     /// Both provider lists, in the same fixed display order the current inline UI already uses.
     /// Reading List Sources first, then Trackers - matches <c>ConnectionsSection.axaml</c>'s two
@@ -80,19 +134,19 @@ public partial class ConnectionProviderRow : ObservableObject
         new()
         {
             Id = nameof(TrackingService.AniList), DisplayName = "AniList", Kind = ConnectionDialogKind.OAuth,
-            PrimaryActionLabel = "Connect",
+            PrimaryActionLabel = "Connect", PasteWatermark = "Paste token here",
             HelpText = "Register your own app at anilist.co/settings/developer, then paste its Client ID.",
         },
         new()
         {
             Id = nameof(TrackingService.MyAnimeList), DisplayName = "MyAnimeList", Kind = ConnectionDialogKind.OAuth,
-            PrimaryActionLabel = "Connect",
+            PrimaryActionLabel = "Connect", PasteWatermark = "Paste code here",
             HelpText = "Register your own app at myanimelist.net/apiconfig/create (needs manual approval), then paste its Client ID. The page after sign-in will fail to load - that's expected. Copy the \"code\" value from its address bar.",
         },
         new()
         {
             Id = nameof(TrackingService.Shikimori), DisplayName = "Shikimori", Kind = ConnectionDialogKind.OAuth,
-            RequiresClientSecret = true, PrimaryActionLabel = "Connect",
+            RequiresClientSecret = true, PrimaryActionLabel = "Connect", PasteWatermark = "Paste code here",
             HelpText = "Register your own app at shikimori.one/oauth/applications, then paste its Client ID and Secret. Shikimori will show you a code to copy - paste it back here.",
         },
         new()

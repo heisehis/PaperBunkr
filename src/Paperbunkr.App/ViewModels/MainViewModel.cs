@@ -2228,6 +2228,10 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         {
             Library.CloseAddIssueCommand.Execute(null);
         }
+        else if (Preferences.IsLegalDocumentViewerOpen)
+        {
+            Preferences.CloseLegalDocumentViewerCommand.Execute(null);
+        }
     }
 
     /// <summary>

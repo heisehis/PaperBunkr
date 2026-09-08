@@ -22,10 +22,16 @@ public static class KeyBindingIO
 
     private sealed record ExportedBinding(string CommandId, string Gesture);
 
+    /// <summary>
+    /// One JSON object per bound gesture (docs/superpowers/specs/2026-09-07-keyboard-shortcuts-
+    /// redesign-design.md §5) - a command with 2 bindings exports 2 objects sharing the same
+    /// CommandId. No format/schema change from the single-binding-per-command shape this shipped
+    /// with; a legacy export (at most one object per CommandId) is just a special case of this.
+    /// </summary>
     public static void Export(KeyBindingService service, string filePath)
     {
         var bindings = service.GetAllBindings()
-            .Select(b => new ExportedBinding(b.Command.Id, b.CurrentKey.ToString()))
+            .SelectMany(b => b.Keys.Select(k => new ExportedBinding(b.Command.Id, k.ToString())))
             .ToList();
 
         File.WriteAllText(filePath, JsonSerializer.Serialize(bindings, JsonOptions));
@@ -34,9 +40,12 @@ public static class KeyBindingIO
     /// <summary>
     /// Applies every valid entry in <paramref name="filePath"/> and returns how many were applied -
     /// an unknown command id (e.g. exported from a different app version) or an unparseable gesture
-    /// is skipped, not treated as a whole-import failure, mirroring <see cref="KeyBindingService.GetKey(Data.PaperbunkrDbContext,string)"/>'s
+    /// is skipped, not treated as a whole-import failure, mirroring <see cref="KeyBindingService.GetKeys(Data.PaperbunkrDbContext,string)"/>'s
     /// own per-entry <c>catch (ArgumentException)</c> fallback philosophy, just applied at import time
     /// instead of read time. Only a completely unparseable file (not valid JSON at all) throws.
+    /// Entries are grouped by CommandId and applied via <see cref="KeyBindingService.ReplaceKeys"/> -
+    /// a re-import is idempotent (replaces that command's whole binding set) rather than additive,
+    /// so importing the same file twice in a row doesn't pile up duplicate/stale rows.
     /// </summary>
     public static int Import(KeyBindingService service, string filePath)
     {
@@ -57,21 +66,25 @@ public static class KeyBindingIO
 
         var knownIds = KeyboardCommandRegistry.Commands.Select(c => c.Id).ToHashSet();
         int applied = 0;
-        foreach (var entry in bindings)
+        foreach (var group in bindings.Where(e => knownIds.Contains(e.CommandId)).GroupBy(e => e.CommandId))
         {
-            if (!knownIds.Contains(entry.CommandId))
+            var gestures = new List<KeyGesture>();
+            foreach (var entry in group)
             {
-                continue;
+                try
+                {
+                    gestures.Add(KeyGesture.Parse(entry.Gesture));
+                    applied++;
+                }
+                catch (ArgumentException)
+                {
+                    // Corrupt/unparseable single entry - skip it, keep applying the rest of the group.
+                }
             }
 
-            try
+            if (gestures.Count > 0)
             {
-                service.SetKey(entry.CommandId, KeyGesture.Parse(entry.Gesture));
-                applied++;
-            }
-            catch (ArgumentException)
-            {
-                // Corrupt/unparseable single entry - skip it, keep applying the rest.
+                service.ReplaceKeys(group.Key, gestures);
             }
         }
 

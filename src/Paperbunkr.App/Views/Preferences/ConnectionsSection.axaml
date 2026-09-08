@@ -3,18 +3,31 @@
              xmlns:pbc="using:Paperbunkr.App.Controls"
              xmlns:vm="using:Paperbunkr.App.ViewModels"
              xmlns:models="using:Paperbunkr.App.Models"
+             xmlns:fi="using:FluentIcons.Avalonia"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d" d:DesignWidth="640" d:DesignHeight="900"
              x:Class="Paperbunkr.App.Views.Preferences.ConnectionsSection"
              x:DataType="vm:PreferencesScreenViewModel">
 
+    <UserControl.Styles>
+        <!-- Connections redesign (docs/superpowers/specs/2026-09-07-connections-redesign-design.md)
+             §1 - a connected row gets a soft accent tint; the checkmark stays as the primary signal,
+             this is additional weight, not a replacement. Unconnected rows stay neutral - "not
+             connected yet" isn't a negative state worth dimming. -->
+        <Style Selector="Button.sideItemButton.connConnected">
+            <Setter Property="Background" Value="{DynamicResource PbAccentSoftBrush}" />
+            <Setter Property="CornerRadius" Value="{StaticResource PbRadiusSm}" />
+            <Setter Property="Margin" Value="6,1" />
+        </Style>
+    </UserControl.Styles>
+
     <UserControl.Resources>
         <!-- One row template shared by both provider lists (docs/superpowers/specs/2026-09-06-
              connections-tracker-dialog-redesign-design.md) - BrandMark, name, a checkmark when
              connected (nothing when not), whole row opens that provider's dialog. -->
         <DataTemplate x:Key="ProviderRowTemplate" x:DataType="models:ConnectionProviderRow">
-            <Button Classes="sideItemButton" HorizontalAlignment="Stretch"
+            <Button Classes="sideItemButton" Classes.connConnected="{Binding IsConnected}" HorizontalAlignment="Stretch"
                     Command="{Binding #Root.((vm:PreferencesScreenViewModel)DataContext).OpenConnectionDialogCommand}"
                     CommandParameter="{Binding}">
                 <Grid ColumnDefinitions="Auto,*,Auto" Margin="4,8">
@@ -58,15 +71,28 @@
              every field/command involved), matching MainWindow's IsIssuePropertiesOverlayOpen scrim
              weight without hoisting state to MainViewModel. Three IsVisible-gated panels keyed on
              SelectedConnectionProvider.Kind, per docs/superpowers/specs/2026-09-06-connections-
-             tracker-dialog-redesign-design.md. -->
+             tracker-dialog-redesign-design.md. Each panel is now one generic block bound to the
+             row's own fields/command references instead of 3 DisplayName-gated copies (docs/
+             superpowers/specs/2026-09-07-connections-redesign-design.md §2). -->
         <Border IsVisible="{Binding IsConnectionDialogOpen}" Background="#B0000000">
             <Border Background="{DynamicResource PbSurface1Brush}" BorderBrush="{DynamicResource PbBorderBrush}"
                     BorderThickness="1" CornerRadius="10" Padding="24" Width="420" MaxHeight="560"
                     HorizontalAlignment="Center" VerticalAlignment="Center">
                 <StackPanel Spacing="14" DataContext="{Binding SelectedConnectionProvider}" x:DataType="models:ConnectionProviderRow">
-                    <Grid ColumnDefinitions="*,Auto">
+                    <Grid ColumnDefinitions="*,Auto,Auto">
                         <pbc:BrandMark Grid.Column="0" Family="Service" Value="{Binding DisplayName}" MarkSize="18" ShowText="True" VerticalAlignment="Center" />
-                        <Button Grid.Column="1" Classes="headerAction ghost"
+
+                        <!-- Status dot (docs/superpowers/specs/2026-09-07-connections-redesign-
+                             design.md §2) - a live, always-current connected signal, independent of
+                             whatever the shared status line last said. Nothing renders when not
+                             connected - the row-level checkmark already covers that state. -->
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center"
+                                    Margin="0,0,10,0" IsVisible="{Binding IsConnected}">
+                            <Border Width="8" Height="8" CornerRadius="4" Background="{DynamicResource PbSuccessBrush}" />
+                            <TextBlock Text="Connected" FontSize="11.5" Foreground="{DynamicResource PbSuccessBrush}" />
+                        </StackPanel>
+
+                        <Button Grid.Column="2" Classes="headerAction ghost"
                                 Command="{Binding #Root.((vm:PreferencesScreenViewModel)DataContext).CloseConnectionDialogCommand}"
                                 ToolTip.Tip="Close" AutomationProperties.AutomationId="ConnectionDialogCloseButton">
                         </Button>
@@ -76,109 +102,52 @@
 
                     <!-- OAuth shape: AniList, MyAnimeList, Shikimori -->
                     <StackPanel Spacing="10" IsVisible="{Binding Kind, Converter={x:Static ObjectConverters.Equal}, ConverterParameter={x:Static models:ConnectionDialogKind.OAuth}}">
-                        <!-- AniList -->
-                        <StackPanel Spacing="8" IsVisible="{Binding DisplayName, Converter={x:Static ObjectConverters.Equal}, ConverterParameter=AniList}">
-                            <TextBox Text="{Binding #Root.((vm:PreferencesScreenViewModel)DataContext).AniListClientId}" Watermark="Client ID" />
-                            <Button Classes="headerAction primary" Content="Open Authorization Page"
-                                    Command="{Binding #Root.((vm:PreferencesScreenViewModel)DataContext).ConnectAniListCommand}" HorizontalAlignment="Left" />
-                            <TextBox Text="{Binding #Root.((vm:PreferencesScreenViewModel)DataContext).AniListPastedToken}" Watermark="Paste token here" />
-                            <Button Classes="headerAction" Content="Complete Connection"
-                                    Command="{Binding #Root.((vm:PreferencesScreenViewModel)DataContext).CompleteAniListConnectCommand}" HorizontalAlignment="Left" />
-                            <Button Classes="headerAction ghost destructive" Content="Disconnect" HorizontalAlignment="Left"
-                                    IsVisible="{Binding IsConnected}"
-                                    Command="{Binding #Root.((vm:PreferencesScreenViewModel)DataContext).DisconnectAniListCommand}" />
-                        </StackPanel>
-
-                        <!-- MyAnimeList -->
-                        <StackPanel Spacing="8" IsVisible="{Binding DisplayName, Converter={x:Static ObjectConverters.Equal}, ConverterParameter=MyAnimeList}">
-                            <TextBox Text="{Binding #Root.((vm:PreferencesScreenViewModel)DataContext).MyAnimeListClientId}" Watermark="Client ID" />
-                            <Button Classes="headerAction primary" Content="Open Authorization Page"
-                                    Command="{Binding #Root.((vm:PreferencesScreenViewModel)DataContext).ConnectMyAnimeListCommand}" HorizontalAlignment="Left" />
-                            <TextBox Text="{Binding #Root.((vm:PreferencesScreenViewModel)DataContext).MyAnimeListPastedCode}" Watermark="Paste code here" />
-                            <Button Classes="headerAction" Content="Complete Connection"
-                                    Command="{Binding #Root.((vm:PreferencesScreenViewModel)DataContext).CompleteMyAnimeListConnectCommand}" HorizontalAlignment="Left" />
-                            <Button Classes="headerAction ghost destructive" Content="Disconnect" HorizontalAlignment="Left"
-                                    IsVisible="{Binding IsConnected}"
-                                    Command="{Binding #Root.((vm:PreferencesScreenViewModel)DataContext).DisconnectMyAnimeListCommand}" />
-                        </StackPanel>
-
-                        <!-- Shikimori -->
-                        <StackPanel Spacing="8" IsVisible="{Binding DisplayName, Converter={x:Static ObjectConverters.Equal}, ConverterParameter=Shikimori}">
-                            <TextBox Text="{Binding #Root.((vm:PreferencesScreenViewModel)DataContext).ShikimoriClientId}" Watermark="Client ID" />
-                            <TextBox Text="{Binding #Root.((vm:PreferencesScreenViewModel)DataContext).ShikimoriClientSecret}" Watermark="Client Secret" PasswordChar="•" />
-                            <Button Classes="headerAction primary" Content="Open Authorization Page"
-                                    Command="{Binding #Root.((vm:PreferencesScreenViewModel)DataContext).ConnectShikimoriCommand}" HorizontalAlignment="Left" />
-                            <TextBox Text="{Binding #Root.((vm:PreferencesScreenViewModel)DataContext).ShikimoriPastedCode}" Watermark="Paste code here" />
-                            <Button Classes="headerAction" Content="Complete Connection"
-                                    Command="{Binding #Root.((vm:PreferencesScreenViewModel)DataContext).CompleteShikimoriConnectCommand}" HorizontalAlignment="Left" />
-                            <Button Classes="headerAction ghost destructive" Content="Disconnect" HorizontalAlignment="Left"
-                                    IsVisible="{Binding IsConnected}"
-                                    Command="{Binding #Root.((vm:PreferencesScreenViewModel)DataContext).DisconnectShikimoriCommand}" />
-                        </StackPanel>
+                        <TextBox Text="{Binding ClientId}" Watermark="Client ID" />
+                        <TextBox Text="{Binding ClientSecret}" Watermark="Client Secret" PasswordChar="•" IsVisible="{Binding RequiresClientSecret}" />
+                        <Button Classes="headerAction primary" Content="Open Authorization Page"
+                                Command="{Binding ConnectCommand}" HorizontalAlignment="Left" />
+                        <TextBox Text="{Binding PastedValue}" Watermark="{Binding PasteWatermark}" />
+                        <Button Classes="headerAction" Content="Complete Connection"
+                                Command="{Binding CompleteCommand}" HorizontalAlignment="Left" />
+                        <Button Classes="headerAction ghost" Foreground="{DynamicResource PbDangerBrush}" BorderBrush="{DynamicResource PbDangerSoftBrush}"
+                                HorizontalAlignment="Left" IsVisible="{Binding IsConnected}" Command="{Binding DisconnectCommand}">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <fi:SymbolIcon Symbol="PlugDisconnected" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbDangerBrush}" />
+                                <TextBlock Text="Disconnect" />
+                            </StackPanel>
+                        </Button>
                     </StackPanel>
 
                     <!-- Token shape: Bangumi, MangaBaka, ComicVine -->
                     <StackPanel Spacing="10" IsVisible="{Binding Kind, Converter={x:Static ObjectConverters.Equal}, ConverterParameter={x:Static models:ConnectionDialogKind.Token}}">
-                        <StackPanel Spacing="8" IsVisible="{Binding DisplayName, Converter={x:Static ObjectConverters.Equal}, ConverterParameter=Bangumi}">
-                            <TextBox Text="{Binding #Root.((vm:PreferencesScreenViewModel)DataContext).BangumiPersonalAccessToken}" Watermark="Personal Access Token" PasswordChar="•" />
-                            <Button Classes="headerAction primary" Content="Save"
-                                    Command="{Binding #Root.((vm:PreferencesScreenViewModel)DataContext).SaveBangumiTokenCommand}" HorizontalAlignment="Left" />
-                            <Button Classes="headerAction ghost destructive" Content="Disconnect" HorizontalAlignment="Left"
-                                    IsVisible="{Binding IsConnected}"
-                                    Command="{Binding #Root.((vm:PreferencesScreenViewModel)DataContext).DisconnectBangumiCommand}" />
-                        </StackPanel>
-                        <StackPanel Spacing="8" IsVisible="{Binding DisplayName, Converter={x:Static ObjectConverters.Equal}, ConverterParameter=MangaBaka}">
-                            <TextBox Text="{Binding #Root.((vm:PreferencesScreenViewModel)DataContext).MangaBakaPersonalAccessToken}" Watermark="Personal Access Token" PasswordChar="•" />
-                            <Button Classes="headerAction primary" Content="Save"
-                                    Command="{Binding #Root.((vm:PreferencesScreenViewModel)DataContext).SaveMangaBakaTokenCommand}" HorizontalAlignment="Left" />
-                            <Button Classes="headerAction ghost destructive" Content="Disconnect" HorizontalAlignment="Left"
-                                    IsVisible="{Binding IsConnected}"
-                                    Command="{Binding #Root.((vm:PreferencesScreenViewModel)DataContext).DisconnectMangaBakaCommand}" />
-                        </StackPanel>
-                        <StackPanel Spacing="8" IsVisible="{Binding DisplayName, Converter={x:Static ObjectConverters.Equal}, ConverterParameter=ComicVine}">
-                            <TextBox Text="{Binding #Root.((vm:PreferencesScreenViewModel)DataContext).ComicVineApiKey}" Watermark="API Key" PasswordChar="•" />
-                            <Button Classes="headerAction primary" Content="Save"
-                                    Command="{Binding #Root.((vm:PreferencesScreenViewModel)DataContext).SaveComicVineCredentialsCommand}" HorizontalAlignment="Left" />
-                            <Button Classes="headerAction ghost destructive" Content="Disconnect" HorizontalAlignment="Left"
-                                    IsVisible="{Binding IsConnected}"
-                                    Command="{Binding #Root.((vm:PreferencesScreenViewModel)DataContext).DisconnectComicVineCommand}" />
-                        </StackPanel>
+                        <TextBox Text="{Binding SecretValue}" Watermark="Personal Access Token / API Key" PasswordChar="•" />
+                        <Button Classes="headerAction primary" Content="{Binding PrimaryActionLabel}"
+                                Command="{Binding SaveCommand}" HorizontalAlignment="Left" />
+                        <Button Classes="headerAction ghost" Foreground="{DynamicResource PbDangerBrush}" BorderBrush="{DynamicResource PbDangerSoftBrush}"
+                                HorizontalAlignment="Left" IsVisible="{Binding IsConnected}" Command="{Binding DisconnectCommand}">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <fi:SymbolIcon Symbol="PlugDisconnected" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbDangerBrush}" />
+                                <TextBlock Text="Disconnect" />
+                            </StackPanel>
+                        </Button>
                     </StackPanel>
 
                     <!-- Credential shape: Metron, MangaUpdates, Kitsu -->
                     <StackPanel Spacing="10" IsVisible="{Binding Kind, Converter={x:Static ObjectConverters.Equal}, ConverterParameter={x:Static models:ConnectionDialogKind.Credential}}">
-                        <StackPanel Spacing="8" IsVisible="{Binding DisplayName, Converter={x:Static ObjectConverters.Equal}, ConverterParameter=Metron}">
-                            <TextBox Text="{Binding #Root.((vm:PreferencesScreenViewModel)DataContext).MetronUsername}" Watermark="Username" />
-                            <TextBox Text="{Binding #Root.((vm:PreferencesScreenViewModel)DataContext).MetronPassword}" Watermark="Password" PasswordChar="•" />
-                            <Button Classes="headerAction primary" Content="Save"
-                                    Command="{Binding #Root.((vm:PreferencesScreenViewModel)DataContext).SaveMetronCredentialsCommand}" HorizontalAlignment="Left" />
-                            <Button Classes="headerAction ghost destructive" Content="Disconnect" HorizontalAlignment="Left"
-                                    IsVisible="{Binding IsConnected}"
-                                    Command="{Binding #Root.((vm:PreferencesScreenViewModel)DataContext).DisconnectMetronCommand}" />
-                        </StackPanel>
-                        <StackPanel Spacing="8" IsVisible="{Binding DisplayName, Converter={x:Static ObjectConverters.Equal}, ConverterParameter=MangaUpdates}">
-                            <TextBox Text="{Binding #Root.((vm:PreferencesScreenViewModel)DataContext).MangaUpdatesUsername}" Watermark="Username" />
-                            <TextBox Text="{Binding #Root.((vm:PreferencesScreenViewModel)DataContext).MangaUpdatesPassword}" Watermark="Password" PasswordChar="•" />
-                            <Button Classes="headerAction primary" Content="Connect"
-                                    Command="{Binding #Root.((vm:PreferencesScreenViewModel)DataContext).ConnectMangaUpdatesCommand}" HorizontalAlignment="Left" />
-                            <Button Classes="headerAction ghost destructive" Content="Disconnect" HorizontalAlignment="Left"
-                                    IsVisible="{Binding IsConnected}"
-                                    Command="{Binding #Root.((vm:PreferencesScreenViewModel)DataContext).DisconnectMangaUpdatesCommand}" />
-                        </StackPanel>
-                        <StackPanel Spacing="8" IsVisible="{Binding DisplayName, Converter={x:Static ObjectConverters.Equal}, ConverterParameter=Kitsu}">
-                            <TextBox Text="{Binding #Root.((vm:PreferencesScreenViewModel)DataContext).KitsuUsername}" Watermark="Username" />
-                            <TextBox Text="{Binding #Root.((vm:PreferencesScreenViewModel)DataContext).KitsuPassword}" Watermark="Password" PasswordChar="•" />
-                            <Button Classes="headerAction primary" Content="Connect"
-                                    Command="{Binding #Root.((vm:PreferencesScreenViewModel)DataContext).ConnectKitsuCommand}" HorizontalAlignment="Left" />
-                            <Button Classes="headerAction ghost destructive" Content="Disconnect" HorizontalAlignment="Left"
-                                    IsVisible="{Binding IsConnected}"
-                                    Command="{Binding #Root.((vm:PreferencesScreenViewModel)DataContext).DisconnectKitsuCommand}" />
-                        </StackPanel>
+                        <TextBox Text="{Binding Username}" Watermark="Username" />
+                        <TextBox Text="{Binding Password}" Watermark="Password" PasswordChar="•" />
+                        <Button Classes="headerAction primary" Content="{Binding PrimaryActionLabel}"
+                                Command="{Binding PrimaryCommand}" HorizontalAlignment="Left" />
+                        <Button Classes="headerAction ghost" Foreground="{DynamicResource PbDangerBrush}" BorderBrush="{DynamicResource PbDangerSoftBrush}"
+                                HorizontalAlignment="Left" IsVisible="{Binding IsConnected}" Command="{Binding DisconnectCommand}">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <fi:SymbolIcon Symbol="PlugDisconnected" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbDangerBrush}" />
+                                <TextBlock Text="Disconnect" />
+                            </StackPanel>
+                        </Button>
                     </StackPanel>
 
-                    <TextBlock Text="{Binding #Root.((vm:PreferencesScreenViewModel)DataContext).TrackersStatus}" FontSize="12"
-                               Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" />
-                    <TextBlock Text="{Binding #Root.((vm:PreferencesScreenViewModel)DataContext).SourcesStatus}" FontSize="12"
+                    <TextBlock Text="{Binding #Root.((vm:PreferencesScreenViewModel)DataContext).ConnectionDialogStatus}" FontSize="12"
                                Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" />
                 </StackPanel>
             </Border>

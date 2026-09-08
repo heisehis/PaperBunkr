@@ -2,6 +2,7 @@ using Avalonia.Input;
 using Microsoft.EntityFrameworkCore;
 using Paperbunkr.App.Models;
 using Paperbunkr.App.Services;
+using Paperbunkr.App.Services.Scheduling;
 using Paperbunkr.App.ViewModels;
 using Paperbunkr.Data;
 using Paperbunkr.Data.Credentials;
@@ -232,12 +233,63 @@ public class PreferencesScreenViewModelTests : IDisposable
         var myAnimeList = vm.TrackerProviderRows.Single(r => r.Id == nameof(TrackingService.MyAnimeList));
 
         vm.OpenConnectionDialogCommand.Execute(aniList);
-        vm.AniListPastedToken = "stale-token";
+        aniList.PastedValue = "stale-token";
 
         vm.OpenConnectionDialogCommand.Execute(myAnimeList);
 
-        Assert.Equal(string.Empty, vm.AniListPastedToken);
+        Assert.Equal(string.Empty, aniList.PastedValue);
         Assert.Same(myAnimeList, vm.SelectedConnectionProvider);
+    }
+
+    [Fact]
+    public void OpenConnectionDialogCommand_SwitchingProviders_ClearsStaleConnectionDialogStatus()
+    {
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+        var comicVine = vm.SourceProviderRows.Single(r => r.Id == "ComicVine");
+        var metron = vm.SourceProviderRows.Single(r => r.Id == "Metron");
+
+        vm.OpenConnectionDialogCommand.Execute(comicVine);
+        vm.ConnectionDialogStatus = "ComicVine API key saved.";
+
+        vm.OpenConnectionDialogCommand.Execute(metron);
+
+        Assert.Equal(string.Empty, vm.ConnectionDialogStatus);
+    }
+
+    [Theory]
+    [InlineData(nameof(TrackingService.AniList))]
+    [InlineData(nameof(TrackingService.Bangumi))]
+    public void ConnectionProviderRow_CommandReferencesWired_MatchExistingViewModelCommands(string trackerId)
+    {
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+        var row = vm.TrackerProviderRows.Single(r => r.Id == trackerId);
+
+        Assert.NotNull(row.DisconnectCommand);
+
+        if (trackerId == nameof(TrackingService.AniList))
+        {
+            Assert.Same(vm.ConnectAniListCommand, row.ConnectCommand);
+            Assert.Same(vm.CompleteAniListConnectCommand, row.CompleteCommand);
+            Assert.Same(vm.DisconnectAniListCommand, row.DisconnectCommand);
+        }
+        else
+        {
+            Assert.Same(vm.SaveBangumiTokenCommand, row.SaveCommand);
+            Assert.Same(vm.DisconnectBangumiCommand, row.DisconnectCommand);
+        }
+    }
+
+    [Fact]
+    public void ConnectionProviderRow_CommandReferencesWired_MetronCredentialShape()
+    {
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+        var row = vm.SourceProviderRows.Single(r => r.Id == "Metron");
+
+        Assert.Same(vm.SaveMetronCredentialsCommand, row.PrimaryCommand);
+        Assert.Same(vm.DisconnectMetronCommand, row.DisconnectCommand);
     }
 
     [Fact]
@@ -284,12 +336,13 @@ public class PreferencesScreenViewModelTests : IDisposable
 
         var vm = CreateViewModel();
         vm.EnsureLoaded();
-        vm.BangumiPersonalAccessToken = "pat";
+        var row = vm.TrackerProviderRows.Single(r => r.Id == nameof(TrackingService.Bangumi));
+        row.SecretValue = "pat";
 
         vm.DisconnectBangumiCommand.Execute(null);
 
         Assert.False(vm.IsBangumiConnected);
-        Assert.Equal(string.Empty, vm.BangumiPersonalAccessToken);
+        Assert.Equal(string.Empty, row.SecretValue);
         using var verify = new PaperbunkrDbContext(_dbOptions);
         Assert.Null(CredentialStore.Get(verify, nameof(TrackingService.Bangumi), CredentialKind.ApiKey));
     }
@@ -305,14 +358,15 @@ public class PreferencesScreenViewModelTests : IDisposable
 
         var vm = CreateViewModel();
         vm.EnsureLoaded();
-        vm.KitsuUsername = "someone";
-        vm.KitsuPassword = "hunter2";
+        var row = vm.TrackerProviderRows.Single(r => r.Id == nameof(TrackingService.Kitsu));
+        row.Username = "someone";
+        row.Password = "hunter2";
 
         vm.DisconnectKitsuCommand.Execute(null);
 
         Assert.False(vm.IsKitsuConnected);
-        Assert.Equal(string.Empty, vm.KitsuUsername);
-        Assert.Equal(string.Empty, vm.KitsuPassword);
+        Assert.Equal(string.Empty, row.Username);
+        Assert.Equal(string.Empty, row.Password);
         using var verify = new PaperbunkrDbContext(_dbOptions);
         Assert.Null(CredentialStore.Get(verify, nameof(TrackingService.Kitsu), CredentialKind.OAuthAccessToken));
         Assert.Null(CredentialStore.Get(verify, nameof(TrackingService.Kitsu), CredentialKind.OAuthRefreshToken));
@@ -351,8 +405,9 @@ public class PreferencesScreenViewModelTests : IDisposable
         vm.DisconnectMetronCommand.Execute(null);
 
         Assert.False(vm.IsMetronConnected);
-        Assert.Equal(string.Empty, vm.MetronUsername);
-        Assert.Equal(string.Empty, vm.MetronPassword);
+        var metronRow = vm.SourceProviderRows.Single(r => r.Id == "Metron");
+        Assert.Equal(string.Empty, metronRow.Username);
+        Assert.Equal(string.Empty, metronRow.Password);
         using var verify = new PaperbunkrDbContext(_dbOptions);
         Assert.Null(CredentialStore.Get(verify, "Metron", CredentialKind.Username));
     }
@@ -654,6 +709,43 @@ public class PreferencesScreenViewModelTests : IDisposable
         Assert.Equal(PreferencesSection.About, vm.ActiveSection);
     }
 
+    // About redesign (docs/superpowers/specs/2026-09-07-about-redesign-design.md) - legal docs open
+    // in the in-app viewer instead of Process.Start.
+    [Fact]
+    public void OpenLegalDocument_ExistingFile_PopulatesBlocksAndOpensViewer()
+    {
+        var vm = CreateViewModel();
+
+        vm.OpenLegalDocumentCommand.Execute("LICENSE");
+
+        Assert.True(vm.IsLegalDocumentViewerOpen);
+        Assert.Equal("License", vm.SelectedLegalDocumentTitle);
+        Assert.NotEmpty(vm.SelectedLegalDocumentBlocks);
+    }
+
+    [Fact]
+    public void OpenLegalDocument_MissingFile_LeavesViewerClosed()
+    {
+        var vm = CreateViewModel();
+
+        vm.OpenLegalDocumentCommand.Execute("DOES_NOT_EXIST.md");
+
+        Assert.False(vm.IsLegalDocumentViewerOpen);
+        Assert.Null(vm.SelectedLegalDocumentTitle);
+        Assert.Empty(vm.SelectedLegalDocumentBlocks);
+    }
+
+    [Fact]
+    public void CloseLegalDocumentViewer_ClosesViewer()
+    {
+        var vm = CreateViewModel();
+        vm.OpenLegalDocumentCommand.Execute("PRIVACY.md");
+
+        vm.CloseLegalDocumentViewerCommand.Execute(null);
+
+        Assert.False(vm.IsLegalDocumentViewerOpen);
+    }
+
     // App chrome (docs/superpowers/specs/2026-08-23-app-chrome-crash-reporter-and-tray-design.md §4)
     [Fact]
     public void EnsureLoaded_PopulatesMinimizeToTrayFromAppSettings()
@@ -902,8 +994,16 @@ public class PreferencesScreenViewModelTests : IDisposable
 
         int total = vm.NavigationKeyBindings.Count + vm.ZoomFitKeyBindings.Count + vm.DisplayKeyBindings.Count;
         Assert.Equal(KeyboardCommandRegistry.Commands.Count, total);
-        Assert.Contains(vm.NavigationKeyBindings, r => r.CommandId == KeyboardCommandRegistry.ReaderPageTurnLeft && r.SelectedKey.Gesture == new KeyGesture(Key.Left));
-        Assert.Contains(vm.NavigationKeyBindings, r => r.CommandId == KeyboardCommandRegistry.ReaderPageTurnRight && r.SelectedKey.Gesture == new KeyGesture(Key.Right));
+        Assert.Contains(vm.NavigationKeyBindings, r => r.CommandId == KeyboardCommandRegistry.ReaderPageTurnLeft && r.BoundKeys.Single().Gesture == new KeyGesture(Key.Left));
+        Assert.Contains(vm.NavigationKeyBindings, r => r.CommandId == KeyboardCommandRegistry.ReaderPageTurnRight && r.BoundKeys.Single().Gesture == new KeyGesture(Key.Right));
+    }
+
+    /// <summary>Replaces a row's sole default binding with a new one via Add-then-Remove (docs/superpowers/specs/2026-09-07-keyboard-shortcuts-redesign-design.md - there's no single "replace" command since a row can hold more than one gesture).</summary>
+    private static void ReplaceBinding(KeyBindingRowViewModel row, KeyOption newOption)
+    {
+        var oldOption = row.BoundKeys.Single();
+        row.AddKeyCommand.Execute(newOption);
+        row.RemoveKeyCommand.Execute(oldOption);
     }
 
     /// <summary>docs/superpowers/specs/2026-08-25-reader-chrome-design.md - a genuine new gap closed, not a restyle: import/export never existed before this (confirmed via grep, zero hits anywhere in src/).</summary>
@@ -916,7 +1016,7 @@ public class PreferencesScreenViewModelTests : IDisposable
             var vm = CreateViewModel(new FileRoundTripPicker { SavePathToReturn = path, OpenPathToReturn = path });
             vm.EnsureLoaded();
             var row = vm.NavigationKeyBindings.Single(r => r.CommandId == KeyboardCommandRegistry.ReaderPageTurnLeft);
-            row.SelectedKey = row.Options.Single(o => o.Gesture == new KeyGesture(Key.J));
+            ReplaceBinding(row, row.AvailableKeyOptions.Single(o => o.Gesture == new KeyGesture(Key.J)));
 
             await vm.ExportKeyBindingsCommand.ExecuteAsync(null);
 
@@ -932,7 +1032,7 @@ public class PreferencesScreenViewModelTests : IDisposable
             await vm.ImportKeyBindingsCommand.ExecuteAsync(null);
 
             var reloaded = vm.NavigationKeyBindings.Single(r => r.CommandId == KeyboardCommandRegistry.ReaderPageTurnLeft);
-            Assert.Equal(new KeyGesture(Key.J), reloaded.SelectedKey.Gesture);
+            Assert.Equal(new KeyGesture(Key.J), reloaded.BoundKeys.Single().Gesture);
         }
         finally
         {
@@ -940,7 +1040,7 @@ public class PreferencesScreenViewModelTests : IDisposable
         }
     }
 
-    /// <summary>Per-entry tolerance, not all-or-nothing (docs/superpowers/specs/2026-08-25-reader-chrome-design.md) - mirrors KeyBindingService.GetKey's own catch (ArgumentException) fallback philosophy, applied at import time.</summary>
+    /// <summary>Per-entry tolerance, not all-or-nothing (docs/superpowers/specs/2026-08-25-reader-chrome-design.md) - mirrors KeyBindingService.GetKeys's own catch (ArgumentException) fallback philosophy, applied at import time.</summary>
     [Fact]
     public async Task ImportKeyBindings_WithOneCorruptEntry_StillAppliesTheValidOnes()
     {
@@ -959,15 +1059,51 @@ public class PreferencesScreenViewModelTests : IDisposable
             await vm.ImportKeyBindingsCommand.ExecuteAsync(null);
 
             var left = vm.NavigationKeyBindings.Single(r => r.CommandId == KeyboardCommandRegistry.ReaderPageTurnLeft);
-            Assert.Equal(new KeyGesture(Key.J), left.SelectedKey.Gesture);
+            Assert.Equal(new KeyGesture(Key.J), left.BoundKeys.Single().Gesture);
             // The corrupt entry didn't throw and didn't block the valid one - right still holds its default.
             var right = vm.NavigationKeyBindings.Single(r => r.CommandId == KeyboardCommandRegistry.ReaderPageTurnRight);
-            Assert.Equal(new KeyGesture(Key.Right), right.SelectedKey.Gesture);
+            Assert.Equal(new KeyGesture(Key.Right), right.BoundKeys.Single().Gesture);
         }
         finally
         {
             if (File.Exists(path)) File.Delete(path);
         }
+    }
+
+    /// <summary>Genuine multi-binding, not a replace (docs/superpowers/specs/2026-09-07-keyboard-shortcuts-redesign-design.md) - adding a second gesture keeps the first, and both survive a reload.</summary>
+    [Fact]
+    public void AddKeyCommand_SecondGesture_BothPersistAndBothReturnedOnReload()
+    {
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+        var row = vm.NavigationKeyBindings.Single(r => r.CommandId == KeyboardCommandRegistry.ReaderPageTurnLeft);
+
+        row.AddKeyCommand.Execute(row.AvailableKeyOptions.Single(o => o.Gesture == new KeyGesture(Key.J)));
+
+        Assert.Equal(2, row.BoundKeys.Count);
+        Assert.Contains(row.BoundKeys, k => k.Gesture == new KeyGesture(Key.Left));
+        Assert.Contains(row.BoundKeys, k => k.Gesture == new KeyGesture(Key.J));
+
+        var reloadedVm = CreateViewModel();
+        reloadedVm.EnsureLoaded();
+        var reloadedRow = reloadedVm.NavigationKeyBindings.Single(r => r.CommandId == KeyboardCommandRegistry.ReaderPageTurnLeft);
+        Assert.Equal(2, reloadedRow.BoundKeys.Count);
+        Assert.Contains(reloadedRow.BoundKeys, k => k.Gesture == new KeyGesture(Key.Left));
+        Assert.Contains(reloadedRow.BoundKeys, k => k.Gesture == new KeyGesture(Key.J));
+    }
+
+    [Fact]
+    public void RemoveKeyCommand_LastRemainingGesture_NoOps()
+    {
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+        var row = vm.NavigationKeyBindings.Single(r => r.CommandId == KeyboardCommandRegistry.ReaderPageTurnLeft);
+        var onlyOption = row.BoundKeys.Single();
+
+        row.RemoveKeyCommand.Execute(onlyOption);
+
+        Assert.Single(row.BoundKeys);
+        Assert.Equal(onlyOption, row.BoundKeys.Single());
     }
 
     [Fact]
@@ -977,28 +1113,55 @@ public class PreferencesScreenViewModelTests : IDisposable
         vm.EnsureLoaded();
         var row = vm.NavigationKeyBindings.Single(r => r.CommandId == KeyboardCommandRegistry.ReaderPageTurnLeft);
 
-        row.SelectedKey = row.Options.Single(o => o.Gesture == new KeyGesture(Key.J));
+        ReplaceBinding(row, row.AvailableKeyOptions.Single(o => o.Gesture == new KeyGesture(Key.J)));
 
         using var context = new PaperbunkrDbContext(_dbOptions);
         Assert.Equal("J", context.KeyBindings.Single(k => k.CommandId == KeyboardCommandRegistry.ReaderPageTurnLeft).Key);
     }
 
     [Fact]
-    public void AssigningSameKeyToBothReaderBindings_SetsConflictError()
+    public void TwoRowsSharingAGesture_BothMarkedIsConflicted_AndClearingOneUnmarksBoth()
     {
         var vm = CreateViewModel();
         vm.EnsureLoaded();
         var left = vm.NavigationKeyBindings.Single(r => r.CommandId == KeyboardCommandRegistry.ReaderPageTurnLeft);
         var right = vm.NavigationKeyBindings.Single(r => r.CommandId == KeyboardCommandRegistry.ReaderPageTurnRight);
 
-        left.SelectedKey = left.Options.Single(o => o.Gesture == new KeyGesture(Key.J));
-        right.SelectedKey = right.Options.Single(o => o.Gesture == new KeyGesture(Key.J));
+        ReplaceBinding(left, left.AvailableKeyOptions.Single(o => o.Gesture == new KeyGesture(Key.J)));
+        ReplaceBinding(right, right.AvailableKeyOptions.Single(o => o.Gesture == new KeyGesture(Key.J)));
 
         Assert.True(vm.HasKeyBindingConflictError);
+        Assert.True(left.IsConflicted);
+        Assert.True(right.IsConflicted);
 
-        // Resolving it clears the error again.
-        right.SelectedKey = right.Options.Single(o => o.Gesture == new KeyGesture(Key.K));
+        // Resolving it clears the error and both rows' flags again.
+        ReplaceBinding(right, right.AvailableKeyOptions.Single(o => o.Gesture == new KeyGesture(Key.K)));
         Assert.False(vm.HasKeyBindingConflictError);
+        Assert.False(left.IsConflicted);
+        Assert.False(right.IsConflicted);
+    }
+
+    [Fact]
+    public void RowConflictingWithTwoOthers_AllThreeMarkedIsConflicted()
+    {
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+        var pageTurnLeft = vm.NavigationKeyBindings.Single(r => r.CommandId == KeyboardCommandRegistry.ReaderPageTurnLeft);
+        var panLeft = vm.NavigationKeyBindings.Single(r => r.CommandId == KeyboardCommandRegistry.ReaderPanLeft);
+        var scrollLeft = vm.NavigationKeyBindings.Single(r => r.CommandId == KeyboardCommandRegistry.ReaderScrollLeft);
+
+        // These three default to Left across three mutually-exclusive-at-runtime contexts, so they
+        // don't conflict with each other by default (see FreshLoad_NoConflictError... below). Adding
+        // an Always-context gesture (ZoomIn) to all three forces genuine cross-context conflicts:
+        // ZoomIn's Always context collides with each of the other three's own context individually.
+        var zoomIn = vm.ZoomFitKeyBindings.Single(r => r.CommandId == KeyboardCommandRegistry.ReaderZoomIn);
+        ReplaceBinding(zoomIn, zoomIn.AvailableKeyOptions.Single(o => o.Gesture == new KeyGesture(Key.Left)));
+
+        Assert.True(vm.HasKeyBindingConflictError);
+        Assert.True(zoomIn.IsConflicted);
+        Assert.True(pageTurnLeft.IsConflicted);
+        Assert.True(panLeft.IsConflicted);
+        Assert.True(scrollLeft.IsConflicted);
     }
 
     [Fact]
@@ -1021,7 +1184,7 @@ public class PreferencesScreenViewModelTests : IDisposable
         var panRight = vm.NavigationKeyBindings.Single(r => r.CommandId == KeyboardCommandRegistry.ReaderPanRight);
 
         // PanLeft (also PagedZoomed) still sits at its default Left.
-        panRight.SelectedKey = panRight.Options.Single(o => o.Gesture == new KeyGesture(Key.Left));
+        ReplaceBinding(panRight, panRight.AvailableKeyOptions.Single(o => o.Gesture == new KeyGesture(Key.Left)));
 
         Assert.True(vm.HasKeyBindingConflictError);
     }
@@ -1036,9 +1199,57 @@ public class PreferencesScreenViewModelTests : IDisposable
         // ZoomIn is Always-context - colliding with PageTurnLeft/PanLeft/ScrollLeft (all still at
         // their default Left) is a real conflict even though those three don't conflict with
         // each other.
-        zoomIn.SelectedKey = zoomIn.Options.Single(o => o.Gesture == new KeyGesture(Key.Left));
+        ReplaceBinding(zoomIn, zoomIn.AvailableKeyOptions.Single(o => o.Gesture == new KeyGesture(Key.Left)));
 
         Assert.True(vm.HasKeyBindingConflictError);
+    }
+
+    [Fact]
+    public void ResetKeyBindingsCommand_RevertsEveryRowToDefault_AndClearsConflictError()
+    {
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+        var pageTurnLeft = vm.NavigationKeyBindings.Single(r => r.CommandId == KeyboardCommandRegistry.ReaderPageTurnLeft);
+        var pageTurnRight = vm.NavigationKeyBindings.Single(r => r.CommandId == KeyboardCommandRegistry.ReaderPageTurnRight);
+        ReplaceBinding(pageTurnLeft, pageTurnLeft.AvailableKeyOptions.Single(o => o.Gesture == new KeyGesture(Key.J)));
+        ReplaceBinding(pageTurnRight, pageTurnRight.AvailableKeyOptions.Single(o => o.Gesture == new KeyGesture(Key.J)));
+        Assert.True(vm.HasKeyBindingConflictError);
+
+        vm.ResetKeyBindingsCommand.Execute(null);
+
+        Assert.False(vm.HasKeyBindingConflictError);
+        var reloadedLeft = vm.NavigationKeyBindings.Single(r => r.CommandId == KeyboardCommandRegistry.ReaderPageTurnLeft);
+        var reloadedRight = vm.NavigationKeyBindings.Single(r => r.CommandId == KeyboardCommandRegistry.ReaderPageTurnRight);
+        Assert.Equal(new KeyGesture(Key.Left), reloadedLeft.BoundKeys.Single().Gesture);
+        Assert.Equal(new KeyGesture(Key.Right), reloadedRight.BoundKeys.Single().Gesture);
+    }
+
+    [Fact]
+    public async Task ImportKeyBindings_MultipleEntriesForSameCommand_AppliesBothAsSeparateBindings()
+    {
+        string path = Path.Combine(Path.GetTempPath(), $"paperbunkr_keybindings_multi_test_{Guid.NewGuid():N}.json");
+        try
+        {
+            File.WriteAllText(path, $$"""
+                [
+                    {"CommandId": "{{KeyboardCommandRegistry.ReaderPageTurnLeft}}", "Gesture": "J"},
+                    {"CommandId": "{{KeyboardCommandRegistry.ReaderPageTurnLeft}}", "Gesture": "K"}
+                ]
+                """);
+            var vm = CreateViewModel(new FileRoundTripPicker { OpenPathToReturn = path });
+            vm.EnsureLoaded();
+
+            await vm.ImportKeyBindingsCommand.ExecuteAsync(null);
+
+            var row = vm.NavigationKeyBindings.Single(r => r.CommandId == KeyboardCommandRegistry.ReaderPageTurnLeft);
+            Assert.Equal(2, row.BoundKeys.Count);
+            Assert.Contains(row.BoundKeys, k => k.Gesture == new KeyGesture(Key.J));
+            Assert.Contains(row.BoundKeys, k => k.Gesture == new KeyGesture(Key.K));
+        }
+        finally
+        {
+            if (File.Exists(path)) File.Delete(path);
+        }
     }
 
     [Fact]
@@ -2189,5 +2400,121 @@ public class PreferencesScreenViewModelTests : IDisposable
         public Task<string?> PickFolderAsync(string title) => Task.FromResult<string?>(null);
 
         public Task SetClipboardTextAsync(string text) => Task.CompletedTask;
+    }
+
+    // Automation redesign (docs/superpowers/specs/2026-09-08-automation-tasks-redesign-design.md) -
+    // CreateViewModel never wires a scheduler, so these tests attach their own fake.
+
+    private static ScheduledTaskRow FakeRow(string id, bool enabled) => new()
+    {
+        TaskId = id,
+        DisplayName = id,
+        Description = "",
+        ActivityKind = ActivityJobKind.Other,
+        Enabled = enabled,
+    };
+
+    [Fact]
+    public void RunAllScheduledTasksNow_CallsRunNowAsyncForEveryTask_RegardlessOfEnabled()
+    {
+        var vm = CreateViewModel();
+        var scheduler = new FakeSchedulerService();
+        scheduler.Tasks.Add(FakeRow("a", enabled: true));
+        scheduler.Tasks.Add(FakeRow("b", enabled: false));
+        scheduler.Tasks.Add(FakeRow("c", enabled: true));
+        vm.AttachScheduler(scheduler);
+
+        vm.RunAllScheduledTasksNowCommand.Execute(null);
+
+        Assert.Equal(new[] { "a", "b", "c" }, scheduler.RunNowCalls.OrderBy(id => id));
+    }
+
+    [Fact]
+    public void RunAllScheduledTasksNow_WithNoSchedulerAttached_NoOps()
+    {
+        var vm = CreateViewModel();
+
+        vm.RunAllScheduledTasksNowCommand.Execute(null);
+    }
+
+    [Fact]
+    public void TogglePauseAll_DisablesEveryTask()
+    {
+        var vm = CreateViewModel();
+        var scheduler = new FakeSchedulerService();
+        scheduler.Tasks.Add(FakeRow("a", enabled: true));
+        scheduler.Tasks.Add(FakeRow("b", enabled: false));
+        scheduler.Tasks.Add(FakeRow("c", enabled: true));
+        vm.AttachScheduler(scheduler);
+
+        vm.TogglePauseAllScheduledTasksCommand.Execute(null);
+
+        Assert.True(vm.IsSchedulerPaused);
+        Assert.All(scheduler.Tasks, row => Assert.False(row.Enabled));
+    }
+
+    [Fact]
+    public void TogglePauseAll_ThenToggleAgain_RestoresOriginalEnabledStates_NotAllTrue()
+    {
+        var vm = CreateViewModel();
+        var scheduler = new FakeSchedulerService();
+        scheduler.Tasks.Add(FakeRow("a", enabled: true));
+        scheduler.Tasks.Add(FakeRow("b", enabled: false));
+        scheduler.Tasks.Add(FakeRow("c", enabled: true));
+        scheduler.Tasks.Add(FakeRow("d", enabled: false));
+        vm.AttachScheduler(scheduler);
+
+        vm.TogglePauseAllScheduledTasksCommand.Execute(null);
+        vm.TogglePauseAllScheduledTasksCommand.Execute(null);
+
+        Assert.False(vm.IsSchedulerPaused);
+        Assert.True(scheduler.Tasks.Single(r => r.TaskId == "a").Enabled);
+        Assert.False(scheduler.Tasks.Single(r => r.TaskId == "b").Enabled);
+        Assert.True(scheduler.Tasks.Single(r => r.TaskId == "c").Enabled);
+        Assert.False(scheduler.Tasks.Single(r => r.TaskId == "d").Enabled);
+    }
+
+    /// <summary>Records calls and mirrors <see cref="ISchedulerService.SetEnabled"/> onto the backing
+    /// rows (and raises Changed, matching real SchedulerService behavior) so
+    /// PreferencesScreenViewModel's RebuildScheduledTasks subscription keeps ScheduledTasks in
+    /// sync the same way it would against the real scheduler.</summary>
+    private sealed class FakeSchedulerService : ISchedulerService
+    {
+        public List<ScheduledTaskRow> Tasks { get; } = new();
+
+        IReadOnlyList<ScheduledTaskRow> ISchedulerService.Tasks => Tasks;
+
+        public event EventHandler? Changed;
+
+        public List<string> RunNowCalls { get; } = new();
+
+        public void Start()
+        {
+        }
+
+        public void Stop()
+        {
+        }
+
+        public Task RunNowAsync(string taskId)
+        {
+            RunNowCalls.Add(taskId);
+            return Task.CompletedTask;
+        }
+
+        public void NotifyRan(string taskId, ScheduledRunStatus status)
+        {
+        }
+
+        public void SetEnabled(string taskId, bool enabled)
+        {
+            var row = Tasks.Single(r => r.TaskId == taskId);
+            row.Enabled = enabled;
+            Changed?.Invoke(this, EventArgs.Empty);
+        }
+
+        public void SetSchedule(string taskId, ScheduleMode mode, int intervalHours, int dailyAtMinutes)
+        {
+        }
     }
 }

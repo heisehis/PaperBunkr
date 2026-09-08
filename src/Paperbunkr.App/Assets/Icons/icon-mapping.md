@@ -19,6 +19,7 @@ everywhere at once — don't fork.
 | More actions on a sidebar row (Collections "⋯" menu) | `MoreVertical` | same as the overflow-menu row below |
 | Remove / delete (destructive) | `Delete` | red `Foreground` at the call site |
 | Remove one item from a list | `SubtractCircle` | non-destructive list edit |
+| Disconnect (clear a saved credential) | `PlugDisconnected` | red `Foreground` at the call site, e.g. Connections dialogs |
 | Minus / collapse / decrement | `Subtract` | |
 | Close / dismiss | `Dismiss` | |
 | Cancel an editor / dialog | `DismissCircle` | |

@@ -1,78 +1,115 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:fi="using:FluentIcons.Avalonia"
              xmlns:vm="using:Paperbunkr.App.ViewModels"
              xmlns:models="using:Paperbunkr.App.Models"
+             xmlns:pref="using:Paperbunkr.App.Views.Preferences"
+             xmlns:views="using:Paperbunkr.App.Views"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d" d:DesignWidth="680" d:DesignHeight="600"
              x:Class="Paperbunkr.App.Views.Preferences.AutomationSection"
              x:DataType="vm:PreferencesScreenViewModel">
 
+    <UserControl.Styles>
+        <!-- Automation redesign (docs/superpowers/specs/2026-09-08-automation-tasks-redesign-
+             design.md) - a running/queued task gets a soft accent tint on top of its badge, same
+             "badge plus additional card-level weight, not badge-replaces-tint" reasoning the
+             Connections redesign used for its connected-row tint. -->
+        <Style Selector="Border.scheduledTaskBadge">
+            <Setter Property="Background" Value="{DynamicResource PbAccentSoftBrush}" />
+            <Setter Property="CornerRadius" Value="{StaticResource PbRadiusSm}" />
+            <Setter Property="Padding" Value="6,1" />
+        </Style>
+        <Style Selector="Border.scheduledTaskCard.scheduledTaskActive">
+            <Setter Property="Background" Value="{DynamicResource PbAccentSoftBrush}" />
+        </Style>
+    </UserControl.Styles>
+
     <ScrollViewer>
         <StackPanel Margin="28,20,28,40" Spacing="20">
             <TextBlock Classes="pbTextHeading" Text="Automation" />
 
-            <Border Classes="groupBox" Tag="automation.tasks">
-                <StackPanel>
-                    <Border Classes="groupHeader">
-                        <TextBlock Text="Scheduled Tasks" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
-                    </Border>
-                    <StackPanel Margin="14" Spacing="16">
+            <pref:SettingsRow Icon="Alert" Title="Notify when a scheduled task finishes"
+                               Description="Maintenance tasks run in the background — on launch for anything overdue, then every 15 minutes while Paperbunkr is open. Up to two run at once. Every run shows in the Activity Center.">
+                <pref:SettingsRow.SettingsContent>
+                    <ComboBox ItemsSource="{x:Static vm:PreferencesScreenViewModel.NotificationLevelOptions}"
+                              SelectedItem="{Binding ScheduledTaskNotificationLevel}" MinWidth="150"
+                              AutomationProperties.AutomationId="ScheduledTaskNotificationLevel" />
+                </pref:SettingsRow.SettingsContent>
+            </pref:SettingsRow>
 
-                        <StackPanel Orientation="Horizontal" Spacing="10">
-                            <TextBlock Text="Notify when a scheduled task finishes:" VerticalAlignment="Center"
-                                       FontSize="12.5" Foreground="{DynamicResource PbTextBrush}" />
-                            <ComboBox ItemsSource="{x:Static vm:PreferencesScreenViewModel.NotificationLevelOptions}"
-                                      SelectedItem="{Binding ScheduledTaskNotificationLevel}" MinWidth="150"
-                                      AutomationProperties.AutomationId="ScheduledTaskNotificationLevel" />
+            <StackPanel Tag="automation.tasks">
+                <TextBlock Classes="settingsGroupCaption" Text="SCHEDULED TASKS" />
+                <StackPanel Orientation="Horizontal" Spacing="10" Margin="0,0,0,10">
+                    <Button Classes="headerAction ghost" Command="{Binding RunAllScheduledTasksNowCommand}"
+                            AutomationProperties.AutomationId="RunAllScheduledTasksNowButton">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <fi:SymbolIcon Symbol="Play" FontSize="{StaticResource PbIconSizeXs}" />
+                            <TextBlock Text="Run all now" />
                         </StackPanel>
-
-                        <TextBlock Text="Maintenance tasks run in the background — on launch for anything overdue, then every 15 minutes while Paperbunkr is open. Up to two run at once. Every run shows in the Activity Center."
-                                   FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" />
-
-                        <ItemsControl ItemsSource="{Binding ScheduledTasks}">
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate x:DataType="models:ScheduledTaskRow">
-                                    <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,0,0,1" Padding="0,12">
-                                        <Grid ColumnDefinitions="*,Auto,Auto" RowDefinitions="Auto,Auto,Auto,Auto">
-                                            <TextBlock Grid.Row="0" Grid.Column="0" Text="{Binding DisplayName}"
-                                                       FontSize="13" FontWeight="SemiBold" Foreground="{DynamicResource PbTextBrush}" />
-                                            <TextBlock Grid.Row="1" Grid.Column="0" Text="{Binding Description}"
-                                                       FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" />
-
-                                            <ToggleSwitch Grid.Row="0" Grid.Column="1" Grid.RowSpan="2"
-                                                          IsChecked="{Binding Enabled}" VerticalAlignment="Top" Margin="12,0" />
-
-                                            <Button Grid.Row="0" Grid.Column="2" Grid.RowSpan="2" Content="Run now"
-                                                    Command="{Binding RunNowCommand}" VerticalAlignment="Top" />
-
-                                            <StackPanel Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="3"
-                                                        Orientation="Horizontal" Spacing="8" Margin="0,8,0,0">
-                                                <ComboBox ItemsSource="{x:Static vm:PreferencesScreenViewModel.ScheduleModeOptions}"
-                                                          SelectedItem="{Binding Mode}" MinWidth="120" />
-                                                <NumericUpDown Value="{Binding IntervalHours}" Minimum="1" Maximum="720" Width="110"
-                                                               IsVisible="{Binding IsIntervalMode}" />
-                                                <TextBlock Text="hours" VerticalAlignment="Center" IsVisible="{Binding IsIntervalMode}"
-                                                           FontSize="12" Foreground="{DynamicResource PbTextFaintBrush}" />
-                                                <TimePicker SelectedTime="{Binding DailyAtTime}" ClockIdentifier="24HourClock"
-                                                            IsVisible="{Binding IsDailyMode}" />
-                                            </StackPanel>
-
-                                            <StackPanel Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="3"
-                                                        Orientation="Horizontal" Spacing="14" Margin="0,6,0,0">
-                                                <TextBlock Text="{Binding LastRunLabel, StringFormat='Last run: {0}'}"
-                                                           FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" />
-                                                <TextBlock Text="{Binding NextRunLabel, StringFormat='Next: {0}'}"
-                                                           FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" />
-                                            </StackPanel>
-                                        </Grid>
-                                    </Border>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-                    </StackPanel>
+                    </Button>
+                    <Button Classes="headerAction ghost" Command="{Binding TogglePauseAllScheduledTasksCommand}"
+                            AutomationProperties.AutomationId="TogglePauseAllScheduledTasksButton">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <fi:SymbolIcon Symbol="{Binding IsSchedulerPaused, Converter={x:Static views:PauseResumeIconConverter.Instance}}"
+                                           FontSize="{StaticResource PbIconSizeXs}" />
+                            <TextBlock Text="{Binding IsSchedulerPaused, Converter={x:Static views:PauseResumeLabelConverter.Instance}}" />
+                        </StackPanel>
+                    </Button>
                 </StackPanel>
-            </Border>
+
+                <ItemsControl ItemsSource="{Binding ScheduledTasks}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="models:ScheduledTaskRow">
+                            <Border Classes="scheduledTaskCard" Classes.scheduledTaskActive="{Binding IsActive}"
+                                    BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1" CornerRadius="6"
+                                    Padding="14,12" Margin="0,0,0,10">
+                                <Grid ColumnDefinitions="Auto,*,Auto" RowDefinitions="Auto,Auto,Auto">
+                                    <fi:SymbolIcon Grid.Row="0" Grid.Column="0" Grid.RowSpan="3"
+                                                   Symbol="{Binding ActivityKind, Converter={x:Static views:ActivityKindIconConverter.Instance}}"
+                                                   FontSize="{StaticResource PbIconSizeSm}" Foreground="{DynamicResource PbTextMutedBrush}"
+                                                   VerticalAlignment="Top" Margin="0,2,12,0" />
+
+                                    <StackPanel Grid.Row="0" Grid.Column="1" Orientation="Horizontal" Spacing="8">
+                                        <TextBlock Text="{Binding DisplayName}" FontSize="13" FontWeight="SemiBold"
+                                                   Foreground="{DynamicResource PbTextBrush}" />
+                                        <Border Classes="scheduledTaskBadge" IsVisible="{Binding IsRunning}">
+                                            <TextBlock Text="Running…" FontSize="10.5" Foreground="{DynamicResource PbAccentBrush}" />
+                                        </Border>
+                                        <Border Classes="scheduledTaskBadge" IsVisible="{Binding IsQueued}">
+                                            <TextBlock Text="Queued" FontSize="10.5" Foreground="{DynamicResource PbAccentBrush}" />
+                                        </Border>
+                                    </StackPanel>
+                                    <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding Description}" FontSize="11.5"
+                                               Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" Margin="0,2,0,8" />
+
+                                    <StackPanel Grid.Row="2" Grid.Column="1" Orientation="Horizontal" Spacing="8">
+                                        <ComboBox ItemsSource="{x:Static vm:PreferencesScreenViewModel.ScheduleModeOptions}"
+                                                  SelectedItem="{Binding Mode}" MinWidth="110" />
+                                        <NumericUpDown Value="{Binding IntervalHours}" Minimum="1" Maximum="720" Width="100"
+                                                       IsVisible="{Binding IsIntervalMode}" />
+                                        <TextBlock Text="hours" VerticalAlignment="Center" IsVisible="{Binding IsIntervalMode}"
+                                                   FontSize="12" Foreground="{DynamicResource PbTextFaintBrush}" />
+                                        <TimePicker SelectedTime="{Binding DailyAtTime}" ClockIdentifier="24HourClock"
+                                                    IsVisible="{Binding IsDailyMode}" />
+                                        <TextBlock Text="{Binding LastRunLabel, StringFormat='Last run: {0}'}"
+                                                   FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" Margin="12,0,0,0" VerticalAlignment="Center" />
+                                        <TextBlock Text="{Binding NextRunLabel, StringFormat='Next: {0}'}"
+                                                   FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" />
+                                    </StackPanel>
+
+                                    <StackPanel Grid.Row="0" Grid.RowSpan="3" Grid.Column="2" Spacing="10" VerticalAlignment="Top">
+                                        <ToggleSwitch IsChecked="{Binding Enabled}" HorizontalAlignment="Right" />
+                                        <Button Content="{Binding RunButtonLabel}" Command="{Binding RunNowCommand}"
+                                                IsEnabled="{Binding !IsActive}" HorizontalAlignment="Right" />
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
         </StackPanel>
     </ScrollViewer>
 </UserControl>

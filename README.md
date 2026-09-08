@@ -76,12 +76,18 @@ pwsh installer/BuildInstaller.ps1
 
 ## Contributing & License
 
-This is a solo project and not yet set up for external contributions (no `CONTRIBUTING.md` or
-issue templates yet) — but bug reports and feedback are genuinely welcome via
+This is primarily a solo project, but external contributions are welcome — see
+[CONTRIBUTING.md](CONTRIBUTING.md) for the (lightweight) contributor license terms and
+[.github/ISSUE_TEMPLATE](.github/ISSUE_TEMPLATE) / [.github/PULL_REQUEST_TEMPLATE.md](.github/PULL_REQUEST_TEMPLATE.md)
+for how to open issues and PRs. Bug reports and feedback are genuinely welcome via
 [GitHub Issues](https://github.com/heisehis/PaperBunkr/issues).
 
-No license has been chosen yet, so standard copyright applies (all rights reserved) until one is
-added — don't assume MIT/Apache-style permissions in the meantime.
+Paperbunkr is licensed under the [GNU Affero General Public License v3.0](LICENSE) (AGPLv3). See
+also [PRIVACY.md](PRIVACY.md) (how the self-hosted app handles data and third-party API calls),
+[TERMS.md](TERMS.md) (usage terms and warranty disclaimer), and
+[COMICVINE_NOTICE.md](COMICVINE_NOTICE.md) (guidance on using your own ComicVine API key). These
+are living documentation templates, not a substitute for your own legal review if you redistribute
+or operate a modified instance.
 
 ## Feedback
 

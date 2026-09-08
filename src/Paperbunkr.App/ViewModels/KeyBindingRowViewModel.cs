@@ -1,8 +1,11 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.Linq;
+using Avalonia.Data.Converters;
 using Avalonia.Input;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using Paperbunkr.App.Models;
 using Paperbunkr.App.Services;
 
@@ -10,8 +13,10 @@ namespace Paperbunkr.App.ViewModels;
 
 /// <summary>
 /// One row in Preferences &gt; Keyboard Shortcuts, wrapping a single <see cref="KeyboardCommandDescriptor"/>
-/// (docs/Paperbunkr-Roadmap.md P5 follow-up). Persists immediately on selection, same as every other
-/// Preferences toggle - there's no Save/Cancel step here.
+/// (docs/Paperbunkr-Roadmap.md P5 follow-up). A command may be bound to more than one gesture
+/// simultaneously (docs/superpowers/specs/2026-09-07-keyboard-shortcuts-redesign-design.md, closing
+/// a real CE-parity gap - CE supports 4 slots per command). Persists immediately on add/remove, same
+/// as every other Preferences toggle - there's no Save/Cancel step here.
 /// </summary>
 public partial class KeyBindingRowViewModel : ViewModelBase
 {
@@ -19,17 +24,18 @@ public partial class KeyBindingRowViewModel : ViewModelBase
     private readonly KeyBindingService _service;
     private readonly Action _onChanged;
 
-    public KeyBindingRowViewModel(KeyboardCommandDescriptor command, KeyGesture currentGesture, KeyBindingService service, Action onChanged)
+    public KeyBindingRowViewModel(KeyboardCommandDescriptor command, IReadOnlyList<KeyGesture> currentGestures, KeyBindingService service, Action onChanged)
     {
         _command = command;
         _service = service;
         _onChanged = onChanged;
 
-        // currentGesture might not be in the curated Options list (e.g. a stale/manually-edited DB
-        // row) - fall back to a synthetic option for it rather than silently snapping to the
-        // first candidate, so the picker shows what's actually bound instead of lying about it.
-        var match = KeyOptions.All.Where(o => o.Gesture == currentGesture).Cast<KeyOption?>().FirstOrDefault();
-        _selectedKey = match ?? new KeyOption(currentGesture, currentGesture.ToString());
+        // A stored gesture might not be in the curated Options list (e.g. a stale/manually-edited DB
+        // row) - fall back to a synthetic option for it rather than silently dropping it, so the
+        // chip list shows what's actually bound instead of lying about it.
+        var options = currentGestures.Select(gesture =>
+            KeyOptions.All.Where(o => o.Gesture == gesture).Cast<KeyOption?>().FirstOrDefault() ?? new KeyOption(gesture, gesture.ToString()));
+        BoundKeys = new ObservableCollection<KeyOption>(options);
     }
 
     public string Group => _command.Group;
@@ -41,14 +47,81 @@ public partial class KeyBindingRowViewModel : ViewModelBase
     /// <summary>Drives PreferencesScreenViewModel's pairwise conflict check - see ConflictContext's own doc comment.</summary>
     public ConflictContext Context => _command.Context;
 
-    public IReadOnlyList<KeyOption> Options => KeyOptions.All;
+    /// <summary>Every gesture currently bound to this command - at least one, never empty (see <see cref="RemoveKey"/>).</summary>
+    public ObservableCollection<KeyOption> BoundKeys { get; }
 
-    [ObservableProperty]
-    private KeyOption _selectedKey;
+    /// <summary>The curated options not already bound to this row - feeds the trailing "Add shortcut…" picker so it never offers a gesture this row already has.</summary>
+    public IReadOnlyList<KeyOption> AvailableKeyOptions => KeyOptions.All.Where(o => !BoundKeys.Contains(o)).ToList();
 
-    partial void OnSelectedKeyChanged(KeyOption value)
+    /// <summary>
+    /// The trailing "Add shortcut…" ComboBox's SelectedItem target - a virtual property, not real
+    /// state (docs/superpowers/specs/2026-09-07-keyboard-shortcuts-redesign-design.md §6). The
+    /// getter always returns null so the ComboBox visually resets to its placeholder right after a
+    /// selection is applied; the setter runs <see cref="AddKeyCommand"/> as a side effect, avoiding
+    /// a separate SelectionChanged code-behind handler for this repeated-3x row template.
+    /// </summary>
+    public KeyOption? PendingAddOption
     {
-        _service.SetKey(CommandId, value.Gesture);
+        get => null;
+        set
+        {
+            if (value is { } option)
+            {
+                AddKeyCommand.Execute(option);
+            }
+
+            OnPropertyChanged();
+        }
+    }
+
+    /// <summary>Feeds the remove chip's IsVisible - a command can never end up with zero bound gestures, so the remove control hides on a single-chip row (defense in depth alongside RemoveKey's own no-op).</summary>
+    public static readonly IValueConverter CountGreaterThanOne = new FuncValueConverter<int, bool>(count => count > 1);
+
+    /// <summary>Highlights this row when one of its gestures collides with another row's - set by PreferencesScreenViewModel.RecomputeKeyBindingConflict.</summary>
+    [ObservableProperty]
+    private bool _isConflicted;
+
+    [RelayCommand]
+    private void AddKey(KeyOption option)
+    {
+        if (BoundKeys.Contains(option))
+        {
+            return;
+        }
+
+        // A fresh row's BoundKeys can start as a synthetic "default" that was never an explicit DB
+        // row (KeyBindingService.GetKeys' own zero-stored-rows-means-default fallback). Customizing
+        // beyond that single default by adding a second gesture must persist the whole currently-
+        // displayed set as real rows (each AddKey call is idempotent, so this is a no-op for any
+        // already-stored gesture) - otherwise a later reload would silently drop whatever was only
+        // ever a display-time default, even though it's still showing as a chip right now.
+        foreach (var existing in BoundKeys)
+        {
+            _service.AddKey(CommandId, existing.Gesture);
+        }
+
+        _service.AddKey(CommandId, option.Gesture);
+        BoundKeys.Add(option);
+        OnPropertyChanged(nameof(AvailableKeyOptions));
+        _onChanged();
+    }
+
+    /// <summary>
+    /// A command can never end up with zero bound gestures (docs/superpowers/specs/2026-09-07-
+    /// keyboard-shortcuts-redesign-design.md's Non-goals) - the View also hides the remove control
+    /// on a single-chip row, this is defense in depth, not the only guard.
+    /// </summary>
+    [RelayCommand]
+    private void RemoveKey(KeyOption option)
+    {
+        if (BoundKeys.Count <= 1)
+        {
+            return;
+        }
+
+        _service.RemoveKey(CommandId, option.Gesture);
+        BoundKeys.Remove(option);
+        OnPropertyChanged(nameof(AvailableKeyOptions));
         _onChanged();
     }
 }

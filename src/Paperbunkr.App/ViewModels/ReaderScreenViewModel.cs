@@ -169,7 +169,7 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
     /// <paramref name="commandId"/> is one of <see cref="KeyboardCommandRegistry"/>'s ids. Avalonia's
     /// {Binding} markup has no parameterized-method-call syntax, so XAML can't call this directly -
     /// the named Xxx*Hint properties below are the actual binding targets, each a thin wrapper.</summary>
-    public string GetShortcutHint(string commandId) => $"({_keyBindingService.GetKey(commandId)})";
+    public string GetShortcutHint(string commandId) => $"({_keyBindingService.GetKeys(commandId)[0]})";
 
     // Named hint properties - one per cluster/drawer control that has a real remappable shortcut.
     // Plain get-only properties (not [ObservableProperty]) since the value only ever needs to be
@@ -250,85 +250,85 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
     // design.md) - defaults here mirror KeyboardCommandRegistry's own defaults exactly; Load()
     // overwrites each with the actual (default-or-remapped) gesture from KeyBindingService.
     [ObservableProperty]
-    private KeyGesture _pageTurnLeftKey = new(Key.Left);
+    private IReadOnlyList<KeyGesture> _pageTurnLeftKey = [new(Key.Left)];
 
     [ObservableProperty]
-    private KeyGesture _pageTurnRightKey = new(Key.Right);
+    private IReadOnlyList<KeyGesture> _pageTurnRightKey = [new(Key.Right)];
 
     [ObservableProperty]
-    private KeyGesture _panLeftKey = new(Key.Left);
+    private IReadOnlyList<KeyGesture> _panLeftKey = [new(Key.Left)];
 
     [ObservableProperty]
-    private KeyGesture _panRightKey = new(Key.Right);
+    private IReadOnlyList<KeyGesture> _panRightKey = [new(Key.Right)];
 
     [ObservableProperty]
-    private KeyGesture _panUpKey = new(Key.Up);
+    private IReadOnlyList<KeyGesture> _panUpKey = [new(Key.Up)];
 
     [ObservableProperty]
-    private KeyGesture _panDownKey = new(Key.Down);
+    private IReadOnlyList<KeyGesture> _panDownKey = [new(Key.Down)];
 
     [ObservableProperty]
-    private KeyGesture _scrollLeftKey = new(Key.Left);
+    private IReadOnlyList<KeyGesture> _scrollLeftKey = [new(Key.Left)];
 
     [ObservableProperty]
-    private KeyGesture _scrollRightKey = new(Key.Right);
+    private IReadOnlyList<KeyGesture> _scrollRightKey = [new(Key.Right)];
 
     [ObservableProperty]
-    private KeyGesture _scrollUpKey = new(Key.Up);
+    private IReadOnlyList<KeyGesture> _scrollUpKey = [new(Key.Up)];
 
     [ObservableProperty]
-    private KeyGesture _scrollDownKey = new(Key.Down);
+    private IReadOnlyList<KeyGesture> _scrollDownKey = [new(Key.Down)];
 
     [ObservableProperty]
-    private KeyGesture _scrollPageUpKey = new(Key.PageUp);
+    private IReadOnlyList<KeyGesture> _scrollPageUpKey = [new(Key.PageUp)];
 
     [ObservableProperty]
-    private KeyGesture _scrollPageDownKey = new(Key.PageDown);
+    private IReadOnlyList<KeyGesture> _scrollPageDownKey = [new(Key.PageDown)];
 
     [ObservableProperty]
-    private KeyGesture _scrollToStartKey = new(Key.Home);
+    private IReadOnlyList<KeyGesture> _scrollToStartKey = [new(Key.Home)];
 
     [ObservableProperty]
-    private KeyGesture _scrollToEndKey = new(Key.End);
+    private IReadOnlyList<KeyGesture> _scrollToEndKey = [new(Key.End)];
 
     [ObservableProperty]
-    private KeyGesture _toggleAutoScrollKey = new(Key.S);
+    private IReadOnlyList<KeyGesture> _toggleAutoScrollKey = [new(Key.S)];
 
     [ObservableProperty]
-    private KeyGesture _previousBookmarkKey = new(Key.PageUp, KeyModifiers.Control);
+    private IReadOnlyList<KeyGesture> _previousBookmarkKey = [new(Key.PageUp, KeyModifiers.Control)];
 
     [ObservableProperty]
-    private KeyGesture _nextBookmarkKey = new(Key.PageDown, KeyModifiers.Control);
+    private IReadOnlyList<KeyGesture> _nextBookmarkKey = [new(Key.PageDown, KeyModifiers.Control)];
 
     [ObservableProperty]
-    private KeyGesture _toggleFullscreenKey = new(Key.F);
+    private IReadOnlyList<KeyGesture> _toggleFullscreenKey = [new(Key.F)];
 
     [ObservableProperty]
-    private KeyGesture _rotateClockwiseKey = new(Key.R);
+    private IReadOnlyList<KeyGesture> _rotateClockwiseKey = [new(Key.R)];
 
     [ObservableProperty]
-    private KeyGesture _rotateCounterClockwiseKey = new(Key.R, KeyModifiers.Shift);
+    private IReadOnlyList<KeyGesture> _rotateCounterClockwiseKey = [new(Key.R, KeyModifiers.Shift)];
 
     [ObservableProperty]
-    private KeyGesture _zoomInKey = new(Key.Z);
+    private IReadOnlyList<KeyGesture> _zoomInKey = [new(Key.Z)];
 
     [ObservableProperty]
-    private KeyGesture _zoomOutKey = new(Key.Z, KeyModifiers.Shift);
+    private IReadOnlyList<KeyGesture> _zoomOutKey = [new(Key.Z, KeyModifiers.Shift)];
 
     [ObservableProperty]
-    private KeyGesture _fitOriginalKey = new(Key.D1);
+    private IReadOnlyList<KeyGesture> _fitOriginalKey = [new(Key.D1)];
 
     [ObservableProperty]
-    private KeyGesture _fitAllKey = new(Key.D2);
+    private IReadOnlyList<KeyGesture> _fitAllKey = [new(Key.D2)];
 
     [ObservableProperty]
-    private KeyGesture _fitWidthKey = new(Key.D3);
+    private IReadOnlyList<KeyGesture> _fitWidthKey = [new(Key.D3)];
 
     [ObservableProperty]
-    private KeyGesture _fitHeightKey = new(Key.D4);
+    private IReadOnlyList<KeyGesture> _fitHeightKey = [new(Key.D4)];
 
     [ObservableProperty]
-    private KeyGesture _fitBestKey = new(Key.D5);
+    private IReadOnlyList<KeyGesture> _fitBestKey = [new(Key.D5)];
 
     [ObservableProperty]
     private string? _errorMessage;
@@ -884,33 +884,33 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
         HighQualityPageDisplay = appSettings.HighQualityPageDisplay;
         MouseWheelSpeed = appSettings.MouseWheelSpeed;
         _resetZoomOnPageChange = appSettings.ResetZoomOnPageChange;
-        PageTurnLeftKey = _keyBindings.GetKey(context, KeyboardCommandRegistry.ReaderPageTurnLeft);
-        PageTurnRightKey = _keyBindings.GetKey(context, KeyboardCommandRegistry.ReaderPageTurnRight);
-        PanLeftKey = _keyBindings.GetKey(context, KeyboardCommandRegistry.ReaderPanLeft);
-        PanRightKey = _keyBindings.GetKey(context, KeyboardCommandRegistry.ReaderPanRight);
-        PanUpKey = _keyBindings.GetKey(context, KeyboardCommandRegistry.ReaderPanUp);
-        PanDownKey = _keyBindings.GetKey(context, KeyboardCommandRegistry.ReaderPanDown);
-        ScrollLeftKey = _keyBindings.GetKey(context, KeyboardCommandRegistry.ReaderScrollLeft);
-        ScrollRightKey = _keyBindings.GetKey(context, KeyboardCommandRegistry.ReaderScrollRight);
-        ScrollUpKey = _keyBindings.GetKey(context, KeyboardCommandRegistry.ReaderScrollUp);
-        ScrollDownKey = _keyBindings.GetKey(context, KeyboardCommandRegistry.ReaderScrollDown);
-        ScrollPageUpKey = _keyBindings.GetKey(context, KeyboardCommandRegistry.ReaderScrollPageUp);
-        ScrollPageDownKey = _keyBindings.GetKey(context, KeyboardCommandRegistry.ReaderScrollPageDown);
-        ScrollToStartKey = _keyBindings.GetKey(context, KeyboardCommandRegistry.ReaderScrollToStart);
-        ScrollToEndKey = _keyBindings.GetKey(context, KeyboardCommandRegistry.ReaderScrollToEnd);
-        ToggleAutoScrollKey = _keyBindings.GetKey(context, KeyboardCommandRegistry.ReaderToggleAutoScroll);
-        PreviousBookmarkKey = _keyBindings.GetKey(context, KeyboardCommandRegistry.ReaderPreviousBookmark);
-        NextBookmarkKey = _keyBindings.GetKey(context, KeyboardCommandRegistry.ReaderNextBookmark);
-        ToggleFullscreenKey = _keyBindings.GetKey(context, KeyboardCommandRegistry.ReaderToggleFullscreen);
-        RotateClockwiseKey = _keyBindings.GetKey(context, KeyboardCommandRegistry.ReaderRotateClockwise);
-        RotateCounterClockwiseKey = _keyBindings.GetKey(context, KeyboardCommandRegistry.ReaderRotateCounterClockwise);
-        ZoomInKey = _keyBindings.GetKey(context, KeyboardCommandRegistry.ReaderZoomIn);
-        ZoomOutKey = _keyBindings.GetKey(context, KeyboardCommandRegistry.ReaderZoomOut);
-        FitOriginalKey = _keyBindings.GetKey(context, KeyboardCommandRegistry.ReaderFitOriginal);
-        FitAllKey = _keyBindings.GetKey(context, KeyboardCommandRegistry.ReaderFitAll);
-        FitWidthKey = _keyBindings.GetKey(context, KeyboardCommandRegistry.ReaderFitWidth);
-        FitHeightKey = _keyBindings.GetKey(context, KeyboardCommandRegistry.ReaderFitHeight);
-        FitBestKey = _keyBindings.GetKey(context, KeyboardCommandRegistry.ReaderFitBest);
+        PageTurnLeftKey = _keyBindings.GetKeys(context, KeyboardCommandRegistry.ReaderPageTurnLeft);
+        PageTurnRightKey = _keyBindings.GetKeys(context, KeyboardCommandRegistry.ReaderPageTurnRight);
+        PanLeftKey = _keyBindings.GetKeys(context, KeyboardCommandRegistry.ReaderPanLeft);
+        PanRightKey = _keyBindings.GetKeys(context, KeyboardCommandRegistry.ReaderPanRight);
+        PanUpKey = _keyBindings.GetKeys(context, KeyboardCommandRegistry.ReaderPanUp);
+        PanDownKey = _keyBindings.GetKeys(context, KeyboardCommandRegistry.ReaderPanDown);
+        ScrollLeftKey = _keyBindings.GetKeys(context, KeyboardCommandRegistry.ReaderScrollLeft);
+        ScrollRightKey = _keyBindings.GetKeys(context, KeyboardCommandRegistry.ReaderScrollRight);
+        ScrollUpKey = _keyBindings.GetKeys(context, KeyboardCommandRegistry.ReaderScrollUp);
+        ScrollDownKey = _keyBindings.GetKeys(context, KeyboardCommandRegistry.ReaderScrollDown);
+        ScrollPageUpKey = _keyBindings.GetKeys(context, KeyboardCommandRegistry.ReaderScrollPageUp);
+        ScrollPageDownKey = _keyBindings.GetKeys(context, KeyboardCommandRegistry.ReaderScrollPageDown);
+        ScrollToStartKey = _keyBindings.GetKeys(context, KeyboardCommandRegistry.ReaderScrollToStart);
+        ScrollToEndKey = _keyBindings.GetKeys(context, KeyboardCommandRegistry.ReaderScrollToEnd);
+        ToggleAutoScrollKey = _keyBindings.GetKeys(context, KeyboardCommandRegistry.ReaderToggleAutoScroll);
+        PreviousBookmarkKey = _keyBindings.GetKeys(context, KeyboardCommandRegistry.ReaderPreviousBookmark);
+        NextBookmarkKey = _keyBindings.GetKeys(context, KeyboardCommandRegistry.ReaderNextBookmark);
+        ToggleFullscreenKey = _keyBindings.GetKeys(context, KeyboardCommandRegistry.ReaderToggleFullscreen);
+        RotateClockwiseKey = _keyBindings.GetKeys(context, KeyboardCommandRegistry.ReaderRotateClockwise);
+        RotateCounterClockwiseKey = _keyBindings.GetKeys(context, KeyboardCommandRegistry.ReaderRotateCounterClockwise);
+        ZoomInKey = _keyBindings.GetKeys(context, KeyboardCommandRegistry.ReaderZoomIn);
+        ZoomOutKey = _keyBindings.GetKeys(context, KeyboardCommandRegistry.ReaderZoomOut);
+        FitOriginalKey = _keyBindings.GetKeys(context, KeyboardCommandRegistry.ReaderFitOriginal);
+        FitAllKey = _keyBindings.GetKeys(context, KeyboardCommandRegistry.ReaderFitAll);
+        FitWidthKey = _keyBindings.GetKeys(context, KeyboardCommandRegistry.ReaderFitWidth);
+        FitHeightKey = _keyBindings.GetKeys(context, KeyboardCommandRegistry.ReaderFitHeight);
+        FitBestKey = _keyBindings.GetKeys(context, KeyboardCommandRegistry.ReaderFitBest);
         UpdateReadingModeState(issue.ReadingModeOverride ?? series.ReadingMode, appSettings.ReverseRtlNavigation);
 
         ErrorMessage = null;

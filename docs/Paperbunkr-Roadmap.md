@@ -1259,7 +1259,7 @@ interactive parts (checkbox toggle, tray icon appearing, restore/exit) were **no
 on-screen - computer-use access was denied for this app, same as a prior session's manga-detail work.
 
 **Navigation transition system shipped 2026-09-05** (sub-project 1 of "full app chrome animations" -
-sub-project 2, chrome/content motion polish, not yet started), design spec + plan
+sub-project 2, chrome/content motion polish, shipped 2026-09-07, see below), design spec + plan
 `2026-09-04-navigation-transition-system-{design,plan}.md`, superseding/extending the 2026-08-24
 navigation-shell-motion spec's own deferred drill-down motion. The six drill-down screens (Detail/
 MangaDetail/Reader/BookDetail/BookReader/PdfReader) move off instant-cut `IsVisible` toggles onto one
@@ -1284,6 +1284,68 @@ new automated coverage; the actual on-screen motion feel is **not yet verified**
 automation in this environment, same standing `[[feedback_no_computer_use]]` limitation as
 everywhere else in this project.
 
+**Chrome & Content Motion Polish shipped 2026-09-07** (sub-project 2 of "full app chrome animations",
+closing out the effort alongside sub-project 1 above), design spec + plan
+`2026-09-07-chrome-content-motion-polish-{design,plan}.md`. Six items: (1) staggered Library grid
+entrance across all 5 view modes via a new `EntranceAnimation` attached-property pair (mirrors
+`SharedElement`'s shape) - one-shot per nav-in/filter/sort/group/view-mode-change trigger via
+`LibraryScreenViewModel.PlayEntranceAnimation`, read once per container preparation so ordinary
+virtualized-scroll recycling never replays it; other grids deferred to a v2 follow-up. (2)
+`DetailHero` backdrop parallax, wired entirely inside `DetailHero.axaml.cs` (finds its own ancestor
+`ScrollViewer`) so it applies to every consumer - comic/manga/book detail, Home spotlight - with no
+per-screen code; fully disabled (not just instant) under Reduced Motion. (3) Contextual sidebar now
+slides via a `Width` transition on `PbMotionStandard`, mirroring the nav rail's own existing
+mechanism, per `App.axaml:124`'s own (previously unimplemented) documented intent for this surface.
+(4) Breadcrumb bar gets a whole-bar fade+slide on trail change (reusing the same
+"entranceReady"/"entered" class pair as item 1); the discard-changes and post-welcome-tour modals get
+a fade+scale via new `modalScrim`/`modalCard` styles (deliberately not routed through `OverlayShell`,
+which turned out to have no animation of its own either - reusing it here would have silently
+animated every other `OverlayShell` consumer app-wide). (5) `WindowNotificationManager` replaced by
+an app-owned `ToastPresenter` + new `AnimatedStackPanel` (FLIP-technique reflow, `RenderTransform`
+only) - same `PbToastView` content, positioning, and `_persistentToasts` close-by-reference tracking
+as before, now fully `PbMotion*`-token-wired and Reduced-Motion-respecting where the stock control's
+animation wasn't. (6) Activity drawer's hardcoded `0.22`/`0.18` literals fixed to
+`PbMotionStandard`/`PbMotionFast`; the peek popover gets the same treatment best-effort - entrance
+only, since `Popup` unmounts its content on close before an exit `Transitions` leg can play, a known,
+documented limitation rather than a silently-dropped goal. New/edited automated coverage:
+`LibraryScreenViewModelTests` (4 new tests for the trigger flag), `AnimatedStackPanelTests` (2 new,
+synchronous-FLIP-jump only - the deferred release-to-identity is dispatcher-driven and therefore
+manual/on-screen only, the same carve-out `SharedElementTransitionServiceTests` already established
+for this project's headless suite). Two accepted v1 simplifications, not oversights: entrance and
+exit share one duration everywhere in this pass rather than following the motion skill's "exit ~70%"
+convention (a second timed state wasn't judged worth it for a first pass); the sidebar's `Width`
+animation is a deliberate exception to the general "never animate Width" performance rule, chosen for
+consistency with the nav rail's own pre-existing precedent since this surface toggles rarely, not on
+scroll. The actual on-screen motion feel across all six items is **not yet verified** - same standing
+`[[feedback_no_computer_use]]` limitation as sub-project 1 above.
+
+**Preferences Tile-Hub Redesign (Phase 1 of Preferences, sub-project 1 of the separate "Whole UI
+Re-Architecture" initiative) shipped 2026-09-07**, design + plan
+`2026-09-07-preferences-tile-hub-redesign-{design,plan}.md`. Settled via a full brainstorm with the
+visual companion, then scope-corrected mid-plan when a codebase survey found the original "every
+setting becomes a shared row" goal didn't hold for roughly half of Preferences (Library/Connections/
+Keyboard Shortcuts/Automation/Advanced's Backup+File Association/Appearance's Skins picker/About are
+repeaters, dashboards, and a 9-provider modal system, not simple settings) - those 9 areas are each
+confirmed-needing-redesign but deferred to their own future phases, tracked in the design doc's §4.
+This phase originally replaced the sidebar + hard-switch pane with one scrolling page entered via a
+tile-grid hub that collapsed to a sticky icon strip - **tried on screen and reverted the same
+session**: too annoying to navigate ("infinite scroll," losing track of where things are), per
+direct user feedback. Back to the sidebar + hard-switch pane, keeping one improvement from the
+attempt - sidebar items now show an icon next to the label. What stands as shipped: new shared
+`SettingsRow` primitive (icon+title+optional description+control) applied to every genuinely-simple
+setting (all of General, most of Reader, parts of Appearance/Advanced/About); 3 new built-in skins
+(Cool & Technical, Vibrant & Pop, Vintage Paperback) added to the Skins picker; and a real bug fixed
+as a byproduct - Windows 11's `theme.json` existed on disk since 2026-08-07 but was never actually
+wired into `SkinService.GetAvailableSkins()`, so it was never a real selectable option until this
+pass generalized that method to a built-in-skins list anyway. 183 tests passing
+(`PreferencesScreenViewModelTests`, `PreferenceIndexTests`, `SkinServiceTests`,
+`WindowsElevenSkinTests`, `MainViewModelTests`); app smoke-launches clean both before and after the
+revert (isolated throwaway DB, confirmed via `startup.log` reaching "Startup complete." with no
+crash). The actual on-screen feel of the (now-reverted-to-familiar) sidebar is **not yet verified**
+- same standing `[[feedback_no_computer_use]]` limitation as everywhere else in this project. A
+description-copy checklist (`docs/preferences-descriptions-todo.md`) tracks which of the converted
+rows still need their `Description` text written.
+
 ### Novels: EPUB/PDF support (Phase 1+2 landed 2026-08-09/10, Phase 3 landed 2026-08-10)
 Not a CE-parity item — ComicRackCE has no prose-reading equivalent, see the design spec's own
 CE-verification note. Design: docs/superpowers/specs/2026-08-09-novels-epub-pdf-support-design.md.
@@ -1297,6 +1359,24 @@ that depend on it. **The Books/PDF reader was also reworked 2026-09-03** (`51b51
 WebView-based reflow renderer, a shared HUD, and a touchpad-scroll fix — see the Books reader
 ergonomics project memory / `2026-09-*-books-reader-*` specs. **OPDS catalog client** (Kavita/Komga)
 is design-only so far (`33ad867`).
+
+**Two regressions that rewrite deliberately shipped with — bookmark/resume-position granularity
+narrowed to chapter-level, and CSS multi-column pagination never working — addressed 2026-09-07**
+(design spec `docs/superpowers/specs/2026-09-07-books-reader-pagination-and-position-fix-design.md`).
+Position/bookmark tracking is fully fixed: `Book`/`BookBookmark` now anchor to `BlockId` (the same
+scheme `BookHighlight` already used), restoring multiple-bookmarks-per-chapter and precise resume,
+plus a bonus fix for bookmark/highlight jumps landing on the already-open chapter (previously a
+silent no-op). New migration `ReworkBookPositionAnchor` resets old bookmark rows, matching
+`ReworkBookHighlightAnchor`'s own precedent. **Pagination is not fixed — a third attempt (CSS
+columns driven by `transform: translateX()` instead of `scrollLeft`, specifically to rule out a
+native-scroll repaint theory) hit the identical column-bleeding-in-at-the-right-edge symptom on real
+on-screen verification** (screenshotted by the user against a real Dune EPUB), the same failure both
+2026-09-02 attempts hit. Three independently-reasoned attempts failing identically is strong enough
+signal to stop guessing without live devtools access, which no session in this project's history has
+had. Per the design's own disclosed fallback chain, `BookReaderScreen.axaml.cs`'s `UseColumnPaging`
+const is `false` — vertical scroll (dressed with CSS scroll-snap) is the final, shipped behavior.
+**True CSS-column pagination for the Books reader is now closed out as permanently declined**, same
+status as the magnifier.
 **Phase 1 shipped** (independent `Book`/`BookSeries`/`BookBookmark`/`BookFolder` schema, `VersOne.Epub`-
 and raw-`pdfium`-text-API-backed parsers behind a shared `IBookTextSource`, folder-scan import with
 cover/metadata extraction, a Books nav section with a covers grid — no reader yet, verified via 17

@@ -100,11 +100,11 @@ public class PageCanvas : Control
     public static readonly StyledProperty<bool> HighQualityDisplayProperty =
         AvaloniaProperty.Register<PageCanvas, bool>(nameof(HighQualityDisplay), defaultValue: true);
 
-    public static readonly StyledProperty<KeyGesture> LeftKeyProperty =
-        AvaloniaProperty.Register<PageCanvas, KeyGesture>(nameof(LeftKey), defaultValue: new KeyGesture(Key.Left));
+    public static readonly StyledProperty<IReadOnlyList<KeyGesture>> LeftKeyProperty =
+        AvaloniaProperty.Register<PageCanvas, IReadOnlyList<KeyGesture>>(nameof(LeftKey), defaultValue: [new KeyGesture(Key.Left)]);
 
-    public static readonly StyledProperty<KeyGesture> RightKeyProperty =
-        AvaloniaProperty.Register<PageCanvas, KeyGesture>(nameof(RightKey), defaultValue: new KeyGesture(Key.Right));
+    public static readonly StyledProperty<IReadOnlyList<KeyGesture>> RightKeyProperty =
+        AvaloniaProperty.Register<PageCanvas, IReadOnlyList<KeyGesture>>(nameof(RightKey), defaultValue: [new KeyGesture(Key.Right)]);
 
     /// <summary>
     /// Pan (zoomed paged mode) and scroll (continuous mode) direction gestures, plus continuous
@@ -114,45 +114,45 @@ public class PageCanvas : Control
     /// <see cref="RightKey"/> already are for spatial page-turn). Defaults reproduce today's
     /// hardcoded arrow/PageUp/PageDown/Home/End behavior exactly.
     /// </summary>
-    public static readonly StyledProperty<KeyGesture> PanLeftGestureProperty =
-        AvaloniaProperty.Register<PageCanvas, KeyGesture>(nameof(PanLeftGesture), defaultValue: new KeyGesture(Key.Left));
+    public static readonly StyledProperty<IReadOnlyList<KeyGesture>> PanLeftGestureProperty =
+        AvaloniaProperty.Register<PageCanvas, IReadOnlyList<KeyGesture>>(nameof(PanLeftGesture), defaultValue: [new KeyGesture(Key.Left)]);
 
-    public static readonly StyledProperty<KeyGesture> PanRightGestureProperty =
-        AvaloniaProperty.Register<PageCanvas, KeyGesture>(nameof(PanRightGesture), defaultValue: new KeyGesture(Key.Right));
+    public static readonly StyledProperty<IReadOnlyList<KeyGesture>> PanRightGestureProperty =
+        AvaloniaProperty.Register<PageCanvas, IReadOnlyList<KeyGesture>>(nameof(PanRightGesture), defaultValue: [new KeyGesture(Key.Right)]);
 
-    public static readonly StyledProperty<KeyGesture> PanUpGestureProperty =
-        AvaloniaProperty.Register<PageCanvas, KeyGesture>(nameof(PanUpGesture), defaultValue: new KeyGesture(Key.Up));
+    public static readonly StyledProperty<IReadOnlyList<KeyGesture>> PanUpGestureProperty =
+        AvaloniaProperty.Register<PageCanvas, IReadOnlyList<KeyGesture>>(nameof(PanUpGesture), defaultValue: [new KeyGesture(Key.Up)]);
 
-    public static readonly StyledProperty<KeyGesture> PanDownGestureProperty =
-        AvaloniaProperty.Register<PageCanvas, KeyGesture>(nameof(PanDownGesture), defaultValue: new KeyGesture(Key.Down));
+    public static readonly StyledProperty<IReadOnlyList<KeyGesture>> PanDownGestureProperty =
+        AvaloniaProperty.Register<PageCanvas, IReadOnlyList<KeyGesture>>(nameof(PanDownGesture), defaultValue: [new KeyGesture(Key.Down)]);
 
-    public static readonly StyledProperty<KeyGesture> ScrollLeftGestureProperty =
-        AvaloniaProperty.Register<PageCanvas, KeyGesture>(nameof(ScrollLeftGesture), defaultValue: new KeyGesture(Key.Left));
+    public static readonly StyledProperty<IReadOnlyList<KeyGesture>> ScrollLeftGestureProperty =
+        AvaloniaProperty.Register<PageCanvas, IReadOnlyList<KeyGesture>>(nameof(ScrollLeftGesture), defaultValue: [new KeyGesture(Key.Left)]);
 
-    public static readonly StyledProperty<KeyGesture> ScrollRightGestureProperty =
-        AvaloniaProperty.Register<PageCanvas, KeyGesture>(nameof(ScrollRightGesture), defaultValue: new KeyGesture(Key.Right));
+    public static readonly StyledProperty<IReadOnlyList<KeyGesture>> ScrollRightGestureProperty =
+        AvaloniaProperty.Register<PageCanvas, IReadOnlyList<KeyGesture>>(nameof(ScrollRightGesture), defaultValue: [new KeyGesture(Key.Right)]);
 
-    public static readonly StyledProperty<KeyGesture> ScrollUpGestureProperty =
-        AvaloniaProperty.Register<PageCanvas, KeyGesture>(nameof(ScrollUpGesture), defaultValue: new KeyGesture(Key.Up));
+    public static readonly StyledProperty<IReadOnlyList<KeyGesture>> ScrollUpGestureProperty =
+        AvaloniaProperty.Register<PageCanvas, IReadOnlyList<KeyGesture>>(nameof(ScrollUpGesture), defaultValue: [new KeyGesture(Key.Up)]);
 
-    public static readonly StyledProperty<KeyGesture> ScrollDownGestureProperty =
-        AvaloniaProperty.Register<PageCanvas, KeyGesture>(nameof(ScrollDownGesture), defaultValue: new KeyGesture(Key.Down));
+    public static readonly StyledProperty<IReadOnlyList<KeyGesture>> ScrollDownGestureProperty =
+        AvaloniaProperty.Register<PageCanvas, IReadOnlyList<KeyGesture>>(nameof(ScrollDownGesture), defaultValue: [new KeyGesture(Key.Down)]);
 
-    public static readonly StyledProperty<KeyGesture> ScrollPageUpGestureProperty =
-        AvaloniaProperty.Register<PageCanvas, KeyGesture>(nameof(ScrollPageUpGesture), defaultValue: new KeyGesture(Key.PageUp));
+    public static readonly StyledProperty<IReadOnlyList<KeyGesture>> ScrollPageUpGestureProperty =
+        AvaloniaProperty.Register<PageCanvas, IReadOnlyList<KeyGesture>>(nameof(ScrollPageUpGesture), defaultValue: [new KeyGesture(Key.PageUp)]);
 
-    public static readonly StyledProperty<KeyGesture> ScrollPageDownGestureProperty =
-        AvaloniaProperty.Register<PageCanvas, KeyGesture>(nameof(ScrollPageDownGesture), defaultValue: new KeyGesture(Key.PageDown));
+    public static readonly StyledProperty<IReadOnlyList<KeyGesture>> ScrollPageDownGestureProperty =
+        AvaloniaProperty.Register<PageCanvas, IReadOnlyList<KeyGesture>>(nameof(ScrollPageDownGesture), defaultValue: [new KeyGesture(Key.PageDown)]);
 
-    public static readonly StyledProperty<KeyGesture> ScrollToStartGestureProperty =
-        AvaloniaProperty.Register<PageCanvas, KeyGesture>(nameof(ScrollToStartGesture), defaultValue: new KeyGesture(Key.Home));
+    public static readonly StyledProperty<IReadOnlyList<KeyGesture>> ScrollToStartGestureProperty =
+        AvaloniaProperty.Register<PageCanvas, IReadOnlyList<KeyGesture>>(nameof(ScrollToStartGesture), defaultValue: [new KeyGesture(Key.Home)]);
 
-    public static readonly StyledProperty<KeyGesture> ScrollToEndGestureProperty =
-        AvaloniaProperty.Register<PageCanvas, KeyGesture>(nameof(ScrollToEndGesture), defaultValue: new KeyGesture(Key.End));
+    public static readonly StyledProperty<IReadOnlyList<KeyGesture>> ScrollToEndGestureProperty =
+        AvaloniaProperty.Register<PageCanvas, IReadOnlyList<KeyGesture>>(nameof(ScrollToEndGesture), defaultValue: [new KeyGesture(Key.End)]);
 
     /// <summary>Toggles the ViewModel-driven hands-free auto-scroll timer (docs/superpowers/specs/2026-08-16-reader-auto-scroll-design.md) - meaningless outside continuous mode, gesture-matched in the same OnKeyDown block as the other continuous-mode gestures above, not the Always-context block.</summary>
-    public static readonly StyledProperty<KeyGesture> ToggleAutoScrollGestureProperty =
-        AvaloniaProperty.Register<PageCanvas, KeyGesture>(nameof(ToggleAutoScrollGesture), defaultValue: new KeyGesture(Key.S));
+    public static readonly StyledProperty<IReadOnlyList<KeyGesture>> ToggleAutoScrollGestureProperty =
+        AvaloniaProperty.Register<PageCanvas, IReadOnlyList<KeyGesture>>(nameof(ToggleAutoScrollGesture), defaultValue: [new KeyGesture(Key.S)]);
 
     public static readonly StyledProperty<ICommand?> ToggleAutoScrollCommandProperty =
         AvaloniaProperty.Register<PageCanvas, ICommand?>(nameof(ToggleAutoScrollCommand));
@@ -172,41 +172,41 @@ public class PageCanvas : Control
     /// (an OS-level convention, not really "a shortcut" in the remappable sense); this gesture is
     /// what's actually remappable.
     /// </summary>
-    public static readonly StyledProperty<KeyGesture> FullscreenToggleGestureProperty =
-        AvaloniaProperty.Register<PageCanvas, KeyGesture>(nameof(FullscreenToggleGesture), defaultValue: new KeyGesture(Key.F));
+    public static readonly StyledProperty<IReadOnlyList<KeyGesture>> FullscreenToggleGestureProperty =
+        AvaloniaProperty.Register<PageCanvas, IReadOnlyList<KeyGesture>>(nameof(FullscreenToggleGesture), defaultValue: [new KeyGesture(Key.F)]);
 
-    public static readonly StyledProperty<KeyGesture> RotateClockwiseGestureProperty =
-        AvaloniaProperty.Register<PageCanvas, KeyGesture>(nameof(RotateClockwiseGesture), defaultValue: new KeyGesture(Key.R));
+    public static readonly StyledProperty<IReadOnlyList<KeyGesture>> RotateClockwiseGestureProperty =
+        AvaloniaProperty.Register<PageCanvas, IReadOnlyList<KeyGesture>>(nameof(RotateClockwiseGesture), defaultValue: [new KeyGesture(Key.R)]);
 
-    public static readonly StyledProperty<KeyGesture> RotateCounterClockwiseGestureProperty =
-        AvaloniaProperty.Register<PageCanvas, KeyGesture>(nameof(RotateCounterClockwiseGesture), defaultValue: new KeyGesture(Key.R, KeyModifiers.Shift));
+    public static readonly StyledProperty<IReadOnlyList<KeyGesture>> RotateCounterClockwiseGestureProperty =
+        AvaloniaProperty.Register<PageCanvas, IReadOnlyList<KeyGesture>>(nameof(RotateCounterClockwiseGesture), defaultValue: [new KeyGesture(Key.R, KeyModifiers.Shift)]);
 
-    public static readonly StyledProperty<KeyGesture> PreviousBookmarkGestureProperty =
-        AvaloniaProperty.Register<PageCanvas, KeyGesture>(nameof(PreviousBookmarkGesture), defaultValue: new KeyGesture(Key.PageUp, KeyModifiers.Control));
+    public static readonly StyledProperty<IReadOnlyList<KeyGesture>> PreviousBookmarkGestureProperty =
+        AvaloniaProperty.Register<PageCanvas, IReadOnlyList<KeyGesture>>(nameof(PreviousBookmarkGesture), defaultValue: [new KeyGesture(Key.PageUp, KeyModifiers.Control)]);
 
-    public static readonly StyledProperty<KeyGesture> NextBookmarkGestureProperty =
-        AvaloniaProperty.Register<PageCanvas, KeyGesture>(nameof(NextBookmarkGesture), defaultValue: new KeyGesture(Key.PageDown, KeyModifiers.Control));
+    public static readonly StyledProperty<IReadOnlyList<KeyGesture>> NextBookmarkGestureProperty =
+        AvaloniaProperty.Register<PageCanvas, IReadOnlyList<KeyGesture>>(nameof(NextBookmarkGesture), defaultValue: [new KeyGesture(Key.PageDown, KeyModifiers.Control)]);
 
-    public static readonly StyledProperty<KeyGesture> ZoomInGestureProperty =
-        AvaloniaProperty.Register<PageCanvas, KeyGesture>(nameof(ZoomInGesture), defaultValue: new KeyGesture(Key.Z));
+    public static readonly StyledProperty<IReadOnlyList<KeyGesture>> ZoomInGestureProperty =
+        AvaloniaProperty.Register<PageCanvas, IReadOnlyList<KeyGesture>>(nameof(ZoomInGesture), defaultValue: [new KeyGesture(Key.Z)]);
 
-    public static readonly StyledProperty<KeyGesture> ZoomOutGestureProperty =
-        AvaloniaProperty.Register<PageCanvas, KeyGesture>(nameof(ZoomOutGesture), defaultValue: new KeyGesture(Key.Z, KeyModifiers.Shift));
+    public static readonly StyledProperty<IReadOnlyList<KeyGesture>> ZoomOutGestureProperty =
+        AvaloniaProperty.Register<PageCanvas, IReadOnlyList<KeyGesture>>(nameof(ZoomOutGesture), defaultValue: [new KeyGesture(Key.Z, KeyModifiers.Shift)]);
 
-    public static readonly StyledProperty<KeyGesture> FitOriginalGestureProperty =
-        AvaloniaProperty.Register<PageCanvas, KeyGesture>(nameof(FitOriginalGesture), defaultValue: new KeyGesture(Key.D1));
+    public static readonly StyledProperty<IReadOnlyList<KeyGesture>> FitOriginalGestureProperty =
+        AvaloniaProperty.Register<PageCanvas, IReadOnlyList<KeyGesture>>(nameof(FitOriginalGesture), defaultValue: [new KeyGesture(Key.D1)]);
 
-    public static readonly StyledProperty<KeyGesture> FitAllGestureProperty =
-        AvaloniaProperty.Register<PageCanvas, KeyGesture>(nameof(FitAllGesture), defaultValue: new KeyGesture(Key.D2));
+    public static readonly StyledProperty<IReadOnlyList<KeyGesture>> FitAllGestureProperty =
+        AvaloniaProperty.Register<PageCanvas, IReadOnlyList<KeyGesture>>(nameof(FitAllGesture), defaultValue: [new KeyGesture(Key.D2)]);
 
-    public static readonly StyledProperty<KeyGesture> FitWidthGestureProperty =
-        AvaloniaProperty.Register<PageCanvas, KeyGesture>(nameof(FitWidthGesture), defaultValue: new KeyGesture(Key.D3));
+    public static readonly StyledProperty<IReadOnlyList<KeyGesture>> FitWidthGestureProperty =
+        AvaloniaProperty.Register<PageCanvas, IReadOnlyList<KeyGesture>>(nameof(FitWidthGesture), defaultValue: [new KeyGesture(Key.D3)]);
 
-    public static readonly StyledProperty<KeyGesture> FitHeightGestureProperty =
-        AvaloniaProperty.Register<PageCanvas, KeyGesture>(nameof(FitHeightGesture), defaultValue: new KeyGesture(Key.D4));
+    public static readonly StyledProperty<IReadOnlyList<KeyGesture>> FitHeightGestureProperty =
+        AvaloniaProperty.Register<PageCanvas, IReadOnlyList<KeyGesture>>(nameof(FitHeightGesture), defaultValue: [new KeyGesture(Key.D4)]);
 
-    public static readonly StyledProperty<KeyGesture> FitBestGestureProperty =
-        AvaloniaProperty.Register<PageCanvas, KeyGesture>(nameof(FitBestGesture), defaultValue: new KeyGesture(Key.D5));
+    public static readonly StyledProperty<IReadOnlyList<KeyGesture>> FitBestGestureProperty =
+        AvaloniaProperty.Register<PageCanvas, IReadOnlyList<KeyGesture>>(nameof(FitBestGesture), defaultValue: [new KeyGesture(Key.D5)]);
 
     public static readonly StyledProperty<double> ZoomLevelProperty =
         AvaloniaProperty.Register<PageCanvas, double>(nameof(ZoomLevel), defaultValue: ZoomPanMath.MinZoom,
@@ -604,92 +604,92 @@ public class PageCanvas : Control
     }
 
     /// <summary>Remappable via Preferences &gt; Reader &gt; Keyboard Shortcuts (docs/Paperbunkr-Roadmap.md P5 follow-up). Defaults to the physical Left arrow.</summary>
-    public KeyGesture LeftKey
+    public IReadOnlyList<KeyGesture> LeftKey
     {
         get => GetValue(LeftKeyProperty);
         set => SetValue(LeftKeyProperty, value);
     }
 
     /// <summary>See <see cref="LeftKey"/>. Defaults to the physical Right arrow.</summary>
-    public KeyGesture RightKey
+    public IReadOnlyList<KeyGesture> RightKey
     {
         get => GetValue(RightKeyProperty);
         set => SetValue(RightKeyProperty, value);
     }
 
-    public KeyGesture PanLeftGesture
+    public IReadOnlyList<KeyGesture> PanLeftGesture
     {
         get => GetValue(PanLeftGestureProperty);
         set => SetValue(PanLeftGestureProperty, value);
     }
 
-    public KeyGesture PanRightGesture
+    public IReadOnlyList<KeyGesture> PanRightGesture
     {
         get => GetValue(PanRightGestureProperty);
         set => SetValue(PanRightGestureProperty, value);
     }
 
-    public KeyGesture PanUpGesture
+    public IReadOnlyList<KeyGesture> PanUpGesture
     {
         get => GetValue(PanUpGestureProperty);
         set => SetValue(PanUpGestureProperty, value);
     }
 
-    public KeyGesture PanDownGesture
+    public IReadOnlyList<KeyGesture> PanDownGesture
     {
         get => GetValue(PanDownGestureProperty);
         set => SetValue(PanDownGestureProperty, value);
     }
 
-    public KeyGesture ScrollLeftGesture
+    public IReadOnlyList<KeyGesture> ScrollLeftGesture
     {
         get => GetValue(ScrollLeftGestureProperty);
         set => SetValue(ScrollLeftGestureProperty, value);
     }
 
-    public KeyGesture ScrollRightGesture
+    public IReadOnlyList<KeyGesture> ScrollRightGesture
     {
         get => GetValue(ScrollRightGestureProperty);
         set => SetValue(ScrollRightGestureProperty, value);
     }
 
-    public KeyGesture ScrollUpGesture
+    public IReadOnlyList<KeyGesture> ScrollUpGesture
     {
         get => GetValue(ScrollUpGestureProperty);
         set => SetValue(ScrollUpGestureProperty, value);
     }
 
-    public KeyGesture ScrollDownGesture
+    public IReadOnlyList<KeyGesture> ScrollDownGesture
     {
         get => GetValue(ScrollDownGestureProperty);
         set => SetValue(ScrollDownGestureProperty, value);
     }
 
-    public KeyGesture ScrollPageUpGesture
+    public IReadOnlyList<KeyGesture> ScrollPageUpGesture
     {
         get => GetValue(ScrollPageUpGestureProperty);
         set => SetValue(ScrollPageUpGestureProperty, value);
     }
 
-    public KeyGesture ScrollPageDownGesture
+    public IReadOnlyList<KeyGesture> ScrollPageDownGesture
     {
         get => GetValue(ScrollPageDownGestureProperty);
         set => SetValue(ScrollPageDownGestureProperty, value);
     }
 
-    public KeyGesture ScrollToStartGesture
+    public IReadOnlyList<KeyGesture> ScrollToStartGesture
     {
         get => GetValue(ScrollToStartGestureProperty);
         set => SetValue(ScrollToStartGestureProperty, value);
     }
 
-    public KeyGesture ScrollToEndGesture
+    public IReadOnlyList<KeyGesture> ScrollToEndGesture
     {
         get => GetValue(ScrollToEndGestureProperty);
         set => SetValue(ScrollToEndGestureProperty, value);
     }
 
-    public KeyGesture ToggleAutoScrollGesture
+    public IReadOnlyList<KeyGesture> ToggleAutoScrollGesture
     {
         get => GetValue(ToggleAutoScrollGestureProperty);
         set => SetValue(ToggleAutoScrollGestureProperty, value);
@@ -707,73 +707,73 @@ public class PageCanvas : Control
         set => SetValue(ChapterBoundaryOverscrollCommandProperty, value);
     }
 
-    public KeyGesture FullscreenToggleGesture
+    public IReadOnlyList<KeyGesture> FullscreenToggleGesture
     {
         get => GetValue(FullscreenToggleGestureProperty);
         set => SetValue(FullscreenToggleGestureProperty, value);
     }
 
-    public KeyGesture RotateClockwiseGesture
+    public IReadOnlyList<KeyGesture> RotateClockwiseGesture
     {
         get => GetValue(RotateClockwiseGestureProperty);
         set => SetValue(RotateClockwiseGestureProperty, value);
     }
 
-    public KeyGesture RotateCounterClockwiseGesture
+    public IReadOnlyList<KeyGesture> RotateCounterClockwiseGesture
     {
         get => GetValue(RotateCounterClockwiseGestureProperty);
         set => SetValue(RotateCounterClockwiseGestureProperty, value);
     }
 
-    public KeyGesture PreviousBookmarkGesture
+    public IReadOnlyList<KeyGesture> PreviousBookmarkGesture
     {
         get => GetValue(PreviousBookmarkGestureProperty);
         set => SetValue(PreviousBookmarkGestureProperty, value);
     }
 
-    public KeyGesture NextBookmarkGesture
+    public IReadOnlyList<KeyGesture> NextBookmarkGesture
     {
         get => GetValue(NextBookmarkGestureProperty);
         set => SetValue(NextBookmarkGestureProperty, value);
     }
 
-    public KeyGesture ZoomInGesture
+    public IReadOnlyList<KeyGesture> ZoomInGesture
     {
         get => GetValue(ZoomInGestureProperty);
         set => SetValue(ZoomInGestureProperty, value);
     }
 
-    public KeyGesture ZoomOutGesture
+    public IReadOnlyList<KeyGesture> ZoomOutGesture
     {
         get => GetValue(ZoomOutGestureProperty);
         set => SetValue(ZoomOutGestureProperty, value);
     }
 
-    public KeyGesture FitOriginalGesture
+    public IReadOnlyList<KeyGesture> FitOriginalGesture
     {
         get => GetValue(FitOriginalGestureProperty);
         set => SetValue(FitOriginalGestureProperty, value);
     }
 
-    public KeyGesture FitAllGesture
+    public IReadOnlyList<KeyGesture> FitAllGesture
     {
         get => GetValue(FitAllGestureProperty);
         set => SetValue(FitAllGestureProperty, value);
     }
 
-    public KeyGesture FitWidthGesture
+    public IReadOnlyList<KeyGesture> FitWidthGesture
     {
         get => GetValue(FitWidthGestureProperty);
         set => SetValue(FitWidthGestureProperty, value);
     }
 
-    public KeyGesture FitHeightGesture
+    public IReadOnlyList<KeyGesture> FitHeightGesture
     {
         get => GetValue(FitHeightGestureProperty);
         set => SetValue(FitHeightGestureProperty, value);
     }
 
-    public KeyGesture FitBestGesture
+    public IReadOnlyList<KeyGesture> FitBestGesture
     {
         get => GetValue(FitBestGestureProperty);
         set => SetValue(FitBestGestureProperty, value);
@@ -1940,7 +1940,7 @@ public class PageCanvas : Control
         // apply regardless of mode - same precedence fullscreen already had, extended to
         // rotate/zoom/fit. F11 stays a hardcoded secondary fullscreen trigger alongside the
         // remappable FullscreenToggleGesture (an OS-level convention, not a real "shortcut").
-        if (e.Key == Key.F11 || FullscreenToggleGesture.Matches(e))
+        if (e.Key == Key.F11 || AnyMatches(FullscreenToggleGesture, e))
         {
             if (TryExecute(FullscreenToggleCommand))
             {
@@ -1950,7 +1950,7 @@ public class PageCanvas : Control
             return;
         }
 
-        if (RotateClockwiseGesture.Matches(e))
+        if (AnyMatches(RotateClockwiseGesture, e))
         {
             if (TryExecute(RotateClockwiseCommand))
             {
@@ -1960,7 +1960,7 @@ public class PageCanvas : Control
             return;
         }
 
-        if (RotateCounterClockwiseGesture.Matches(e))
+        if (AnyMatches(RotateCounterClockwiseGesture, e))
         {
             if (TryExecute(RotateCounterClockwiseCommand))
             {
@@ -1970,7 +1970,7 @@ public class PageCanvas : Control
             return;
         }
 
-        if (PreviousBookmarkGesture.Matches(e))
+        if (AnyMatches(PreviousBookmarkGesture, e))
         {
             if (TryExecute(PreviousBookmarkCommand))
             {
@@ -1980,7 +1980,7 @@ public class PageCanvas : Control
             return;
         }
 
-        if (NextBookmarkGesture.Matches(e))
+        if (AnyMatches(NextBookmarkGesture, e))
         {
             if (TryExecute(NextBookmarkCommand))
             {
@@ -1990,7 +1990,7 @@ public class PageCanvas : Control
             return;
         }
 
-        if (ZoomInGesture.Matches(e))
+        if (AnyMatches(ZoomInGesture, e))
         {
             if (TryExecute(ZoomInCommand))
             {
@@ -2000,7 +2000,7 @@ public class PageCanvas : Control
             return;
         }
 
-        if (ZoomOutGesture.Matches(e))
+        if (AnyMatches(ZoomOutGesture, e))
         {
             if (TryExecute(ZoomOutCommand))
             {
@@ -2023,7 +2023,7 @@ public class PageCanvas : Control
 
         if (IsContinuous)
         {
-            if (ToggleAutoScrollGesture.Matches(e))
+            if (AnyMatches(ToggleAutoScrollGesture, e))
             {
                 if (TryExecute(ToggleAutoScrollCommand))
                 {
@@ -2033,14 +2033,14 @@ public class PageCanvas : Control
                 return;
             }
 
-            if (ScrollToStartGesture.Matches(e))
+            if (AnyMatches(ScrollToStartGesture, e))
             {
                 ScrollOffset = 0;
                 e.Handled = true;
                 return;
             }
 
-            if (ScrollToEndGesture.Matches(e))
+            if (AnyMatches(ScrollToEndGesture, e))
             {
                 ScrollOffset = ClampScrollOffset(double.MaxValue);
                 e.Handled = true;
@@ -2091,11 +2091,11 @@ public class PageCanvas : Control
             }
         }
 
-        if (LeftKey.Matches(e) && ExecuteTurn(forward: false))
+        if (AnyMatches(LeftKey, e) && ExecuteTurn(forward: false))
         {
             e.Handled = true;
         }
-        else if (RightKey.Matches(e) && ExecuteTurn(forward: true))
+        else if (AnyMatches(RightKey, e) && ExecuteTurn(forward: true))
         {
             e.Handled = true;
         }
@@ -2110,11 +2110,11 @@ public class PageCanvas : Control
     /// </summary>
     private bool TryMatchFitGesture(KeyEventArgs e, out ImageFitMode mode)
     {
-        if (FitOriginalGesture.Matches(e)) { mode = ImageFitMode.Original; return true; }
-        if (FitAllGesture.Matches(e)) { mode = ImageFitMode.Fit; return true; }
-        if (FitWidthGesture.Matches(e)) { mode = ImageFitMode.FitWidth; return true; }
-        if (FitHeightGesture.Matches(e)) { mode = ImageFitMode.FitHeight; return true; }
-        if (FitBestGesture.Matches(e)) { mode = ImageFitMode.BestFit; return true; }
+        if (AnyMatches(FitOriginalGesture, e)) { mode = ImageFitMode.Original; return true; }
+        if (AnyMatches(FitAllGesture, e)) { mode = ImageFitMode.Fit; return true; }
+        if (AnyMatches(FitWidthGesture, e)) { mode = ImageFitMode.FitWidth; return true; }
+        if (AnyMatches(FitHeightGesture, e)) { mode = ImageFitMode.FitHeight; return true; }
+        if (AnyMatches(FitBestGesture, e)) { mode = ImageFitMode.BestFit; return true; }
         mode = default;
         return false;
     }
@@ -2277,25 +2277,25 @@ public class PageCanvas : Control
         double pageJump = (ContinuousAxis == ReaderLayoutModel.Axis.Vertical ? Bounds.Height : Bounds.Width) * PageJumpFraction;
         bool isVertical = ContinuousAxis == ReaderLayoutModel.Axis.Vertical;
 
-        if ((isVertical && ScrollDownGesture.Matches(e)) || (!isVertical && ScrollRightGesture.Matches(e)))
+        if ((isVertical && AnyMatches(ScrollDownGesture, e)) || (!isVertical && AnyMatches(ScrollRightGesture, e)))
         {
             delta = WheelScrollStepPixels;
             return true;
         }
 
-        if ((isVertical && ScrollUpGesture.Matches(e)) || (!isVertical && ScrollLeftGesture.Matches(e)))
+        if ((isVertical && AnyMatches(ScrollUpGesture, e)) || (!isVertical && AnyMatches(ScrollLeftGesture, e)))
         {
             delta = -WheelScrollStepPixels;
             return true;
         }
 
-        if (ScrollPageDownGesture.Matches(e))
+        if (AnyMatches(ScrollPageDownGesture, e))
         {
             delta = pageJump;
             return true;
         }
 
-        if (ScrollPageUpGesture.Matches(e))
+        if (AnyMatches(ScrollPageUpGesture, e))
         {
             delta = -pageJump;
             return true;
@@ -2308,10 +2308,28 @@ public class PageCanvas : Control
     private bool TryGetArrowPanDelta(KeyEventArgs e, out double dx, out double dy)
     {
         dx = dy = 0;
-        if (PanLeftGesture.Matches(e)) { dx = KeyPanStep; return true; }
-        if (PanRightGesture.Matches(e)) { dx = -KeyPanStep; return true; }
-        if (PanUpGesture.Matches(e)) { dy = KeyPanStep; return true; }
-        if (PanDownGesture.Matches(e)) { dy = -KeyPanStep; return true; }
+        if (AnyMatches(PanLeftGesture, e)) { dx = KeyPanStep; return true; }
+        if (AnyMatches(PanRightGesture, e)) { dx = -KeyPanStep; return true; }
+        if (AnyMatches(PanUpGesture, e)) { dy = KeyPanStep; return true; }
+        if (AnyMatches(PanDownGesture, e)) { dy = -KeyPanStep; return true; }
+        return false;
+    }
+
+    /// <summary>
+    /// True if <paramref name="e"/> matches any of a command's bound gestures (docs/superpowers/specs/
+    /// 2026-09-07-keyboard-shortcuts-redesign-design.md) - a command may have more than one bound
+    /// gesture simultaneously, so a single equality check against one gesture is no longer enough.
+    /// </summary>
+    private static bool AnyMatches(IReadOnlyList<KeyGesture> gestures, KeyEventArgs e)
+    {
+        foreach (var gesture in gestures)
+        {
+            if (gesture.Matches(e))
+            {
+                return true;
+            }
+        }
+
         return false;
     }
 

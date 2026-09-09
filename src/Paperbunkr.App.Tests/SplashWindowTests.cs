@@ -28,24 +28,25 @@ public class SplashWindowTests
     }
 
     [Fact]
-    public void ReducedMotion_SnapsEmblemVisible_NoEnterClass()
+    public void ReducedMotion_StripsAnimateClass_AndShowsEmblem()
     {
         var window = new SplashWindow(reducedMotion: true) { DataContext = new SplashViewModel() };
         window.Show();
 
         var logo = window.FindControl<Image>("LogoImage")!;
-        Assert.DoesNotContain("enter", logo.Classes);
+        Assert.DoesNotContain("animate", logo.Classes);
+        Assert.Equal(1d, logo.Opacity);
 
         window.Close();
     }
 
     [Fact]
-    public void MotionOn_EmblemStartsWithEnterClass()
+    public void MotionOn_KeepsAnimateClass()
     {
         var window = new SplashWindow(reducedMotion: false) { DataContext = new SplashViewModel() };
-        // Before Show()/Opened the pre-entrance ".enter" class is still present.
+
         var logo = window.FindControl<Image>("LogoImage")!;
-        Assert.Contains("enter", logo.Classes);
+        Assert.Contains("animate", logo.Classes);
 
         window.Close();
     }

@@ -21,46 +21,60 @@
         (docs/superpowers/specs/2026-09-09-startup-onboarding-whats-new-design.md, Decision 2).
         Background is the literal brand dark - renders before SkinService has necessarily run.
 
-        Motion follows the codebase's proven "class toggle + TransformOperationsTransition" pattern
-        (Styles/Primitives.axaml's Control.entranceReady, HomeScreen's MastheadVisualLayer ken-burns)
-        - NOT keyframe Animation on RenderTransform, which has no registered animator in this
-        Avalonia build and crashed at window construction. Code-behind (Opened + a ping-pong timer)
-        adds/removes the .enter / .breathe classes; the transitions do the tweening. The glow's blur
-        is a static RadialGradientBrush; only its Opacity moves.
+        Keyframe Animation on a transform must animate the transform's SUB-properties
+        (ScaleTransform.ScaleX/Y) against an explicit <ScaleTransform>, per the Avalonia docs -
+        animating RenderTransform directly ("scale(...)") has no registered animator in this build
+        and crashes at construction. Same keyframe-Animation shape as StatusBar's IndicatorPulse.
+        Reduced motion: code-behind removes the ".animate" class, deactivating these animation
+        styles, and snaps Opacity to 1.
     -->
     <Window.Styles>
-        <Style Selector="Image#LogoImage">
-            <Setter Property="RenderTransformOrigin" Value="0.5,0.5" />
-            <Setter Property="Transitions">
-                <Transitions>
-                    <DoubleTransition Property="Opacity" Duration="0:0:0.5" Easing="CubicEaseOut" />
-                    <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.9" Easing="SineEaseInOut" />
-                </Transitions>
-            </Setter>
-        </Style>
-        <Style Selector="Image#LogoImage.enter">
-            <Setter Property="Opacity" Value="0" />
-            <Setter Property="RenderTransform" Value="scale(0.86)" />
-        </Style>
-        <Style Selector="Image#LogoImage.breathe">
-            <Setter Property="RenderTransform" Value="scale(1.04)" />
+        <!-- Emblem: entrance (fade + scale-up from 0.86, once) then a slow breathing pulse.
+             The ".animate" class is on the element by default; code-behind removes it (and snaps
+             Opacity to 1) under reduced motion, which deactivates these animation styles. -->
+        <Style Selector="Image#LogoImage.animate">
+            <Style.Animations>
+                <Animation Duration="0:0:0.55" Easing="CubicEaseOut" FillMode="Forward">
+                    <KeyFrame Cue="0%">
+                        <Setter Property="Opacity" Value="0" />
+                        <Setter Property="ScaleTransform.ScaleX" Value="0.86" />
+                        <Setter Property="ScaleTransform.ScaleY" Value="0.86" />
+                    </KeyFrame>
+                    <KeyFrame Cue="100%">
+                        <Setter Property="Opacity" Value="1" />
+                        <Setter Property="ScaleTransform.ScaleX" Value="1" />
+                        <Setter Property="ScaleTransform.ScaleY" Value="1" />
+                    </KeyFrame>
+                </Animation>
+                <Animation Duration="0:0:2.6" IterationCount="Infinite" PlaybackDirection="Alternate"
+                           Easing="SineEaseInOut" Delay="0:0:0.55">
+                    <KeyFrame Cue="0%">
+                        <Setter Property="ScaleTransform.ScaleX" Value="1" />
+                        <Setter Property="ScaleTransform.ScaleY" Value="1" />
+                    </KeyFrame>
+                    <KeyFrame Cue="100%">
+                        <Setter Property="ScaleTransform.ScaleX" Value="1.045" />
+                        <Setter Property="ScaleTransform.ScaleY" Value="1.045" />
+                    </KeyFrame>
+                </Animation>
+            </Style.Animations>
         </Style>
 
-        <Style Selector="Border#GlowBorder">
-            <Setter Property="Transitions">
-                <Transitions>
-                    <DoubleTransition Property="Opacity" Duration="0:0:1.3" Easing="SineEaseInOut" />
-                </Transitions>
-            </Setter>
-        </Style>
-        <Style Selector="Border#GlowBorder.breathe">
-            <Setter Property="Opacity" Value="0.75" />
+        <!-- Glow: opacity breathing, in sync with the emblem. -->
+        <Style Selector="Border#GlowBorder.animate">
+            <Style.Animations>
+                <Animation Duration="0:0:2.6" IterationCount="Infinite" PlaybackDirection="Alternate"
+                           Easing="SineEaseInOut">
+                    <KeyFrame Cue="0%"><Setter Property="Opacity" Value="0.4" /></KeyFrame>
+                    <KeyFrame Cue="100%"><Setter Property="Opacity" Value="0.78" /></KeyFrame>
+                </Animation>
+            </Style.Animations>
         </Style>
     </Window.Styles>
 
     <Grid RowDefinitions="*,Auto,Auto,*">
         <Panel Grid.Row="1" HorizontalAlignment="Center" Margin="0,0,0,28">
-            <Border x:Name="GlowBorder" Width="190" Height="190" Opacity="0.4">
+            <Border x:Name="GlowBorder" Classes="animate" Width="190" Height="190" Opacity="0.4">
                 <Border.Background>
                     <RadialGradientBrush GradientOrigin="50%,50%" Center="50%,50%" RadiusX="50%" RadiusY="50%">
                         <GradientStop Color="#8CC9803F" Offset="0" />
@@ -68,8 +82,13 @@
                     </RadialGradientBrush>
                 </Border.Background>
             </Border>
-            <Image x:Name="LogoImage" Classes="enter" Width="122" Height="122"
-                   Source="avares://Paperbunkr.App/Assets/paperbunkr-logo-source.png" />
+            <Image x:Name="LogoImage" Classes="animate" Width="122" Height="122" Opacity="0"
+                   RenderTransformOrigin="50%,50%"
+                   Source="avares://Paperbunkr.App/Assets/paperbunkr-logo-source.png">
+                <Image.RenderTransform>
+                    <ScaleTransform ScaleX="1" ScaleY="1" />
+                </Image.RenderTransform>
+            </Image>
         </Panel>
 
         <StackPanel Grid.Row="2" HorizontalAlignment="Center" Spacing="14">

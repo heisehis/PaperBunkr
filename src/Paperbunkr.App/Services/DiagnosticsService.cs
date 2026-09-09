@@ -106,6 +106,19 @@ public static class DiagnosticsService
     }
 
     /// <summary>
+    /// A fatal startup failure the app cannot run past (a database that won't migrate/open) -
+    /// logs it, shows the no-Continue <see cref="CrashReportWindow"/>, and exits. For use from
+    /// <c>App.axaml.cs</c>'s now-async startup, where a bare <c>throw</c> would land in an async
+    /// continuation / <see cref="TaskScheduler.UnobservedTaskException"/> (log-only) instead of the
+    /// strict <see cref="AppDomain.UnhandledException"/> path a synchronous throw used to hit.
+    /// </summary>
+    public static void ReportFatalStartupError(string context, Exception exception)
+    {
+        LogCrash(context, exception, isTerminating: true);
+        ShowCrashDialogAndExit(context, exception, allowContinue: false);
+    }
+
+    /// <summary>
     /// Shows <see cref="CrashReportWindow"/> for a source that never offers Continue, then always
     /// exits (Restart relaunches first) - the shared tail end of the
     /// <see cref="AppDomain.UnhandledException"/> path. If no outcome could be obtained (dialog

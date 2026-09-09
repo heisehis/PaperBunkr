@@ -149,6 +149,15 @@ UsePreviousAppDir=yes
 ; getting it running again, so RestartApplications is off to avoid a double-launch.
 CloseApplications=yes
 RestartApplications=no
+; Presence check for a running Paperbunkr. Setup and the uninstaller call OpenMutex on each name
+; in this comma list at startup; if any exists they show a "please close Paperbunkr" retry prompt
+; before touching any files. Both the plain and Global\ names are listed because Inno does NOT
+; auto-check the Global\ variant - and the app creates whichever it can (Program.cs tries Global\
+; first, falls back to the session-local name). This is paced ahead of CloseApplications' Restart
+; Manager pass (the fallback if the user leaves it running) - a clean, user-initiated shutdown
+; matters here because Paperbunkr's library DB is a single shared SQLite file. The mutex names
+; MUST stay identical to Program.cs's RunningMutexName.
+AppMutex=Paperbunkr_App_Running,Global\Paperbunkr_App_Running
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
@@ -239,17 +248,14 @@ Filename: "{app}\{#MyAppExeName}"; Description: "Open {#MyAppName} now"; Flags: 
 Filename: "{#MyAppURL}/wiki"; Description: "Browse the {#MyAppName} wiki"; Flags: postinstall shellexec runasoriginaluser skipifsilent unchecked
 
 [UninstallRun]
-; Mirror of the [Run] association entries, run before files are removed (Inno's UninstallRun
-; ordering) so the exe still exists to call. Each "Tasks:" gate means the line only runs for
-; installs that actually opted that format in - Inno remembers the original per-task selection
-; across the uninstall, no [Code] needed.
-Filename: "{app}\{#MyAppExeName}"; Parameters: "--unregister-file-associations .pdf";  Tasks: associatepdf;  Flags: runhidden waituntilterminated skipifdoesntexist; RunOnceId: "UnregisterAssocPdf"
-Filename: "{app}\{#MyAppExeName}"; Parameters: "--unregister-file-associations .cbz";  Tasks: associatecbz;  Flags: runhidden waituntilterminated skipifdoesntexist; RunOnceId: "UnregisterAssocCbz"
-Filename: "{app}\{#MyAppExeName}"; Parameters: "--unregister-file-associations .cbr";  Tasks: associatecbr;  Flags: runhidden waituntilterminated skipifdoesntexist; RunOnceId: "UnregisterAssocCbr"
-Filename: "{app}\{#MyAppExeName}"; Parameters: "--unregister-file-associations .cb7";  Tasks: associatecb7;  Flags: runhidden waituntilterminated skipifdoesntexist; RunOnceId: "UnregisterAssocCb7"
-Filename: "{app}\{#MyAppExeName}"; Parameters: "--unregister-file-associations .cbt";  Tasks: associatecbt;  Flags: runhidden waituntilterminated skipifdoesntexist; RunOnceId: "UnregisterAssocCbt"
-Filename: "{app}\{#MyAppExeName}"; Parameters: "--unregister-file-associations .cbw";  Tasks: associatecbw;  Flags: runhidden waituntilterminated skipifdoesntexist; RunOnceId: "UnregisterAssocCbw"
-Filename: "{app}\{#MyAppExeName}"; Parameters: "--unregister-file-associations .djvu"; Tasks: associatedjvu; Flags: runhidden waituntilterminated skipifdoesntexist; RunOnceId: "UnregisterAssocDjvu"
+; Unregister ALL comic file associations on uninstall, unconditionally - not gated on the
+; original per-format [Tasks] selection. Bare "--unregister-file-associations" (no extension
+; args) clears the whole FileAssociationService.ComicAssociationExtensions set; each per-format
+; unregister is idempotent, so this is a no-op for formats that were never associated. Doing it
+; unconditionally avoids orphaned ProgID keys when task state drifts across an
+; upgrade/repair (e.g. a format associated by an older build whose task the user later unchecked).
+; Runs before files are removed (Inno's UninstallRun ordering) so the exe still exists to call.
+Filename: "{app}\{#MyAppExeName}"; Parameters: "--unregister-file-associations"; Flags: runhidden waituntilterminated skipifdoesntexist; RunOnceId: "UnregisterFileAssociations"
 
 [Code]
 

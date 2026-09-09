@@ -16,6 +16,13 @@ $ErrorActionPreference = "Stop"
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $installerDir = $PSScriptRoot
 
+# Require the .NET SDK before doing anything else - the publish step below needs it, and a missing
+# 'dotnet' otherwise fails deep in the script with a less obvious message.
+if (-not (Get-Command dotnet -ErrorAction SilentlyContinue)) {
+    Write-Error "The .NET SDK ('dotnet') was not found on PATH. Install it from https://dotnet.microsoft.com/download"
+    exit 1
+}
+
 # Locate Inno Setup 6.
 $innoSetupCandidates = @(
     "C:\Program Files (x86)\Inno Setup 6\ISCC.exe",
@@ -27,9 +34,18 @@ if (-not $innoSetupPath) {
     exit 1
 }
 
-# Derive a version string if the caller didn't pass one.
+# Derive a version string if the caller didn't pass one. Fall back to "dev" when git isn't
+# available or this isn't a git checkout (CI/container builds), rather than aborting.
 if (-not $Version) {
-    $shortCommit = (git -C $repoRoot rev-parse --short HEAD).Trim()
+    $shortCommit = "dev"
+    try {
+        $gitHash = (git -C $repoRoot rev-parse --short HEAD 2>$null)
+        if ($LASTEXITCODE -eq 0 -and -not [string]::IsNullOrWhiteSpace($gitHash)) {
+            $shortCommit = $gitHash.Trim()
+        }
+    } catch {
+        # git not on PATH - keep the "dev" fallback.
+    }
     $Version = "0.3.0-beta-$shortCommit"
 }
 
@@ -68,13 +84,18 @@ if (Test-Path $licensePath) {
     $licenseLines += Get-Content $licensePath
 }
 if (Test-Path $termsPath) {
+    # Get-Content (no -Raw) yields one string per line, so ^/$ anchor per line without needing
+    # (?m). Order matters: strip **bold** before *italic*, and use character classes that can't
+    # run past a delimiter so a stray token on a later edit can't swallow the rest of the line.
     $termsPlain = (Get-Content $termsPath) `
-        -replace '^#{1,6}\s+', '' `
-        -replace '^>\s?', '' `
-        -replace '\*\*(.+?)\*\*', '$1' `
-        -replace '`(.+?)`', '$1' `
-        -replace '\[(.+?)\]\((.+?)\)', '$1 ($2)' `
-        -replace '^[-*]\s+', '  - '
+        -replace '^\s{0,3}#{1,6}\s+', '' `
+        -replace '^\s{0,3}>\s?', '' `
+        -replace '\*\*([^*]+?)\*\*', '$1' `
+        -replace '__([^_]+?)__', '$1' `
+        -replace '(?<![\*\w])\*([^*\r\n]+?)\*(?!\w)', '$1' `
+        -replace '`([^`\r\n]+?)`', '$1' `
+        -replace '\[([^\]]+?)\]\(([^)]+?)\)', '$1 ($2)' `
+        -replace '^\s{0,3}[-*+]\s+', '  - '
     $licenseLines += @(
         "",
         ("=" * 80),

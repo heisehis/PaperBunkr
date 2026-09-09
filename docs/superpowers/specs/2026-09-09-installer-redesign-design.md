@@ -253,6 +253,32 @@ silent/no-wizard code path. This is a scoped, honest interpretation of "repair":
 doesn't have a built-in maintenance-mode file-verification pass, so "repair" here means "guided
 reinstall, defaulted to where you already have it," not silent background file-hash verification.
 
+## Post-approval hardening (2026-09-09, from an external review)
+
+Four production tweaks applied after the design was approved; none change the shape above:
+
+1. **`[UninstallRun]` unregisters associations unconditionally.** The seven `Tasks:`-gated
+   per-format unregister lines collapse to one ungated `--unregister-file-associations` (no args →
+   the whole `ComicAssociationExtensions` set). Each per-format unregister is idempotent, so this
+   is a no-op for formats that were never associated — and it can't leave an orphaned ProgID key
+   when task state drifts across an upgrade/repair (a format associated by an older build whose
+   task the user later unchecks).
+2. **`AppMutex` presence check.** `AppMutex=Paperbunkr_App_Running,Global\Paperbunkr_App_Running`
+   in `[Setup]`, paired with a matching lifetime `Mutex` created in `src/Paperbunkr.App/Program.cs`
+   (GUI path only, after the headless file-association early-return; tries `Global\` then falls
+   back session-local). Setup/Uninstall now prompt "please close Paperbunkr" before touching
+   files — a cleaner, user-initiated shutdown than `CloseApplications`' Restart Manager pass
+   (still kept as the fallback), which matters because the library DB is one shared SQLite file.
+   Not single-instance enforcement — the mutex just has to exist while any instance runs. Inno
+   does **not** auto-check the `Global\` variant, so both names are listed explicitly.
+3. **`BuildInstaller.ps1` preflight + fallbacks.** A `Get-Command dotnet` check up front; the
+   `git rev-parse --short HEAD` wrapped so a missing git / non-checkout (CI, container) falls back
+   to `0.3.0-beta-dev` instead of aborting under `$ErrorActionPreference = "Stop"`.
+4. **License markdown-strip regexes hardened.** Delimiter-bounded character classes
+   (`` `[^`]+?` ``, `\[[^\]]+?\]\([^)]+?\)`, `\*\*[^*]+?\*\*`) plus `__bold__` and a lookaround-guarded
+   single-`*` italic rule, so a stray token introduced by a future `TERMS.md` edit can't swallow
+   the rest of its line. Verified: current `License.txt` output has zero leaked markdown tokens.
+
 ## Explicitly out of scope (YAGNI)
 
 - Any further custom Pascal-scripted wizard pages beyond decision 7's Repair/Uninstall gate — no

@@ -19,63 +19,44 @@
     <!--
         Shown first from App.axaml.cs while the heavy startup work runs on a background thread
         (docs/superpowers/specs/2026-09-09-startup-onboarding-whats-new-design.md, Decision 2).
-        Bound to SplashViewModel. Background is the literal brand dark (the app's real Default-skin
-        page colour, same value the installer uses) - NOT a skin resource: this renders before
-        SkinService.ApplyPersistedSettings() has necessarily run.
+        Bound to SplashViewModel. Background is the literal brand dark - NOT a skin resource: this
+        renders before SkinService.ApplyPersistedSettings() has necessarily run.
 
-        All motion is Opacity / RenderTransform only. The glow's blur is a static RadialGradientBrush
-        - only its Opacity pulses (an animated BoxShadow property caused a real invalidation race
-        here before - project memory poster_glow_transition_bug). The ".animated" classes are added
-        in code-behind only when reduced motion is off.
+        Motion is Opacity / RenderTransform only, driven by property Transitions (the entrance) and
+        a code-behind ping-pong timer (the breathing loop) - this Avalonia build has no animator
+        registered for keyframe Animation on RenderTransform (crash "No animator registered for the
+        property RenderTransform"), so everything transform-related goes through
+        TransformOperationsTransition, the same pattern the rest of the app uses. The glow's blur is
+        a static RadialGradientBrush; only its Opacity moves (project memory
+        poster_glow_transition_bug - an animated BoxShadow raced invalidation here before).
+        Code-behind adds the ".animate" class and starts the timer only when reduced motion is off.
     -->
     <Window.Styles>
-        <!-- Emblem entrance: fade + scale-in, once. -->
         <Style Selector="Image#LogoImage">
             <Setter Property="RenderTransformOrigin" Value="0.5,0.5" />
-            <Style.Animations>
-                <Animation Duration="0:0:0.45" Easing="CubicEaseOut" FillMode="Forward">
-                    <KeyFrame Cue="0%">
-                        <Setter Property="Opacity" Value="0" />
-                        <Setter Property="RenderTransform" Value="scale(0.9)" />
-                    </KeyFrame>
-                    <KeyFrame Cue="100%">
-                        <Setter Property="Opacity" Value="1" />
-                        <Setter Property="RenderTransform" Value="scale(1)" />
-                    </KeyFrame>
-                </Animation>
-            </Style.Animations>
+            <Setter Property="Transitions">
+                <Transitions>
+                    <DoubleTransition Property="Opacity" Duration="0:0:0.45" Easing="CubicEaseOut" />
+                    <TransformOperationsTransition Property="RenderTransform" Duration="0:0:1.2" Easing="SineEaseInOut" />
+                </Transitions>
+            </Setter>
         </Style>
-        <!-- Breathing pulse while loading (added in code-behind unless reduced motion). -->
-        <Style Selector="Image#LogoImage.animated">
-            <Style.Animations>
-                <Animation Duration="0:0:2.4" IterationCount="INFINITE" PlaybackDirection="Alternate"
-                           Easing="SineEaseInOut" Delay="0:0:0.45">
-                    <KeyFrame Cue="0%">
-                        <Setter Property="RenderTransform" Value="scale(1)" />
-                    </KeyFrame>
-                    <KeyFrame Cue="100%">
-                        <Setter Property="RenderTransform" Value="scale(1.035)" />
-                    </KeyFrame>
-                </Animation>
-            </Style.Animations>
+        <!-- Pre-entrance state; the code-behind Loaded handler clears .enter to animate in. -->
+        <Style Selector="Image#LogoImage.enter">
+            <Setter Property="Opacity" Value="0" />
+            <Setter Property="RenderTransform" Value="scale(0.9)" />
         </Style>
-        <Style Selector="Border#GlowBorder.animated">
-            <Style.Animations>
-                <Animation Duration="0:0:2.4" IterationCount="INFINITE" PlaybackDirection="Alternate"
-                           Easing="SineEaseInOut">
-                    <KeyFrame Cue="0%">
-                        <Setter Property="Opacity" Value="0.35" />
-                    </KeyFrame>
-                    <KeyFrame Cue="100%">
-                        <Setter Property="Opacity" Value="0.7" />
-                    </KeyFrame>
-                </Animation>
-            </Style.Animations>
+
+        <Style Selector="Border#GlowBorder">
+            <Setter Property="Transitions">
+                <Transitions>
+                    <DoubleTransition Property="Opacity" Duration="0:0:1.2" Easing="SineEaseInOut" />
+                </Transitions>
+            </Setter>
         </Style>
     </Window.Styles>
 
     <Grid RowDefinitions="*,Auto,Auto,*">
-        <!-- Emblem + static glow -->
         <Panel Grid.Row="1" HorizontalAlignment="Center" Margin="0,0,0,28">
             <Border x:Name="GlowBorder" Width="180" Height="180" Opacity="0.5">
                 <Border.Background>
@@ -85,11 +66,10 @@
                     </RadialGradientBrush>
                 </Border.Background>
             </Border>
-            <Image x:Name="LogoImage" Width="120" Height="120"
+            <Image x:Name="LogoImage" Classes="enter" Width="120" Height="120"
                    Source="avares://Paperbunkr.App/Assets/paperbunkr-logo-source.png" />
         </Panel>
 
-        <!-- Progress + status -->
         <StackPanel Grid.Row="2" HorizontalAlignment="Center" Spacing="14">
             <ProgressBar Width="240" Height="3" Minimum="0" Maximum="1"
                          Value="{Binding Progress}"

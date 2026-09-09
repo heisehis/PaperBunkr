@@ -139,6 +139,9 @@ has its own `LicenseFile`).
 >   been installed on this computer" + a one-line quick-start pointer) plus two `postinstall`
 >   `[Run]` checkboxes — **"Open Paperbunkr now"** (checked) and **"Browse the wiki"** (unchecked,
 >   `shellexec` the wiki URL as the logged-in user). No `InfoAfter.txt` is generated any more.
+> - `DisableDirPage=no` added so the "Select Destination Location" page always shows — Inno's
+>   `auto` default had been hiding it on every machine with a prior install in the registry.
+> - `FinishedLabel` does not repeat "Click Finish…" — Inno prints its own `ClickFinish` line.
 
 A new `InfoAfterFile` page (parallel to the existing `InfoBeforeFile` "what's new" page) shown
 after a successful install, before Finish. Content: a short quick-start (where Preferences lives,

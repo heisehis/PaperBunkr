@@ -52,47 +52,14 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 
-# Generate the installer's pre-install "what's new" page (Installer.iss's InfoBeforeFile) from
-# CHANGELOG.md's latest entry. Plain text, not raw markdown - Inno's info-file viewer doesn't render
-# markdown, so this strips the "## [x.y.z] - date" heading down to just the version/date and the
-# "### Added" style subheadings down to plain lines. Always writes a file (falls back to a
-# placeholder) so Installer.iss's InfoBeforeFile never points at something missing.
-$changelogPath = Join-Path $repoRoot "CHANGELOG.md"
-$whatsNewPath = Join-Path $publishDir "..\WhatsNew.txt"
-$whatsNewText = $null
-if (Test-Path $changelogPath) {
-    $lines = Get-Content $changelogPath
-    $headingIndexes = @()
-    for ($i = 0; $i -lt $lines.Count; $i++) {
-        if ($lines[$i] -match '^## \[') { $headingIndexes += $i }
-    }
-    if ($headingIndexes.Count -gt 0) {
-        $start = $headingIndexes[0]
-        $end = if ($headingIndexes.Count -gt 1) { $headingIndexes[1] - 1 } else { $lines.Count - 1 }
-        $section = $lines[$start..$end] | Where-Object { $_ -ne "" }
-        $heading = $section[0] -replace '^## \[(.+?)\](.*)$', 'Paperbunkr $1$2'
-        $body = $section[1..($section.Count - 1)] -replace '^### (.+)$', '$1:' -replace '^- ', '  - '
-        # Strip inline markdown Inno's plain-text info-file viewer won't render: **bold**/`code`
-        # markers down to their bare text, and [label](url) links down to "label (url)" so the URL
-        # isn't silently dropped.
-        $body = $body -replace '\*\*(.+?)\*\*', '$1' -replace '`(.+?)`', '$1' -replace '\[(.+?)\]\((.+?)\)', '$1 ($2)'
-        $whatsNewText = @($heading, "") + $body
-    }
-}
-if (-not $whatsNewText) {
-    $whatsNewText = @("See CHANGELOG.md in the installation folder for release notes.")
-}
-Set-Content -Path $whatsNewPath -Value $whatsNewText -Encoding UTF8
-Write-Output "Wrote $whatsNewPath"
-
 # Generate the combined license file (Installer.iss's LicenseFile, shown before the install-dir
 # step - see docs/superpowers/specs/2026-09-09-installer-redesign-design.md decision 3). Inno's
 # LicenseFile is a single accept-gate for exactly one document, but the repo has two: LICENSE
 # (AGPLv3, the code license) and TERMS.md (usage/liability terms whose own opening line -
 # "By downloading, installing, or running Paperbunkr... you agree to the following" - is the sort
 # of claim that should be backed by a real install-time accept). Concatenate LICENSE then TERMS.md,
-# stripping TERMS.md's markdown the same way the WhatsNew block above does (Inno's license viewer
-# renders no markdown).
+# stripping TERMS.md's markdown down to plain text line by line (Inno's license viewer renders no
+# markdown).
 $licensePath = Join-Path $repoRoot "LICENSE"
 $termsPath = Join-Path $repoRoot "TERMS.md"
 $combinedLicensePath = Join-Path $publishDir "..\License.txt"
@@ -122,32 +89,10 @@ if ($licenseLines.Count -eq 0) {
 Set-Content -Path $combinedLicensePath -Value $licenseLines -Encoding UTF8
 Write-Output "Wrote $combinedLicensePath"
 
-# Generate the post-install quick-start page (Installer.iss's InfoAfterFile, shown after a
-# successful install before Finish - design decision 4). Static content: unlike WhatsNew.txt it
-# doesn't depend on build-time state, so it's written verbatim here rather than derived.
-$infoAfterPath = Join-Path $publishDir "..\InfoAfter.txt"
-$infoAfterText = @'
-Paperbunkr is installed. A few things to get you started:
-
-  -  Open Preferences from the gear icon in the top-right of the main window.
-
-  -  Preferences > Libraries is where you add your first comic or book folder -
-     point it at a folder and Paperbunkr scans it into your library.
-
-  -  Preferences > Advanced has per-format file-association toggles if you skipped
-     the association options in this installer (or want to change them later).
-
-  -  Reading direction, page-fit, and other reader behaviour live in
-     Preferences > Reader.
-
-Full documentation, guides, and troubleshooting:
-
-  https://github.com/heisehis/PaperBunkr/wiki
-
-Click Next to finish.
-'@
-Set-Content -Path $infoAfterPath -Value $infoAfterText -Encoding UTF8
-Write-Output "Wrote $infoAfterPath"
+# (No InfoAfter.txt / InfoBefore.txt generation any more - the installer has no "Information"
+#  pages: release notes moved to the app's first-run Welcome screen, and the post-install
+#  quick-start + wiki link are now the Finished page's own FinishedLabel copy and its two
+#  postinstall [Run] checkboxes. See Installer.iss.)
 
 # Compile the installer.
 $setupFileParam = "PaperbunkrSetup-$Version"

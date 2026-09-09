@@ -51,11 +51,19 @@ at the **same two files**:
 Inno 6.7.3 accepts PNG directly for both `WizardImageFile*` and `WizardSmallImageFile*` (with
 transparency) — no BMP conversion step is needed, unlike the current `.bmp` assets.
 
-`WizardImageStretch=no` should be set: the lockup's own aspect ratio (~1.06:1, roughly square) is
+~~`WizardImageStretch=no` should be set: the lockup's own aspect ratio (~1.06:1, roughly square) is
 nothing like the wizard's tall/narrow default side-panel area (164:314 ≈ 0.52:1), and stretching a
 near-square image to fill a tall narrow rectangle would visibly distort it. With `Stretch=no` it
 centers at its natural size instead, letterboxed by the panel's own background color (which, being
-transparent PNG on a themed panel, reads as intentional framing rather than an error).
+transparent PNG on a themed panel, reads as intentional framing rather than an error).~~
+
+> **Correction (2026-09-09, on-screen test):** `WizardImageStretch=no` was wrong. It *clips* (not
+> letterboxes) an image larger than the panel — the 900px-wide lockup showed as a ~15px vertical
+> slice through its centre — and it **also applies to the small badge**, clipping the 300px emblem
+> down to a blank centre slice (user saw "a blank bar" top-right). Fix: drop the directive (back to
+> the default stretch), and pre-pad `WizardImage.png` to the panel aspect (~164:314) with the logo
+> in the upper area and transparency below, so the uniform stretch introduces no distortion.
+> `WizardSmallImage.png` (300×300, square) needs no change once the directive is gone.
 
 **Brand color, split by system theme** (confirmed via a second grilling round): `WizardBackColor`/
 `WizardImageBackColor` accept literal `#rrggbb` hex (not just Inno's 5 named style presets), and
@@ -119,6 +127,18 @@ install-directory step, matching ComicRackCE's own precedent (`_reference/ComicR
 has its own `LicenseFile`).
 
 ### 4. Post-install page: `InfoAfterFile`, quick-start + wiki link
+
+> **Correction (2026-09-09, user direction):** the installer now has **no "Information" pages at
+> all**.
+> - The pre-install `InfoBeforeFile` "what's new" / changelog page (and its `WhatsNew.txt`
+>   generation) is gone — release notes move to the app's own first-run Welcome screen.
+> - The `InfoAfterFile` page described below was also dropped: a separate page with its own
+>   **Next** button before the real Finish page was redundant. Its content moved onto the
+>   **Finished page** itself (which in `modern` style already mirrors the Welcome page — same big
+>   side image, its own **Finish** button): a custom `FinishedHeadingLabel`/`FinishedLabel` ("…has
+>   been installed on this computer" + a one-line quick-start pointer) plus two `postinstall`
+>   `[Run]` checkboxes — **"Open Paperbunkr now"** (checked) and **"Browse the wiki"** (unchecked,
+>   `shellexec` the wiki URL as the logged-in user). No `InfoAfter.txt` is generated any more.
 
 A new `InfoAfterFile` page (parallel to the existing `InfoBeforeFile` "what's new" page) shown
 after a successful install, before Finish. Content: a short quick-start (where Preferences lives,
@@ -238,10 +258,11 @@ reinstall, defaulted to where you already have it," not silent background file-h
   one.
 - Touching `Preferences → Advanced`'s own file-association UI or its underlying service beyond the
   `Program.cs` CLI-path fix in decision 5.
-- Writing the `CHANGELOG.md` `[0.3.0-beta]` entry itself — `BuildInstaller.ps1` will still generate
-  `WhatsNew.txt` from CHANGELOG.md's latest heading exactly as it does today; the entry needs to
-  exist before a real release build, but authoring it is separate release-prep work, not part of
-  this installer redesign. Flagged to the user, not done here.
+- Writing the `CHANGELOG.md` `[0.3.0-beta]` entry itself — separate release-prep work. (The
+  installer no longer reads `CHANGELOG.md` at all after the 2026-09-09 correction that removed the
+  `InfoBeforeFile` / `WhatsNew.txt` page — release notes are moving to the app's first-run Welcome
+  screen. The changelog entry still needs to exist for a real release, but nothing in the
+  installer depends on it now.)
 
 ## Files touched (for the implementation plan)
 

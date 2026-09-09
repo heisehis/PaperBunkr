@@ -283,8 +283,10 @@ budgetBytes = clamp( 0.25 * physicalRamBytes, 128 MiB, 512 MiB )     // "Auto"
 `physicalRamBytes` from `GC.GetGCMemoryInfo().TotalAvailableMemoryBytes` (reflects the machine /
 container limit). On the 16 GB target box: `clamp(4 GB, 128 MiB, 512 MiB)` = **512 MiB**. On an
 8 GB box: `clamp(2 GB, …)` = 512 MiB still — so the 512 MiB ceiling is the operative limit on
-any machine with ≥ 2 GB RAM; the 128 MiB floor only engages below ~512 MiB RAM. Whether the
-ceiling should itself scale down on a busy 16 GB box is open question #1 (§14).
+any machine with ≥ 2 GB RAM; the 128 MiB floor only engages below ~512 MiB RAM. **Resolved
+(review):** keep this formula as-is — 512 MiB is conservative even beside a browser on the 16 GB
+target box (≥ 9 GB typically free), and the Auto / 512 / 1024 setting (§5.2) is the escape hatch
+if a specific machine needs less or more. No RAM-scaled ceiling term.
 
 ### 5.2 Override
 
@@ -338,7 +340,9 @@ case (Phase 4 removes the residual per-frame CPU rescale).
 When the user zooms in past what the display tier can show sharply:
 
 - Trigger: effective on-screen scale > **1.15×** the display-tier bitmap's native size **and**
-  the zoom/pan gesture has been idle for **~150 ms** (debounce — don't decode mid-pinch).
+  the zoom/pan gesture has been idle for **~150 ms** (debounce — don't decode mid-pinch). These
+  two constants ship as-is and get tuned from real feel after Phase 2 lands (resolved in review),
+  not guessed harder now — they're isolated in one place for that.
 - Action: `GetDetail(index, neededSize)` decodes the **full page** (not a region — region/tile
   decode is Phase 3) from `RawBytesCache` at the needed resolution. Held by the caller, drawn in
   place of the display-tier bitmap.
@@ -441,8 +445,10 @@ Not the pipeline itself, but the same effort:
 - Progressive display: draw the resident bands, request the next as the scroll approaches it,
   evict bands that scroll far out of view (a strip's bands are individually LRU'd within the
   page's own byte allowance).
-- This is the phase most likely to need its own mini-design; the pipeline seam (`TryGet` could
-  return a band-aware handle) is designed to accommodate it without a rewrite.
+- **Resolved (review): Phase 3 gets its own focused mini-design doc** when we reach it
+  (`docs/superpowers/specs/<date>-reader-webtoon-strip-band-decode-design.md`). This section is
+  the direction, not the detailed design. The pipeline seam (`TryGet` could return a band-aware
+  handle) is built in Phase 1 to accommodate it without a rewrite.
 
 ---
 
@@ -501,10 +507,14 @@ archive read, simulating the old-HDD box for a manual pass on dev hardware.
 
 ---
 
-## 14. Open questions for review
+## 14. Review decisions
 
-1. §5.1 — is `clamp(25% RAM, 128, 512) MiB` the right Auto formula, given the 16 GB box is also
-   running a browser? Alternative: add a `min(…, 6% RAM)` term so the ceiling only applies above
-   ~8.5 GB.
-2. §6.2 — 1.15× / 150 ms detail-tier trigger values — reasonable, or tune after Phase 2 lands?
-3. §11 — split Phase 3 into its own design doc when we get there, or keep it in this one?
+All three open questions resolved with the drafted recommendations (review, 2026-09-09):
+
+1. **Byte-budget Auto formula** — `clamp(25% RAM, 128, 512) MiB` stays as-is; no RAM-scaled
+   ceiling term. Rationale in §5.1.
+2. **Detail-tier trigger** — 1.15× / 150 ms ship as constants, tuned from feel after Phase 2.
+   §6.2.
+3. **Phase 3** — its own mini-design doc when reached; §11 is direction only.
+
+No open questions remain. The four grilling rounds and this review close the design frontier.

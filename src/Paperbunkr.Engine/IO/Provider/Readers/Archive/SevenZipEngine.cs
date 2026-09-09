@@ -100,6 +100,130 @@ namespace cYo.Projects.ComicRack.Engine.IO.Provider.Readers.Archive
             return GetFileData(source, info);
         }
 
+        // --- Keep-open reading session (docs/superpowers/specs/2026-09-08-reader-decode-cache-
+        // prefetch-pipeline-design.md §4). Only the library-mode (7z.dll) path is stateful enough
+        // to hold open; the console-exe path spawns a process per call and gains nothing.
+        public override bool SupportsSession => libraryMode;
+
+        public override IComicAccessorSession OpenSession(string source)
+            => libraryMode ? SevenZipAccessorSession.TryOpen(this, source) : null;
+
+        /// <summary>
+        /// Holds one 7z.dll <see cref="IInArchive"/> open for a reading session. Non-solid
+        /// containers (every <c>.cbz</c>) get cheap any-order reads; solid <c>.cb7</c>/<c>.cbr</c>
+        /// get a forward-mark range extract (§4.2) so a sequential read pays the solid-block
+        /// decompression cost once, not per page. Not thread-safe (per <see cref="IComicAccessorSession"/>).
+        /// </summary>
+        /// <summary>Last <see cref="SevenZipAccessorSession"/> open failure, for diagnostics - a failed session open is non-fatal (§4.5: the pipeline falls back to the stateless read path).</summary>
+        internal static System.Exception LastSessionOpenError { get; private set; }
+
+        private sealed class SevenZipAccessorSession : IComicAccessorSession
+        {
+            private const int ForwardBatch = 8;
+
+            private readonly IDisposable handle;
+            private readonly IInArchive archive;
+            private readonly Dictionary<string, int> nameToIndex;
+            private readonly Dictionary<int, byte[]> passedByBuffer = new Dictionary<int, byte[]>();
+            private int maxExtracted = -1;
+
+            private SevenZipAccessorSession(IDisposable handle, IInArchive archive, Dictionary<string, int> nameToIndex)
+            {
+                this.handle = handle;
+                this.archive = archive;
+                this.nameToIndex = nameToIndex;
+            }
+
+            public static SevenZipAccessorSession TryOpen(SevenZipEngine owner, string source)
+            {
+                IInArchive archive = null;
+                IDisposable handle = null;
+                try
+                {
+                    handle = owner.OpenArchive(source, out archive);
+                    int count = archive.GetNumberOfItems();
+                    var map = new Dictionary<string, int>(count, StringComparer.OrdinalIgnoreCase);
+                    for (int i = 0; i < count; i++)
+                    {
+                        PropVariant path = default(PropVariant);
+                        archive.GetProperty(i, ItemPropId.kpidPath, ref path);
+                        string name = path.GetObject()?.ToString();
+                        if (!string.IsNullOrEmpty(name))
+                        {
+                            map[name] = i;
+                        }
+                    }
+                    return new SevenZipAccessorSession(handle, archive, map);
+                }
+                catch (System.Exception ex)
+                {
+                    LastSessionOpenError = ex;
+                    handle?.Dispose();
+                    return null;
+                }
+            }
+
+            public int Count => nameToIndex.Count;
+
+            public byte[] ReadEntryBytes(string entryName)
+            {
+                if (entryName == null || !nameToIndex.TryGetValue(entryName, out int index))
+                {
+                    return null;
+                }
+
+                if (passedByBuffer.TryGetValue(index, out byte[] buffered))
+                {
+                    passedByBuffer.Remove(index);
+                    return buffered;
+                }
+
+                try
+                {
+                    bool forward = index > maxExtracted && index <= maxExtracted + ForwardBatch;
+                    int start = forward ? maxExtracted + 1 : index;
+                    int[] indices = new int[index - start + 1];
+                    for (int k = 0; k < indices.Length; k++)
+                    {
+                        indices[k] = start + k;
+                    }
+
+                    var callback = new MultiExtractToStreamsCallback(indices);
+                    archive.Extract(indices, indices.Length, 0, callback);
+                    var results = callback.GetResults();
+
+                    if (index > maxExtracted)
+                    {
+                        maxExtracted = index;
+                    }
+
+                    byte[] wanted = null;
+                    foreach (var kv in results)
+                    {
+                        if (kv.Key == index)
+                        {
+                            wanted = kv.Value;
+                        }
+                        else
+                        {
+                            passedByBuffer[kv.Key] = kv.Value;
+                        }
+                    }
+                    return wanted;
+                }
+                catch
+                {
+                    return null;
+                }
+            }
+
+            public void Dispose()
+            {
+                passedByBuffer.Clear();
+                handle?.Dispose();
+            }
+        }
+
         private IDisposable OpenArchive(string source, out IInArchive archive)
         {
             IInArchive a = (archive = SevenZipFactory.CreateInArchive(MapFileFormat(base.Format)));

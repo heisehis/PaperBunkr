@@ -50,6 +50,10 @@ namespace cYo.Projects.ComicRack.Engine.IO.Provider.Readers.Archive
             }
         }
 
+        public override bool SupportsSession => true;
+
+        public override IComicAccessorSession OpenSession(string source) => SharpCompressAccessorSession.TryOpen(source);
+
         public override IEnumerable<ProviderImageInfo> GetEntryList(string source)
         {
             using (IArchive archive = ArchiveFactory.OpenArchive(source))

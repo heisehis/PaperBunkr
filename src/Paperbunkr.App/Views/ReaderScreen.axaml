@@ -162,6 +162,14 @@
 
     <Grid Background="{DynamicResource PbSurface1Brush}" PointerMoved="OnReaderPointerMoved" SizeChanged="OnReaderSizeChanged">
 
+        <!-- Perf overlay - top-left, above everything, click-through -->
+        <Border ZIndex="1000" IsHitTestVisible="False" IsVisible="{Binding PerfOverlayVisible}"
+                HorizontalAlignment="Left" VerticalAlignment="Top" Margin="12"
+                Background="#CC000000" CornerRadius="4" Padding="8,5">
+            <TextBlock Text="{Binding PerfOverlayText}" Foreground="#E6FFFFFF"
+                       FontFamily="Consolas,monospace" FontSize="11" />
+        </Border>
+
         <!-- ============ Canvas + floating chrome ============ -->
         <Grid Background="{Binding CanvasBackgroundBrush}">
 

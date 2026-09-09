@@ -34,6 +34,13 @@ namespace cYo.Projects.ComicRack.Engine.IO.Provider.Readers.Archive
             }
         }
 
+        public override bool SupportsSession => true;
+
+        // Seekable random access for the session path, via SharpCompress's TarArchive, instead of
+        // this engine's own forward-only TarInputStream (docs/superpowers/specs/2026-09-08-reader-
+        // decode-cache-prefetch-pipeline-design.md §4.1).
+        public override IComicAccessorSession OpenSession(string source) => SharpCompressAccessorSession.TryOpen(source);
+
         public override IEnumerable<ProviderImageInfo> GetEntryList(string source)
         {
             using (FileStream fs = new FileStream(source, FileMode.Open, FileAccess.Read, FileShare.Read, BufferSize))

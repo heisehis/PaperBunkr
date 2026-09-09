@@ -16,6 +16,36 @@ namespace Paperbunkr.App.Services;
 /// </summary>
 internal static class PageDecodeCore
 {
+    /// <summary>
+    /// One-shot: decode page <paramref name="pageIndex"/> of the file at <paramref name="filePath"/>
+    /// and dispose the provider. For callers that need a single page and nothing else - cover /
+    /// thumbnail generation, plugin page fetch - without standing up the full
+    /// <see cref="Reader.ReaderImagePipeline"/> (which spins a background consumer thread per
+    /// instance). Returns <see langword="null"/> if the file can't be opened or the page decoded.
+    /// </summary>
+    public static AvaloniaBitmap? DecodeSinglePage(string filePath, int pageIndex = 0)
+    {
+        var provider = TryOpenProvider(filePath);
+        if (provider is null || pageIndex < 0 || pageIndex >= provider.Count)
+        {
+            provider?.Dispose();
+            return null;
+        }
+
+        try
+        {
+            return Decode(provider, pageIndex);
+        }
+        catch
+        {
+            return null;
+        }
+        finally
+        {
+            provider.Dispose();
+        }
+    }
+
     /// <summary>Opens the archive at <paramref name="filePath"/>, or returns null if it can't be opened at all (missing file, unsupported format, corrupt/empty archive).</summary>
     public static ImageProvider? TryOpenProvider(string filePath)
     {
@@ -62,10 +92,10 @@ internal static class PageDecodeCore
         try
         {
             byte[]? bytes = provider.GetByteImage(pageIndex);
-            if (bytes is { Length: > 0 })
+            var direct = TryDecodeBytes(bytes);
+            if (direct is not null)
             {
-                using var byteStream = new MemoryStream(bytes);
-                return new AvaloniaBitmap(byteStream);
+                return direct;
             }
         }
         catch
@@ -78,5 +108,30 @@ internal static class PageDecodeCore
         gdiBitmap.Save(pngStream, ImageFormat.Png);
         pngStream.Position = 0;
         return new AvaloniaBitmap(pngStream);
+    }
+
+    /// <summary>
+    /// Decode already-in-hand encoded bytes (JPEG/PNG/…) straight through Avalonia's Skia decoder,
+    /// or <see langword="null"/> if they aren't a format it reads directly (caller then falls back
+    /// to <see cref="Decode(ImageProvider,int)"/>'s GDI path). The reader pipeline's fast path -
+    /// bytes come from a held-open <see cref="cYo.Projects.ComicRack.Engine.IO.Provider.Readers.IComicAccessorSession"/>,
+    /// not a per-page archive reopen (docs/superpowers/specs/2026-09-08-reader-decode-cache-prefetch-pipeline-design.md §4).
+    /// </summary>
+    public static AvaloniaBitmap? TryDecodeBytes(byte[]? bytes)
+    {
+        if (bytes is not { Length: > 0 })
+        {
+            return null;
+        }
+
+        try
+        {
+            using var stream = new MemoryStream(bytes, writable: false);
+            return new AvaloniaBitmap(stream);
+        }
+        catch
+        {
+            return null;
+        }
     }
 }

@@ -78,6 +78,20 @@ namespace cYo.Projects.ComicRack.Engine.IO.Provider.Readers.Archive
 			this.imageArchive = imageArchive;
 		}
 
+		/// <summary>
+		/// Opens a keep-open reading session onto this archive (docs/superpowers/specs/
+		/// 2026-09-08-reader-decode-cache-prefetch-pipeline-design.md §4), or <see langword="null"/>
+		/// if the configured engine doesn't support one. The caller resolves a page to its
+		/// <see cref="ProviderImageInfo.Name"/> via <see cref="GetFile"/> and passes that to
+		/// <see cref="IComicAccessorSession.ReadEntryBytes"/>.
+		/// </summary>
+		public IComicAccessorSession TryOpenReaderSession()
+		{
+			return imageArchive != null && imageArchive.SupportsSession
+				? imageArchive.OpenSession(base.Source)
+				: null;
+		}
+
 		private IItemLock<List<ProviderImageInfo>> GetCachedFileList()
 		{
 			using (ItemMonitor.Lock(typeof(ArchiveComicProvider)))

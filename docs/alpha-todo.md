@@ -52,6 +52,44 @@ this file itself already did once (see the note below).
 > boundary currently hits this). Scoped, reactive fix per the same triage precedent as the note
 > above — not a full audit of every no-op-`Down()` migration in the schema.
 >
+> **Manual session note (2026-09-09, reader decode/cache/prefetch pipeline — all 4 phases landed):**
+> Beta-backlog perf work, P0–P7 unchanged. Branch `claude/reader-pipeline` (worktree, off `master`),
+> ~20 commits, unmerged. Design: `docs/superpowers/specs/2026-09-08-reader-decode-cache-prefetch-
+> pipeline-design.md` (+ its `-plan.md`; + Phase 3 `2026-09-09-reader-webtoon-strip-band-decode-
+> design.md`).
+> **Landed & tested (unmerged, GUI-unverified — no computer-use for this project):**
+> - `IComicAccessorSession` for every archive engine (7z.dll with solid-block forward-mark range
+>   extract; SharpZipLib; SharpCompress; tar) + `IPdfDocumentSession` holding one PDFium
+>   `PdfDocument`. Stateless `ReadByteImage` untouched.
+> - `ReaderImagePipeline` / `IReaderPageSource` — one decode/cache/prefetch impl; the old
+>   `PageImageDecoder`(sync paged) / `PageDecodeService`(continuous) split is **deleted** (three
+>   one-shot callers moved to `PageDecodeCore.DecodeSinglePage`). Three byte-bounded `Cache<PageId,T>`
+>   tiers under `ReaderMemoryBudget`; the compressed-bytes tier is process-wide (`SharedRawCache`)
+>   for instant issue-back-nav. One bg consumer loop, adaptive prefetch fringe.
+> - `AppSettings.ReaderMemoryLimitMb` (+ no-op-`Down()` migration). **Preferences UI control for it
+>   not wired** — Auto works without it.
+> - Comic (paged + continuous) + PDF readers all on the pipeline; paged/PDF now prefetch.
+> - Phase 2: 2560px paged display cap; zoom **detail tier** (`ActivePageIndex` + a `PageCanvas`
+>   settle-timer that fetches a higher-res decode from the bytes tier, strictly additive).
+> - Phase 3: display-tier decode = full decode then downsample to the 2560px cap (`TryDecodeScaled`
+>   SKCodec-into-framebuffer path was tried and **reverted** — it AV'd on fast flip).
+> - Phase 4: `SkiaBitmapConverter` output cached per-frame (continuous + paged); WebP/HEIF/etc route
+>   through the engine's `ConvertToJpeg`; `ReaderPerfStats` + `ReaderFrameStats` overlay (Ctrl+Shift+P).
+> - `Paperbunkr.Benchmarks` (BenchmarkDotNet). ~1000 reader/cover/plugin/data tests green across
+>   targeted runs; full solution builds clean.
+> **Fast-flip AccessViolation (native, no managed crash log) — fix chain (9fb519b→988b54a):**
+> serialise all container reads behind `_readerLock` (7z.dll COM not thread-safe); defer
+> evicted-bitmap dispose 4s + timer sweep (no hard cap); coalesce paged render pushes to one per
+> animation frame; pre-convert transition bitmaps to `SKImage` at message time; and a
+> coalesced multi-turn flush now does an instant swap instead of animating from a
+> `_lastRenderedPage` the virtualization window has already recycled. **Needs the user's
+> with-transitions fast-flip retest to confirm closed.**
+> **Deliberately deferred (design-complete):** true per-band progressive webtoon decode
+> (`2026-09-09-…-band-decode-design.md`'s own pass); full async-paged swap-on-`PageReady`
+> (detail tier + prefetch cover it); 1-reader/N-decoder thread split (one loop already decodes
+> off-UI); the `ReaderMemoryLimitMb` Preferences checkbox.
+> **A manual or FlaUI GUI pass on the running reader is the one gate before this merges.**
+>
 > **Manual session note (2026-09-05, Duplicate Finder shipped + grouped review/bulk delete/scan
 > alerts):** follow-up to the Plugin API v2 backlog-finish note directly below. Duplicate Finder
 > moved from a `Paperbunkr.Plugins.Tests`-only fixture to a real, downloadable plugin

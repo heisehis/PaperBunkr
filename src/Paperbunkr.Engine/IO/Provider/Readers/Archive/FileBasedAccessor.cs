@@ -33,6 +33,17 @@ namespace cYo.Projects.ComicRack.Engine.IO.Provider.Readers.Archive
 			return SevenZipEngine.UpdateComicInfos(source, Format, comicInfo: info);
         }
 
+		/// <summary>
+		/// Concrete (non-DIM) so archive engines can <c>override</c> and have the override picked up
+		/// through an <see cref="IComicAccessor"/> reference - a derived class adding a matching
+		/// member does <b>not</b> re-map an interface slot already satisfied by a base-class default
+		/// interface method. See docs/superpowers/specs/2026-09-08-reader-decode-cache-prefetch-
+		/// pipeline-design.md §4.
+		/// </summary>
+		public virtual bool SupportsSession => false;
+
+		public virtual IComicAccessorSession OpenSession(string source) => null;
+
         public virtual bool IsFormat(string source)
 		{
 			if (signature == null)

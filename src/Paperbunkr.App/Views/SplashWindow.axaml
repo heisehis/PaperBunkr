@@ -19,54 +19,56 @@
     <!--
         Shown first from App.axaml.cs while the heavy startup work runs on a background thread
         (docs/superpowers/specs/2026-09-09-startup-onboarding-whats-new-design.md, Decision 2).
-        Bound to SplashViewModel. Background is the literal brand dark - NOT a skin resource: this
-        renders before SkinService.ApplyPersistedSettings() has necessarily run.
+        Background is the literal brand dark - renders before SkinService has necessarily run.
 
-        Motion is Opacity / RenderTransform only, driven by property Transitions (the entrance) and
-        a code-behind ping-pong timer (the breathing loop) - this Avalonia build has no animator
-        registered for keyframe Animation on RenderTransform (crash "No animator registered for the
-        property RenderTransform"), so everything transform-related goes through
-        TransformOperationsTransition, the same pattern the rest of the app uses. The glow's blur is
-        a static RadialGradientBrush; only its Opacity moves (project memory
-        poster_glow_transition_bug - an animated BoxShadow raced invalidation here before).
-        Code-behind adds the ".animate" class and starts the timer only when reduced motion is off.
+        Motion follows the codebase's proven "class toggle + TransformOperationsTransition" pattern
+        (Styles/Primitives.axaml's Control.entranceReady, HomeScreen's MastheadVisualLayer ken-burns)
+        - NOT keyframe Animation on RenderTransform, which has no registered animator in this
+        Avalonia build and crashed at window construction. Code-behind (Opened + a ping-pong timer)
+        adds/removes the .enter / .breathe classes; the transitions do the tweening. The glow's blur
+        is a static RadialGradientBrush; only its Opacity moves.
     -->
     <Window.Styles>
         <Style Selector="Image#LogoImage">
             <Setter Property="RenderTransformOrigin" Value="0.5,0.5" />
             <Setter Property="Transitions">
                 <Transitions>
-                    <DoubleTransition Property="Opacity" Duration="0:0:0.45" Easing="CubicEaseOut" />
-                    <TransformOperationsTransition Property="RenderTransform" Duration="0:0:1.2" Easing="SineEaseInOut" />
+                    <DoubleTransition Property="Opacity" Duration="0:0:0.5" Easing="CubicEaseOut" />
+                    <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.9" Easing="SineEaseInOut" />
                 </Transitions>
             </Setter>
         </Style>
-        <!-- Pre-entrance state; the code-behind Loaded handler clears .enter to animate in. -->
         <Style Selector="Image#LogoImage.enter">
             <Setter Property="Opacity" Value="0" />
-            <Setter Property="RenderTransform" Value="scale(0.9)" />
+            <Setter Property="RenderTransform" Value="scale(0.86)" />
+        </Style>
+        <Style Selector="Image#LogoImage.breathe">
+            <Setter Property="RenderTransform" Value="scale(1.04)" />
         </Style>
 
         <Style Selector="Border#GlowBorder">
             <Setter Property="Transitions">
                 <Transitions>
-                    <DoubleTransition Property="Opacity" Duration="0:0:1.2" Easing="SineEaseInOut" />
+                    <DoubleTransition Property="Opacity" Duration="0:0:1.3" Easing="SineEaseInOut" />
                 </Transitions>
             </Setter>
+        </Style>
+        <Style Selector="Border#GlowBorder.breathe">
+            <Setter Property="Opacity" Value="0.75" />
         </Style>
     </Window.Styles>
 
     <Grid RowDefinitions="*,Auto,Auto,*">
         <Panel Grid.Row="1" HorizontalAlignment="Center" Margin="0,0,0,28">
-            <Border x:Name="GlowBorder" Width="180" Height="180" Opacity="0.5">
+            <Border x:Name="GlowBorder" Width="190" Height="190" Opacity="0.4">
                 <Border.Background>
                     <RadialGradientBrush GradientOrigin="50%,50%" Center="50%,50%" RadiusX="50%" RadiusY="50%">
-                        <GradientStop Color="#73C9803F" Offset="0" />
-                        <GradientStop Color="#00C9803F" Offset="0.7" />
+                        <GradientStop Color="#8CC9803F" Offset="0" />
+                        <GradientStop Color="#00C9803F" Offset="0.72" />
                     </RadialGradientBrush>
                 </Border.Background>
             </Border>
-            <Image x:Name="LogoImage" Classes="enter" Width="120" Height="120"
+            <Image x:Name="LogoImage" Classes="enter" Width="122" Height="122"
                    Source="avares://Paperbunkr.App/Assets/paperbunkr-logo-source.png" />
         </Panel>
 

@@ -46,11 +46,11 @@ public class SplashViewModelTests
         var delays = new List<TimeSpan>();
         var vm = new SplashViewModel(d => { delays.Add(d); return Task.CompletedTask; });
 
-        // "Shown" 100ms ago -> ~300ms of the 400ms floor still to wait.
+        // "Shown" 100ms ago -> most of the ~1.1s floor still to wait.
         await vm.EnforceMinimumVisibleAsync(DateTime.UtcNow - TimeSpan.FromMilliseconds(100));
 
         Assert.Single(delays);
-        Assert.InRange(delays[0], TimeSpan.FromMilliseconds(150), TimeSpan.FromMilliseconds(400));
+        Assert.InRange(delays[0], TimeSpan.FromMilliseconds(700), SplashViewModel.MinimumVisible);
     }
 
     [Fact]

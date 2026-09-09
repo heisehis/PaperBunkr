@@ -3,7 +3,6 @@ using System.Threading.Tasks;
 using Avalonia.Animation;
 using Avalonia.Animation.Easings;
 using Avalonia.Controls;
-using Avalonia.Media.Transformation;
 using Avalonia.Styling;
 using Avalonia.Threading;
 using Paperbunkr.App.Services;
@@ -16,20 +15,16 @@ namespace Paperbunkr.App.Views;
 /// thread reporting into the bound <see cref="ViewModels.SplashViewModel"/>; then <c>App.axaml.cs</c>
 /// builds and shows <c>MainWindow</c> and calls <see cref="FadeOutAndCloseAsync"/>.
 ///
-/// Motion is driven from here (property transitions + a ping-pong timer) rather than XAML keyframe
-/// <c>Animation</c> - this Avalonia build has no animator registered for keyframe animation of
-/// <c>RenderTransform</c>. Reduced motion (<see cref="SkinService.GetReducedMotion"/>) is checked
-/// here rather than via the <c>PbMotion*</c> resources, which <c>SkinService.ApplyPersistedSettings()</c>
-/// has not necessarily zeroed yet at splash time.
+/// Motion is driven from here by toggling the <c>.enter</c> / <c>.breathe</c> classes the XAML
+/// <c>TransformOperationsTransition</c>s tween - keyframe <c>Animation</c> on <c>RenderTransform</c>
+/// has no registered animator in this Avalonia build and crashes at construction. Reduced motion
+/// (<see cref="SkinService.GetReducedMotion"/>) is checked here rather than via the
+/// <c>PbMotion*</c> resources, which have not necessarily been zeroed yet at splash time.
 /// </summary>
 public partial class SplashWindow : Window
 {
-    private static readonly TransformOperations ScaleRest = TransformOperations.Parse("scale(1)");
-    private static readonly TransformOperations ScaleUp = TransformOperations.Parse("scale(1.035)");
-
     private readonly bool _reducedMotion;
     private DispatcherTimer? _breatheTimer;
-    private bool _breatheUp;
 
     public SplashWindow()
         : this(new SkinService().GetReducedMotion())
@@ -41,35 +36,39 @@ public partial class SplashWindow : Window
         _reducedMotion = reducedMotion;
         InitializeComponent();
 
-        LogoImage.RenderTransform = ScaleRest;
-        GlowBorder.Opacity = _reducedMotion ? 0.5 : 0.35;
+        if (_reducedMotion)
+        {
+            // Snap to the resting state - no entrance, no breathing.
+            LogoImage.Classes.Remove("enter");
+            GlowBorder.Opacity = 0.5;
+        }
 
-        Loaded += OnLoaded;
+        Opened += OnOpened;
         Closed += (_, _) => _breatheTimer?.Stop();
     }
 
-    private void OnLoaded(object? sender, EventArgs e)
+    private void OnOpened(object? sender, EventArgs e)
     {
-        // Entrance: drop the pre-entrance ".enter" class so the transitions animate to the resting
-        // Opacity 1 / scale(1). Under reduced motion the class was already visually a no-op path -
-        // clearing it just snaps to the final state.
-        LogoImage.Classes.Remove("enter");
-
         if (_reducedMotion)
         {
             return;
         }
 
-        // Breathing: ping-pong the logo scale and the glow opacity every half-cycle; the
-        // TransformOperationsTransition / DoubleTransition on each element tweens between the two.
-        _breatheTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1.2) };
+        // Entrance: drop .enter so the emblem fades + scales up from scale(0.88) to rest. A short
+        // delay lets the transitions attach before the value changes (otherwise the first change
+        // can apply instantly).
+        DispatcherTimer.RunOnce(() => LogoImage.Classes.Remove("enter"), TimeSpan.FromMilliseconds(30));
+
+        // Breathing: toggle .breathe every half-cycle; the transitions tween scale 1.0<->1.04 on
+        // the logo and opacity 0.4<->0.75 on the glow. First toggle after the entrance settles.
+        _breatheTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1.3) };
         _breatheTimer.Tick += (_, _) =>
         {
-            _breatheUp = !_breatheUp;
-            LogoImage.RenderTransform = _breatheUp ? ScaleUp : ScaleRest;
-            GlowBorder.Opacity = _breatheUp ? 0.7 : 0.35;
+            bool up = !LogoImage.Classes.Contains("breathe");
+            LogoImage.Classes.Set("breathe", up);
+            GlowBorder.Classes.Set("breathe", up);
         };
-        _breatheTimer.Start();
+        DispatcherTimer.RunOnce(() => _breatheTimer.Start(), TimeSpan.FromMilliseconds(550));
     }
 
     /// <summary>Fades the whole window out over ~150ms, then closes it. Called after

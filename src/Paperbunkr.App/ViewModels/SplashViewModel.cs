@@ -19,8 +19,10 @@ namespace Paperbunkr.App.ViewModels;
 public partial class SplashViewModel : ObservableObject
 {
     /// <summary>Anti-flash floor - the splash stays visible at least this long even if init
-    /// finishes sooner (Decision 2, from the pasted spec's 400ms guidance).</summary>
-    public static readonly TimeSpan MinimumVisible = TimeSpan.FromMilliseconds(400);
+    /// finishes sooner (Decision 2). The pasted spec suggested 400ms purely as an anti-flash floor;
+    /// bumped to ~1.1s so the emblem's entrance animation actually completes and the first breath
+    /// begins, rather than the whole splash flashing past before any motion is visible.</summary>
+    public static readonly TimeSpan MinimumVisible = TimeSpan.FromMilliseconds(1100);
 
     private readonly Func<TimeSpan, Task> _delay;
 

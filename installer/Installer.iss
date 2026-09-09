@@ -57,6 +57,11 @@ AppUpdatesURL={#MyAppURL}/releases
 DefaultDirName={autopf}\{#MyAppName}
 DefaultGroupName={#MyAppName}
 AllowNoIcons=yes
+; Always show the "Select Destination Location" page. Inno's default (DisableDirPage=auto) hides
+; it whenever UsePreviousAppDir finds a prior install in the registry - which, with this project's
+; frequent re-installs (and the InitializeSetup upgrade path), meant it almost never appeared. The
+; page still pre-fills the previous directory, so a repair/upgrade is just one extra Next click.
+DisableDirPage=no
 ; Per-machine install (Program Files, admin/UAC required) - matches CE's own PrivilegesRequired,
 ; chosen over a per-user install even though Paperbunkr's own file-association writes don't need
 ; elevation (see the file-header note above).
@@ -159,7 +164,7 @@ WelcomeLabel2=Get ready to get bunked!%n%nYou're about to install {#MyAppName} {
 ; two postinstall [Run] checkboxes ("Open Paperbunkr now" / "Browse the wiki") render just below
 ; this text.
 FinishedHeadingLabel={#MyAppName} is bunked in and ready.
-FinishedLabel={#MyAppName} {#MyAppVersion} has been installed on this computer.%n%nNew here? Add your first comic or book folder from Preferences > Libraries, and the wiki has the full walkthrough.%n%nClick Finish to close Setup.
+FinishedLabel={#MyAppName} {#MyAppVersion} has been installed on this computer.%n%nNew here? Add your first comic or book folder from Preferences > Libraries, and the wiki has the full walkthrough.
 
 [Types]
 Name: "full";    Description: "Full installation";
@@ -231,7 +236,7 @@ Filename: "{app}\{#MyAppExeName}"; Parameters: "--register-file-associations .dj
 ; default; "Browse the wiki" is opt-in (unchecked). The wiki entry is a URL opened via the shell
 ; (shellexec) as the logged-in user rather than the elevated installer account (runasoriginaluser).
 Filename: "{app}\{#MyAppExeName}"; Description: "Open {#MyAppName} now"; Flags: nowait postinstall skipifsilent
-Filename: "{#MyAppURL}/wiki"; Description: "Browse the {#MyAppName} wiki (opens your browser)"; Flags: postinstall shellexec runasoriginaluser skipifsilent unchecked
+Filename: "{#MyAppURL}/wiki"; Description: "Browse the {#MyAppName} wiki"; Flags: postinstall shellexec runasoriginaluser skipifsilent unchecked
 
 [UninstallRun]
 ; Mirror of the [Run] association entries, run before files are removed (Inno's UninstallRun

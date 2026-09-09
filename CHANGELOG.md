@@ -3,6 +3,72 @@
 All notable changes to Paperbunkr are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.3.0-beta] - 2026-09-09
+
+Everything below shipped since
+[0.2.0-beta](https://github.com/heisehis/PaperBunkr/releases/tag/v0.2.0-beta).
+
+### Added
+
+- **Insights & Stats** — a reading-habit dashboard (new "Insights" item in the nav rail) and a
+  Stats view with library and reading analytics, both backed by a running log of your reading
+  activity.
+- **Quick Open (`Ctrl+P`)** — a command palette to jump to any screen, series, or action by
+  typing.
+- **Activity Center** — a status bar with a pop-out panel showing background jobs (scans, cover
+  work, scheduled tasks) and alerts.
+- **Library Health** — a Preferences dashboard that finds missing files, flags likely duplicates,
+  and collects everything needing attention in one "Needs Review" list.
+- **Automation** — background maintenance tasks (library rescan, cover verification, backups, and
+  more) on a schedule you control from Preferences → Automation.
+- **Virtual Tags** — rule-based tags that apply themselves to matching issues, editable from
+  Preferences.
+- **Saved Workspaces** — save and restore a full Library or Books view (filters, sort, grouping,
+  columns) by name.
+- **FB2 and MOBI/AZW3 books** — both formats now import and read alongside EPUB and PDF.
+- **Reworked Books/PDF reader** — a reflow renderer for EPUB, a shared reading HUD, in-text
+  highlights and notes, and accessibility support.
+- **More trackers** — MangaUpdates, MangaDex, and Kitsu, plus two-way sync that can push your
+  progress and ratings back to a provider.
+- **Python plugin commands** — plugins can now script commands in Python, alongside the existing
+  plugin API, which also gained new UI extension points and bulk operations.
+- **Duplicate Finder** — shipped as a built-in installable plugin.
+- **Drag-and-drop import** — drop files, folders, or `.cbl` lists onto the Library or a Reading
+  List to import them.
+- **File metadata write-back** — optionally write your edits back into the comic file as
+  `ComicInfo.xml` and/or a sidecar (off by default).
+- **Reader extras** — split-page part-by-part navigation, an on-screen clock and battery
+  indicator, and tap-to-toggle chrome on touch.
+- **Redesigned installer** — brand artwork, a combined license + terms page, per-format
+  file-association checkboxes, a prompt to close Paperbunkr before installing, and a
+  repair/uninstall path when re-run over an existing install.
+
+### Changed
+
+- **Animated navigation** — covers and cards fly between the Library and detail screens,
+  drill-downs slide in and out, and screen/content transitions were polished throughout.
+- **Faster, lighter Library** — every view mode is now virtualized, so large libraries use far
+  less memory and scroll smoothly. The separate "Comic List" mode was removed and its
+  sorting/grouping folded into the other modes.
+- **Panorama view** shows each cover at its real shape (portrait, landscape, square) without
+  loading every image up front.
+- **Redesigned Preferences** — every area reworked around a tile-based hub: Appearance, Libraries,
+  Library Health, Folder Management, Virtual Tags, Connections, Keyboard Shortcuts, Advanced,
+  About, and Automation.
+- **Better metadata editors** — autocomplete, dropdowns, and steppers matching ComicRack's
+  editing feel.
+- **Consistent feedback** — unified toasts, confirmation dialogs, busy indicators, and status
+  badges across the app.
+- **Nav rail** — hover-to-expand is now a preference; the Undo/Redo buttons were removed.
+
+### Fixed
+
+- Comic files could be flagged "missing" immediately after a metadata write-back touched them; a
+  startup self-heal now repoints any that were affected.
+- A database-migration rollback chain that could fail when downgrading.
+- The reader settings sheet rendering oversized on a non-maximized window.
+- Unregistering a file association left an orphaned registry key behind.
+
 ## [0.2.0-beta] - 2026-09-01
 
 Paperbunkr moves from alpha to beta with this release. Everything below shipped since

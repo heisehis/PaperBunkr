@@ -1,5 +1,6 @@
 using Avalonia;
 using System;
+using System.Linq;
 using Paperbunkr.App.Services;
 using Optris.Icons.Avalonia;
 using Optris.Icons.Avalonia.FontAwesome;
@@ -20,20 +21,25 @@ sealed class Program
         DiagnosticsService.Install();
 
         // Headless file-association (un)registration, invoked by installer\Installer.iss's optional
-        // "associate" task/uninstall step. Deliberately reuses FileAssociationService - the exact
-        // same live registry-write path Preferences > Advanced uses - instead of the installer
-        // hand-writing ProgID keys itself, so there is only ever one place that knows the current
-        // extension list and one owner of those registry keys (see Installer.iss's own file-header
-        // note). Must run before Avalonia touches anything, and must exit without ever building a
-        // window.
+        // per-format "associate*" tasks/uninstall steps. Deliberately reuses FileAssociationService
+        // - the exact same live registry-write path Preferences > Advanced uses - instead of the
+        // installer hand-writing ProgID keys itself, so there is only ever one place that knows the
+        // current extension list and one owner of those registry keys (see Installer.iss's own
+        // file-header note). Must run before Avalonia touches anything, and must exit without ever
+        // building a window.
+        //
+        // Trailing args are the specific extensions to act on (".cbz", ".pdf", ...); the installer
+        // passes one per selected task. With no extensions given, defaults to the full comic-format
+        // allow-list. Either way the set is clamped to FileAssociationService.ComicAssociationExtensions
+        // - so this path never (re)associates bare .zip/.rar/.7z, unlike the old
+        // "loop every GetAvailableFormats() entry" it replaces (2026-09-09 installer redesign, decision 5).
         if (args.Length > 0 && (args[0] == "--register-file-associations" || args[0] == "--unregister-file-associations"))
         {
             bool associate = args[0] == "--register-file-associations";
-            var associationService = new FileAssociationService();
-            foreach (var format in associationService.GetAvailableFormats())
-            {
-                associationService.SetAssociated(format.Name, associate);
-            }
+            var requestedExtensions = args.Length > 1
+                ? args[1..]
+                : FileAssociationService.ComicAssociationExtensions.ToArray();
+            new FileAssociationService().SetComicAssociationsFor(requestedExtensions, associate);
 
             return;
         }

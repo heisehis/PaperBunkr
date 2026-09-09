@@ -30,7 +30,7 @@ if (-not $innoSetupPath) {
 # Derive a version string if the caller didn't pass one.
 if (-not $Version) {
     $shortCommit = (git -C $repoRoot rev-parse --short HEAD).Trim()
-    $Version = "0.1.0-alpha-$shortCommit"
+    $Version = "0.3.0-beta-$shortCommit"
 }
 
 Write-Output "Building Paperbunkr installer version $Version"
@@ -84,6 +84,70 @@ if (-not $whatsNewText) {
 }
 Set-Content -Path $whatsNewPath -Value $whatsNewText -Encoding UTF8
 Write-Output "Wrote $whatsNewPath"
+
+# Generate the combined license file (Installer.iss's LicenseFile, shown before the install-dir
+# step - see docs/superpowers/specs/2026-09-09-installer-redesign-design.md decision 3). Inno's
+# LicenseFile is a single accept-gate for exactly one document, but the repo has two: LICENSE
+# (AGPLv3, the code license) and TERMS.md (usage/liability terms whose own opening line -
+# "By downloading, installing, or running Paperbunkr... you agree to the following" - is the sort
+# of claim that should be backed by a real install-time accept). Concatenate LICENSE then TERMS.md,
+# stripping TERMS.md's markdown the same way the WhatsNew block above does (Inno's license viewer
+# renders no markdown).
+$licensePath = Join-Path $repoRoot "LICENSE"
+$termsPath = Join-Path $repoRoot "TERMS.md"
+$combinedLicensePath = Join-Path $publishDir "..\License.txt"
+$licenseLines = @()
+if (Test-Path $licensePath) {
+    $licenseLines += Get-Content $licensePath
+}
+if (Test-Path $termsPath) {
+    $termsPlain = (Get-Content $termsPath) `
+        -replace '^#{1,6}\s+', '' `
+        -replace '^>\s?', '' `
+        -replace '\*\*(.+?)\*\*', '$1' `
+        -replace '`(.+?)`', '$1' `
+        -replace '\[(.+?)\]\((.+?)\)', '$1 ($2)' `
+        -replace '^[-*]\s+', '  - '
+    $licenseLines += @(
+        "",
+        ("=" * 80),
+        "ADDITIONAL TERMS OF USE",
+        ("=" * 80),
+        ""
+    ) + $termsPlain
+}
+if ($licenseLines.Count -eq 0) {
+    $licenseLines = @("See LICENSE and TERMS.md in the installation folder.")
+}
+Set-Content -Path $combinedLicensePath -Value $licenseLines -Encoding UTF8
+Write-Output "Wrote $combinedLicensePath"
+
+# Generate the post-install quick-start page (Installer.iss's InfoAfterFile, shown after a
+# successful install before Finish - design decision 4). Static content: unlike WhatsNew.txt it
+# doesn't depend on build-time state, so it's written verbatim here rather than derived.
+$infoAfterPath = Join-Path $publishDir "..\InfoAfter.txt"
+$infoAfterText = @'
+Paperbunkr is installed. A few things to get you started:
+
+  -  Open Preferences from the gear icon in the top-right of the main window.
+
+  -  Preferences > Libraries is where you add your first comic or book folder -
+     point it at a folder and Paperbunkr scans it into your library.
+
+  -  Preferences > Advanced has per-format file-association toggles if you skipped
+     the association options in this installer (or want to change them later).
+
+  -  Reading direction, page-fit, and other reader behaviour live in
+     Preferences > Reader.
+
+Full documentation, guides, and troubleshooting:
+
+  https://github.com/heisehis/PaperBunkr/wiki
+
+Click Next to finish.
+'@
+Set-Content -Path $infoAfterPath -Value $infoAfterText -Encoding UTF8
+Write-Output "Wrote $infoAfterPath"
 
 # Compile the installer.
 $setupFileParam = "PaperbunkrSetup-$Version"

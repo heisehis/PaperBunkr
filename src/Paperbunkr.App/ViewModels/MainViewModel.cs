@@ -123,7 +123,13 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         _upkeepIdleTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(4) };
         _upkeepIdleTimer.Tick += (_, _) => { _upkeepIdleTimer.Stop(); _upkeep.SetIdle(); };
 
-        Home = new HomeScreenViewModel(GoDetailForSeries, GoReaderForIssue, GoLibraryWithSearch, GoReaderForIssueInReadingList, GoBookReaderForBook, GoLibraryWithCollection);
+        // Shared with Preferences below (not a fresh instance there) - the Home masthead
+        // (docs/superpowers/specs/2026-09-08-home-navrail-visual-v2-design.md §3) subscribes to
+        // this specific instance's SkinApplied to know when to re-render the cover-wall on a live
+        // skin switch; a second SkinService instance would never fire into that subscription since
+        // the event isn't static/process-wide.
+        var skinService = new SkinService();
+        Home = new HomeScreenViewModel(GoDetailForSeries, GoReaderForIssue, GoLibraryWithSearch, GoReaderForIssueInReadingList, GoBookReaderForBook, GoLibraryWithCollection, skinService);
         Library = new LibraryScreenViewModel(GoDetailForSeries, GoReaderForIssue, GoNewIssuePropertiesForPlaceholder, OpenQuickRateOverlay, GoIssuePropertiesForIssue, GoBulkIssuePropertiesForIssues, ShowToast, GoBulkSeriesPropertiesForSeries, GoLibraryFoldersPreferences, OpenCollectionPropertiesOverlay, GoBookDetailForBook, promptForName: PromptWorkspaceName, enqueueMetadataWriteBack: EnqueueMetadataWriteBack, activity: Activity);
         Books = new BooksScreenViewModel(GoBookDetailForBook, GoBookSeriesDetailForSeries, GoBookPropertiesForBook, GoBulkBookPropertiesForBooks, GoBookSeriesPropertiesForSeries, GoLibraryFoldersPreferences, ShowToast, promptForName: PromptWorkspaceName);
         BookDetail = new BookDetailScreenViewModel(NavigateBack, GoBookReaderForBook, GoBookPropertiesForBook, GoBulkBookPropertiesForBooks, GoBookSeriesPropertiesForSeries);
@@ -158,6 +164,10 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         // Auto-update (docs/superpowers/specs/2026-09-01-auto-update-and-changelog-design.md) - same
         // small-overlay-VM shape as Welcome above.
         Update = new UpdateAvailableOverlayViewModel(DownloadUpdateAsync, CloseUpdateAvailableOverlay);
+        // "What's New" after an update (docs/superpowers/specs/2026-09-09-startup-onboarding-whats-
+        // new-design.md) - same small-overlay-VM shape; MainViewModel does the CHANGELOG load +
+        // entry selection before calling Show().
+        WhatsNew = new WhatsNewOverlayViewModel(CloseWhatsNewOverlay, GoAboutFromWhatsNew);
         WelcomeTour = new WelcomeTourOverlayViewModel(
             GoHomeCommand, GoInsightsCommand, GoLibraryCommand, GoBooksCommand, GoSmartCommand, GoReadingCommand, GoEventsCommand, GoPreferencesCommand,
             CloseWelcomeTourOverlay);
@@ -235,7 +245,7 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         }
 
         Preferences = new PreferencesScreenViewModel(
-            new SkinService(),
+            skinService,
             new FilePickerService(),
             new LibraryFolderScanner(),
             new FileAssociationService(),
@@ -407,6 +417,7 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
     public IDialogService Dialogs { get; }
     public WelcomeOverlayViewModel Welcome { get; }
     public UpdateAvailableOverlayViewModel Update { get; }
+    public WhatsNewOverlayViewModel WhatsNew { get; }
     public WelcomeTourOverlayViewModel WelcomeTour { get; }
     public ReadingListPropertiesScreenViewModel ReadingListProperties { get; }
     public CollectionPropertiesScreenViewModel CollectionProperties { get; }
@@ -452,6 +463,9 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
 
     [ObservableProperty]
     private bool _isUpdateAvailableOverlayOpen;
+
+    [ObservableProperty]
+    private bool _isWhatsNewOverlayOpen;
 
     [ObservableProperty]
     private bool _isTourOfferOpen;
@@ -960,7 +974,7 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         || IsBookPropertiesOverlayOpen || IsBulkBookPropertiesOverlayOpen || IsBookSeriesPropertiesOverlayOpen
         || IsReadingListPropertiesOverlayOpen || IsCollectionPropertiesOverlayOpen || IsWorkspaceNameOverlayOpen
         || IsNewReadingListDialogOpen || IsNewEventDialogOpen || IsMigrationOverlayOpen || IsQuickRateOverlayOpen
-        || IsWelcomeOverlayOpen || IsWelcomeTourOverlayOpen;
+        || IsWelcomeOverlayOpen || IsWelcomeTourOverlayOpen || IsWhatsNewOverlayOpen;
 
     /// <summary>Ctrl+P (docs/superpowers/specs/2026-09-03-quick-open-command-palette-design.md) - opens
     /// the command palette. No-op while an editor overlay is up, or if it's already open. The
@@ -1756,7 +1770,8 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
             return;
         }
 
-        string? changelogBody = LoadNewestChangelogBody();
+        var entries = ChangelogParser.LoadBundledEntries();
+        string? changelogBody = entries.Count > 0 ? entries[0].Body : null;
         Dispatcher.UIThread.Post(() =>
         {
             Update.Show(info.Updates[0], changelogBody);
@@ -1764,19 +1779,131 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         });
     }
 
-    private static string? LoadNewestChangelogBody()
-    {
-        string path = Path.Combine(AppContext.BaseDirectory, "CHANGELOG.md");
-        if (!File.Exists(path))
-        {
-            return null;
-        }
+    private void CloseUpdateAvailableOverlay() => IsUpdateAvailableOverlayOpen = false;
 
-        var entries = ChangelogParser.Parse(File.ReadAllText(path));
-        return entries.Count > 0 ? entries[0].Body : null;
+    /// <summary>What the not-first-run startup path does once the main window is up.</summary>
+    public enum StartupFirstLook
+    {
+        /// <summary>Fresh install - <c>App.axaml.cs</c> already opened the welcome overlay.</summary>
+        Welcome,
+        /// <summary>Running version is newer than <c>AppSettings.LastRunVersion</c> - show "What's New".</summary>
+        WhatsNew,
+        /// <summary>No version change - run the normal auto-update check.</summary>
+        UpdateCheck,
     }
 
-    private void CloseUpdateAvailableOverlay() => IsUpdateAvailableOverlayOpen = false;
+    /// <summary>
+    /// Pure decision for the startup first-look modal (docs/superpowers/specs/2026-09-09-startup-
+    /// onboarding-whats-new-design.md, Decision 7) - factored out so all three branches are unit
+    /// tested without a database or the network. Mutually exclusive: two first-look modals never
+    /// stack.
+    /// </summary>
+    public static StartupFirstLook DecideFirstLook(bool welcomeScreenShown, string? lastRunVersion, Version currentVersion)
+    {
+        if (!welcomeScreenShown)
+        {
+            return StartupFirstLook.Welcome;
+        }
+
+        if (!string.IsNullOrWhiteSpace(lastRunVersion)
+            && Version.TryParse(lastRunVersion, out var since)
+            && ReleaseVersion.IsNewerThan(currentVersion, since))
+        {
+            return StartupFirstLook.WhatsNew;
+        }
+
+        return StartupFirstLook.UpdateCheck;
+    }
+
+    /// <summary>
+    /// The not-first-run startup path (docs/superpowers/specs/2026-09-09-startup-onboarding-whats-
+    /// new-design.md, Decision 7). Called via <c>Task.Run</c> from <c>App.axaml.cs</c> - so, like
+    /// <see cref="CheckForUpdatesOnStartupAsync"/>, its body runs off the UI thread and marshals the
+    /// overlay-open tail back via <see cref="Dispatcher.UIThread"/>. Reads <c>LastRunVersion</c>,
+    /// shows "What's New" if the version bumped, otherwise falls through to the update check, and
+    /// <b>always</b> writes <c>LastRunVersion = current</c> at the end (so a patch with no changelog
+    /// entry still advances the marker).
+    /// </summary>
+    public async Task ShowWhatsNewOrCheckForUpdatesAsync()
+    {
+        try
+        {
+            string? lastRunVersion;
+            bool welcomeShown;
+            using (var context = PaperbunkrDb.CreateContext())
+            {
+                var settings = context.GetOrCreateAppSettings();
+                lastRunVersion = settings.LastRunVersion;
+                welcomeShown = settings.WelcomeScreenShown;
+            }
+
+            var decision = DecideFirstLook(welcomeShown, lastRunVersion, ReleaseVersion.Current);
+            if (decision == StartupFirstLook.WhatsNew)
+            {
+                var entries = WhatsNewOverlayViewModel.SelectEntriesSince(ChangelogParser.LoadBundledEntries(), lastRunVersion);
+                if (entries.Count > 0)
+                {
+                    Dispatcher.UIThread.Post(() =>
+                    {
+                        WhatsNew.Show(entries, currentEntryOnly: false);
+                        IsWhatsNewOverlayOpen = true;
+                    });
+                }
+            }
+            else if (decision == StartupFirstLook.UpdateCheck)
+            {
+                await CheckForUpdatesOnStartupAsync();
+            }
+        }
+        finally
+        {
+            PersistLastRunVersion();
+        }
+    }
+
+    /// <summary>Writes <c>AppSettings.LastRunVersion = ReleaseVersion.Current</c>. Called on every
+    /// startup path (the welcome branch too, from <c>App.axaml.cs</c>) so the marker always
+    /// advances. Best-effort - a failed write just means "What's New" might re-show next launch.</summary>
+    public void PersistLastRunVersion()
+    {
+        try
+        {
+            using var context = PaperbunkrDb.CreateContext();
+            var settings = context.GetOrCreateAppSettings();
+            string current = ReleaseVersion.Current.ToString();
+            if (settings.LastRunVersion != current)
+            {
+                settings.LastRunVersion = current;
+                context.SaveChanges();
+            }
+        }
+        catch (Exception)
+        {
+            // ignore - see the doc comment
+        }
+    }
+
+    private void CloseWhatsNewOverlay() => IsWhatsNewOverlayOpen = false;
+
+    /// <summary>Opens "What's New" showing just the current release - from the welcome screen's
+    /// link and the Preferences → About button.</summary>
+    public void OpenWhatsNewOverlayCurrentOnly()
+    {
+        var entries = ChangelogParser.LoadBundledEntries();
+        if (entries.Count == 0)
+        {
+            return;
+        }
+
+        WhatsNew.Show([entries[0]], currentEntryOnly: true);
+        IsWhatsNewOverlayOpen = true;
+    }
+
+    private void GoAboutFromWhatsNew()
+    {
+        GoPreferencesCommand.Execute(null);
+        Preferences.GoAboutCommand.Execute(null);
+    }
 
     /// <summary>
     /// Download+apply flow, started from <see cref="Update"/>'s Download button. The download runs
@@ -2150,6 +2277,10 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         if (IsQuickOpenOverlayOpen)
         {
             CloseQuickOpenOverlay();
+        }
+        else if (IsWhatsNewOverlayOpen)
+        {
+            CloseWhatsNewOverlay();
         }
         else if (IsMigrationOverlayOpen)
         {

@@ -330,6 +330,15 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     /// outside its declaring class.</summary>
     public void RequestScrollToAnchor(string anchorKey) => ScrollToAnchorRequested?.Invoke(anchorKey);
 
+    /// <summary>Raised by the About section's "What's New" button - MainViewModel opens the
+    /// WhatsNewOverlay scoped to the current release (docs/superpowers/specs/2026-09-09-startup-
+    /// onboarding-whats-new-design.md, Decision 6). Same wire-up pattern as
+    /// <see cref="ReaderDisplaySettingsChanged"/>.</summary>
+    public event Action? WhatsNewRequested;
+
+    [RelayCommand]
+    private void OpenWhatsNew() => WhatsNewRequested?.Invoke();
+
     partial void OnSearchQueryChanged(string value)
     {
         OnPropertyChanged(nameof(IsSearching));

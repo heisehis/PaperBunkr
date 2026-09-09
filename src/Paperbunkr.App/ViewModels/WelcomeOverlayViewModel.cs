@@ -22,14 +22,19 @@ public partial class WelcomeOverlayViewModel : ViewModelBase
     private readonly Action _reloadFolderWatch;
     private readonly Action _openMigrationOverlay;
     private readonly Action _requestClose;
+    private readonly Action _showWhatsNew;
 
-    public WelcomeOverlayViewModel(IFilePickerService filePicker, Action reloadFolderWatch, Action openMigrationOverlay, Action requestClose)
+    public WelcomeOverlayViewModel(IFilePickerService filePicker, Action reloadFolderWatch, Action openMigrationOverlay, Action requestClose, Action showWhatsNew)
     {
         _filePicker = filePicker;
         _reloadFolderWatch = reloadFolderWatch;
         _openMigrationOverlay = openMigrationOverlay;
         _requestClose = requestClose;
+        _showWhatsNew = showWhatsNew;
     }
+
+    /// <summary>The version string for the "What's new in {version} →" footer link.</summary>
+    public string VersionText => ReleaseVersion.DisplayString;
 
     /// <summary>Set by <see cref="MainViewModel.OpenWelcomeOverlay"/> each time the screen opens, from
     /// the same <c>File.Exists(MigrationViewModel.GetDefaultCePath())</c> check <c>App.axaml.cs</c>
@@ -90,4 +95,10 @@ public partial class WelcomeOverlayViewModel : ViewModelBase
 
     [RelayCommand]
     private void Skip() => _requestClose();
+
+    /// <summary>The "What's new in {version} →" footer link - opens the What's New overlay scoped to
+    /// the current release (docs/superpowers/specs/2026-09-09-startup-onboarding-whats-new-design.md,
+    /// Decision 4). Leaves the welcome overlay open behind it.</summary>
+    [RelayCommand]
+    private void ShowWhatsNew() => _showWhatsNew();
 }

@@ -160,7 +160,7 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         // constructed here like every other overlay VM; LiveFolderWatch.Reload/OpenMigrationOverlay
         // are the same callbacks Preferences already reuses for the identical folder-add/migration
         // actions, CloseWelcomeOverlay is this class's own close-and-persist method (defined below).
-        Welcome = new WelcomeOverlayViewModel(new FilePickerService(), () => LiveFolderWatch.Reload(), OpenMigrationOverlay, CloseWelcomeOverlay);
+        Welcome = new WelcomeOverlayViewModel(new FilePickerService(), () => LiveFolderWatch.Reload(), OpenMigrationOverlay, CloseWelcomeOverlay, OpenWhatsNewOverlayCurrentOnly);
         // Auto-update (docs/superpowers/specs/2026-09-01-auto-update-and-changelog-design.md) - same
         // small-overlay-VM shape as Welcome above.
         Update = new UpdateAvailableOverlayViewModel(DownloadUpdateAsync, CloseUpdateAvailableOverlay);
@@ -272,6 +272,7 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         // Load happened to run. Wired the same way as the toast plumbing above - Preferences raises a
         // plain event, the Reader refreshes its own snapshot in response, no shared mutable state.
         Preferences.ReaderDisplaySettingsChanged += Reader.RefreshDisplaySettings;
+        Preferences.WhatsNewRequested += OpenWhatsNewOverlayCurrentOnly;
 
         using (var context = PaperbunkrDb.CreateContext())
         {

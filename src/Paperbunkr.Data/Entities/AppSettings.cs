@@ -365,6 +365,17 @@ public class AppSettings
     public bool WelcomeTourOffered { get; set; }
 
     /// <summary>
+    /// The Paperbunkr version string last seen running on this machine - the four-part assembly
+    /// version, e.g. "0.3.0.0" (docs/superpowers/specs/2026-09-09-startup-onboarding-whats-new-
+    /// design.md). Compared against the running version on startup to decide whether to show the
+    /// "What's New" overlay; written every launch regardless of whether the overlay showed, so a
+    /// patch release with no changelog entry still advances the marker. Null until the first launch
+    /// that writes it - a null here means "fresh install", which shows nothing (there's no prior
+    /// version to have changed from).
+    /// </summary>
+    public string? LastRunVersion { get; set; }
+
+    /// <summary>
     /// Library search box's remembered past queries (docs/superpowers/specs/2026-08-31-library-
     /// search-suggestions-design.md) - JSON-serialized <c>List&lt;string&gt;</c>, most-recent-first,
     /// capped at 8, case-insensitive deduped. Null/empty means no history yet. JSON rather than

@@ -102,7 +102,7 @@
             <Grid ColumnDefinitions="*,Auto">
                 <Button Grid.Column="0" Classes="linkText" HorizontalAlignment="Left" VerticalAlignment="Center"
                         Command="{Binding ShowWhatsNewCommand}"
-                        Content="{Binding VersionText, StringFormat='✨ What&apos;s new in {0} →'}"
+                        Content="{Binding WhatsNewLinkText}"
                         AutomationProperties.AutomationId="WelcomeWhatsNew" />
                 <Button Grid.Column="1" Classes="linkText" Content="Skip for now"
                         Command="{Binding SkipCommand}"

@@ -33,8 +33,8 @@ public partial class WelcomeOverlayViewModel : ViewModelBase
         _showWhatsNew = showWhatsNew;
     }
 
-    /// <summary>The version string for the "What's new in {version} →" footer link.</summary>
-    public string VersionText => ReleaseVersion.DisplayString;
+    /// <summary>The footer link label - "What's new in {version} →".</summary>
+    public string WhatsNewLinkText => $"✨ What's new in {ReleaseVersion.DisplayString} →";
 
     /// <summary>Set by <see cref="MainViewModel.OpenWelcomeOverlay"/> each time the screen opens, from
     /// the same <c>File.Exists(MigrationViewModel.GetDefaultCePath())</c> check <c>App.axaml.cs</c>

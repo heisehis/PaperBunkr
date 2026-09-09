@@ -1,6 +1,31 @@
 # Startup pipeline — Implementation Plan
 *Implements: docs/superpowers/specs/2026-09-09-startup-onboarding-whats-new-design.md*
 
+## Implementation status (2026-09-09)
+
+All 13 code steps landed on `claude/library-health` (commits `65be377`, `562fe20`, `a337384`,
+`a32d18b`, `81daa0e`, `885bf4c`). Notes on where implementation chose a shape the plan left open:
+
+- **Step 6** — `FirstLookShell` built as the code-only `TemplatedControl` (Title/Subtitle/Footer),
+  not the "convention" alternative, since Welcome and What's New share the header exactly.
+- **Step 9** — the About "What's New" trigger uses a `PreferencesScreenViewModel.WhatsNewRequested`
+  event (MainViewModel subscribes, same pattern as `ReaderDisplaySettingsChanged`) instead of a
+  new ctor param — avoids touching every `PreferencesScreenViewModel` test's construction.
+- **Step 5** — a bare `throw` from the now-async startup body would only hit the log-only
+  unobserved-task handler, so a new `DiagnosticsService.ReportFatalStartupError` (strict
+  no-Continue dialog + exit) is called instead, and the whole sequence is wrapped so any
+  unexpected startup exception routes there too.
+- **Step 8** — `Button.linkText` added to `Styles/Primitives.axaml` (shared by both first-look
+  overlays) rather than a local per-view style.
+- **Step 13** — **no change made.** `WelcomeTourOverlay` already builds on `Border.floatingPanel`
+  + `Pb*` tokens; it's already consistent with `FirstLookShell`. Forcing an edit would be churn.
+
+**Not yet verified (blocked / manual):** a clean `dotnet build` + full targeted test run + all
+on-screen verification — a running `Paperbunkr.App` instance held the output DLLs locked during
+implementation. Needs the app closed, then: build, `dotnet test --filter` the six suites below, and
+launch the exe to click through splash → welcome/What's-New → the DB-recovery and reduced-motion
+paths.
+
 Three units in one spec: **Splash** (steps 2–6), **What's New** (steps 7–11), **Welcome redesign**
 (steps 12–14). Steps 1 and 7 are the only real cross-unit dependencies. Everything is
 CommunityToolkit.Mvvm + `.axaml`; overlays follow the existing `OverlayShell` host pattern in

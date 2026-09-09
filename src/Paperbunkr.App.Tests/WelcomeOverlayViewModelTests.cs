@@ -23,6 +23,7 @@ public class WelcomeOverlayViewModelTests : IDisposable
     private int _reloadCount;
     private int _migrationOpenCount;
     private int _closeCount;
+    private int _whatsNewCount;
 
     public WelcomeOverlayViewModelTests()
     {
@@ -47,7 +48,7 @@ public class WelcomeOverlayViewModelTests : IDisposable
     }
 
     private WelcomeOverlayViewModel CreateViewModel() =>
-        new(_filePicker, () => _reloadCount++, () => _migrationOpenCount++, () => _closeCount++);
+        new(_filePicker, () => _reloadCount++, () => _migrationOpenCount++, () => _closeCount++, () => _whatsNewCount++);
 
     private sealed class FakeFilePickerService : IFilePickerService
     {
@@ -144,5 +145,16 @@ public class WelcomeOverlayViewModelTests : IDisposable
         vm.CeInstallDetected = true;
 
         Assert.True(vm.CeInstallDetected);
+    }
+
+    [Fact]
+    public void ShowWhatsNew_InvokesCallback_WithoutClosing()
+    {
+        var vm = CreateViewModel();
+
+        vm.ShowWhatsNewCommand.Execute(null);
+
+        Assert.Equal(1, _whatsNewCount);
+        Assert.Equal(0, _closeCount); // the welcome overlay stays open behind What's New
     }
 }

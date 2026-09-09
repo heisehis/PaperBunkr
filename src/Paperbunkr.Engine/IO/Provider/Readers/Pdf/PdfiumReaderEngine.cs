@@ -60,20 +60,19 @@ namespace cYo.Projects.ComicRack.Engine.IO.Provider.Readers.Pdf
             throw new NotImplementedException();
         }
 
-        public byte[] ReadByteImage(string source, ProviderImageInfo info)
+        public byte[] ReadByteImage(string source, ProviderImageInfo info) => RenderPageToJpeg(new PdfDocument(source), info.Index, disposeDoc: true);
+
+        private byte[] RenderPageToJpeg(PdfDocument doc, int index, bool disposeDoc)
         {
             try
             {
-                using (PdfDocument pdfDocument = new PdfDocument(source))
+                using (PdfPage pdfPage = doc.Pages[index])
                 {
-                    using (PdfPage pdfPage = pdfDocument.Pages[info.Index])
+                    Size size = CalculateSize(pdfPage.Width, pdfPage.Height);
+                    using (Bitmap bitmap = new Bitmap(size.Width, size.Height, PixelFormat.Format24bppRgb))
                     {
-                        Size size = CalculateSize(pdfPage.Width, pdfPage.Height);
-                        using (Bitmap bitmap = new Bitmap(size.Width, size.Height, PixelFormat.Format24bppRgb))
-                        {
-                            pdfPage.Render(bitmap);
-                            return bitmap.ImageToBytes(ImageFormat.Jpeg);
-                        }
+                        pdfPage.Render(bitmap);
+                        return bitmap.ImageToBytes(ImageFormat.Jpeg);
                     }
                 }
             }
@@ -81,6 +80,57 @@ namespace cYo.Projects.ComicRack.Engine.IO.Provider.Readers.Pdf
             {
                 return null;
             }
+            finally
+            {
+                if (disposeDoc)
+                {
+                    ((System.IDisposable)doc).Dispose();
+                }
+            }
+        }
+
+        // Keep-open reading session (docs/superpowers/specs/2026-09-08-reader-decode-cache-prefetch-
+        // pipeline-design.md §4.3): one PdfDocument (FPDF_DOCUMENT) held for the whole reading
+        // session instead of re-parsing the xref table on every page. PDFium is not thread-safe -
+        // the pipeline serialises all reads on one thread. The session's "entry name" is the page
+        // index as a string (a PDF has no per-page names).
+        public bool SupportsSession => true;
+
+        public IComicAccessorSession OpenSession(string source)
+        {
+            try
+            {
+                return new PdfiumAccessorSession(this, new PdfDocument(source));
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private sealed class PdfiumAccessorSession : IComicAccessorSession
+        {
+            private readonly PdfiumReaderEngine _owner;
+            private readonly PdfDocument _doc;
+
+            public PdfiumAccessorSession(PdfiumReaderEngine owner, PdfDocument doc)
+            {
+                _owner = owner;
+                _doc = doc;
+            }
+
+            public int Count => _doc.Pages.Count;
+
+            public byte[] ReadEntryBytes(string entryName)
+            {
+                if (!int.TryParse(entryName, out int index) || index < 0 || index >= _doc.Pages.Count)
+                {
+                    return null;
+                }
+                return _owner.RenderPageToJpeg(_doc, index, disposeDoc: false);
+            }
+
+            public void Dispose() => ((System.IDisposable)_doc).Dispose();
         }
 
         private Size CalculateSize(double width, double height)

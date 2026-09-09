@@ -10,3 +10,8 @@ installer/Output/
 
 # Brainstorming visual-companion scratch files
 .superpowers/
+
+# test run artifacts
+src/Paperbunkr.App.Tests/TestResults/
+**/TestResults/
+*.dmp

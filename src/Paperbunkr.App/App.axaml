@@ -232,6 +232,7 @@
         <StyleInclude Source="avares://Paperbunkr.App/Styles/Icons.axaml" />
         <StyleInclude Source="avares://Paperbunkr.App/Styles/Marks.axaml" />
         <StyleInclude Source="avares://Paperbunkr.App/Styles/Overlays.axaml" />
+        <StyleInclude Source="avares://Paperbunkr.App/Styles/FirstLook.axaml" />
         <StyleInclude Source="avares://Paperbunkr.App/Styles/Indicators.axaml" />
         <StyleInclude Source="avares://Paperbunkr.App/Styles/Badges.axaml" />
         <StyleInclude Source="avares://Paperbunkr.App/Styles/DetailChrome.axaml" />

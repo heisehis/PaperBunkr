@@ -118,6 +118,29 @@
         <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
     </Style>
 
+    <!-- Text link - a flat, chrome-less button that reads as an inline link (faint text at rest,
+         accent on hover). Used for the "what's new" / "full changelog" links on the first-look
+         overlays; replaces per-view local "skipLink"-style copies. -->
+    <Style Selector="Button.linkText">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="FontSize" Value="12.5" />
+        <Setter Property="Foreground" Value="{DynamicResource PbTextFaintBrush}" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Transitions">
+            <Transitions>
+                <BrushTransition Property="Foreground" Duration="{DynamicResource PbMotionFast}" Easing="{StaticResource PbMotionEase}" />
+            </Transitions>
+        </Setter>
+    </Style>
+    <Style Selector="Button.linkText:pointerover /template/ ContentPresenter">
+        <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="Button.linkText:pointerover">
+        <Setter Property="Foreground" Value="{DynamicResource PbAccentBrush}" />
+    </Style>
+
     <!-- Chip/pill - generalizes the pattern already established in Views/DetailPills.axaml. Two
          separate selectors (not a comma-list) since Border and Button share no common base type
          with Background/BorderBrush/CornerRadius/Padding declared on it. -->
@@ -194,6 +217,35 @@
     </Style>
     <Style Selector="Border.posterTile:focus-visible Border.posterCover">
         <Setter Property="BoxShadow" Value="0 6 18 -4 #80000000, 0 0 0 2 #66E0995A" />
+    </Style>
+
+    <!-- Kinetic Rail hover treatment (docs/superpowers/specs/2026-09-08-home-navrail-visual-v2-
+         design.md §6), scoped to Home's own cards via the "shelfCard" class PosterTile.axaml adds to
+         itself - Library's separately-authored card templates share the plain "posterTile"/
+         "posterCover" class names above but never get "shelfCard", so this doesn't touch them.
+         BoxShadow stays un-transitioned deliberately (see the "Real bug found 2026-09-03" comment
+         above this block) - only the widened ring VALUE changes, no animation added to it. The
+         scale-pop is a separate RenderTransform, unaffected by that bug since it's a different
+         property/compositor path. -->
+    <Style Selector="Border.posterTile.shelfCard:pointerover Border.posterCover">
+        <Setter Property="BoxShadow" Value="0 6 18 -4 #80000000, 0 0 0 4 #66E0995A" />
+    </Style>
+    <Style Selector="Border.posterTile.shelfCard:focus-visible Border.posterCover">
+        <Setter Property="BoxShadow" Value="0 6 18 -4 #80000000, 0 0 0 4 #66E0995A" />
+    </Style>
+    <Style Selector="Border.posterTile.shelfCard">
+        <Setter Property="RenderTransform" Value="none" />
+        <Setter Property="Transitions">
+            <Transitions>
+                <TransformOperationsTransition Property="RenderTransform" Duration="{DynamicResource PbMotionFast}" Easing="{StaticResource PbMotionEase}" />
+            </Transitions>
+        </Setter>
+    </Style>
+    <Style Selector="Border.posterTile.shelfCard:pointerover">
+        <Setter Property="RenderTransform" Value="scale(1.02)" />
+    </Style>
+    <Style Selector="Border.posterTile.shelfCard:focus-visible">
+        <Setter Property="RenderTransform" Value="scale(1.02)" />
     </Style>
 
     <!-- Poster cover scrim (docs/superpowers/specs/2026-08-27-library-browsing-4a-poster-grid-

@@ -55,7 +55,7 @@
              Button.rail / Button.rail.active Foreground Setters recolor the icon for free. Only
              the glyph size needs setting here. -->
         <Style Selector="Button.rail fi|SymbolIcon">
-            <Setter Property="FontSize" Value="20" />
+            <Setter Property="FontSize" Value="22" />
         </Style>
 
         <!-- Rail expand/collapse (docs/superpowers/specs/2026-08-24-navigation-shell-motion-system-
@@ -195,7 +195,7 @@
                             Command="{Binding GoHomeCommand}" ToolTip.Tip="Home"
                             AutomationProperties.AutomationId="HomeRailButton">
                         <StackPanel Orientation="Horizontal">
-                            <fi:SymbolIcon Symbol="Home" />
+                            <fi:SymbolIcon Symbol="Home" IconVariant="{Binding IsHome, Converter={x:Static views:BoolToIconVariantConverter.Instance}}" />
                             <TextBlock Classes="railLabel" Text="Home" IsVisible="{Binding IsNavRailExpanded}" />
                         </StackPanel>
                     </Button>
@@ -203,7 +203,7 @@
                             Command="{Binding GoInsightsCommand}" ToolTip.Tip="Insights"
                             AutomationProperties.AutomationId="InsightsRailButton">
                         <StackPanel Orientation="Horizontal">
-                            <fi:SymbolIcon Symbol="DataHistogram" />
+                            <fi:SymbolIcon Symbol="DataHistogram" IconVariant="{Binding IsInsights, Converter={x:Static views:BoolToIconVariantConverter.Instance}}" />
                             <TextBlock Classes="railLabel" Text="Insights" IsVisible="{Binding IsNavRailExpanded}" />
                         </StackPanel>
                     </Button>
@@ -211,7 +211,7 @@
                             Command="{Binding GoLibraryCommand}" ToolTip.Tip="Library"
                             AutomationProperties.AutomationId="LibraryRailButton">
                         <StackPanel Orientation="Horizontal">
-                            <fi:SymbolIcon Symbol="Book" />
+                            <fi:SymbolIcon Symbol="Library" IconVariant="{Binding IsLibrary, Converter={x:Static views:BoolToIconVariantConverter.Instance}}" />
                             <TextBlock Classes="railLabel" Text="Library" IsVisible="{Binding IsNavRailExpanded}" />
                         </StackPanel>
                     </Button>
@@ -219,21 +219,21 @@
                             Command="{Binding GoBooksCommand}" ToolTip.Tip="Books"
                             AutomationProperties.AutomationId="BooksRailButton">
                         <StackPanel Orientation="Horizontal">
-                            <fi:SymbolIcon Symbol="Book" />
+                            <fi:SymbolIcon Symbol="BookOpen" IconVariant="{Binding IsBooks, Converter={x:Static views:BoolToIconVariantConverter.Instance}}" />
                             <TextBlock Classes="railLabel" Text="Books" IsVisible="{Binding IsNavRailExpanded}" />
                         </StackPanel>
                     </Button>
                     <Button x:Name="SmartListsRailButton" Classes="rail" Classes.active="{Binding IsSmart}"
                             Command="{Binding GoSmartCommand}" ToolTip.Tip="Smart Lists">
                         <StackPanel Orientation="Horizontal">
-                            <fi:SymbolIcon Symbol="Filter" />
+                            <fi:SymbolIcon Symbol="Filter" IconVariant="{Binding IsSmart, Converter={x:Static views:BoolToIconVariantConverter.Instance}}" />
                             <TextBlock Classes="railLabel" Text="Smart Lists" IsVisible="{Binding IsNavRailExpanded}" />
                         </StackPanel>
                     </Button>
                     <Button x:Name="ReadingListsRailButton" Classes="rail" Classes.active="{Binding IsReading}"
                             Command="{Binding GoReadingCommand}" ToolTip.Tip="Reading Lists">
                         <StackPanel Orientation="Horizontal">
-                            <fi:SymbolIcon Symbol="Bookmark" />
+                            <fi:SymbolIcon Symbol="Bookmark" IconVariant="{Binding IsReading, Converter={x:Static views:BoolToIconVariantConverter.Instance}}" />
                             <TextBlock Classes="railLabel" Text="Reading Lists" IsVisible="{Binding IsNavRailExpanded}" />
                         </StackPanel>
                     </Button>
@@ -241,7 +241,7 @@
                             Command="{Binding GoEventsCommand}" ToolTip.Tip="Continuity"
                             AutomationProperties.AutomationId="EventsRailButton">
                         <StackPanel Orientation="Horizontal">
-                            <fi:SymbolIcon Symbol="Star" />
+                            <fi:SymbolIcon Symbol="Planet" IconVariant="{Binding IsEvents, Converter={x:Static views:BoolToIconVariantConverter.Instance}}" />
                             <TextBlock Classes="railLabel" Text="Continuity" IsVisible="{Binding IsNavRailExpanded}" />
                         </StackPanel>
                     </Button>
@@ -258,7 +258,7 @@
                             Command="{Binding GoPreferencesCommand}" ToolTip.Tip="Preferences"
                             AutomationProperties.AutomationId="PreferencesRailButton">
                         <StackPanel Orientation="Horizontal">
-                            <fi:SymbolIcon Symbol="Settings" />
+                            <fi:SymbolIcon Symbol="Settings" IconVariant="{Binding IsPreferences, Converter={x:Static views:BoolToIconVariantConverter.Instance}}" />
                             <TextBlock Classes="railLabel" Text="Preferences" IsVisible="{Binding IsNavRailExpanded}" />
                         </StackPanel>
                     </Button>
@@ -266,7 +266,7 @@
                             Command="{Binding ToggleNavRailPinCommand}"
                             ToolTip.Tip="Pin nav rail open" IsVisible="{Binding IsNavRailExpanded}">
                         <StackPanel Orientation="Horizontal">
-                            <fi:SymbolIcon Symbol="Pin" />
+                            <fi:SymbolIcon Symbol="Pin" IconVariant="{Binding NavRailPinned, Converter={x:Static views:BoolToIconVariantConverter.Instance}}" />
                             <TextBlock Classes="railLabel" Text="Pin" IsVisible="{Binding !NavRailPinned}" />
                             <TextBlock Classes="railLabel" Text="Unpin" IsVisible="{Binding NavRailPinned}" />
                         </StackPanel>
@@ -1051,6 +1051,14 @@
     <controls:OverlayShell IsOpen="{Binding IsUpdateAvailableOverlayOpen}" CloseCommand="{Binding Update.NotNowCommand}"
                             CloseButtonAutomationId="UpdateAvailableOverlayCloseButton">
         <views:UpdateAvailableOverlay DataContext="{Binding Update}" />
+    </controls:OverlayShell>
+
+    <!-- ============ "What's New" after an update (docs/superpowers/specs/2026-09-09-startup-
+         onboarding-whats-new-design.md) - auto-shown once when the version bumps, also opened from
+         the welcome link and Preferences → About. Same backdrop-popup pattern ============ -->
+    <controls:OverlayShell IsOpen="{Binding IsWhatsNewOverlayOpen}" CloseCommand="{Binding WhatsNew.GotItCommand}"
+                            CloseButtonAutomationId="WhatsNewOverlayCloseButton">
+        <views:WhatsNewOverlay DataContext="{Binding WhatsNew}" />
     </controls:OverlayShell>
 
     <!-- ============ Post-welcome tour offer (docs/superpowers/specs/2026-08-31-first-run-

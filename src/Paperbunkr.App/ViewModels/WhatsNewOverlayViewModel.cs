@@ -7,6 +7,10 @@ using Paperbunkr.App.Services;
 
 namespace Paperbunkr.App.ViewModels;
 
+/// <summary>One version's row in the What's New overlay - the parsed entry plus whether it opens
+/// expanded (the newest / the only one) or collapsed (a skipped release).</summary>
+public sealed record WhatsNewEntryRow(ChangelogEntry Entry, bool StartExpanded);
+
 /// <summary>
 /// The "What's New" overlay (docs/superpowers/specs/2026-09-09-startup-onboarding-whats-new-
 /// design.md, Decisions 5-6). Shown automatically on the first launch after the version bumps,
@@ -33,6 +37,11 @@ public partial class WhatsNewOverlayViewModel : ViewModelBase
     [ObservableProperty]
     private IReadOnlyList<ChangelogEntry> _entries = [];
 
+    /// <summary>View rows - the newest entry starts expanded, older (skipped) releases collapsed.
+    /// In current-only mode there is one row, expanded.</summary>
+    [ObservableProperty]
+    private IReadOnlyList<WhatsNewEntryRow> _rows = [];
+
     /// <summary>True when opened from the welcome link / About button - one entry, always expanded,
     /// no collapsed history list.</summary>
     [ObservableProperty]
@@ -45,6 +54,7 @@ public partial class WhatsNewOverlayViewModel : ViewModelBase
     public void Show(IReadOnlyList<ChangelogEntry> entries, bool currentEntryOnly)
     {
         Entries = entries;
+        Rows = entries.Select((e, i) => new WhatsNewEntryRow(e, StartExpanded: currentEntryOnly || i == 0)).ToList();
         CurrentEntryOnly = currentEntryOnly;
         HeaderText = currentEntryOnly
             ? $"What's new in Paperbunkr {ReleaseVersion.DisplayString}"

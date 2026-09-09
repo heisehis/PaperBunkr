@@ -1,0 +1,79 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Paperbunkr.App.ViewModels"
+             xmlns:services="using:Paperbunkr.App.Services"
+             xmlns:controls="using:Paperbunkr.App.Controls"
+             xmlns:views="using:Paperbunkr.App.Views"
+             xmlns:fi="using:FluentIcons.Avalonia"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="560" d:DesignHeight="460"
+             x:Class="Paperbunkr.App.Views.WhatsNewOverlay"
+             x:DataType="vm:WhatsNewOverlayViewModel">
+
+    <!--
+        The "What's New" overlay (docs/superpowers/specs/2026-09-09-startup-onboarding-whats-new-
+        design.md, Decisions 5-6). On the shared FirstLookShell. Changelog rendering reuses the
+        exact converter + category styles the Preferences → About accordion uses
+        (ChangelogBodyToGroupsConverter, changelogCategoryTag) - one renderer, not two.
+    -->
+    <controls:FirstLookShell Title="What's new" Subtitle="{Binding HeaderText}">
+
+        <ScrollViewer MaxHeight="340" HorizontalScrollBarVisibility="Disabled">
+            <ItemsControl ItemsSource="{Binding Rows}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:WhatsNewEntryRow">
+                        <StackPanel Margin="0,0,0,4">
+                            <ToggleButton Name="ExpandToggle" Classes="changelogExpandHeader"
+                                          IsChecked="{Binding StartExpanded, Mode=OneTime}">
+                                <Grid ColumnDefinitions="Auto,Auto,Auto,*">
+                                    <fi:SymbolIcon Grid.Column="0" Symbol="ChevronRight" FontSize="14"
+                                                   Classes="changelogChevron" Classes.expanded="{Binding $parent[ToggleButton].IsChecked}"
+                                                   Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" />
+                                    <TextBlock Grid.Column="1" Text="{Binding Entry.Version}" FontWeight="Bold" FontSize="13"
+                                               Foreground="{DynamicResource PbTextBrush}" Margin="8,0" VerticalAlignment="Center" />
+                                    <TextBlock Grid.Column="2" Text="{Binding Entry.Date}" FontSize="11.5"
+                                               Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" />
+                                </Grid>
+                            </ToggleButton>
+                            <StackPanel IsVisible="{Binding #ExpandToggle.IsChecked}" Margin="22,8,0,10" Spacing="8">
+                                <ItemsControl ItemsSource="{Binding Entry.Body, Converter={x:Static views:ChangelogBodyToGroupsConverter.Instance}}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="services:ChangelogBodyGroup">
+                                            <StackPanel Spacing="4" Margin="0,0,0,4">
+                                                <Border Classes="changelogCategoryTag" HorizontalAlignment="Left"
+                                                        IsVisible="{Binding Category, Converter={x:Static ObjectConverters.IsNotNull}}">
+                                                    <TextBlock Text="{Binding Category}" FontSize="11" Foreground="{DynamicResource PbAccentBrush}" />
+                                                </Border>
+                                                <ItemsControl ItemsSource="{Binding Lines}">
+                                                    <ItemsControl.ItemTemplate>
+                                                        <DataTemplate x:DataType="x:String">
+                                                            <TextBlock Text="{Binding}" FontSize="12.5" TextWrapping="Wrap"
+                                                                       Foreground="{DynamicResource PbTextFaintBrush}" Margin="0,2" />
+                                                        </DataTemplate>
+                                                    </ItemsControl.ItemTemplate>
+                                                </ItemsControl>
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </StackPanel>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </ScrollViewer>
+
+        <controls:FirstLookShell.Footer>
+            <Grid ColumnDefinitions="*,Auto">
+                <Button Grid.Column="0" Classes="linkText" HorizontalAlignment="Left" VerticalAlignment="Center"
+                        Command="{Binding OpenFullChangelogCommand}"
+                        Content="Full changelog in Preferences → About"
+                        AutomationProperties.AutomationId="WhatsNewFullChangelog" />
+                <Button Grid.Column="1" Classes="primary" Content="Got it"
+                        Command="{Binding GotItCommand}"
+                        AutomationProperties.AutomationId="WhatsNewGotIt" />
+            </Grid>
+        </controls:FirstLookShell.Footer>
+    </controls:FirstLookShell>
+</UserControl>

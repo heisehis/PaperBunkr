@@ -1,0 +1,112 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:Paperbunkr.App.ViewModels"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" d:DesignWidth="480" d:DesignHeight="340"
+        x:Class="Paperbunkr.App.Views.SplashWindow"
+        x:DataType="vm:SplashViewModel"
+        Title="Paperbunkr"
+        Width="480" Height="340"
+        CanResize="False"
+        SystemDecorations="None"
+        ShowInTaskbar="False"
+        Topmost="True"
+        WindowStartupLocation="CenterScreen"
+        TransparencyLevelHint="None"
+        Background="#0A0B0D">
+
+    <!--
+        Shown first from App.axaml.cs while the heavy startup work runs on a background thread
+        (docs/superpowers/specs/2026-09-09-startup-onboarding-whats-new-design.md, Decision 2).
+        Bound to SplashViewModel. Background is the literal brand dark (the app's real Default-skin
+        page colour, same value the installer uses) - NOT a skin resource: this renders before
+        SkinService.ApplyPersistedSettings() has necessarily run.
+
+        All motion is Opacity / RenderTransform only. The glow's blur is a static RadialGradientBrush
+        - only its Opacity pulses (an animated BoxShadow property caused a real invalidation race
+        here before - project memory poster_glow_transition_bug). The ".animated" classes are added
+        in code-behind only when reduced motion is off.
+    -->
+    <Window.Styles>
+        <!-- Emblem entrance: fade + scale-in, once. -->
+        <Style Selector="Image#LogoImage">
+            <Setter Property="RenderTransformOrigin" Value="0.5,0.5" />
+            <Style.Animations>
+                <Animation Duration="0:0:0.45" Easing="CubicEaseOut" FillMode="Forward">
+                    <KeyFrame Cue="0%">
+                        <Setter Property="Opacity" Value="0" />
+                        <Setter Property="RenderTransform" Value="scale(0.9)" />
+                    </KeyFrame>
+                    <KeyFrame Cue="100%">
+                        <Setter Property="Opacity" Value="1" />
+                        <Setter Property="RenderTransform" Value="scale(1)" />
+                    </KeyFrame>
+                </Animation>
+            </Style.Animations>
+        </Style>
+        <!-- Breathing pulse while loading (added in code-behind unless reduced motion). -->
+        <Style Selector="Image#LogoImage.animated">
+            <Style.Animations>
+                <Animation Duration="0:0:2.4" IterationCount="INFINITE" PlaybackDirection="Alternate"
+                           Easing="SineEaseInOut" Delay="0:0:0.45">
+                    <KeyFrame Cue="0%">
+                        <Setter Property="RenderTransform" Value="scale(1)" />
+                    </KeyFrame>
+                    <KeyFrame Cue="100%">
+                        <Setter Property="RenderTransform" Value="scale(1.035)" />
+                    </KeyFrame>
+                </Animation>
+            </Style.Animations>
+        </Style>
+        <Style Selector="Border#GlowBorder.animated">
+            <Style.Animations>
+                <Animation Duration="0:0:2.4" IterationCount="INFINITE" PlaybackDirection="Alternate"
+                           Easing="SineEaseInOut">
+                    <KeyFrame Cue="0%">
+                        <Setter Property="Opacity" Value="0.35" />
+                    </KeyFrame>
+                    <KeyFrame Cue="100%">
+                        <Setter Property="Opacity" Value="0.7" />
+                    </KeyFrame>
+                </Animation>
+            </Style.Animations>
+        </Style>
+    </Window.Styles>
+
+    <Grid RowDefinitions="*,Auto,Auto,*">
+        <!-- Emblem + static glow -->
+        <Panel Grid.Row="1" HorizontalAlignment="Center" Margin="0,0,0,28">
+            <Border x:Name="GlowBorder" Width="180" Height="180" Opacity="0.5">
+                <Border.Background>
+                    <RadialGradientBrush GradientOrigin="50%,50%" Center="50%,50%" RadiusX="50%" RadiusY="50%">
+                        <GradientStop Color="#73C9803F" Offset="0" />
+                        <GradientStop Color="#00C9803F" Offset="0.7" />
+                    </RadialGradientBrush>
+                </Border.Background>
+            </Border>
+            <Image x:Name="LogoImage" Width="120" Height="120"
+                   Source="avares://Paperbunkr.App/Assets/paperbunkr-logo-source.png" />
+        </Panel>
+
+        <!-- Progress + status -->
+        <StackPanel Grid.Row="2" HorizontalAlignment="Center" Spacing="14">
+            <ProgressBar Width="240" Height="3" Minimum="0" Maximum="1"
+                         Value="{Binding Progress}"
+                         Background="#25252B" CornerRadius="2" ShowProgressText="False">
+                <ProgressBar.Foreground>
+                    <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,0%">
+                        <GradientStop Color="#B06A2E" Offset="0" />
+                        <GradientStop Color="#D9A441" Offset="1" />
+                    </LinearGradientBrush>
+                </ProgressBar.Foreground>
+            </ProgressBar>
+            <TextBlock Text="{Binding StatusMessage}" FontSize="12" Foreground="#8A8F98"
+                       HorizontalAlignment="Center" />
+        </StackPanel>
+
+        <TextBlock Grid.Row="3" Text="{Binding VersionText}"
+                   HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,15,13"
+                   FontSize="10.5" Foreground="#565B64" />
+    </Grid>
+</Window>

@@ -58,9 +58,16 @@ Mirror the existing segmented-tab idiom (`IsComicFoldersMaintenanceTabActive` + 
 
 ```csharp
 // backing store — the persisted value, null = Auto
-[ObservableProperty] private int? _readerMemoryLimitMb;
+[ObservableProperty]
+[NotifyPropertyChangedFor(nameof(IsReaderMemoryAuto))]
+[NotifyPropertyChangedFor(nameof(IsReaderMemory512))]
+[NotifyPropertyChangedFor(nameof(IsReaderMemory1024))]
+private int? _readerMemoryLimitMb;
 
-public bool IsReaderMemoryAuto  => ReaderMemoryLimitMb is not (512 or 1024);
+// Auto == "no explicit override" == null. A non-standard stored value (e.g. 768 set by
+// hand or a future build) lights up NO segment — an honest "custom" state — rather than
+// being mislabelled Auto.
+public bool IsReaderMemoryAuto  => ReaderMemoryLimitMb is null;
 public bool IsReaderMemory512   => ReaderMemoryLimitMb == 512;
 public bool IsReaderMemory1024  => ReaderMemoryLimitMb == 1024;
 
@@ -69,19 +76,17 @@ private void SetReaderMemoryLimit(string choice)   // "auto" | "512" | "1024"
 {
     int? mb = choice switch { "512" => 512, "1024" => 1024, _ => null };
     if (ReaderMemoryLimitMb == mb) return;
-    ReaderMemoryLimitMb = mb;
+    ReaderMemoryLimitMb = mb;                              // generated setter raises the 3 NotifyPropertyChangedFor
     PersistBehaviorSetting(s => s.ReaderMemoryLimitMb = mb);
-    OnPropertyChanged(nameof(IsReaderMemoryAuto));
-    OnPropertyChanged(nameof(IsReaderMemory512));
-    OnPropertyChanged(nameof(IsReaderMemory1024));
 }
 ```
 
 - The `string` command parameter (not `int?`) keeps the XAML binding trivial —
-  `CommandParameter="512"`.
+  `CommandParameter="512"`. `[NotifyPropertyChangedFor]` on the field means the three `Is…`
+  bools re-raise automatically whenever the property changes — no manual `OnPropertyChanged`
+  in the command, and the load path gets the notifications for free too.
 - Load path (the settings-hydration method, ~line 668 alongside `ResetZoomOnPageChange` /
-  `DefaultPageFitMode`): `ReaderMemoryLimitMb = settings.ReaderMemoryLimitMb;` then raise the
-  three `OnPropertyChanged`.
+  `DefaultPageFitMode`): `ReaderMemoryLimitMb = settings.ReaderMemoryLimitMb;`.
 - `PersistBehaviorSetting` is the class's existing single-field write helper. No new event —
   `ReaderDisplaySettingsChanged` is deliberately **not** raised (nothing live-applies this).
 
@@ -117,18 +122,20 @@ New group at the **bottom** of the section, after the background/margins group:
   `Background="Transparent"`; `.active` → `PbSurface3Brush` fill + `PbTextBrush` + SemiBold), not
   a joined 3-segment control. Its own comment calls it a stopgap "rather than a new shared
   control." This batch is its second consumer, so **promote the pair to a shared styles file**
-  (`Styles/Primitives.axaml`) and drop the local copy from `LibrarySection.axaml` (behaviour
-  identical — same selectors, same setters). Nothing about it needs 2-vs-3-segment handling; each
-  button rounds itself.
+  (`Styles/Primitives.axaml`) and drop the local copy from `LibrarySection.axaml`. Behaviour is
+  identical — same selectors, same setters, same `{DynamicResource}` keys (`PbTextFaintBrush` /
+  `PbSurface3Brush` / `PbTextBrush`) carried over verbatim so theme switching still works.
+  Nothing about it needs 2-vs-3-segment handling; each button rounds itself.
 - All brushes via `{DynamicResource}` / existing `Classes` — no hex literals (avalonia-pro-max
   design-system rule).
 
 ### Migration / tests
 
 - **No migration** — column exists.
-- `PreferencesScreenViewModelTests`: setting each choice persists the right `int?`
-  (`null` / `512` / `1024`) and the three `Is…` bools reflect it; a fresh VM hydrates the
-  selection from a stored value.
+- `PreferencesScreenViewModelTests`: each command choice persists the right `int?`
+  (`null` / `512` / `1024`) and the three `Is…` bools track it; a fresh VM hydrates the selection
+  from a stored value; a stored **non-standard** value (e.g. `768`) → all three bools false
+  (no segment shown), and re-selecting `Auto` writes `null`.
 - No `ReaderMemoryBudget` change — `Resolve` already handles every value this control can produce.
 
 ---
@@ -170,14 +177,22 @@ State:
 ```csharp
 private int _awaitingPageIndex = -1;   // the page a cold-miss swap is waiting on; -1 = none
 [ObservableProperty] private bool _isPageLoading;
+private IDisposable? _coldMissTimeout;  // the ~5 s "still loading" fallback; disarmed on swap / new request / teardown
 ```
 
-Subscription — once, in `Load`, paged mode only, after `_decoder` is assigned and cast:
+**Subscription lifecycle.** `Load()` already does `_decoder?.Dispose(); _decoder = null;` near its
+top (`ReaderScreenViewModel.cs:856`) to drop the previous issue's decoder, and `GoBack()`
+(`:2553`) is the "leaving the reader" exit. Both are the churn points for `_decoder`.
 
-```csharp
-if (_decoder is IReaderPageSource pipeline)
-    pipeline.BackgroundDecodeCompleted += OnBackgroundPageDecoded;   // unsubscribe on reader teardown
-```
+- **Before** `_decoder?.Dispose()` in `Load` **and** in `GoBack`: if the outgoing
+  `_decoder is IReaderPageSource oldPipe`, `oldPipe.BackgroundDecodeCompleted -= OnBackgroundPageDecoded`.
+  Also `_coldMissTimeout?.Dispose()`, `_awaitingPageIndex = -1`, `IsPageLoading = false`.
+- **After** the new `_decoder` is created and cast (paged mode), `newPipe.BackgroundDecodeCompleted
+  += OnBackgroundPageDecoded`.
+
+Factor the detach into a small `DetachDecoderEvents()` helper so `Load` and `GoBack` can't
+drift. The VM instance itself is never destroyed (rail-nav toggles `IsVisible`), so there is no
+`Dispose()` on the VM to hook — the decoder-churn points are the complete set.
 
 `RefreshCurrentPage` paged branch (replacing the current unconditional `GetPage`):
 
@@ -186,6 +201,10 @@ if (_decoder is IReaderPageSource pipeline)
 {
     pipeline.SetViewportWidth(2560);
     pipeline.SetVirtualizationWindow(_currentPageIndex - 1, _currentPageIndex + 1); // enqueues target high-priority
+
+    // always cancel a prior wait first — a new page request supersedes it
+    _coldMissTimeout?.Dispose();
+    _coldMissTimeout = null;
 
     var cached = pipeline.TryGetCachedPage(_currentPageIndex);
     if (cached is not null)
@@ -199,6 +218,14 @@ if (_decoder is IReaderPageSource pipeline)
         // keep the outgoing page on screen; don't blank CurrentPage
         _awaitingPageIndex = _currentPageIndex;
         IsPageLoading = true;
+        int waitingFor = _currentPageIndex;
+        _coldMissTimeout = DispatcherTimer.RunOnce(() =>
+        {
+            if (_awaitingPageIndex != waitingFor) return;   // already resolved
+            _awaitingPageIndex = -1;
+            IsPageLoading = false;
+            ErrorMessage = $"Couldn't decode page {waitingFor + 1}.";
+        }, TimeSpan.FromSeconds(5));
     }
 }
 else
@@ -212,25 +239,38 @@ Handler:
 ```csharp
 private void OnBackgroundPageDecoded(int idx)
 {
-    if (idx != _awaitingPageIndex) return;   // stale — user moved on
-    Dispatcher.UIThread.Post(() =>
-    {
-        if (idx != _awaitingPageIndex || _decoder is not IReaderPageSource p) return;
-        var bmp = p.TryGetCachedPage(idx);
-        if (bmp is null) return;             // evicted again before we got here; a later turn re-requests
-        _awaitingPageIndex = -1;
-        IsPageLoading = false;
-        CurrentPage = bmp;
-        CurrentPageSecondary = TryDecodePairedPage(idx, bmp.PixelSize);
-    });
+    if (idx != _awaitingPageIndex) return;   // stale — user moved on (see "stale guard" below)
+    if (Dispatcher.UIThread.CheckAccess()) ApplyDecodedPage(idx);
+    else Dispatcher.UIThread.Post(() => ApplyDecodedPage(idx));
+}
+
+private void ApplyDecodedPage(int idx)
+{
+    if (idx != _awaitingPageIndex || _decoder is not IReaderPageSource p) return;
+    var bmp = p.TryGetCachedPage(idx);
+    if (bmp is null) return;                 // evicted again before we got here; a later turn re-requests
+    _awaitingPageIndex = -1;
+    _coldMissTimeout?.Dispose();
+    _coldMissTimeout = null;
+    IsPageLoading = false;
+    CurrentPage = bmp;
+    CurrentPageSecondary = TryDecodePairedPage(idx, bmp.PixelSize);
 }
 ```
 
-- **Error path:** the current `catch` around `GetPage` moves — a cold miss no longer throws here;
-  a genuine decode failure surfaces via the pipeline's own logging + the page simply never
-  arriving. Keep a fallback: if `IsPageLoading` is still true after a timeout (~5 s), set
-  `ErrorMessage = "Couldn't decode page N."` and clear the flag. (Timer armed on miss, disarmed on
-  swap.)
+- **Stale guard — why `_awaitingPageIndex` alone is sufficient (no sequence counter).** For a
+  given issue and the fixed paged viewport width (2560), page index → decoded bitmap is
+  deterministic: `TryGetCachedPage(N)` can only ever return *page N*, never stale content.
+  So the identity that matters is "is N still the page the user wants," which `_awaitingPageIndex`
+  captures exactly. Rapid A→B→A: the B request is abandoned when `_awaitingPageIndex` moves to A;
+  a late `BackgroundDecodeCompleted(A)` from the *first* A visit still delivers the correct page A
+  (the user is back on A). A monotonic request-id would only make us *wait longer* for a
+  byte-identical re-decode. The `_coldMissTimeout`'s own `waitingFor` capture covers the timer.
+- **Error path:** the current `catch` around `GetPage` stays only on the non-pipeline fallback
+  branch. On the pipeline branch a cold miss no longer throws — a genuine decode failure surfaces
+  as the `_coldMissTimeout` firing (page never arrived) → `ErrorMessage`. The timeout is disarmed
+  on: a successful swap (`ApplyDecodedPage`), any new page request (top of the pipeline branch
+  above), and decoder teardown (`DetachDecoderEvents`).
 - **Double-page secondary:** stays synchronous via `TryDecodePairedPage` — the paired page is
   adjacent and almost always already cached or in the high-priority window. If it too is a cold
   miss, `TryDecodePairedPage` returns null (existing contract) and the spread shows solo until the
@@ -250,12 +290,21 @@ IsPageLoading}"`. Reuse `BusyIndicator` if it sizes down cleanly into the cluste
 
 ### Tests
 
-- `ReaderScreenViewModelTests`: with a fake `IReaderPageSource` whose `TryGetCachedPage` returns
-  null then (after raising `BackgroundDecodeCompleted`) a bitmap — `IsPageLoading` goes
-  true→false, `CurrentPage` swaps, the outgoing page stays visible in between.
-- Stale guard: two jumps in a row; the first page's late `BackgroundDecodeCompleted` is ignored.
-- Warm path unchanged: `TryGetCachedPage` returns a bitmap → `IsPageLoading` never set,
-  synchronous assignment.
+- **Cold miss → swap:** fake `IReaderPageSource` whose `TryGetCachedPage` returns null, then a
+  bitmap after `BackgroundDecodeCompleted` is raised — `IsPageLoading` true→false, `CurrentPage`
+  swaps, and the *outgoing* bitmap is still `CurrentPage` in between (not null).
+- **Warm path unchanged:** `TryGetCachedPage` returns a bitmap immediately → `IsPageLoading` never
+  set true, synchronous assignment, no timer armed.
+- **Stale guard:** jump A→B→A; the first-A-visit's late `BackgroundDecodeCompleted(A)` after the
+  user is back on A still applies (correct page); a late `BackgroundDecodeCompleted(B)` after the
+  user left B is ignored (`CurrentPage` unchanged).
+- **Timeout:** cold miss, no completion raised — after the 5 s fallback (use a fake/virtual
+  timer or the headless dispatcher's time control) `IsPageLoading` clears and `ErrorMessage` is
+  set; a completion arriving *after* the timeout is a no-op (`_awaitingPageIndex` already -1).
+- **Subscription lifecycle:** a second `Load()` (new decoder) and a `GoBack()` each detach the
+  handler from the previous `IReaderPageSource` — raising `BackgroundDecodeCompleted` on the
+  *old* fake pipe afterwards does nothing. (Assert via a spy `IReaderPageSource` that counts
+  live handlers, or that a post-teardown event doesn't touch `CurrentPage`.)
 
 ---
 
@@ -281,38 +330,58 @@ private void CommitPageInput()
     IsPageInputActive = false;
     if (!int.TryParse(PageInputText?.Trim(), out int n)) return;   // invalid → no-op
     n = Math.Clamp(n, 1, PageCount);
-    int index = n - 1;
-    if (IsContinuousMode) ScrollToPageRequested?.Invoke(index);
-    else GoToPage(index);
+    NavigateToPageIndex(n - 1);                                    // 1-based entry → 0-based index
 }
 
 [RelayCommand]
 private void CancelPageInput() => IsPageInputActive = false;
 ```
 
-- Routing is exactly `SelectThumbnail`'s split (paged → `GoToPage`, continuous →
-  `ScrollToPageRequested`). Double-page: `GoToPage` lands on the typed page and its existing
-  pairing logic re-pairs.
+**Shared navigation helper.** Extract the mode split that `SelectThumbnail` currently inlines
+into one private method, and call it from both:
+
+```csharp
+private void NavigateToPageIndex(int index)   // index is 0-based, already clamped by the caller
+{
+    if (IsContinuousMode) ScrollToPageRequested?.Invoke(index);
+    else GoToPage(index);
+}
+```
+
+- `SelectThumbnail` becomes `NavigateToPageIndex(Thumbnails.IndexOf(thumbnail))` — behaviour
+  unchanged, one code path.
+- **Double-page / spread mode:** `GoToPage(N-1)` is *exactly* what clicking page N's thumbnail
+  does today. `GoToPage`'s existing `DoublePagePairingActive` logic then positions the spread so
+  page N is visible (paired with N−1 or N+1 per the existing rules). "Jump to page N" therefore
+  means "show me page N," landing on whatever spread contains it — no separate spread-index math,
+  and consistent with the thumbnail rail.
 - `GoToPage` already no-ops when `index == _currentPageIndex`, so re-entering the current number
   is harmless.
 
-### Keyboard — `Models/KeyboardCommandRegistry`
+### Keyboard — remappable, via the existing `PageCanvas` gesture-property pattern
 
-New entry in the `NavigationGroup` list:
+Every remappable reader shortcut is: a `KeyboardCommandRegistry` entry → a `…Key`
+`IReadOnlyList<KeyGesture>` property on `ReaderScreenViewModel` (resolved through
+`KeyBindingService`) → a `StyledProperty<IReadOnlyList<KeyGesture>>` + a `StyledProperty<ICommand>`
+on `PageCanvas`, bound in `ReaderScreen.axaml` → matched in `PageCanvas.OnKeyDown` via
+`AnyMatches(…Gesture, e)` + `TryExecute(…Command)`. `ReaderGoToPage` follows that pattern exactly:
 
-```csharp
-new(ReaderGoToPage, NavigationGroup, "Go to page…", new KeyGesture(Key.G), ConflictContext.Always),
-```
+1. `KeyboardCommandRegistry`: new `ReaderGoToPage` id constant + entry in the `NavigationGroup`
+   list — `new(ReaderGoToPage, NavigationGroup, "Go to page…", new KeyGesture(Key.G),
+   ConflictContext.Always)`. `G` is unbound in the reader registry today (`D1`–`D5` are fit
+   modes, so digit-accumulation is not an option — hence an explicit trigger key). Defaults live
+   in code; `KeyBinding` persists only overrides — **no migration, no seeding.**
+2. `ReaderScreenViewModel`: new `GoToPageKey` property, resolved the same way the other `…Key`
+   properties are.
+3. `PageCanvas`: `GoToPageGestureProperty` + `GoToPageCommandProperty`; in `OnKeyDown`'s
+   Always-context block (alongside rotate/zoom/fullscreen) —
+   `if (AnyMatches(GoToPageGesture, e)) { if (TryExecute(GoToPageCommand)) e.Handled = true; return; }`.
+4. `ReaderScreen.axaml`: `GoToPageGesture="{Binding GoToPageKey}"`
+   `GoToPageCommand="{Binding BeginPageInputCommand}"`.
 
-- `G` is unbound in the reader registry today (`D1`–`D5` are fit modes; digit-accumulation is
-  therefore not an option — this is why the trigger is an explicit key/click, not typing digits
-  into the canvas).
-- `ReaderGoToPage` is a new command-id constant alongside the other `Reader*` ids.
-- Defaults live in code; `KeyBinding` persists only user overrides — **no migration, no seeding.**
-- Dispatch: wherever reader registry commands are routed to VM actions (the
-  `KeyBindingService`-driven switch in `PageCanvas.OnKeyDown` or `ReaderScreen.axaml.cs`), map
-  `ReaderGoToPage` → `BeginPageInputCommand`. It must fire in every reading mode and whether or
-  not the canvas has focus — same dispatch reach as `ReaderToggleFullscreen`.
+Reach is identical to every other reader shortcut: fires while the canvas has focus (the normal
+reading state), in every reading mode. Once focus has moved into a chrome control the user clicks
+the page label instead.
 
 ### View — `Views/ReaderScreen.axaml` (Navigate cluster, ~line 347)
 
@@ -340,25 +409,43 @@ The `PageLabel` `TextBlock` and an inline editor share one slot:
   `<UserControl.Styles>`**, where `chromeCluster` / `clusterIcon` / `floatingPanel` already live
   — the reader chrome styles are not in a shared `Styles/*.axaml` file.
 - Code-behind (`ReaderScreen.axaml.cs`):
-  - React to `IsPageInputActive` becoming true (property-changed subscription or an
-    `AttachedToVisualTree`/`IsVisibleProperty` observer on `PageJumpBox`) → `PageJumpBox.Focus();
-    PageJumpBox.SelectAll();`.
-  - `PageJumpBox.KeyDown`: `Enter` → `CommitPageInputCommand`; `Escape` → `CancelPageInputCommand`;
-    mark handled so the reader's global key handling doesn't also see them.
+  - React to `IsPageInputActive` becoming true (via the existing `OnViewModelPropertyChanged`
+    handler) → **synchronously** `PageJumpBox.Focus(); PageJumpBox.SelectAll();`. Synchronous
+    focus is what keeps the keystroke that opened the box (and everything after) away from
+    `PageCanvas`.
+  - `PageJumpBox.KeyDown`: `Enter` → `CommitPageInputCommand`, `Escape` → `CancelPageInputCommand`
+    (both `e.Handled = true`). Also `e.Handled = true` for `Up` / `Down` / `PageUp` / `PageDown`
+    (a single-line `TextBox` does nothing useful with them and they must not bubble to reader
+    nav). `Left` / `Right` are left alone — caret movement.
+  - `PageJumpBox` input filter — handle `TextInputEvent` (or `TextInput` on the control) and set
+    `e.Handled = true` for any non-digit, so only `0`–`9` ever enter the field. Space, `-`, `.`,
+    letters are all rejected at the source; the commit-time `int.TryParse` + `Clamp` stays as the
+    backstop.
   - `PageJumpBox.LostFocus` → `CancelPageInputCommand` (blur = cancel; blur-commit surprises when
     the user clicks away).
+- **Belt-and-suspenders shortcut suppression:** `PageCanvas` gains a `bool` `PageInputActiveProperty`
+  bound `{Binding IsPageInputActive}`; `OnKeyDown` returns immediately (before `base.OnKeyDown`'s
+  own handling matters) when it's set. Covers any focus-timing edge where a key reaches the canvas
+  while the input is open.
 - `PartLabel` (split-page part indicator) sits after this in the same cluster — unchanged; it
   only shows when zoomed, orthogonal to page input.
 
 ### Tests
 
-- `ReaderScreenViewModelTests`: `CommitPageInput` — `"5"` → page 5; `"9999"` → clamped to
-  `PageCount`; `"0"` / `"-3"` → clamped to 1; `"abc"` / `""` → no navigation, input closes;
-  continuous mode raises `ScrollToPageRequested` not `GoToPage`; `BeginPageInput` pre-fills the
-  current number; `CancelPageInput` closes without navigating.
-- `KeyboardCommandRegistryTests` (or equivalent): `ReaderGoToPage` present, default `G`, no
-  gesture conflict in `ConflictContext.Always`.
-- `KeyBindingServiceTests`: an override on `ReaderGoToPage` round-trips through persistence.
+- `ReaderScreenViewModelTests` — `CommitPageInput`: `"5"` → index 4; `"9999"` → `PageCount-1`;
+  `"0"` / `"-3"` → index 0; `"  7  "` (whitespace) → index 6; `"abc"` / `""` → no navigation,
+  `IsPageInputActive` false; continuous mode routes to `ScrollToPageRequested` (spy the event)
+  not `GoToPage`; `BeginPageInput` sets `PageInputText` to the current 1-based number and
+  `IsPageInputActive` true; `BeginPageInput` no-ops with no decoder / `PageCount == 0`;
+  `CancelPageInput` closes without navigating.
+- `NavigateToPageIndex` shared helper: `SelectThumbnail` still routes correctly after the
+  refactor (existing thumbnail tests must stay green — assert, don't just assume).
+- `KeyboardCommandRegistryTests`: `ReaderGoToPage` present in `NavigationGroup`, default `G`,
+  `ConflictContext.Always`, no gesture collision with any other `Always` command.
+- `KeyBindingServiceTests`: an override on `ReaderGoToPage` round-trips through persistence;
+  `GoToPageKey` on the VM reflects the override.
+- Digit-filter and key-suppression live in code-behind (not headless-testable here) — covered by
+  the on-screen verification list, not an xUnit test.
 
 ---
 
@@ -368,16 +455,16 @@ The `PageLabel` `TextBlock` and an inline editor share one slot:
 |---|---|
 | `src/Paperbunkr.App/ViewModels/PreferencesScreenViewModel.cs` | Item 1 VM: backing prop, 3 bools, `SetReaderMemoryLimitCommand`, load-path hydration |
 | `src/Paperbunkr.App/Views/Preferences/ReaderSection.axaml` | Item 1 view: "Performance" group |
-| `src/Paperbunkr.App/ViewModels/ReaderScreenViewModel.cs` | Item 2 narrow fix (state, subscription, `RefreshCurrentPage` paged branch, handler, timeout); Item 3 VM (3 props/commands) |
-| `src/Paperbunkr.App/Views/ReaderScreen.axaml` | Item 2 loading spinner; Item 3 page-label button + `pageJump` TextBox |
-| `src/Paperbunkr.App/Views/ReaderScreen.axaml.cs` | Item 3 focus/keydown/lostfocus wiring; `ReaderGoToPage` dispatch |
-| `src/Paperbunkr.App/Views/ReaderScreen.axaml` (`<UserControl.Styles>`) | Item 3: `pageJump` + `pageLabelButton` inline styles |
+| `src/Paperbunkr.App/ViewModels/ReaderScreenViewModel.cs` | Item 2 narrow fix (state, `DetachDecoderEvents` helper, subscribe/unsubscribe in `Load`+`GoBack`, `RefreshCurrentPage` paged branch, `OnBackgroundPageDecoded`/`ApplyDecodedPage`, `_coldMissTimeout`); Item 3 VM (props, 3 commands, `NavigateToPageIndex` helper, `GoToPageKey`) |
+| `src/Paperbunkr.App/Views/ReaderScreen.axaml` | Item 2 loading spinner; Item 3 page-label button + `pageJump` TextBox + `GoToPageGesture`/`GoToPageCommand`/`PageInputActive` bindings on `PageCanvas`; both new inline styles in `<UserControl.Styles>` |
+| `src/Paperbunkr.App/Views/ReaderScreen.axaml.cs` | Item 3 synchronous focus on activation, `PageJumpBox` KeyDown / TextInput digit-filter / LostFocus wiring |
+| `src/Paperbunkr.App/Views/PageCanvas.cs` | Item 3: `GoToPageGesture`/`GoToPageCommand` styled properties + `OnKeyDown` Always-block match; `PageInputActive` styled property + early-return guard |
 | `src/Paperbunkr.App/Models/KeyboardCommandRegistry.cs` | Item 3: `ReaderGoToPage` id + entry |
 | `src/Paperbunkr.App/Styles/Primitives.axaml` | Item 1: promote `segTab` / `segTab.active` here (shared) |
 | `src/Paperbunkr.App/Views/Preferences/LibrarySection.axaml` | Item 1: drop the now-shared local `segTab` style pair |
 | `src/Paperbunkr.App.Tests/PreferencesScreenViewModelTests.cs` | Item 1 tests |
-| `src/Paperbunkr.App.Tests/ReaderScreenViewModelTests.cs` | Item 2 + Item 3 tests |
-| `src/Paperbunkr.App.Tests/KeyboardCommandRegistryTests.cs` / `KeyBindingServiceTests.cs` | Item 3 registry + roundtrip tests |
+| `src/Paperbunkr.App.Tests/ReaderScreenViewModelTests.cs` | Item 2 (cold-miss swap, warm path, stale guard, timeout, subscription lifecycle) + Item 3 (`CommitPageInput` boundaries, mode routing, `NavigateToPageIndex` refactor safety) tests |
+| `src/Paperbunkr.App.Tests/KeyboardCommandRegistryTests.cs` / `KeyBindingServiceTests.cs` | Item 3 registry entry + override roundtrip |
 | `docs/superpowers/specs/2026-09-08-reader-decode-cache-prefetch-pipeline-design.md` | new §17 (Item 2 decision record) |
 | `docs/ce-feature-inventory.md` | line 138: correct the CE-has-it framing; note Item 3 shipped as a deviation |
 | `docs/Paperbunkr-Roadmap.md` | reader section: mark these items |
@@ -391,10 +478,15 @@ The `PageLabel` `TextBlock` and an inline editor share one slot:
   merged style set and the `Library` folder-management tabs still render after the move.
 - **`BusyIndicator` fit** in the Navigate cluster is unverified — the design allows a plain glyph
   fallback, so this isn't blocking.
-- **`ReaderGoToPage` dispatch reach** — needs to fire regardless of canvas focus. If the reader's
-  registry dispatch is canvas-focus-gated today, that's a one-line addition to the always-on
-  handler (same place `F`/fullscreen is handled), not a redesign.
-- **On-screen verification** — no computer-use for this project. The user verifies the freeze is
-  gone on a large jump, the segmented control persists, and the inline editor focuses/commits/
-  cancels. Automated tests cover the VM logic; they can't prove the UI-thread stall is actually
-  gone.
+- **`ReaderGoToPage` dispatch reach** — confirmed: reader shortcuts are matched in
+  `PageCanvas.OnKeyDown` via per-command `StyledProperty<IReadOnlyList<KeyGesture>>` bound from
+  `ReaderScreen.axaml`. `ReaderGoToPage` uses that same pattern; its reach (canvas-focused, any
+  mode) matches every other reader shortcut. Not a redesign.
+- **Cold-miss timeout value (5 s)** is a guess. It only governs how long a genuinely stuck decode
+  shows the spinner before an error — generous is fine. Tune from feel if it ever matters.
+- **On-screen verification** — no computer-use for this project. The user verifies: the freeze is
+  gone on a large jump (Item 2); the segmented control persists across app restart and the Library
+  folder tabs still render after the `segTab` move (Item 1); the inline editor focuses on `G`,
+  accepts only digits, commits on Enter, cancels on Esc/blur, and no page-turn/fit-mode fires
+  while it's open (Item 3). Automated tests cover VM logic only — they can't prove the UI-thread
+  stall is gone or that key-suppression works.

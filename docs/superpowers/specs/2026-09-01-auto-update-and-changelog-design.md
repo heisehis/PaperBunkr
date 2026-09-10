@@ -29,6 +29,13 @@ the appcast points at, rather than replacing installation entirely the way Velop
   key baked into `UpdateService.cs`), pointed at the tag's own GitHub Release download URL. CI also
   explicitly installs Inno Setup via Chocolatey - `windows-latest` stopped shipping it once the
   underlying image moved past Windows Server 2022 (`actions/runner-images#11644`).
+  **`appcast.xml.signature` must be uploaded as a release asset alongside `appcast.xml`.**
+  `netsparkle-generate-appcast` writes it, but the `files:` list in `release.yml` originally
+  omitted it (fixed for 0.3.1-beta). `UpdateService.cs` uses `SecurityMode.Strict`, under which
+  NetSparkle verifies the appcast *document* itself - fetching `<appcastUrl>.signature` - before
+  trusting any item, so without that asset every in-app "check for updates" silently returns
+  "up to date". The per-`<enclosure>` `sparkle:signature` (the installer's own signature) is
+  separate and was always present.
 - **What stayed the same:** the ask-before-download UX, `CHANGELOG.md` as the changelog source of
   truth, the Preferences → About section, single-stream `-beta` versioning, and the CI tag-trigger/
   version-derivation/changelog-extraction logic (those steps don't care which update engine follows).

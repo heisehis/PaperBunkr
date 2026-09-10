@@ -27,6 +27,7 @@ public sealed partial class ScheduledTaskRow : ObservableObject
     private bool _enabled;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ModeText))]
     private ScheduleMode _mode;
 
     [ObservableProperty]
@@ -50,6 +51,17 @@ public sealed partial class ScheduledTaskRow : ObservableObject
 
     [ObservableProperty]
     private bool _isQueued;
+
+    /// <summary>String view of <see cref="Mode"/> for the <c>SuggestBox</c> schedule-mode picker
+    /// (string-only, <c>IsStrict</c>). Unknown text is ignored - the picker only offers
+    /// <see cref="ModeNames"/>.</summary>
+    public string ModeText
+    {
+        get => Mode.ToString();
+        set { if (Enum.TryParse<ScheduleMode>(value, out var parsed)) Mode = parsed; }
+    }
+
+    public string[] ModeNames { get; } = Enum.GetNames<ScheduleMode>();
 
     public bool IsIntervalMode => Mode == ScheduleMode.Interval;
 

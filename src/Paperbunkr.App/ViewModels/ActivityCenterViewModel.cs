@@ -130,9 +130,23 @@ public sealed partial class ActivityCenterViewModel : ViewModelBase
 
     public bool IsActiveTab => ActiveTab == ActivityDrawerTab.Active;
 
-    public Array HistoryKindOptions { get; } = Enum.GetValues(typeof(ActivityHistoryKindOption));
+    // SuggestBox string projections (docs/superpowers/specs/2026-09-10-suggestbox-migration-plan.md)
+    // for the two history filter pickers - string-only, IsStrict; unknown text is ignored.
+    public string[] HistoryKindNames { get; } = Enum.GetNames<ActivityHistoryKindOption>();
 
-    public Array HistoryAgeOptions { get; } = Enum.GetValues(typeof(ActivityHistoryAgeOption));
+    public string[] HistoryAgeNames { get; } = Enum.GetNames<ActivityHistoryAgeOption>();
+
+    public string HistoryKindText
+    {
+        get => HistoryKind.ToString();
+        set { if (Enum.TryParse<ActivityHistoryKindOption>(value, out var parsed)) HistoryKind = parsed; }
+    }
+
+    public string HistoryAgeText
+    {
+        get => HistoryAge.ToString();
+        set { if (Enum.TryParse<ActivityHistoryAgeOption>(value, out var parsed)) HistoryAge = parsed; }
+    }
 
     partial void OnIsPeekOpenChanged(bool value) => SyncPanelOpen();
 
@@ -250,9 +264,11 @@ public sealed partial class ActivityCenterViewModel : ViewModelBase
     private string _historySearch = "";
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HistoryKindText))]
     private ActivityHistoryKindOption _historyKind = ActivityHistoryKindOption.All;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HistoryAgeText))]
     private ActivityHistoryAgeOption _historyAge = ActivityHistoryAgeOption.Last7Days;
 
     [ObservableProperty]

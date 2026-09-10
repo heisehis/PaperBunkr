@@ -796,4 +796,28 @@ public class ReadingScreenViewModelTests : IDisposable
         using var db = PaperbunkrDb.CreateContext();
         Assert.Empty(db.Issues);
     }
+
+    // --- SuggestBox string projections (docs/superpowers/specs/2026-09-10-suggestbox-migration-plan.md) ---
+
+    [Fact]
+    public void ArcSourceAndBulkRoleText_RoundTripThroughTheirObjectProperties()
+    {
+        var vm = new ReadingScreenViewModel(_filePicker, (_, _) => { });
+
+        Assert.Equal(ReadingScreenViewModel.ArcSourceOptions.Select(o => o.DisplayName), vm.ArcSourceNames);
+        var source = ReadingScreenViewModel.ArcSourceOptions.First(o => o.DisplayName != vm.SelectedArcSource.DisplayName);
+        vm.SelectedArcSourceText = source.DisplayName;
+        Assert.Equal(source.DisplayName, vm.SelectedArcSource.DisplayName);
+
+        var kept = vm.SelectedArcSource;
+        vm.SelectedArcSourceText = "no such source";
+        Assert.Equal(kept, vm.SelectedArcSource);
+
+        var role = ReadingListItemRowViewModel.RoleOptions.First();
+        vm.BulkRoleText = role.Label;
+        Assert.Equal(role.Role, vm.BulkRole!.Role);
+        vm.BulkRoleText = "not a role";
+        Assert.Null(vm.BulkRole);
+        Assert.Equal(ReadingListItemRowViewModel.RoleOptions.Select(o => o.Label), vm.BulkRoleNames);
+    }
 }

@@ -1186,8 +1186,8 @@
                 Width="380" Padding="22" HorizontalAlignment="Center" VerticalAlignment="Center">
             <StackPanel Spacing="12">
                 <TextBlock Text="Add issue to library" Classes="pbTextHeading" />
-                <AutoCompleteBox PlaceholderText="Series name" Text="{Binding NewIssueSeriesName}"
-                                 ItemsSource="{Binding ExistingSeriesNames}" FontSize="13" />
+                <controls:SuggestBox Watermark="Series name" Text="{Binding NewIssueSeriesName}"
+                                     Suggestions="{Binding ExistingSeriesNames}" FontSize="13" />
                 <TextBox PlaceholderText="Number" Text="{Binding NewIssueNumber}" FontSize="13" />
 
                 <TextBlock Text="Content type" Classes="pbTextCaption" />

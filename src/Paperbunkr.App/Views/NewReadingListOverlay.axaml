@@ -83,13 +83,8 @@
                     <!-- Arc sub-panel -->
                     <StackPanel Spacing="8" IsVisible="{Binding IsArcMethod}">
                         <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
-                            <ComboBox Grid.Column="0" ItemsSource="{Binding ArcSourceOptions}" SelectedItem="{Binding SelectedArcSource}" Width="160">
-                                <ComboBox.ItemTemplate>
-                                    <DataTemplate x:DataType="models:ArcSourceOption">
-                                        <pbc:BrandMark Family="Service" Value="{Binding Key}" ShowText="True" MarkSize="14" />
-                                    </DataTemplate>
-                                </ComboBox.ItemTemplate>
-                            </ComboBox>
+                            <pbc:SuggestBox Grid.Column="0" IsStrict="True" Suggestions="{Binding ArcSourceNames}"
+                                            Text="{Binding SelectedArcSourceText}" Width="160" />
                             <TextBox Grid.Column="1" Text="{Binding ArcSearchQuery}" Watermark="Arc or event name…" />
                             <Button Grid.Column="2" Classes="primary" Content="Search" Command="{Binding SearchArcCommand}" />
                         </Grid>
@@ -110,12 +105,8 @@
                     <!-- Event sub-panel -->
                     <StackPanel Spacing="6" IsVisible="{Binding IsEventMethod}">
                         <TextBlock Classes="fieldLabel" Text="STORY EVENT" />
-                        <ComboBox ItemsSource="{Binding StoryEventOptions}" SelectedItem="{Binding SelectedStoryEvent}"
-                                  HorizontalAlignment="Stretch" PlaceholderText="Pick an event…">
-                            <ComboBox.ItemTemplate>
-                                <DataTemplate x:DataType="vm:NewReadingListViewModel+StoryEventOption"><TextBlock Text="{Binding Name}" /></DataTemplate>
-                            </ComboBox.ItemTemplate>
-                        </ComboBox>
+                        <pbc:SuggestBox IsStrict="True" Suggestions="{Binding StoryEventNames}" Text="{Binding SelectedStoryEventText}"
+                                        HorizontalAlignment="Stretch" Watermark="Pick an event…" />
                         <TextBlock Text="No story events yet." FontSize="10.5" Foreground="{DynamicResource PbTextFaintBrush}"
                                    IsVisible="{Binding !StoryEventOptions.Count}" />
                     </StackPanel>

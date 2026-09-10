@@ -139,6 +139,10 @@ public partial class EventsScreenViewModel : ViewModelBase
 
     public static EventMembershipRoleOption[] RoleOptions => EventMembershipRoleOption.All;
 
+    // SuggestBox string projections (docs/superpowers/specs/2026-09-10-suggestbox-migration-plan.md).
+    // EventMembershipRoleOption.Label / RelationTypeOption.Label are unique per value.
+    public static string[] RoleNames { get; } = RoleOptions.Select(o => o.Label).ToArray();
+
     /// <summary>
     /// The subset of <see cref="RelationType"/> that describes how one publishing event relates to
     /// another (docs/superpowers/specs/2026-08-27-metadata-model-phase4d-event-relations-design.md)
@@ -151,6 +155,8 @@ public partial class EventsScreenViewModel : ViewModelBase
         RelationType.Prequel, RelationType.Sequel, RelationType.Continuation, RelationType.Crossover,
         RelationType.SameUniverse, RelationType.SharedUniverse, RelationType.Related, RelationType.Other,
     }.Select(t => new RelationTypeOption(t, RelationTypeOption.FormatLabel(t))).ToArray();
+
+    public static string[] EventRelationTypeNames { get; } = EventRelationTypeOptions.Select(o => o.Label).ToArray();
 
     [ObservableProperty]
     private string _eventName = string.Empty;
@@ -181,9 +187,23 @@ public partial class EventsScreenViewModel : ViewModelBase
     /// see docs/superpowers/specs/2026-08-18-selectedvaluebinding-xaml-fix-design.md).
     /// </summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(SelectedRoleOptionText))]
     private EventMembershipRoleOption _selectedRoleOption = RoleOptions.First(o => o.Role == EventMembershipRole.Core);
 
     partial void OnSelectedRoleOptionChanged(EventMembershipRoleOption value) => SelectedRole = value.Role;
+
+    public string SelectedRoleOptionText
+    {
+        get => SelectedRoleOption.Label;
+        set
+        {
+            var match = RoleOptions.FirstOrDefault(o => o.Label == value);
+            if (match is not null)
+            {
+                SelectedRoleOption = match;
+            }
+        }
+    }
 
     // --- Connected Events (docs/superpowers/specs/2026-08-27-metadata-model-phase4d-event-relations-design.md) ---
 
@@ -198,9 +218,23 @@ public partial class EventsScreenViewModel : ViewModelBase
 
     /// <summary>Bound to the ComboBox's <c>SelectedItem</c> (not <c>SelectedValue</c>) - same permanent XAML-binding-scope bug as <see cref="SelectedRoleOption"/>.</summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(SelectedEventRelationTypeOptionText))]
     private RelationTypeOption _selectedEventRelationTypeOption = EventRelationTypeOptions.First(o => o.Type == RelationType.Related);
 
     partial void OnSelectedEventRelationTypeOptionChanged(RelationTypeOption value) => SelectedEventRelationType = value.Type;
+
+    public string SelectedEventRelationTypeOptionText
+    {
+        get => SelectedEventRelationTypeOption.Label;
+        set
+        {
+            var match = EventRelationTypeOptions.FirstOrDefault(o => o.Label == value);
+            if (match is not null)
+            {
+                SelectedEventRelationTypeOption = match;
+            }
+        }
+    }
 
     public bool HasNoEvents => Events.Count == 0;
 
@@ -254,7 +288,14 @@ public partial class EventsScreenViewModel : ViewModelBase
 
     /// <summary>Role applied by the member selection bar's "Set role".</summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(BulkRoleText))]
     private EventMembershipRoleOption? _bulkRole;
+
+    public string BulkRoleText
+    {
+        get => BulkRole?.Label ?? string.Empty;
+        set => BulkRole = RoleOptions.FirstOrDefault(o => o.Label == value);
+    }
 
     private void RaiseEventSelectionState()
     {

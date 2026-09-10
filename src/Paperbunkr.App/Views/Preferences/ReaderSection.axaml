@@ -1,6 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Paperbunkr.App.ViewModels"
+             xmlns:controls="using:Paperbunkr.App.Controls"
              xmlns:entities="using:Paperbunkr.Data.Entities"
              xmlns:conv="using:Avalonia.Data.Converters"
              xmlns:pref="using:Paperbunkr.App.Views.Preferences"
@@ -34,8 +35,8 @@
             <pref:SettingsRow Icon="ArrowFit" Title="Default fit mode"
                                Description="Used for any book that hasn't been set to a different fit mode from the reader itself.">
                 <pref:SettingsRow.SettingsContent>
-                    <ComboBox ItemsSource="{x:Static vm:PreferencesScreenViewModel.FitModeOptions}"
-                              SelectedItem="{Binding DefaultPageFitMode}" Width="150" />
+                    <controls:SuggestBox IsStrict="True" Text="{Binding DefaultPageFitModeText}"
+                                         Suggestions="{Binding FitModeNames}" Width="150" />
                 </pref:SettingsRow.SettingsContent>
             </pref:SettingsRow>
             <pref:SettingsRow Icon="ArrowRotateClockwise" Title="Auto-rotate landscape pages by default">
@@ -46,15 +47,15 @@
             <pref:SettingsRow Icon="DualScreen" Title="Double-page spread"
                                Description="Used for any series that hasn't been set to a different double-page mode from the reader toolbar itself.">
                 <pref:SettingsRow.SettingsContent>
-                    <ComboBox ItemsSource="{x:Static vm:PreferencesScreenViewModel.PageLayoutModeOptions}"
-                              SelectedItem="{Binding DefaultPageLayoutMode}" Width="150" />
+                    <controls:SuggestBox IsStrict="True" Text="{Binding DefaultPageLayoutModeText}"
+                                         Suggestions="{Binding PageLayoutModeNames}" Width="150" />
                 </pref:SettingsRow.SettingsContent>
             </pref:SettingsRow>
             <pref:SettingsRow Icon="SlideTransition" Title="Page transition"
                                Description="Animates turning the page (arrow keys, click-zones, flick, scrubber) - jumping to a page (e.g. a thumbnail click) is always instant.">
                 <pref:SettingsRow.SettingsContent>
-                    <ComboBox ItemsSource="{x:Static vm:PreferencesScreenViewModel.PageTransitionStyleOptions}"
-                              SelectedItem="{Binding PageTransitionStyle}" Width="150" />
+                    <controls:SuggestBox IsStrict="True" Text="{Binding PageTransitionStyleText}"
+                                         Suggestions="{Binding PageTransitionStyleNames}" Width="150" />
                 </pref:SettingsRow.SettingsContent>
             </pref:SettingsRow>
             <pref:SettingsRow Icon="TopSpeed" Title="{Binding PageTransitionDurationMs, StringFormat='Page transition speed: {0}ms'}">
@@ -110,8 +111,8 @@
             <pref:SettingsRow Icon="ColorBackground" Title="Canvas background"
                                Description="Auto keeps the app's own background; Color fills the canvas with the color below.">
                 <pref:SettingsRow.SettingsContent>
-                    <ComboBox ItemsSource="{x:Static vm:PreferencesScreenViewModel.BackgroundModeOptions}"
-                              SelectedItem="{Binding ImageBackgroundMode}" Width="150" />
+                    <controls:SuggestBox IsStrict="True" Text="{Binding ImageBackgroundModeText}"
+                                         Suggestions="{Binding BackgroundModeNames}" Width="150" />
                 </pref:SettingsRow.SettingsContent>
             </pref:SettingsRow>
             <!-- Compound content: two controls (presets + freeform hex) for one logical setting
@@ -121,8 +122,8 @@
                                IsVisible="{Binding ImageBackgroundMode, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:ImageBackgroundMode.Color}}">
                 <pref:SettingsRow.SettingsContent>
                     <StackPanel Orientation="Horizontal" Spacing="8">
-                        <ComboBox ItemsSource="{x:Static vm:PreferencesScreenViewModel.BackgroundColorPresets}"
-                                  SelectedItem="{Binding BackgroundColor}" Width="130" PlaceholderText="Presets" />
+                        <controls:SuggestBox Text="{Binding BackgroundColor}"
+                                             Suggestions="{Binding BackgroundColorPresetNames}" Width="130" Watermark="Presets" />
                         <TextBox Text="{Binding BackgroundColor}" Width="130" ToolTip.Tip="A named color (e.g. WhiteSmoke) or hex value (e.g. #F5F5F5)" />
                     </StackPanel>
                 </pref:SettingsRow.SettingsContent>

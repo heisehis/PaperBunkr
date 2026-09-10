@@ -38,6 +38,7 @@ public partial class NewReadingListViewModel : ViewModelBase
         _onCreated = onCreated;
         _onCancel = onCancel;
         ArcSourceOptions = ReadingScreenViewModel.ArcSourceOptions;
+        ArcSourceNames = ArcSourceOptions.Select(o => o.DisplayName).ToArray();
         _selectedArcSource = ArcSourceOptions[0];
     }
 
@@ -59,6 +60,8 @@ public partial class NewReadingListViewModel : ViewModelBase
         {
             StoryEventOptions.Add(e);
         }
+
+        OnPropertyChanged(nameof(StoryEventNames));
     }
 
     [ObservableProperty]
@@ -203,16 +206,44 @@ public partial class NewReadingListViewModel : ViewModelBase
     public ObservableCollection<StoryEventOption> StoryEventOptions { get; } = new();
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(SelectedStoryEventText))]
     private StoryEventOption? _selectedStoryEvent;
 
     partial void OnSelectedStoryEventChanged(StoryEventOption? value) => OnPropertyChanged(nameof(CanCreate));
+
+    // --- SuggestBox string projections (docs/superpowers/specs/2026-09-10-suggestbox-migration-
+    // plan.md). Story-event names are user-defined and may collide - first match by name wins
+    // (accepted; see the plan doc). Empty text clears the picker.
+    public IReadOnlyList<string> StoryEventNames => StoryEventOptions.Select(o => o.Name).ToList();
+
+    public string SelectedStoryEventText
+    {
+        get => SelectedStoryEvent?.Name ?? string.Empty;
+        set => SelectedStoryEvent = StoryEventOptions.FirstOrDefault(o => o.Name == value);
+    }
 
     // --- Story arc search (its own minimal copy - screen-state on ReadingScreenViewModel isn't reusable here) ---
 
     public ArcSourceOption[] ArcSourceOptions { get; }
 
+    public string[] ArcSourceNames { get; }
+
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(SelectedArcSourceText))]
     private ArcSourceOption _selectedArcSource;
+
+    public string SelectedArcSourceText
+    {
+        get => SelectedArcSource.DisplayName;
+        set
+        {
+            var match = ArcSourceOptions.FirstOrDefault(o => o.DisplayName == value);
+            if (match is not null)
+            {
+                SelectedArcSource = match;
+            }
+        }
+    }
 
     [ObservableProperty]
     private string _arcSearchQuery = string.Empty;

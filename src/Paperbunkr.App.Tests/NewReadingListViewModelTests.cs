@@ -130,4 +130,43 @@ public class NewReadingListViewModelTests : IDisposable
         vm.SelectMethodCommand.Execute("Event");
         Assert.False(vm.CanCreate); // Event needs a selection first
     }
+
+    // --- SuggestBox string projections (docs/superpowers/specs/2026-09-10-suggestbox-migration-plan.md) ---
+
+    [Fact]
+    public void ArcSourceText_RoundTripsAndIgnoresUnknownText()
+    {
+        var vm = Create();
+
+        Assert.Equal(vm.ArcSourceOptions.Select(o => o.DisplayName), vm.ArcSourceNames);
+
+        var target = vm.ArcSourceOptions.First(o => o.DisplayName != vm.SelectedArcSource.DisplayName);
+        vm.SelectedArcSourceText = target.DisplayName;
+        Assert.Equal(target.DisplayName, vm.SelectedArcSource.DisplayName);
+
+        var kept = vm.SelectedArcSource;
+        vm.SelectedArcSourceText = "no such source";
+        Assert.Equal(kept, vm.SelectedArcSource);
+    }
+
+    [Fact]
+    public void StoryEventText_PicksByNameAndClearsOnEmpty()
+    {
+        using (var context = PaperbunkrDb.CreateContext())
+        {
+            context.StoryEvents.Add(new StoryEvent { Name = "Infinite Crisis" });
+            context.StoryEvents.Add(new StoryEvent { Name = "Final Crisis" });
+            context.SaveChanges();
+        }
+
+        var vm = Create();
+
+        Assert.Equal(vm.StoryEventOptions.Select(o => o.Name), vm.StoryEventNames);
+
+        vm.SelectedStoryEventText = "Final Crisis";
+        Assert.Equal("Final Crisis", vm.SelectedStoryEvent!.Name);
+
+        vm.SelectedStoryEventText = string.Empty;
+        Assert.Null(vm.SelectedStoryEvent);
+    }
 }

@@ -4,6 +4,7 @@ using System.Collections.ObjectModel;
 using System.Linq;
 using Avalonia.Data.Converters;
 using Avalonia.Input;
+using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Paperbunkr.App.Models;
@@ -52,6 +53,32 @@ public partial class KeyBindingRowViewModel : ViewModelBase
 
     /// <summary>The curated options not already bound to this row - feeds the trailing "Add shortcut…" picker so it never offers a gesture this row already has.</summary>
     public IReadOnlyList<KeyOption> AvailableKeyOptions => KeyOptions.All.Where(o => !BoundKeys.Contains(o)).ToList();
+
+    /// <summary>Labels of <see cref="AvailableKeyOptions"/> for the string-only <c>SuggestBox</c>
+    /// "Add shortcut…" picker (docs/superpowers/specs/2026-09-10-suggestbox-migration-plan.md).
+    /// <see cref="KeyOption.Label"/> is a stable unique display string, so the label round-trips
+    /// back to the gesture in <see cref="PendingAddText"/>.</summary>
+    public IReadOnlyList<string> AvailableKeyOptionNames => AvailableKeyOptions.Select(o => o.Label).ToList();
+
+    /// <summary>String twin of <see cref="PendingAddOption"/> for the <c>SuggestBox</c> picker. The
+    /// getter is always empty so the field snaps back to its watermark after a pick; the setter
+    /// resolves the label to a curated option and runs <see cref="AddKeyCommand"/> as a side
+    /// effect. The reset notification is posted so it lands after <c>SuggestBox</c> finishes its
+    /// own text sync.</summary>
+    public string PendingAddText
+    {
+        get => string.Empty;
+        set
+        {
+            if (!string.IsNullOrEmpty(value) &&
+                AvailableKeyOptions.FirstOrDefault(o => o.Label == value) is { Gesture: not null } option)
+            {
+                AddKeyCommand.Execute(option);
+            }
+
+            Dispatcher.UIThread.Post(() => OnPropertyChanged(nameof(PendingAddText)));
+        }
+    }
 
     /// <summary>
     /// The trailing "Add shortcut…" ComboBox's SelectedItem target - a virtual property, not real
@@ -103,6 +130,7 @@ public partial class KeyBindingRowViewModel : ViewModelBase
         _service.AddKey(CommandId, option.Gesture);
         BoundKeys.Add(option);
         OnPropertyChanged(nameof(AvailableKeyOptions));
+        OnPropertyChanged(nameof(AvailableKeyOptionNames));
         _onChanged();
     }
 
@@ -122,6 +150,7 @@ public partial class KeyBindingRowViewModel : ViewModelBase
         _service.RemoveKey(CommandId, option.Gesture);
         BoundKeys.Remove(option);
         OnPropertyChanged(nameof(AvailableKeyOptions));
+        OnPropertyChanged(nameof(AvailableKeyOptionNames));
         _onChanged();
     }
 }

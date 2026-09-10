@@ -166,12 +166,8 @@
                                 <TextBlock Text="Issues rule" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
                             </Border>
                             <StackPanel Margin="14" Orientation="Horizontal" Spacing="8">
-                                <ComboBox ItemsSource="{Binding IssueSmartLists}" SelectedItem="{Binding SelectedIssueSmartList}"
-                                          MinWidth="220" FontSize="12" PlaceholderText="No Issue smart lists yet">
-                                    <ComboBox.ItemTemplate>
-                                        <DataTemplate x:DataType="models:SmartListOption"><TextBlock Text="{Binding Name}" /></DataTemplate>
-                                    </ComboBox.ItemTemplate>
-                                </ComboBox>
+                                <controls:SuggestBox IsStrict="True" Suggestions="{Binding IssueSmartListNames}" Text="{Binding SelectedIssueSmartListText}"
+                                          MinWidth="220" FontSize="12" Watermark="No Issue smart lists yet" />
                                 <Button Classes="ghost" FontSize="11.5" Content="Set" Command="{Binding SetIssueRuleCommand}" />
                                 <Button Classes="ghost" FontSize="11.5" Content="Clear" Command="{Binding ClearIssueRuleCommand}" />
                             </StackPanel>
@@ -184,12 +180,8 @@
                                 <TextBlock Text="Series rule" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
                             </Border>
                             <StackPanel Margin="14" Orientation="Horizontal" Spacing="8">
-                                <ComboBox ItemsSource="{Binding SeriesSmartLists}" SelectedItem="{Binding SelectedSeriesSmartList}"
-                                          MinWidth="220" FontSize="12" PlaceholderText="No Series smart lists yet">
-                                    <ComboBox.ItemTemplate>
-                                        <DataTemplate x:DataType="models:SmartListOption"><TextBlock Text="{Binding Name}" /></DataTemplate>
-                                    </ComboBox.ItemTemplate>
-                                </ComboBox>
+                                <controls:SuggestBox IsStrict="True" Suggestions="{Binding SeriesSmartListNames}" Text="{Binding SelectedSeriesSmartListText}"
+                                          MinWidth="220" FontSize="12" Watermark="No Series smart lists yet" />
                                 <Button Classes="ghost" FontSize="11.5" Content="Set" Command="{Binding SetSeriesRuleCommand}" />
                                 <Button Classes="ghost" FontSize="11.5" Content="Clear" Command="{Binding ClearSeriesRuleCommand}" />
                             </StackPanel>
@@ -202,12 +194,8 @@
                                 <TextBlock Text="Novels rule" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
                             </Border>
                             <StackPanel Margin="14" Orientation="Horizontal" Spacing="8">
-                                <ComboBox ItemsSource="{Binding NovelSmartLists}" SelectedItem="{Binding SelectedNovelSmartList}"
-                                          MinWidth="220" FontSize="12" PlaceholderText="No Novel smart lists yet">
-                                    <ComboBox.ItemTemplate>
-                                        <DataTemplate x:DataType="models:SmartListOption"><TextBlock Text="{Binding Name}" /></DataTemplate>
-                                    </ComboBox.ItemTemplate>
-                                </ComboBox>
+                                <controls:SuggestBox IsStrict="True" Suggestions="{Binding NovelSmartListNames}" Text="{Binding SelectedNovelSmartListText}"
+                                          MinWidth="220" FontSize="12" Watermark="No Novel smart lists yet" />
                                 <Button Classes="ghost" FontSize="11.5" Content="Set" Command="{Binding SetNovelRuleCommand}" />
                                 <Button Classes="ghost" FontSize="11.5" Content="Clear" Command="{Binding ClearNovelRuleCommand}" />
                             </StackPanel>
@@ -226,11 +214,8 @@
                                     <StackPanel Spacing="8">
                                         <StackPanel Orientation="Horizontal" Spacing="8">
                                             <TextBlock Text="Relationship:" FontSize="12" VerticalAlignment="Center" Foreground="{DynamicResource PbTextMutedBrush}" />
-                                            <ComboBox ItemsSource="{Binding RelationTypeOptions}" SelectedItem="{Binding SelectedRelationTypeOption}" MinWidth="160" FontSize="12">
-                                                <ComboBox.ItemTemplate>
-                                                    <DataTemplate x:DataType="models:RelationTypeOption"><TextBlock Text="{Binding Label}" /></DataTemplate>
-                                                </ComboBox.ItemTemplate>
-                                            </ComboBox>
+                                            <controls:SuggestBox IsStrict="True" Suggestions="{Binding RelationTypeNames}"
+                                                                 Text="{Binding SelectedRelationTypeOptionText}" MinWidth="160" FontSize="12" />
                                         </StackPanel>
                                         <TextBox Text="{Binding RelationSearchQuery}" Watermark="Search for a collection…" FontSize="12" />
                                         <ItemsControl ItemsSource="{Binding RelationSearchResults}">
@@ -288,11 +273,8 @@
                                     <StackPanel Spacing="8">
                                         <StackPanel Orientation="Horizontal" Spacing="8">
                                             <TextBlock Text="Relationship:" FontSize="12" VerticalAlignment="Center" Foreground="{DynamicResource PbTextMutedBrush}" />
-                                            <ComboBox ItemsSource="{Binding RelationTypeOptions}" SelectedItem="{Binding SelectedSeriesRelationTypeOption}" MinWidth="160" FontSize="12">
-                                                <ComboBox.ItemTemplate>
-                                                    <DataTemplate x:DataType="models:RelationTypeOption"><TextBlock Text="{Binding Label}" /></DataTemplate>
-                                                </ComboBox.ItemTemplate>
-                                            </ComboBox>
+                                            <controls:SuggestBox IsStrict="True" Suggestions="{Binding RelationTypeNames}"
+                                                                 Text="{Binding SelectedSeriesRelationTypeOptionText}" MinWidth="160" FontSize="12" />
                                         </StackPanel>
                                         <TextBox Text="{Binding SeriesRelationSearchQuery}" Watermark="Search for a series…" FontSize="12" />
                                         <ItemsControl ItemsSource="{Binding SeriesRelationSearchResults}">

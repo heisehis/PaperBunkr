@@ -223,7 +223,22 @@ public partial class ReadingScreenViewModel : ViewModelBase, IContextMenuProvide
 
     /// <summary>Role applied by "Set role" in the member selection bar.</summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(BulkRoleText))]
     private EventMembershipRoleOption? _bulkRole;
+
+    // SuggestBox string projections (docs/superpowers/specs/2026-09-10-suggestbox-migration-plan.md).
+    // Instance passthrough (not {x:Static}) - a static-array Suggestions binding trips XAML's
+    // collection-adder path (see TagEditRowViewModel.WeightNames' own note).
+    public string[] BulkRoleNames { get; } =
+        ReadingListItemRowViewModel.RoleOptions.Select(o => o.Label).ToArray();
+
+    /// <summary>String view of <see cref="BulkRole"/> for the string-only <c>SuggestBox</c> "Set
+    /// role" picker (<see cref="EventMembershipRoleOption.Label"/> is a unique display string).</summary>
+    public string BulkRoleText
+    {
+        get => BulkRole?.Label ?? string.Empty;
+        set => BulkRole = ReadingListItemRowViewModel.RoleOptions.FirstOrDefault(o => o.Label == value);
+    }
 
     private void RaiseSelectionState()
     {
@@ -1151,7 +1166,25 @@ public partial class ReadingScreenViewModel : ViewModelBase, IContextMenuProvide
     private bool _isArcSearchOpen;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(SelectedArcSourceText))]
     private ArcSourceOption _selectedArcSource = ArcSourceOptions[0];
+
+    /// <summary>Registry display names, unique per source - the string-only <c>SuggestBox</c> arc
+    /// picker's list, and its round-trip key back to the option.</summary>
+    public string[] ArcSourceNames { get; } = ArcSourceOptions.Select(o => o.DisplayName).ToArray();
+
+    public string SelectedArcSourceText
+    {
+        get => SelectedArcSource.DisplayName;
+        set
+        {
+            var match = ArcSourceOptions.FirstOrDefault(o => o.DisplayName == value);
+            if (match is not null)
+            {
+                SelectedArcSource = match;
+            }
+        }
+    }
 
     [ObservableProperty]
     private string _arcSearchQuery = string.Empty;

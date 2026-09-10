@@ -457,11 +457,8 @@
                 <StackPanel Spacing="8">
                     <StackPanel Orientation="Horizontal" Spacing="8">
                         <TextBlock Text="Relationship:" FontSize="12" VerticalAlignment="Center" Foreground="{DynamicResource PbTextMutedBrush}" />
-                        <ComboBox ItemsSource="{Binding RelationTypeOptions}" SelectedItem="{Binding SelectedRelationTypeOption}" MinWidth="160" FontSize="12">
-                            <ComboBox.ItemTemplate>
-                                <DataTemplate x:DataType="models:RelationTypeOption"><TextBlock Text="{Binding Label}" /></DataTemplate>
-                            </ComboBox.ItemTemplate>
-                        </ComboBox>
+                        <pbc:SuggestBox IsStrict="True" Suggestions="{Binding RelationTypeNames}"
+                                        Text="{Binding SelectedRelationTypeOptionText}" MinWidth="160" FontSize="12" />
                     </StackPanel>
                     <TextBox Text="{Binding RelationSearchQuery}" Watermark="Search for a series or collection…" FontSize="12" />
                     <ItemsControl ItemsSource="{Binding RelationSearchResults}">
@@ -557,20 +554,8 @@
                              instance property (was static) since it includes live plugin commands;
                              the item template branches on IsPlugin since a plugin entry has no
                              bundled BrandMark asset. -->
-                        <ComboBox ItemsSource="{Binding MetadataProviderOptions}"
-                                  SelectedItem="{Binding SelectedMetadataProvider}" Width="150" FontSize="12">
-                            <ComboBox.ItemTemplate>
-                                <DataTemplate x:DataType="models:MetadataSearchProviderOption">
-                                    <Panel>
-                                        <pbc:BrandMark Family="Service" Value="{Binding BrandMarkValue}" ShowText="True" MarkSize="{StaticResource PbIconSizeXs}" IsVisible="{Binding !IsPlugin}" />
-                                        <StackPanel Orientation="Horizontal" Spacing="6" IsVisible="{Binding IsPlugin}">
-                                            <fi:SymbolIcon Symbol="Apps" FontSize="{StaticResource PbIconSizeXs}" />
-                                            <TextBlock Text="{Binding Label}" FontSize="12" />
-                                        </StackPanel>
-                                    </Panel>
-                                </DataTemplate>
-                            </ComboBox.ItemTemplate>
-                        </ComboBox>
+                        <pbc:SuggestBox IsStrict="True" Suggestions="{Binding MetadataProviderNames}"
+                                        Text="{Binding SelectedMetadataProviderText}" Width="150" FontSize="12" />
                         <TextBox Text="{Binding MetadataSearchQuery}" Watermark="Search…" FontSize="12" Width="220" />
                         <Button Content="Search" Command="{Binding SearchMetadataCommand}" Padding="10,5" FontSize="12" CornerRadius="5" />
                     </StackPanel>
@@ -656,14 +641,8 @@
                     CornerRadius="6" Padding="12">
                 <StackPanel Spacing="8">
                     <StackPanel Orientation="Horizontal" Spacing="8">
-                        <ComboBox ItemsSource="{x:Static vm:DetailTabsViewModel.TrackerServiceOptions}"
-                                  SelectedItem="{Binding SelectedTrackerService}" Width="160" FontSize="12">
-                            <ComboBox.ItemTemplate>
-                                <DataTemplate>
-                                    <pbc:BrandMark Family="Service" Value="{Binding}" ShowText="True" MarkSize="{StaticResource PbIconSizeXs}" />
-                                </DataTemplate>
-                            </ComboBox.ItemTemplate>
-                        </ComboBox>
+                        <pbc:SuggestBox IsStrict="True" Suggestions="{Binding TrackerServiceNames}"
+                                        Text="{Binding SelectedTrackerServiceText}" Width="160" FontSize="12" />
                         <TextBox Text="{Binding TrackerSearchQuery}" Watermark="Search title…" FontSize="12" Width="220" />
                         <Button Content="Search" Command="{Binding SearchTrackerCommand}" Padding="10,5" FontSize="12" CornerRadius="5" />
                     </StackPanel>

@@ -313,9 +313,6 @@ public partial class IssuePropertiesScreenViewModel : ViewModelBase
 
     public static string[] ColorModeOptions { get; } = Enum.GetNames<ColorMode>();
 
-    /// <summary>Weight picker options for <see cref="GenreTagRows"/>/<see cref="TagsTagRows"/> (docs/superpowers/specs/2026-08-23-weighted-categorized-tags-design.md).</summary>
-    public static IssueTagWeight[] WeightOptions { get; } = Enum.GetValues<IssueTagWeight>();
-
     /// <summary>Replaces CE's per-issue Yes/No/Unknown <c>SeriesComplete</c> checkbox - had shipped
     /// data (docs/superpowers/specs/2026-08-17-metadata-model-phase1-canonical-metadata-design.md)
     /// with no editor UI until now (docs/superpowers/specs/2026-08-18-metadata-model-ui-gaps-status-

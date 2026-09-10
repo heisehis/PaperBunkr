@@ -70,16 +70,23 @@
              close via Popup.Closed) - that cross-property oscillation is exactly the dropdown-open
              freeze this control was built to sidestep (see SuggestBox / FluentAvaloniaWorkarounds). -->
         <ControlTheme x:Key="{x:Type c:SuggestBox}" TargetType="c:SuggestBox">
+            <!-- Defaults for the metadata-editor look; a classed Style (e.g. .contentTypePicker on
+                 the detail screens) can override any of these and the TemplateBindings below carry
+                 the override down to PART_TextBox. -->
+            <Setter Property="Background" Value="{DynamicResource PbSurface2Brush}" />
+            <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextBrush}" />
+            <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusSm}" />
             <Setter Property="Template">
                 <ControlTemplate>
                     <Grid ColumnDefinitions="*,Auto">
                         <TextBox Name="PART_TextBox" Grid.Column="0"
                                  Watermark="{TemplateBinding Watermark}"
                                  IsReadOnly="{TemplateBinding IsStrict}"
-                                 CornerRadius="{DynamicResource PbRadiusSm}"
-                                 Background="{DynamicResource PbSurface2Brush}"
-                                 BorderBrush="{DynamicResource PbBorderBrush}"
-                                 Foreground="{DynamicResource PbTextBrush}" />
+                                 CornerRadius="{TemplateBinding CornerRadius}"
+                                 Background="{TemplateBinding Background}"
+                                 BorderBrush="{TemplateBinding BorderBrush}"
+                                 Foreground="{TemplateBinding Foreground}" />
 
                         <Button Name="PART_DropDownButton" Grid.Column="1" Margin="-28,0,0,0"
                                 Width="26" Background="Transparent" BorderThickness="0"

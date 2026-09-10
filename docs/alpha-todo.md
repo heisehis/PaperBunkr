@@ -203,6 +203,25 @@ this file itself already did once (see the note below).
 > `FreezeWatchdog` now auto-captures a `dotnet-stack` trace on freeze. **Confirmed working
 > on-screen by the user.** Not committed at session end. P0–P7 unchanged.
 
+> **Follow-up 2 (2026-09-10) — `SuggestBox` migration completed app-wide.** The freeze fix above
+> (`a03a29d`, cherry-picked here) only converted the 3 metadata editors. This branch converts
+> **every remaining** `ComboBox`/`AutoCompleteBox` under `src/Paperbunkr.App/Views` (15 files,
+> ~40 instances) to `Controls/SuggestBox` — see
+> `docs/superpowers/specs/2026-09-10-suggestbox-migration-plan.md` for the per-site audit. The two
+> *global* fixes (FA handler unsubscribe + `OverlayPopups`) already removed the freeze everywhere;
+> this pass is idiom consistency (user chose "convert everything"). VMs gained
+> `WeightText`/`WeightNames`-style string wrappers (enum pickers) and display-string wrappers
+> (object-catalog pickers: `RelationTypeOption`, `EventMembershipRoleOption`, `ArcSourceOption`,
+> `SmartListOption`, …). User-named/collide-able pickers (SmartLists, StoryEvent, VirtualTag)
+> converted with accepted first-match-by-name semantics. `SuggestBox` `ControlTheme` gained
+> `Background`/`BorderBrush`/`Foreground`/`CornerRadius` `TemplateBinding`s so the classed
+> `.contentTypePicker` / `.conditionPicker` looks survive. Dead code removed:
+> `Behaviors/MultiValueAutoComplete.cs` (+ test), both `WeightOptions` props, the now-unbound
+> `*Options` enum arrays in `PreferencesScreenViewModel` / `ActivityCenterViewModel`. New
+> `SuggestBoxTests`-style VM-wrapper coverage across ~10 test classes; App project + full test
+> suite green; XAML weave verified (splash renders). On-screen click-through still outstanding
+> (blocked locally by a corrupt shared dev DB — unrelated to this change). P0–P7 unchanged.
+
 > **Manual session note (2026-09-04):** P0–P7 remain all done. Two things worth recording here since
 > this is the doc a human opens first:
 > 1. **The project is now `0.2.0-beta`** (`v0.2.0-beta` tag, `CHANGELOG.md`, README/wiki updated).

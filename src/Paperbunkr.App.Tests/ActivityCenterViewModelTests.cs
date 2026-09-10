@@ -118,4 +118,25 @@ public class ActivityCenterViewModelTests
         vm.ShowActiveTabCommand.Execute(null);
         Assert.False(vm.IsHistory);
     }
+
+    // --- SuggestBox string projections (docs/superpowers/specs/2026-09-10-suggestbox-migration-plan.md) ---
+
+    [Fact]
+    public void HistoryFilterText_RoundTripsAndIgnoresUnknownText()
+    {
+        var (vm, _, _) = Create();
+
+        vm.HistoryKindText = nameof(ActivityHistoryKindOption.LibraryScan);
+        Assert.Equal(ActivityHistoryKindOption.LibraryScan, vm.HistoryKind);
+
+        vm.HistoryKindText = "bogus";
+        Assert.Equal(ActivityHistoryKindOption.LibraryScan, vm.HistoryKind);
+
+        vm.HistoryAgeText = nameof(ActivityHistoryAgeOption.Last24Hours);
+        Assert.Equal(ActivityHistoryAgeOption.Last24Hours, vm.HistoryAge);
+        Assert.Equal(ActivityHistoryAgeOption.Last24Hours.ToString(), vm.HistoryAgeText);
+
+        Assert.Contains(nameof(ActivityHistoryKindOption.All), vm.HistoryKindNames);
+        Assert.Contains(nameof(ActivityHistoryAgeOption.AllTime), vm.HistoryAgeNames);
+    }
 }

@@ -126,7 +126,19 @@ public partial class ReadingListItemRowViewModel : ViewModelBase, Models.ISelect
     /// optional role, matching the ComboBox's placeholder-text empty state.
     /// </summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(SelectedRoleOptionText))]
     private EventMembershipRoleOption? _selectedRoleOption;
+
+    /// <summary>String view of <see cref="SelectedRoleOption"/> for the string-only
+    /// <c>SuggestBox</c> role picker (docs/superpowers/specs/2026-09-10-suggestbox-migration-
+    /// plan.md). Empty text clears the optional role.</summary>
+    public string SelectedRoleOptionText
+    {
+        get => SelectedRoleOption?.Label ?? string.Empty;
+        set => SelectedRoleOption = RoleOptions.FirstOrDefault(o => o.Label == value);
+    }
+
+    public static string[] RoleOptionNames { get; } = RoleOptions.Select(o => o.Label).ToArray();
 
     partial void OnSelectedRoleOptionChanged(EventMembershipRoleOption? value)
     {

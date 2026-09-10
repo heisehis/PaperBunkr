@@ -1147,4 +1147,56 @@ public class DetailTabsViewModelTests : IDisposable
         Assert.NotNull(verifyContext.Series.Find(_seriesId));
         Assert.Empty(verifyContext.ExternalMediaIds.Where(e => e.SeriesId == _seriesId));
     }
+
+    // --- SuggestBox string projections (docs/superpowers/specs/2026-09-10-suggestbox-migration-plan.md) ---
+
+    [Fact]
+    public void SelectedRelationTypeOptionText_RoundTripsThroughTheObjectProperty()
+    {
+        var vm = CreateViewModel();
+
+        vm.SelectedRelationTypeOptionText = "Sequel";
+
+        Assert.Equal(RelationType.Sequel, vm.SelectedRelationType);
+        Assert.Equal("Sequel", vm.SelectedRelationTypeOptionText);
+        Assert.Contains("Sequel", DetailTabsViewModel.RelationTypeNames);
+    }
+
+    [Fact]
+    public void SelectedRelationTypeOptionText_IgnoresTextThatIsNotAnOption()
+    {
+        var vm = CreateViewModel();
+        var before = vm.SelectedRelationTypeOption;
+
+        vm.SelectedRelationTypeOptionText = "Not A Relation";
+
+        Assert.Equal(before, vm.SelectedRelationTypeOption);
+    }
+
+    [Fact]
+    public void SelectedTrackerServiceText_OnlyAcceptsTheCuratedSubset()
+    {
+        var vm = CreateViewModel();
+
+        vm.SelectedTrackerServiceText = "MyAnimeList";
+        Assert.Equal(TrackingService.MyAnimeList, vm.SelectedTrackerService);
+
+        vm.SelectedTrackerServiceText = "SomethingElse";
+        Assert.Equal(TrackingService.MyAnimeList, vm.SelectedTrackerService);
+
+        Assert.Equal(DetailTabsViewModel.TrackerServiceOptions.Select(s => s.ToString()), DetailTabsViewModel.TrackerServiceNames);
+    }
+
+    [Fact]
+    public void SelectedMetadataProviderText_RoundTripsAndTracksTheOptionList()
+    {
+        var vm = CreateViewModel();
+
+        Assert.Equal(vm.MetadataProviderOptions.Select(o => o.Label), vm.MetadataProviderNames);
+
+        var target = vm.MetadataProviderOptions.First(o => o.Label != vm.SelectedMetadataProvider.Label);
+        vm.SelectedMetadataProviderText = target.Label;
+
+        Assert.Equal(target.Label, vm.SelectedMetadataProvider.Label);
+    }
 }

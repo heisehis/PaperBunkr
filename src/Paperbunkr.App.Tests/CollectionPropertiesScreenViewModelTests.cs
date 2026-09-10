@@ -391,4 +391,38 @@ public class CollectionPropertiesScreenViewModelTests : IDisposable
         var seriesChip = Assert.Single(vm.RelatedSeries);
         Assert.Equal(otherSeriesId, seriesChip.SeriesId);
     }
+
+    // --- SuggestBox string projections (docs/superpowers/specs/2026-09-10-suggestbox-migration-plan.md) ---
+
+    [Fact]
+    public void RelationTypeTextProjections_RoundTripThroughTheObjectProperties()
+    {
+        var vm = new CollectionPropertiesScreenViewModel(() => { }, () => new PaperbunkrDbContext(_dbOptions));
+        vm.Load(_collectionId);
+
+        vm.SelectedRelationTypeOptionText = "Sequel";
+        Assert.Equal(RelationType.Sequel, vm.SelectedRelationType);
+
+        vm.SelectedSeriesRelationTypeOptionText = "Prequel";
+        Assert.Equal(RelationType.Prequel, vm.SelectedSeriesRelationType);
+
+        vm.SelectedRelationTypeOptionText = "not a relation";
+        Assert.Equal(RelationType.Sequel, vm.SelectedRelationType);
+
+        Assert.Contains("Sequel", CollectionPropertiesScreenViewModel.RelationTypeNames);
+    }
+
+    [Fact]
+    public void SmartListNameProjections_MirrorTheirOptionCollections()
+    {
+        var vm = new CollectionPropertiesScreenViewModel(() => { }, () => new PaperbunkrDbContext(_dbOptions));
+        vm.Load(_collectionId);
+
+        Assert.Equal(vm.IssueSmartLists.Select(o => o.Name), vm.IssueSmartListNames);
+        Assert.Equal(vm.SeriesSmartLists.Select(o => o.Name), vm.SeriesSmartListNames);
+        Assert.Equal(vm.NovelSmartLists.Select(o => o.Name), vm.NovelSmartListNames);
+
+        vm.SelectedIssueSmartListText = "no such list";
+        Assert.Null(vm.SelectedIssueSmartList);
+    }
 }

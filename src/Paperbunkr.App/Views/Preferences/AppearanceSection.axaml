@@ -1,6 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:fi="using:FluentIcons.Avalonia"
+             xmlns:controls="using:Paperbunkr.App.Controls"
              xmlns:vm="using:Paperbunkr.App.ViewModels"
              xmlns:models="using:Paperbunkr.App.Models"
              xmlns:pref="using:Paperbunkr.App.Views.Preferences"
@@ -94,7 +95,7 @@
             <TextBlock Classes="settingsGroupCaption" Text="FONT" />
             <pref:SettingsRow Icon="TextFont" Title="Font family">
                 <pref:SettingsRow.SettingsContent>
-                    <ComboBox ItemsSource="{Binding FontFamilies}" SelectedItem="{Binding SelectedFontFamily}" Width="280" />
+                    <controls:SuggestBox IsStrict="True" Text="{Binding SelectedFontFamily}" Suggestions="{Binding FontFamilies}" Width="280" />
                 </pref:SettingsRow.SettingsContent>
             </pref:SettingsRow>
             <TextBlock Text="The quick brown fox jumps over the lazy dog" FontFamily="{Binding SelectedFontFamily}"

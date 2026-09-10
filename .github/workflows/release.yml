@@ -112,9 +112,17 @@ jobs:
           --file-version ${{ steps.version.outputs.version }}
 
       # Not marked pre-release - single update stream, "beta" is just what the version string says
-      # right now, not a separate channel (see the design doc's Scope section). Both the installer and
-      # the signed appcast.xml go up as release assets; UpdateService.cs points at this tag's "latest"
-      # release download URL for appcast.xml, which only resolves once a non-prerelease exists.
+      # right now, not a separate channel (see the design doc's Scope section). Installer +
+      # appcast.xml + appcast.xml.signature all go up as release assets; UpdateService.cs points at
+      # this tag's "latest" release download URL for appcast.xml, which only resolves once a
+      # non-prerelease exists.
+      #
+      # appcast.xml.signature is REQUIRED, not optional: UpdateService.cs uses
+      # Ed25519Checker(SecurityMode.Strict), under which NetSparkle verifies the appcast document
+      # itself (fetching "<appcastUrl>.signature") before trusting any item in it. Omitting this
+      # asset - the bug in the 0.3.0/0.3.1-beta releases - makes every in-app "check for updates"
+      # silently return "up to date" no matter what the appcast says. netsparkle-generate-appcast
+      # writes it next to appcast.xml (see its "Wrote .\appcast.xml.signature" log line).
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -124,3 +132,4 @@ jobs:
           files: |
             installer/Output/PaperbunkrSetup-${{ steps.version.outputs.version }}.exe
             appcast.xml
+            appcast.xml.signature

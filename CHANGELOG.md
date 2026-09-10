@@ -13,6 +13,13 @@ All notable changes to Paperbunkr are documented here. Format follows
   different from the one that built the release — before any window or error could appear.
   0.3.1-beta disables ReadyToRun; startup is a fraction of a second slower on a cold launch, but
   reliable. If you hit this, install 0.3.1-beta over the top — no data is affected.
+- **Recovery from a failed start.** If Paperbunkr ever crashes before its window appears (a bad
+  graphics driver, for example), the next launch now automatically retries with hardware
+  acceleration turned off and tells you, instead of silently failing to open.
+- **"Check for updates" never found anything.** The published update feed was missing its
+  signature file, so the app — which verifies it — always reported "up to date" regardless of
+  what was released. Fixed in the release pipeline; this and future releases carry the signature,
+  so 0.3.0-beta installs will now see 0.3.1-beta.
 
 ## [0.3.0-beta] - 2026-09-10
 

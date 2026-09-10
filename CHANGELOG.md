@@ -3,7 +3,7 @@
 All notable changes to Paperbunkr are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [0.3.0-beta] - 2026-09-09
+## [0.3.0-beta] - 2026-09-10
 
 Everything below shipped since
 [0.2.0-beta](https://github.com/heisehis/PaperBunkr/releases/tag/v0.2.0-beta).
@@ -42,6 +42,9 @@ Everything below shipped since
 - **Redesigned installer** — brand artwork, a combined license + terms page, per-format
   file-association checkboxes, a prompt to close Paperbunkr before installing, and a
   repair/uninstall path when re-run over an existing install.
+- **Startup splash and Welcome screen** — a branded splash while the app loads, a redesigned
+  first-run Welcome screen, and a "What's New" panel that shows this changelog the first time you
+  open a new version (also available any time from Preferences → About).
 
 ### Changed
 
@@ -60,6 +63,15 @@ Everything below shipped since
 - **Consistent feedback** — unified toasts, confirmation dialogs, busy indicators, and status
   badges across the app.
 - **Nav rail** — hover-to-expand is now a preference; the Undo/Redo buttons were removed.
+- **Faster startup** — the main window now appears while your library finishes loading in the
+  background instead of after it, and the heavy editor overlays build the first time you open
+  them rather than at launch.
+- **Smoother reading** — the page decode, cache, and prefetch pipeline was rebuilt; pages load
+  faster, memory use is bounded, and flipping quickly through a book no longer stutters. A
+  performance overlay is available with `Ctrl+Shift+P`.
+- **Home masthead** — the blurred cover wall behind the spotlight now picks up the featured
+  book's colour and the active theme.
+- **About** — shows the release version (`0.3.0-beta`) with the exact build alongside it.
 
 ### Fixed
 
@@ -68,6 +80,9 @@ Everything below shipped since
 - A database-migration rollback chain that could fail when downgrading.
 - The reader settings sheet rendering oversized on a non-maximized window.
 - Unregistering a file association left an orphaned registry key behind.
+- The startup splash could freeze and show "Not Responding" on a large library before the main
+  window appeared.
+- Flipping pages rapidly could crash the reader.
 
 ## [0.2.0-beta] - 2026-09-01
 

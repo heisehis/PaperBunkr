@@ -37,8 +37,29 @@ public partial class SplashWindow : Window
     private bool _closing;
 
     public SplashWindow()
-        : this(new SkinService().GetReducedMotion())
+        : this(TryGetReducedMotion())
     {
+    }
+
+    /// <summary>
+    /// The splash is shown by <c>App.RunDesktopStartupAsync</c> <b>before</b> the database
+    /// integrity check and pending-migration step run. On a cold start right after an app update
+    /// the DB schema can be behind the EF model, so a plain <see cref="SkinService.GetReducedMotion"/>
+    /// here throws <c>SqliteException</c> - which, before this guard, faulted the whole fire-and-
+    /// forget startup task and left a dead splash with no MainWindow. Default to motion-on; the
+    /// real preference is applied to the rest of the app once startup finishes.
+    /// </summary>
+    private static bool TryGetReducedMotion()
+    {
+        try
+        {
+            return new SkinService().GetReducedMotion();
+        }
+        catch (Exception ex)
+        {
+            DiagnosticsService.LogMilestone($"Splash: reduced-motion lookup failed ({ex.GetType().Name}) - assuming motion on.");
+            return false;
+        }
     }
 
     public SplashWindow(bool reducedMotion)

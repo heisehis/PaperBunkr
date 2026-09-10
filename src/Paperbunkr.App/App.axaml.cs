@@ -49,21 +49,23 @@ public partial class App : Application
     {
         const int TotalPhases = 5;
 
-        var splashViewModel = new SplashViewModel();
-        var splash = new SplashWindow { DataContext = splashViewModel };
-        splash.Show();
-        var splashShownAtUtc = DateTime.UtcNow;
-
         try
         {
+            // Splash construction is inside the try: SplashWindow's ctor and any service it touches
+            // can fail (e.g. a DB read against a schema that's behind the model on a post-update
+            // cold start), and a bare throw from this fire-and-forget Task would only reach the
+            // log-only TaskScheduler.UnobservedTaskException path - a silent dead splash.
+            var splashViewModel = new SplashViewModel();
+            var splash = new SplashWindow { DataContext = splashViewModel };
+            splash.Show();
+            var splashShownAtUtc = DateTime.UtcNow;
+
             await RunStartupSequenceAsync(desktop, splash, splashViewModel, splashShownAtUtc, TotalPhases);
         }
         catch (Exception ex)
         {
-            // This body is a fire-and-forget Task, so an unhandled throw here would only reach the
-            // log-only TaskScheduler.UnobservedTaskException path. Route anything unexpected during
-            // startup to the strict no-Continue crash dialog instead, matching the synchronous
-            // OnFrameworkInitializationCompleted this replaced.
+            // Route anything unexpected during startup to the strict no-Continue crash dialog,
+            // matching the synchronous OnFrameworkInitializationCompleted this replaced.
             DiagnosticsService.ReportFatalStartupError("Startup sequence", ex);
         }
     }

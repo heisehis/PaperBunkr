@@ -15,3 +15,7 @@ installer/Output/
 src/Paperbunkr.App.Tests/TestResults/
 **/TestResults/
 *.dmp
+
+# BenchmarkDotNet run output
+BenchmarkDotNet.Artifacts/
+**/BenchmarkDotNet.Artifacts/

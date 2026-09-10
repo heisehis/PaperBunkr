@@ -47,4 +47,12 @@ public interface IReaderPageSource : IPageImageDecoder
     /// also self-releases on the next <see cref="GetDetailPage"/> or a page change.
     /// </summary>
     void ReleaseDetail();
+
+    /// <summary>
+    /// Holds the low-priority prefetch-fringe decode for <paramref name="milliseconds"/> — the
+    /// visible window still decodes at high priority. Called while a paged page-turn transition is
+    /// animating so the fringe's `CreateScaledBitmap` churn on the decode workers doesn't starve
+    /// the compositor mid-slide. Re-arming or a shorter value both take effect immediately.
+    /// </summary>
+    void SuppressFringePrefetch(int milliseconds);
 }

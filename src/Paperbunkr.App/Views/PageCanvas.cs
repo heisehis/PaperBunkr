@@ -1668,6 +1668,11 @@ public class PageCanvas : Control
             _lastRenderedPage = Page;
             _lastRenderedSecondaryPage = SecondaryPage;
             _visual?.SendHandlerMessage(transition);
+
+            // Hold the low-priority prefetch fringe for the duration of the slide/fade - its
+            // CreateScaledBitmap churn on the decode workers otherwise competes with the compositor
+            // and makes the animation choppy. The visible window keeps decoding at high priority.
+            (Decoder as Services.Reader.IReaderPageSource)?.SuppressFringePrefetch(PageTransitionDurationMs + 40);
             return;
         }
 

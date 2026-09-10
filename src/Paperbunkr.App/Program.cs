@@ -120,6 +120,18 @@ sealed class Program
             .With(new Win32PlatformOptions
             {
                 RenderingMode = GraphicsBootstrap.ToRenderingModes(graphics),
+                // Render every popup (ComboBox/AutoCompleteBox dropdowns, flyouts, tooltips) inside
+                // the owner window's surface instead of a native child HWND. Fixes a permanent
+                // UI-thread freeze on dropdown-open (freeze stacks captured 2026-09-10, see
+                // Services/FluentAvaloniaWorkarounds): a native popup's close path runs
+                // WindowImpl.Dispose -> PresentationSource.Dispose -> Task.InternalWait, a synchronous
+                // wait on compositor teardown that never completes on this app's degraded render
+                // stack (AngleEgl->Wgl->Software, WinUIComposition often absent on the IoT LTSC
+                // target), while the ComboBox IsDropDownOpen<->Popup.IsOpen TwoWay TemplateBinding
+                // oscillates on top of it. Overlay popups have no HWND and no compositor teardown.
+                // Trade-off: a popup can no longer extend past the window's own bounds - acceptable
+                // for this app's centered, bounded editors and toolbars.
+                OverlayPopups = true,
                 // Prefer the GPU-composited, vsync-locked present paths and keep RedirectionSurface -
                 // which can tear, and which is what Avalonia's default [WinUIComposition,
                 // RedirectionSurface] drops straight to when WinUI composition isn't available - only

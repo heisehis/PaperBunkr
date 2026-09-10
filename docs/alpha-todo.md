@@ -190,6 +190,19 @@ this file itself already did once (see the note below).
 > App-only change). On branch `claude/metadata-editor-affordances`; on-screen GUI pass still
 > outstanding. **P0–P7 status unchanged (still all done).**
 
+> **Follow-up (2026-09-10) — the on-screen pass found a hard freeze, now fixed.** Opening *any*
+> dropdown in the metadata editor permanently wedged the UI thread on this project's runtime target
+> (Win11 IoT LTSC, degraded render stack). Root-caused via `dotnet-stack` to Avalonia's
+> `ComboBox`/`AutoCompleteBox` templates: `Popup.Open()` re-enters an oscillating TwoWay
+> `IsDropDownOpen`⇄`Popup.IsOpen` `bool` `TemplateBinding`, amplified by FluentAvalonia's
+> unconditional high-contrast resource reload on popup-host creation and by native popup-window
+> teardown. Fixes: (1) `FluentAvaloniaWorkarounds.SuppressColorValuesChangedHandler()` unsubscribes
+> FA's `ColorValuesChanged` handler at startup; (2) `Win32PlatformOptions.OverlayPopups = true`;
+> (3) **new `Controls/SuggestBox` replaces every `ComboBox`/`AutoCompleteBox`** in both editors — a
+> `TextBox` + ▼ + plain `Popup` (the LibraryToolbar idiom), no TwoWay popup binding; (4)
+> `FreezeWatchdog` now auto-captures a `dotnet-stack` trace on freeze. **Confirmed working
+> on-screen by the user.** Not committed at session end. P0–P7 unchanged.
+
 > **Manual session note (2026-09-04):** P0–P7 remain all done. Two things worth recording here since
 > this is the doc a human opens first:
 > 1. **The project is now `0.2.0-beta`** (`v0.2.0-beta` tag, `CHANGELOG.md`, README/wiki updated).

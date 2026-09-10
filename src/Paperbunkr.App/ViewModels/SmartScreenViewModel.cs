@@ -35,7 +35,7 @@ public partial class SmartScreenViewModel : ViewModelBase
     private readonly Action<int> _goToSeries;
     private readonly Action<int> _goToBook;
 
-    public SmartScreenViewModel(Action<int> goToSeries, Action<int> goToBook)
+    public SmartScreenViewModel(Action<int> goToSeries, Action<int> goToBook, bool loadOnConstruction = true)
     {
         _goToSeries = goToSeries;
         _goToBook = goToBook;
@@ -47,7 +47,15 @@ public partial class SmartScreenViewModel : ViewModelBase
         Results = new ObservableCollection<IssueCardSample>();
         SeriesResults = new ObservableCollection<SeriesCardSample>();
         NovelResults = new ObservableCollection<BookCardSample>();
-        RefreshSidebar();
+
+        // Production (MainViewModel) passes false and lets GoSmart() call RefreshSidebar() on
+        // navigation instead - the ctor call did a full library load for every list's match count
+        // (its own comment below), ~1s+ on the UI thread during the frozen-splash startup window.
+        // Tests default to true.
+        if (loadOnConstruction)
+        {
+            RefreshSidebar();
+        }
     }
 
     // "Missing Files"/"Duplicate Candidates" render under a separate Maintenance heading in the

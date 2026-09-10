@@ -1,5 +1,7 @@
 using Avalonia;
 using System;
+using System.Linq;
+using System.Threading;
 using Paperbunkr.App.Services;
 using Optris.Icons.Avalonia;
 using Optris.Icons.Avalonia.FontAwesome;
@@ -9,6 +11,14 @@ namespace Paperbunkr.App;
 
 sealed class Program
 {
+    // Held for the whole process lifetime (never disposed) purely so the installer's
+    // AppMutex check (installer/Installer.iss) can tell Paperbunkr is running and prompt the user
+    // to close it before Setup/Uninstall touches any files. NOT single-instance enforcement - the
+    // app still allows multiple windows; this mutex just has to *exist* while any instance is up.
+    // The name MUST stay identical to Installer.iss's AppMutex value.
+    private const string RunningMutexName = "Paperbunkr_App_Running";
+    private static Mutex? _runningMutex;
+
     // Initialization code. Don't use any Avalonia, third-party APIs or any
     // SynchronizationContext-reliant code before AppMain is called: things aren't initialized
     // yet and stuff might break.
@@ -20,22 +30,42 @@ sealed class Program
         DiagnosticsService.Install();
 
         // Headless file-association (un)registration, invoked by installer\Installer.iss's optional
-        // "associate" task/uninstall step. Deliberately reuses FileAssociationService - the exact
-        // same live registry-write path Preferences > Advanced uses - instead of the installer
-        // hand-writing ProgID keys itself, so there is only ever one place that knows the current
-        // extension list and one owner of those registry keys (see Installer.iss's own file-header
-        // note). Must run before Avalonia touches anything, and must exit without ever building a
-        // window.
+        // per-format "associate*" tasks/uninstall steps. Deliberately reuses FileAssociationService
+        // - the exact same live registry-write path Preferences > Advanced uses - instead of the
+        // installer hand-writing ProgID keys itself, so there is only ever one place that knows the
+        // current extension list and one owner of those registry keys (see Installer.iss's own
+        // file-header note). Must run before Avalonia touches anything, and must exit without ever
+        // building a window.
+        //
+        // Trailing args are the specific extensions to act on (".cbz", ".pdf", ...); the installer
+        // passes one per selected task. With no extensions given, defaults to the full comic-format
+        // allow-list. Either way the set is clamped to FileAssociationService.ComicAssociationExtensions
+        // - so this path never (re)associates bare .zip/.rar/.7z, unlike the old
+        // "loop every GetAvailableFormats() entry" it replaces (2026-09-09 installer redesign, decision 5).
         if (args.Length > 0 && (args[0] == "--register-file-associations" || args[0] == "--unregister-file-associations"))
         {
             bool associate = args[0] == "--register-file-associations";
-            var associationService = new FileAssociationService();
-            foreach (var format in associationService.GetAvailableFormats())
-            {
-                associationService.SetAssociated(format.Name, associate);
-            }
+            var requestedExtensions = args.Length > 1
+                ? args[1..]
+                : FileAssociationService.ComicAssociationExtensions.ToArray();
+            new FileAssociationService().SetComicAssociationsFor(requestedExtensions, associate);
 
             return;
+        }
+
+        // Create the installer-detection mutex only on the real GUI path (after the headless
+        // file-association early-return above, which the installer itself invokes mid-install).
+        // Global\ so an elevated Setup process in a different token still sees it; fall back to a
+        // session-local name if the Global namespace is denied. Best-effort - nothing in-process
+        // depends on it.
+        try
+        {
+            _runningMutex = new Mutex(initiallyOwned: false, @"Global\" + RunningMutexName);
+        }
+        catch (Exception)
+        {
+            try { _runningMutex = new Mutex(initiallyOwned: false, RunningMutexName); }
+            catch (Exception) { /* give up - the installer still has CloseApplications as a fallback */ }
         }
 
         // Icon-font providers for Optris.Icons.Avalonia (the maintained Avalonia 12 fork of

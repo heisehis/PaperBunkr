@@ -19,6 +19,27 @@ public class FileAssociationService
 {
     private const string TypeIdPrefix = "Paperbunkr.";
 
+    /// <summary>
+    /// The comic-specific extensions the installer's per-format association tasks (and the
+    /// <c>--register-file-associations</c> / <c>--unregister-file-associations</c> CLI path in
+    /// <see cref="Program"/>) are allowed to touch - see
+    /// docs/superpowers/specs/2026-09-09-installer-redesign-design.md decision 5, plus the
+    /// 2026-09-09 correction that restores <c>.cbt</c> for ComicRack CE parity.
+    ///
+    /// <para>
+    /// Deliberately excludes the generic archive groups <see cref="GetAvailableFormats"/> also
+    /// returns - <c>.zip</c> ("ZIP Archive"), <c>.rar</c> ("RAR Archive" / "RAR5 Archive"),
+    /// <c>.7z</c> ("7z Archive"), <c>.tar</c> ("TAR Archive"): the install/CLI flow hijacking bare
+    /// archive extensions as Paperbunkr files was a pre-existing over-association bug. Preferences
+    /// &gt; Advanced is a separate post-install screen and keeps its own full
+    /// <see cref="GetAvailableFormats"/> list untouched.
+    /// </para>
+    /// </summary>
+    public static readonly IReadOnlyList<string> ComicAssociationExtensions = new[]
+    {
+        ".pdf", ".cbz", ".cbr", ".cb7", ".cbt", ".cbw", ".djvu",
+    };
+
     private readonly IShellFileAssociation _shell;
 
     public FileAssociationService()
@@ -50,6 +71,52 @@ public class FileAssociationService
                 };
             })
             .ToList();
+    }
+
+    /// <summary>
+    /// Registers (or unregisters) file associations for the requested comic extensions only,
+    /// scoped by <see cref="ComicAssociationExtensions"/>. Drives the installer's per-format
+    /// <c>[Tasks]</c> and the <see cref="Program"/> CLI path (decision 5 of the 2026-09-09
+    /// installer redesign). Reuses the same per-format <see cref="SetAssociated"/> registry-write
+    /// path as Preferences &gt; Advanced, so there is still exactly one owner of these keys.
+    /// </summary>
+    /// <param name="extensions">
+    /// The extensions to act on (leading dot optional, case-insensitive). Anything not in
+    /// <see cref="ComicAssociationExtensions"/> is silently ignored. Pass the whole allow-list for
+    /// "all comic formats".
+    /// </param>
+    public void SetComicAssociationsFor(IEnumerable<string> extensions, bool associated)
+    {
+        var requested = extensions
+            .Select(NormalizeExtension)
+            .Where(ext => ComicAssociationExtensions.Contains(ext, StringComparer.OrdinalIgnoreCase))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        if (requested.Count == 0)
+        {
+            return;
+        }
+
+        // Materialize before the loop: SetAssociated re-enters Providers.Readers.GetSourceFormats(),
+        // and holding this enumerator open across that call would recursively acquire the provider
+        // registry's read lock (which is not recursion-enabled). Same reason GetAvailableFormats
+        // above ends in .ToList().
+        var formatNames = Providers.Readers.GetSourceFormats()
+            .Where(f => f.Extensions.Any(ext => requested.Contains(ext)))
+            .Select(f => f.Name)
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
+        foreach (string formatName in formatNames)
+        {
+            SetAssociated(formatName, associated);
+        }
+    }
+
+    private static string NormalizeExtension(string ext)
+    {
+        ext = ext.Trim();
+        return ext.StartsWith('.') ? ext : "." + ext;
     }
 
     public void SetAssociated(string formatName, bool associated)

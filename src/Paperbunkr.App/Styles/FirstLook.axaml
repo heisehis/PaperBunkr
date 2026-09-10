@@ -1,0 +1,54 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="using:Paperbunkr.App.Controls">
+    <!--
+        FirstLookShell (docs/superpowers/specs/2026-09-09-startup-onboarding-whats-new-design.md,
+        Decision 3) - shared card chrome for WelcomeOverlay and WhatsNewOverlay. Code-only
+        TemplatedControl (Controls/FirstLookShell.cs); this implicit ControlTheme is its template,
+        same pattern as OverlayShell / BrandMark.
+
+        The header band uses the literal brand dark (#0A0B0D) so it reads as one piece with the
+        SplashWindow that just handed off to it - deliberately not a skin token, same call as the
+        splash background.
+    -->
+    <Styles.Resources>
+        <ControlTheme x:Key="{x:Type controls:FirstLookShell}" TargetType="controls:FirstLookShell">
+            <Setter Property="Template">
+                <ControlTemplate>
+                    <Border Classes="floatingPanel" Width="560" ClipToBounds="True">
+                        <Grid RowDefinitions="Auto,*,Auto">
+
+                            <!-- Header band -->
+                            <Border Grid.Row="0" Background="#0A0B0D" Padding="24,20"
+                                    BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,0,0,1">
+                                <StackPanel Orientation="Horizontal" Spacing="14">
+                                    <Image Width="44" Height="44" VerticalAlignment="Center"
+                                           Source="avares://Paperbunkr.App/Assets/paperbunkr-logo-source.png" />
+                                    <StackPanel VerticalAlignment="Center" Spacing="2">
+                                        <TextBlock Text="{TemplateBinding Title}"
+                                                   FontSize="18" FontWeight="Bold" Foreground="#F2EDE6" />
+                                        <TextBlock Text="{TemplateBinding Subtitle}"
+                                                   FontSize="12" Foreground="#8A8F98" TextWrapping="Wrap"
+                                                   IsVisible="{Binding Subtitle, RelativeSource={RelativeSource TemplatedParent},
+                                                                       Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                                    </StackPanel>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- Body -->
+                            <ContentPresenter Grid.Row="1" Margin="24,18,24,10"
+                                              Content="{TemplateBinding Content}"
+                                              ContentTemplate="{TemplateBinding ContentTemplate}" />
+
+                            <!-- Footer -->
+                            <ContentPresenter Grid.Row="2" Margin="24,10,24,20"
+                                              Content="{TemplateBinding Footer}"
+                                              IsVisible="{Binding Footer, RelativeSource={RelativeSource TemplatedParent},
+                                                                  Converter={x:Static ObjectConverters.IsNotNull}}" />
+                        </Grid>
+                    </Border>
+                </ControlTemplate>
+            </Setter>
+        </ControlTheme>
+    </Styles.Resources>
+</Styles>

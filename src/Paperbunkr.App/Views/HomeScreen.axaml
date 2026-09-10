@@ -135,17 +135,41 @@
 
             <!-- ============ Masthead on the cover-wall (full-bleed, edge to edge) ============ -->
             <Panel Height="210">
-                <Image Source="{Binding MastheadBackdrop}" Stretch="UniformToFill"
-                       IsVisible="{Binding MastheadBackdrop, Converter={x:Static conv:ObjectConverters.IsNotNull}}" />
-                <Border IsVisible="{Binding MastheadBackdrop, Converter={x:Static conv:ObjectConverters.IsNull}}">
-                    <Border.Background>
-                        <RadialGradientBrush GradientOrigin="18%,0%" Center="18%,0%" RadiusX="1.1" RadiusY="0.9">
-                            <GradientStop Offset="0" Color="#241812" />
-                            <GradientStop Offset="0.5" Color="#0C0B0A" />
-                            <GradientStop Offset="1" Color="#060606" />
-                        </RadialGradientBrush>
-                    </Border.Background>
-                </Border>
+                <!-- Backdrop layer only (image or fallback) - the scoped Ken-Burns pan/scale
+                     (docs/superpowers/specs/2026-09-08-home-navrail-visual-v2-design.md §4) applies
+                     to this wrapper from HomeScreen.axaml.cs, one slow move per spotlight rotation,
+                     not a perpetual loop (see that file's own reduced-motion note). ClipToBounds
+                     keeps the ~6% zoom from spilling past the masthead's own 210px band. -->
+                <Panel x:Name="MastheadVisualLayer" ClipToBounds="True">
+                    <Panel.Transitions>
+                        <Transitions>
+                            <TransformOperationsTransition Property="RenderTransform" Duration="0:0:8" Easing="CubicEaseOut" />
+                        </Transitions>
+                    </Panel.Transitions>
+                    <Image Source="{Binding MastheadBackdrop}" Stretch="UniformToFill"
+                           IsVisible="{Binding MastheadBackdrop, Converter={x:Static conv:ObjectConverters.IsNotNull}}" />
+                    <!-- Skin-aware fallback (docs/superpowers/specs/2026-09-08-home-navrail-visual-v2-
+                         design.md §3 - fixes the Windows 11 masthead contrast bug): reuses the same
+                         PbHeroGradientStart/EndColor pair DetailHero's own backdrop already relies on,
+                         rather than a bespoke blend - every skin (windows_11 included) already ships a
+                         correct transparent-to-base-tone pair for exactly this "gradient over a surface"
+                         shape, so no new resource plumbing is needed. -->
+                    <Border IsVisible="{Binding MastheadBackdrop, Converter={x:Static conv:ObjectConverters.IsNull}}">
+                        <Border.Background>
+                            <RadialGradientBrush GradientOrigin="18%,0%" Center="18%,0%" RadiusX="1.1" RadiusY="0.9">
+                                <GradientStop Offset="0" Color="{DynamicResource PbHeroGradientEndColor}" />
+                                <GradientStop Offset="1" Color="{DynamicResource PbHeroGradientStartColor}" />
+                            </RadialGradientBrush>
+                        </Border.Background>
+                    </Border>
+                </Panel>
+
+                <!-- Ambient recolor wash (docs/superpowers/specs/2026-09-08-home-navrail-visual-v2-
+                     design.md §4) - a ~30%-opacity tint toward the current spotlight cover's average
+                     color, layered additively over the backdrop and under the existing bottom-fade
+                     scrim below, so it can never fully override the active skin's own palette. -->
+                <Border Background="{Binding SpotlightAccentColor, Converter={x:Static views:SpotlightAccentToBrushConverter.Instance}}" />
+
                 <Border>
                     <Border.Background>
                         <LinearGradientBrush StartPoint="0%,55%" EndPoint="0%,100%">
@@ -191,10 +215,29 @@
 
                 <!-- ============ Spotlight hero ============ -->
                 <StackPanel Spacing="12">
-                    <StackPanel Spacing="12" IsVisible="{Binding HasSpotlight}">
+                    <!-- Hover anywhere in this region (card or dots) pauses spotlight auto-rotation
+                         (docs/superpowers/specs/2026-09-08-home-navrail-visual-v2-design.md §5). -->
+                    <StackPanel Spacing="12" IsVisible="{Binding HasSpotlight}"
+                                PointerEntered="HeroRegion_PointerEntered" PointerExited="HeroRegion_PointerExited">
                         <Button Classes="heroCard" Command="{Binding OpenSpotlightCommand}"
                                 AutomationProperties.AutomationId="HomeSpotlightCard">
-                            <Border CornerRadius="{DynamicResource PbRadiusLg}" ClipToBounds="True">
+                            <!-- Crossfade on spotlight swap (docs/superpowers/specs/2026-09-08-home-
+                                 navrail-visual-v2-design.md §4 follow-up - the design's own "no
+                                 visual changes to DetailHero itself" boundary stays intact; this
+                                 wraps it instead). DetailHero's DataContext is one persistent
+                                 SpotlightHeader adapter that re-fires PropertyChanged rather than
+                                 being replaced, so a content-swap control wouldn't detect a change
+                                 here - HomeScreen.axaml.cs drives Opacity directly on
+                                 CurrentSpotlight changing, dipping to near-0 (swapping the
+                                 instantly-updated content while it's invisible) then back to 1.
+                                 PbMotionStandard duration means Reduced Motion collapses this to an
+                                 instant snap for free, no separate check needed. -->
+                            <Border x:Name="HeroCardWrapper" CornerRadius="{DynamicResource PbRadiusLg}" ClipToBounds="True">
+                                <Border.Transitions>
+                                    <Transitions>
+                                        <DoubleTransition Property="Opacity" Duration="{DynamicResource PbMotionStandard}" Easing="{StaticResource PbMotionEase}" />
+                                    </Transitions>
+                                </Border.Transitions>
                                 <views:DetailHero DataContext="{Binding SpotlightHeader}" MutedBackdrop="True" HeroHeight="264" />
                             </Border>
                         </Button>
@@ -221,7 +264,8 @@
                 <StackPanel Spacing="12">
                     <controls:SplitText Classes="heading" Text="Continue Reading" AutomationProperties.AutomationId="HomeContinueReadingHeader" />
                     <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" IsVisible="{Binding HasContinueReading}">
-                        <ItemsControl ItemsSource="{Binding ContinueReading}" Margin="0,0,0,12" AutomationProperties.AutomationId="HomeContinueReadingList">
+                        <ItemsControl ItemsSource="{Binding ContinueReading}" Margin="0,0,0,12" AutomationProperties.AutomationId="HomeContinueReadingList"
+                                      controls:EntranceAnimation.Enabled="{Binding PlayEntranceAnimation}">
                             <ItemsControl.ItemsPanel>
                                 <ItemsPanelTemplate><StackPanel Orientation="Horizontal" Spacing="16" /></ItemsPanelTemplate>
                             </ItemsControl.ItemsPanel>
@@ -246,7 +290,8 @@
                 <StackPanel Spacing="12" IsVisible="{Binding HasBooksLibrary}">
                     <controls:SplitText Classes="heading" Text="Continue Reading — Books" AutomationProperties.AutomationId="HomeContinueReadingBooksHeader" />
                     <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" IsVisible="{Binding HasContinueReadingBooks}">
-                        <ItemsControl ItemsSource="{Binding ContinueReadingBooks}" Margin="0,0,0,12" AutomationProperties.AutomationId="HomeContinueReadingBooksList">
+                        <ItemsControl ItemsSource="{Binding ContinueReadingBooks}" Margin="0,0,0,12" AutomationProperties.AutomationId="HomeContinueReadingBooksList"
+                                      controls:EntranceAnimation.Enabled="{Binding PlayEntranceAnimation}">
                             <ItemsControl.ItemsPanel>
                                 <ItemsPanelTemplate><StackPanel Orientation="Horizontal" Spacing="16" /></ItemsPanelTemplate>
                             </ItemsControl.ItemsPanel>
@@ -276,7 +321,8 @@
                                 AutomationProperties.AutomationId="HomeViewLibraryLink" />
                     </Grid>
                     <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" IsVisible="{Binding HasRecentlyAdded}">
-                        <ItemsControl ItemsSource="{Binding RecentlyAdded}" Margin="0,0,0,12" AutomationProperties.AutomationId="HomeRecentlyAddedList">
+                        <ItemsControl ItemsSource="{Binding RecentlyAdded}" Margin="0,0,0,12" AutomationProperties.AutomationId="HomeRecentlyAddedList"
+                                      controls:EntranceAnimation.Enabled="{Binding PlayEntranceAnimation}">
                             <ItemsControl.ItemsPanel>
                                 <ItemsPanelTemplate><StackPanel Orientation="Horizontal" Spacing="16" /></ItemsPanelTemplate>
                             </ItemsControl.ItemsPanel>
@@ -305,7 +351,8 @@
                                 AutomationProperties.AutomationId="HomeViewLibraryFromCollectionsLink" />
                     </Grid>
                     <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
-                        <ItemsControl ItemsSource="{Binding Collections}" Margin="0,0,0,12" AutomationProperties.AutomationId="HomeCollectionsList">
+                        <ItemsControl ItemsSource="{Binding Collections}" Margin="0,0,0,12" AutomationProperties.AutomationId="HomeCollectionsList"
+                                      controls:EntranceAnimation.Enabled="{Binding PlayEntranceAnimation}">
                             <ItemsControl.ItemsPanel>
                                 <ItemsPanelTemplate><StackPanel Orientation="Horizontal" Spacing="16" /></ItemsPanelTemplate>
                             </ItemsControl.ItemsPanel>
@@ -331,7 +378,8 @@
                             <StackPanel Spacing="12" Margin="0,0,0,20">
                                 <controls:SplitText Classes="heading" Text="{Binding SeedSeriesName, StringFormat='Because you read {0}'}" />
                                 <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
-                                    <ItemsControl ItemsSource="{Binding Cards}" Margin="0,0,0,12">
+                                    <ItemsControl ItemsSource="{Binding Cards}" Margin="0,0,0,12"
+                                                  controls:EntranceAnimation.Enabled="{Binding $parent[UserControl].((vm:HomeScreenViewModel)DataContext).PlayEntranceAnimation}">
                                         <ItemsControl.ItemsPanel>
                                             <ItemsPanelTemplate><StackPanel Orientation="Horizontal" Spacing="16" /></ItemsPanelTemplate>
                                         </ItemsControl.ItemsPanel>

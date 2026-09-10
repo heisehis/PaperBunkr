@@ -361,6 +361,25 @@ public class HomeScreenViewModelTests : IDisposable
         Assert.True(vm.HasRecentlyAdded);
     }
 
+    [Fact]
+    public async Task LoadFromDatabaseAsync_PopulatesTheSameModulesAsTheSyncLoad()
+    {
+        // The startup path uses the async variant (queries + cover-wall render off the UI thread,
+        // collections applied back on it) so the just-shown shell doesn't freeze for ~2.7s.
+        SeedSeriesWithIssue("Async Recently Added", addedTime: DateTime.UtcNow);
+        SeedSeriesWithIssue("Async In Progress", lastPageRead: 20, pageCount: 100, openedTime: DateTime.UtcNow);
+
+        var vm = new HomeScreenViewModel(_ => { }, _ => { }, _ => { }, (_, _) => { }, (_, _) => { },
+            loadOnConstruction: false);
+        Assert.False(vm.HasRecentlyAdded);
+
+        await vm.LoadFromDatabaseAsync();
+
+        Assert.True(vm.HasRecentlyAdded);
+        Assert.Contains(vm.RecentlyAdded, c => c.Name == "Async Recently Added");
+        Assert.Single(vm.ContinueReading);
+    }
+
     // --- Continue Reading — Books (docs/superpowers/specs/2026-08-27-books-screen-chrome-and-home-
     // strip-design.md) ---
 

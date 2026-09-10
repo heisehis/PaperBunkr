@@ -31,7 +31,8 @@ public partial class EventsScreenViewModel : ViewModelBase
         Action<int>? goToSeriesDetail = null,
         Action<int>? goToReader = null,
         Action<int>? goToReadingList = null,
-        Action<string, string>? notify = null)
+        Action<string, string>? notify = null,
+        bool loadOnConstruction = true)
     {
         _goToSeriesDetail = goToSeriesDetail ?? (_ => { });
         _goToReader = goToReader ?? (_ => { });
@@ -54,8 +55,13 @@ public partial class EventsScreenViewModel : ViewModelBase
         EventFamily = new ObservableCollection<EventFamilyNodeCard>();
         EventConnectionSuggestions = new ObservableCollection<EventConnectionSuggestionCard>();
         DismissedSuggestions = new ObservableCollection<DismissedSuggestionCard>();
-        RefreshSidebar();
-        RefreshContinuitiesSidebar();
+        // Production passes false; GoEvents() calls both refreshes on navigation. Same rationale
+        // as SmartScreenViewModel - two eager sidebar loads on the UI thread at startup.
+        if (loadOnConstruction)
+        {
+            RefreshSidebar();
+            RefreshContinuitiesSidebar();
+        }
     }
 
     // --- Navigation model (docs/superpowers/specs/2026-08-28-events-continuity-screen-redesign-

@@ -26,9 +26,9 @@ namespace Paperbunkr.App.Services;
 /// <see cref="File.Exists"/> re-check on the next lookup self-heals once a screen reloads.
 /// </para>
 ///
-/// The <see cref="LruCache{TKey,TValue}"/> is UI-thread-only. <see cref="DecodeFromDisk"/> is the
-/// one exception - it touches no cache state, so <see cref="AsyncCoverImage"/> can call it from a
-/// threadpool thread.
+/// The <see cref="LruCache{TKey,TValue}"/> is now internally locked, so <see cref="Get"/> /
+/// <see cref="TryGetCached"/> are safe to call from any thread (the startup Home load builds its
+/// cover-wall off the UI thread). <see cref="DecodeFromDisk"/> still touches no cache state at all.
 /// </summary>
 public static class CoverImageCache
 {
@@ -36,7 +36,7 @@ public static class CoverImageCache
 
     private static readonly LruCache<string, Bitmap> _cache = new(MaxEntries);
 
-    /// <summary>A cache hit, or decode-then-store if a file exists (custom cover preferred). UI-thread only.</summary>
+    /// <summary>A cache hit, or decode-then-store if a file exists (custom cover preferred). Any thread.</summary>
     public static Bitmap? Get(string idKey)
     {
         if (_cache.TryGetValue(idKey, out var cached))
@@ -52,7 +52,7 @@ public static class CoverImageCache
     public static Bitmap? Get(int issueId, string? filePath, long? fileSize) =>
         Get(issueId.ToString(CultureInfo.InvariantCulture));
 
-    /// <summary>In-memory lookup only - never touches the disk. UI-thread only.</summary>
+    /// <summary>In-memory lookup only - never touches the disk. Any thread.</summary>
     public static bool TryGetCached(string idKey, out Bitmap? bitmap) => _cache.TryGetValue(idKey, out bitmap);
 
     /// <summary>
@@ -93,7 +93,9 @@ public static class CoverImageCache
         return File.Exists(generated) ? generated : string.Empty;
     }
 
-    /// <summary>Adds <paramref name="decoded"/> under <paramref name="idKey"/> unless another decode already populated it. UI-thread only.</summary>
+    /// <summary>Adds <paramref name="decoded"/> under <paramref name="idKey"/> unless another decode
+    /// already populated it. Any thread - the check-then-add is benignly racy (a concurrent decode
+    /// of the same key just wastes one decode; the loser's bitmap is dropped by <see cref="LruCache{TKey,TValue}.Add"/>).</summary>
     public static Bitmap StoreIfAbsent(string idKey, Bitmap decoded)
     {
         if (_cache.TryGetValue(idKey, out var existing))

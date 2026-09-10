@@ -144,6 +144,15 @@ public sealed partial class SeriesCardSample : ObservableObject, ISelectableCard
     /// </summary>
     public string? CoverKey { get; init; }
 
+    /// <summary>
+    /// A deterministic decorative cover gradient. Returns an <b>immutable</b> brush
+    /// (<c>ImmutableLinearGradientBrush</c>) - it has no <see cref="AvaloniaObject"/> thread
+    /// affinity, so it's safe to build off the UI thread (e.g. inside
+    /// <c>HomeScreenViewModel.BuildSnapshot</c>'s <c>Task.Run</c>) and still render on the
+    /// compositor. A mutable <see cref="LinearGradientBrush"/> here crashed the compositor with
+    /// "The calling thread cannot access this object" the moment a card built off-thread was drawn.
+    /// It's also a touch lighter (no property-system backing).
+    /// </summary>
     public static IBrush Gradient(string fromHex, string toHex) => new LinearGradientBrush
     {
         StartPoint = new RelativePoint(0, 0, RelativeUnit.Relative),
@@ -153,7 +162,7 @@ public sealed partial class SeriesCardSample : ObservableObject, ISelectableCard
             new GradientStop(Color.Parse(fromHex), 0),
             new GradientStop(Color.Parse(toHex), 1),
         },
-    };
+    }.ToImmutable();
 
     // Same palette used throughout the wireframe's own sample covers - picked deterministically
     // per series (by name hash) since there's no real cover-art decode pipeline yet (that's the

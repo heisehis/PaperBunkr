@@ -267,6 +267,9 @@ namespace Paperbunkr.Data.Migrations
                     b.Property<DateTime?>("LastLibraryHealthVerifyUtc")
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("LastRunVersion")
+                        .HasColumnType("TEXT");
+
                     b.Property<int?>("LastScreenEntityId")
                         .HasColumnType("INTEGER");
 

@@ -28,6 +28,16 @@ public class SkinService
     public const string DefaultSkinKey = "default";
 
     /// <summary>
+    /// Raised after a skin's colors are live in <see cref="Application.Current"/>'s resources
+    /// (docs/superpowers/specs/2026-09-08-home-navrail-visual-v2-design.md §3) - most consumers
+    /// don't need this since their brushes are already <c>DynamicResource</c>-bound and Avalonia
+    /// re-notifies them automatically, but a consumer that bakes a skin color into a raster (e.g.
+    /// <c>HomeScreenViewModel</c>'s masthead cover-wall, built once via SkiaSharp rather than drawn
+    /// live) has no other way to know a re-render is needed.
+    /// </summary>
+    public event Action? SkinApplied;
+
+    /// <summary>
     /// Embedded built-in skins (docs/superpowers/specs/2026-09-07-preferences-tile-hub-redesign-
     /// design.md §3) - <see cref="DefaultSkinKey"/> used to be the only one read from an
     /// <c>avares://</c> resource here; everything else fell through to <c>SkinPaths.ExtractedDirectory</c>
@@ -153,6 +163,7 @@ public class SkinService
         context.SaveChanges();
 
         _iconCache.Clear();
+        SkinApplied?.Invoke();
     }
 
     /// <summary>Re-applies whatever skin/font is already persisted in <see cref="Data.Entities.AppSettings"/> - called once on startup.</summary>
@@ -166,6 +177,7 @@ public class SkinService
         Application.Current!.Resources["PbMotionSlow"] = settings.ReducedMotion ? TimeSpan.Zero : DefaultMotionSlow;
         Application.Current!.Resources["PbMotionStandard"] = settings.ReducedMotion ? TimeSpan.Zero : DefaultMotionStandard;
         Application.Current!.Resources["PbMotionLarge"] = settings.ReducedMotion ? TimeSpan.Zero : DefaultMotionLarge;
+        SkinApplied?.Invoke();
     }
 
     private static void ApplySkinResources(SkinTheme theme)

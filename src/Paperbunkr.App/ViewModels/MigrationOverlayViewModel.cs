@@ -20,9 +20,9 @@ public enum MigrationOverlayMode
 /// </summary>
 public partial class MigrationOverlayViewModel : ViewModelBase
 {
-    public MigrationOverlayViewModel(IFilePickerService filePicker, Action<int> onOpenSeriesDetail)
+    public MigrationOverlayViewModel(IFilePickerService filePicker, Action<int> onOpenSeriesDetail, bool loadOnConstruction = true)
     {
-        NeedsReview = new NeedsReviewViewModel(onOpenSeriesDetail);
+        NeedsReview = new NeedsReviewViewModel(onOpenSeriesDetail, loadOnConstruction);
         Migration = new MigrationViewModel(filePicker, onCompleted: () => NeedsReview.Refresh());
     }
 

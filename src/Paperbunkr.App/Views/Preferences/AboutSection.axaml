@@ -72,8 +72,22 @@
             <TextBlock Classes="settingsGroupCaption" Text="UPDATES" />
             <pref:SettingsRow Icon="Tag" Title="Version">
                 <pref:SettingsRow.SettingsContent>
-                    <TextBlock Text="{Binding CurrentVersion}" FontSize="13" FontFamily="Consolas,monospace"
-                               Foreground="{DynamicResource PbTextBrush}" />
+                    <StackPanel HorizontalAlignment="Right" Spacing="1">
+                        <TextBlock Text="{Binding CurrentVersion}" FontSize="13" FontFamily="Consolas,monospace"
+                                   HorizontalAlignment="Right"
+                                   Foreground="{DynamicResource PbTextBrush}" />
+                        <TextBlock Text="{Binding BuildLabel, StringFormat='build {0}'}" FontSize="11"
+                                   FontFamily="Consolas,monospace" HorizontalAlignment="Right"
+                                   IsVisible="{Binding BuildLabel, Converter={x:Static conv:ObjectConverters.IsNotNull}}"
+                                   Foreground="{DynamicResource PbTextFaintBrush}" />
+                    </StackPanel>
+                </pref:SettingsRow.SettingsContent>
+            </pref:SettingsRow>
+            <pref:SettingsRow Icon="Sparkle" Title="What's new"
+                               Description="Highlights from this release">
+                <pref:SettingsRow.SettingsContent>
+                    <Button Classes="headerAction ghost" Command="{Binding OpenWhatsNewCommand}" Content="View"
+                            AutomationProperties.AutomationId="AboutWhatsNew" />
                 </pref:SettingsRow.SettingsContent>
             </pref:SettingsRow>
             <pref:SettingsRow Icon="ArrowSync" Title="Check for updates"

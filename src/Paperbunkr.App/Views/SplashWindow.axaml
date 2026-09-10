@@ -1,0 +1,71 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:Paperbunkr.App.ViewModels"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" d:DesignWidth="480" d:DesignHeight="340"
+        x:Class="Paperbunkr.App.Views.SplashWindow"
+        x:DataType="vm:SplashViewModel"
+        Title="Paperbunkr"
+        Width="480" Height="340"
+        CanResize="False"
+        SystemDecorations="None"
+        ShowInTaskbar="False"
+        Topmost="True"
+        WindowStartupLocation="CenterScreen"
+        TransparencyLevelHint="None"
+        Background="#0A0B0D">
+
+    <!--
+        Shown first from App.axaml.cs while the heavy startup work runs (integrity check +
+        migrations on a background thread; view-model + main-window construction on the UI thread).
+        Background is the literal brand dark - renders before SkinService has necessarily run.
+
+        The entrance + breathing motion is driven entirely from code-behind (Animation.RunAsync,
+        kicked off from the Opened event) rather than from XAML <Style.Animations>. A style
+        animation whose selector already matches at parse time can "run" against a control that
+        has no live clock yet and finish before the first paint - which is exactly what happened
+        across three earlier attempts here ("no animation"). Starting it from Opened guarantees a
+        realized visual with a running clock. Reduced motion (SkinService.GetReducedMotion) skips
+        it and snaps the resting values.
+    -->
+    <Grid RowDefinitions="*,Auto,Auto,*">
+        <Panel Grid.Row="1" HorizontalAlignment="Center" Margin="0,0,0,28">
+            <Border x:Name="GlowBorder" Width="190" Height="190" Opacity="0.35">
+                <Border.Background>
+                    <RadialGradientBrush GradientOrigin="50%,50%" Center="50%,50%" RadiusX="50%" RadiusY="50%">
+                        <GradientStop Color="#8CC9803F" Offset="0" />
+                        <GradientStop Color="#00C9803F" Offset="0.72" />
+                    </RadialGradientBrush>
+                </Border.Background>
+            </Border>
+            <Image x:Name="LogoImage" Width="122" Height="122" Opacity="0"
+                   RenderTransformOrigin="50%,50%"
+                   Source="avares://Paperbunkr.App/Assets/paperbunkr-logo-source.png" />
+        </Panel>
+
+        <StackPanel Grid.Row="2" HorizontalAlignment="Center" Spacing="14">
+            <ProgressBar Width="240" Height="3" Minimum="0" Maximum="1"
+                         Value="{Binding Progress}"
+                         Background="#25252B" CornerRadius="2" ShowProgressText="False">
+                <ProgressBar.Transitions>
+                    <Transitions>
+                        <DoubleTransition Property="Value" Duration="0:0:0.4" Easing="CubicEaseOut" />
+                    </Transitions>
+                </ProgressBar.Transitions>
+                <ProgressBar.Foreground>
+                    <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,0%">
+                        <GradientStop Color="#B06A2E" Offset="0" />
+                        <GradientStop Color="#D9A441" Offset="1" />
+                    </LinearGradientBrush>
+                </ProgressBar.Foreground>
+            </ProgressBar>
+            <TextBlock Text="{Binding StatusMessage}" FontSize="12" Foreground="#8A8F98"
+                       HorizontalAlignment="Center" />
+        </StackPanel>
+
+        <TextBlock Grid.Row="3" Text="{Binding VersionText}"
+                   HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,15,13"
+                   FontSize="10.5" Foreground="#565B64" />
+    </Grid>
+</Window>

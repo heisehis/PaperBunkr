@@ -149,6 +149,23 @@ public class SkinServiceTests : IDisposable
         Assert.Equal(key, service.GetAvailableSkins().Single(s => s.IsActive).Key);
     }
 
+    /// <summary>
+    /// A consumer that bakes a skin color into a raster (docs/superpowers/specs/
+    /// 2026-09-08-home-navrail-visual-v2-design.md §3 - the Home masthead cover-wall) needs to know
+    /// exactly when a skin switch happens, not just that resources changed underneath it.
+    /// </summary>
+    [Fact]
+    public void ApplySkin_RaisesSkinApplied_ExactlyOnce()
+    {
+        var service = CreateService();
+        int raisedCount = 0;
+        service.SkinApplied += () => raisedCount++;
+
+        service.ApplySkin("cool_technical");
+
+        Assert.Equal(1, raisedCount);
+    }
+
     [Fact]
     public void TryInstallSkin_RoundTrips_InstallExtractParseApply()
     {

@@ -9,7 +9,9 @@ namespace Paperbunkr.App.Services;
 /// In-memory <see cref="Bitmap"/> cache over <see cref="BookCoverThumbnailPaths"/>' on-disk cache -
 /// mirrors <see cref="CoverImageCache"/> for comics, including its bounded-size, miss-not-cached,
 /// and id-keyed rationale (docs/superpowers/specs/2026-09-06-scheduled-tasks-and-cover-durability-
-/// design.md). UI-thread-only, same assumption as <see cref="CoverImageCache"/>.
+/// design.md). Any-thread, same as <see cref="CoverImageCache"/> (the backing
+/// <see cref="LruCache{TKey,TValue}"/> is internally locked; the miss-path check-then-add is
+/// benignly racy - a concurrent decode of the same key just wastes one decode).
 /// </summary>
 public static class BookCoverImageCache
 {

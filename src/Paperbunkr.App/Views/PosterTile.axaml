@@ -17,7 +17,12 @@
         UserControl's own x:Name), since this control's DataContext is whatever the consumer sets it
         to, not this control's own StyledProperties.
     -->
-    <Border x:Name="Root" Classes="posterTile" Focusable="True" AutomationProperties.AutomationId="PosterTileCard">
+    <!-- "shelfCard" (docs/superpowers/specs/2026-09-08-home-navrail-visual-v2-design.md §6) scopes
+         the widened Kinetic Rail hover glow to Home's own cards without touching the shared
+         Border.posterTile/posterCover class names LibraryScreen.axaml's separately-authored card
+         templates also use - PosterTile is Home-only (per this file's own header comment), so it's
+         safe to hardcode here rather than make every consumer opt in. -->
+    <Border x:Name="Root" Classes="posterTile shelfCard" Focusable="True" AutomationProperties.AutomationId="PosterTileCard">
         <Grid RowDefinitions="*,Auto" Width="140">
             <Border Grid.Row="0" Classes="posterCover" Height="196" ClipToBounds="True" CornerRadius="{DynamicResource PbRadiusSm}">
                 <Grid>

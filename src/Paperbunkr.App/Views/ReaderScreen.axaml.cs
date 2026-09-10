@@ -4,6 +4,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Input;
+using Avalonia.Interactivity;
 using Avalonia.Media.Imaging;
 using Avalonia.Threading;
 using Paperbunkr.App.Models;
@@ -19,6 +20,21 @@ public partial class ReaderScreen : UserControl
     {
         InitializeComponent();
         DataContextChanged += OnDataContextChanged;
+
+        // Ctrl+Shift+P -> perf overlay (docs/superpowers/specs/2026-09-08-reader-decode-cache-
+        // prefetch-pipeline-design.md §10). Handled here rather than via UserControl.KeyBindings so
+        // it fires even though PageCanvas is the focused element - handledEventsToo covers the case
+        // where PageCanvas already marked an unrelated modifier chord handled.
+        AddHandler(KeyDownEvent, OnReaderKeyDown, RoutingStrategies.Tunnel | RoutingStrategies.Bubble, handledEventsToo: true);
+    }
+
+    private void OnReaderKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.P && e.KeyModifiers == (KeyModifiers.Control | KeyModifiers.Shift))
+        {
+            _viewModel?.TogglePerfOverlayCommand.Execute(null);
+            e.Handled = true;
+        }
     }
 
     /// <summary>

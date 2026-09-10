@@ -112,13 +112,12 @@ public sealed class PaperbunkrApplication : IApplication
             return null;
         }
 
-        using var decoder = PageImageDecoder.TryOpen(issue.FilePath);
-        if (decoder is null || page < 0 || page >= decoder.PageCount)
+        using Bitmap? bitmap = Services.PageDecodeCore.DecodeSinglePage(issue.FilePath, page);
+        if (bitmap is null)
         {
             return null;
         }
 
-        Bitmap bitmap = decoder.GetPage(page);
         using var stream = new MemoryStream();
         bitmap.Save(stream, new PngBitmapEncoderOptions());
         return stream.ToArray();

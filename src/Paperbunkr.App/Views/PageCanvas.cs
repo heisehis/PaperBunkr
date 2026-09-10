@@ -367,7 +367,7 @@ public class PageCanvas : Control
     /// <summary>
     /// Page-turn transition style/duration (docs/superpowers/specs/2026-08-13-reader-page-transition-
     /// animations-design.md §4), backing <c>AppSettings.PageTransitionStyle</c>/
-    /// <c>PageTransitionDurationMs</c>. Read directly by <see cref="TryBuildPageTransition"/> at
+    /// <c>PageTransitionDurationMs</c>. Read directly by <c>FlushPagedPush</c> at
     /// turn-time rather than added to <see cref="RenderAffectingProperties"/> - same non-reactive-read
     /// precedent as <see cref="WheelPanStep"/>, changing the setting mid-session only needs to affect
     /// the *next* turn, not force an immediate rerender.
@@ -400,6 +400,29 @@ public class PageCanvas : Control
 
     /// <summary>Set while a coalesced continuous-mode render push is already queued for the next animation frame (see <see cref="RequestContinuousPush"/>).</summary>
     private bool _continuousPushQueued;
+
+    /// <summary>
+    /// Paged-mode render pushes are coalesced to one per animation frame too (see
+    /// <see cref="RequestPagedPush"/>) - fast flipping used to fire one
+    /// <see cref="CompositionCustomVisual.SendHandlerMessage"/> per turn, which queue on the
+    /// compositor thread; the pipeline's UI-thread window eviction then races ahead of the
+    /// compositor draining that backlog and frees a bitmap a queued frame still references
+    /// (AccessViolation in <see cref="ReaderPageVisualHandler.OnRender"/>). Coalescing keeps the
+    /// compositor at most one frame behind, so what it renders is always what's on screen now.
+    /// </summary>
+    private bool _pagedPushQueued;
+    private PageTransitionDirection? _pagedTurnPending;
+
+    /// <summary>
+    /// Count of <see cref="PageProperty"/> changes seen since the last <see cref="FlushPagedPush"/>.
+    /// A coalesced flush that swallowed more than one page change is a fast-flip <em>burst</em>: the
+    /// transition it would build animates from <see cref="_lastRenderedPage"/>, which by then points
+    /// at a page several turns back that the pipeline's virtualization window has already scrolled
+    /// past and is recycling - converting it on the compositor thread mid-recycle is the fast-flip
+    /// AccessViolation. A burst can't show a legible animation anyway, so such a flush does an
+    /// instant swap instead. Reset to 0 at the end of every flush.
+    /// </summary>
+    private int _pagedChangesSinceFlush;
 
     /// <summary>Reused across <see cref="PushContinuousVisualData"/> calls so a drag scroll doesn't allocate a fresh <c>PageCount</c>-sized array on every pointer-move event - regrown only when <see cref="PageCount"/> changes.</summary>
     private Size[] _estimatedSizesBuffer = Array.Empty<Size>();
@@ -441,7 +464,7 @@ public class PageCanvas : Control
     /// fires <see cref="OnPropertyChanged(AvaloniaPropertyChangedEventArgs)"/> once per changed
     /// property, so there's no single event carrying "old primary + old secondary" together, and
     /// relying on the two events firing in a guaranteed order would be fragile. These two fields sidestep
-    /// the ordering question entirely - <see cref="TryBuildPageTransition"/> reads them as "old" and
+    /// the ordering question entirely - <c>FlushPagedPush</c> reads them as "old" and
     /// the current <see cref="Page"/>/<see cref="SecondaryPage"/> values as "new," with no dependency
     /// on which property's change notification happens to fire first. Cleared alongside
     /// <see cref="_pendingTransitionDirection"/> whenever <see cref="DecoderProperty"/> changes.
@@ -461,6 +484,23 @@ public class PageCanvas : Control
 
     /// <summary>Progressive-refinement cache for continuous mode's layout (see <see cref="DefaultEstimatedPageSize"/>) - every page this control has actually decoded/rendered at least once, so re-layout after the first pass uses real sizes instead of the estimate. Cleared whenever <see cref="Decoder"/> changes (a new issue was opened).</summary>
     private readonly Dictionary<int, Size> _knownPageSizes = new();
+
+    /// <summary>
+    /// Detail tier (docs/superpowers/specs/2026-09-08-reader-decode-cache-prefetch-pipeline-
+    /// design.md §6.2): when a solo paged page is zoomed past what its downsampled display-tier
+    /// bitmap can show sharply, a higher-resolution decode is fetched (from the pipeline's
+    /// compressed-bytes tier, no archive I/O) once the zoom/pan gesture has settled, and drawn in
+    /// its place. Strictly additive - if the fetch fails or the trigger math is off, the display
+    /// bitmap is just drawn upscaled, exactly as before. Dropped the moment zoom falls back below
+    /// the trigger, the page changes, or a spread/transition/continuous render happens.
+    /// </summary>
+    private Bitmap? _detailBitmap;
+    private int _detailBitmapForPage = -1;
+    private Avalonia.Threading.DispatcherTimer? _detailSettleTimer;
+    private const double DetailTierScaleTrigger = 1.15;
+    private const double DetailTierZoomTrigger = 1.5;
+    private const int DetailTierMaxWidth = 4096;
+    private static readonly TimeSpan DetailSettleDelay = TimeSpan.FromMilliseconds(150);
 
     /// <summary>
     /// Every styled property that used to be registered with <c>AffectsRender&lt;PageCanvas&gt;</c>
@@ -1299,7 +1339,7 @@ public class PageCanvas : Control
         // Re-arm the background-decode subscription: the screen switcher toggles visibility (detach/
         // re-attach) without a DecoderProperty change, so OnPropertyChanged wouldn't re-subscribe
         // after OnDetachedFromVisualTree dropped it. Idempotent (-= then +=).
-        if (Decoder is PageDecodeService decodeService)
+        if (Decoder is Paperbunkr.App.Services.Reader.IReaderPageSource decodeService)
         {
             decodeService.BackgroundDecodeCompleted -= OnBackgroundDecodeCompleted;
             decodeService.BackgroundDecodeCompleted += OnBackgroundDecodeCompleted;
@@ -1315,10 +1355,13 @@ public class PageCanvas : Control
         ElementComposition.SetElementChildVisual(this, null);
         _visual = null;
 
-        if (Decoder is PageDecodeService decodeService)
+        if (Decoder is Paperbunkr.App.Services.Reader.IReaderPageSource decodeService)
         {
             decodeService.BackgroundDecodeCompleted -= OnBackgroundDecodeCompleted;
         }
+
+        _detailSettleTimer?.Stop();
+        ClearDetail();
     }
 
     /// <summary>
@@ -1360,12 +1403,12 @@ public class PageCanvas : Control
             // Move the background-decode-completed subscription to the new decoder. Continuous mode
             // draws not-yet-decoded pages as gaps (see PushContinuousVisualData) and relies on this
             // to re-push once the background loop fills one in.
-            if (change.OldValue is PageDecodeService oldDecodeService)
+            if (change.OldValue is Paperbunkr.App.Services.Reader.IReaderPageSource oldDecodeService)
             {
                 oldDecodeService.BackgroundDecodeCompleted -= OnBackgroundDecodeCompleted;
             }
 
-            if (change.NewValue is PageDecodeService newDecodeService)
+            if (change.NewValue is Paperbunkr.App.Services.Reader.IReaderPageSource newDecodeService)
             {
                 newDecodeService.BackgroundDecodeCompleted += OnBackgroundDecodeCompleted;
             }
@@ -1373,6 +1416,8 @@ public class PageCanvas : Control
             // A new issue was opened (or continuous mode's decoder was swapped) - yesterday's page
             // sizes don't apply to today's book.
             _knownPageSizes.Clear();
+            _detailSettleTimer?.Stop();
+            ClearDetail();
 
             // A pending direction here would mean crossing an issue boundary via
             // NavigateToAdjacentIssue set one right before this decoder swap - clearing it means that
@@ -1400,20 +1445,22 @@ public class PageCanvas : Control
         // the ordinary instant-swap push below, same as every other RenderAffectingProperties change.
         if (change.Property == PageProperty && !IsContinuous)
         {
-            var transition = TryBuildPageTransition();
-            _pendingTransitionDirection = null;
+            // The page changed - any detail bitmap was for the old page.
+            _detailSettleTimer?.Stop();
+            ClearDetail();
 
-            if (transition is not null)
+            // Carry the turn direction (if this was adjacent nav) into the coalesced flush, which
+            // decides transition-vs-instant-swap from the state as of the next frame. Last write
+            // wins across a fast-flip burst - they're the same direction in practice.
+            if (_pendingTransitionDirection is { } dir)
             {
-                _lastTransitionStartUtc = DateTime.UtcNow;
-                // Bookkeeping stays correct for the next turn even though the compositor is still
-                // animating toward these values - PushPagedVisualData won't run for this change since
-                // we return below, so nothing else updates them.
-                _lastRenderedPage = Page;
-                _lastRenderedSecondaryPage = SecondaryPage;
-                _visual?.SendHandlerMessage(transition);
-                return;
+                _pagedTurnPending = dir;
             }
+            _pendingTransitionDirection = null;
+            _pagedChangesSinceFlush++;
+
+            RequestPagedPush();
+            return;
         }
 
         // Real bug, found via manual testing: OnPointerWheelChanged's Ctrl+wheel zoom handler
@@ -1487,6 +1534,12 @@ public class PageCanvas : Control
             {
                 RequestContinuousPush();
             }
+            else if (!IsContinuous)
+            {
+                // Paged: coalesce every render-affecting change (page, zoom, pan, fit, rotation)
+                // to one frame so the compositor message queue never backs up behind the pipeline.
+                RequestPagedPush();
+            }
             else
             {
                 PushRenderData();
@@ -1550,6 +1603,77 @@ public class PageCanvas : Control
         });
     }
 
+    /// <summary>
+    /// Coalesced paged-mode push - see <see cref="_pagedPushQueued"/>. On the next animation frame,
+    /// sends exactly one message reflecting the current state: a page-turn transition when a turn
+    /// happened and the style/throttle allow it, otherwise a plain <see cref="PushPagedVisualData"/>.
+    /// </summary>
+    private void RequestPagedPush()
+    {
+        if (_pagedPushQueued)
+        {
+            return;
+        }
+
+        var topLevel = TopLevel.GetTopLevel(this);
+        if (topLevel is null)
+        {
+            FlushPagedPush();
+            return;
+        }
+
+        _pagedPushQueued = true;
+        topLevel.RequestAnimationFrame(_ =>
+        {
+            _pagedPushQueued = false;
+            FlushPagedPush();
+        });
+    }
+
+    private void FlushPagedPush()
+    {
+        if (IsContinuous)
+        {
+            _pagedTurnPending = null;
+            _pagedChangesSinceFlush = 0;
+            return;
+        }
+
+        var turn = _pagedTurnPending;
+        _pagedTurnPending = null;
+
+        // A flush that coalesced more than one page change is a fast-flip burst - animate nothing
+        // (see _pagedChangesSinceFlush), the "old" bitmap is already being recycled underneath us.
+        bool burst = _pagedChangesSinceFlush > 1;
+        _pagedChangesSinceFlush = 0;
+
+        bool throttleCleared = _lastTransitionStartUtc is null
+            || (DateTime.UtcNow - _lastTransitionStartUtc.Value).TotalMilliseconds >= PageTransitionDurationMs;
+
+        if (turn is { } direction
+            && !burst
+            && PageTransitionStyle != PageTransitionStyle.None
+            && throttleCleared
+            && _lastRenderedPage is { } oldBitmap
+            && !ReferenceEquals(oldBitmap, Page)
+            && Page is not null)
+        {
+            bool isRightToLeft = ReadingMode == ReadingMode.RightToLeft;
+            var transition = new ReaderPageTransitionData(
+                new Rect(Bounds.Size), oldBitmap, Page, HighQualityDisplay, ZoomLevel * PageMarginMultiplier, PanOffsetX, PanOffsetY,
+                FitMode, FitOnlyIfOversized, EffectiveRotationDegrees(), PageTransitionStyle, TimeSpan.FromMilliseconds(PageTransitionDurationMs), direction,
+                _lastRenderedSecondaryPage, SecondaryPage, isRightToLeft, OldIsRightToLeft: isRightToLeft);
+
+            _lastTransitionStartUtc = DateTime.UtcNow;
+            _lastRenderedPage = Page;
+            _lastRenderedSecondaryPage = SecondaryPage;
+            _visual?.SendHandlerMessage(transition);
+            return;
+        }
+
+        PushPagedVisualData();
+    }
+
     private void PushAdjustmentData() =>
         _visual?.SendHandlerMessage(new AdjustmentVisualData(Brightness, Contrast, Saturation, Gamma));
 
@@ -1566,7 +1690,7 @@ public class PageCanvas : Control
     /// <see cref="_lastRenderedSecondaryPage"/> - by the time this runs, the ViewModel's own property
     /// changes (<see cref="Page"/>/<see cref="SecondaryPage"/>) have already fired and pushed an
     /// ordinary instant re-render through <see cref="OnPropertyChanged(AvaloniaPropertyChangedEventArgs)"/>'s
-    /// normal <see cref="PageProperty"/> path (no pending direction, so <see cref="TryBuildPageTransition"/>
+    /// normal <see cref="PageProperty"/> path (no pending direction, so <c>FlushPagedPush</c>
     /// itself declines), clobbering that bookkeeping to the *new* values already. Named simplification:
     /// this means one already-composited instant frame briefly shows the new state before the
     /// crossfade sent here starts it back from the old one - a single-frame flash, not chased further
@@ -1599,54 +1723,119 @@ public class PageCanvas : Control
         _visual?.SendHandlerMessage(transition);
     }
 
-    /// <summary>
-    /// Builds an animated page-turn message for the <see cref="PageProperty"/> change just observed,
-    /// or <see langword="null"/> if this turn shouldn't animate (spec §3.1/§3.3): no pending direction
-    /// (a jump, not adjacent nav), <see cref="PageTransitionStyle"/> is <see cref="Paperbunkr.Data.Entities.PageTransitionStyle.None"/>,
-    /// the rapid-paging throttle hasn't cleared yet, or there's no outgoing bitmap to transition from
-    /// (e.g. the very first page of a freshly opened book, tracked via <see cref="_lastRenderedPage"/>
-    /// - see that field's own doc comment for why this no longer reads <c>change.OldValue</c>). Both
-    /// bitmaps render against the current (already-updated) zoom/pan/fit/rotation state - see
-    /// <see cref="ReaderPageTransitionData"/>'s own doc comment for why that's not an attempt to
-    /// preserve either page's historical transform. Carries <see cref="SecondaryPage"/> on both sides
-    /// too (docs/superpowers/specs/2026-08-15-reader-double-page-spread-design.md §5) - a turn between
-    /// solo and paired animates just like a solo-to-solo one, each side's plan(s) built against that
-    /// side's own bitmap count downstream in <see cref="ReaderPageVisualHandler"/>.
-    /// </summary>
-    private ReaderPageTransitionData? TryBuildPageTransition()
-    {
-        if (_pendingTransitionDirection is not { } direction || PageTransitionStyle == PageTransitionStyle.None)
-        {
-            return null;
-        }
-
-        bool throttleCleared = _lastTransitionStartUtc is null
-            || (DateTime.UtcNow - _lastTransitionStartUtc.Value).TotalMilliseconds >= PageTransitionDurationMs;
-        if (!throttleCleared)
-        {
-            return null;
-        }
-
-        if (_lastRenderedPage is not { } oldBitmap)
-        {
-            return null;
-        }
-
-        bool isRightToLeft = ReadingMode == ReadingMode.RightToLeft;
-        return new ReaderPageTransitionData(
-            new Rect(Bounds.Size), oldBitmap, Page, HighQualityDisplay, ZoomLevel * PageMarginMultiplier, PanOffsetX, PanOffsetY,
-            FitMode, FitOnlyIfOversized, EffectiveRotationDegrees(), PageTransitionStyle, TimeSpan.FromMilliseconds(PageTransitionDurationMs), direction,
-            _lastRenderedSecondaryPage, SecondaryPage, isRightToLeft, OldIsRightToLeft: isRightToLeft);
-    }
-
     private void PushPagedVisualData()
     {
+        Bitmap? primary = ResolvePagedPrimaryBitmap();
+
         _visual?.SendHandlerMessage(new ReaderPageVisualData(
-            new Rect(Bounds.Size), Page, HighQualityDisplay, ZoomLevel * PageMarginMultiplier, PanOffsetX, PanOffsetY,
+            new Rect(Bounds.Size), primary, HighQualityDisplay, ZoomLevel * PageMarginMultiplier, PanOffsetX, PanOffsetY,
             FitMode, FitOnlyIfOversized, EffectiveRotationDegrees(), SecondaryPage, ReadingMode == ReadingMode.RightToLeft));
 
         _lastRenderedPage = Page;
         _lastRenderedSecondaryPage = SecondaryPage;
+    }
+
+    /// <summary>
+    /// The bitmap to draw for the current solo paged page - the higher-res detail bitmap when one
+    /// is ready for this page and the page is still zoomed past the trigger, otherwise the
+    /// display-tier <see cref="Page"/> (drawn upscaled). Also (re)arms the settle timer that
+    /// fetches a detail bitmap when the view is zoomed in and idle. See <see cref="_detailBitmap"/>.
+    /// </summary>
+    private Bitmap? ResolvePagedPrimaryBitmap()
+    {
+        if (Page is null || SecondaryPage is not null || Decoder is not Services.Reader.IReaderPageSource src)
+        {
+            ClearDetail();
+            return Page;
+        }
+
+        // Only when the user has actually zoomed in past fit - a fit mode that upscales a smallish
+        // scan to fill the viewport is not "zoomed in" and shouldn't trigger a detail decode.
+        double onScreenWidth = PagedOnScreenWidth();
+        bool wantsDetail = ZoomLevel >= DetailTierZoomTrigger
+                           && onScreenWidth > Page.PixelSize.Width * DetailTierScaleTrigger;
+
+        if (!wantsDetail)
+        {
+            ClearDetail();
+            _detailSettleTimer?.Stop();
+            return Page;
+        }
+
+        if (_detailBitmap is { } detail && _detailBitmapForPage == src.ActivePageIndex
+            && detail.PixelSize.Width >= onScreenWidth * 0.9)
+        {
+            return detail;
+        }
+
+        ArmDetailTimer();
+        return Page;
+    }
+
+    private double PagedOnScreenWidth()
+    {
+        if (Page is null)
+        {
+            return 0;
+        }
+        double scale = ZoomPanMath.ComputeBaseScale(Bounds.Size, Page.PixelSize, FitMode, FitOnlyIfOversized) * ZoomLevel * PageMarginMultiplier;
+        return Page.PixelSize.Width * scale;
+    }
+
+    private void ArmDetailTimer()
+    {
+        _detailSettleTimer ??= new Avalonia.Threading.DispatcherTimer { Interval = DetailSettleDelay };
+        if (_detailSettleTimerHandlerHooked is false)
+        {
+            _detailSettleTimer.Tick += OnDetailSettleTick;
+            _detailSettleTimerHandlerHooked = true;
+        }
+        _detailSettleTimer.Stop();
+        _detailSettleTimer.Start();
+    }
+
+    private bool _detailSettleTimerHandlerHooked;
+
+    private void OnDetailSettleTick(object? sender, EventArgs e)
+    {
+        _detailSettleTimer?.Stop();
+
+        if (Page is null || SecondaryPage is not null || Decoder is not Services.Reader.IReaderPageSource src || src.ActivePageIndex < 0)
+        {
+            return;
+        }
+
+        double onScreenWidth = PagedOnScreenWidth();
+        if (ZoomLevel < DetailTierZoomTrigger || onScreenWidth <= Page.PixelSize.Width * DetailTierScaleTrigger)
+        {
+            return; // zoomed back out while the timer was pending
+        }
+
+        int targetWidth = Math.Min(DetailTierMaxWidth, Math.Max(1, (int)Math.Ceiling(onScreenWidth)));
+        int targetHeight = Math.Max(1, (int)Math.Round(targetWidth * (double)Page.PixelSize.Height / Page.PixelSize.Width));
+
+        try
+        {
+            var fresh = src.GetDetailPage(src.ActivePageIndex, new PixelSize(targetWidth, targetHeight));
+            // Never Dispose() the old one - a ReaderPageVisualData still in flight on the compositor
+            // thread may reference it (same rule the pipeline follows for its own bitmaps; disposing
+            // one the render thread still holds is a hard native crash). Drop the reference; GC
+            // reclaims once the compositor's last message referencing it is replaced.
+            _detailBitmap = fresh;
+            _detailBitmapForPage = src.ActivePageIndex;
+            PushRenderData();
+        }
+        catch
+        {
+            // best-effort - the display bitmap stays on screen
+        }
+    }
+
+    private void ClearDetail()
+    {
+        // Reference-drop only, never Dispose - see OnDetailSettleTick.
+        _detailBitmap = null;
+        _detailBitmapForPage = -1;
     }
 
     /// <summary>
@@ -1693,7 +1882,7 @@ public class PageCanvas : Control
             CurrentContinuousPageIndex = nearest;
         }
 
-        var decodeService = Decoder as PageDecodeService;
+        var decodeService = Decoder as Paperbunkr.App.Services.Reader.IReaderPageSource;
         if (decodeService is not null)
         {
             int viewportCrossSize = (int)(ContinuousAxis == ReaderLayoutModel.Axis.Vertical ? Bounds.Width : Bounds.Height);

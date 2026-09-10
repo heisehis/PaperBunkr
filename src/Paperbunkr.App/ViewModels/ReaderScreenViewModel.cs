@@ -105,6 +105,7 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
     /// <summary>Clock/battery refresh cadence (docs/superpowers/specs/2026-09-05-reader-polish-backlog-finish-design.md §2) - CE repaints its clock on every frame (<c>timeLabel.Drawing</c>), but a Reader that isn't continuously repainting has no equivalent hook, and a clock only needs minute resolution anyway.</summary>
     private static readonly TimeSpan ClockRefreshInterval = TimeSpan.FromSeconds(60);
     private DispatcherTimer? _clockTimer;
+    private DispatcherTimer? _perfTimer;
 
     /// <summary>
     /// Debounce window for continuous-mode's throttled position save (spec §6: "throttled to avoid
@@ -224,6 +225,18 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
 
     [ObservableProperty]
     private Bitmap? _currentPage;
+
+    /// <summary>
+    /// The <c>ReaderFrameStats</c> debug overlay (docs/superpowers/specs/2026-09-08-reader-decode-
+    /// cache-prefetch-pipeline-design.md §10) - compositor frame p50/p99, cache hit ratio, decode
+    /// and container-read counts. Toggled by <see cref="TogglePerfOverlayCommand"/> (Ctrl+Shift+P),
+    /// off by default, refreshed twice a second from <see cref="Services.Reader.ReaderPerfStats"/>.
+    /// </summary>
+    [ObservableProperty]
+    private bool _perfOverlayVisible;
+
+    [ObservableProperty]
+    private string _perfOverlayText = string.Empty;
 
     /// <summary>The second page of a double-page spread (docs/superpowers/specs/2026-08-15-reader-double-page-spread-design.md §3), null whenever <see cref="_currentPageIndex"/> isn't paired - solo display, same as before this feature existed.</summary>
     [ObservableProperty]
@@ -682,6 +695,14 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
 
     partial void OnGammaChanged(double value) => PersistAdjustmentOverride(_gammaGlobalDefault, value, (issue, delta) => issue.GammaOverride = delta);
 
+    /// <summary>Ctrl+Shift+P - toggles the reader perf overlay (§10). Dev diagnostic, not a persisted setting.</summary>
+    [RelayCommand]
+    private void TogglePerfOverlay()
+    {
+        PerfOverlayVisible = !PerfOverlayVisible;
+        PerfOverlayText = PerfOverlayVisible ? Services.Reader.ReaderPerfStats.Current.Snapshot().ToString() : string.Empty;
+    }
+
     private void PersistAdjustmentOverride(double globalDefault, double effectiveValue, Action<Issue, float> apply)
     {
         if (_suppressAdjustmentPersist || _loadedIssueId is not int issueId)
@@ -817,6 +838,19 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
             _clockTimer.Start();
         }
 
+        if (_perfTimer is null)
+        {
+            _perfTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
+            _perfTimer.Tick += (_, _) =>
+            {
+                if (PerfOverlayVisible)
+                {
+                    PerfOverlayText = Services.Reader.ReaderPerfStats.Current.Snapshot().ToString();
+                }
+            };
+            _perfTimer.Start();
+        }
+
         RefreshClockAndBattery();
 
         _decoder?.Dispose();
@@ -945,13 +979,13 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
 
         if (!string.IsNullOrEmpty(issue.FilePath))
         {
-            // Continuous mode needs the two-tier/virtualized decoder (multiple pages concurrently
-            // visible); paged mode keeps its original ±1-window decoder, untouched (docs/
-            // superpowers/specs/2026-08-10-reader-polish-continuous-scroll-chrome-overlays-design.md
-            // §1's Stage 1 note - both implement IPageImageDecoder, so nothing downstream of this
-            // needs to know which one is active except the continuous-specific calls PageCanvas
-            // makes directly against PageDecodeService).
-            _decoder = IsContinuousMode ? PageDecodeService.TryOpen(issue.FilePath) : PageImageDecoder.TryOpen(issue.FilePath);
+            // One pipeline for every mode now (docs/superpowers/specs/2026-09-08-reader-decode-
+            // cache-prefetch-pipeline-design.md): async background decode, a held-open archive
+            // session, an adaptive byte budget and prefetch for paged and continuous alike. The
+            // old PageImageDecoder (sync, paged) / PageDecodeService (continuous) split is gone;
+            // PageCanvas's continuous-specific calls now go through IReaderPageSource.
+            Services.Reader.ReaderPerfStats.Current.Reset();
+            _decoder = Services.Reader.ReaderImagePipeline.TryOpen(issue.FilePath, appSettings.ReaderMemoryLimitMb);
             if (_decoder is null)
             {
                 ErrorMessage = "Couldn't open this file — unsupported format or a damaged archive.";
@@ -1833,6 +1867,21 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
             CurrentPage = null;
             CurrentPageSecondary = null;
             return;
+        }
+
+        // Tell the pipeline what's on/near screen so its background loop prefetches the fringe
+        // (docs/superpowers/specs/2026-09-08-reader-decode-cache-prefetch-pipeline-design.md §3.3).
+        // GetPage below still decodes synchronously on a cold miss (correctness); prefetch makes
+        // that miss rare after the first turn.
+        if (_decoder is Services.Reader.IReaderPageSource pipeline)
+        {
+            // Interim Phase 2: cap paged display-tier decode at a generous fixed width rather than
+            // holding multi-thousand-pixel scans at native res (the memory-climb symptom). 2560
+            // covers any real monitor at 100% and stays sharp to ~1.5x zoom; a true
+            // viewport-aware display tier + zoom-triggered detail re-decode (§6) needs the
+            // async-paged PageCanvas restructure and is deferred. No-ops for pages already ≤ 2560.
+            pipeline.SetViewportWidth(2560);
+            pipeline.SetVirtualizationWindow(_currentPageIndex - 1, _currentPageIndex + 1);
         }
 
         try

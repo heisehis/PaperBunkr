@@ -73,5 +73,16 @@ namespace cYo.Projects.ComicRack.Engine.IO.Provider.Readers
 		{
 			return pdfReader.ReadByteImage(base.Source, infos[index]);
 		}
+
+		/// <summary>
+		/// Opens a keep-open reading session (held <c>PdfDocument</c>) when the configured PDF
+		/// engine supports one - only the default PDFium engine does (docs/superpowers/specs/
+		/// 2026-09-08-reader-decode-cache-prefetch-pipeline-design.md §4.3). The caller addresses
+		/// pages by index-as-string.
+		/// </summary>
+		public IComicAccessorSession TryOpenReaderSession()
+		{
+			return pdfReader != null && pdfReader.SupportsSession ? pdfReader.OpenSession(base.Source) : null;
+		}
 	}
 }

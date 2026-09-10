@@ -95,15 +95,14 @@ public class BookCoverThumbnailService
 
     private static bool TryGenerateFromPdfFirstPage(string filePath, string destPath)
     {
-        using var decoder = PageImageDecoder.TryOpen(filePath);
-        if (decoder is null)
+        using Bitmap? page = PageDecodeCore.DecodeSinglePage(filePath, 0);
+        if (page is null)
         {
             return false;
         }
 
         try
         {
-            Bitmap page = decoder.GetPage(0);
             return ScaleAndSave(page, destPath);
         }
         catch

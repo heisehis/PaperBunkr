@@ -187,7 +187,49 @@ public sealed class ReaderPageVisualHandler : CompositionCustomVisualHandler
     /// </summary>
     private readonly Dictionary<Bitmap, (PixelSize Size, Bitmap Scaled)> _continuousScaledCache = new();
 
-    private void DisposeContinuousScaledCache()
+    /// <summary>
+    /// Phase 4 (docs/superpowers/specs/2026-09-08-reader-decode-cache-prefetch-pipeline-design.md
+    /// §10): when a live image adjustment is on, both <see cref="RenderContinuous"/> and
+    /// <see cref="DrawBitmap"/>'s lease path used to call <see cref="SkiaBitmapConverter.ToSkImage"/>
+    /// - two full-resolution pixel copies - for every drawn page on <b>every</b> compose frame,
+    /// sustained for the whole time the adjustment panel is open. Keyed by source
+    /// <see cref="Bitmap"/> reference and evicted alongside <see cref="_continuousScaledCache"/>, so
+    /// a pure scroll / a pan with adjustment on re-copies nothing.
+    /// </summary>
+    private readonly Dictionary<Bitmap, SKImage> _skImageCache = new();
+
+    private SKImage GetOrCreateSkImage(Bitmap source)
+    {
+        if (_skImageCache.TryGetValue(source, out var cached))
+        {
+            return cached;
+        }
+
+        var image = SkiaBitmapConverter.ToSkImage(source);
+        _skImageCache[source] = image;
+        return image;
+    }
+
+    /// <summary>
+    /// <see cref="SkiaBitmapConverter.ToSkImage"/> guarded against a bitmap that's been disposed
+    /// between the pipeline handing it out and this message being processed - returns
+    /// <see langword="null"/> (the page just doesn't draw this frame) rather than propagating a
+    /// managed <see cref="ObjectDisposedException"/> onto the compositor thread.
+    /// </summary>
+    private static SKImage? SafeToSkImage(Bitmap bitmap)
+    {
+        try
+        {
+            return SkiaBitmapConverter.ToSkImage(bitmap);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    /// <param name="keepFor">When non-null, SKImage cache entries whose source bitmap is still one of this data's bitmaps are kept (a pan/zoom that didn't change the page - §10); everything else is disposed.</param>
+    private void DisposeContinuousScaledCache(ReaderPageVisualData? keepFor = null)
     {
         foreach (var cached in _continuousScaledCache.Values)
         {
@@ -195,7 +237,25 @@ public sealed class ReaderPageVisualHandler : CompositionCustomVisualHandler
         }
 
         _continuousScaledCache.Clear();
+
+        foreach (var (bmp, image) in _skImageCache)
+        {
+            if (keepFor is { } k && (ReferenceEquals(bmp, k.Bitmap) || ReferenceEquals(bmp, k.SecondaryBitmap)))
+            {
+                continue;
+            }
+            image.Dispose();
+            _skImageCacheEvicted.Add(bmp);
+        }
+
+        foreach (var bmp in _skImageCacheEvicted)
+        {
+            _skImageCache.Remove(bmp);
+        }
+        _skImageCacheEvicted.Clear();
     }
+
+    private readonly List<Bitmap> _skImageCacheEvicted = new();
 
     /// <summary>
     /// Runs on the compositor thread (confirmed via reflection against the actual Avalonia 12.1.1
@@ -212,14 +272,21 @@ public sealed class ReaderPageVisualHandler : CompositionCustomVisualHandler
         switch (message)
         {
             case ReaderPageVisualData paged:
+            {
+                // Keep the SKImage cache across a pan/zoom that doesn't change the bitmap(s) - the
+                // whole point of §10's per-frame-copy fix for paged mode with adjustment on.
+                bool sameBitmaps = _pagedData is { } prev
+                    && ReferenceEquals(prev.Bitmap, paged.Bitmap)
+                    && ReferenceEquals(prev.SecondaryBitmap, paged.SecondaryBitmap);
                 _pagedData = paged;
                 _continuousData = null;
                 _transitionData = null;
                 _transitionStart = null;
                 DisposeTransitionImages();
-                DisposeContinuousScaledCache();
+                DisposeContinuousScaledCache(sameBitmaps ? paged : null);
                 Invalidate();
                 break;
+            }
             case ReaderContinuousVisualData continuous:
                 _continuousData = continuous;
                 _pagedData = null;
@@ -238,16 +305,15 @@ public sealed class ReaderPageVisualHandler : CompositionCustomVisualHandler
                 // same clock throughout the animation.
                 _transitionStart = CompositionNow;
 
-                // Converted once here, not per-frame - see _transitionOldImage's own doc comment for
-                // why. Only Crossfade needs these at all (Slide never takes DrawBitmap's lease path
-                // when no color filter is active).
-                if (transition.Style == Data.Entities.PageTransitionStyle.Crossfade)
-                {
-                    _transitionOldImage = transition.OldBitmap is { } oldBitmap ? SkiaBitmapConverter.ToSkImage(oldBitmap) : null;
-                    _transitionNewImage = transition.NewBitmap is { } newBitmap ? SkiaBitmapConverter.ToSkImage(newBitmap) : null;
-                    _transitionOldSecondaryImage = transition.OldSecondaryBitmap is { } oldSecondary ? SkiaBitmapConverter.ToSkImage(oldSecondary) : null;
-                    _transitionNewSecondaryImage = transition.NewSecondaryBitmap is { } newSecondary ? SkiaBitmapConverter.ToSkImage(newSecondary) : null;
-                }
+                // Convert BOTH page bitmaps to SKImage copies right now, while the message just
+                // arrived and the bitmaps are guaranteed alive - RenderTransition then never reads
+                // a raw Avalonia Bitmap per-frame. Previously only Crossfade did this; Slide with a
+                // colour filter active hit DrawBitmap's lease path and re-converted the raw bitmap
+                // every frame, which AccessViolation'd when the reader pipeline freed one mid-turn.
+                _transitionOldImage = transition.OldBitmap is { } oldBitmap ? SafeToSkImage(oldBitmap) : null;
+                _transitionNewImage = transition.NewBitmap is { } newBitmap ? SafeToSkImage(newBitmap) : null;
+                _transitionOldSecondaryImage = transition.OldSecondaryBitmap is { } oldSecondary ? SafeToSkImage(oldSecondary) : null;
+                _transitionNewSecondaryImage = transition.NewSecondaryBitmap is { } newSecondary ? SafeToSkImage(newSecondary) : null;
 
                 RegisterForNextAnimationFrameUpdate();
                 Invalidate();
@@ -324,6 +390,20 @@ public sealed class ReaderPageVisualHandler : CompositionCustomVisualHandler
     /// </summary>
     public override void OnRender(ImmediateDrawingContext context)
     {
+        var frameSw = System.Diagnostics.Stopwatch.StartNew();
+        try
+        {
+            RenderCore(context);
+        }
+        finally
+        {
+            frameSw.Stop();
+            Services.Reader.ReaderPerfStats.Current.RecordComposeFrameMs(frameSw.Elapsed.TotalMilliseconds);
+        }
+    }
+
+    private void RenderCore(ImmediateDrawingContext context)
+    {
         var colorFilter = GetColorFilter();
 
         // A crossfade needs the leased-canvas/SKPaint path regardless of whether a brightness/
@@ -331,7 +411,10 @@ public sealed class ReaderPageVisualHandler : CompositionCustomVisualHandler
         // overload (confirmed via reflection against the actual Avalonia 12.1.1 assembly), so alpha
         // blending between the outgoing/incoming bitmap is only possible through SKPaint.Color's
         // alpha channel.
-        bool needsLease = colorFilter is not null || _transitionData is { Style: Data.Entities.PageTransitionStyle.Crossfade };
+        // Any transition takes the leased path now, not just Crossfade: it draws the pre-converted
+        // SKImages (OnMessage) rather than the raw page bitmaps, so an in-flight animation survives
+        // the reader pipeline freeing a bitmap.
+        bool needsLease = colorFilter is not null || _transitionData is not null;
         using ISkiaSharpApiLease? lease = needsLease && context.TryGetFeature<ISkiaSharpApiLeaseFeature>() is { } leaseFeature
             ? leaseFeature.Lease()
             : null;
@@ -427,11 +510,15 @@ public sealed class ReaderPageVisualHandler : CompositionCustomVisualHandler
     /// <see cref="_transitionOldImage"/>'s own doc comment for why that per-frame conversion was a
     /// real performance bug.
     /// </summary>
-    private static void DrawBitmap(ImmediateDrawingContext context, Bitmap bitmap, PixelSize pixelSize, PageDrawPlan plan, int rotationDegrees, bool highQuality, ISkiaSharpApiLease? lease, SKColorFilter? colorFilter, double alpha, SKImage? cachedImage = null)
+    private static void DrawBitmap(ImmediateDrawingContext context, Bitmap bitmap, PixelSize pixelSize, PageDrawPlan plan, int rotationDegrees, bool highQuality, ISkiaSharpApiLease? lease, SKColorFilter? colorFilter, double alpha, SKImage? cachedImage = null, Func<Bitmap, SKImage>? skImageResolver = null)
     {
-        if (lease is not null && (colorFilter is not null || alpha < 1.0))
+        // Take the leased SKImage path whenever a colour filter or partial alpha needs it, OR a
+        // caller handed us a pre-converted SKImage - the latter means "don't touch the raw Bitmap",
+        // which matters when the reader pipeline may free it out from under an in-flight animation.
+        if (lease is not null && (colorFilter is not null || alpha < 1.0 || cachedImage is not null || skImageResolver is not null))
         {
-            SKImage skImage = cachedImage ?? SkiaBitmapConverter.ToSkImage(bitmap);
+            bool ownsImage = cachedImage is null && skImageResolver is null;
+            SKImage skImage = cachedImage ?? skImageResolver?.Invoke(bitmap) ?? SkiaBitmapConverter.ToSkImage(bitmap);
             try
             {
                 using var paint = new SKPaint { ColorFilter = colorFilter, IsAntialias = true, Color = new SKColor(255, 255, 255, (byte)(Math.Clamp(alpha, 0, 1) * 255)) };
@@ -452,7 +539,7 @@ public sealed class ReaderPageVisualHandler : CompositionCustomVisualHandler
             }
             finally
             {
-                if (cachedImage is null)
+                if (ownsImage)
                 {
                     skImage.Dispose();
                 }
@@ -477,7 +564,7 @@ public sealed class ReaderPageVisualHandler : CompositionCustomVisualHandler
         }
     }
 
-    private static void RenderPaged(ImmediateDrawingContext context, ReaderPageVisualData data, ISkiaSharpApiLease? lease, SKColorFilter? colorFilter)
+    private void RenderPaged(ImmediateDrawingContext context, ReaderPageVisualData data, ISkiaSharpApiLease? lease, SKColorFilter? colorFilter)
     {
         if (data.Bitmap is null || data.Bounds.Width <= 0 || data.Bounds.Height <= 0)
         {
@@ -488,12 +575,18 @@ public sealed class ReaderPageVisualHandler : CompositionCustomVisualHandler
         {
             var pixelSize = data.Bitmap.PixelSize;
             var plan = ComputeDrawPlan(data.Bounds, pixelSize, data.Zoom, data.PanOffsetX, data.PanOffsetY, data.FitMode, data.FitOnlyIfOversized, data.RotationDegrees);
-            DrawBitmap(context, data.Bitmap, pixelSize, plan, data.RotationDegrees, data.HighQuality, lease, colorFilter, alpha: 1.0);
+            // §10: with a colour filter active, the leased path converts to SKImage - cache that
+            // across frames (a pan/zoom with adjustment on re-copies nothing) rather than the
+            // former per-frame double pixel copy. EvictStaleContinuousScales keys off the visible
+            // continuous set; a lone paged bitmap that changes triggers OnMessage's cache dispose.
+            DrawBitmap(context, data.Bitmap, pixelSize, plan, data.RotationDegrees, data.HighQuality, lease, colorFilter, alpha: 1.0,
+                skImageResolver: colorFilter is not null ? GetOrCreateSkImage : null);
             return;
         }
 
         RenderSpread(context, data.Bounds, data.Bitmap, data.SecondaryBitmap, data.Zoom, data.PanOffsetX, data.PanOffsetY,
-            data.FitMode, data.FitOnlyIfOversized, data.HighQuality, data.IsRightToLeft, lease, colorFilter, offset: default, alpha: 1.0);
+            data.FitMode, data.FitOnlyIfOversized, data.HighQuality, data.IsRightToLeft, lease, colorFilter, offset: default, alpha: 1.0,
+            skImageResolver: colorFilter is not null ? GetOrCreateSkImage : null);
     }
 
     /// <summary>
@@ -516,7 +609,7 @@ public sealed class ReaderPageVisualHandler : CompositionCustomVisualHandler
     private static void RenderSpread(ImmediateDrawingContext context, Rect bounds, Bitmap primary, Bitmap secondary,
         double zoom, double panOffsetX, double panOffsetY, ImageFitMode fitMode, bool fitOnlyIfOversized, bool highQuality,
         bool isRightToLeft, ISkiaSharpApiLease? lease, SKColorFilter? colorFilter, Vector offset, double alpha,
-        SKImage? primaryCachedImage = null, SKImage? secondaryCachedImage = null)
+        SKImage? primaryCachedImage = null, SKImage? secondaryCachedImage = null, Func<Bitmap, SKImage>? skImageResolver = null)
     {
         if (alpha <= 0)
         {
@@ -540,8 +633,8 @@ public sealed class ReaderPageVisualHandler : CompositionCustomVisualHandler
         var primaryPlan = new PageDrawPlan(primaryRect, primaryRect.Center.X, primaryRect.Center.Y);
         var secondaryPlan = new PageDrawPlan(secondaryRect, secondaryRect.Center.X, secondaryRect.Center.Y);
 
-        DrawBitmap(context, primary, primaryPixelSize, primaryPlan, rotationDegrees: 0, highQuality, lease, colorFilter, alpha, primaryCachedImage);
-        DrawBitmap(context, secondary, secondaryPixelSize, secondaryPlan, rotationDegrees: 0, highQuality, lease, colorFilter, alpha, secondaryCachedImage);
+        DrawBitmap(context, primary, primaryPixelSize, primaryPlan, rotationDegrees: 0, highQuality, lease, colorFilter, alpha, primaryCachedImage, skImageResolver);
+        DrawBitmap(context, secondary, secondaryPixelSize, secondaryPlan, rotationDegrees: 0, highQuality, lease, colorFilter, alpha, secondaryCachedImage, skImageResolver);
     }
 
     /// <summary>
@@ -641,7 +734,7 @@ public sealed class ReaderPageVisualHandler : CompositionCustomVisualHandler
             if (lease is not null && colorFilter is not null)
             {
                 var pixelSize = entry.Bitmap.PixelSize;
-                using var skImage = SkiaBitmapConverter.ToSkImage(entry.Bitmap);
+                var skImage = GetOrCreateSkImage(entry.Bitmap); // cached across frames (§10), not per-frame
                 using var paint = new SKPaint { ColorFilter = colorFilter, IsAntialias = true };
                 var sourceRect = new SKRect(0, 0, pixelSize.Width, pixelSize.Height);
                 var destRectSk = new SKRect((float)entry.Rect.X, (float)entry.Rect.Y, (float)(entry.Rect.X + entry.Rect.Width), (float)(entry.Rect.Y + entry.Rect.Height));
@@ -707,7 +800,7 @@ public sealed class ReaderPageVisualHandler : CompositionCustomVisualHandler
     /// <summary>Drops (and disposes) any cached downscale whose source page has left the visible set - the counterpart to <see cref="ResolveContinuousDrawBitmap"/> populating it, so the cache tracks the virtualization window rather than growing without bound.</summary>
     private void EvictStaleContinuousScales(IReadOnlyList<ContinuousPageEntry> pages)
     {
-        if (_continuousScaledCache.Count == 0)
+        if (_continuousScaledCache.Count == 0 && _skImageCache.Count == 0)
         {
             return;
         }
@@ -731,6 +824,23 @@ public sealed class ReaderPageVisualHandler : CompositionCustomVisualHandler
             }
         }
 
+        // SKImage cache (§10) tracks the same visible set.
+        if (_skImageCache.Count != 0)
+        {
+            foreach (var key in _skImageCache.Keys)
+            {
+                bool live = false;
+                foreach (var entry in pages)
+                {
+                    if (ReferenceEquals(entry.Bitmap, key)) { live = true; break; }
+                }
+                if (!live)
+                {
+                    (stale ??= new List<Bitmap>()).Add(key);
+                }
+            }
+        }
+
         if (stale is null)
         {
             return;
@@ -741,6 +851,10 @@ public sealed class ReaderPageVisualHandler : CompositionCustomVisualHandler
             if (_continuousScaledCache.Remove(key, out var removed))
             {
                 removed.Scaled.Dispose();
+            }
+            if (_skImageCache.Remove(key, out var removedImage))
+            {
+                removedImage.Dispose();
             }
         }
     }

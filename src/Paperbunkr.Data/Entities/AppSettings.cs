@@ -71,6 +71,16 @@ public class AppSettings
     public double MouseWheelSpeed { get; set; } = 2.0;
 
     /// <summary>
+    /// Cap (in MiB) on the reader decode/cache pipeline's in-memory budget for one open book
+    /// (docs/superpowers/specs/2026-09-08-reader-decode-cache-prefetch-pipeline-design.md §5).
+    /// <see langword="null"/> = Auto: <c>clamp(25% physical RAM, 128 MiB, 512 MiB)</c>. Only one
+    /// reader is open at a time, so this is the whole-reader budget, split internally across
+    /// decoded pages, the thumbnail rail, and the compressed-bytes tier. No CE equivalent - CE's
+    /// fixed <c>MemoryPageCacheCount</c> is superseded by the adaptive byte budget.
+    /// </summary>
+    public int? ReaderMemoryLimitMb { get; set; }
+
+    /// <summary>
     /// Global default fit mode for a book with no <see cref="Issue.PageFitModeOverride"/>
     /// (docs/superpowers/specs/2026-08-10-reader-polish-core-viewing-controls-design.md §3 left
     /// this as a fixed code constant pending a Reader Preferences surface to edit it - this is

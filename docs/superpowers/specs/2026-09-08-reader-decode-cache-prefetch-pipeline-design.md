@@ -1,24 +1,12 @@
 # Reader decode / cache / prefetch pipeline — design
 
-**Status:** Phases 1–4 implemented and merged to `master` via **PR #68** (`825f146`), 2026-09-09.
-This document additionally carries a set of **post-implementation review addenda (rev 3,
-2026-09-10)** — five concurrency / memory-accounting corrections from a technical review that are
-**specified here but not yet implemented**; they are a follow-up backlog on top of the shipped
-pipeline. Each is threaded into its home section below and summarised in §15.
+**Status:** draft for review
 **Date:** 2026-09-08
 **Supersedes/extends:** `docs/onboarding.md` §8 (the original decode-pipeline vision — this is the
 concrete engineering of it), the ad-hoc decoders added in
 `docs/superpowers/specs/2026-08-06-reader-canvas-alpha-design.md` §2 and
 `docs/superpowers/specs/2026-08-10-reader-polish-continuous-scroll-chrome-overlays-design.md` §3.
-**Branch:** merged from `claude/reader-pipeline-v2`.
-
-### Revision history
-
-| Rev | Date | Change |
-|---|---|---|
-| 1 | 2026-09-08 | Initial design; four grilling rounds. |
-| 2 | 2026-09-09 | Review decisions (§14): byte-budget formula, detail-tier trigger constants, Phase 3 split to its own doc. Implemented as PR #68. |
-| 3 | 2026-09-10 | Post-implementation review addenda (§15), **not yet implemented**: (1) 7z.dll COM work moves to a dedicated pinned single-thread executor, not a pooled thread + lock — §4.1/§4.2/§8.3; (2) `IPdfDocumentSession` caches up to 3 `FPDF_PAGE` handles — §4.3; (3) detail-tier bitmaps are accounted against `ReaderMemoryBudget` and force `DisplayCache` LRU eviction — §5.3/§6.2; (4) `ArrayPool<byte>.Shared` for all intermediate read/extract buffers in every `IComicAccessorSession`, pulled from Phase 4 to Phase 1 — §4.7; (5) ~30 ms debounce on prefetch-fringe re-enqueue during rapid sequential turns — §8.4. |
+**Branch:** `claude/reader-pipeline` (off `master`).
 
 ---
 
@@ -148,7 +136,7 @@ Lives in `src/Paperbunkr.App/Services/Reader/`. Composed of:
 
 | Component | Responsibility | Thread-safety |
 |---|---|---|
-| `IReaderByteSource` — wraps an engine `IComicAccessorSession` (archives) or `IPdfDocumentSession` (PDF); `ProviderByteSource` for exotic single-image formats | Raw compressed/encoded page bytes by index, from a **handle opened once per session**. §4. | **Thread-*affine*, not merely locked.** None of the underlying libraries (SharpZipLib, SharpCompress, 7z.dll COM, PDFium) are thread-safe, and 7z.dll's COM objects are additionally *apartment-bound* — a lock is insufficient. Every call into a given session is marshalled onto that session's **owning thread** (§4.2): for 7z that is a dedicated pinned thread the `IInArchive` is created, invoked, and released on; for the others it is the pipeline's single reader thread. |
+| `IReaderByteSource` — wraps an engine `IComicAccessorSession` (archives) or `IPdfDocumentSession` (PDF); `ProviderByteSource` for exotic single-image formats | Raw compressed/encoded page bytes by index, from a **handle opened once per session**. §4. | Single-threaded access, serialized by the pipeline's reader lock (none of the underlying libraries — SharpZipLib, SharpCompress, 7z.dll COM, PDFium — are thread-safe). |
 | `RawBytesCache : Cache<PageId, RawPageBytes>` | Compressed page bytes in RAM. Feeds decode + detail re-decode without re-touching the archive. `RawPageBytes : IDataSize`. | `Cache<K,T>` (RW-lock, single-flight). |
 | `DecodeWorkers` | N `Task`s draining a high- and a low-priority bounded `Channel<DecodeRequest>` (Channels, per §1). Each: get bytes from `RawBytesCache` → Skia decode → downsample to display target → store. Window-staleness check at dequeue and post-decode (the existing `PageDecodeService` pattern — no per-request tokens). | Channels; `_window` snapshot check. |
 | `DisplayCache : Cache<PageId, ReaderBitmap>` | Decoded, display-tier (downsampled) bitmaps. **Byte-bounded** (§5). `ItemRemoved` → `ReaderBitmap.Dispose()`. | `Cache<K,T>`. |

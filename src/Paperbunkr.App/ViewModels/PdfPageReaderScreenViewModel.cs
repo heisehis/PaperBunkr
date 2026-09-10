@@ -174,7 +174,11 @@ public partial class PdfPageReaderScreenViewModel : ViewModelBase
             AnnotationImages.Add(ToSummary(image));
         }
 
-        _decoder = PageImageDecoder.TryOpen(book.FilePath);
+        // Same unified pipeline as the comic reader (docs/superpowers/specs/2026-09-08-reader-
+        // decode-cache-prefetch-pipeline-design.md §3.3/§4.3): background decode, a bounded byte
+        // budget, prefetch, and a held-open PdfDocument (via PdfComicProvider.TryOpenReaderSession)
+        // so pages don't re-parse the xref table on every turn - none of which paged PDF had.
+        _decoder = Services.Reader.ReaderImagePipeline.TryOpen(book.FilePath);
         if (_decoder is null)
         {
             ErrorMessage = "Couldn't open this PDF - unsupported or a damaged file.";
@@ -365,6 +369,11 @@ public partial class PdfPageReaderScreenViewModel : ViewModelBase
 
     private void RefreshCurrentPage()
     {
+        if (_decoder is Services.Reader.IReaderPageSource pipeline)
+        {
+            pipeline.SetVirtualizationWindow(PageIndex - 1, PageIndex + 1);
+        }
+
         CurrentPage = _decoder?.GetPage(PageIndex);
         ZoomLevel = 1.0;
         OnPropertyChanged(nameof(ProgressFraction));

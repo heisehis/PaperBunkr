@@ -175,10 +175,19 @@ removes the UI-thread stall on jumps and backward-beyond-fringe, using the seam 
 State:
 
 ```csharp
-private int _awaitingPageIndex = -1;   // the page a cold-miss swap is waiting on; -1 = none
+private int _awaitingPageIndex = -1;           // primary page a cold-miss swap waits on; -1 = none
+private int _awaitingSecondaryPageIndex = -1;   // spread's paired page, when it too missed; -1 = none
 [ObservableProperty] private bool _isPageLoading;
-private IDisposable? _coldMissTimeout;  // the ~5 s "still loading" fallback; disarmed on swap / new request / teardown
+private IDisposable? _coldMissTimeout;  // ~5 s "still loading" fallback (primary only); disarmed on swap / new request / teardown
 ```
+
+> **Why a secondary await is needed, not "keep the pair synchronous".** `TryDecodePairedPage`
+> (`ReaderScreenViewModel.cs:1914`) calls `_decoder.GetPage(pageIndex + 1)` **synchronously** — on
+> a cold miss that blocks the UI thread, the exact stall Item 2 removes for the primary. A jump
+> into a spread (`SetVirtualizationWindow` enqueues `primary-1 … primary+1` and the single loop
+> clears them in order) routinely has the primary ready a beat before its pair. So the pipeline
+> branch must peek the pair too, and wait for its completion — otherwise the fix just moves the
+> freeze from the primary decode to the pair decode.
 
 **Subscription lifecycle.** `Load()` already does `_decoder?.Dispose(); _decoder = null;` near its
 top (`ReaderScreenViewModel.cs:856`) to drop the previous issue's decoder, and `GoBack()`
@@ -186,7 +195,8 @@ top (`ReaderScreenViewModel.cs:856`) to drop the previous issue's decoder, and `
 
 - **Before** `_decoder?.Dispose()` in `Load` **and** in `GoBack`: if the outgoing
   `_decoder is IReaderPageSource oldPipe`, `oldPipe.BackgroundDecodeCompleted -= OnBackgroundPageDecoded`.
-  Also `_coldMissTimeout?.Dispose()`, `_awaitingPageIndex = -1`, `IsPageLoading = false`.
+  Also `_coldMissTimeout?.Dispose()`, `_awaitingPageIndex = -1`, `_awaitingSecondaryPageIndex = -1`,
+  `IsPageLoading = false`.
 - **After** the new `_decoder` is created and cast (paged mode), `newPipe.BackgroundDecodeCompleted
   += OnBackgroundPageDecoded`.
 
@@ -205,6 +215,7 @@ if (_decoder is IReaderPageSource pipeline)
     // always cancel a prior wait first — a new page request supersedes it
     _coldMissTimeout?.Dispose();
     _coldMissTimeout = null;
+    _awaitingSecondaryPageIndex = -1;
 
     var cached = pipeline.TryGetCachedPage(_currentPageIndex);
     if (cached is not null)
@@ -212,12 +223,14 @@ if (_decoder is IReaderPageSource pipeline)
         _awaitingPageIndex = -1;
         IsPageLoading = false;
         CurrentPage = cached;
+        ResolveSecondaryPage(pipeline, _currentPageIndex, cached.PixelSize);
     }
     else
     {
         // keep the outgoing page on screen; don't blank CurrentPage
         _awaitingPageIndex = _currentPageIndex;
         IsPageLoading = true;
+        CurrentPageSecondary = null;   // pair resolves after the primary lands (needs its PixelSize)
         int waitingFor = _currentPageIndex;
         _coldMissTimeout = DispatcherTimer.RunOnce(() =>
         {
@@ -230,51 +243,93 @@ if (_decoder is IReaderPageSource pipeline)
 }
 else
 {
-    CurrentPage = _decoder.GetPage(_currentPageIndex);   // non-pipeline fallback (unchanged)
+    CurrentPage = _decoder.GetPage(_currentPageIndex);              // non-pipeline fallback (unchanged)
+    CurrentPageSecondary = TryDecodePairedPage(_currentPageIndex, CurrentPage.PixelSize);
 }
 ```
 
-Handler:
+Secondary-page peek (pipeline branch only — the non-pipeline fallback keeps `TryDecodePairedPage`):
+
+```csharp
+private void ResolveSecondaryPage(IReaderPageSource pipeline, int primaryIdx, PixelSize primarySize)
+{
+    if (!DoublePagePairingActive || primaryIdx == 0 || primaryIdx + 1 >= _decoder!.PageCount)
+    {
+        _awaitingSecondaryPageIndex = -1;
+        CurrentPageSecondary = null;
+        return;
+    }
+    var sec = pipeline.TryGetCachedPage(primaryIdx + 1);
+    if (sec is not null)
+    {
+        _awaitingSecondaryPageIndex = -1;
+        CurrentPageSecondary = SpreadLayoutMath.IsPairEligible(primarySize, sec.PixelSize) ? sec : null;
+    }
+    else
+    {
+        _awaitingSecondaryPageIndex = primaryIdx + 1;   // wait for it; spread shows solo meanwhile
+        CurrentPageSecondary = null;
+    }
+}
+```
+
+Handler — one event, both awaits. `BackgroundDecodeCompleted` fires on a decode thread; the
+check here is a cheap early-out and the **authoritative** re-check is inside `ApplyDecoded` on the
+UI thread (the awaits are only ever written on the UI thread, so a stale read here just means one
+extra no-op `Post`):
 
 ```csharp
 private void OnBackgroundPageDecoded(int idx)
 {
-    if (idx != _awaitingPageIndex) return;   // stale — user moved on (see "stale guard" below)
-    if (Dispatcher.UIThread.CheckAccess()) ApplyDecodedPage(idx);
-    else Dispatcher.UIThread.Post(() => ApplyDecodedPage(idx));
+    if (idx != _awaitingPageIndex && idx != _awaitingSecondaryPageIndex) return;   // stale — see "stale guard"
+    if (Dispatcher.UIThread.CheckAccess()) ApplyDecoded(idx);
+    else Dispatcher.UIThread.Post(() => ApplyDecoded(idx));
 }
 
-private void ApplyDecodedPage(int idx)
+private void ApplyDecoded(int idx)
 {
-    if (idx != _awaitingPageIndex || _decoder is not IReaderPageSource p) return;
-    var bmp = p.TryGetCachedPage(idx);
-    if (bmp is null) return;                 // evicted again before we got here; a later turn re-requests
-    _awaitingPageIndex = -1;
-    _coldMissTimeout?.Dispose();
-    _coldMissTimeout = null;
-    IsPageLoading = false;
-    CurrentPage = bmp;
-    CurrentPageSecondary = TryDecodePairedPage(idx, bmp.PixelSize);
+    if (_decoder is not IReaderPageSource p) return;
+
+    if (idx == _awaitingPageIndex)
+    {
+        var bmp = p.TryGetCachedPage(idx);
+        if (bmp is null) return;              // evicted again before we got here; a later turn re-requests
+        _awaitingPageIndex = -1;
+        _coldMissTimeout?.Dispose();
+        _coldMissTimeout = null;
+        IsPageLoading = false;
+        CurrentPage = bmp;
+        ResolveSecondaryPage(p, idx, bmp.PixelSize);   // may set _awaitingSecondaryPageIndex
+    }
+    else if (idx == _awaitingSecondaryPageIndex)
+    {
+        var sec = p.TryGetCachedPage(idx);
+        if (sec is null) return;
+        _awaitingSecondaryPageIndex = -1;
+        CurrentPageSecondary = CurrentPage is not null
+            && SpreadLayoutMath.IsPairEligible(CurrentPage.PixelSize, sec.PixelSize) ? sec : null;
+    }
 }
 ```
 
-- **Stale guard — why `_awaitingPageIndex` alone is sufficient (no sequence counter).** For a
-  given issue and the fixed paged viewport width (2560), page index → decoded bitmap is
-  deterministic: `TryGetCachedPage(N)` can only ever return *page N*, never stale content.
-  So the identity that matters is "is N still the page the user wants," which `_awaitingPageIndex`
-  captures exactly. Rapid A→B→A: the B request is abandoned when `_awaitingPageIndex` moves to A;
-  a late `BackgroundDecodeCompleted(A)` from the *first* A visit still delivers the correct page A
-  (the user is back on A). A monotonic request-id would only make us *wait longer* for a
-  byte-identical re-decode. The `_coldMissTimeout`'s own `waitingFor` capture covers the timer.
+- **Stale guard — why index awaits alone are sufficient (no sequence counter).** For a given
+  issue and the fixed paged viewport width (2560), page index → decoded bitmap is deterministic:
+  `TryGetCachedPage(N)` can only ever return *page N*, never stale content. So the identity that
+  matters is "is N still wanted," which `_awaitingPageIndex` / `_awaitingSecondaryPageIndex`
+  capture exactly. Rapid A→B→A: the B request is abandoned when the awaits move back to A; a late
+  `BackgroundDecodeCompleted(A)` from the *first* A visit still delivers the correct page A. A
+  monotonic request-id would only make us *wait longer* for a byte-identical re-decode. The
+  `_coldMissTimeout`'s own `waitingFor` capture covers the timer.
 - **Error path:** the current `catch` around `GetPage` stays only on the non-pipeline fallback
-  branch. On the pipeline branch a cold miss no longer throws — a genuine decode failure surfaces
-  as the `_coldMissTimeout` firing (page never arrived) → `ErrorMessage`. The timeout is disarmed
-  on: a successful swap (`ApplyDecodedPage`), any new page request (top of the pipeline branch
-  above), and decoder teardown (`DetachDecoderEvents`).
-- **Double-page secondary:** stays synchronous via `TryDecodePairedPage` — the paired page is
-  adjacent and almost always already cached or in the high-priority window. If it too is a cold
-  miss, `TryDecodePairedPage` returns null (existing contract) and the spread shows solo until the
-  next refresh. Acceptable; noted.
+  branch. On the pipeline branch a primary cold miss no longer throws — a genuine decode failure
+  surfaces as the `_coldMissTimeout` firing (page never arrived) → `ErrorMessage`. The timeout is
+  disarmed on: a successful primary swap (`ApplyDecoded`), any new page request (top of the
+  pipeline branch above), and decoder teardown (`DetachDecoderEvents`).
+- **Secondary never blocks and never errors.** A stuck paired-page decode just leaves the spread
+  showing solo (`_awaitingSecondaryPageIndex` stays set); it self-heals on that page's completion
+  or on the next turn. No timeout, no error — it's cosmetic, and forcing an error for "the second
+  half of a spread is 200 ms late" would be worse than the brief solo frame. The non-pipeline
+  fallback keeps `TryDecodePairedPage` (synchronous) since that decoder has no async path anyway.
 - **`ResetZoomOnPageChange`, `PageRotationOverrideDegrees`, `LastPageRead`, `TrackSessionProgress`,
   thumbnail selection, `PageLabel`** — all already updated in `GoToPage` *before* `RefreshCurrentPage`,
   so they're correct immediately regardless of when the bitmap lands. No change.
@@ -305,6 +360,18 @@ IsPageLoading}"`. Reuse `BusyIndicator` if it sizes down cleanly into the cluste
   handler from the previous `IReaderPageSource` — raising `BackgroundDecodeCompleted` on the
   *old* fake pipe afterwards does nothing. (Assert via a spy `IReaderPageSource` that counts
   live handlers, or that a post-teardown event doesn't touch `CurrentPage`.)
+- **Double-page cold miss — primary warm, pair cold:** spread mode, `TryGetCachedPage(primary)`
+  hits, `TryGetCachedPage(primary+1)` misses → `CurrentPage` set, `CurrentPageSecondary` null,
+  `_awaitingSecondaryPageIndex == primary+1`; raise `BackgroundDecodeCompleted(primary+1)` with
+  an eligible-sized bitmap → `CurrentPageSecondary` populated, await cleared. Also: pair completes
+  with an *ineligible* size (landscape) → `CurrentPageSecondary` stays null, await cleared (solo
+  is correct).
+- **Double-page cold miss — both cold:** neither peek hits → `IsPageLoading` true, both awaits
+  set; `BackgroundDecodeCompleted(primary)` → primary swaps, `ResolveSecondaryPage` re-peeks
+  (still cold) → `_awaitingSecondaryPageIndex` still set; then `BackgroundDecodeCompleted(primary+1)`
+  → spread completes.
+- **Secondary stale:** jump into spread A (both cold), then jump away before the pair lands —
+  a late `BackgroundDecodeCompleted(A+1)` is ignored (`_awaitingSecondaryPageIndex` moved).
 
 ---
 
@@ -316,12 +383,20 @@ IsPageLoading}"`. Reuse `BusyIndicator` if it sizes down cleanly into the cluste
 [ObservableProperty] private bool _isPageInputActive;
 [ObservableProperty] private string _pageInputText = string.Empty;
 
+// Single sanitisation chokepoint — covers typing, paste, drag-drop, IME. Strip to digits;
+// re-assign only when it actually changed (the generated setter's equality check stops recursion).
+partial void OnPageInputTextChanged(string value)
+{
+    var digits = new string(value.Where(char.IsDigit).ToArray());
+    if (digits != value) PageInputText = digits;
+}
+
 [RelayCommand]
 private void BeginPageInput()
 {
     if (_decoder is null || PageCount <= 0) return;
     PageInputText = (_currentPageIndex + 1).ToString();
-    IsPageInputActive = true;   // view focuses + selects the TextBox off this
+    IsPageInputActive = true;   // view defers focus + select-all off this
 }
 
 [RelayCommand]
@@ -410,42 +485,49 @@ The `PageLabel` `TextBlock` and an inline editor share one slot:
   — the reader chrome styles are not in a shared `Styles/*.axaml` file.
 - Code-behind (`ReaderScreen.axaml.cs`):
   - React to `IsPageInputActive` becoming true (via the existing `OnViewModelPropertyChanged`
-    handler) → **synchronously** `PageJumpBox.Focus(); PageJumpBox.SelectAll();`. Synchronous
-    focus is what keeps the keystroke that opened the box (and everything after) away from
-    `PageCanvas`.
+    handler) → `Dispatcher.UIThread.Post(() => { PageJumpBox.Focus(); PageJumpBox.SelectAll(); })`.
+    Deferred, **matching every other post-visibility-change `Focus()` call in this file**
+    (`OnScrollToPageRequested`, the two `PageCanvasControl.Focus()` sites) — the `IsVisible`
+    binding and the layout pass that realises the `TextBox` haven't run yet on the tick the
+    property changes, so a synchronous `Focus()` no-ops. The `PageInputActive` guard below covers
+    the one-tick gap where the canvas still holds focus.
   - `PageJumpBox.KeyDown`: `Enter` → `CommitPageInputCommand`, `Escape` → `CancelPageInputCommand`
     (both `e.Handled = true`). Also `e.Handled = true` for `Up` / `Down` / `PageUp` / `PageDown`
     (a single-line `TextBox` does nothing useful with them and they must not bubble to reader
     nav). `Left` / `Right` are left alone — caret movement.
-  - `PageJumpBox` input filter — handle `TextInputEvent` (or `TextInput` on the control) and set
-    `e.Handled = true` for any non-digit, so only `0`–`9` ever enter the field. Space, `-`, `.`,
-    letters are all rejected at the source; the commit-time `int.TryParse` + `Clamp` stays as the
-    backstop.
+  - `PageJumpBox` typing filter — handle `TextInput` on the control and set `e.Handled = true`
+    for any non-digit, so a rejected keystroke never even flickers into the field. This is the
+    fast-path nicety; **paste / drag-drop / IME are caught by the VM's `OnPageInputTextChanged`
+    coercion** (above), and the commit-time `int.TryParse` + `Clamp` is the final backstop.
   - `PageJumpBox.LostFocus` → `CancelPageInputCommand` (blur = cancel; blur-commit surprises when
     the user clicks away).
 - **Belt-and-suspenders shortcut suppression:** `PageCanvas` gains a `bool` `PageInputActiveProperty`
-  bound `{Binding IsPageInputActive}`; `OnKeyDown` returns immediately (before `base.OnKeyDown`'s
-  own handling matters) when it's set. Covers any focus-timing edge where a key reaches the canvas
-  while the input is open.
+  bound `{Binding IsPageInputActive}`; `OnKeyDown` returns immediately (before it matches any
+  gesture) when it's set. Covers the one-dispatcher-tick gap between the property flipping and the
+  deferred `Focus()` landing.
 - `PartLabel` (split-page part indicator) sits after this in the same cluster — unchanged; it
   only shows when zoomed, orthogonal to page input.
 
 ### Tests
 
-- `ReaderScreenViewModelTests` — `CommitPageInput`: `"5"` → index 4; `"9999"` → `PageCount-1`;
-  `"0"` / `"-3"` → index 0; `"  7  "` (whitespace) → index 6; `"abc"` / `""` → no navigation,
-  `IsPageInputActive` false; continuous mode routes to `ScrollToPageRequested` (spy the event)
-  not `GoToPage`; `BeginPageInput` sets `PageInputText` to the current 1-based number and
-  `IsPageInputActive` true; `BeginPageInput` no-ops with no decoder / `PageCount == 0`;
-  `CancelPageInput` closes without navigating.
+- `ReaderScreenViewModelTests` — `CommitPageInput` (note `PageInputText` is already digits-only by
+  the time commit runs, thanks to the coercion): `"5"` → index 4; `"9999"` → `PageCount-1`;
+  `"0"` → index 0; `""` → no navigation, `IsPageInputActive` false; continuous mode routes to
+  `ScrollToPageRequested` (spy the event) not `GoToPage`; `BeginPageInput` sets `PageInputText`
+  to the current 1-based number and `IsPageInputActive` true; `BeginPageInput` no-ops with no
+  decoder / `PageCount == 0`; `CancelPageInput` closes without navigating.
+- **Input sanitisation (VM, headless-testable):** `PageInputText = "3a4"` coerces to `"34"`;
+  `"  12 "` → `"12"`; `"abc"` → `""`; `"5"` unchanged (no re-assignment / no notification storm).
+  This is the paste / drag-drop / IME guard — it lives in the VM precisely so it's testable.
 - `NavigateToPageIndex` shared helper: `SelectThumbnail` still routes correctly after the
   refactor (existing thumbnail tests must stay green — assert, don't just assume).
 - `KeyboardCommandRegistryTests`: `ReaderGoToPage` present in `NavigationGroup`, default `G`,
   `ConflictContext.Always`, no gesture collision with any other `Always` command.
 - `KeyBindingServiceTests`: an override on `ReaderGoToPage` round-trips through persistence;
   `GoToPageKey` on the VM reflects the override.
-- Digit-filter and key-suppression live in code-behind (not headless-testable here) — covered by
-  the on-screen verification list, not an xUnit test.
+- The code-behind typing filter, `Up/Down/PageUp/PageDown` suppression, deferred focus, and the
+  `PageCanvas.PageInputActive` guard are not headless-testable — on the on-screen verification
+  list, not xUnit.
 
 ---
 
@@ -455,15 +537,15 @@ The `PageLabel` `TextBlock` and an inline editor share one slot:
 |---|---|
 | `src/Paperbunkr.App/ViewModels/PreferencesScreenViewModel.cs` | Item 1 VM: backing prop, 3 bools, `SetReaderMemoryLimitCommand`, load-path hydration |
 | `src/Paperbunkr.App/Views/Preferences/ReaderSection.axaml` | Item 1 view: "Performance" group |
-| `src/Paperbunkr.App/ViewModels/ReaderScreenViewModel.cs` | Item 2 narrow fix (state, `DetachDecoderEvents` helper, subscribe/unsubscribe in `Load`+`GoBack`, `RefreshCurrentPage` paged branch, `OnBackgroundPageDecoded`/`ApplyDecodedPage`, `_coldMissTimeout`); Item 3 VM (props, 3 commands, `NavigateToPageIndex` helper, `GoToPageKey`) |
+| `src/Paperbunkr.App/ViewModels/ReaderScreenViewModel.cs` | Item 2 (`_awaitingPageIndex` / `_awaitingSecondaryPageIndex` / `_coldMissTimeout` state, `DetachDecoderEvents` helper, subscribe/unsubscribe in `Load`+`GoBack`, `RefreshCurrentPage` paged branch, `ResolveSecondaryPage`, `OnBackgroundPageDecoded`/`ApplyDecoded`); Item 3 VM (props, `OnPageInputTextChanged` coercion, 3 commands, `NavigateToPageIndex` helper reused by `SelectThumbnail`, `GoToPageKey`) |
 | `src/Paperbunkr.App/Views/ReaderScreen.axaml` | Item 2 loading spinner; Item 3 page-label button + `pageJump` TextBox + `GoToPageGesture`/`GoToPageCommand`/`PageInputActive` bindings on `PageCanvas`; both new inline styles in `<UserControl.Styles>` |
-| `src/Paperbunkr.App/Views/ReaderScreen.axaml.cs` | Item 3 synchronous focus on activation, `PageJumpBox` KeyDown / TextInput digit-filter / LostFocus wiring |
+| `src/Paperbunkr.App/Views/ReaderScreen.axaml.cs` | Item 3 deferred focus+select-all on activation, `PageJumpBox` KeyDown (Enter/Esc/Up/Down/PageUp/PageDown) / TextInput digit-filter / LostFocus wiring |
 | `src/Paperbunkr.App/Views/PageCanvas.cs` | Item 3: `GoToPageGesture`/`GoToPageCommand` styled properties + `OnKeyDown` Always-block match; `PageInputActive` styled property + early-return guard |
 | `src/Paperbunkr.App/Models/KeyboardCommandRegistry.cs` | Item 3: `ReaderGoToPage` id + entry |
 | `src/Paperbunkr.App/Styles/Primitives.axaml` | Item 1: promote `segTab` / `segTab.active` here (shared) |
 | `src/Paperbunkr.App/Views/Preferences/LibrarySection.axaml` | Item 1: drop the now-shared local `segTab` style pair |
 | `src/Paperbunkr.App.Tests/PreferencesScreenViewModelTests.cs` | Item 1 tests |
-| `src/Paperbunkr.App.Tests/ReaderScreenViewModelTests.cs` | Item 2 (cold-miss swap, warm path, stale guard, timeout, subscription lifecycle) + Item 3 (`CommitPageInput` boundaries, mode routing, `NavigateToPageIndex` refactor safety) tests |
+| `src/Paperbunkr.App.Tests/ReaderScreenViewModelTests.cs` | Item 2 (cold-miss swap, warm path, stale guard, timeout, subscription lifecycle, double-page cold miss × primary/secondary/both, secondary stale) + Item 3 (`CommitPageInput` boundaries, mode routing, `PageInputText` coercion, `NavigateToPageIndex` refactor safety) tests |
 | `src/Paperbunkr.App.Tests/KeyboardCommandRegistryTests.cs` / `KeyBindingServiceTests.cs` | Item 3 registry entry + override roundtrip |
 | `docs/superpowers/specs/2026-09-08-reader-decode-cache-prefetch-pipeline-design.md` | new §17 (Item 2 decision record) |
 | `docs/ce-feature-inventory.md` | line 138: correct the CE-has-it framing; note Item 3 shipped as a deviation |

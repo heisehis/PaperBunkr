@@ -165,6 +165,7 @@ the UI thread — a multi-frame stall for a large scan. Cold misses happen on:
 |---|---|---|
 | **Full async-paged swap-on-`PageReady`** (viewport-aware display tier + zoom-triggered detail re-decode, the full `PageCanvas` restructure) | **Stays deferred.** | The shipped detail tier (`GetDetailPage`, rev-3 budget-accounted) already covers zoom sharpness. The restructure's remaining benefit is viewport-width-aware display decode; the interim 2560px cap is good enough on any real monitor to ~1.5× zoom. Large scope, low marginal value. |
 | **1-reader / N-decoder thread split** (§8.3: `N = clamp(ProcessorCount−1, 1, 4)` Skia workers) | **Formally accepted as not-needed.** | The single loop already decodes off the UI thread. Archive reads are serialized regardless (`_readerLock` + the single 7z COM executor thread, rev-3 #1), so parallel Skia decode only helps a multi-page *cold* burst, and the `RawBytesCache` makes re-reads cheap. Revisit **only** if a benchmark shows decode (not read) as the bottleneck. |
+| **Explicit queue cancellation on `IReaderPageSource`** (`FlushQueue()` / a `CancellationToken` on `SetVirtualizationWindow`) | **Not needed; not added.** | Stale queue entries are already dropped at dequeue in O(1) (`ProcessQueuedPage` window-membership check, `ReaderImagePipeline.cs:739`/`:762`); `_window`/`_enqueued` are re-bounded every call (`:600–614`); the fringe pass is debounced 30 ms. A 50-jump burst does ~3 real decodes, not 150. Widening the interface is out of Batch A scope and would revisit a shipped design. Revisit only if on-screen testing shows a real burst stall. |
 
 **What this batch does build:** the **narrow async swap on cold miss** — the smallest change that
 removes the UI-thread stall on jumps and backward-beyond-fringe, using the seam exactly as
@@ -335,6 +336,24 @@ private void ApplyDecoded(int idx)
   so they're correct immediately regardless of when the bitmap lands. No change.
 - **Continuous mode:** `RefreshCurrentPage` early-returns for continuous (unchanged); continuous
   never used `CurrentPage`.
+- **Rapid-jump queue pressure — no new mechanism needed, and none added to `IReaderPageSource`.**
+  This change calls `SetVirtualizationWindow` on a page change exactly as the code does today; it
+  removes the synchronous `GetPage`, so a jump does *less* UI-thread work than before, not more.
+  The shipped pipeline already bounds the cost of a burst (verified against
+  `ReaderImagePipeline.cs`, 2026-09-10):
+  - `SetVirtualizationWindow` is O(window size), not O(queue size): it clamps indices, rebuilds
+    `_window` / prunes `_enqueued` to `[min−BackFringe(2) … max+MaxForwardFringe(6)]` on **every**
+    call (`:600–614`), and enqueues at most the 3 on-screen indices high-priority.
+  - The single consumer loop drops stale entries at dequeue in O(1) — `ProcessQueuedPage` returns
+    before any decode when `!_window.Contains(pageIndex)` (`:739`) and again post-decode (`:762`).
+  - `TryEnqueue` dedups against `_enqueued` + the cache (`:693`).
+  - The heavier fringe recompute is debounced 30 ms (`_fringeTimer`).
+  So 50 thumbnail-rail jumps in 3 s ≈ 150 enqueues, of which ~147 are dequeued-and-skipped
+  (a lock + two set ops each, sub-µs) and only the final resting window's ~3 actually decode.
+  There is no unbounded growth and no UI-thread stall. If on-screen testing ever shows one, it is
+  a pipeline-level follow-up (a real `CancellationToken` / queue-drain on `IReaderPageSource`),
+  explicitly **out of scope for Batch A** — this batch does not widen that interface. The §17
+  decision record states this.
 
 ### The loading affordance — `Views/ReaderScreen.axaml`
 
@@ -383,14 +402,6 @@ IsPageLoading}"`. Reuse `BusyIndicator` if it sizes down cleanly into the cluste
 [ObservableProperty] private bool _isPageInputActive;
 [ObservableProperty] private string _pageInputText = string.Empty;
 
-// Single sanitisation chokepoint — covers typing, paste, drag-drop, IME. Strip to digits;
-// re-assign only when it actually changed (the generated setter's equality check stops recursion).
-partial void OnPageInputTextChanged(string value)
-{
-    var digits = new string(value.Where(char.IsDigit).ToArray());
-    if (digits != value) PageInputText = digits;
-}
-
 [RelayCommand]
 private void BeginPageInput()
 {
@@ -403,14 +414,24 @@ private void BeginPageInput()
 private void CommitPageInput()
 {
     IsPageInputActive = false;
-    if (!int.TryParse(PageInputText?.Trim(), out int n)) return;   // invalid → no-op
-    n = Math.Clamp(n, 1, PageCount);
-    NavigateToPageIndex(n - 1);                                    // 1-based entry → 0-based index
+    var s = (PageInputText ?? string.Empty).Trim();
+    if (s.Length == 0 || !s.All(char.IsDigit)) return;            // empty / non-numeric → no-op
+    // Graceful overflow: a digit string too big even for long (only reachable if the view's
+    // MaxLength is somehow bypassed) means "way past the end" → clamp to the last page.
+    int target = long.TryParse(s, out long v) ? (int)Math.Clamp(v, 1, PageCount) : PageCount;
+    NavigateToPageIndex(target - 1);                              // 1-based entry → 0-based index
 }
 
 [RelayCommand]
 private void CancelPageInput() => IsPageInputActive = false;
 ```
+
+- **No VM-side text coercion.** Round 2 put digit-stripping in an `OnPageInputTextChanged` partial
+  for testability; that's reverted — mutating a two-way-bound `TextBox.Text` from the VM while the
+  box is focused re-clamps `CaretIndex` and snaps the caret to the end on a mid-string edit.
+  Filtering moves to the view (below), where the character is rejected *before* insertion so the
+  bound text never needs correcting. The VM keeps the part that actually matters for correctness —
+  the commit-time parse / clamp / route — and that stays fully headless-testable.
 
 **Shared navigation helper.** Extract the mode split that `SelectThumbnail` currently inlines
 into one private method, and call it from both:
@@ -471,11 +492,15 @@ The `PageLabel` `TextBlock` and an inline editor share one slot:
                Foreground="{DynamicResource PbTextMutedBrush}" />
   </Button>
   <TextBox x:Name="PageJumpBox" Classes="pageJump" IsVisible="{Binding IsPageInputActive}"
-           Text="{Binding PageInputText, Mode=TwoWay}"
+           Text="{Binding PageInputText, Mode=TwoWay}" MaxLength="7"
            FontFamily="Consolas,monospace" FontSize="12" Width="52"
            AutomationProperties.Name="Go to page" />
 </Panel>
 ```
+
+- `MaxLength="7"` structurally caps the input below `int.MaxValue` (no comic has 10 M pages), so
+  the commit-time parse can never overflow through the normal path; the `long.TryParse` fallback
+  in `CommitPageInput` is only for a theoretically-bypassed MaxLength.
 
 - `pageLabelButton` — a near-invisible button style (transparent bg, no border, `Padding="0"`),
   same treatment as the existing `GoBackCommand` button in this cluster.
@@ -492,42 +517,52 @@ The `PageLabel` `TextBlock` and an inline editor share one slot:
     property changes, so a synchronous `Focus()` no-ops. The `PageInputActive` guard below covers
     the one-tick gap where the canvas still holds focus.
   - `PageJumpBox.KeyDown`: `Enter` → `CommitPageInputCommand`, `Escape` → `CancelPageInputCommand`
-    (both `e.Handled = true`). Also `e.Handled = true` for `Up` / `Down` / `PageUp` / `PageDown`
-    (a single-line `TextBox` does nothing useful with them and they must not bubble to reader
-    nav). `Left` / `Right` are left alone — caret movement.
+    (both `e.Handled = true`). Also `e.Handled = true` for `Up` / `Down` / `PageUp` / `PageDown` /
+    **`Space`** — a single-line `TextBox` does nothing useful with them, and marking them handled
+    stops any bubble to reader nav. (`Space` isn't bound to page-turn in this reader today and the
+    `PageInputActive` guard already blocks the path — see below — but it's free insurance against a
+    future binding.) `Left` / `Right` / `Home` / `End` are left alone — caret movement.
   - `PageJumpBox` typing filter — handle `TextInput` on the control and set `e.Handled = true`
-    for any non-digit, so a rejected keystroke never even flickers into the field. This is the
-    fast-path nicety; **paste / drag-drop / IME are caught by the VM's `OnPageInputTextChanged`
-    coercion** (above), and the commit-time `int.TryParse` + `Clamp` is the final backstop.
+    for any non-digit, so a rejected keystroke never even flickers into the field and the bound
+    `Text` never needs correcting (no caret snap).
+  - `PageJumpBox` paste sanitisation — `AddHandler(DataObject.PastingEvent, …)`: pull the text
+    payload, keep only `char.IsDigit` chars, and if the result differs from the original either
+    replace the `DataPackage` text or cancel the paste and insert the digit-only string manually
+    at the caret. Covers Ctrl+V and context-menu paste. Drag-drop of text is handled the same way
+    via `DragDrop.DropEvent` if it proves reachable on this control (verify during implementation;
+    a page-number field is an unlikely drop target).
   - `PageJumpBox.LostFocus` → `CancelPageInputCommand` (blur = cancel; blur-commit surprises when
     the user clicks away).
 - **Belt-and-suspenders shortcut suppression:** `PageCanvas` gains a `bool` `PageInputActiveProperty`
   bound `{Binding IsPageInputActive}`; `OnKeyDown` returns immediately (before it matches any
-  gesture) when it's set. Covers the one-dispatcher-tick gap between the property flipping and the
-  deferred `Focus()` landing.
+  gesture) when it's set. This is the *real* guard against any key reaching reader nav while the
+  input is open — the chrome `TextBox` is a sibling of `PageCanvas` in the visual tree, not a
+  descendant, so its `KeyDown` never routes through `PageCanvas.OnKeyDown` anyway; the guard
+  covers only the one-dispatcher-tick gap between the property flip and the deferred `Focus()`.
 - `PartLabel` (split-page part indicator) sits after this in the same cluster — unchanged; it
   only shows when zoomed, orthogonal to page input.
 
 ### Tests
 
-- `ReaderScreenViewModelTests` — `CommitPageInput` (note `PageInputText` is already digits-only by
-  the time commit runs, thanks to the coercion): `"5"` → index 4; `"9999"` → `PageCount-1`;
-  `"0"` → index 0; `""` → no navigation, `IsPageInputActive` false; continuous mode routes to
-  `ScrollToPageRequested` (spy the event) not `GoToPage`; `BeginPageInput` sets `PageInputText`
-  to the current 1-based number and `IsPageInputActive` true; `BeginPageInput` no-ops with no
-  decoder / `PageCount == 0`; `CancelPageInput` closes without navigating.
-- **Input sanitisation (VM, headless-testable):** `PageInputText = "3a4"` coerces to `"34"`;
-  `"  12 "` → `"12"`; `"abc"` → `""`; `"5"` unchanged (no re-assignment / no notification storm).
-  This is the paste / drag-drop / IME guard — it lives in the VM precisely so it's testable.
+- `ReaderScreenViewModelTests` — `CommitPageInput`: `"5"` → index 4; `"9999"` → `PageCount-1`;
+  `"1"` / `"0"` → index 0; `"  7  "` → index 6 (`Trim` + `long.TryParse` handle surrounding
+  space); `""` → no navigation; `"99999999999999999999"` (20 digits, overflows `long`) → clamps
+  to `PageCount-1`, does *not* silently abort; `"12a"` → no navigation (defensive `All(IsDigit)`
+  check — the view normally prevents this reaching commit); `IsPageInputActive` is false after
+  every commit; continuous mode routes to `ScrollToPageRequested` (spy the event) not `GoToPage`;
+  `BeginPageInput` sets `PageInputText` to the current 1-based number and `IsPageInputActive`
+  true; `BeginPageInput` no-ops with no decoder / `PageCount == 0`; `CancelPageInput` closes
+  without navigating.
 - `NavigateToPageIndex` shared helper: `SelectThumbnail` still routes correctly after the
   refactor (existing thumbnail tests must stay green — assert, don't just assume).
 - `KeyboardCommandRegistryTests`: `ReaderGoToPage` present in `NavigationGroup`, default `G`,
   `ConflictContext.Always`, no gesture collision with any other `Always` command.
 - `KeyBindingServiceTests`: an override on `ReaderGoToPage` round-trips through persistence;
   `GoToPageKey` on the VM reflects the override.
-- The code-behind typing filter, `Up/Down/PageUp/PageDown` suppression, deferred focus, and the
-  `PageCanvas.PageInputActive` guard are not headless-testable — on the on-screen verification
-  list, not xUnit.
+- Not headless-testable → on the on-screen verification list: the `TextInput` digit filter, the
+  `DataObject.Pasting` sanitiser, `MaxLength`, `Up/Down/PageUp/PageDown/Space` suppression,
+  deferred focus + select-all, caret stays put on a mid-string edit, and the
+  `PageCanvas.PageInputActive` guard.
 
 ---
 
@@ -537,15 +572,15 @@ The `PageLabel` `TextBlock` and an inline editor share one slot:
 |---|---|
 | `src/Paperbunkr.App/ViewModels/PreferencesScreenViewModel.cs` | Item 1 VM: backing prop, 3 bools, `SetReaderMemoryLimitCommand`, load-path hydration |
 | `src/Paperbunkr.App/Views/Preferences/ReaderSection.axaml` | Item 1 view: "Performance" group |
-| `src/Paperbunkr.App/ViewModels/ReaderScreenViewModel.cs` | Item 2 (`_awaitingPageIndex` / `_awaitingSecondaryPageIndex` / `_coldMissTimeout` state, `DetachDecoderEvents` helper, subscribe/unsubscribe in `Load`+`GoBack`, `RefreshCurrentPage` paged branch, `ResolveSecondaryPage`, `OnBackgroundPageDecoded`/`ApplyDecoded`); Item 3 VM (props, `OnPageInputTextChanged` coercion, 3 commands, `NavigateToPageIndex` helper reused by `SelectThumbnail`, `GoToPageKey`) |
-| `src/Paperbunkr.App/Views/ReaderScreen.axaml` | Item 2 loading spinner; Item 3 page-label button + `pageJump` TextBox + `GoToPageGesture`/`GoToPageCommand`/`PageInputActive` bindings on `PageCanvas`; both new inline styles in `<UserControl.Styles>` |
-| `src/Paperbunkr.App/Views/ReaderScreen.axaml.cs` | Item 3 deferred focus+select-all on activation, `PageJumpBox` KeyDown (Enter/Esc/Up/Down/PageUp/PageDown) / TextInput digit-filter / LostFocus wiring |
+| `src/Paperbunkr.App/ViewModels/ReaderScreenViewModel.cs` | Item 2 (`_awaitingPageIndex` / `_awaitingSecondaryPageIndex` / `_coldMissTimeout` state, `DetachDecoderEvents` helper, subscribe/unsubscribe in `Load`+`GoBack`, `RefreshCurrentPage` paged branch, `ResolveSecondaryPage`, `OnBackgroundPageDecoded`/`ApplyDecoded`); Item 3 VM (`IsPageInputActive` / `PageInputText` props, 3 commands, `CommitPageInput` with `long.TryParse`+clamp, `NavigateToPageIndex` helper reused by `SelectThumbnail`, `GoToPageKey`) — **no VM text coercion** |
+| `src/Paperbunkr.App/Views/ReaderScreen.axaml` | Item 2 loading spinner; Item 3 page-label button + `pageJump` `TextBox` (`MaxLength="7"`) + `GoToPageGesture`/`GoToPageCommand`/`PageInputActive` bindings on `PageCanvas`; both new inline styles in `<UserControl.Styles>` |
+| `src/Paperbunkr.App/Views/ReaderScreen.axaml.cs` | Item 3 deferred focus+select-all on activation; `PageJumpBox` KeyDown (Enter/Esc/Up/Down/PageUp/PageDown/Space), `TextInput` digit-filter, `DataObject.PastingEvent` sanitiser, LostFocus wiring |
 | `src/Paperbunkr.App/Views/PageCanvas.cs` | Item 3: `GoToPageGesture`/`GoToPageCommand` styled properties + `OnKeyDown` Always-block match; `PageInputActive` styled property + early-return guard |
 | `src/Paperbunkr.App/Models/KeyboardCommandRegistry.cs` | Item 3: `ReaderGoToPage` id + entry |
 | `src/Paperbunkr.App/Styles/Primitives.axaml` | Item 1: promote `segTab` / `segTab.active` here (shared) |
 | `src/Paperbunkr.App/Views/Preferences/LibrarySection.axaml` | Item 1: drop the now-shared local `segTab` style pair |
 | `src/Paperbunkr.App.Tests/PreferencesScreenViewModelTests.cs` | Item 1 tests |
-| `src/Paperbunkr.App.Tests/ReaderScreenViewModelTests.cs` | Item 2 (cold-miss swap, warm path, stale guard, timeout, subscription lifecycle, double-page cold miss × primary/secondary/both, secondary stale) + Item 3 (`CommitPageInput` boundaries, mode routing, `PageInputText` coercion, `NavigateToPageIndex` refactor safety) tests |
+| `src/Paperbunkr.App.Tests/ReaderScreenViewModelTests.cs` | Item 2 (cold-miss swap, warm path, stale guard, timeout, subscription lifecycle, double-page cold miss × primary/secondary/both, secondary stale) + Item 3 (`CommitPageInput` boundaries incl. `long`-overflow → clamp, mode routing, `NavigateToPageIndex` refactor safety) tests |
 | `src/Paperbunkr.App.Tests/KeyboardCommandRegistryTests.cs` / `KeyBindingServiceTests.cs` | Item 3 registry entry + override roundtrip |
 | `docs/superpowers/specs/2026-09-08-reader-decode-cache-prefetch-pipeline-design.md` | new §17 (Item 2 decision record) |
 | `docs/ce-feature-inventory.md` | line 138: correct the CE-has-it framing; note Item 3 shipped as a deviation |
@@ -566,9 +601,14 @@ The `PageLabel` `TextBlock` and an inline editor share one slot:
   mode) matches every other reader shortcut. Not a redesign.
 - **Cold-miss timeout value (5 s)** is a guess. It only governs how long a genuinely stuck decode
   shows the spinner before an error — generous is fine. Tune from feel if it ever matters.
+- **`DataObject.PastingEvent` API shape** — confirm the current Avalonia (net10 / this project's
+  pinned version) event name and `DataPackage` mutation surface during implementation; if the
+  clean interception isn't available, fall back to cancel-and-reinsert-digits at the caret.
+- **Drag-drop into `PageJumpBox`** — likely not a reachable target for text drops; verify and add
+  a `DragDrop.DropEvent` filter only if it is.
 - **On-screen verification** — no computer-use for this project. The user verifies: the freeze is
-  gone on a large jump (Item 2); the segmented control persists across app restart and the Library
-  folder tabs still render after the `segTab` move (Item 1); the inline editor focuses on `G`,
-  accepts only digits, commits on Enter, cancels on Esc/blur, and no page-turn/fit-mode fires
-  while it's open (Item 3). Automated tests cover VM logic only — they can't prove the UI-thread
-  stall is gone or that key-suppression works.
+  gone on a large jump, incl. jumping into a spread (Item 2); the segmented control persists
+  across app restart and the Library folder tabs still render after the `segTab` move (Item 1);
+  the inline editor focuses on `G`, accepts only digits (typed *and* pasted), keeps the caret
+  put on a mid-string edit, commits on Enter, cancels on Esc/blur, and no page-turn/fit-mode
+  fires while it's open (Item 3). Automated tests cover VM logic only.

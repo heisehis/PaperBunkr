@@ -4,21 +4,22 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>PaperBunkr - Lightweight Desktop Comic &amp; Manga Reader</title>
-  <meta name="description" content="PaperBunkr is a free, local-first desktop comic and manga reader for Windows. Read CBZ, CBR, PDF, and EPUB with library management, Smart Lists, and no cloud dependency." />
+  <meta name="description" content="PaperBunkr is a free, local-first desktop comic and manga reader for Windows. Read CBZ, CBR, PDF, EPUB, FB2, and MOBI with a full library manager, Smart Lists, rich metadata editing, and no cloud dependency." />
   <link rel="canonical" href="https://heisehis.github.io/PaperBunkr/" />
 
   <!-- Open Graph -->
   <meta property="og:type" content="website" />
   <meta property="og:site_name" content="PaperBunkr" />
   <meta property="og:title" content="PaperBunkr - Lightweight Desktop Comic & Manga Reader" />
-  <meta property="og:description" content="A free, local-first comic and manga library and reader for Windows. CBZ, CBR, PDF, EPUB — no cloud, no account." />
+  <meta property="og:description" content="A free, local-first comic and manga library and reader for Windows. CBZ, CBR, PDF, EPUB, FB2, MOBI — no cloud, no account." />
   <meta property="og:url" content="https://heisehis.github.io/PaperBunkr/" />
   <meta property="og:image" content="https://heisehis.github.io/PaperBunkr/assets/paperbunkr-logo.png" />
 
   <!-- Twitter -->
   <meta name="twitter:card" content="summary" />
   <meta name="twitter:title" content="PaperBunkr - Lightweight Desktop Comic & Manga Reader" />
-  <meta name="twitter:description" content="A free, local-first comic and manga library and reader for Windows. CBZ, CBR, PDF, EPUB — no cloud, no account." />
+  <meta name="twitter:description" content="A free, local-first comic and manga library and reader for Windows. CBZ, CBR, PDF, EPUB, FB2, MOBI — no cloud, no account." />
+  <meta name="twitter:image" content="https://heisehis.github.io/PaperBunkr/assets/paperbunkr-logo.png" />
 
   <!-- Structured data: identifies this as a distinct software product, not generic GitHub Pages docs -->
   <script type="application/ld+json">
@@ -28,12 +29,14 @@
     "name": "PaperBunkr",
     "applicationCategory": "MultimediaApplication",
     "operatingSystem": "Windows",
-    "description": "A free, local-first desktop comic and manga library and reader for Windows. Reads CBZ, CBR, PDF, and EPUB with no cloud dependency.",
+    "description": "A free, local-first desktop comic and manga library and reader for Windows. Reads CBZ, CBR, PDF, EPUB, FB2, and MOBI/AZW3 with no cloud dependency.",
     "url": "https://heisehis.github.io/PaperBunkr/",
     "image": "https://heisehis.github.io/PaperBunkr/assets/paperbunkr-logo.png",
-    "softwareVersion": "0.2.0-beta",
+    "softwareVersion": "0.3.0-beta",
+    "license": "https://www.gnu.org/licenses/agpl-3.0.html",
     "releaseNotes": "https://github.com/heisehis/PaperBunkr/releases/latest",
     "downloadUrl": "https://github.com/heisehis/PaperBunkr/releases/latest",
+    "softwareRequirements": "Windows 10 or later",
     "offers": {
       "@type": "Offer",
       "price": "0",
@@ -41,161 +44,415 @@
     }
   }
   </script>
-  <meta name="twitter:image" content="https://heisehis.github.io/PaperBunkr/assets/paperbunkr-logo.png" />
 
   <link rel="icon" type="image/png" href="assets/paperbunkr-logo.png" />
 
   <style>
     :root {
-      --bg: #0f1115;
-      --panel: #171a21;
-      --text: #e8e8ea;
-      --muted: #9a9ea8;
+      --bg: #0d0f13;
+      --bg-2: #12151c;
+      --panel: #161a22;
+      --panel-2: #1b1f29;
+      --text: #eceef2;
+      --muted: #9aa0ad;
+      --faint: #6b7280;
       --accent: #7aa2ff;
-      --border: #262a33;
+      --accent-2: #9d7bff;
+      --border: #262b36;
+      --radius: 12px;
     }
     * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
     body {
       margin: 0;
       background: var(--bg);
       color: var(--text);
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
       line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
     }
-    .wrap {
-      max-width: 780px;
+    a { color: var(--accent); }
+    img { max-width: 100%; }
+
+    .wrap { max-width: 960px; margin: 0 auto; padding: 0 24px; }
+
+    /* ---------- Hero ---------- */
+    .hero {
+      position: relative;
+      overflow: hidden;
+      border-bottom: 1px solid var(--border);
+      background:
+        radial-gradient(650px 320px at 50% -40px, rgba(122,162,255,0.18), transparent 70%),
+        radial-gradient(500px 260px at 85% 0, rgba(157,123,255,0.12), transparent 70%),
+        var(--bg);
+    }
+    .hero-inner {
+      max-width: 960px;
       margin: 0 auto;
-      padding: 64px 24px 96px;
-    }
-    header {
+      padding: 84px 24px 72px;
       text-align: center;
-      margin-bottom: 48px;
     }
-    header img {
-      width: 96px;
-      height: 96px;
-      border-radius: 20px;
-      margin-bottom: 16px;
+    .hero img.logo {
+      width: 104px;
+      height: 104px;
+      border-radius: 24px;
+      margin-bottom: 22px;
+      box-shadow: 0 12px 40px rgba(0,0,0,0.45);
     }
     h1 {
-      font-size: 2rem;
-      margin: 0 0 8px;
+      font-size: 2.5rem;
+      line-height: 1.15;
+      margin: 0 0 14px;
+      letter-spacing: -0.02em;
     }
     .tagline {
       color: var(--muted);
-      font-size: 1.05rem;
-      max-width: 560px;
+      font-size: 1.12rem;
+      max-width: 620px;
       margin: 0 auto;
     }
     .badge {
       display: inline-block;
-      margin-top: 16px;
-      padding: 4px 12px;
+      margin-top: 20px;
+      padding: 5px 14px;
       border: 1px solid var(--border);
       border-radius: 999px;
       font-size: 0.8rem;
       color: var(--muted);
+      background: rgba(255,255,255,0.02);
     }
     .cta {
       display: flex;
       gap: 12px;
       justify-content: center;
-      margin-top: 24px;
+      margin-top: 28px;
       flex-wrap: wrap;
     }
     .cta a {
-      display: inline-block;
-      padding: 10px 20px;
-      border-radius: 8px;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 22px;
+      border-radius: 10px;
       text-decoration: none;
       font-weight: 600;
-      font-size: 0.95rem;
+      font-size: 0.97rem;
+      transition: transform 0.12s ease, background 0.12s ease, border-color 0.12s ease;
     }
+    .cta a:hover { transform: translateY(-1px); }
     .cta .primary {
-      background: var(--accent);
-      color: #0f1115;
+      background: linear-gradient(180deg, var(--accent), #6b93f5);
+      color: #0b0d12;
     }
+    .cta .primary:hover { background: linear-gradient(180deg, #8db0ff, var(--accent)); }
     .cta .secondary {
       border: 1px solid var(--border);
       color: var(--text);
-    }
-    section {
-      margin-top: 48px;
-    }
-    h2 {
-      font-size: 1.2rem;
-      border-bottom: 1px solid var(--border);
-      padding-bottom: 8px;
-    }
-    ul {
-      padding-left: 20px;
-      color: var(--text);
-    }
-    li { margin-bottom: 8px; }
-    li strong { color: var(--text); }
-    code {
       background: var(--panel);
+    }
+    .cta .secondary:hover { border-color: var(--accent); }
+    .meta-line {
+      margin-top: 18px;
+      font-size: 0.82rem;
+      color: var(--faint);
+    }
+
+    /* ---------- Sections ---------- */
+    section { padding: 60px 0; border-bottom: 1px solid var(--border); }
+    section:last-of-type { border-bottom: none; }
+    h2 {
+      font-size: 1.35rem;
+      margin: 0 0 8px;
+      letter-spacing: -0.01em;
+    }
+    .section-sub {
+      color: var(--muted);
+      margin: 0 0 28px;
+      font-size: 0.97rem;
+    }
+
+    /* ---------- Feature grid ---------- */
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 16px;
+    }
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+    }
+    .card h3 {
+      margin: 0 0 6px;
+      font-size: 1rem;
+    }
+    .card p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+    .card .dot {
+      display: inline-block;
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--accent);
+      margin-right: 8px;
+      vertical-align: middle;
+    }
+
+    /* ---------- Formats strip ---------- */
+    .formats {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 4px;
+    }
+    .chip {
+      padding: 6px 12px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--panel);
+      font-size: 0.82rem;
+      color: var(--text);
+      font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    }
+
+    /* ---------- What's new ---------- */
+    .whatsnew {
+      background: linear-gradient(180deg, var(--bg-2), var(--bg));
+    }
+    .whatsnew ul {
+      margin: 0;
+      padding-left: 20px;
+      columns: 2;
+      column-gap: 36px;
+    }
+    .whatsnew li {
+      margin-bottom: 10px;
+      color: var(--text);
+      break-inside: avoid;
+    }
+    .whatsnew li span { color: var(--muted); }
+
+    /* ---------- Get started ---------- */
+    .steps { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+    .step {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 18px;
+    }
+    .step .n {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 26px; height: 26px;
+      border-radius: 7px;
+      background: rgba(122,162,255,0.14);
+      color: var(--accent);
+      font-weight: 700;
+      font-size: 0.85rem;
+      margin-bottom: 10px;
+    }
+    .step p { margin: 0; color: var(--muted); font-size: 0.9rem; }
+    code {
+      background: var(--panel-2);
       padding: 2px 6px;
       border-radius: 4px;
-      font-size: 0.9em;
+      font-size: 0.88em;
+      font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
     }
+
     footer {
-      margin-top: 64px;
+      padding: 44px 24px 56px;
       text-align: center;
       color: var(--muted);
       font-size: 0.85rem;
     }
     footer a { color: var(--muted); }
+    footer .links { margin-bottom: 12px; }
+    footer .links a { margin: 0 10px; }
+
+    @media (max-width: 640px) {
+      h1 { font-size: 2rem; }
+      section { padding: 44px 0; }
+      .whatsnew ul { columns: 1; }
+    }
   </style>
 </head>
 <body>
-  <div class="wrap">
-    <header>
-      <img src="assets/paperbunkr-logo.png" alt="PaperBunkr logo" />
+  <header class="hero">
+    <div class="hero-inner">
+      <img class="logo" src="assets/paperbunkr-logo.png" alt="PaperBunkr logo" />
       <h1>PaperBunkr</h1>
       <p class="tagline">
-        A free, local-first desktop comic &amp; manga library and reader for Windows.
-        CBZ, CBR, PDF, EPUB — no cloud, no account, your library stays on your machine.
+        A free, local-first desktop comic &amp; manga library and reader for Windows —
+        a ground-up rewrite of ComicRack. Your library stays on your machine: no cloud, no account.
       </p>
       <span class="badge">Beta — solo project, expect rough edges</span>
       <div class="cta">
         <a class="primary" href="https://github.com/heisehis/PaperBunkr/releases/latest">Download latest release</a>
         <a class="secondary" href="https://github.com/heisehis/PaperBunkr">View on GitHub</a>
       </div>
-    </header>
+      <p class="meta-line">Windows 10+ · self-contained installer · checks for updates on startup · current release 0.3.0-beta</p>
+    </div>
+
+    <div class="wrap" style="padding-bottom:64px">
+      <img src="assets/home.png" alt="Paperbunkr Home dashboard"
+           style="border-radius:14px;border:1px solid var(--border);box-shadow:0 24px 70px rgba(0,0,0,0.5);display:block;margin:0 auto;max-width:880px;width:100%" />
+    </div>
+  </header>
+
+  <main class="wrap">
 
     <section>
       <h2>What it does</h2>
+      <p class="section-sub">A full library manager and a custom reader — not a viewer, not a web service.</p>
+      <div class="grid">
+        <div class="card">
+          <h3><span class="dot"></span>Comic &amp; manga reading</h3>
+          <p>Real page rendering for CBZ / CBR / PDF. Fit modes, zoom, rotation, page transitions,
+          double-page spreads, continuous / webtoon scroll, auto-scroll, and right-to-left manga direction.</p>
+        </div>
+        <div class="card">
+          <h3><span class="dot"></span>Books</h3>
+          <p>A separate section for novels — EPUB, PDF, FB2, and MOBI/AZW3 — with a reflow reader,
+          a shared reading HUD, in-text highlights and notes, and accessibility support.</p>
+        </div>
+        <div class="card">
+          <h3><span class="dot"></span>Library management</h3>
+          <p>Series and per-issue browsing, virtualized view modes, Collections (manual or
+          rule-based), unified sort/group/filter, Virtual Tags, Saved Workspaces, and full keyboard navigation.</p>
+        </div>
+        <div class="card">
+          <h3><span class="dot"></span>Home dashboard</h3>
+          <p>Continue reading, "because you read…" recommendations, and spotlight modules, driven
+          by a relationship-aware recommendation engine.</p>
+        </div>
+        <div class="card">
+          <h3><span class="dot"></span>Metadata &amp; editing</h3>
+          <p>Single and bulk issue editors, series relations, continuity groupings, story events,
+          and online lookups from AniList, MangaBaka, MangaUpdates, MangaDex, Kitsu, and ComicVine.</p>
+        </div>
+        <div class="card">
+          <h3><span class="dot"></span>Smart Lists &amp; Reading Lists</h3>
+          <p>Saved rule-based views with nested AND/OR groups, plus hand-curated and imported
+          (CBL / CSV) reading lists with story-arc lookup.</p>
+        </div>
+        <div class="card">
+          <h3><span class="dot"></span>Insights</h3>
+          <p>A reading-habit dashboard and a library/reading analytics view, backed by an
+          append-only log of your reading activity.</p>
+        </div>
+        <div class="card">
+          <h3><span class="dot"></span>Library Health &amp; Automation</h3>
+          <p>Find missing files and likely duplicates, and run background maintenance — rescans,
+          cover verification, backups — on a schedule you control.</p>
+        </div>
+        <div class="card">
+          <h3><span class="dot"></span>Plugins</h3>
+          <p>An installable plugin ecosystem with its own package manager, a plugin API, Python
+          plugin commands, and a built-in Duplicate Finder.</p>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2>A look around</h2>
+      <p class="section-sub">Library, a series detail screen, and reading insights.</p>
+      <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(260px,1fr))">
+        <a href="assets/library.png"><img src="assets/library.png" alt="The Library" style="border-radius:10px;border:1px solid var(--border)" /></a>
+        <a href="assets/detail.png"><img src="assets/detail.png" alt="A series detail screen" style="border-radius:10px;border:1px solid var(--border)" /></a>
+        <a href="assets/insights.png"><img src="assets/insights.png" alt="Insights" style="border-radius:10px;border:1px solid var(--border)" /></a>
+      </div>
+    </section>
+
+    <section>
+      <h2>Formats</h2>
+      <p class="section-sub">Comics and books, read natively — no conversion step.</p>
+      <div class="formats">
+        <span class="chip">.cbz</span>
+        <span class="chip">.cbr</span>
+        <span class="chip">.pdf</span>
+        <span class="chip">.epub</span>
+        <span class="chip">.fb2</span>
+        <span class="chip">.mobi</span>
+        <span class="chip">.azw3</span>
+        <span class="chip">.cbl</span>
+      </div>
+    </section>
+
+    <section class="whatsnew">
+      <h2>New in 0.3.0-beta</h2>
+      <p class="section-sub">
+        The largest release since the alpha —
+        <a href="https://github.com/heisehis/PaperBunkr/releases/tag/v0.3.0-beta">full release notes</a>.
+      </p>
       <ul>
-        <li><strong>Comic &amp; manga reading</strong> — real page rendering for <code>.cbz</code> / <code>.cbr</code> / <code>.pdf</code>, fit modes, zoom, rotation, double-page spread, continuous/webtoon scroll, and RTL manga reading direction.</li>
-        <li><strong>Books</strong> — a separate section for EPUB/PDF novels.</li>
-        <li><strong>Library management</strong> — series/issue browsing, Collections, sort/group, browse history, Smart Lists, Reading Lists, and migration from an existing ComicRack CE library.</li>
-        <li><strong>Home dashboard</strong> — continue reading and recommendation modules driven by a relationship-aware recommendation engine.</li>
-        <li><strong>Rich metadata</strong> — series relations, continuity groupings, story events, and a live AniList adapter.</li>
-        <li><strong>Plugins</strong> — an installable plugin ecosystem with its own package manager.</li>
+        <li>Insights &amp; Stats <span>— reading-habit dashboard and analytics</span></li>
+        <li>Quick Open <span>— <code>Ctrl+P</code> command palette</span></li>
+        <li>Activity Center <span>— background jobs and alerts in the status bar</span></li>
+        <li>Library Health <span>— missing files, duplicates, a "Needs Review" list</span></li>
+        <li>Automation <span>— scheduled library maintenance</span></li>
+        <li>Virtual Tags <span>— rule-based self-applying tags</span></li>
+        <li>Saved Workspaces <span>— named Library / Books view snapshots</span></li>
+        <li>FB2 and MOBI/AZW3 <span>— plus a rebuilt Books reader</span></li>
+        <li>More trackers <span>— MangaUpdates, MangaDex, Kitsu, two-way sync</span></li>
+        <li>Drag-and-drop import <span>— files, folders, and <code>.cbl</code> lists</span></li>
+        <li>File metadata write-back <span>— <code>ComicInfo.xml</code> / sidecar, opt-in</span></li>
+        <li>Python plugin commands <span>— and a built-in Duplicate Finder</span></li>
+        <li>Faster, lighter Library <span>— every view mode virtualized</span></li>
+        <li>Rebuilt reader pipeline <span>— smoother fast-flipping, bounded memory</span></li>
+        <li>Redesigned Preferences <span>— a tile-based hub</span></li>
+        <li>Redesigned installer &amp; first-run <span>— splash, Welcome, "What's New"</span></li>
       </ul>
     </section>
 
     <section>
       <h2>Get started</h2>
-      <p>
-        Grab the installer from the
-        <a href="https://github.com/heisehis/PaperBunkr/releases/latest">latest release</a>.
-        It's fully self-contained — bundles its own .NET runtime, nothing else to install.
-        Windows only for now, and it checks for new releases on startup so you stay up to date.
-        Full docs and build-from-source instructions are in the
-        <a href="https://github.com/heisehis/PaperBunkr#readme">project README</a>.
+      <p class="section-sub">Three steps from download to reading.</p>
+      <div class="steps">
+        <div class="step">
+          <span class="n">1</span>
+          <p>Grab the installer from the
+          <a href="https://github.com/heisehis/PaperBunkr/releases/latest">latest release</a>
+          and run it. It bundles its own .NET runtime — nothing else to install.</p>
+        </div>
+        <div class="step">
+          <span class="n">2</span>
+          <p>Point PaperBunkr at your comics folder. It scans the files, folds trade paperbacks,
+          and builds a local library database alongside them.</p>
+        </div>
+        <div class="step">
+          <span class="n">3</span>
+          <p>Coming from ComicRack CE? Import your existing library — database, reading state, and
+          lists — from the migration screen.</p>
+        </div>
+      </div>
+      <p class="section-sub" style="margin-top:24px">
+        Full docs are in the
+        <a href="https://github.com/heisehis/PaperBunkr/wiki">project wiki</a>;
+        build-from-source instructions are in the
+        <a href="https://github.com/heisehis/PaperBunkr#readme">README</a>.
       </p>
     </section>
 
-    <footer>
-      <p>
-        Built on .NET 10 and Avalonia UI. No license has been chosen yet — see the
-        <a href="https://github.com/heisehis/PaperBunkr">repository</a> for current terms.
-        Feedback and bug reports welcome via
-        <a href="https://github.com/heisehis/PaperBunkr/issues">GitHub Issues</a>.
-      </p>
-    </footer>
-  </div>
+  </main>
+
+  <footer>
+    <div class="links">
+      <a href="https://github.com/heisehis/PaperBunkr">GitHub</a>
+      <a href="https://github.com/heisehis/PaperBunkr/wiki">Wiki</a>
+      <a href="https://github.com/heisehis/PaperBunkr/releases">Releases</a>
+      <a href="https://github.com/heisehis/PaperBunkr/issues">Issues</a>
+    </div>
+    <p>
+      Built on .NET 10 and Avalonia UI. Licensed under the
+      <a href="https://github.com/heisehis/PaperBunkr/blob/master/LICENSE">GNU Affero General Public License v3.0</a>.
+      Feedback and bug reports welcome via
+      <a href="https://github.com/heisehis/PaperBunkr/issues">GitHub Issues</a>.
+    </p>
+  </footer>
 </body>
 </html>

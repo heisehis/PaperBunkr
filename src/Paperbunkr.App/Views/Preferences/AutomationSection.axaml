@@ -1,6 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:fi="using:FluentIcons.Avalonia"
+             xmlns:controls="using:Paperbunkr.App.Controls"
              xmlns:vm="using:Paperbunkr.App.ViewModels"
              xmlns:models="using:Paperbunkr.App.Models"
              xmlns:pref="using:Paperbunkr.App.Views.Preferences"
@@ -33,9 +34,9 @@
             <pref:SettingsRow Icon="Alert" Title="Notify when a scheduled task finishes"
                                Description="Maintenance tasks run in the background — on launch for anything overdue, then every 15 minutes while Paperbunkr is open. Up to two run at once. Every run shows in the Activity Center.">
                 <pref:SettingsRow.SettingsContent>
-                    <ComboBox ItemsSource="{x:Static vm:PreferencesScreenViewModel.NotificationLevelOptions}"
-                              SelectedItem="{Binding ScheduledTaskNotificationLevel}" MinWidth="150"
-                              AutomationProperties.AutomationId="ScheduledTaskNotificationLevel" />
+                    <controls:SuggestBox IsStrict="True" Text="{Binding ScheduledTaskNotificationLevelText}"
+                                         Suggestions="{Binding NotificationLevelNames}" MinWidth="150"
+                                         AutomationProperties.AutomationId="ScheduledTaskNotificationLevel" />
                 </pref:SettingsRow.SettingsContent>
             </pref:SettingsRow>
 
@@ -85,8 +86,8 @@
                                                Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" Margin="0,2,0,8" />
 
                                     <StackPanel Grid.Row="2" Grid.Column="1" Orientation="Horizontal" Spacing="8">
-                                        <ComboBox ItemsSource="{x:Static vm:PreferencesScreenViewModel.ScheduleModeOptions}"
-                                                  SelectedItem="{Binding Mode}" MinWidth="110" />
+                                        <controls:SuggestBox IsStrict="True" Text="{Binding ModeText}"
+                                                             Suggestions="{Binding ModeNames}" MinWidth="110" />
                                         <NumericUpDown Value="{Binding IntervalHours}" Minimum="1" Maximum="720" Width="100"
                                                        IsVisible="{Binding IsIntervalMode}" />
                                         <TextBlock Text="hours" VerticalAlignment="Center" IsVisible="{Binding IsIntervalMode}"

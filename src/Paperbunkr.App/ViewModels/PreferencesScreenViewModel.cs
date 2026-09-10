@@ -205,18 +205,53 @@ public partial class PreferencesScreenViewModel : ViewModelBase
 
     public ObservableCollection<string> FontFamilies { get; }
 
-    public static readonly ImageFitMode[] FitModeOptions = Enum.GetValues<ImageFitMode>();
+    // --- SuggestBox string projections (docs/superpowers/specs/2026-09-10-suggestbox-migration-
+    // plan.md). SuggestBox is string-only; each closed-enum picker gets a Text view + a Names list,
+    // following the TagEditRowViewModel.WeightText/WeightNames pattern. The XAML sets IsStrict, so a
+    // setter only ever receives a member of the matching *Names list; anything else is ignored.
+    public string DefaultPageFitModeText
+    {
+        get => DefaultPageFitMode.ToString();
+        set { if (Enum.TryParse<ImageFitMode>(value, out var parsed)) DefaultPageFitMode = parsed; }
+    }
 
-    /// <summary>docs/superpowers/specs/2026-08-13-reader-page-transition-animations-design.md §6.</summary>
-    public static readonly PageTransitionStyle[] PageTransitionStyleOptions = Enum.GetValues<PageTransitionStyle>();
+    public string[] FitModeNames { get; } = Enum.GetNames<ImageFitMode>();
 
-    /// <summary>docs/superpowers/specs/2026-08-15-reader-double-page-spread-design.md §2.</summary>
-    public static readonly PageLayoutMode[] PageLayoutModeOptions = Enum.GetValues<PageLayoutMode>();
+    public string DefaultPageLayoutModeText
+    {
+        get => DefaultPageLayoutMode.ToString();
+        set { if (Enum.TryParse<PageLayoutMode>(value, out var parsed)) DefaultPageLayoutMode = parsed; }
+    }
 
-    public static readonly ImageBackgroundMode[] BackgroundModeOptions = Enum.GetValues<ImageBackgroundMode>();
+    public string[] PageLayoutModeNames { get; } = Enum.GetNames<PageLayoutMode>();
 
-    /// <summary>docs/superpowers/specs/2026-08-27-hardware-accelerated-rendering-design.md §10.</summary>
-    public static readonly RenderBackend[] RenderBackendOptions = Enum.GetValues<RenderBackend>();
+    public string PageTransitionStyleText
+    {
+        get => PageTransitionStyle.ToString();
+        set { if (Enum.TryParse<PageTransitionStyle>(value, out var parsed)) PageTransitionStyle = parsed; }
+    }
+
+    public string[] PageTransitionStyleNames { get; } = Enum.GetNames<PageTransitionStyle>();
+
+    public string ImageBackgroundModeText
+    {
+        get => ImageBackgroundMode.ToString();
+        set { if (Enum.TryParse<ImageBackgroundMode>(value, out var parsed)) ImageBackgroundMode = parsed; }
+    }
+
+    public string[] BackgroundModeNames { get; } = Enum.GetNames<ImageBackgroundMode>();
+
+    public string RenderingBackendText
+    {
+        get => RenderingBackend.ToString();
+        set { if (Enum.TryParse<RenderBackend>(value, out var parsed)) RenderingBackend = parsed; }
+    }
+
+    public string[] RenderBackendNames { get; } = Enum.GetNames<RenderBackend>();
+
+    /// <summary>Instance passthrough of <see cref="BackgroundColorPresets"/> - the preset picker is
+    /// non-strict, so a hex value typed into it still round-trips through <c>BackgroundColor</c>.</summary>
+    public string[] BackgroundColorPresetNames => BackgroundColorPresets;
 
     /// <summary>docs/superpowers/specs/2026-09-01-auto-update-and-changelog-design.md - newest first, parsed from the bundled CHANGELOG.md.</summary>
     public ObservableCollection<ChangelogEntry> ChangelogEntries { get; }
@@ -471,6 +506,7 @@ public partial class PreferencesScreenViewModel : ViewModelBase
 
     /// <summary>Global default for a book with no <see cref="Issue.PageFitModeOverride"/> - not a CE setting, closes the TODO docs/superpowers/specs/2026-08-10-reader-polish-core-viewing-controls-design.md §3 left pending this tab's existence.</summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(DefaultPageFitModeText))]
     private ImageFitMode _defaultPageFitMode = ImageFitMode.FitWidth;
 
     [ObservableProperty]
@@ -478,10 +514,12 @@ public partial class PreferencesScreenViewModel : ViewModelBase
 
     /// <summary>Global default for a book with no <see cref="Series.PageLayoutMode"/>/<see cref="Issue.PageLayoutModeOverride"/> set (docs/superpowers/specs/2026-08-15-reader-double-page-spread-design.md §2).</summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(DefaultPageLayoutModeText))]
     private PageLayoutMode _defaultPageLayoutMode = PageLayoutMode.Single;
 
     /// <summary>docs/superpowers/specs/2026-08-13-reader-page-transition-animations-design.md §2 - default <see cref="PageTransitionStyle.None"/>, matching CE's own <c>BlendWhilePaging</c> default of <c>false</c>.</summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(PageTransitionStyleText))]
     private PageTransitionStyle _pageTransitionStyle = PageTransitionStyle.None;
 
     [ObservableProperty]
@@ -502,6 +540,7 @@ public partial class PreferencesScreenViewModel : ViewModelBase
 
     /// <summary>Global-only (docs/superpowers/specs/2026-08-10-reader-polish-continuous-scroll-chrome-overlays-design.md §10) - no per-Issue override, CE default <c>Color</c> (confirmed from <c>DisplayWorkspace.cs</c>).</summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ImageBackgroundModeText))]
     private ImageBackgroundMode _imageBackgroundMode = ImageBackgroundMode.Color;
 
     /// <summary>CE default "WhiteSmoke" (<c>DisplayWorkspace.BackgroundColor</c>) - a named or hex color string, parsed by <c>ReaderScreenViewModel.ComputeCanvasBackgroundBrush</c>.</summary>
@@ -522,6 +561,7 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     /// the <c>graphics.json</c> bootstrap cache immediately, but only takes effect on next launch.
     /// </summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(RenderingBackendText))]
     private RenderBackend _renderingBackend = RenderBackend.Auto;
 
     /// <summary>See <see cref="RenderingBackend"/> - tries native OpenGL (WGL) before ANGLE when true.</summary>
@@ -2600,13 +2640,18 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     /// <summary>The scheduler's task rows, rebuilt whenever it raises <c>Changed</c>.</summary>
     public ObservableCollection<ScheduledTaskRow> ScheduledTasks { get; }
 
-    public static readonly ScheduledTaskNotificationLevel[] NotificationLevelOptions =
-        Enum.GetValues<ScheduledTaskNotificationLevel>();
-
-    public static readonly ScheduleMode[] ScheduleModeOptions = Enum.GetValues<ScheduleMode>();
-
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ScheduledTaskNotificationLevelText))]
     private ScheduledTaskNotificationLevel _scheduledTaskNotificationLevel = ScheduledTaskNotificationLevel.OnlyFailures;
+
+    /// <summary>SuggestBox string view - see the reader-tab projections above.</summary>
+    public string ScheduledTaskNotificationLevelText
+    {
+        get => ScheduledTaskNotificationLevel.ToString();
+        set { if (Enum.TryParse<ScheduledTaskNotificationLevel>(value, out var parsed)) ScheduledTaskNotificationLevel = parsed; }
+    }
+
+    public string[] NotificationLevelNames { get; } = Enum.GetNames<ScheduledTaskNotificationLevel>();
 
     partial void OnScheduledTaskNotificationLevelChanged(ScheduledTaskNotificationLevel value)
     {

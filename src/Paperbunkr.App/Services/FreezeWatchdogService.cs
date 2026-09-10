@@ -139,9 +139,88 @@ public sealed class FreezeWatchdogService : IDisposable
     private static void DefaultOnFrozen()
     {
         DiagnosticsService.LogCrash("FreezeWatchdog", exception: null, isTerminating: false);
+
+        // Capture the frozen UI thread's managed stack before anything else. Runs here on the
+        // watchdog's own background thread (the UI thread is wedged), via out-of-process
+        // dotnet-stack, which reads the runtime over EventPipe and works even when the UI thread
+        // never yields. Best-effort: if the tool isn't installed or times out, we just don't get
+        // the trace - the freeze report above still lands.
+        TryCaptureManagedStack();
+
         if (NativeMessageBox.ShowNotResponding() == NativeMessageBoxResult.ForceExit)
         {
             Environment.Exit(1);
         }
+    }
+
+    private static bool _stackCaptureAttempted;
+
+    private static void TryCaptureManagedStack()
+    {
+        if (_stackCaptureAttempted)
+        {
+            return;
+        }
+
+        _stackCaptureAttempted = true;
+
+        try
+        {
+            string? tool = ResolveDotnetStackPath();
+            if (tool is null)
+            {
+                DiagnosticsService.LogMilestone("FreezeWatchdog: dotnet-stack not found - no managed stack captured");
+                return;
+            }
+
+            string outPath = System.IO.Path.Combine(
+                DiagnosticsService.LogDirectory,
+                $"freeze-stack-{DateTime.Now:yyyyMMdd-HHmmss}.txt");
+
+            var psi = new System.Diagnostics.ProcessStartInfo(tool)
+            {
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                ArgumentList = { "report", "-p", Environment.ProcessId.ToString() },
+            };
+
+            using var proc = System.Diagnostics.Process.Start(psi);
+            if (proc is null)
+            {
+                return;
+            }
+
+            string output = proc.StandardOutput.ReadToEnd();
+            proc.WaitForExit(30_000);
+            System.IO.File.WriteAllText(outPath, output);
+            DiagnosticsService.LogMilestone($"FreezeWatchdog: managed stack captured -> {System.IO.Path.GetFileName(outPath)}");
+        }
+        catch (Exception ex)
+        {
+            DiagnosticsService.LogMilestone($"FreezeWatchdog: managed stack capture failed - {ex.GetType().Name}: {ex.Message}");
+        }
+    }
+
+    private static string? ResolveDotnetStackPath()
+    {
+        string home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        string[] candidates =
+        {
+            System.IO.Path.Combine(home, ".dotnet", "tools", "dotnet-stack.exe"),
+            System.IO.Path.Combine(home, ".dotnet", "tools", "dotnet-stack"),
+        };
+
+        foreach (string candidate in candidates)
+        {
+            if (System.IO.File.Exists(candidate))
+            {
+                return candidate;
+            }
+        }
+
+        // Fall back to PATH resolution.
+        return "dotnet-stack";
     }
 }

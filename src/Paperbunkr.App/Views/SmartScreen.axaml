@@ -31,14 +31,17 @@
             <Setter Property="Foreground" Value="{DynamicResource PbBadgeTextBrush}" />
         </Style>
 
-        <Style Selector="ComboBox.conditionPicker">
+        <!-- conditionPicker: rule-builder SuggestBox. Brush/radius setters ride the ControlTheme's
+             TemplateBindings to PART_TextBox; the inner padding needs the /template/ selector. -->
+        <Style Selector="controls|SuggestBox.conditionPicker">
             <Setter Property="Background" Value="{DynamicResource PbChromeBrush}" />
             <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
-            <Setter Property="BorderThickness" Value="1" />
             <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusSm}" />
             <Setter Property="FontSize" Value="12.5" />
-            <Setter Property="Padding" Value="10,5" />
             <Setter Property="MinWidth" Value="120" />
+        </Style>
+        <Style Selector="controls|SuggestBox.conditionPicker /template/ TextBox#PART_TextBox">
+            <Setter Property="Padding" Value="10,5" />
         </Style>
         <Style Selector="TextBox.conditionValue">
             <Setter Property="Background" Value="{DynamicResource PbChromeBrush}" />
@@ -137,12 +140,12 @@
                                                       ToolTip.Tip="Negate this condition"
                                                       IsEnabled="{Binding !$parent[UserControl].((vm:SmartScreenViewModel)DataContext).IsReadOnly}" />
 
-                                        <ComboBox Classes="conditionPicker" ItemsSource="{Binding FieldOptions}"
-                                                  SelectedItem="{Binding SelectedField}"
+                                        <controls:SuggestBox Classes="conditionPicker" IsStrict="True" Suggestions="{Binding FieldNames}"
+                                                  Text="{Binding SelectedFieldText}"
                                                   IsEnabled="{Binding !$parent[UserControl].((vm:SmartScreenViewModel)DataContext).IsReadOnly}" />
 
-                                        <ComboBox Classes="conditionPicker" Width="140" PlaceholderText="search in"
-                                                  ItemsSource="{Binding SearchModeOptions}" SelectedItem="{Binding SelectedSearchMode}"
+                                        <controls:SuggestBox Classes="conditionPicker" IsStrict="True" Width="140" Watermark="search in"
+                                                  Suggestions="{Binding SearchModeNames}" Text="{Binding SelectedSearchModeText}"
                                                   IsVisible="{Binding IsAllPropertiesField}"
                                                   IsEnabled="{Binding !$parent[UserControl].((vm:SmartScreenViewModel)DataContext).IsReadOnly}" />
 
@@ -150,13 +153,13 @@
                                                  Text="{Binding CustomValueName}" IsVisible="{Binding IsCustomValueField}"
                                                  IsReadOnly="{Binding $parent[UserControl].((vm:SmartScreenViewModel)DataContext).IsReadOnly}" />
 
-                                        <ComboBox Classes="conditionPicker" Width="150" PlaceholderText="virtual tag"
-                                                  ItemsSource="{Binding VirtualTagOptions}" SelectedItem="{Binding SelectedVirtualTag}"
+                                        <controls:SuggestBox Classes="conditionPicker" IsStrict="True" Width="150" Watermark="virtual tag"
+                                                  Suggestions="{Binding VirtualTagNames}" Text="{Binding SelectedVirtualTagText}"
                                                   IsVisible="{Binding IsVirtualTagField}"
                                                   IsEnabled="{Binding !$parent[UserControl].((vm:SmartScreenViewModel)DataContext).IsReadOnly}" />
 
-                                        <ComboBox Classes="conditionPicker" ItemsSource="{Binding OperatorOptions}"
-                                                  SelectedItem="{Binding SelectedOperator}" IsVisible="{Binding !IsDuplicateField}"
+                                        <controls:SuggestBox Classes="conditionPicker" IsStrict="True" Suggestions="{Binding OperatorNames}"
+                                                  Text="{Binding SelectedOperatorText}" IsVisible="{Binding !IsDuplicateField}"
                                                   IsEnabled="{Binding !$parent[UserControl].((vm:SmartScreenViewModel)DataContext).IsReadOnly}" />
 
                                         <ToggleButton Classes="conditionFlag" Content="Aa" IsChecked="{Binding IgnoreCase}"

@@ -84,4 +84,24 @@ public class ScheduledTaskRowTests
         Assert.Contains(nameof(ScheduledTaskRow.IsActive), raised);
         Assert.Contains(nameof(ScheduledTaskRow.RunButtonLabel), raised);
     }
+
+    // --- SuggestBox string projection (docs/superpowers/specs/2026-09-10-suggestbox-migration-plan.md) ---
+
+    [Fact]
+    public void ModeText_RoundTripsAndIgnoresUnknownText()
+    {
+        var row = CreateRow();
+        var raised = new List<string?>();
+        row.PropertyChanged += (_, e) => raised.Add(e.PropertyName);
+
+        row.ModeText = nameof(ScheduleMode.DailyAt);
+
+        Assert.Equal(ScheduleMode.DailyAt, row.Mode);
+        Assert.Equal(nameof(ScheduleMode.DailyAt), row.ModeText);
+        Assert.Contains(nameof(ScheduledTaskRow.ModeText), raised);
+        Assert.Equal(Enum.GetNames<ScheduleMode>(), row.ModeNames);
+
+        row.ModeText = "Hourly";
+        Assert.Equal(ScheduleMode.DailyAt, row.Mode);
+    }
 }

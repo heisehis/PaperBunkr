@@ -167,6 +167,18 @@ public partial class DetailScreenViewModel : ViewModelBase, IDetailHeaderSource
     /// </summary>
     public ContentType[] ContentTypeOptions { get; } = Enum.GetValues<ContentType>();
 
+    /// <summary>String projection of <see cref="SelectedContentType"/> for the <c>SuggestBox</c>
+    /// reclassify picker (string-only, <c>IsStrict</c>). Unknown text is ignored - the picker only
+    /// offers <see cref="ContentTypeNames"/>. See docs/superpowers/specs/2026-09-10-suggestbox-
+    /// migration-plan.md.</summary>
+    public string SelectedContentTypeText
+    {
+        get => SelectedContentType.ToString();
+        set { if (Enum.TryParse<ContentType>(value, out var parsed)) SelectedContentType = parsed; }
+    }
+
+    public string[] ContentTypeNames { get; } = Enum.GetNames<ContentType>();
+
     [ObservableProperty]
     private IBrush _coverBrush;
 
@@ -180,6 +192,7 @@ public partial class DetailScreenViewModel : ViewModelBase, IDetailHeaderSource
     private string _coverTitle = string.Empty;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(SelectedContentTypeText))]
     private ContentType _selectedContentType;
 
     /// <summary>

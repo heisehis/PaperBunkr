@@ -1,6 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:fi="using:FluentIcons.Avalonia"
+             xmlns:controls="using:Paperbunkr.App.Controls"
              xmlns:vm="using:Paperbunkr.App.ViewModels"
              xmlns:views="using:Paperbunkr.App.Views"
              xmlns:models="using:Paperbunkr.App.Models"
@@ -147,10 +148,10 @@
                 <Grid Grid.Row="0" ColumnDefinitions="*,Auto,Auto,Auto" Margin="12,10" ColumnSpacing="8">
                     <TextBox Grid.Column="0" Text="{Binding HistorySearch}" Watermark="Search history…"
                              FontSize="{DynamicResource PbFontSizeControl}" />
-                    <ComboBox Grid.Column="1" SelectedItem="{Binding HistoryKind}" MinWidth="130"
-                              ItemsSource="{Binding HistoryKindOptions}" />
-                    <ComboBox Grid.Column="2" SelectedItem="{Binding HistoryAge}" MinWidth="120"
-                              ItemsSource="{Binding HistoryAgeOptions}" />
+                    <controls:SuggestBox Grid.Column="1" IsStrict="True" MinWidth="130"
+                                         Text="{Binding HistoryKindText}" Suggestions="{Binding HistoryKindNames}" />
+                    <controls:SuggestBox Grid.Column="2" IsStrict="True" MinWidth="120"
+                                         Text="{Binding HistoryAgeText}" Suggestions="{Binding HistoryAgeNames}" />
                     <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
                         <TextBlock Text="Failures only" FontSize="{DynamicResource PbFontSizeControl}" VerticalAlignment="Center" Foreground="{DynamicResource PbTextBrush}" />
                         <ToggleSwitch IsChecked="{Binding HistoryFailuresOnly}" OnContent="{x:Null}" OffContent="{x:Null}" />

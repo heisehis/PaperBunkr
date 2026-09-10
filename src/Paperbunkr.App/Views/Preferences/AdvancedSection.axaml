@@ -1,6 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:fi="using:FluentIcons.Avalonia"
+             xmlns:controls="using:Paperbunkr.App.Controls"
              xmlns:vm="using:Paperbunkr.App.ViewModels"
              xmlns:models="using:Paperbunkr.App.Models"
              xmlns:pref="using:Paperbunkr.App.Views.Preferences"
@@ -29,8 +30,8 @@
             <pref:SettingsRow Icon="DeveloperBoard" Title="Graphics backend"
                                Description="Auto uses the GPU with a software fallback (recommended). Gpu forces the GPU with no fallback — the app may fail to start on a broken driver. Software forces the CPU renderer, for broken GPUs, remote desktop, or VMs.">
                 <pref:SettingsRow.SettingsContent>
-                    <ComboBox ItemsSource="{x:Static vm:PreferencesScreenViewModel.RenderBackendOptions}"
-                              SelectedItem="{Binding RenderingBackend}" Width="150" />
+                    <controls:SuggestBox IsStrict="True" Text="{Binding RenderingBackendText}"
+                                         Suggestions="{Binding RenderBackendNames}" Width="150" />
                 </pref:SettingsRow.SettingsContent>
             </pref:SettingsRow>
             <pref:SettingsRow Icon="Cube" Title="Prefer native OpenGL over ANGLE"

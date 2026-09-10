@@ -25,10 +25,21 @@ public partial class App : Application
         // §5). Runs before the compositor creates its GPU context, so the fallback messages are
         // captured. Idempotent.
         CompositeLogSink.EnsureRenderCaptureInstalled();
+
+        // FluentAvaloniaTheme's ctor (instantiated by the AvaloniaXamlLoader.Load above) has by now
+        // subscribed to IPlatformSettings.ColorValuesChanged. On this project's runtime target that
+        // handler turns every popup open into a permanent UI-thread freeze - see
+        // FluentAvaloniaWorkarounds for the captured stack. The app never needs it (fixed Dark
+        // theme + fixed accent), so drop it immediately after load, before any window exists.
+        FluentAvaloniaWorkarounds.SuppressColorValuesChangedHandler();
     }
 
     public override void OnFrameworkInitializationCompleted()
     {
+        // Second attempt (the first is in Initialize) - by here PlatformSettings is guaranteed
+        // live even if it wasn't during Initialize. Idempotent. See FluentAvaloniaWorkarounds.
+        FluentAvaloniaWorkarounds.SuppressColorValuesChangedHandler();
+
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
             // Splash-first async startup (docs/superpowers/specs/2026-09-09-startup-onboarding-

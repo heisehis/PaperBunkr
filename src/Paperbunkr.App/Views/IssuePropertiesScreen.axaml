@@ -261,7 +261,7 @@
                                     <StackPanel Classes="field">
                                         <TextBlock Classes="fieldLabel" Text="TITLE" />
                                         <Grid ColumnDefinitions="*,Auto">
-                                            <AutoCompleteBox Grid.Column="0" Text="{Binding Title}" ItemsSource="{Binding TitleVocab}" FilterMode="ContainsOrdinal" />
+                                            <pbc:SuggestBox Grid.Column="0" Text="{Binding Title}" Suggestions="{Binding TitleVocab}" />
                                             <Button x:Name="TitleTokenButton" Grid.Column="1" Classes="toolbarPill" Content="{}{ }" Margin="4,0,0,0" ToolTip.Tip="Insert a token">
                                                 <Button.Flyout>
                                                     <Flyout Placement="Bottom">
@@ -284,7 +284,7 @@
                                     <StackPanel Classes="field">
                                         <TextBlock Classes="fieldLabel" Text="ALTERNATE SERIES" />
                                         <Grid ColumnDefinitions="*,Auto">
-                                            <AutoCompleteBox Grid.Column="0" Text="{Binding AlternateSeries}" ItemsSource="{Binding AlternateSeriesVocab}" FilterMode="ContainsOrdinal" />
+                                            <pbc:SuggestBox Grid.Column="0" Text="{Binding AlternateSeries}" Suggestions="{Binding AlternateSeriesVocab}" />
                                             <Button x:Name="AltSeriesTokenButton" Grid.Column="1" Classes="toolbarPill" Content="{}{ }" Margin="4,0,0,0" ToolTip.Tip="Insert a token">
                                                 <Button.Flyout>
                                                     <Flyout Placement="Bottom">
@@ -308,7 +308,7 @@
                                     <StackPanel Classes="field">
                                         <TextBlock Classes="fieldLabel" Text="STORY ARC" />
                                         <Grid ColumnDefinitions="*,Auto">
-                                            <AutoCompleteBox Grid.Column="0" Text="{Binding StoryArc}" ItemsSource="{Binding StoryArcVocab}" FilterMode="ContainsOrdinal" />
+                                            <pbc:SuggestBox Grid.Column="0" Text="{Binding StoryArc}" Suggestions="{Binding StoryArcVocab}" />
                                             <Button x:Name="StoryArcTokenButton" Grid.Column="1" Classes="toolbarPill" Content="{}{ }" Margin="4,0,0,0" ToolTip.Tip="Insert a token">
                                                 <Button.Flyout>
                                                     <Flyout Placement="Bottom">
@@ -332,7 +332,7 @@
                                     <StackPanel Classes="field">
                                         <TextBlock Classes="fieldLabel" Text="SERIES GROUP" />
                                         <Grid ColumnDefinitions="*,Auto">
-                                            <AutoCompleteBox Grid.Column="0" Text="{Binding SeriesGroup}" ItemsSource="{Binding SeriesGroupVocab}" FilterMode="ContainsOrdinal" />
+                                            <pbc:SuggestBox Grid.Column="0" Text="{Binding SeriesGroup}" Suggestions="{Binding SeriesGroupVocab}" />
                                             <Button x:Name="SeriesGroupTokenButton" Grid.Column="1" Classes="toolbarPill" Content="{}{ }" Margin="4,0,0,0" ToolTip.Tip="Insert a token">
                                                 <Button.Flyout>
                                                     <Flyout Placement="Bottom">
@@ -354,53 +354,53 @@
                                     </StackPanel>
                                     <StackPanel Classes="field">
                                         <TextBlock Classes="fieldLabel" Text="PUBLISHER" />
-                                        <ComboBox IsEditable="True" HorizontalAlignment="Stretch" Text="{Binding Publisher, Mode=TwoWay}" ItemsSource="{Binding PublisherVocab}" />
+                                        <pbc:SuggestBox HorizontalAlignment="Stretch" Text="{Binding Publisher}" Suggestions="{Binding PublisherVocab}" />
                                     </StackPanel>
                                     <StackPanel Classes="field">
                                         <TextBlock Classes="fieldLabel" Text="IMPRINT" />
-                                        <ComboBox IsEditable="True" HorizontalAlignment="Stretch" Text="{Binding Imprint, Mode=TwoWay}" ItemsSource="{Binding ImprintVocab}" />
+                                        <pbc:SuggestBox HorizontalAlignment="Stretch" Text="{Binding Imprint}" Suggestions="{Binding ImprintVocab}" />
                                     </StackPanel>
                                     <StackPanel Classes="field">
                                         <Grid ColumnDefinitions="*,Auto">
                                             <TextBlock Grid.Column="0" Classes="fieldLabel" Text="FORMAT" />
                                             <pbc:BrandMark Grid.Column="1" Family="Format" Value="{Binding Format}" ShowText="False" MarkSize="14" />
                                         </Grid>
-                                        <ComboBox IsEditable="True" HorizontalAlignment="Stretch" Text="{Binding Format, Mode=TwoWay}" ItemsSource="{Binding FormatVocab}" />
+                                        <pbc:SuggestBox HorizontalAlignment="Stretch" Text="{Binding Format}" Suggestions="{Binding FormatVocab}" />
                                     </StackPanel>
                                     <StackPanel Classes="field">
                                         <TextBlock Classes="fieldLabel" Text="BOOK AGE" />
-                                        <ComboBox IsEditable="True" HorizontalAlignment="Stretch" Text="{Binding BookAge, Mode=TwoWay}" ItemsSource="{Binding BookAgeVocab}" />
+                                        <pbc:SuggestBox HorizontalAlignment="Stretch" Text="{Binding BookAge}" Suggestions="{Binding BookAgeVocab}" />
                                     </StackPanel>
                                     <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="YEAR" /><NumericUpDown HorizontalAlignment="Stretch" Minimum="0" Maximum="9999" FormatString="0" Value="{Binding YearText, Converter={x:Static v:NullableDecimalStringConverter.Instance}}" /></StackPanel>
                                     <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="MONTH" /><NumericUpDown HorizontalAlignment="Stretch" Minimum="1" Maximum="12" FormatString="0" Value="{Binding MonthText, Converter={x:Static v:NullableDecimalStringConverter.Instance}}" /></StackPanel>
                                     <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="DAY" /><NumericUpDown HorizontalAlignment="Stretch" Minimum="1" Maximum="31" FormatString="0" Value="{Binding DayText, Converter={x:Static v:NullableDecimalStringConverter.Instance}}" /></StackPanel>
-                                    <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="GENRE" /><AutoCompleteBox Text="{Binding Genre}" ItemsSource="{Binding GenreVocab}" beh:MultiValueAutoComplete.Enabled="True" /></StackPanel>
-                                    <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="TAGS" /><AutoCompleteBox Text="{Binding Tags}" ItemsSource="{Binding TagsVocab}" beh:MultiValueAutoComplete.Enabled="True" /></StackPanel>
-                                    <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="WRITER" /><AutoCompleteBox Text="{Binding Writer}" ItemsSource="{Binding WriterVocab}" beh:MultiValueAutoComplete.Enabled="True" /></StackPanel>
-                                    <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="PENCILLER" /><AutoCompleteBox Text="{Binding Penciller}" ItemsSource="{Binding PencillerVocab}" beh:MultiValueAutoComplete.Enabled="True" /></StackPanel>
-                                    <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="INKER" /><AutoCompleteBox Text="{Binding Inker}" ItemsSource="{Binding InkerVocab}" beh:MultiValueAutoComplete.Enabled="True" /></StackPanel>
-                                    <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="COLORIST" /><AutoCompleteBox Text="{Binding Colorist}" ItemsSource="{Binding ColoristVocab}" beh:MultiValueAutoComplete.Enabled="True" /></StackPanel>
-                                    <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="LETTERER" /><AutoCompleteBox Text="{Binding Letterer}" ItemsSource="{Binding LettererVocab}" beh:MultiValueAutoComplete.Enabled="True" /></StackPanel>
-                                    <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="COVER ARTIST" /><AutoCompleteBox Text="{Binding CoverArtist}" ItemsSource="{Binding CoverArtistVocab}" beh:MultiValueAutoComplete.Enabled="True" /></StackPanel>
-                                    <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="EDITOR" /><AutoCompleteBox Text="{Binding Editor}" ItemsSource="{Binding EditorVocab}" beh:MultiValueAutoComplete.Enabled="True" /></StackPanel>
-                                    <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="TRANSLATOR" /><AutoCompleteBox Text="{Binding Translator}" ItemsSource="{Binding TranslatorVocab}" beh:MultiValueAutoComplete.Enabled="True" /></StackPanel>
+                                    <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="GENRE" /><pbc:SuggestBox Text="{Binding Genre}" Suggestions="{Binding GenreVocab}" IsMultiValue="True" /></StackPanel>
+                                    <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="TAGS" /><pbc:SuggestBox Text="{Binding Tags}" Suggestions="{Binding TagsVocab}" IsMultiValue="True" /></StackPanel>
+                                    <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="WRITER" /><pbc:SuggestBox Text="{Binding Writer}" Suggestions="{Binding WriterVocab}" IsMultiValue="True" /></StackPanel>
+                                    <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="PENCILLER" /><pbc:SuggestBox Text="{Binding Penciller}" Suggestions="{Binding PencillerVocab}" IsMultiValue="True" /></StackPanel>
+                                    <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="INKER" /><pbc:SuggestBox Text="{Binding Inker}" Suggestions="{Binding InkerVocab}" IsMultiValue="True" /></StackPanel>
+                                    <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="COLORIST" /><pbc:SuggestBox Text="{Binding Colorist}" Suggestions="{Binding ColoristVocab}" IsMultiValue="True" /></StackPanel>
+                                    <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="LETTERER" /><pbc:SuggestBox Text="{Binding Letterer}" Suggestions="{Binding LettererVocab}" IsMultiValue="True" /></StackPanel>
+                                    <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="COVER ARTIST" /><pbc:SuggestBox Text="{Binding CoverArtist}" Suggestions="{Binding CoverArtistVocab}" IsMultiValue="True" /></StackPanel>
+                                    <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="EDITOR" /><pbc:SuggestBox Text="{Binding Editor}" Suggestions="{Binding EditorVocab}" IsMultiValue="True" /></StackPanel>
+                                    <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="TRANSLATOR" /><pbc:SuggestBox Text="{Binding Translator}" Suggestions="{Binding TranslatorVocab}" IsMultiValue="True" /></StackPanel>
                                     <StackPanel Classes="field">
                                         <Grid ColumnDefinitions="*,Auto">
                                             <TextBlock Grid.Column="0" Classes="fieldLabel" Text="AGE RATING" />
                                             <pbc:BrandMark Grid.Column="1" Family="AgeRating" Value="{Binding AgeRating}" ShowText="False" MarkSize="18" />
                                         </Grid>
-                                        <ComboBox IsEditable="True" HorizontalAlignment="Stretch" Text="{Binding AgeRating, Mode=TwoWay}" ItemsSource="{Binding AgeRatingVocab}" />
+                                        <pbc:SuggestBox HorizontalAlignment="Stretch" Text="{Binding AgeRating}" Suggestions="{Binding AgeRatingVocab}" />
                                     </StackPanel>
                                     <StackPanel Classes="field">
                                         <Grid ColumnDefinitions="*,Auto">
                                             <TextBlock Grid.Column="0" Classes="fieldLabel" Text="LANGUAGE" />
                                             <pbc:BrandMark Grid.Column="1" Family="Language" Value="{Binding LanguageIso}" ShowText="False" MarkSize="13" />
                                         </Grid>
-                                        <ComboBox IsEditable="True" HorizontalAlignment="Stretch" Text="{Binding LanguageIso, Mode=TwoWay}" ItemsSource="{Binding LanguageVocab}" />
+                                        <pbc:SuggestBox HorizontalAlignment="Stretch" Text="{Binding LanguageIso}" Suggestions="{Binding LanguageVocab}" />
                                     </StackPanel>
                                     <StackPanel Classes="field">
                                         <TextBlock Classes="fieldLabel" Text="COLOR MODE" />
-                                        <ComboBox HorizontalAlignment="Stretch" ItemsSource="{Binding ColorModeOptions}" SelectedItem="{Binding ColorModeText}" />
+                                        <pbc:SuggestBox HorizontalAlignment="Stretch" IsStrict="True" Text="{Binding ColorModeText}" Suggestions="{Binding ColorModeOptions}" />
                                     </StackPanel>
                                     <StackPanel Classes="field" VerticalAlignment="Bottom">
                                         <Grid ColumnDefinitions="*,Auto">
@@ -428,7 +428,7 @@
                                             <Grid ColumnDefinitions="140,*,140" Margin="0,0,0,8">
                                                 <TextBlock Grid.Column="0" Text="{Binding Value}" VerticalAlignment="Center" FontWeight="SemiBold" />
                                                 <TextBox Grid.Column="1" Text="{Binding Category}" Watermark="Category (e.g. Theme, Setting)" Margin="0,0,8,0" />
-                                                <ComboBox Grid.Column="2" ItemsSource="{Binding $parent[UserControl].((vm:IssuePropertiesScreenViewModel)DataContext).WeightOptions, Mode=OneTime}" SelectedItem="{Binding Weight}" HorizontalAlignment="Stretch" />
+                                                <pbc:SuggestBox Grid.Column="2" IsStrict="True" Text="{Binding WeightText}" Suggestions="{Binding WeightNames}" HorizontalAlignment="Stretch" />
                                             </Grid>
                                         </DataTemplate>
                                     </ItemsControl.ItemTemplate>
@@ -447,7 +447,7 @@
                                             <Grid ColumnDefinitions="140,*,140" Margin="0,0,0,8">
                                                 <TextBlock Grid.Column="0" Text="{Binding Value}" VerticalAlignment="Center" FontWeight="SemiBold" />
                                                 <TextBox Grid.Column="1" Text="{Binding Category}" Watermark="Category (e.g. Theme, Setting)" Margin="0,0,8,0" />
-                                                <ComboBox Grid.Column="2" ItemsSource="{Binding $parent[UserControl].((vm:IssuePropertiesScreenViewModel)DataContext).WeightOptions, Mode=OneTime}" SelectedItem="{Binding Weight}" HorizontalAlignment="Stretch" />
+                                                <pbc:SuggestBox Grid.Column="2" IsStrict="True" Text="{Binding WeightText}" Suggestions="{Binding WeightNames}" HorizontalAlignment="Stretch" />
                                             </Grid>
                                         </DataTemplate>
                                     </ItemsControl.ItemTemplate>
@@ -464,10 +464,10 @@
                                     <TextBlock Text="Plot" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
                                 </Border>
                                 <WrapPanel Margin="14,14,0,0">
-                                    <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="CHARACTERS" /><AutoCompleteBox Text="{Binding Characters}" ItemsSource="{Binding CharactersVocab}" beh:MultiValueAutoComplete.Enabled="True" /></StackPanel>
-                                    <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="TEAMS" /><AutoCompleteBox Text="{Binding Teams}" ItemsSource="{Binding TeamsVocab}" beh:MultiValueAutoComplete.Enabled="True" /></StackPanel>
-                                    <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="MAIN CHARACTER OR TEAM" /><AutoCompleteBox Text="{Binding MainCharacterOrTeam}" ItemsSource="{Binding MainCharacterOrTeamVocab}" beh:MultiValueAutoComplete.Enabled="True" /></StackPanel>
-                                    <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="LOCATIONS" /><AutoCompleteBox Text="{Binding Locations}" ItemsSource="{Binding LocationsVocab}" beh:MultiValueAutoComplete.Enabled="True" /></StackPanel>
+                                    <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="CHARACTERS" /><pbc:SuggestBox Text="{Binding Characters}" Suggestions="{Binding CharactersVocab}" IsMultiValue="True" /></StackPanel>
+                                    <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="TEAMS" /><pbc:SuggestBox Text="{Binding Teams}" Suggestions="{Binding TeamsVocab}" IsMultiValue="True" /></StackPanel>
+                                    <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="MAIN CHARACTER OR TEAM" /><pbc:SuggestBox Text="{Binding MainCharacterOrTeam}" Suggestions="{Binding MainCharacterOrTeamVocab}" IsMultiValue="True" /></StackPanel>
+                                    <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="LOCATIONS" /><pbc:SuggestBox Text="{Binding Locations}" Suggestions="{Binding LocationsVocab}" IsMultiValue="True" /></StackPanel>
                                     <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="WEB" /><TextBox Text="{Binding Web}" /></StackPanel>
                                     <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="SCAN INFORMATION" /><TextBox Text="{Binding ScanInformation}" /></StackPanel>
                                 </WrapPanel>

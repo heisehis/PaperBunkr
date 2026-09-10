@@ -2,6 +2,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Paperbunkr.App.ViewModels"
              xmlns:views="using:Paperbunkr.App.Views"
+             xmlns:controls="using:Paperbunkr.App.Controls"
              xmlns:fi="using:FluentIcons.Avalonia"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -17,26 +18,25 @@
         design's Risks section allows a non-sticky fallback.
     -->
     <UserControl.Styles>
-        <Style Selector="ComboBox.contentTypePicker">
+        <!-- contentTypePicker: the accent "pill" look for the reclassify SuggestBox. Brush/radius
+             setters ride the ControlTheme's TemplateBindings down to PART_TextBox; the inner
+             padding/min-height need the /template/ selector since those aren't template-bound
+             (they must keep the FluentAvalonia TextBox defaults everywhere else). FontSize/Weight
+             inherit into the TextBox on their own. -->
+        <Style Selector="controls|SuggestBox.contentTypePicker">
             <Setter Property="Background" Value="{DynamicResource PbAccentSoftBrush}" />
             <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
-            <Setter Property="BorderThickness" Value="1" />
             <Setter Property="CornerRadius" Value="{DynamicResource PbRadius}" />
-            <Setter Property="Padding" Value="10,3" />
             <Setter Property="FontSize" Value="11" />
             <Setter Property="FontWeight" Value="Bold" />
             <Setter Property="Foreground" Value="{DynamicResource PbAccentTextBrush}" />
-            <Setter Property="MinHeight" Value="0" />
             <Setter Property="VerticalAlignment" Value="Center" />
-            <Setter Property="VerticalContentAlignment" Value="Center" />
-            <Setter Property="HorizontalContentAlignment" Value="Left" />
-            <Setter Property="Transitions">
-                <Transitions>
-                    <BrushTransition Property="Background" Duration="{DynamicResource PbMotionFast}" Easing="{StaticResource PbMotionEase}" />
-                </Transitions>
-            </Setter>
         </Style>
-        <Style Selector="ComboBox.contentTypePicker:pointerover">
+        <Style Selector="controls|SuggestBox.contentTypePicker /template/ TextBox#PART_TextBox">
+            <Setter Property="Padding" Value="10,3" />
+            <Setter Property="MinHeight" Value="0" />
+        </Style>
+        <Style Selector="controls|SuggestBox.contentTypePicker:pointerover">
             <Setter Property="Background" Value="{DynamicResource PbAccentBrush}" />
             <Setter Property="Foreground" Value="{DynamicResource PbBadgeTextBrush}" />
         </Style>
@@ -55,10 +55,10 @@
 
             <views:DetailBand DataContext="{Binding Band}">
                 <views:DetailBand.LeadingContent>
-                    <ComboBox Classes="contentTypePicker"
-                              ItemsSource="{Binding #Screen.((vm:DetailScreenViewModel)DataContext).ContentTypeOptions}"
-                              SelectedItem="{Binding #Screen.((vm:DetailScreenViewModel)DataContext).SelectedContentType}"
-                              ToolTip.Tip="Content Type" />
+                    <controls:SuggestBox Classes="contentTypePicker" IsStrict="True"
+                                         Text="{Binding #Screen.((vm:DetailScreenViewModel)DataContext).SelectedContentTypeText}"
+                                         Suggestions="{Binding #Screen.((vm:DetailScreenViewModel)DataContext).ContentTypeNames}"
+                                         ToolTip.Tip="Content Type" />
                 </views:DetailBand.LeadingContent>
             </views:DetailBand>
 

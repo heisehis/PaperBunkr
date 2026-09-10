@@ -1,6 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:fi="using:FluentIcons.Avalonia"
+             xmlns:controls="using:Paperbunkr.App.Controls"
              xmlns:vm="using:Paperbunkr.App.ViewModels"
              xmlns:models="using:Paperbunkr.App.Models"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
@@ -56,8 +57,8 @@
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
-                    <ComboBox ItemsSource="{Binding AvailableKeyOptions}" SelectedItem="{Binding PendingAddOption}"
-                              PlaceholderText="Add shortcut…" Width="160" HorizontalAlignment="Left" />
+                    <controls:SuggestBox IsStrict="True" Suggestions="{Binding AvailableKeyOptionNames}" Text="{Binding PendingAddText}"
+                                         Watermark="Add shortcut…" Width="160" HorizontalAlignment="Left" />
                 </StackPanel>
             </Border>
         </DataTemplate>

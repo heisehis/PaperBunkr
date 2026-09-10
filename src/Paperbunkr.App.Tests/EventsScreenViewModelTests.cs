@@ -967,4 +967,30 @@ public class EventsScreenViewModelTests : IDisposable
         Assert.Equal(new[] { 1, 2 }, vm.Members.Select(m => m.Position));
         Assert.Equal("Event · 2 members", vm.MetaLine);
     }
+
+    // --- SuggestBox string projections (docs/superpowers/specs/2026-09-10-suggestbox-migration-plan.md) ---
+
+    [Fact]
+    public void RoleAndRelationTextProjections_RoundTripThroughTheirObjectProperties()
+    {
+        var vm = new EventsScreenViewModel();
+
+        var role = EventsScreenViewModel.RoleOptions.First(o => o.Role != vm.SelectedRoleOption.Role);
+        vm.SelectedRoleOptionText = role.Label;
+        Assert.Equal(role.Role, vm.SelectedRole);
+        Assert.Equal(role.Label, vm.SelectedRoleOptionText);
+
+        vm.SelectedRoleOptionText = "not a role";
+        Assert.Equal(role.Role, vm.SelectedRole);
+
+        vm.BulkRoleText = role.Label;
+        Assert.Equal(role.Role, vm.BulkRole!.Role);
+
+        var relation = EventsScreenViewModel.EventRelationTypeOptions.First(o => o.Type != vm.SelectedEventRelationTypeOption.Type);
+        vm.SelectedEventRelationTypeOptionText = relation.Label;
+        Assert.Equal(relation.Type, vm.SelectedEventRelationType);
+
+        Assert.Equal(EventsScreenViewModel.RoleOptions.Select(o => o.Label), EventsScreenViewModel.RoleNames);
+        Assert.Equal(EventsScreenViewModel.EventRelationTypeOptions.Select(o => o.Label), EventsScreenViewModel.EventRelationTypeNames);
+    }
 }

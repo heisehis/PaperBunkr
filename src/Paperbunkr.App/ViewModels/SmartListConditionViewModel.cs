@@ -104,13 +104,18 @@ public partial class SmartListConditionViewModel : ViewModelBase
             }
 
             OnPropertyChanged();
+            OnPropertyChanged(nameof(SelectedFieldText));
             OnPropertyChanged(nameof(OperatorOptions));
+            OnPropertyChanged(nameof(OperatorNames));
             OnPropertyChanged(nameof(SelectedOperator));
+            OnPropertyChanged(nameof(SelectedOperatorText));
             OnPropertyChanged(nameof(IsCustomValueField));
             OnPropertyChanged(nameof(IsVirtualTagField));
             OnPropertyChanged(nameof(IsAllPropertiesField));
             OnPropertyChanged(nameof(SelectedVirtualTag));
+            OnPropertyChanged(nameof(SelectedVirtualTagText));
             OnPropertyChanged(nameof(SelectedSearchMode));
+            OnPropertyChanged(nameof(SelectedSearchModeText));
             OnPropertyChanged(nameof(ShowValue2));
             OnPropertyChanged(nameof(ShowCaseToggle));
             _onChanged();
@@ -161,6 +166,7 @@ public partial class SmartListConditionViewModel : ViewModelBase
 
             _condition.Operator = value.Operator;
             OnPropertyChanged();
+            OnPropertyChanged(nameof(SelectedOperatorText));
             OnPropertyChanged(nameof(ShowValue2));
             _onChanged();
         }
@@ -253,6 +259,7 @@ public partial class SmartListConditionViewModel : ViewModelBase
 
             _condition.VirtualTagId = id;
             OnPropertyChanged();
+            OnPropertyChanged(nameof(SelectedVirtualTagText));
             _onChanged();
         }
     }
@@ -270,7 +277,69 @@ public partial class SmartListConditionViewModel : ViewModelBase
 
             _condition.SearchMode = value.Mode;
             OnPropertyChanged();
+            OnPropertyChanged(nameof(SelectedSearchModeText));
             _onChanged();
+        }
+    }
+
+    // --- SuggestBox string projections (docs/superpowers/specs/2026-09-10-suggestbox-migration-
+    // plan.md). Each rule-builder picker is string-only + IsStrict; the setters route through the
+    // object properties above so every existing cascade notification still fires. VirtualTag names
+    // are user-defined and may collide - first match by name wins (accepted; see the plan doc).
+    public IReadOnlyList<string> FieldNames => FieldOptions.Select(o => o.Label).ToList();
+
+    public IReadOnlyList<string> OperatorNames => OperatorOptions.Select(o => o.Label).ToList();
+
+    public IReadOnlyList<string> SearchModeNames => SearchModeOptions.Select(o => o.Label).ToList();
+
+    public IReadOnlyList<string> VirtualTagNames => VirtualTagOptions.Select(o => o.Name).ToList();
+
+    public string SelectedFieldText
+    {
+        get => SelectedField.Label ?? string.Empty;
+        set
+        {
+            var match = FieldOptions.FirstOrDefault(o => o.Label == value);
+            if (match.Label is not null)
+            {
+                SelectedField = match;
+            }
+        }
+    }
+
+    public string SelectedOperatorText
+    {
+        get => SelectedOperator.Label ?? string.Empty;
+        set
+        {
+            var match = OperatorOptions.FirstOrDefault(o => o.Label == value);
+            if (match.Label is not null)
+            {
+                SelectedOperator = match;
+            }
+        }
+    }
+
+    public string SelectedSearchModeText
+    {
+        get => SelectedSearchMode.Label ?? string.Empty;
+        set
+        {
+            var match = SearchModeOptions.FirstOrDefault(o => o.Label == value);
+            if (match.Label is not null)
+            {
+                SelectedSearchMode = match;
+            }
+        }
+    }
+
+    public string SelectedVirtualTagText
+    {
+        get => SelectedVirtualTag?.Name ?? string.Empty;
+        set
+        {
+            var match = VirtualTagOptions.FirstOrDefault(o => o.Name == value);
+            SelectedVirtualTag = match.Name is null ? null : match;
         }
     }
 

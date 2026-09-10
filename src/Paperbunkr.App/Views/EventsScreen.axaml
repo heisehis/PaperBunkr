@@ -1,6 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:fi="using:FluentIcons.Avalonia"
+             xmlns:controls="using:Paperbunkr.App.Controls"
              xmlns:vm="using:Paperbunkr.App.ViewModels"
              xmlns:models="using:Paperbunkr.App.Models"
              xmlns:views="using:Paperbunkr.App.Views"
@@ -215,12 +216,8 @@
                                 <KeyBinding Gesture="Enter" Command="{Binding SearchCommand}" />
                             </TextBox.KeyBindings>
                         </TextBox>
-                        <ComboBox Grid.Column="1" Margin="8,0,0,0" MinWidth="120" FontSize="12"
-                                  ItemsSource="{Binding RoleOptions}" SelectedItem="{Binding SelectedRoleOption}">
-                            <ComboBox.ItemTemplate>
-                                <DataTemplate x:DataType="models:EventMembershipRoleOption"><TextBlock Text="{Binding Label}" /></DataTemplate>
-                            </ComboBox.ItemTemplate>
-                        </ComboBox>
+                        <controls:SuggestBox Grid.Column="1" Margin="8,0,0,0" MinWidth="120" FontSize="12" IsStrict="True"
+                                             Suggestions="{Binding RoleNames}" Text="{Binding SelectedRoleOptionText}" />
                     </Grid>
                     <Border Background="{DynamicResource PbSurface3Brush}" CornerRadius="5" Padding="8,6" IsVisible="{Binding AnyEventSearchSelected}">
                         <StackPanel Orientation="Horizontal" Spacing="10">
@@ -344,11 +341,8 @@
                             <StackPanel Orientation="Horizontal" Spacing="10">
                                 <TextBlock Text="{Binding EventMemberSelectionSummary}" FontSize="11.5" Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
                                 <Button Classes="headerAction ghost" Padding="8,4" FontSize="11" Content="Remove" Command="{Binding RemoveSelectedMembersCommand}" />
-                                <ComboBox ItemsSource="{Binding RoleOptions}" SelectedItem="{Binding BulkRole}" FontSize="11" MinWidth="110" PlaceholderText="Set role">
-                                    <ComboBox.ItemTemplate>
-                                        <DataTemplate x:DataType="models:EventMembershipRoleOption"><TextBlock Text="{Binding Label}" /></DataTemplate>
-                                    </ComboBox.ItemTemplate>
-                                </ComboBox>
+                                <controls:SuggestBox IsStrict="True" Suggestions="{Binding RoleNames}" Text="{Binding BulkRoleText}"
+                                                     FontSize="11" MinWidth="110" Watermark="Set role" />
                                 <Button Classes="headerAction ghost" Padding="8,4" FontSize="11" Content="Apply" Command="{Binding SetRoleForSelectedMembersCommand}" />
                                 <Button Classes="headerAction ghost" Padding="8,4" FontSize="11" Content="Clear" Command="{Binding ClearEventMemberSelectionCommand}" />
                             </StackPanel>
@@ -460,12 +454,8 @@
                                 <StackPanel IsVisible="{Binding IsConnectingEvent}" Spacing="6" Margin="0,4,0,0">
                                     <Grid ColumnDefinitions="*,Auto">
                                         <TextBox Grid.Column="0" Classes="searchBox" Watermark="Search story events…" Text="{Binding ConnectEventQuery}" />
-                                        <ComboBox Grid.Column="1" Margin="8,0,0,0" MinWidth="120" FontSize="12"
-                                                  ItemsSource="{Binding EventRelationTypeOptions}" SelectedItem="{Binding SelectedEventRelationTypeOption}">
-                                            <ComboBox.ItemTemplate>
-                                                <DataTemplate x:DataType="models:RelationTypeOption"><TextBlock Text="{Binding Label}" /></DataTemplate>
-                                            </ComboBox.ItemTemplate>
-                                        </ComboBox>
+                                        <controls:SuggestBox Grid.Column="1" Margin="8,0,0,0" MinWidth="120" FontSize="12" IsStrict="True"
+                                                             Suggestions="{Binding EventRelationTypeNames}" Text="{Binding SelectedEventRelationTypeOptionText}" />
                                     </Grid>
                                     <ItemsControl ItemsSource="{Binding EventSearchResults}">
                                         <ItemsControl.ItemTemplate>
@@ -527,12 +517,9 @@
                                                     <TextBlock Text="{Binding DisplayLabel}" FontSize="12.5" Foreground="{DynamicResource PbTextBrush}" />
                                                     <TextBlock Text="{Binding Reason}" FontSize="10" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" />
                                                 </StackPanel>
-                                                <ComboBox Grid.Column="1" ItemsSource="{Binding RoleOptions}" SelectedItem="{Binding SelectedRoleOption}"
-                                                          FontSize="11" VerticalAlignment="Center" Margin="8,0">
-                                                    <ComboBox.ItemTemplate>
-                                                        <DataTemplate x:DataType="models:EventMembershipRoleOption"><TextBlock Text="{Binding Label}" /></DataTemplate>
-                                                    </ComboBox.ItemTemplate>
-                                                </ComboBox>
+                                                <controls:SuggestBox Grid.Column="1" IsStrict="True" Suggestions="{Binding RoleNames}"
+                                                          Text="{Binding SelectedRoleOptionText}"
+                                                          FontSize="11" VerticalAlignment="Center" Margin="8,0" />
                                                 <Button Grid.Column="2" Classes="headerAction ghost" Content="Add" VerticalAlignment="Center" Command="{Binding AddCommand}" />
                                                 <Button Grid.Column="3" Classes="headerAction ghost" Content="Dismiss" VerticalAlignment="Center" Command="{Binding DismissCommand}" />
                                             </Grid>

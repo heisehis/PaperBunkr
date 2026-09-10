@@ -2474,6 +2474,41 @@ public class PreferencesScreenViewModelTests : IDisposable
         Assert.False(scheduler.Tasks.Single(r => r.TaskId == "d").Enabled);
     }
 
+    // --- SuggestBox string projections (docs/superpowers/specs/2026-09-10-suggestbox-migration-plan.md) ---
+
+    [Theory]
+    [InlineData(nameof(ImageFitMode.FitHeight))]
+    [InlineData(nameof(ImageFitMode.BestFit))]
+    public void DefaultPageFitModeText_RoundTrips(string name)
+    {
+        var vm = CreateViewModel();
+
+        vm.DefaultPageFitModeText = name;
+
+        Assert.Equal(Enum.Parse<ImageFitMode>(name), vm.DefaultPageFitMode);
+        Assert.Equal(name, vm.DefaultPageFitModeText);
+        Assert.Contains(name, vm.FitModeNames);
+    }
+
+    [Fact]
+    public void EnumText_IgnoresTextThatIsNotAMember_AndNamesMatchTheEnum()
+    {
+        var vm = CreateViewModel();
+        var keptFit = vm.DefaultPageFitMode;
+        var keptBackend = vm.RenderingBackend;
+
+        vm.DefaultPageFitModeText = "Nonsense";
+        vm.RenderingBackendText = "Nonsense";
+
+        Assert.Equal(keptFit, vm.DefaultPageFitMode);
+        Assert.Equal(keptBackend, vm.RenderingBackend);
+        Assert.Equal(Enum.GetNames<PageLayoutMode>(), vm.PageLayoutModeNames);
+        Assert.Equal(Enum.GetNames<PageTransitionStyle>(), vm.PageTransitionStyleNames);
+        Assert.Equal(Enum.GetNames<ImageBackgroundMode>(), vm.BackgroundModeNames);
+        Assert.Equal(Enum.GetNames<RenderBackend>(), vm.RenderBackendNames);
+        Assert.Equal(Enum.GetNames<ScheduledTaskNotificationLevel>(), vm.NotificationLevelNames);
+    }
+
     /// <summary>Records calls and mirrors <see cref="ISchedulerService.SetEnabled"/> onto the backing
     /// rows (and raises Changed, matching real SchedulerService behavior) so
     /// PreferencesScreenViewModel's RebuildScheduledTasks subscription keeps ScheduledTasks in

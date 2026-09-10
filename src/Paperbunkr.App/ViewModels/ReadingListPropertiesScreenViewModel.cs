@@ -43,8 +43,6 @@ public partial class ReadingListPropertiesScreenViewModel : ViewModelBase
 
     public static string[] TypeOptions { get; } = Enum.GetNames<ReadingListType>();
 
-    public static IssueTagWeight[] WeightOptions { get; } = Enum.GetValues<IssueTagWeight>();
-
     [ObservableProperty]
     private string _headerLabel = string.Empty;
 

@@ -226,13 +226,44 @@ public partial class CollectionPropertiesScreenViewModel : ViewModelBase, IConte
     public ObservableCollection<SmartListOption> NovelSmartLists { get; } = new();
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(SelectedIssueSmartListText))]
     private SmartListOption? _selectedIssueSmartList;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(SelectedSeriesSmartListText))]
     private SmartListOption? _selectedSeriesSmartList;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(SelectedNovelSmartListText))]
     private SmartListOption? _selectedNovelSmartList;
+
+    // --- SuggestBox string projections (docs/superpowers/specs/2026-09-10-suggestbox-migration-
+    // plan.md). SmartList names are user-defined and may collide - first match by name wins
+    // (accepted; see the plan doc). Empty text clears the rule slot's picker selection (the Set
+    // button is what actually persists it, so this matches the old placeholder behavior).
+    public IReadOnlyList<string> IssueSmartListNames => IssueSmartLists.Select(o => o.Name).ToList();
+
+    public IReadOnlyList<string> SeriesSmartListNames => SeriesSmartLists.Select(o => o.Name).ToList();
+
+    public IReadOnlyList<string> NovelSmartListNames => NovelSmartLists.Select(o => o.Name).ToList();
+
+    public string SelectedIssueSmartListText
+    {
+        get => SelectedIssueSmartList?.Name ?? string.Empty;
+        set => SelectedIssueSmartList = IssueSmartLists.FirstOrDefault(o => o.Name == value);
+    }
+
+    public string SelectedSeriesSmartListText
+    {
+        get => SelectedSeriesSmartList?.Name ?? string.Empty;
+        set => SelectedSeriesSmartList = SeriesSmartLists.FirstOrDefault(o => o.Name == value);
+    }
+
+    public string SelectedNovelSmartListText
+    {
+        get => SelectedNovelSmartList?.Name ?? string.Empty;
+        set => SelectedNovelSmartList = NovelSmartLists.FirstOrDefault(o => o.Name == value);
+    }
 
     private void LoadRuleSlots(PaperbunkrDbContext context, Collection collection)
     {
@@ -254,6 +285,10 @@ public partial class CollectionPropertiesScreenViewModel : ViewModelBase, IConte
         {
             NovelSmartLists.Add(new SmartListOption(list.Id, list.Name));
         }
+
+        OnPropertyChanged(nameof(IssueSmartListNames));
+        OnPropertyChanged(nameof(SeriesSmartListNames));
+        OnPropertyChanged(nameof(NovelSmartListNames));
 
         SelectedIssueSmartList = IssueSmartLists.FirstOrDefault(o => o.Id == collection.IssueSmartListId);
         SelectedSeriesSmartList = SeriesSmartLists.FirstOrDefault(o => o.Id == collection.SeriesSmartListId);
@@ -353,6 +388,9 @@ public partial class CollectionPropertiesScreenViewModel : ViewModelBase, IConte
 
     public static IReadOnlyList<RelationTypeOption> RelationTypeOptions => RelationTypeOption.All;
 
+    /// <summary>Relation-type labels for the string-only <c>SuggestBox</c> pickers - unique per value.</summary>
+    public static string[] RelationTypeNames { get; } = RelationTypeOption.All.Select(o => o.Label).ToArray();
+
     [ObservableProperty]
     private bool _isAddingRelation;
 
@@ -366,9 +404,23 @@ public partial class CollectionPropertiesScreenViewModel : ViewModelBase, IConte
     /// DetailTabsViewModel.SelectedRelationTypeOption's own doc comment for why (a real, permanent
     /// XAML binding-resolution bug in this Avalonia version, not tooling noise).</summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(SelectedRelationTypeOptionText))]
     private RelationTypeOption _selectedRelationTypeOption = RelationTypeOptions.First(o => o.Type == RelationType.Related);
 
     partial void OnSelectedRelationTypeOptionChanged(RelationTypeOption value) => SelectedRelationType = value.Type;
+
+    public string SelectedRelationTypeOptionText
+    {
+        get => SelectedRelationTypeOption.Label;
+        set
+        {
+            var match = RelationTypeOptions.FirstOrDefault(o => o.Label == value);
+            if (match is not null)
+            {
+                SelectedRelationTypeOption = match;
+            }
+        }
+    }
 
     public ObservableCollection<CollectionSearchResult> RelationSearchResults { get; } = new();
 
@@ -479,9 +531,23 @@ public partial class CollectionPropertiesScreenViewModel : ViewModelBase, IConte
     private RelationType _selectedSeriesRelationType = RelationType.Related;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(SelectedSeriesRelationTypeOptionText))]
     private RelationTypeOption _selectedSeriesRelationTypeOption = RelationTypeOptions.First(o => o.Type == RelationType.Related);
 
     partial void OnSelectedSeriesRelationTypeOptionChanged(RelationTypeOption value) => SelectedSeriesRelationType = value.Type;
+
+    public string SelectedSeriesRelationTypeOptionText
+    {
+        get => SelectedSeriesRelationTypeOption.Label;
+        set
+        {
+            var match = RelationTypeOptions.FirstOrDefault(o => o.Label == value);
+            if (match is not null)
+            {
+                SelectedSeriesRelationTypeOption = match;
+            }
+        }
+    }
 
     public ObservableCollection<SeriesSearchResult> SeriesRelationSearchResults { get; } = new();
 

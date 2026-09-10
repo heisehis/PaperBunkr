@@ -19,7 +19,7 @@ public partial class LibraryScreen : UserControl
     {
         InitializeComponent();
         // Tunnel so Escape closes the Add-issue overlay even while a field inside it has focus
-        // (an AutoCompleteBox otherwise swallows Escape for its own dropdown).
+        // (the series-name SuggestBox otherwise swallows Escape to close its own dropdown).
         AddHandler(KeyDownEvent, OnLibraryScreenKeyDown, RoutingStrategies.Tunnel);
         Toolbar.FocusGridRequested += (_, _) => FocusFirstGridItem();
         DataContextChanged += OnDataContextChanged;

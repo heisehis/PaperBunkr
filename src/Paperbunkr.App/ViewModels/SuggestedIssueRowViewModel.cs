@@ -44,14 +44,32 @@ public partial class SuggestedIssueRowViewModel : ViewModelBase
 
     public static EventMembershipRoleOption[] RoleOptions => EventMembershipRoleOption.All;
 
+    public static string[] RoleNames { get; } = RoleOptions.Select(o => o.Label).ToArray();
+
     [ObservableProperty]
     private EventMembershipRole _selectedRole;
 
-    /// <summary>Bound to the ComboBox's <c>SelectedItem</c> (not <c>SelectedValue</c>) - same permanent XAML-binding-scope bug as elsewhere on this screen.</summary>
+    /// <summary>Bound to the picker's value - same permanent XAML-binding-scope bug as elsewhere on this screen.</summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(SelectedRoleOptionText))]
     private EventMembershipRoleOption _selectedRoleOption = null!;
 
     partial void OnSelectedRoleOptionChanged(EventMembershipRoleOption value) => SelectedRole = value.Role;
+
+    /// <summary>String view for the string-only <c>SuggestBox</c> role picker
+    /// (docs/superpowers/specs/2026-09-10-suggestbox-migration-plan.md).</summary>
+    public string SelectedRoleOptionText
+    {
+        get => SelectedRoleOption?.Label ?? string.Empty;
+        set
+        {
+            var match = RoleOptions.FirstOrDefault(o => o.Label == value);
+            if (match is not null)
+            {
+                SelectedRoleOption = match;
+            }
+        }
+    }
 
     [RelayCommand]
     private void Add() => _onAdd(this);

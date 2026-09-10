@@ -392,6 +392,10 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
 
     public static IReadOnlyList<RelationTypeOption> RelationTypeOptions => RelationTypeOption.All;
 
+    /// <summary>Relation-type labels for the string-only <c>SuggestBox</c> picker
+    /// (docs/superpowers/specs/2026-09-10-suggestbox-migration-plan.md) - unique per value.</summary>
+    public static string[] RelationTypeNames { get; } = RelationTypeOption.All.Select(o => o.Label).ToArray();
+
     [ObservableProperty]
     private bool _isAddingRelation;
 
@@ -410,9 +414,23 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
     /// design.md).
     /// </summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(SelectedRelationTypeOptionText))]
     private RelationTypeOption _selectedRelationTypeOption = RelationTypeOptions.First(o => o.Type == RelationType.Related);
 
     partial void OnSelectedRelationTypeOptionChanged(RelationTypeOption value) => SelectedRelationType = value.Type;
+
+    public string SelectedRelationTypeOptionText
+    {
+        get => SelectedRelationTypeOption.Label;
+        set
+        {
+            var match = RelationTypeOptions.FirstOrDefault(o => o.Label == value);
+            if (match is not null)
+            {
+                SelectedRelationTypeOption = match;
+            }
+        }
+    }
 
     [RelayCommand]
     private void ToggleAddRelation()
@@ -796,6 +814,7 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
         _pluginHost = host;
         OnPropertyChanged(nameof(HasPluginHost));
         OnPropertyChanged(nameof(MetadataProviderOptions));
+        OnPropertyChanged(nameof(MetadataProviderNames));
     }
 
     private static readonly MetadataSearchProviderOption AniListOption = MetadataSearchProviderOption.For(ExternalMetadataProvider.AniList);
@@ -823,8 +842,26 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
         }
     }
 
+    /// <summary>Provider labels for the string-only <c>SuggestBox</c> picker - dynamic (plugin
+    /// NetSearch commands), re-raised wherever <see cref="MetadataProviderOptions"/> is.</summary>
+    public IReadOnlyList<string> MetadataProviderNames => MetadataProviderOptions.Select(o => o.Label).ToList();
+
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(SelectedMetadataProviderText))]
     private MetadataSearchProviderOption _selectedMetadataProvider = AniListOption;
+
+    public string SelectedMetadataProviderText
+    {
+        get => SelectedMetadataProvider.Label;
+        set
+        {
+            var match = MetadataProviderOptions.FirstOrDefault(o => o.Label == value);
+            if (match is not null)
+            {
+                SelectedMetadataProvider = match;
+            }
+        }
+    }
 
     /// <summary>Fresh instance per call for MangaBaka/MangaDex, same "no DI container" rationale as
     /// <see cref="GetTrackerSearchProvider"/> - AniList keeps using the injected/test-seam
@@ -1070,7 +1107,26 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
     private bool _isLinkingTracker;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(SelectedTrackerServiceText))]
     private TrackingService _selectedTrackerService = TrackingService.AniList;
+
+    /// <summary>The curated tracker subset as strings for the string-only <c>SuggestBox</c> picker
+    /// (docs/superpowers/specs/2026-09-10-suggestbox-migration-plan.md). Not <c>Enum.GetNames</c> -
+    /// only the seven services in <see cref="TrackerServiceOptions"/> are offered.</summary>
+    public static string[] TrackerServiceNames { get; } =
+        TrackerServiceOptions.Select(s => s.ToString()).ToArray();
+
+    public string SelectedTrackerServiceText
+    {
+        get => SelectedTrackerService.ToString();
+        set
+        {
+            if (Enum.TryParse<TrackingService>(value, out var parsed) && TrackerServiceOptions.Contains(parsed))
+            {
+                SelectedTrackerService = parsed;
+            }
+        }
+    }
 
     [ObservableProperty]
     private string _trackerSearchQuery = string.Empty;

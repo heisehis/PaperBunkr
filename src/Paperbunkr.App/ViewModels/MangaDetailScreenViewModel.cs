@@ -132,6 +132,16 @@ public partial class MangaDetailScreenViewModel : ViewModelBase, IDetailHeaderSo
     /// <summary>Same reclassify picker as <see cref="DetailScreenViewModel.ContentTypeOptions"/> - see that property's own doc comment.</summary>
     public ContentType[] ContentTypeOptions { get; } = Enum.GetValues<ContentType>();
 
+    /// <summary>String projection for the <c>SuggestBox</c> reclassify picker - see
+    /// <see cref="DetailScreenViewModel.SelectedContentTypeText"/>.</summary>
+    public string SelectedContentTypeText
+    {
+        get => SelectedContentType.ToString();
+        set { if (Enum.TryParse<ContentType>(value, out var parsed)) SelectedContentType = parsed; }
+    }
+
+    public string[] ContentTypeNames { get; } = Enum.GetNames<ContentType>();
+
     [ObservableProperty]
     private Bitmap? _coverImage;
 
@@ -144,6 +154,7 @@ public partial class MangaDetailScreenViewModel : ViewModelBase, IDetailHeaderSo
     private string _seriesTitle = string.Empty;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(SelectedContentTypeText))]
     private ContentType _selectedContentType;
 
     /// <summary>See <see cref="DetailScreenViewModel.OnSelectedContentTypeChanged"/>'s own doc comment - identical rerouting behavior, mirrored here.</summary>

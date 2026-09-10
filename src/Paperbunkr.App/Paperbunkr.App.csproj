@@ -8,7 +8,7 @@
     <!-- Single source of truth for the release version (docs/superpowers/specs/
          2026-09-01-auto-update-and-changelog-design.md). CI derives the SemVer release tag/appcast
          version from this by dropping the trailing revision segment and appending "-beta". -->
-    <Version>0.3.0.0</Version>
+    <Version>0.3.1.0</Version>
     <!-- We stamp InformationalVersion ourselves in _PbStampBuildMetadata below; turn off the SDK's
          own SourceLink-driven "+<SourceRevisionId>" append so it can't double-stamp. -->
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>

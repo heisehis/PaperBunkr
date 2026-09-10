@@ -28,7 +28,7 @@
 
 #define MyAppName "Paperbunkr"
 #ifndef MyAppVersion
-#define MyAppVersion "0.3.0-beta"
+#define MyAppVersion "0.3.1-beta"
 #endif
 ; Pure x.y.z.w form for VersionInfoVersion (the setup exe's own file-version resource) - the
 ; "-beta" suffix in MyAppVersion is not a valid VS_FIXEDFILEINFO version. BuildInstaller.ps1
@@ -37,7 +37,7 @@
 ; automatically. The literal below is only a fallback for compiling the .iss directly without the
 ; build script (docs/superpowers/specs/2026-09-10-versioning-convention-design.md, Q6).
 #ifndef MyAppVersionNumeric
-#define MyAppVersionNumeric "0.3.0.0"
+#define MyAppVersionNumeric "0.3.1.0"
 #endif
 #ifndef MyAppSetupFile
 #define MyAppSetupFile "PaperbunkrSetup"

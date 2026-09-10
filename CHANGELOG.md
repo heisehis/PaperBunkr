@@ -3,6 +3,17 @@
 All notable changes to Paperbunkr are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.3.1-beta] - 2026-09-10
+
+### Fixed
+
+- **App would not launch on some machines after installing 0.3.0-beta.** Setup completed
+  normally, but the application never opened a window. The 0.3.0-beta build used ahead-of-time
+  (ReadyToRun) compilation, and those precompiled images could crash during startup on CPUs
+  different from the one that built the release — before any window or error could appear.
+  0.3.1-beta disables ReadyToRun; startup is a fraction of a second slower on a cold launch, but
+  reliable. If you hit this, install 0.3.1-beta over the top — no data is affected.
+
 ## [0.3.0-beta] - 2026-09-10
 
 Everything below shipped since

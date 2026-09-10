@@ -70,15 +70,18 @@ if (Test-Path $publishDir) {
     Remove-Item -Recurse -Force $publishDir
 }
 
-# ReadyToRun: AOT-compile the IL to native up front so end users don't pay the cold-start JIT
-# tax on first launch (the startup pipeline builds ~30 view-models + the full MainWindow visual
-# tree on the UI thread - measured at ~1.6s of pure JIT on a cold run). Costs ~20-30MB of extra
-# payload in the already-self-contained bundle and a slower publish; worth it for a desktop app
-# whose whole first impression is how fast the window appears.
+# ReadyToRun is deliberately OFF. It was enabled for 0.3.0-beta (to skip ~1.6s of cold-start JIT
+# on the ~30 view-models + MainWindow visual tree), and that release shipped unlaunchable on at
+# least one machine: the crossgen2 images produced by the CI runner faulted during CLR assembly
+# load on a different CPU, before Avalonia ever created a window - a hard native termination with
+# no crash log (see the 0.3.1-beta CHANGELOG entry, and startup.log ending at "Render backend
+# requested" with nothing after). An identical no-R2R build launched fine on the same machine.
+# Re-enable only with a startup-sentinel fallback (relaunch with DOTNET_ReadyToRun=0 on a detected
+# bootstrap crash) and testing on varied hardware, not just the build box.
 Write-Output "Publishing self-contained win-x64 build to $publishDir..."
 dotnet publish (Join-Path $repoRoot "src\Paperbunkr.App\Paperbunkr.App.csproj") `
     -c Release -r win-x64 --self-contained true `
-    -p:PublishReadyToRun=true `
+    -p:PublishReadyToRun=false `
     -o $publishDir
 if ($LASTEXITCODE -ne 0) {
     Write-Error "dotnet publish failed."

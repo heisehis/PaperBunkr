@@ -237,6 +237,7 @@ public static class DiagnosticsService
     {
         var entryAssembly = Assembly.GetEntryAssembly();
         sb.AppendLine("Application  : Paperbunkr");
+        sb.AppendLine($"Version      : {ReleaseVersion.DisplayStringWithBuild}");
         sb.AppendLine($"Assembly     : {entryAssembly?.GetName().Version}");
         sb.AppendLine($"OS           : {Environment.OSVersion} ({(Environment.Is64BitProcess ? "64" : "32")}-bit)");
         sb.AppendLine($".NET         : {Environment.Version}");

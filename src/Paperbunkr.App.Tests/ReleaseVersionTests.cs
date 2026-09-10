@@ -55,4 +55,32 @@ public class ReleaseVersionTests
         Assert.Equal($"{v.Major}.{v.Minor}.{v.Build}-beta", ReleaseVersion.DisplayString);
         Assert.DoesNotContain("..", ReleaseVersion.DisplayString);
     }
+
+    [Fact]
+    public void BuildMetadata_IsAlwaysStampedOnABuiltAssembly()
+    {
+        // The csproj's _PbStampBuildMetadata target sets InformationalVersion to "<Version>+<hash>"
+        // or "<Version>+dev" on every build, so a built Paperbunkr.App assembly always has a label
+        // (docs/superpowers/specs/2026-09-10-versioning-convention-design.md Q5).
+        Assert.False(string.IsNullOrEmpty(ReleaseVersion.BuildMetadata));
+        Assert.DoesNotContain('+', ReleaseVersion.BuildMetadata!); // the label only, not the whole string
+    }
+
+    [Fact]
+    public void DisplayStringWithBuild_ExtendsDisplayStringWithThePlusLabel()
+    {
+        string full = ReleaseVersion.DisplayStringWithBuild;
+        Assert.StartsWith(ReleaseVersion.DisplayString, full);
+        if (ReleaseVersion.BuildMetadata is { Length: > 0 } meta)
+        {
+            Assert.Equal($"{ReleaseVersion.DisplayString}+{meta}", full);
+        }
+    }
+
+    [Fact]
+    public void TryParseHeading_IgnoresBuildMetadata()
+    {
+        Assert.True(ReleaseVersion.TryParseHeading("0.3.0-beta+9cc0b62", out var v));
+        Assert.Equal(new Version(0, 3, 0), v);
+    }
 }

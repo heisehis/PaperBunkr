@@ -1,3 +1,5 @@
+using System.Threading.Tasks;
+using Avalonia.Media;
 using Paperbunkr.App.Models;
 using Paperbunkr.Data.Entities;
 
@@ -98,5 +100,30 @@ public class SeriesCardSampleTests
 
         Assert.Null(card.Publisher);
         Assert.False(card.HasPublisher);
+    }
+
+    [Fact]
+    public void CoverBrush_IsImmutable_SoItSurvivesBeingBuiltOffTheUiThread()
+    {
+        // A mutable LinearGradientBrush here is an AvaloniaObject with thread affinity: a card
+        // built inside HomeScreenViewModel.BuildSnapshot's Task.Run and then drawn on the
+        // compositor crashed the app with "The calling thread cannot access this object because a
+        // different thread owns it" (Brush.get_Transform -> VerifyAccess). Immutable brushes have
+        // no such affinity.
+        Assert.IsAssignableFrom<IImmutableBrush>(SeriesCardSample.Gradient("#111111", "#222222"));
+        Assert.IsAssignableFrom<IImmutableBrush>(SeriesCardSample.CoverBrushFor("Any Series Name"));
+    }
+
+    [Fact]
+    public async Task FromSeries_BuiltOnBackgroundThread_BrushPropertiesReadableFromCaller()
+    {
+        var series = new Series { Name = "Off-thread Series" };
+
+        var card = await Task.Run(() => SeriesCardSample.FromSeries(series));
+
+        // Touching a thread-affine object's styled properties from a different thread than the one
+        // that created it throws; an immutable brush just returns.
+        var gradient = Assert.IsAssignableFrom<IGradientBrush>(card.CoverBrush);
+        Assert.Equal(2, gradient.GradientStops.Count);
     }
 }

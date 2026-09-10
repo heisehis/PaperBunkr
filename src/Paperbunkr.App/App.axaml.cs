@@ -168,6 +168,7 @@ public partial class App : Application
 
         DiagnosticsService.LogMilestone("Building main window...");
         splashViewModel.ReportPhase(3, TotalPhases, "Getting things ready…");
+        var buildStopwatch = System.Diagnostics.Stopwatch.StartNew();
 
         // docs/superpowers/specs/2026-09-04-navigation-transition-system-design.md - real
         // shared-element flight duration/easing come from the same App.axaml resources every
@@ -178,12 +179,38 @@ public partial class App : Application
             isReducedMotion: skinService.GetReducedMotion,
             flightDuration: () => (TimeSpan)(Application.Current!.Resources["PbMotionLarge"] ?? TimeSpan.FromMilliseconds(320)),
             easing: new CubicEaseOut());
+        DiagnosticsService.LogMilestone($"  [t+{buildStopwatch.ElapsedMilliseconds}ms] transition coordinator ready; constructing MainViewModel...");
         var mainViewModel = new MainViewModel(transitionCoordinator.RunAsync);
+        DiagnosticsService.LogMilestone($"  [t+{buildStopwatch.ElapsedMilliseconds}ms] MainViewModel ready; constructing MainWindow...");
         var mainWindow = new MainWindow
         {
             DataContext = mainViewModel,
         };
+        DiagnosticsService.LogMilestone($"  [t+{buildStopwatch.ElapsedMilliseconds}ms] MainWindow constructed.");
         desktop.MainWindow = mainWindow;
+
+        // Show the main window (its shell chrome renders against the empty default "home" screen),
+        // hold the splash to its MinimumVisible floor, then fade it out - all BEFORE the initial
+        // screen's data load below. That load (RestoreLastScreen -> GoX -> LoadFromDatabase) is a
+        // 2-3s synchronous UI-thread block; running it here, with the fully-chromed main window
+        // already visible and the splash already gone, means the freeze reads as "the content is
+        // loading" rather than "the borderless splash has hung" (which is what the user saw when
+        // this ran before Show - the splash sat frozen and Windows ghosted it "Not Responding").
+        splashViewModel.ReportPhase(4, TotalPhases, "Almost there…");
+        mainWindow.Show();
+        DiagnosticsService.LogMilestone($"  [t+{buildStopwatch.ElapsedMilliseconds}ms] MainWindow.Show() returned.");
+
+        // The UI thread is free again now that construction is done. Hold the splash to its
+        // MinimumVisible floor, then give the emblem motion one more short beat on the free UI
+        // thread so the hand-off doesn't cut straight from the construction freeze into the fade
+        // (skipped under reduced motion). Only then fade out.
+        await splashViewModel.EnforceMinimumVisibleAsync(splashShownAtUtc);
+        if (!skinService.GetReducedMotion())
+        {
+            await Task.Delay(TimeSpan.FromMilliseconds(1100));
+        }
+        await splash.FadeOutAndCloseAsync();
+        DiagnosticsService.LogMilestone($"  [t+{buildStopwatch.ElapsedMilliseconds}ms] splash faded + closed.");
 
         // App shell navigation history (docs/superpowers/specs/2026-08-30-app-shell-navigation-
         // history-design.md) - a CLI deep link takes priority over restoring the prior session's
@@ -191,7 +218,9 @@ public partial class App : Application
         // restore yet, so RestoreLastScreen's own "no usable last screen" fallback to Home
         // covers that case too, no separate branch needed here. RestoreLastScreen itself honours
         // AppSettings.RestoreSessionOnStartup (docs/superpowers/specs/2026-09-04-behavior-
-        // settings-batch2-design.md §3.1) - off means it just goes Home.
+        // settings-batch2-design.md §3.1) - off means it just goes Home. Yield first so the
+        // main window paints at least one frame before the load blocks the UI thread.
+        await Task.Yield();
         if (NavigationCliArgs.TryParseOpenArg(desktop.Args ?? Array.Empty<string>(), out var deepLinkTarget) && deepLinkTarget is not null)
         {
             mainViewModel.OpenDeepLink(deepLinkTarget);
@@ -200,13 +229,7 @@ public partial class App : Application
         {
             mainViewModel.RestoreLastScreen();
         }
-
-        // Show the main window, then hold the splash to its 400ms floor and fade it out over it
-        // (docs/superpowers/specs/2026-09-09-startup-onboarding-whats-new-design.md, Decision 2).
-        splashViewModel.ReportPhase(4, TotalPhases, "Almost there…");
-        mainWindow.Show();
-        await splashViewModel.EnforceMinimumVisibleAsync(splashShownAtUtc);
-        await splash.FadeOutAndCloseAsync();
+        DiagnosticsService.LogMilestone($"  [t+{buildStopwatch.ElapsedMilliseconds}ms] initial screen loaded.");
 
         // Startup first-look modal (docs/superpowers/specs/2026-09-09-startup-onboarding-whats-new-
         // design.md, Decision 7) - mutually exclusive, so two never stack:

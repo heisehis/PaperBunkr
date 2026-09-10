@@ -26,14 +26,22 @@ public partial class NeedsReviewViewModel : ViewModelBase
 {
     private readonly Action<int> _onOpenSeriesDetail;
 
-    public NeedsReviewViewModel(Action<int> onOpenSeriesDetail)
+    public NeedsReviewViewModel(Action<int> onOpenSeriesDetail, bool loadOnConstruction = true)
     {
         _onOpenSeriesDetail = onOpenSeriesDetail;
         ContentTypeItems = new ObservableCollection<SeriesReviewItem>();
         SeriesConflicts = new ObservableCollection<SeriesConflictRowViewModel>();
         MetadataProposalItems = new ObservableCollection<MetadataProposalRowViewModel>();
         DuplicateGroupItems = new ObservableCollection<DuplicateGroupRowViewModel>();
-        Refresh();
+
+        // Production passes false. Refresh() runs four DB passes including SmartList evaluation
+        // (a near-full-library scan) - ~1s+ on the UI thread during the frozen-splash startup
+        // window. It's re-run whenever it actually matters: MigrationOverlayViewModel.Open(), the
+        // live folder-watch handler, and GoPreferences() (for the Libraries-tab pending badge).
+        if (loadOnConstruction)
+        {
+            Refresh();
+        }
     }
 
     public ObservableCollection<SeriesReviewItem> ContentTypeItems { get; }

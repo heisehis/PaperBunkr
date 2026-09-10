@@ -8,8 +8,33 @@
     <!-- Single source of truth for the release version (docs/superpowers/specs/
          2026-09-01-auto-update-and-changelog-design.md). CI derives the SemVer release tag/appcast
          version from this by dropping the trailing revision segment and appending "-beta". -->
-    <Version>0.2.0.0</Version>
+    <Version>0.3.0.0</Version>
+    <!-- We stamp InformationalVersion ourselves in _PbStampBuildMetadata below; turn off the SDK's
+         own SourceLink-driven "+<SourceRevisionId>" append so it can't double-stamp. -->
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
   </PropertyGroup>
+
+  <!-- Build-metadata stamp (docs/superpowers/specs/2026-09-10-versioning-convention-design.md Q5):
+       InformationalVersion becomes "<Version>+<short git hash>", or "<Version>+dev" off a non-git
+       build. Surfaced only in the About section and the diagnostics log - it is NOT part of the
+       release contract (never in the git tag, the installer filename, or ReleaseVersion's ordering
+       compare, which strips anything after '+'). A new commit changes the hash and triggers a
+       one-file assembly-info regen; between commits the value is stable so there's no build churn. -->
+  <Target Name="_PbStampBuildMetadata" BeforeTargets="GetAssemblyVersion;GenerateAssemblyInfo">
+    <Exec Command="git -C &quot;$(MSBuildProjectDirectory)&quot; rev-parse --short HEAD"
+          ConsoleToMSBuild="true"
+          StandardOutputImportance="low"
+          StandardErrorImportance="low"
+          ContinueOnError="true">
+      <Output TaskParameter="ConsoleOutput" PropertyName="_PbGitShortHash" />
+      <Output TaskParameter="ExitCode" PropertyName="_PbGitExitCode" />
+    </Exec>
+    <PropertyGroup>
+      <_PbBuildLabel>dev</_PbBuildLabel>
+      <_PbBuildLabel Condition="'$(_PbGitExitCode)' == '0' and '$(_PbGitShortHash)' != ''">$(_PbGitShortHash.Trim())</_PbBuildLabel>
+      <InformationalVersion>$(Version)+$(_PbBuildLabel)</InformationalVersion>
+    </PropertyGroup>
+  </Target>
 
   <ItemGroup>
     <Folder Include="Models\" />

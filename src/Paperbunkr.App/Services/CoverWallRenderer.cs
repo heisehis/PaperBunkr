@@ -21,19 +21,34 @@ namespace Paperbunkr.App.Services;
 /// </summary>
 public static class CoverWallRenderer
 {
-    public static Bitmap? Render(IReadOnlyList<Bitmap> covers, PixelSize targetSize, float blurSigma = 42f)
+    /// <summary>Fallback when the caller has no skin-derived color to pass - matches the literal
+    /// this method used before it became theme-aware (docs/superpowers/specs/
+    /// 2026-09-08-home-navrail-visual-v2-design.md §3), so callers that don't yet thread a skin
+    /// color through see no behavior change.</summary>
+    public static readonly SKColor DefaultBaseColor = new(8, 8, 10);
+
+    public static Bitmap? Render(IReadOnlyList<Bitmap> covers, PixelSize targetSize, SKColor? baseColor = null, float blurSigma = 42f)
     {
         if (covers is null || covers.Count == 0 || targetSize.Width <= 0 || targetSize.Height <= 0)
         {
             return null;
         }
 
+        SKColor scrimColor = baseColor ?? DefaultBaseColor;
+        // A darkened derivative of the base color for the vignette's outer edge - keeps the "toward
+        // black" read on dark skins and "toward the skin's own dark end" on light ones, rather than
+        // literally inverting to black on a light skin like windows_11.
+        SKColor vignetteColor = new(
+            (byte)(scrimColor.Red * 0.75f),
+            (byte)(scrimColor.Green * 0.75f),
+            (byte)(scrimColor.Blue * 0.75f));
+
         var info = new SKImageInfo(targetSize.Width, targetSize.Height, SKColorType.Bgra8888, SKAlphaType.Premul);
 
         // Pass 1 - tile the covers sharp across a grid.
         using var tileSurface = SKSurface.Create(info);
         var tile = tileSurface.Canvas;
-        tile.Clear(new SKColor(8, 8, 10));
+        tile.Clear(scrimColor);
 
         int count = covers.Count;
         int cols = count <= 3 ? Math.Max(1, count) : (int)Math.Ceiling(Math.Sqrt(count));
@@ -86,7 +101,7 @@ public static class CoverWallRenderer
             canvas.DrawImage(tiled, full, blurPaint);
         }
 
-        using (var scrim = new SKPaint { Color = new SKColor(8, 8, 10, 205) })
+        using (var scrim = new SKPaint { Color = scrimColor.WithAlpha(205) })
         {
             canvas.DrawRect(full, scrim);
         }
@@ -96,7 +111,7 @@ public static class CoverWallRenderer
                    Shader = SKShader.CreateRadialGradient(
                        new SKPoint(targetSize.Width / 2f, targetSize.Height * 0.35f),
                        Math.Max(targetSize.Width, targetSize.Height) * 0.75f,
-                       new[] { new SKColor(0, 0, 0, 0), new SKColor(6, 6, 6, 235) },
+                       new[] { scrimColor.WithAlpha(0), vignetteColor.WithAlpha(235) },
                        new[] { 0.35f, 1f },
                        SKShaderTileMode.Clamp),
                })

@@ -4,7 +4,6 @@ using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
-using System.Reflection;
 using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -222,8 +221,15 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     /// <summary>docs/superpowers/specs/2026-09-01-auto-update-and-changelog-design.md - newest first, parsed from the bundled CHANGELOG.md.</summary>
     public ObservableCollection<ChangelogEntry> ChangelogEntries { get; }
 
-    /// <summary>Assembly version, formatted for display on the About section.</summary>
-    public string CurrentVersion => Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "unknown";
+    /// <summary>The release-style version string for the About section - <c>"0.3.0-beta"</c>. Matches
+    /// the <c>CHANGELOG.md</c> <c>## [x.y.z-beta]</c> headings (so the changelog accordion's exact-match
+    /// "Current" badge actually lights - it never did while this returned the four-part <c>x.y.z.w</c>)
+    /// and the CI-derived release tag. docs/superpowers/specs/2026-09-10-versioning-convention-design.md Q5.</summary>
+    public string CurrentVersion => ReleaseVersion.DisplayString;
+
+    /// <summary>Short git commit hash of this build (<c>"9cc0b62"</c>), <c>"dev"</c> off a non-git
+    /// build, or <see langword="null"/>. Shown as a faint secondary line under the version.</summary>
+    public string? BuildLabel => ReleaseVersion.BuildMetadata;
 
     [ObservableProperty]
     private string? _updateCheckResultText;

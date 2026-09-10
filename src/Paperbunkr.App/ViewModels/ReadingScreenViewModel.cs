@@ -50,7 +50,7 @@ public partial class ReadingScreenViewModel : ViewModelBase, IContextMenuProvide
     /// <summary>All lists from the last <see cref="RefreshSidebar"/> query, before any tag filter - <see cref="Lists"/> is the filtered view actually shown.</summary>
     private List<ReadingListSummary> _allListSummaries = new();
 
-    public ReadingScreenViewModel(IFilePickerService filePicker, Action<int, int> goReaderForIssueInReadingList, Action<int>? openProperties = null, IActivityService? activity = null)
+    public ReadingScreenViewModel(IFilePickerService filePicker, Action<int, int> goReaderForIssueInReadingList, Action<int>? openProperties = null, IActivityService? activity = null, bool loadOnConstruction = true)
     {
         _filePicker = filePicker;
         _goReaderForIssueInReadingList = goReaderForIssueInReadingList;
@@ -59,7 +59,13 @@ public partial class ReadingScreenViewModel : ViewModelBase, IContextMenuProvide
         Lists = new ObservableCollection<ReadingListSummary>();
         Groups = new ObservableCollection<ReadingListGroupViewModel>();
         SearchResults = new ObservableCollection<IssueSearchResult>();
-        RefreshSidebar();
+
+        // Production passes false; GoReading() calls RefreshSidebar() on navigation. See the same
+        // note on SmartScreenViewModel - eager sidebar loads ran on the UI thread during startup.
+        if (loadOnConstruction)
+        {
+            RefreshSidebar();
+        }
     }
 
     public ObservableCollection<ReadingListSummary> Lists { get; }

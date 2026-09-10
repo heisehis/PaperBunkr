@@ -59,6 +59,7 @@ public class OverlayShell : ContentControl
         AvaloniaProperty.Register<OverlayShell, bool>(nameof(ShowCloseButton), defaultValue: true);
 
     private Border? _scrim;
+    private bool _deferredContentRealized;
 
     public OverlayShell()
     {
@@ -66,6 +67,25 @@ public class OverlayShell : ContentControl
         // (IsOpen defaults to false) never runs that handler - without this, it would keep
         // Avalonia's own Visual.IsVisible default of true, showing an unopened overlay.
         IsVisible = IsOpen;
+    }
+
+    /// <summary>
+    /// When true, the shell's <see cref="ContentControl.ContentTemplate"/> is not materialized
+    /// until the overlay is opened for the first time (then cached - re-open is instant and any
+    /// editor state is preserved, matching the old always-built behavior). This keeps ~20 heavy
+    /// editor views (Issue/Bulk properties, Migration, …) out of <c>new MainWindow()</c>'s
+    /// first-layout pass, which ran on the UI thread while the startup splash was still up.
+    /// Set on the shells whose content is both heavy and not needed at launch; the
+    /// <see cref="ContentControl.Content"/> is left unset in XAML and the view goes in
+    /// <see cref="ContentControl.ContentTemplate"/> instead.
+    /// </summary>
+    public static readonly StyledProperty<bool> DeferContentProperty =
+        AvaloniaProperty.Register<OverlayShell, bool>(nameof(DeferContent));
+
+    public bool DeferContent
+    {
+        get => GetValue(DeferContentProperty);
+        set => SetValue(DeferContentProperty, value);
     }
 
     public bool IsOpen
@@ -112,7 +132,21 @@ public class OverlayShell : ContentControl
 
     static OverlayShell()
     {
-        IsOpenProperty.Changed.AddClassHandler<OverlayShell>((shell, e) => shell.IsVisible = (bool)e.NewValue!);
+        IsOpenProperty.Changed.AddClassHandler<OverlayShell>((shell, e) =>
+        {
+            bool open = (bool)e.NewValue!;
+            shell.IsVisible = open;
+
+            // First open of a DeferContent shell: hand the ContentPresenter a non-null Content so
+            // it materializes ContentTemplate now. Content is the shell's own DataContext (the
+            // MainViewModel), so the {Binding SomeVm} on the template's root view resolves exactly
+            // as it did when the view was an inline child. Cached after the first realize.
+            if (open && shell.DeferContent && !shell._deferredContentRealized)
+            {
+                shell._deferredContentRealized = true;
+                shell.Content ??= shell.DataContext;
+            }
+        });
     }
 
     protected override void OnApplyTemplate(TemplateAppliedEventArgs e)

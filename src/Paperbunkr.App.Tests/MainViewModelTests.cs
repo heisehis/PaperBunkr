@@ -299,6 +299,10 @@ public class MainViewModelTests : IDisposable
 
         var vm = new MainViewModel();
         vm.GoHomeCommand.Execute(null);
+        // GoHome kicks Home.LoadFromDatabaseAsync() as fire-and-forget (the screen switches
+        // immediately; the shelves fill a beat later). Load synchronously here so the assertion
+        // has data - same end state, just deterministic for the test.
+        vm.Home.LoadFromDatabase();
         var card = Assert.Single(vm.Home.ContinueReading);
 
         vm.Home.OpenContinueReadingCommand.Execute(card.ResumeIssueId);

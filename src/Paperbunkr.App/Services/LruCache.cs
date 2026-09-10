@@ -24,10 +24,20 @@ namespace Paperbunkr.App.Services;
 /// dropping the cache's own strong reference (not disposing) keeps the *entry count* bounded,
 /// which was the actual goal - the underlying native bitmap still gets reclaimed once nothing
 /// else references it, just via GC instead of an eager (and unsafe) explicit Dispose.
+///
+/// <para>
+/// Every public method is guarded by a single lock. The read path mutates (a hit re-orders the
+/// recency list), so even <see cref="TryGetValue"/> needs it. This is what lets
+/// <see cref="CoverImageCache.Get"/> run from a thread-pool thread - the startup Home load
+/// (<c>HomeScreenViewModel.LoadFromDatabaseAsync</c>) builds its cover-wall off the UI thread
+/// while the shell is already on screen. The lock is uncontended in the overwhelmingly common
+/// single-thread case; the held work is all O(1) dictionary/linked-list ops.
+/// </para>
 /// </summary>
 public sealed class LruCache<TKey, TValue> where TKey : notnull
 {
     private readonly int _capacity;
+    private readonly object _gate = new();
     private readonly Dictionary<TKey, TValue> _values = new();
     private readonly LinkedList<TKey> _recencyOrder = new(); // front = most recently used
     private readonly Dictionary<TKey, LinkedListNode<TKey>> _recencyNodes = new();
@@ -42,36 +52,45 @@ public sealed class LruCache<TKey, TValue> where TKey : notnull
         _capacity = capacity;
     }
 
-    public int Count => _values.Count;
+    public int Count
+    {
+        get { lock (_gate) { return _values.Count; } }
+    }
 
     public bool TryGetValue(TKey key, out TValue value)
     {
-        if (_values.TryGetValue(key, out value!))
+        lock (_gate)
         {
-            Touch(key);
-            return true;
-        }
+            if (_values.TryGetValue(key, out value!))
+            {
+                Touch(key);
+                return true;
+            }
 
-        return false;
+            return false;
+        }
     }
 
     /// <summary>Adds or replaces <paramref name="key"/>'s value and marks it most-recently-used, evicting the current least-recently-used entry first if already at capacity.</summary>
     public void Add(TKey key, TValue value)
     {
-        if (_values.ContainsKey(key))
+        lock (_gate)
         {
+            if (_values.ContainsKey(key))
+            {
+                _values[key] = value;
+                Touch(key);
+                return;
+            }
+
+            if (_values.Count >= _capacity)
+            {
+                EvictLeastRecentlyUsed();
+            }
+
             _values[key] = value;
-            Touch(key);
-            return;
+            _recencyNodes[key] = _recencyOrder.AddFirst(key);
         }
-
-        if (_values.Count >= _capacity)
-        {
-            EvictLeastRecentlyUsed();
-        }
-
-        _values[key] = value;
-        _recencyNodes[key] = _recencyOrder.AddFirst(key);
     }
 
     /// <summary>Drops <paramref name="key"/>'s entry, if present, without disposing it - same
@@ -79,6 +98,14 @@ public sealed class LruCache<TKey, TValue> where TKey : notnull
     /// underlying cached value is known-stale (e.g. its backing file was deleted/regenerated) and a
     /// caller must not keep handing out the old one.</summary>
     public bool Remove(TKey key)
+    {
+        lock (_gate)
+        {
+            return RemoveLocked(key);
+        }
+    }
+
+    private bool RemoveLocked(TKey key)
     {
         if (!_recencyNodes.TryGetValue(key, out var node))
         {
@@ -96,23 +123,26 @@ public sealed class LruCache<TKey, TValue> where TKey : notnull
     /// fingerprint-keyed cover entries at once when that id's row is deleted.</summary>
     public void RemoveWhere(Func<TKey, bool> predicate)
     {
-        List<TKey>? doomed = null;
-        foreach (var key in _values.Keys)
+        lock (_gate)
         {
-            if (predicate(key))
+            List<TKey>? doomed = null;
+            foreach (var key in _values.Keys)
             {
-                (doomed ??= new List<TKey>()).Add(key);
+                if (predicate(key))
+                {
+                    (doomed ??= new List<TKey>()).Add(key);
+                }
             }
-        }
 
-        if (doomed is null)
-        {
-            return;
-        }
+            if (doomed is null)
+            {
+                return;
+            }
 
-        foreach (var key in doomed)
-        {
-            Remove(key);
+            foreach (var key in doomed)
+            {
+                RemoveLocked(key);
+            }
         }
     }
 
@@ -121,9 +151,12 @@ public sealed class LruCache<TKey, TValue> where TKey : notnull
     /// bitmap could be for the wrong entity.</summary>
     public void Clear()
     {
-        _values.Clear();
-        _recencyOrder.Clear();
-        _recencyNodes.Clear();
+        lock (_gate)
+        {
+            _values.Clear();
+            _recencyOrder.Clear();
+            _recencyNodes.Clear();
+        }
     }
 
     private void Touch(TKey key)

@@ -17,64 +17,21 @@
         Background="#0A0B0D">
 
     <!--
-        Shown first from App.axaml.cs while the heavy startup work runs on a background thread
-        (docs/superpowers/specs/2026-09-09-startup-onboarding-whats-new-design.md, Decision 2).
+        Shown first from App.axaml.cs while the heavy startup work runs (integrity check +
+        migrations on a background thread; view-model + main-window construction on the UI thread).
         Background is the literal brand dark - renders before SkinService has necessarily run.
 
-        Keyframe Animation on a transform must animate the transform's SUB-properties
-        (ScaleTransform.ScaleX/Y) against an explicit <ScaleTransform>, per the Avalonia docs -
-        animating RenderTransform directly ("scale(...)") has no registered animator in this build
-        and crashes at construction. Same keyframe-Animation shape as StatusBar's IndicatorPulse.
-        Reduced motion: code-behind removes the ".animate" class, deactivating these animation
-        styles, and snaps Opacity to 1.
+        The entrance + breathing motion is driven entirely from code-behind (Animation.RunAsync,
+        kicked off from the Opened event) rather than from XAML <Style.Animations>. A style
+        animation whose selector already matches at parse time can "run" against a control that
+        has no live clock yet and finish before the first paint - which is exactly what happened
+        across three earlier attempts here ("no animation"). Starting it from Opened guarantees a
+        realized visual with a running clock. Reduced motion (SkinService.GetReducedMotion) skips
+        it and snaps the resting values.
     -->
-    <Window.Styles>
-        <!-- Emblem: entrance (fade + scale-up from 0.86, once) then a slow breathing pulse.
-             The ".animate" class is on the element by default; code-behind removes it (and snaps
-             Opacity to 1) under reduced motion, which deactivates these animation styles. -->
-        <Style Selector="Image#LogoImage.animate">
-            <Style.Animations>
-                <Animation Duration="0:0:0.55" Easing="CubicEaseOut" FillMode="Forward">
-                    <KeyFrame Cue="0%">
-                        <Setter Property="Opacity" Value="0" />
-                        <Setter Property="ScaleTransform.ScaleX" Value="0.86" />
-                        <Setter Property="ScaleTransform.ScaleY" Value="0.86" />
-                    </KeyFrame>
-                    <KeyFrame Cue="100%">
-                        <Setter Property="Opacity" Value="1" />
-                        <Setter Property="ScaleTransform.ScaleX" Value="1" />
-                        <Setter Property="ScaleTransform.ScaleY" Value="1" />
-                    </KeyFrame>
-                </Animation>
-                <Animation Duration="0:0:2.6" IterationCount="Infinite" PlaybackDirection="Alternate"
-                           Easing="SineEaseInOut" Delay="0:0:0.55">
-                    <KeyFrame Cue="0%">
-                        <Setter Property="ScaleTransform.ScaleX" Value="1" />
-                        <Setter Property="ScaleTransform.ScaleY" Value="1" />
-                    </KeyFrame>
-                    <KeyFrame Cue="100%">
-                        <Setter Property="ScaleTransform.ScaleX" Value="1.045" />
-                        <Setter Property="ScaleTransform.ScaleY" Value="1.045" />
-                    </KeyFrame>
-                </Animation>
-            </Style.Animations>
-        </Style>
-
-        <!-- Glow: opacity breathing, in sync with the emblem. -->
-        <Style Selector="Border#GlowBorder.animate">
-            <Style.Animations>
-                <Animation Duration="0:0:2.6" IterationCount="Infinite" PlaybackDirection="Alternate"
-                           Easing="SineEaseInOut">
-                    <KeyFrame Cue="0%"><Setter Property="Opacity" Value="0.4" /></KeyFrame>
-                    <KeyFrame Cue="100%"><Setter Property="Opacity" Value="0.78" /></KeyFrame>
-                </Animation>
-            </Style.Animations>
-        </Style>
-    </Window.Styles>
-
     <Grid RowDefinitions="*,Auto,Auto,*">
         <Panel Grid.Row="1" HorizontalAlignment="Center" Margin="0,0,0,28">
-            <Border x:Name="GlowBorder" Classes="animate" Width="190" Height="190" Opacity="0.4">
+            <Border x:Name="GlowBorder" Width="190" Height="190" Opacity="0.35">
                 <Border.Background>
                     <RadialGradientBrush GradientOrigin="50%,50%" Center="50%,50%" RadiusX="50%" RadiusY="50%">
                         <GradientStop Color="#8CC9803F" Offset="0" />
@@ -82,19 +39,20 @@
                     </RadialGradientBrush>
                 </Border.Background>
             </Border>
-            <Image x:Name="LogoImage" Classes="animate" Width="122" Height="122" Opacity="0"
+            <Image x:Name="LogoImage" Width="122" Height="122" Opacity="0"
                    RenderTransformOrigin="50%,50%"
-                   Source="avares://Paperbunkr.App/Assets/paperbunkr-logo-source.png">
-                <Image.RenderTransform>
-                    <ScaleTransform ScaleX="1" ScaleY="1" />
-                </Image.RenderTransform>
-            </Image>
+                   Source="avares://Paperbunkr.App/Assets/paperbunkr-logo-source.png" />
         </Panel>
 
         <StackPanel Grid.Row="2" HorizontalAlignment="Center" Spacing="14">
             <ProgressBar Width="240" Height="3" Minimum="0" Maximum="1"
                          Value="{Binding Progress}"
                          Background="#25252B" CornerRadius="2" ShowProgressText="False">
+                <ProgressBar.Transitions>
+                    <Transitions>
+                        <DoubleTransition Property="Value" Duration="0:0:0.4" Easing="CubicEaseOut" />
+                    </Transitions>
+                </ProgressBar.Transitions>
                 <ProgressBar.Foreground>
                     <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,0%">
                         <GradientStop Color="#B06A2E" Offset="0" />

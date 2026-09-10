@@ -898,8 +898,12 @@
 
     <!-- ============ Migration overlay (docs/superpowers/specs/2026-08-06-migration-ux-design.md §B) ============ -->
     <controls:OverlayShell IsOpen="{Binding IsMigrationOverlayOpen}" CloseCommand="{Binding CloseMigrationOverlayCommand}"
-                            CloseButtonAutomationId="MigrationOverlayCloseButton">
-        <views:MigrationOverlay DataContext="{Binding Migration}" />
+                            CloseButtonAutomationId="MigrationOverlayCloseButton" DeferContent="True">
+        <controls:OverlayShell.ContentTemplate>
+            <DataTemplate x:DataType="vm:MainViewModel">
+                <views:MigrationOverlay DataContext="{Binding Migration}" />
+            </DataTemplate>
+        </controls:OverlayShell.ContentTemplate>
     </controls:OverlayShell>
 
     <!-- ============ Shared confirm dialog (docs/superpowers/specs/2026-09-06-feedback-
@@ -915,99 +919,155 @@
          list-tags-design.md) - same backdrop-popup pattern as the Migration overlay above, not a
          screen swap ============ -->
     <controls:OverlayShell IsOpen="{Binding IsReadingListPropertiesOverlayOpen}" CloseCommand="{Binding CloseReadingListPropertiesOverlayCommand}"
-                            CloseButtonAutomationId="ReadingListPropertiesOverlayCloseButton">
-        <views:ReadingListPropertiesOverlay DataContext="{Binding ReadingListProperties}" />
+                            CloseButtonAutomationId="ReadingListPropertiesOverlayCloseButton" DeferContent="True">
+        <controls:OverlayShell.ContentTemplate>
+            <DataTemplate x:DataType="vm:MainViewModel">
+                <views:ReadingListPropertiesOverlay DataContext="{Binding ReadingListProperties}" />
+            </DataTemplate>
+        </controls:OverlayShell.ContentTemplate>
     </controls:OverlayShell>
 
     <!-- ============ Collection properties overlay (docs/superpowers/specs/2026-08-27-collections-
          design.md, step 8) - same backdrop-popup pattern as the Reading List overlay above ============ -->
     <controls:OverlayShell IsOpen="{Binding IsCollectionPropertiesOverlayOpen}" CloseCommand="{Binding CloseCollectionPropertiesOverlayCommand}"
-                            CloseButtonAutomationId="CollectionPropertiesOverlayCloseButton">
-        <views:CollectionPropertiesOverlay DataContext="{Binding CollectionProperties}" />
+                            CloseButtonAutomationId="CollectionPropertiesOverlayCloseButton" DeferContent="True">
+        <controls:OverlayShell.ContentTemplate>
+            <DataTemplate x:DataType="vm:MainViewModel">
+                <views:CollectionPropertiesOverlay DataContext="{Binding CollectionProperties}" />
+            </DataTemplate>
+        </controls:OverlayShell.ContentTemplate>
     </controls:OverlayShell>
 
     <!-- ============ New Reading List dialog (docs/superpowers/specs/2026-08-28-reading-lists-
          screen-redesign-design.md → v2) - the sidebar "＋" opens this ============ -->
     <controls:OverlayShell IsOpen="{Binding IsNewReadingListDialogOpen}" CloseCommand="{Binding CloseNewReadingListDialogCommand}"
-                            CloseButtonAutomationId="NewReadingListOverlayCloseButton">
-        <views:NewReadingListOverlay DataContext="{Binding NewReadingList}" />
+                            CloseButtonAutomationId="NewReadingListOverlayCloseButton" DeferContent="True">
+        <controls:OverlayShell.ContentTemplate>
+            <DataTemplate x:DataType="vm:MainViewModel">
+                <views:NewReadingListOverlay DataContext="{Binding NewReadingList}" />
+            </DataTemplate>
+        </controls:OverlayShell.ContentTemplate>
     </controls:OverlayShell>
 
     <!-- ============ Name-this-workspace dialog (docs/superpowers/specs/2026-09-03-library-saved-
          workspaces-design.md) - shared by the Library and Books workspace switchers ============ -->
     <controls:OverlayShell IsOpen="{Binding IsWorkspaceNameOverlayOpen}" CloseCommand="{Binding CloseWorkspaceNameOverlayCommand}"
-                            CloseButtonAutomationId="WorkspaceNameOverlayCloseButton">
-        <views:WorkspaceNameOverlay DataContext="{Binding WorkspaceName}" />
+                            CloseButtonAutomationId="WorkspaceNameOverlayCloseButton" DeferContent="True">
+        <controls:OverlayShell.ContentTemplate>
+            <DataTemplate x:DataType="vm:MainViewModel">
+                <views:WorkspaceNameOverlay DataContext="{Binding WorkspaceName}" />
+            </DataTemplate>
+        </controls:OverlayShell.ContentTemplate>
     </controls:OverlayShell>
 
     <!-- ============ Quick Open command palette (docs/superpowers/specs/2026-09-03-quick-open-
          command-palette-design.md) - Ctrl+P from any shell screen ============ -->
     <controls:OverlayShell IsOpen="{Binding IsQuickOpenOverlayOpen}" CloseCommand="{Binding CloseQuickOpenOverlayCommand}"
-                            ContentVerticalAlignment="Stretch" ShowCloseButton="False">
-        <views:QuickOpenOverlay DataContext="{Binding QuickOpen}" />
+                            ContentVerticalAlignment="Stretch" ShowCloseButton="False" DeferContent="True">
+        <controls:OverlayShell.ContentTemplate>
+            <DataTemplate x:DataType="vm:MainViewModel">
+                <views:QuickOpenOverlay DataContext="{Binding QuickOpen}" />
+            </DataTemplate>
+        </controls:OverlayShell.ContentTemplate>
     </controls:OverlayShell>
 
     <!-- ============ New Event / New Continuity dialog (docs/superpowers/specs/2026-08-28-events-
          continuity-screen-redesign-design.md) ============ -->
-    <controls:OverlayShell IsOpen="{Binding IsNewEventDialogOpen}" CloseCommand="{Binding CloseNewEventDialogCommand}">
-        <views:NewEventOrContinuityOverlay DataContext="{Binding NewEventOrContinuity}" />
+    <controls:OverlayShell IsOpen="{Binding IsNewEventDialogOpen}" CloseCommand="{Binding CloseNewEventDialogCommand}" DeferContent="True">
+        <controls:OverlayShell.ContentTemplate>
+            <DataTemplate x:DataType="vm:MainViewModel">
+                <views:NewEventOrContinuityOverlay DataContext="{Binding NewEventOrContinuity}" />
+            </DataTemplate>
+        </controls:OverlayShell.ContentTemplate>
     </controls:OverlayShell>
 
     <!-- ============ Book Properties editor overlay (docs/superpowers/specs/2026-08-27-book-
          properties-editor-design.md) - same backdrop-popup pattern as Reading List Properties above ============ -->
     <controls:OverlayShell IsOpen="{Binding IsBookPropertiesOverlayOpen}" CloseCommand="{Binding CloseBookPropertiesOverlayCommand}"
-                            CloseButtonAutomationId="BookPropertiesOverlayCloseButton">
-        <views:BookPropertiesOverlay DataContext="{Binding BookProperties}" />
+                            CloseButtonAutomationId="BookPropertiesOverlayCloseButton" DeferContent="True">
+        <controls:OverlayShell.ContentTemplate>
+            <DataTemplate x:DataType="vm:MainViewModel">
+                <views:BookPropertiesOverlay DataContext="{Binding BookProperties}" />
+            </DataTemplate>
+        </controls:OverlayShell.ContentTemplate>
     </controls:OverlayShell>
 
     <!-- ============ Bulk book properties overlay (docs/superpowers/specs/2026-08-27-books-bulk-
          series-editing-design.md, component b) ============ -->
     <controls:OverlayShell IsOpen="{Binding IsBulkBookPropertiesOverlayOpen}" CloseCommand="{Binding CloseBulkBookPropertiesOverlayCommand}"
-                            CloseButtonAutomationId="BulkBookPropertiesOverlayCloseButton">
-        <views:BulkBookPropertiesOverlay DataContext="{Binding BulkBookProperties}" />
+                            CloseButtonAutomationId="BulkBookPropertiesOverlayCloseButton" DeferContent="True">
+        <controls:OverlayShell.ContentTemplate>
+            <DataTemplate x:DataType="vm:MainViewModel">
+                <views:BulkBookPropertiesOverlay DataContext="{Binding BulkBookProperties}" />
+            </DataTemplate>
+        </controls:OverlayShell.ContentTemplate>
     </controls:OverlayShell>
 
     <!-- ============ BookSeries properties overlay (docs/superpowers/specs/2026-08-27-books-bulk-
          series-editing-design.md, component c) ============ -->
     <controls:OverlayShell IsOpen="{Binding IsBookSeriesPropertiesOverlayOpen}" CloseCommand="{Binding CloseBookSeriesPropertiesOverlayCommand}"
-                            CloseButtonAutomationId="BookSeriesPropertiesOverlayCloseButton">
-        <views:BookSeriesPropertiesOverlay DataContext="{Binding BookSeriesProperties}" />
+                            CloseButtonAutomationId="BookSeriesPropertiesOverlayCloseButton" DeferContent="True">
+        <controls:OverlayShell.ContentTemplate>
+            <DataTemplate x:DataType="vm:MainViewModel">
+                <views:BookSeriesPropertiesOverlay DataContext="{Binding BookSeriesProperties}" />
+            </DataTemplate>
+        </controls:OverlayShell.ContentTemplate>
     </controls:OverlayShell>
 
     <!-- ============ Quick Rate overlay (docs/ce-feature-inventory.md §A "Quick Rating + free-text
          Review in one popup") - same backdrop-popup pattern as Reading List Properties above ============ -->
     <controls:OverlayShell IsOpen="{Binding IsQuickRateOverlayOpen}" CloseCommand="{Binding CloseQuickRateOverlayCommand}"
-                            CloseButtonAutomationId="QuickRateOverlayCloseButton">
-        <views:QuickRateOverlay DataContext="{Binding QuickRate}" />
+                            CloseButtonAutomationId="QuickRateOverlayCloseButton" DeferContent="True">
+        <controls:OverlayShell.ContentTemplate>
+            <DataTemplate x:DataType="vm:MainViewModel">
+                <views:QuickRateOverlay DataContext="{Binding QuickRate}" />
+            </DataTemplate>
+        </controls:OverlayShell.ContentTemplate>
     </controls:OverlayShell>
 
     <!-- ============ Design Showcase overlay (docs/superpowers/specs/2026-08-24-design-language-
          foundation-design.md, debug-only) - same backdrop-popup pattern as Quick Rate above ============ -->
     <controls:OverlayShell IsOpen="{Binding IsDesignShowcaseOverlayOpen}" CloseCommand="{Binding CloseDesignShowcaseOverlayCommand}"
-                            CloseButtonAutomationId="DesignShowcaseOverlayCloseButton">
-        <views:DesignShowcaseOverlay DataContext="{Binding DesignShowcase}" />
+                            CloseButtonAutomationId="DesignShowcaseOverlayCloseButton" DeferContent="True">
+        <controls:OverlayShell.ContentTemplate>
+            <DataTemplate x:DataType="vm:MainViewModel">
+                <views:DesignShowcaseOverlay DataContext="{Binding DesignShowcase}" />
+            </DataTemplate>
+        </controls:OverlayShell.ContentTemplate>
     </controls:OverlayShell>
 
     <!-- ============ Issue Properties overlay (docs/superpowers/specs/2026-08-23-issue-editor-
          borderless-overlay-design.md) - same backdrop-popup pattern as Migration/Reading List
          Properties above, replacing the old full-screen CurrentScreen swap ============ -->
     <controls:OverlayShell IsOpen="{Binding IsIssuePropertiesOverlayOpen}" CloseCommand="{Binding CloseIssuePropertiesOverlayCommand}"
-                            CloseButtonAutomationId="IssuePropertiesOverlayCloseButton">
-        <views:IssuePropertiesScreen DataContext="{Binding IssueProperties}" />
+                            CloseButtonAutomationId="IssuePropertiesOverlayCloseButton" DeferContent="True">
+        <controls:OverlayShell.ContentTemplate>
+            <DataTemplate x:DataType="vm:MainViewModel">
+                <views:IssuePropertiesScreen DataContext="{Binding IssueProperties}" />
+            </DataTemplate>
+        </controls:OverlayShell.ContentTemplate>
     </controls:OverlayShell>
 
     <!-- ============ Bulk Issue Editing overlay (docs/superpowers/specs/2026-08-23-issue-editor-
          borderless-overlay-design.md) ============ -->
     <controls:OverlayShell IsOpen="{Binding IsBulkIssuePropertiesOverlayOpen}" CloseCommand="{Binding CloseBulkIssuePropertiesOverlayCommand}"
-                            CloseButtonAutomationId="BulkIssuePropertiesOverlayCloseButton">
-        <views:BulkIssuePropertiesScreen DataContext="{Binding BulkIssueProperties}" />
+                            CloseButtonAutomationId="BulkIssuePropertiesOverlayCloseButton" DeferContent="True">
+        <controls:OverlayShell.ContentTemplate>
+            <DataTemplate x:DataType="vm:MainViewModel">
+                <views:BulkIssuePropertiesScreen DataContext="{Binding BulkIssueProperties}" />
+            </DataTemplate>
+        </controls:OverlayShell.ContentTemplate>
     </controls:OverlayShell>
 
     <!-- ============ Bulk Series Editing overlay (docs/superpowers/specs/2026-08-24-library-
          multiselect-slice3-design.md) ============ -->
     <controls:OverlayShell IsOpen="{Binding IsBulkSeriesPropertiesOverlayOpen}" CloseCommand="{Binding CloseBulkSeriesPropertiesOverlayCommand}"
-                            CloseButtonAutomationId="BulkSeriesPropertiesOverlayCloseButton">
-        <views:BulkSeriesPropertiesScreen DataContext="{Binding BulkSeriesProperties}" />
+                            CloseButtonAutomationId="BulkSeriesPropertiesOverlayCloseButton" DeferContent="True">
+        <controls:OverlayShell.ContentTemplate>
+            <DataTemplate x:DataType="vm:MainViewModel">
+                <views:BulkSeriesPropertiesScreen DataContext="{Binding BulkSeriesProperties}" />
+            </DataTemplate>
+        </controls:OverlayShell.ContentTemplate>
     </controls:OverlayShell>
 
     <!-- ============ Unsaved-changes discard confirm (P6 follow-up, docs/alpha-todo.md) - guards
@@ -1041,24 +1101,36 @@
          onboarding-design.md) - same backdrop-popup pattern as the Migration overlay above, opened
          from App.axaml.cs in place of the old CE-only auto-migration launch ============ -->
     <controls:OverlayShell IsOpen="{Binding IsWelcomeOverlayOpen}" CloseCommand="{Binding Welcome.SkipCommand}"
-                            CloseButtonAutomationId="WelcomeOverlayCloseButton">
-        <views:WelcomeOverlay DataContext="{Binding Welcome}" />
+                            CloseButtonAutomationId="WelcomeOverlayCloseButton" DeferContent="True">
+        <controls:OverlayShell.ContentTemplate>
+            <DataTemplate x:DataType="vm:MainViewModel">
+                <views:WelcomeOverlay DataContext="{Binding Welcome}" />
+            </DataTemplate>
+        </controls:OverlayShell.ContentTemplate>
     </controls:OverlayShell>
 
     <!-- ============ Auto-update: update-available prompt (docs/superpowers/specs/
          2026-09-01-auto-update-and-changelog-design.md) - same backdrop-popup pattern as Welcome
          above ============ -->
     <controls:OverlayShell IsOpen="{Binding IsUpdateAvailableOverlayOpen}" CloseCommand="{Binding Update.NotNowCommand}"
-                            CloseButtonAutomationId="UpdateAvailableOverlayCloseButton">
-        <views:UpdateAvailableOverlay DataContext="{Binding Update}" />
+                            CloseButtonAutomationId="UpdateAvailableOverlayCloseButton" DeferContent="True">
+        <controls:OverlayShell.ContentTemplate>
+            <DataTemplate x:DataType="vm:MainViewModel">
+                <views:UpdateAvailableOverlay DataContext="{Binding Update}" />
+            </DataTemplate>
+        </controls:OverlayShell.ContentTemplate>
     </controls:OverlayShell>
 
     <!-- ============ "What's New" after an update (docs/superpowers/specs/2026-09-09-startup-
          onboarding-whats-new-design.md) - auto-shown once when the version bumps, also opened from
          the welcome link and Preferences → About. Same backdrop-popup pattern ============ -->
     <controls:OverlayShell IsOpen="{Binding IsWhatsNewOverlayOpen}" CloseCommand="{Binding WhatsNew.GotItCommand}"
-                            CloseButtonAutomationId="WhatsNewOverlayCloseButton">
-        <views:WhatsNewOverlay DataContext="{Binding WhatsNew}" />
+                            CloseButtonAutomationId="WhatsNewOverlayCloseButton" DeferContent="True">
+        <controls:OverlayShell.ContentTemplate>
+            <DataTemplate x:DataType="vm:MainViewModel">
+                <views:WhatsNewOverlay DataContext="{Binding WhatsNew}" />
+            </DataTemplate>
+        </controls:OverlayShell.ContentTemplate>
     </controls:OverlayShell>
 
     <!-- ============ Post-welcome tour offer (docs/superpowers/specs/2026-08-31-first-run-

@@ -49,7 +49,19 @@ if (-not $Version) {
     $Version = "0.3.0-beta-$shortCommit"
 }
 
-Write-Output "Building Paperbunkr installer version $Version"
+# Inno's VersionInfoVersion (the setup exe's own VS_FIXEDFILEINFO resource) needs a pure
+# numeric x.y.z.w - the "-beta" / "-beta-<hash>" suffix in $Version is not valid there. Derive it
+# from $Version's leading numeric run rather than hand-maintaining a second version string in
+# Installer.iss (which CI never overrode, so it silently lagged the csproj on every bump).
+if ($Version -match '^(\d+(?:\.\d+){1,3})') {
+    $numericParts = $Matches[1].Split('.')
+} else {
+    $numericParts = @('0', '0', '0')
+}
+while ($numericParts.Count -lt 4) { $numericParts += '0' }
+$VersionNumeric = ($numericParts[0..3] -join '.')
+
+Write-Output "Building Paperbunkr installer version $Version (file-version resource $VersionNumeric)"
 
 # Publish self-contained win-x64 - bundles the .NET 8 runtime, so the installer needs no
 # prerequisite-detection step the way CE's does for .NET Framework 4.8 (see Installer.iss header).
@@ -58,10 +70,15 @@ if (Test-Path $publishDir) {
     Remove-Item -Recurse -Force $publishDir
 }
 
+# ReadyToRun: AOT-compile the IL to native up front so end users don't pay the cold-start JIT
+# tax on first launch (the startup pipeline builds ~30 view-models + the full MainWindow visual
+# tree on the UI thread - measured at ~1.6s of pure JIT on a cold run). Costs ~20-30MB of extra
+# payload in the already-self-contained bundle and a slower publish; worth it for a desktop app
+# whose whole first impression is how fast the window appears.
 Write-Output "Publishing self-contained win-x64 build to $publishDir..."
 dotnet publish (Join-Path $repoRoot "src\Paperbunkr.App\Paperbunkr.App.csproj") `
     -c Release -r win-x64 --self-contained true `
-    -p:PublishReadyToRun=false `
+    -p:PublishReadyToRun=true `
     -o $publishDir
 if ($LASTEXITCODE -ne 0) {
     Write-Error "dotnet publish failed."
@@ -118,7 +135,7 @@ Write-Output "Wrote $combinedLicensePath"
 # Compile the installer.
 $setupFileParam = "PaperbunkrSetup-$Version"
 Write-Output "Running Inno Setup..."
-& $innoSetupPath (Join-Path $installerDir "Installer.iss") "/DMyAppVersion=$Version" "/DMyAppSetupFile=$setupFileParam"
+& $innoSetupPath (Join-Path $installerDir "Installer.iss") "/DMyAppVersion=$Version" "/DMyAppVersionNumeric=$VersionNumeric" "/DMyAppSetupFile=$setupFileParam"
 if ($LASTEXITCODE -ne 0) {
     Write-Error "Inno Setup compilation failed."
     exit 1

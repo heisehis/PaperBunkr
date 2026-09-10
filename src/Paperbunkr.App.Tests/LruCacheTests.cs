@@ -1,3 +1,6 @@
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
 using Paperbunkr.App.Services;
 
 namespace Paperbunkr.App.Tests;
@@ -148,5 +151,35 @@ public class LruCacheTests
         Assert.Equal(2, cache.Count);
         Assert.True(cache.TryGetValue(2, out _));
         Assert.True(cache.TryGetValue(3, out _));
+    }
+
+    [Fact]
+    public async Task ConcurrentReadsAndWrites_DoNotThrow_AndStayBounded()
+    {
+        // The cache is now locked internally so CoverImageCache.Get can run off the UI thread
+        // (HomeScreenViewModel.LoadFromDatabaseAsync). Before the lock this hammering reliably
+        // threw (LinkedList/Dictionary corruption) - the read path mutates the recency list, so a
+        // concurrent TryGetValue + Add is enough.
+        const int capacity = 64;
+        var cache = new LruCache<int, int>(capacity);
+
+        var tasks = Enumerable.Range(0, 8).Select(worker => Task.Run(() =>
+        {
+            for (int i = 0; i < 20_000; i++)
+            {
+                int key = (worker * 7 + i) % 200;
+                cache.Add(key, i);
+                cache.TryGetValue(key, out _);
+                cache.TryGetValue((key + 1) % 200, out _);
+                if (i % 50 == 0)
+                {
+                    cache.RemoveWhere(k => k % 13 == 0);
+                }
+            }
+        })).ToArray();
+
+        await Task.WhenAll(tasks);
+
+        Assert.True(cache.Count <= capacity, $"count {cache.Count} exceeded capacity {capacity}");
     }
 }

@@ -178,7 +178,8 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         Action<string?, Action<string>>? promptForName = null,
         WorkspaceService? workspaceService = null,
         Action<int, bool>? enqueueMetadataWriteBack = null,
-        IActivityService? activity = null)
+        IActivityService? activity = null,
+        bool loadOnConstruction = true)
     {
         _activity = activity ?? new ActivityService();
         _enqueueMetadataWriteBack = enqueueMetadataWriteBack ?? ((_, _) => { });
@@ -278,7 +279,14 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         // not true from a phantom pre-history state.
         _browseHistory.AddAtCursor(CurrentBrowseState());
 
-        LoadFromDatabase();
+        // Production (MainViewModel) passes false - GoLibrary() and every other navigation into
+        // this screen already call LoadFromDatabase(), so loading here too was duplicate work on
+        // the UI thread during the frozen-splash startup window (~0.9s: the whole-library
+        // materialization). RefreshWorkspaces() stays cheap enough to keep. Tests default to true.
+        if (loadOnConstruction)
+        {
+            LoadFromDatabase();
+        }
         RefreshWorkspaces();
         _constructed = true;
 

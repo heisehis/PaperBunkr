@@ -33,6 +33,31 @@ public static class ReleaseVersion
     public static string DisplayString => $"{Current.Major}.{Current.Minor}.{Current.Build}-beta";
 
     /// <summary>
+    /// The build-metadata label from this assembly's <see cref="AssemblyInformationalVersionAttribute"/>
+    /// - everything after the first <c>+</c>. The short git commit hash on a normal build
+    /// (<c>"9cc0b62"</c>), <c>"dev"</c> off a non-git build, or <see langword="null"/> if the assembly
+    /// somehow carries no informational version. Display/diagnostics only - never used for ordering
+    /// (<see cref="TryParseHeading"/> strips it). Stamped by <c>_PbStampBuildMetadata</c> in the csproj
+    /// (docs/superpowers/specs/2026-09-10-versioning-convention-design.md, Q5).
+    /// </summary>
+    public static string? BuildMetadata
+    {
+        get
+        {
+            string? info = Assembly.GetExecutingAssembly()
+                .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
+            int plus = info?.IndexOf('+') ?? -1;
+            return plus >= 0 && plus < info!.Length - 1 ? info[(plus + 1)..] : null;
+        }
+    }
+
+    /// <summary><see cref="DisplayString"/> with <see cref="BuildMetadata"/> appended as
+    /// <c>+label</c> when present - e.g. <c>"0.3.0-beta+9cc0b62"</c>. The diagnostics log uses this;
+    /// the About section shows <see cref="DisplayString"/> and the label on separate lines.</summary>
+    public static string DisplayStringWithBuild =>
+        BuildMetadata is { Length: > 0 } meta ? $"{DisplayString}+{meta}" : DisplayString;
+
+    /// <summary>
     /// Parses a changelog heading version (<c>"0.3.0-beta"</c>, <c>"0.1.1-alpha"</c>, or a bare
     /// <c>"0.3.0"</c>) into a three-component <see cref="Version"/> for comparison. Any <c>-suffix</c>
     /// (and anything after a <c>+</c> build-metadata marker) is dropped. Returns <see langword="false"/>

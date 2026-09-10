@@ -129,8 +129,8 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         // skin switch; a second SkinService instance would never fire into that subscription since
         // the event isn't static/process-wide.
         var skinService = new SkinService();
-        Home = new HomeScreenViewModel(GoDetailForSeries, GoReaderForIssue, GoLibraryWithSearch, GoReaderForIssueInReadingList, GoBookReaderForBook, GoLibraryWithCollection, skinService);
-        Library = new LibraryScreenViewModel(GoDetailForSeries, GoReaderForIssue, GoNewIssuePropertiesForPlaceholder, OpenQuickRateOverlay, GoIssuePropertiesForIssue, GoBulkIssuePropertiesForIssues, ShowToast, GoBulkSeriesPropertiesForSeries, GoLibraryFoldersPreferences, OpenCollectionPropertiesOverlay, GoBookDetailForBook, promptForName: PromptWorkspaceName, enqueueMetadataWriteBack: EnqueueMetadataWriteBack, activity: Activity);
+        Home = new HomeScreenViewModel(GoDetailForSeries, GoReaderForIssue, GoLibraryWithSearch, GoReaderForIssueInReadingList, GoBookReaderForBook, GoLibraryWithCollection, skinService, loadOnConstruction: false);
+        Library = new LibraryScreenViewModel(GoDetailForSeries, GoReaderForIssue, GoNewIssuePropertiesForPlaceholder, OpenQuickRateOverlay, GoIssuePropertiesForIssue, GoBulkIssuePropertiesForIssues, ShowToast, GoBulkSeriesPropertiesForSeries, GoLibraryFoldersPreferences, OpenCollectionPropertiesOverlay, GoBookDetailForBook, promptForName: PromptWorkspaceName, enqueueMetadataWriteBack: EnqueueMetadataWriteBack, activity: Activity, loadOnConstruction: false);
         Books = new BooksScreenViewModel(GoBookDetailForBook, GoBookSeriesDetailForSeries, GoBookPropertiesForBook, GoBulkBookPropertiesForBooks, GoBookSeriesPropertiesForSeries, GoLibraryFoldersPreferences, ShowToast, promptForName: PromptWorkspaceName);
         BookDetail = new BookDetailScreenViewModel(NavigateBack, GoBookReaderForBook, GoBookPropertiesForBook, GoBulkBookPropertiesForBooks, GoBookSeriesPropertiesForSeries);
         BookProperties = new BookPropertiesScreenViewModel(CloseBookPropertiesOverlay, ShowToast);
@@ -150,12 +150,12 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         IssueProperties = new IssuePropertiesScreenViewModel(CloseIssuePropertiesOverlayAndReload, ShowToast, enqueueMetadataWriteBack: id => EnqueueMetadataWriteBack(id));
         BulkIssueProperties = new BulkIssuePropertiesScreenViewModel(CloseBulkIssuePropertiesOverlayAndReload, ShowToast, enqueueMetadataWriteBack: id => EnqueueMetadataWriteBack(id));
         BulkSeriesProperties = new BulkSeriesPropertiesScreenViewModel(CloseBulkSeriesPropertiesOverlayAndReload, id => EnqueueMetadataWriteBack(id));
-        Smart = new SmartScreenViewModel(GoDetailForSeries, GoBookDetailForBook);
-        Reading = new ReadingScreenViewModel(new FilePickerService(), GoReaderForIssueInReadingList, OpenReadingListPropertiesOverlay, activity: Activity);
-        Events = new EventsScreenViewModel(GoDetailForSeries, GoReaderForIssue, GoReadingWithList, ShowToast);
+        Smart = new SmartScreenViewModel(GoDetailForSeries, GoBookDetailForBook, loadOnConstruction: false);
+        Reading = new ReadingScreenViewModel(new FilePickerService(), GoReaderForIssueInReadingList, OpenReadingListPropertiesOverlay, activity: Activity, loadOnConstruction: false);
+        Events = new EventsScreenViewModel(GoDetailForSeries, GoReaderForIssue, GoReadingWithList, ShowToast, loadOnConstruction: false);
         Insights = new InsightsScreenViewModel(GoReaderForIssue, GoDetailForSeries, GoLibraryWithSearch, ReadingEvents);
         Plugin = new PluginScreenViewModel(new FilePickerService(), Dialogs);
-        Migration = new MigrationOverlayViewModel(new FilePickerService(), OpenSeriesDetailFromReview);
+        Migration = new MigrationOverlayViewModel(new FilePickerService(), OpenSeriesDetailFromReview, loadOnConstruction: false);
         // First-run onboarding (docs/superpowers/specs/2026-08-31-first-run-onboarding-design.md) -
         // constructed here like every other overlay VM; LiveFolderWatch.Reload/OpenMigrationOverlay
         // are the same callbacks Preferences already reuses for the identical folder-add/migration
@@ -692,7 +692,11 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
     [RelayCommand]
     private void GoHome() => TryLeaveCurrentEditor(() =>
     {
-        Home.LoadFromDatabase();
+        // Fire-and-forget async load (queries + cover-wall render off the UI thread; it
+        // self-handles failure). The screen switches immediately to an empty Home that fills in a
+        // beat later - far better than the ~2.7s synchronous freeze this used to cause, most
+        // visibly on the startup restore path (App.axaml.cs -> RestoreLastScreen -> here).
+        _ = Home.LoadFromDatabaseAsync();
         CurrentScreen = "home";
         ResetHistoryRoot("home");
     });
@@ -754,6 +758,7 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
     [RelayCommand]
     private void GoSmart() => TryLeaveCurrentEditor(() =>
     {
+        Smart.RefreshSidebar();
         Smart.EnsureListLoaded();
         CurrentScreen = "smart";
         ResetHistoryRoot("smart");
@@ -762,6 +767,7 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
     [RelayCommand]
     private void GoReading() => TryLeaveCurrentEditor(() =>
     {
+        Reading.RefreshSidebar();
         Reading.EnsureListLoaded();
         CurrentScreen = "reading";
         ResetHistoryRoot("reading");
@@ -770,6 +776,7 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
     /// <summary>Opens the Reading screen on a specific list - used by the Story Events "create reading list from continuity" action (docs/superpowers/specs/2026-08-27-metadata-model-phase4f-continuity-browse-design.md).</summary>
     private void GoReadingWithList(int readingListId)
     {
+        Reading.RefreshSidebar();
         Reading.LoadReadingList(readingListId);
         CurrentScreen = "reading";
         ResetHistoryRoot("reading");
@@ -778,6 +785,8 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
     [RelayCommand]
     private void GoEvents() => TryLeaveCurrentEditor(() =>
     {
+        Events.RefreshSidebar();
+        Events.RefreshContinuitiesSidebar();
         Events.EnsureEventLoaded();
         CurrentScreen = "events";
         ResetHistoryRoot("events");
@@ -787,6 +796,10 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
     private void GoPreferences() => TryLeaveCurrentEditor(() =>
     {
         Preferences.EnsureLoaded();
+        // Keep the Libraries-tab "needs review" badge (LibrarySection.axaml, bound to
+        // Migration.NeedsReview.HasPendingItems) current - NeedsReview no longer refreshes in its
+        // constructor (that was ~1s of the frozen-splash startup window).
+        Migration.NeedsReview.Refresh();
         CurrentScreen = "preferences";
         ResetHistoryRoot("preferences");
     });

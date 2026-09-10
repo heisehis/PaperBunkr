@@ -3,6 +3,7 @@ using System;
 using System.Linq;
 using System.Threading;
 using Paperbunkr.App.Services;
+using Paperbunkr.Data.Entities;
 using Optris.Icons.Avalonia;
 using Optris.Icons.Avalonia.FontAwesome;
 using Optris.Icons.Avalonia.MaterialDesign;
@@ -83,6 +84,29 @@ sealed class Program
             $"Render backend requested: {graphics.Backend} preferNativeOpenGl={graphics.PreferNativeOpenGl} (source: {source}); "
             + $"rendering-mode chain [{string.Join(", ", GraphicsBootstrap.ToRenderingModes(graphics))}]; "
             + "composition [WinUIComposition, DirectComposition, RedirectionSurface]");
+
+        // Bootstrap-crash recovery (docs/superpowers/specs/2026-09-10-bootstrap-crash-sentinel-safe-
+        // mode-design.md). A native crash between StartWithClassicDesktopLifetime and the splash
+        // rendering leaves a sentinel on disk; on the next launch we retry with software rendering,
+        // and on a second consecutive failure we show a native notice instead of starting Avalonia.
+        var bootstrapDecision = BootstrapSentinel.Evaluate(ReleaseVersion.Current);
+        DiagnosticsService.LogMilestone($"Bootstrap sentinel decision: {bootstrapDecision}");
+
+        if (bootstrapDecision == BootstrapDecision.GiveUp)
+        {
+            SafeModeNotice.ShowGiveUpMessageBox(DiagnosticsService.LogDirectory);
+            BootstrapSentinel.ResetAfterGiveUp();
+            return;
+        }
+
+        if (bootstrapDecision == BootstrapDecision.SafeMode)
+        {
+            graphics = graphics with { Backend = RenderBackend.Software };
+            SafeModeState.Active = true;
+            DiagnosticsService.LogMilestone("Safe mode: forcing Software rendering for this launch.");
+        }
+
+        BootstrapSentinel.Record(ReleaseVersion.Current);
 
         try
         {

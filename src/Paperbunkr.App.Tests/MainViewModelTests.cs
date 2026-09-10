@@ -1000,4 +1000,20 @@ public class MainViewModelTests : IDisposable
         Assert.True(vm.Preferences.IsLibrarySection);
         Assert.Equal("library.health", anchor);
     }
+
+    /// <summary>
+    /// The safe-mode Activity alert (docs/superpowers/specs/2026-09-10-bootstrap-crash-sentinel-
+    /// safe-mode-design.md §5.4) links to <c>Preferences</c>/"Advanced" - the resolver must open
+    /// Preferences on the Advanced section where the rendering-backend controls live.
+    /// </summary>
+    [Fact]
+    public void FollowLink_WithAdvancedPreferencesPayload_OpensPreferencesOnAdvancedSection()
+    {
+        var vm = new MainViewModel();
+
+        vm.ActivityCenter.FollowLinkCommand.Execute(new Paperbunkr.App.Models.ActivityLink(Paperbunkr.App.Models.ActivityLinkKind.Preferences, "Advanced"));
+
+        Assert.True(vm.IsPreferences);
+        Assert.True(vm.Preferences.IsAdvancedSection);
+    }
 }

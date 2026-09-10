@@ -60,20 +60,18 @@ namespace cYo.Projects.ComicRack.Engine.IO.Provider.Readers.Pdf
             throw new NotImplementedException();
         }
 
-        public byte[] ReadByteImage(string source, ProviderImageInfo info) => RenderPageToJpeg(new PdfDocument(source), info.Index, disposeDoc: true);
+        /// <summary>Test seam (rev-3 addendum, design §15 #2): invoked with the page index each time a <see cref="PdfPage"/> is loaded (an <c>FPDF_LoadPage</c> - content-stream + resource-dict parse), so a test can assert the session's page cache avoids reloading.</summary>
+        internal static Action<int> OnPageLoaded;
 
-        private byte[] RenderPageToJpeg(PdfDocument doc, int index, bool disposeDoc)
+        public byte[] ReadByteImage(string source, ProviderImageInfo info)
         {
+            var doc = new PdfDocument(source);
             try
             {
-                using (PdfPage pdfPage = doc.Pages[index])
+                OnPageLoaded?.Invoke(info.Index);
+                using (PdfPage pdfPage = doc.Pages[info.Index])
                 {
-                    Size size = CalculateSize(pdfPage.Width, pdfPage.Height);
-                    using (Bitmap bitmap = new Bitmap(size.Width, size.Height, PixelFormat.Format24bppRgb))
-                    {
-                        pdfPage.Render(bitmap);
-                        return bitmap.ImageToBytes(ImageFormat.Jpeg);
-                    }
+                    return RenderPage(pdfPage);
                 }
             }
             catch (Exception)
@@ -82,10 +80,25 @@ namespace cYo.Projects.ComicRack.Engine.IO.Provider.Readers.Pdf
             }
             finally
             {
-                if (disposeDoc)
+                ((System.IDisposable)doc).Dispose();
+            }
+        }
+
+        /// <summary>Rasterises an already-loaded page to a JPEG byte[]; the caller owns the <see cref="PdfPage"/> lifetime (stateless path disposes it per call, the session keeps a small LRU - design §15 #2).</summary>
+        private byte[] RenderPage(PdfPage pdfPage)
+        {
+            try
+            {
+                Size size = CalculateSize(pdfPage.Width, pdfPage.Height);
+                using (Bitmap bitmap = new Bitmap(size.Width, size.Height, PixelFormat.Format24bppRgb))
                 {
-                    ((System.IDisposable)doc).Dispose();
+                    pdfPage.Render(bitmap);
+                    return bitmap.ImageToBytes(ImageFormat.Jpeg);
                 }
+            }
+            catch (Exception)
+            {
+                return null;
             }
         }
 
@@ -110,8 +123,17 @@ namespace cYo.Projects.ComicRack.Engine.IO.Provider.Readers.Pdf
 
         private sealed class PdfiumAccessorSession : IComicAccessorSession
         {
+            // FPDF_LoadPage parses the page's content stream + resource dict; the prefetch pass and
+            // a later detail render (design §6.2) of the same page would each pay it. Keep a tiny
+            // LRU of open PdfPage objects - the current page and its immediate neighbours (the paged
+            // window) stay resident during a forward flip without holding the whole document open
+            // (design §15 #2). All access is on the pipeline's single reader thread (PDFium affinity).
+            private const int MaxOpenPages = 3;
+
             private readonly PdfiumReaderEngine _owner;
             private readonly PdfDocument _doc;
+            private readonly Dictionary<int, PdfPage> _pages = new Dictionary<int, PdfPage>();
+            private readonly LinkedList<int> _lru = new LinkedList<int>(); // front = most recent
 
             public PdfiumAccessorSession(PdfiumReaderEngine owner, PdfDocument doc)
             {
@@ -127,10 +149,54 @@ namespace cYo.Projects.ComicRack.Engine.IO.Provider.Readers.Pdf
                 {
                     return null;
                 }
-                return _owner.RenderPageToJpeg(_doc, index, disposeDoc: false);
+
+                try
+                {
+                    return _owner.RenderPage(GetOrLoadPage(index));
+                }
+                catch (Exception)
+                {
+                    return null;
+                }
             }
 
-            public void Dispose() => ((System.IDisposable)_doc).Dispose();
+            private PdfPage GetOrLoadPage(int index)
+            {
+                if (_pages.TryGetValue(index, out PdfPage cached))
+                {
+                    _lru.Remove(index);
+                    _lru.AddFirst(index);
+                    return cached;
+                }
+
+                OnPageLoaded?.Invoke(index);
+                PdfPage page = _doc.Pages[index];
+                _pages[index] = page;
+                _lru.AddFirst(index);
+
+                while (_lru.Count > MaxOpenPages)
+                {
+                    int evict = _lru.Last.Value;
+                    _lru.RemoveLast();
+                    if (_pages.Remove(evict, out PdfPage stale))
+                    {
+                        try { stale.Dispose(); } catch { } // FPDF_ClosePage
+                    }
+                }
+
+                return page;
+            }
+
+            public void Dispose()
+            {
+                foreach (PdfPage page in _pages.Values)
+                {
+                    try { page.Dispose(); } catch { }
+                }
+                _pages.Clear();
+                _lru.Clear();
+                ((System.IDisposable)_doc).Dispose();
+            }
         }
 
         private Size CalculateSize(double width, double height)

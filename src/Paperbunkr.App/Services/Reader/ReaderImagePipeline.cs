@@ -50,9 +50,14 @@ public sealed class ReaderImagePipeline : IReaderPageSource
     private readonly ImageProvider _provider;
     private readonly ArchiveComicProvider? _archiveProvider;
     private readonly IComicAccessorSession? _session;
+    private readonly ReaderMemoryBudget _budget;
     private readonly string _container;
     private readonly long _containerStamp;
     private readonly string?[] _entryNames;
+
+    /// <summary>Bytes currently reserved for one live detail-tier bitmap (design §15 #3). While &gt; 0, <see cref="_displayCache"/>'s <c>SizeCapacity</c> is lowered by this much so real memory stays within budget. Guarded by <see cref="_sync"/>.</summary>
+    private long _reservedDetailBytes;
+    private int _detailReservedForPage = -1;
 
     private readonly Cache<PageId, ReaderBitmap> _displayCache;
     private readonly Cache<PageId, ReaderBitmap> _thumbCache;
@@ -112,6 +117,7 @@ public sealed class ReaderImagePipeline : IReaderPageSource
         _provider = provider;
         _archiveProvider = provider as ArchiveComicProvider;
         _session = session;
+        _budget = budget;
         _container = provider.Source ?? string.Empty;
 
         try
@@ -151,6 +157,10 @@ public sealed class ReaderImagePipeline : IReaderPageSource
         // stop firing then). Threadpool timer, not DispatcherTimer - no UI-thread dependency;
         // disposing an evicted bitmap is thread-agnostic (it's been out of every frame for seconds).
         _disposeSweep = new System.Threading.Timer(_ => DrainPendingDispose(), null, 2000, 2000);
+
+        // Idle until SetVirtualizationWindow arms it (§15 #5).
+        _fringeTimer = new System.Threading.Timer(_ => { try { RecomputeFringe(); } catch { } }, null,
+            System.Threading.Timeout.Infinite, System.Threading.Timeout.Infinite);
     }
 
     // A bitmap only enters this queue when it is EVICTED (scrolled out of the virtualization
@@ -417,9 +427,65 @@ public sealed class ReaderImagePipeline : IReaderPageSource
 
     public AvaloniaBitmap GetDetailPage(int pageIndex, PixelSize targetSize)
     {
+        ReserveDetailBudget(pageIndex, targetSize);
+
         byte[]? bytes = ReadRawBytes(pageIndex);
         using AvaloniaBitmap native = PageDecodeCore.TryDecodeBytes(bytes) ?? PageDecodeCore.Decode(_provider, pageIndex);
         return native.CreateScaledBitmap(targetSize, BitmapInterpolationMode.HighQuality);
+    }
+
+    public void ReleaseDetail() => ReleaseDetailBudget();
+
+    /// <summary>
+    /// Reserves <c>w*h*4</c> bytes for a detail bitmap against the display-cache budget (design
+    /// §15 #3): drop <see cref="_displayCache"/>'s <c>SizeCapacity</c> by the reservation, which
+    /// evicts LRU (out-of-window) decoded pages to fit. The active page is pinned across the drop
+    /// so <see cref="Cache{K,T}"/>'s <c>Trim</c> can't take it. Best-effort - if the window itself
+    /// exceeds the reduced cap the detail decode still proceeds (a brief overshoot beats a failed
+    /// zoom). Any prior reservation is released first (one detail bitmap live at a time).
+    /// </summary>
+    private void ReserveDetailBudget(int pageIndex, PixelSize targetSize)
+    {
+        ReleaseDetailBudget();
+
+        long reserve;
+        try { reserve = checked((long)targetSize.Width * targetSize.Height * 4); }
+        catch (OverflowException) { reserve = _budget.DisplayBytes; }
+        if (reserve <= 0)
+        {
+            return;
+        }
+
+        lock (_sync)
+        {
+            IItemLock<ReaderBitmap>? pin = pageIndex >= 0
+                ? _displayCache.LockItem(DisplayId(pageIndex), (Func<PageId, ReaderBitmap>)null!)
+                : null;
+            try
+            {
+                _displayCache.SizeCapacity = Math.Max(1L, _budget.DisplayBytes - reserve);
+            }
+            finally
+            {
+                pin?.Dispose();
+            }
+            _reservedDetailBytes = reserve;
+            _detailReservedForPage = pageIndex;
+        }
+    }
+
+    private void ReleaseDetailBudget()
+    {
+        lock (_sync)
+        {
+            if (_reservedDetailBytes <= 0)
+            {
+                return;
+            }
+            _reservedDetailBytes = 0;
+            _detailReservedForPage = -1;
+            _displayCache.SizeCapacity = Math.Max(1L, _budget.DisplayBytes);
+        }
     }
 
     public AvaloniaBitmap? TryGetCachedPage(int pageIndex)
@@ -474,6 +540,15 @@ public sealed class ReaderImagePipeline : IReaderPageSource
 
     // --- Virtualization window + prefetch ------------------------------------
 
+    /// <summary>Trailing-edge debounce for the low-priority prefetch-fringe recompute during a rapid sequential flip (design §15 #5). The high-priority window still updates on every call.</summary>
+    private const int FringeDebounceMs = 30;
+    private int _pendingMin = -1;
+    private int _pendingMax = -1;
+    private readonly System.Threading.Timer _fringeTimer;
+
+    /// <summary>Test seam (design §12.4): fires at the end of each debounced <see cref="RecomputeFringe"/> pass.</summary>
+    internal Action? OnFringeRecomputed { get; set; }
+
     public void SetVirtualizationWindow(int minIndex, int maxIndex)
     {
         minIndex = Math.Max(0, minIndex);
@@ -485,19 +560,80 @@ public sealed class ReaderImagePipeline : IReaderPageSource
 
         _activePageIndex = (minIndex + maxIndex) / 2;
 
-        int forward;
-        lock (_sync) { forward = _forwardFringe; }
-        int fringeMin = Math.Max(0, minIndex - BackFringe);
-        int fringeMax = Math.Min(PageCount - 1, maxIndex + forward);
+        // A page turn invalidates any detail-tier reservation held for the old page (design §15 #3).
+        // PageCanvas also calls ReleaseDetail() explicitly on zoom-out; this is the belt-and-braces
+        // path for a straight page turn.
+        int reservedFor;
+        lock (_sync) { reservedFor = _detailReservedForPage; }
+        if (reservedFor >= 0 && reservedFor != _activePageIndex)
+        {
+            ReleaseDetailBudget();
+        }
+
+        // Widest bound the debounced fringe pass could land on - evict against this now so a
+        // still-pending precise pass never leaves an out-of-fringe page resident beyond one
+        // debounce interval, without churning the exact fringe every call.
+        int safeMin = Math.Max(0, minIndex - BackFringe);
+        int safeMax = Math.Min(PageCount - 1, maxIndex + MaxForwardFringe);
 
         DrainPendingDispose();
 
         lock (_sync)
         {
-            // Evict decoded bitmaps outside [fringeMin..fringeMax]. Explicit RemoveItem loop, not
-            // Cache.RemoveKeys - the latter takes a write lock then re-enters an upgradeable read
-            // lock per key (LockRecursionException; dead CE path). ItemRemoved queues each for a
-            // deferred dispose (see QueueForDispose).
+            _pendingMin = minIndex;
+            _pendingMax = maxIndex;
+
+            foreach (var key in _displayCache.GetKeys())
+            {
+                if (key.Index < safeMin || key.Index > safeMax)
+                {
+                    _displayCache.RemoveItem(key);
+                }
+            }
+
+            // The window gates ProcessQueuedPage; the high-priority pages enqueued just below must
+            // be in it. The debounced pass narrows it to the precise fringe.
+            for (int i = safeMin; i <= safeMax; i++)
+            {
+                _window.Add(i);
+            }
+            _enqueued.RemoveWhere(i => i < safeMin || i > safeMax);
+        }
+
+        // Immediate: the page(s) actually on screen, high priority, every call.
+        for (int i = minIndex; i <= maxIndex; i++)
+        {
+            TryEnqueue(i, _highPriority);
+        }
+
+        // Debounced: the low-priority fringe recompute + enqueue.
+        _fringeTimer.Change(FringeDebounceMs, System.Threading.Timeout.Infinite);
+    }
+
+    private void RecomputeFringe()
+    {
+        if (_cts.IsCancellationRequested)
+        {
+            return;
+        }
+
+        DrainPendingDispose();
+
+        int minIndex, maxIndex, fringeMin, fringeMax;
+        lock (_sync)
+        {
+            // Read the pending window and rebuild _window under one lock so an interleaved
+            // SetVirtualizationWindow can't have its just-enqueued high-priority pages wiped out.
+            minIndex = _pendingMin;
+            maxIndex = _pendingMax;
+            if (minIndex < 0 || maxIndex < 0)
+            {
+                return;
+            }
+
+            fringeMin = Math.Max(0, minIndex - BackFringe);
+            fringeMax = Math.Min(PageCount - 1, maxIndex + _forwardFringe);
+
             foreach (var key in _displayCache.GetKeys())
             {
                 if (key.Index < fringeMin || key.Index > fringeMax)
@@ -514,10 +650,6 @@ public sealed class ReaderImagePipeline : IReaderPageSource
             _enqueued.RemoveWhere(i => i < fringeMin || i > fringeMax);
         }
 
-        for (int i = minIndex; i <= maxIndex; i++)
-        {
-            TryEnqueue(i, _highPriority);
-        }
         for (int i = fringeMin; i < minIndex; i++)
         {
             TryEnqueue(i, _lowPriority);
@@ -526,6 +658,8 @@ public sealed class ReaderImagePipeline : IReaderPageSource
         {
             TryEnqueue(i, _lowPriority);
         }
+
+        OnFringeRecomputed?.Invoke();
     }
 
     private void TryEnqueue(int pageIndex, Channel<int> channel)
@@ -632,6 +766,7 @@ public sealed class ReaderImagePipeline : IReaderPageSource
 
     public void Dispose()
     {
+        _fringeTimer.Dispose();
         _disposeSweep.Dispose();
         _cts.Cancel();
         try { _consumerLoop.Wait(TimeSpan.FromSeconds(2)); } catch (AggregateException) { }

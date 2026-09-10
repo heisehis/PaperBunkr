@@ -39,4 +39,12 @@ public interface IReaderPageSource : IPageImageDecoder
 
     /// <summary>On-demand higher-resolution decode for zoom-past-100% (§6.2). Never cached; caller disposes when zoom settles. Phase 2 wires a real trigger; present now so the seam is stable.</summary>
     Bitmap GetDetailPage(int pageIndex, PixelSize targetSize);
+
+    /// <summary>
+    /// Releases the byte-budget reservation the last <see cref="GetDetailPage"/> took against the
+    /// display cache (design §15 #3). Call when the detail bitmap is no longer shown (zoom back to
+    /// fit, page turn, reader close). Idempotent; a no-op when nothing is reserved. The reservation
+    /// also self-releases on the next <see cref="GetDetailPage"/> or a page change.
+    /// </summary>
+    void ReleaseDetail();
 }

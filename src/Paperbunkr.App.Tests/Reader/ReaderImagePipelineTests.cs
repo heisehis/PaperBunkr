@@ -205,6 +205,100 @@ public class ReaderImagePipelineTests : IDisposable
         Assert.Null(failure);
     }
 
+    // --- rev-3 addendum: detail-tier budget accounting (design §15 #3) ---------------------------
+
+    [Fact]
+    public void GetDetailPage_ReservesAgainstBudget_EvictsDisplayPages_KeepsActivePage()
+    {
+        const int pageCount = 40;
+        CbzFixture.Create(_cbzPath, pageCount); // 64x96x4 = 24,576 bytes/page decoded
+        using var pipeline = ReaderImagePipeline.TryOpen(_cbzPath, userMemoryLimitMb: 1)!;
+
+        pipeline.SetVirtualizationWindow(10, 14); // ActivePageIndex = 12
+        for (int i = 8; i <= 22; i++)
+        {
+            pipeline.GetPage(i);
+        }
+        int before = pipeline.DecodedPageCount;
+        Assert.True(before > 4, $"expected the display cache to hold several pages, had {before}");
+
+        // ~400*600*4 = 960,000 bytes reserved - close to the whole ~900 KiB display allowance,
+        // so the cache must shed almost everything.
+        var detail = pipeline.GetDetailPage(12, new Avalonia.PixelSize(400, 600));
+        Assert.Equal(400, detail.PixelSize.Width);
+
+        int after = pipeline.DecodedPageCount;
+        Assert.True(after < before, $"detail reservation did not evict display pages ({before} -> {after})");
+        Assert.NotNull(pipeline.TryGetCachedPage(12)); // the active page was pinned across the drop
+
+        pipeline.ReleaseDetail();
+        for (int i = 8; i <= 22; i++)
+        {
+            pipeline.GetPage(i);
+        }
+        Assert.True(pipeline.DecodedPageCount > after, "capacity was not restored after ReleaseDetail");
+    }
+
+    [Fact]
+    public void PageTurn_ReleasesAStaleDetailReservation()
+    {
+        CbzFixture.Create(_cbzPath, pageCount: 30);
+        using var pipeline = ReaderImagePipeline.TryOpen(_cbzPath, userMemoryLimitMb: 1)!;
+
+        pipeline.SetVirtualizationWindow(5, 5);
+        pipeline.GetPage(5);
+        pipeline.GetDetailPage(5, new Avalonia.PixelSize(400, 600)); // reserve ~937 KiB
+
+        // Turn to a far page - the reservation for page 5 must be released so the new window fills.
+        pipeline.SetVirtualizationWindow(20, 20);
+        for (int i = 18; i <= 22; i++)
+        {
+            pipeline.GetPage(i);
+        }
+        Assert.True(pipeline.DecodedPageCount >= 4, "the reservation from the old page was never released on the turn");
+    }
+
+    // --- rev-3 addendum: fringe-recompute debounce (design §15 #5) ------------------------------
+
+    [Fact]
+    public void SetVirtualizationWindow_Burst_DebouncesFringeRecompute_ToOnePass()
+    {
+        CbzFixture.Create(_cbzPath, pageCount: 60);
+        using var pipeline = ReaderImagePipeline.TryOpen(_cbzPath)!;
+
+        int recomputes = 0;
+        var settled = new ManualResetEventSlim(false);
+        pipeline.OnFringeRecomputed = () => { Interlocked.Increment(ref recomputes); settled.Set(); };
+
+        for (int i = 0; i < 12; i++)
+        {
+            pipeline.SetVirtualizationWindow(i, i); // < 30 ms apart in a tight loop
+        }
+
+        Assert.True(settled.Wait(TimeSpan.FromSeconds(2)));
+        Thread.Sleep(120); // let any stragglers fire
+        Assert.Equal(1, recomputes);
+    }
+
+    [Fact]
+    public void SetVirtualizationWindow_SpacedCalls_RecomputeFringeEachTime()
+    {
+        CbzFixture.Create(_cbzPath, pageCount: 60);
+        using var pipeline = ReaderImagePipeline.TryOpen(_cbzPath)!;
+
+        int recomputes = 0;
+        pipeline.OnFringeRecomputed = () => Interlocked.Increment(ref recomputes);
+
+        for (int i = 0; i < 5; i++)
+        {
+            pipeline.SetVirtualizationWindow(i * 3, i * 3);
+            Thread.Sleep(60); // > FringeDebounceMs
+        }
+        Thread.Sleep(120);
+
+        Assert.Equal(5, recomputes);
+    }
+
     [Fact]
     public void MemoryBudget_HardByteCeiling_EvictsUnderPressure()
     {

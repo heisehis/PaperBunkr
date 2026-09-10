@@ -546,6 +546,20 @@ public sealed class ReaderImagePipeline : IReaderPageSource
     private int _pendingMax = -1;
     private readonly System.Threading.Timer _fringeTimer;
 
+    /// <summary><see cref="Environment.TickCount64"/> before which <see cref="RecomputeFringe"/> defers itself (a page-turn transition is animating). 0 = not suppressed.</summary>
+    private long _fringeSuppressedUntilTick;
+
+    public void SuppressFringePrefetch(int milliseconds)
+    {
+        if (milliseconds <= 0)
+        {
+            return;
+        }
+        _fringeSuppressedUntilTick = Environment.TickCount64 + milliseconds;
+        // Make sure a pass is scheduled to run once the hold lifts.
+        _fringeTimer.Change(milliseconds + 10, System.Threading.Timeout.Infinite);
+    }
+
     /// <summary>Test seam (design §12.4): fires at the end of each debounced <see cref="RecomputeFringe"/> pass.</summary>
     internal Action? OnFringeRecomputed { get; set; }
 
@@ -614,6 +628,16 @@ public sealed class ReaderImagePipeline : IReaderPageSource
     {
         if (_cts.IsCancellationRequested)
         {
+            return;
+        }
+
+        long suppressedFor = _fringeSuppressedUntilTick - Environment.TickCount64;
+        if (suppressedFor > 0)
+        {
+            // A transition is animating - defer the whole fringe pass (eviction + low-priority
+            // enqueue) until it finishes. The visible window still decodes: SetVirtualizationWindow's
+            // immediate path keeps _window wide enough and evicts against the widest bound.
+            _fringeTimer.Change((int)Math.Min(suppressedFor + 10, 2000), System.Threading.Timeout.Infinite);
             return;
         }
 

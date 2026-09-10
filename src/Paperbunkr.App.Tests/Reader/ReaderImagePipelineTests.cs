@@ -300,6 +300,26 @@ public class ReaderImagePipelineTests : IDisposable
     }
 
     [Fact]
+    public void SuppressFringePrefetch_DefersTheFringePass_UntilTheHoldLifts()
+    {
+        CbzFixture.Create(_cbzPath, pageCount: 60);
+        using var pipeline = ReaderImagePipeline.TryOpen(_cbzPath)!;
+
+        int recomputes = 0;
+        var ran = new ManualResetEventSlim(false);
+        pipeline.OnFringeRecomputed = () => { Interlocked.Increment(ref recomputes); ran.Set(); };
+
+        pipeline.SuppressFringePrefetch(200);
+        pipeline.SetVirtualizationWindow(20, 20);
+
+        Thread.Sleep(90); // still inside the hold
+        Assert.Equal(0, recomputes);
+
+        Assert.True(ran.Wait(TimeSpan.FromSeconds(2)), "fringe pass never ran after the hold lifted");
+        Assert.Equal(1, recomputes);
+    }
+
+    [Fact]
     public void MemoryBudget_HardByteCeiling_EvictsUnderPressure()
     {
         const int pageCount = 40;

@@ -111,9 +111,17 @@ this file itself already did once (see the note below).
 > multiple GUI-unverified fix chains now looks fixed — not formally declared closed (one session;
 > native AVs can be load/timing-dependent) but strong evidence. Rev-3 items (1) 7z COM thread
 > affinity and (5) fringe debounce are the likely closers.
-> **Residual (smoothness, not crash — lower priority):** page-turn transitions are still "a bit
-> choppy" per the user ("big leap from yesterday" though). Likely the `ReaderPageVisualHandler`
-> transition render path competing with background decode. Not yet investigated.
+> **Residual (smoothness, not crash):** page-turn transitions were "a bit choppy" — the
+> low-priority prefetch fringe's `CreateScaledBitmap` churn on the decode workers competed with
+> the compositor mid-slide. Follow-up: `IReaderPageSource.SuppressFringePrefetch(ms)` — `PageCanvas`
+> calls it when it sends a `ReaderPageTransitionData` (hold = transition duration + 40ms), so the
+> fringe pass defers past the animation while the visible window keeps decoding at high priority.
+> GUI-unverified (check the Ctrl+Shift+P `ReaderPerfStats` overlay's compose p99 during a
+> transition-flip). Committed on `claude/reader-transition-smoothing`.
+> **`Paperbunkr.Benchmarks` note:** `SequentialFlip` returns `NA` — BDN's isolated child process
+> doesn't survive the `[GlobalSetup]` headless-Avalonia bootstrap in this environment (same class
+> as the full-suite headless flake). Not blocking; the rev-3 item-4 allocation change is covered
+> by the 7z session unit tests. The harness itself needs a fix before it yields numbers.
 >
 > **Also 2026-09-10 — startup dead-splash bug (separate, startup-pipeline):** `App.RunDesktopStartupAsync`
 > built `new SplashWindow()` (App.axaml.cs:53) — whose ctor reads `AppSettings` via
@@ -124,7 +132,8 @@ this file itself already did once (see the note below).
 > Diagnosed from a full dump. Fixes: `SplashWindow` ctor `TryGetReducedMotion()` (try/catch →
 > motion-on) so the splash never hard-depends on DB schema; splash construction moved inside the
 > `RunDesktopStartupAsync` try so failures hit `ReportFatalStartupError`. DB migrated forward with
-> `dotnet ef database update`. 2 files, own commit, still uncommitted.
+> `dotnet ef database update`. **Merged to master with the rev-3 work as PR #71 (`1b0a56a`),
+> 2026-09-10** — commits `03980eb` (reader rev-3) + `a923d7b` (splash fix).
 >
 > **Manual session note (2026-09-05, Duplicate Finder shipped + grouped review/bulk delete/scan
 > alerts):** follow-up to the Plugin API v2 backlog-finish note directly below. Duplicate Finder

@@ -154,11 +154,20 @@ automatically.
   `IsPageLoading = false`. Call it at the top of `Load()` **before** `_decoder?.Dispose()`, and in
   `GoBack()` before `_goBack()`. After the new `_decoder` is created in `Load()`, if it
   `is IReaderPageSource np` → `np.BackgroundDecodeCompleted += OnBackgroundPageDecoded`.
-- Rewrite the `RefreshCurrentPage()` paged branch per the spec: pipeline branch peeks
-  `TryGetCachedPage(_currentPageIndex)`; hit → assign + `ResolveSecondaryPage`; miss → keep
-  outgoing `CurrentPage`, `_awaitingPageIndex = _currentPageIndex`, `IsPageLoading = true`,
-  `CurrentPageSecondary = null`, arm `_coldMissTimeout = DispatcherTimer.RunOnce(() => OnColdMissTimeoutElapsed(waitingFor), 5s)`.
-  Non-`IReaderPageSource` fallback keeps the current synchronous `GetPage` + `TryDecodePairedPage` + try/catch.
+- Rewrite the `RefreshCurrentPage()` paged branch — **but scope the async path to large jumps
+  only** (see note below): `GoToPage` computes `largeJump = Math.Abs(new − old) > 3` and passes it
+  as `RefreshCurrentPage(allowAsyncColdMiss:)`. Pipeline branch peeks `TryGetCachedPage`; if it's
+  a miss **and** `allowAsyncColdMiss`, keep the outgoing `CurrentPage`, set `_awaitingPageIndex`,
+  `IsPageLoading = true`, `CurrentPageSecondary = null`, arm `_coldMissTimeout`; otherwise take the
+  synchronous path (`cached ?? _decoder.GetPage(...)` in a try/catch, then `TryDecodePairedPage`)
+  exactly as before. Non-`IReaderPageSource` fallback unchanged. `ResolveSecondaryPage` (async
+  peek+await for the pair) runs only from `ApplyDecoded`'s primary branch.
+  **Why scoped:** a first pass made *every* page turn async, which regressed deterministic
+  double-page pairing on ordinary turns (3 pre-existing tests: `NextPage_StepsByTwo_WhenCurrentlyPaired`,
+  `ToggleDoublePageModeCommand…RePairsImmediately`, `CurrentPageSecondary_PairsAdjacentPortraitPages`) —
+  a real pipeline often hasn't decoded the adjacent page the instant you turn to it. Adjacent
+  turns stay synchronous (prefetch nearly always made them a hit; a rare cold ±1/±2 decode is
+  ~50 ms, the pre-existing behaviour); only thumbnail-click / type-to-jump distances go async.
 - `internal void OnColdMissTimeoutElapsed(int waitingFor)` (extracted like `OnAutoScrollTick`, so
   headless tests can invoke it): if `_awaitingPageIndex == waitingFor` → clear await, `IsPageLoading = false`,
   `ErrorMessage = $"Couldn't decode page {waitingFor + 1}."`.

@@ -127,11 +127,13 @@ The array is a priority-ordered fallback chain (first element wins if it initial
 - **`Auto`** makes today's implicit `[AngleEgl, Software]` explicit **and inserts `Wgl` as a rung
   before the CPU rasterizer** — a box where ANGLE/D3D fails to init still gets native GL before
   dropping all the way to software. This is the meaningful behavioral improvement for goal 1.
-- **`Gpu`** removes the software fallback — for deliberately testing "is GPU actually working, or
-  has it been silently falling back this whole time?" It *can* fail to start the app on a broken
-  GPU; that is intentional and documented (recovery: set `PAPERBUNKR_RENDER=software`, or edit
-  `graphics.json`'s `backend` to `"software"`, or — once the Advanced-tab UI exists — change it
-  there).
+- **`Gpu`** removes the software fallback *within a launch* — for deliberately testing "is GPU
+  actually working, or has it been silently falling back this whole time?" It can fail to start
+  the app on a broken GPU; that is intentional. It is no longer a *permanent* brick: as of
+  `docs/superpowers/specs/2026-09-10-bootstrap-crash-sentinel-safe-mode-design.md`, a crash before
+  the first window is detected on the next launch, which forces software rendering automatically.
+  Manual recovery still works too (set `PAPERBUNKR_RENDER=software`, edit `graphics.json`, or use
+  the Preferences → Advanced controls).
 - **`Software`** is the escape hatch for broken drivers, RDP sessions, and VMs.
 
 `CompositionMode` is **left at its default** (`[WinUIComposition, DirectComposition,

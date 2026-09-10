@@ -5,6 +5,7 @@ using Avalonia;
 using Avalonia.Animation.Easings;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
+using Paperbunkr.App.Models;
 using Paperbunkr.App.Plugins;
 using Paperbunkr.App.Services;
 using Paperbunkr.App.ViewModels;
@@ -69,6 +70,15 @@ public partial class App : Application
             var splashViewModel = new SplashViewModel();
             var splash = new SplashWindow { DataContext = splashViewModel };
             splash.Show();
+
+            // The render stack that crashes pre-window (Avalonia platform init, Skia/ANGLE/WGL
+            // device creation, App.axaml load, a top-level window reaching the compositor) has now
+            // come up - retire the bootstrap sentinel (docs/superpowers/specs/2026-09-10-bootstrap-
+            // crash-sentinel-safe-mode-design.md §5.3). Deliberately before the DB-integrity /
+            // migration phase below, which has its own DatabaseRecoveryWindow and must not be
+            // misread as a bootstrap crash if the user force-quits during it.
+            BootstrapSentinel.Clear();
+
             var splashShownAtUtc = DateTime.UtcNow;
 
             await RunStartupSequenceAsync(desktop, splash, splashViewModel, splashShownAtUtc, TotalPhases);
@@ -267,6 +277,26 @@ public partial class App : Application
         else
         {
             _ = Task.Run(mainViewModel.ShowWhatsNewOrCheckForUpdatesAsync);
+        }
+
+        // Safe-mode notice (docs/superpowers/specs/2026-09-10-bootstrap-crash-sentinel-safe-mode-
+        // design.md §5.3) - this launch is a post-crash software-rendering retry. A dismissible
+        // Activity Center warning, not a modal: the app is fully usable this way. Coexists with the
+        // first-look modals above.
+        if (SafeModeState.Active)
+        {
+            mainViewModel.Activity.RaiseAlert(new ActivityAlert
+            {
+                Severity = ActivityAlertSeverity.Warning,
+                Title = "Running in safe mode",
+                Detail = "Paperbunkr didn't finish starting last time, so hardware acceleration is "
+                    + "off for this session. Everything works - it may feel slower. If your graphics "
+                    + "driver is the cause, set the rendering backend to Software to keep it; "
+                    + "otherwise the next launch tries hardware again.",
+                ActionLabel = "Graphics settings",
+                ActionLink = new ActivityLink(ActivityLinkKind.Preferences, "Advanced"),
+                DedupeKey = "safe-mode-active",
+            });
         }
 
         // App chrome (docs/superpowers/specs/2026-08-23-app-chrome-crash-reporter-and-tray-

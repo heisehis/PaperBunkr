@@ -231,6 +231,16 @@ verification" section near the top of this backlog); this session's three new it
 battery + "Part X/Y" label, split-page part navigation, and touch center-zone chrome toggle —
 user-confirmed live 2026-09-05.
 
+**Reader backlog Batch A designed 2026-09-10, code unmerged** (branch
+`claude/reader-backlog-batch-a`, design + plan `docs/superpowers/specs/2026-09-10-reader-backlog-
+batch-a-*.md`): three items scoped — (1) the deferred Preferences → Reader control for
+`AppSettings.ReaderMemoryLimitMb`; (2) a narrow async-swap-on-cold-miss in `ReaderScreenViewModel`
+for large jumps only, plus §17 of the pipeline design doc recording that the fuller async-paged
+restructure stays deferred/declined; (3) type-to-jump-to-page (`ReaderGoToPage`). The branch's
+author reported the code building clean with tests green, but it was never merged and no on-screen
+verification happened — treat the branch's code as unlanded until it's actually merged; only the
+design/plan docs are captured here.
+
 **Two more items thought closed above turned out to have real remaining gaps, revisited as
 "reader backlog Batch B" and shipped 2026-09-11**
 (docs/superpowers/specs/2026-09-10-reader-backlog-batch-b-design.md +

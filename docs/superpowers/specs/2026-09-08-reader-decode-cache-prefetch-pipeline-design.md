@@ -769,3 +769,26 @@ target the shipped names.
 - **Deleted:** `Services/{PageImageDecoder,PageDecodeService}.cs` (+ their tests); one-shot callers → `PageDecodeCore.DecodeSinglePage`
 - **Modified:** `PageCanvas.cs` (+291), `ReaderPageVisualHandler.cs` (+164), `ReaderScreenViewModel.cs`, `PdfPageReaderScreenViewModel.cs`, `PageDecodeCore.cs`, `SevenZipEngine.cs` (+124), `PdfiumReaderEngine.cs` (+68), `ReaderScreen.axaml`(.cs) (Ctrl+Shift+P perf overlay), `AppSettings.cs`
 - **New (test/bench):** `Paperbunkr.Benchmarks/` (BenchmarkDotNet), `App.Tests/Reader/*`, `AccessorSessionTests`, `SevenZipAccessorSessionTests`, `PdfPipelineSessionTests`
+
+---
+
+## 17. Post-batch-A decisions (2026-09-10, branch `claude/reader-backlog-batch-a`)
+
+Reader-backlog Batch A (`docs/superpowers/specs/2026-09-10-reader-backlog-batch-a-design.md`)
+revisited the two deferrals from the 2026-09-09 alpha-todo note plus one review question.
+
+| Deferred item | Decision | Rationale |
+|---|---|---|
+| **Full async-paged swap-on-`PageReady`** (viewport-aware display tier + zoom-triggered detail re-decode — the full `PageCanvas` restructure) | **Stays deferred.** | The shipped detail tier (`GetDetailPage`, rev-3 budget-accounted) already covers zoom sharpness. Remaining benefit is viewport-width-aware display decode; the interim 2560 px cap is good on any real monitor to ~1.5× zoom. Large scope, low marginal value. |
+| **1-reader / N-decoder thread split** (§8.3) | **Formally accepted as not-needed.** | One loop already decodes off the UI thread; archive reads serialise regardless (`_readerLock` + the single 7z COM executor thread). Parallel Skia decode only helps a multi-page cold burst, and `RawBytesCache` makes re-reads cheap. Revisit only if a benchmark shows decode (not read) as the bottleneck. |
+| **Explicit queue cancellation on `IReaderPageSource`** (`FlushQueue()` / a `CancellationToken` on `SetVirtualizationWindow`) — raised in review re: rapid jumps | **Not needed; not added.** | Stale queue entries are already dropped at dequeue in O(1) (`ProcessQueuedPage` window-membership check, `ReaderImagePipeline.cs:739`/`:762`); `_window`/`_enqueued` re-bound every call (`:600–614`); the fringe recompute is debounced 30 ms. A 50-jump burst does ~3 real decodes, not 150. Widening the interface is out of scope and would reopen a shipped design. |
+
+**What Batch A *did* build:** a narrow async-swap-on-cold-miss in `ReaderScreenViewModel` — but
+scoped to **large jumps only** (`Math.Abs(new − old) > 3`, i.e. thumbnail click / type-to-jump).
+An adjacent page turn keeps the pre-existing synchronous `GetPage` path: prefetch nearly always
+made it a hit, a rare cold ±1/±2 decode is ~50 ms, and keeping it synchronous means the
+double-page pair still resolves deterministically on every ordinary turn (regressing that was the
+first attempt's mistake). On a large-jump cold miss the outgoing page stays on screen, a `…`
+indicator shows (`IsPageLoading`), and the primary — then, via `ApplyDecoded` → `ResolveSecondaryPage`,
+the spread's pair — swap in on `BackgroundDecodeCompleted`. A 5 s `DispatcherTimer` fallback
+surfaces `ErrorMessage` if the decode never lands.

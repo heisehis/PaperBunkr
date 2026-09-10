@@ -1836,6 +1836,13 @@ public class PageCanvas : Control
         // Reference-drop only, never Dispose - see OnDetailSettleTick.
         _detailBitmap = null;
         _detailBitmapForPage = -1;
+
+        // Hand back the pipeline's byte-budget reservation for the detail bitmap (design §15 #3) -
+        // the display cache returns to its full capacity. No-op when nothing was reserved.
+        if (Decoder is Services.Reader.IReaderPageSource src)
+        {
+            src.ReleaseDetail();
+        }
     }
 
     /// <summary>

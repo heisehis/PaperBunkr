@@ -1,3 +1,6 @@
+using System.Collections.Concurrent;
+using System.Threading;
+using System.Threading.Tasks;
 using cYo.Projects.ComicRack.Engine.IO.Provider.Readers;
 using cYo.Projects.ComicRack.Engine.IO.Provider.Readers.Archive;
 using Paperbunkr.App.Services;
@@ -18,6 +21,7 @@ public class SevenZipAccessorSessionTests : IDisposable
 
     public void Dispose()
     {
+        SevenZipEngine.OnSessionComWork = null;
         try { if (File.Exists(_cbzPath)) File.Delete(_cbzPath); } catch (IOException) { }
     }
 
@@ -80,5 +84,51 @@ public class SevenZipAccessorSessionTests : IDisposable
         using var session = provider.TryOpenReaderSession()!;
 
         Assert.Null(session.ReadEntryBytes("nope_not_here.png"));
+    }
+
+    // --- rev-3 addendum: 7z COM thread affinity (design §15 #1) --------------------------------
+
+    [Fact]
+    public void Session_EveryComCall_RunsOnOneThread_DistinctFromCaller()
+    {
+        var comThreads = new ConcurrentDictionary<int, byte>();
+        SevenZipEngine.OnSessionComWork = tid => comThreads.TryAdd(tid, 0);
+
+        CbzFixture.Create(_cbzPath, pageCount: 8);
+        using var provider = OpenProvider();
+        using var session = provider.TryOpenReaderSession()!; // open() marshals to the COM thread
+
+        // Reads from several different calling threads must all land on the same COM thread.
+        var callerThreads = new ConcurrentDictionary<int, byte>();
+        Parallel.ForEach(new[] { 0, 5, 2, 7, 1, 4 }, i =>
+        {
+            callerThreads.TryAdd(Environment.CurrentManagedThreadId, 0);
+            Assert.NotNull(session.ReadEntryBytes(provider.GetFile(i).Name));
+        });
+
+        Assert.Single(comThreads);
+        Assert.DoesNotContain(comThreads.Keys.Single(), callerThreads.Keys);
+        Assert.DoesNotContain(Environment.CurrentManagedThreadId, comThreads.Keys);
+    }
+
+    [Fact]
+    public void Session_ConcurrentReads_AreSerialized_AndCorrect()
+    {
+        CbzFixture.Create(_cbzPath, pageCount: 10);
+        using var provider = OpenProvider();
+        using var session = provider.TryOpenReaderSession()!;
+
+        var expected = new byte[provider.Count][];
+        for (int i = 0; i < provider.Count; i++)
+        {
+            expected[i] = provider.GetByteImage(i);
+        }
+
+        Parallel.For(0, provider.Count * 3, k =>
+        {
+            int i = k % provider.Count;
+            var actual = session.ReadEntryBytes(provider.GetFile(i).Name);
+            Assert.Equal(expected[i], actual);
+        });
     }
 }

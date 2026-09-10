@@ -95,4 +95,10 @@
     <ProjectReference Include="..\Paperbunkr.Common\Paperbunkr.Common.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Test-only seams (e.g. SevenZipEngine.OnSessionComWork, the 7z COM-thread affinity probe
+         for the reader-pipeline rev-3 addenda, design §15 #1). -->
+    <InternalsVisibleTo Include="Paperbunkr.App.Tests" />
+  </ItemGroup>
+
 </Project>

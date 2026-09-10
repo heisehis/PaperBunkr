@@ -1,12 +1,25 @@
 # Reader decode / cache / prefetch pipeline — design
 
-**Status:** draft for review
+**Status:** Phases 1–4 implemented and merged to `master` via **PR #68** (`825f146`), 2026-09-09.
+This document additionally carries a set of **post-implementation review addenda (rev 3,
+2026-09-10)** — five concurrency / memory-accounting corrections from a technical review that are
+**implemented 2026-09-10** (branch `claude/reader-rev3-addenda`) on top of the shipped
+pipeline. Each is threaded into its home section below and summarised in §15.
 **Date:** 2026-09-08
 **Supersedes/extends:** `docs/onboarding.md` §8 (the original decode-pipeline vision — this is the
 concrete engineering of it), the ad-hoc decoders added in
 `docs/superpowers/specs/2026-08-06-reader-canvas-alpha-design.md` §2 and
 `docs/superpowers/specs/2026-08-10-reader-polish-continuous-scroll-chrome-overlays-design.md` §3.
-**Branch:** `claude/reader-pipeline` (off `master`).
+**Branch:** merged from `claude/reader-pipeline-v2`.
+
+### Revision history
+
+| Rev | Date | Change |
+|---|---|---|
+| 1 | 2026-09-08 | Initial design; four grilling rounds. |
+| 2 | 2026-09-09 | Review decisions (§14): byte-budget formula, detail-tier trigger constants, Phase 3 split to its own doc. Implemented as PR #68. |
+| 3 | 2026-09-10 | Post-implementation review addenda (§15), targeting the shipped types (see §16 for design-vs-as-built): (1) 7z.dll COM on a dedicated executor thread, not a pooled thread + `_readerLock`; (2) `PdfiumAccessorSession` caches up to 3 `PdfPage` objects; (3) detail-tier bitmaps accounted against the reader byte budget; (4) pre-size `MultiExtractToStreamsCallback`'s streams (the two stream sessions were already exact-size); (5) ~30 ms debounce on the prefetch-fringe recompute. Also: **§16 "As-built deltas (PR #68)"** added. |
+| 4 | 2026-09-10 | Rev-3 addenda **implemented** on branch `claude/reader-rev3-addenda`. Notes vs rev-3 spec: (4) turned out near-trivial — the two stream sessions already pre-sized from `entry.Size`; only `MultiExtractToStreamsCallback` needed the fix, `GetProperty` had to move before `Extract` (7z.dll forbids it reentrant — caught in test), and the exact bytes are captured in `SetOperationResult` before `OutStreamWrapper.Dispose()` closes the stream. §4.7 rewritten to match. |
 
 ---
 
@@ -94,6 +107,13 @@ untouched.
 
 ### 3.1 The seam: `IReaderPageSource`
 
+> **As-built (PR #68):** the shipped interface differs from the sketch below — it is
+> `IReaderPageSource : IPageImageDecoder` with `SetVirtualizationWindow(int,int)`,
+> `TryGetCachedPage(int) → Bitmap?`, `GetDetailPage(int, PixelSize)`, `BackgroundDecodeCompleted`,
+> `ActivePageIndex`, `SetViewportWidth`, `DecodedPageCount`. The `PageRange` / `PagePriority` /
+> `ReaderPageHandle` / `PageReady` names here were not used. Full table: **§16**. Treat the code
+> below as the design intent, not the API.
+
 Replaces `IPageImageDecoder`. Window-based rather than "get page N":
 
 ```csharp
@@ -136,7 +156,7 @@ Lives in `src/Paperbunkr.App/Services/Reader/`. Composed of:
 
 | Component | Responsibility | Thread-safety |
 |---|---|---|
-| `IReaderByteSource` — wraps an engine `IComicAccessorSession` (archives) or `IPdfDocumentSession` (PDF); `ProviderByteSource` for exotic single-image formats | Raw compressed/encoded page bytes by index, from a **handle opened once per session**. §4. | Single-threaded access, serialized by the pipeline's reader lock (none of the underlying libraries — SharpZipLib, SharpCompress, 7z.dll COM, PDFium — are thread-safe). |
+| `IReaderByteSource` — wraps an engine `IComicAccessorSession` (archives) or `IPdfDocumentSession` (PDF); `ProviderByteSource` for exotic single-image formats | Raw compressed/encoded page bytes by index, from a **handle opened once per session**. §4. | **Thread-*affine*, not merely locked.** None of the underlying libraries (SharpZipLib, SharpCompress, 7z.dll COM, PDFium) are thread-safe, and 7z.dll's COM objects are additionally *apartment-bound* — a lock is insufficient. Every call into a given session is marshalled onto that session's **owning thread** (§4.2): for 7z that is a dedicated pinned thread the `IInArchive` is created, invoked, and released on; for the others it is the pipeline's single reader thread. |
 | `RawBytesCache : Cache<PageId, RawPageBytes>` | Compressed page bytes in RAM. Feeds decode + detail re-decode without re-touching the archive. `RawPageBytes : IDataSize`. | `Cache<K,T>` (RW-lock, single-flight). |
 | `DecodeWorkers` | N `Task`s draining a high- and a low-priority bounded `Channel<DecodeRequest>` (Channels, per §1). Each: get bytes from `RawBytesCache` → Skia decode → downsample to display target → store. Window-staleness check at dequeue and post-decode (the existing `PageDecodeService` pattern — no per-request tokens). | Channels; `_window` snapshot check. |
 | `DisplayCache : Cache<PageId, ReaderBitmap>` | Decoded, display-tier (downsampled) bitmaps. **Byte-bounded** (§5). `ItemRemoved` → `ReaderBitmap.Dispose()`. | `Cache<K,T>`. |
@@ -205,10 +225,41 @@ The **7z.dll COM `IInArchive`** lifecycle (the `SevenZipFactory`, `InStreamWrapp
 machinery rather than the App layer reimplementing it. This is the reason the session lives in
 the engine, not the App (resolved in review — Round 4).
 
+**COM apartment affinity (rev 3, implemented 2026-09-10) — targets `SevenZipEngine.SevenZipAccessorSession`.**
+As shipped, `SevenZipAccessorSession` has no thread or lock of its own; `ReaderImagePipeline`
+serialises every call with `_readerLock` on its `RunConsumerLoopAsync` pool thread. That is not
+sufficient: `IInArchive`, `InStreamWrapper`, and the `MultiExtractToStreamsCallback` are COM
+objects with apartment affinity — invoking them from a thread other than the one that created
+them crosses an apartment boundary and can fault natively (no managed exception, matching the
+class of fast-flip AccessViolation this whole effort chased). The 7z session therefore owns a
+**dedicated, long-lived executor thread**:
+
+- Created with `ApartmentState.STA` and a simple blocking work-queue (`BlockingCollection<Action>`
+  drained in a loop), one per open 7z session.
+- **Every** touch of the `IInArchive` — `SevenZipFactory.CreateInArchive`, `Open`, `Extract`,
+  the `InStreamWrapper` / `MultiExtractToStreamsCallback` construction, `GetProperty` in
+  `TryOpen`, and `Marshal.ReleaseComObject` — is posted to that thread and awaited. The
+  `IInArchive` is never handed to another thread.
+- `ReadEntryBytes(name)` from the pipeline's reader thread posts the range extract to the
+  executor and blocks on the result; `_readerLock` still serialises *callers* (one outstanding
+  request), but correctness now comes from thread affinity, not the lock.
+- The `passedByBuffer` / `maxExtracted` forward-mark state (§4.2) stays owned by the executor
+  thread — only ever touched inside a posted action.
+- Session `Dispose()` posts the `Marshal.ReleaseComObject` calls to the executor, signals the
+  work-queue to complete, and joins the thread (a .NET STA thread tears its COM apartment down
+  on exit — no explicit `CoUninitialize`).
+
+The zip / tar / rar / SharpCompress sessions (`ZipSharpAccessorSession`,
+`SharpCompressAccessorSession`, the tar session) have no apartment constraint and stay on the
+pipeline's single reader thread (§8.3) under `_readerLock` as shipped.
+
 ### 4.2 Solid-archive strategy
 
 For solid `.cbr`/`.cb7`, decompression is forward-only from the block start. The session keeps a
-high-water mark of the furthest index extracted. `ReadPageBytes(i)`:
+high-water mark of the furthest index extracted (shipped: `maxExtracted`, `passedByBuffer`,
+`ForwardBatch = 8`). Every `Extract(...)` call below runs on the 7z session's pinned executor
+thread (§4.1, rev 3). For an entry at index `i` (resolved from the name `ReadEntryBytes` was
+given):
 
 - `i` already extracted → served from `RawBytesCache` (the pipeline checks that first anyway).
 - `i` ahead of the mark → `Extract([mark+1 .. i])` in one COM call; **every** entry it produces
@@ -223,9 +274,15 @@ the reader from the start.
 
 Net: the O(n) solid-decode cost is paid **once across a forward reading pass**, not per page.
 
-### 4.3 `IPdfDocumentSession` (new)
+### 4.3 PDF session
 
-Parallel to the archive session, for the default `PdfiumReaderEngine` path:
+> **As-built (PR #68):** there is **no** separate `IPdfDocumentSession`. PDF reuses
+> `IComicAccessorSession` via `PdfiumReaderEngine.PdfiumAccessorSession`, whose `ReadEntryBytes`
+> calls `RenderPageToJpeg(_doc, index, disposeDoc: false)` against one `PdfDocument`
+> (`FPDF_DOCUMENT`) held for the session. `targetLongEdgePx` render-to-size was not implemented —
+> PDFium renders at its fixed path and the pipeline downsamples. §16.
+
+The design below (a parallel `IPdfDocumentSession`) is the historical intent.
 
 ```csharp
 public interface IPdfDocumentSession : IDisposable
@@ -243,6 +300,20 @@ xref/object-table re-parse (confirmed; PDFiumSharpV2 1.1.4 has no incremental op
 **not thread-safe** — all `FPDF_*` calls serialised on the pipeline's reader thread, same as
 archives. `PdfGhostScript` / `PdfNative` (non-default engines) keep their current per-page path;
 only the default Pdfium engine gets a session.
+
+**Page-object cache (rev 3, implemented 2026-09-10) — targets the shipped `PdfiumAccessorSession`.**
+`RenderPageToJpeg` currently does `using (PdfPage pdfPage = doc.Pages[index])` — a load
+(`FPDF_LoadPage`: content-stream + resource-dict parse) and a close on every call, so a prefetch
+render and a subsequent detail render (§6.2) of the same page each pay it. Add a small **LRU of
+up to 3 `PdfPage` objects** on the session (keyed by page index):
+
+- `RenderPageToJpeg` reuses the cached `PdfPage` if present, else loads it and inserts it; the
+  page is left open.
+- On the 4th distinct page, the least-recently-used `PdfPage` is disposed (`FPDF_ClosePage`).
+- Sized at 3 so the current page plus its immediate neighbours (the paged window, §3.3) stay
+  resident during a forward flip without holding the whole document's pages open.
+- All load/render/close calls stay on the pipeline's reader thread (PDFium affinity); `Dispose()`
+  disposes every cached `PdfPage` before `((IDisposable)_doc).Dispose()`.
 
 ### 4.4 Cost model after this change
 
@@ -269,6 +340,38 @@ correct — matches today's behaviour for that format).
 `ProviderByteSource`. It returns the *encoded* bytes where a Skia-native decode is possible (WebP
 on the bundled SkiaSharp 3.119) and only falls back to the `System.Drawing` → re-encode path for
 formats Skia genuinely can't read (Phase 4 replaces the PNG round-trip with a raw pixel buffer).
+
+### 4.7 Buffer allocation (rev 3 — **implemented 2026-09-10, narrower than first specified**)
+
+A decompressed page is routinely 200 KB–2 MB — over the **Large Object Heap** threshold (85 KB) —
+and a growing `MemoryStream` reaches its final size through geometric doubling, allocating several
+LOH arrays per page. Sustained over a continuous read that is LOH churn that fragments the heap
+and forces gen-2 compaction pauses that read as reader stutter.
+
+**As found (reading the PR #68 code), most of this was already right:**
+
+- `SharpCompressAccessorSession.ReadAll` and `ZipSharpAccessorSession.ReadEntryBytes` already
+  allocate **one exact-size `byte[]` from `entry.Size`** and read straight into it — no doubling,
+  and that array is the artifact the pipeline caches, not scratch. The `new MemoryStream()` +
+  `CopyTo` + `ToArray` fallback in each only fires when `entry.Size` is missing/0, which does not
+  happen for well-formed zip/rar/7z. Left as-is.
+- The *final* `byte[]` crossing the `ReadEntryBytes` boundary is a right-sized array the caller
+  owns (copied into a `RawPageBytes` cache entry immediately). Pooling the return value would
+  need an ownership protocol the interface deliberately avoids.
+
+**The one real gap — fixed:** `MultiExtractToStreamsCallback` (the 7z solid/forward-batch path)
+used a plain growing `new MemoryStream()` per entry. Now:
+
+- The callback takes `IReadOnlyDictionary<int,long> knownSizes`, gathered by
+  `SevenZipAccessorSession` from `kpidSize` **before** the `Extract` call (7z.dll forbids
+  reentrant `GetProperty` from inside an extract callback — this was a real bug caught in test).
+- `GetStream` creates `new MemoryStream(capacity: (int)size)` — one allocation, no doubling.
+- `GetResults` hands back `MemoryStream.GetBuffer()` directly (no `ToArray` copy) when the stream
+  filled exactly (`Length == Capacity`); falls back to `ToArray()` otherwise.
+
+No `ArrayPool<byte>.Shared` rentals in the end — the exact-pre-size approach removes the churn
+without a rent/return lifetime to manage across the COM callback boundary. Spec §15 #4 updated to
+match.
 
 ---
 
@@ -300,11 +403,34 @@ if a specific machine needs less or more. No RAM-scaled ceiling term.
 One budget, shared — only one reader (comic *or* PDF *or* book) is open at a time. Allocation
 within it:
 
-- `DisplayCache.SizeCapacity` = `budgetBytes − thumbnailReserve`.
-- `ThumbnailCache.SizeCapacity` = `thumbnailReserve` = `min(32 MiB, budgetBytes / 8)`.
-- `RawBytesCache.SizeCapacity` = a separate, smaller allowance (`min(64 MiB, budgetBytes / 4)`) —
+As shipped (`ReaderMemoryBudget`, an immutable snapshot — §16):
+
+- `DisplayBytes` (`= _displayCache.SizeCapacity`) = `TotalBytes − ThumbnailBytes`.
+- `ThumbnailBytes` = `min(32 MiB, TotalBytes / 8)`.
+- `RawBytesBytes` = `min(64 MiB, TotalBytes / 4)` — backs the process-wide `SharedRawCache`;
   compressed bytes are ~10–20× smaller than decoded, so this holds far more pages than the
   display cache and is what makes eviction cheap to recover from.
+
+**Detail-tier reservation (rev 3, implemented 2026-09-10).** The shipped detail tier
+(`ReaderImagePipeline.GetDetailPage`) decodes a full-page high-res bitmap outside any cache and
+outside the budget — a 3000×4600×4 detail bitmap is ~55 MiB that the budget never sees, so a
+zoom-in while the display cache is at its cap pushes real memory past the budget. `ReaderMemoryBudget`
+shipped immutable (no setter), so the fix is one of:
+
+- add a mutable `ReservedDetailBytes` to `ReaderMemoryBudget` and derive
+  `EffectiveDisplayBytes = DisplayBytes − ReservedDetailBytes`, pushed to
+  `_displayCache.SizeCapacity` whenever it changes; **or**
+- keep `ReaderMemoryBudget` immutable and have the pipeline lower `_displayCache.SizeCapacity`
+  directly around the `GetDetailPage` call.
+
+Either way: before decoding, reserve `targetSize.Width * targetSize.Height * 4`; that lowers the
+display cache capacity and evicts to fit — **pages outside the current virtualization window
+first, and never `ActivePageIndex`** (that bitmap is drawn under the detail overlay; the shipped
+peek doesn't `IItemLock` it, so this exclusion is explicit). The reservation is best-effort — if
+the window itself is bigger than the reduced capacity, the detail bitmap is allowed to briefly
+exceed budget rather than fail the decode. At most one detail bitmap is live at a time; a new
+`GetDetailPage` releases the previous reservation first. Disposing the returned bitmap restores
+the capacity.
 
 ### 5.4 `Cache<K,T>` tuning
 
@@ -343,12 +469,20 @@ When the user zooms in past what the display tier can show sharply:
   the zoom/pan gesture has been idle for **~150 ms** (debounce — don't decode mid-pinch). These
   two constants ship as-is and get tuned from real feel after Phase 2 lands (resolved in review),
   not guessed harder now — they're isolated in one place for that.
-- Action: `GetDetail(index, neededSize)` decodes the **full page** (not a region — region/tile
-  decode is Phase 3) from `RawBytesCache` at the needed resolution. Held by the caller, drawn in
-  place of the display-tier bitmap.
+- Action: `GetDetailPage(index, targetSize)` decodes the **full page** (not a region — region/tile
+  decode is Phase 3) from the raw-bytes tier (`SharedRawCache`) at the needed resolution — shipped
+  as `PageDecodeCore.TryDecodeBytes(bytes) → CreateScaledBitmap(targetSize)`. Returns a bare
+  `Bitmap` the caller disposes; `PageCanvas` swaps it in for the display-tier bitmap and drops it
+  on zoom-out (Phase 2 wired the trigger via a settle-timer keyed off `ActivePageIndex`).
+- **Budget (rev 3, implemented 2026-09-10):** before decoding, reserve
+  `targetSize.Width * targetSize.Height * 4` per §5.3, which shrinks the display cache's
+  `SizeCapacity` and evicts unleased display entries to make room. At most one detail bitmap is
+  live at a time (a new `GetDetailPage` releases the previous reservation first). The reservation
+  is released the instant the caller disposes the returned bitmap.
 - Release: dropped as soon as effective scale falls back below the trigger, or the page leaves
-  the window. Never enters `DisplayCache`.
-- Interaction with `RawBytesCache`: because the compressed bytes are still cached, a detail
+  the window. Never enters the display cache; its bytes are still counted (via the reservation)
+  while alive.
+- Interaction with `SharedRawCache`: because the compressed bytes are still cached, a detail
   decode after settling costs one Skia decode, no archive I/O.
 
 ---
@@ -393,11 +527,34 @@ Directional, adaptive, **not** velocity-scaled:
 
 ### 8.3 Threads
 
-- **1** archive-read thread (sequential-archive-friendly; one reader lock).
+- **1** archive-read thread (sequential-archive-friendly; one reader lock). For a 7z session, this
+  thread posts to and awaits the session's dedicated COM executor thread (§4.1) rather than
+  touching `IInArchive` directly.
 - **N = clamp(ProcessorCount − 1, 1, 4)** Skia decode/resample workers, pulling already-read
   compressed bytes from `RawBytesCache`.
 - Read and decode are decoupled: the reader thread races ahead filling `RawBytesCache`; workers
   consume it in parallel.
+
+### 8.4 Fast-flip fringe debounce (rev 3, implemented 2026-09-10) — targets `ReaderImagePipeline.SetVirtualizationWindow`
+
+`SetVirtualizationWindow(min, max)` is called on every page turn / scroll frame (from
+`PageCanvas`). As shipped it does the full pass every call: recompute `[fringeMin..fringeMax]`
+from `_forwardFringe`, evict decoded bitmaps outside it, rebuild `_window`, prune `_enqueued`,
+enqueue the window on the high channel and the fringe on the low. There is **no `PrefetchCoordinator`
+class** — this logic is inline in the method.
+
+The **window** part must apply immediately — that is the page the user is looking at. The
+**fringe** part does not: during a rapid sequential flip (holding the page-turn key, repeated
+taps) the fringe shifts one page per turn and every fringe page the single reader thread starts
+is superseded before it is read.
+
+Split `SetVirtualizationWindow` so the window (evict-outside-window + high-priority enqueue)
+still runs synchronously every call, but the **fringe recompute + low-priority enqueue is
+debounced ~30 ms**: a burst of calls within that window schedules the fringe pass once, on the
+trailing edge, against the final window position. A single deliberate turn (no follow-up within
+30 ms) is unaffected. A threadpool timer, reset on each call, same shape as the shipped
+`FlushPagedPush` render burst-guard — applied to the prefetch queue instead of the render push.
+`_forwardFringe` adaptation (§8.1) stays where it is; only the recompute cadence changes.
 
 ---
 
@@ -410,7 +567,7 @@ On issue switch (or reading-mode switch, which forces a reload):
 2. Keep the **previous** container's `RawBytesCache` entries until the new container's first
    window has decoded, then flush them. Gives instant back-navigation (very common — "wrong
    issue, go back") without holding two volumes of decoded pages at once.
-3. Dispose the previous `IComicAccessorSession` / `IPdfDocumentSession` handle.
+3. Dispose the previous `IComicAccessorSession` handle (archives and PDF both — §16).
 
 ---
 
@@ -428,11 +585,12 @@ Not the pipeline itself, but the same effort:
 - **Paged per-frame `CreateScaledBitmap`:** with the display tier now at draw size (§6.1), draw
   the source bitmap directly (GPU scale) in the common case, mirroring
   `ResolveContinuousDrawBitmap`.
-- **`ArrayPool<byte>`** for the read/extract buffers in the accessor-session implementations.
-- **`ReaderFrameStats`** — opt-in overlay behind the existing reader diagnostics toggle:
-  compositor draw time p50/p99, dropped-frame count, cache hit ratio, current budget use. This
-  is how the brief's "< 1 ms render" target is *observed*; it is not a CI gate (compositor
-  timing is too environment-variable).
+- ~~**`ArrayPool<byte>`** for the read/extract buffers in the accessor-session implementations.~~
+  **Reclassified as a Phase-1-class requirement, shipped in the §15 batch** — see §4.7 (rev 3).
+- **`ReaderPerfStats`** (shipped name; drafted as `ReaderFrameStats`) — opt-in overlay, toggled
+  with **Ctrl+Shift+P**: cache hit ratio, decode wall-times, budget use, decoded-page count. This
+  is how the brief's "< 1 ms render" target is *observed*; it is not a CI gate (compositor timing
+  is too environment-variable).
 
 ---
 
@@ -494,6 +652,29 @@ Not the pipeline itself, but the same effort:
 `--reader-throttle` (or an env var): forces N=1 decode workers and injects ~15 ms latency per
 archive read, simulating the old-HDD box for a manual pass on dev hardware.
 
+### 12.4 Rev-3 addendum asserts (§15)
+
+- **7z executor affinity:** in `SevenZipAccessorSessionTests`, the `IInArchive` and every COM
+  wrapper it owns are created, used, and released on one thread — assert via a captured
+  `Thread.ManagedThreadId` recorded at each COM touch through an injected probe; all recorded ids
+  equal, and ≠ the calling thread's. An `Extract` issued from a pool thread is marshalled, not
+  run inline.
+- **PDFium page-object cache:** in `PdfPipelineSessionTests`, `RenderPageToJpeg` for the sequence
+  `[2,3,4,2]` loads a `PdfPage` exactly 3 times (page 2 is a cache hit); a 4th distinct page
+  disposes the LRU `PdfPage`. `Dispose` disposes all cached pages before the `PdfDocument`.
+- **Detail-tier budget:** with the budget pinned to 64 MiB and the display cache full,
+  `GetDetailPage` for a 40 MiB target evicts out-of-window display entries so that
+  `display DataSize + reservedDetailBytes` ≤ budget + one in-flight; disposing the returned
+  bitmap restores `_displayCache.SizeCapacity`. The `ActivePageIndex` entry is never evicted to
+  make room (assert it survives even when it is the LRU entry).
+- **ArrayPool:** a scripted 50-page sequential read through the pipeline allocates no `byte[]`
+  > 85 KB on the LOH for scratch buffers (assert via BenchmarkDotNet `[MemoryDiagnoser]`
+  LOH-bytes/op below a threshold, and/or a rented-vs-`new` audit in the session impls +
+  `MultiExtractToStreamsCallback`).
+- **Fringe debounce:** 10 `SetVirtualizationWindow` calls within 30 ms schedule exactly one
+  fringe recompute (trailing edge, final window); 10 calls spaced 50 ms apart schedule 10. The
+  evict-outside-window + high-priority window enqueue fires on every call regardless.
+
 ---
 
 ## 13. Phases
@@ -503,7 +684,9 @@ archive read, simulating the old-HDD box for a manual pass on dev hardware.
 | **1 — Foundation** | §3 pipeline, §4 `IComicAccessorSession` (zip/tar/rar/7z) + `IPdfDocumentSession`, §5 budget + setting, §8 prefetch, paged+PDF moved async, §7 thumbnails, §12.1 + §12.2 harness. | All modes decode off the UI thread; container opened once/session (archive **and** PDF); budget respected in tests; benchmark numbers recorded as the baseline; no functional regression. |
 | **2 — Tiers** | §6 display-tier downsampling for paged + §6.2 detail tier, §9 cross-issue retention. | Paged mode holds no native-res bitmaps; zoom-in stays sharp; memory flat across issue switches. |
 | **3 — Big strips** | §11. | A 12 000 px webtoon strip scrolls without a decode spike; peak memory for a webtoon volume within budget. |
-| **4 — Render cleanup** | §10. | WebP path has no PNG round-trip; `ReaderFrameStats` overlay; no per-frame pixel copy with adjustment on. |
+| **4 — Render cleanup** | §10. | WebP/HEIF/etc route through the engine's `ConvertToJpeg`; `ReaderPerfStats` overlay (Ctrl+Shift+P); `SkiaBitmapConverter` output cached per-frame. |
+| **Phases 1–4** | — | **Shipped: PR #68 (`825f146`), 2026-09-09.** |
+| **5 — Review addenda** | §15 (items 1–5). | **Done 2026-09-10** (branch `claude/reader-rev3-addenda`): 7z COM executor thread; PDFium `PdfPage` LRU(3); detail tier counted against budget; `MultiExtractToStreamsCallback` pre-sized; fringe-recompute debounced. §12.4 asserts green; fast-flip AV still GUI-unverified. |
 
 ---
 
@@ -517,4 +700,72 @@ All three open questions resolved with the drafted recommendations (review, 2026
    §6.2.
 3. **Phase 3** — its own mini-design doc when reached; §11 is direction only.
 
-No open questions remain. The four grilling rounds and this review close the design frontier.
+The four grilling rounds and the 2026-09-09 review closed the design frontier for the shipped
+implementation (PR #68).
+
+---
+
+## 15. Post-implementation review addenda (rev 3 — **implemented 2026-09-10**, branch `claude/reader-rev3-addenda`)
+
+A technical review of the shipped pipeline (PR #68) flagged five concurrency / memory-accounting
+corrections. All five are now implemented; the "as-built" column records how each landed.
+
+| # | Change | As built | Why it matters |
+|---|---|---|---|
+| 1 | **7z.dll COM on a dedicated executor thread**, not a pooled thread + `_readerLock`. | `SevenZipEngine.ComExecutor` — one long-lived background thread (STA on Windows, plain elsewhere), a `BlockingCollection<Action>` work queue. `SevenZipAccessorSession` posts **every** `IInArchive` touch to it: `OpenArchive` + the name-map loop in `TryOpen`, `Extract` + `MultiExtractToStreamsCallback` + `GetProperty(kpidSize)` in `ExtractOnComThread`, `handle.Dispose()` (→ `Marshal.ReleaseComObject`) in `Dispose`. `passedByBuffer` / `maxExtracted` are thread-confined (no lock). Pipeline `_readerLock` unchanged (caller gate + stateless `GetByteImage` path). | `IInArchive` + the extract callback are apartment-bound COM; invoking them off their creating thread can fault natively with **no managed exception** — the fast-flip AccessViolation signature. A lock serialises callers; it does not pin affinity. **Verified:** thread-affinity + concurrent-read tests green. The AV fix itself stays GUI-unverified (same ceiling as the original fast-flip chain). |
+| 2 | **`PdfiumAccessorSession` caches up to 3 `PdfPage` objects** (LRU by index). | `RenderPageToJpeg` split into `RenderPage(PdfPage)` + a stateless loader. Session keeps `Dictionary<int,PdfPage>` + a `LinkedList<int>` LRU (front = MRU); `GetOrLoadPage` reuses or `FPDF_LoadPage`s, evicts+`Dispose()`s the LRU past 3; `Dispose` closes all then the doc. All on the pipeline reader thread. **Verified:** `[2,3,4,2]` → 3 loads; evicted page reloads. | A prefetch render and a later detail render of the same page each re-parse its content stream + resource dict otherwise. |
+| 3 | **Detail-tier bitmaps accounted against the reader byte budget.** | `ReaderImagePipeline._budget` now stored; `_reservedDetailBytes` / `_detailReservedForPage` under `_sync`. `GetDetailPage` → `ReserveDetailBudget`: pins the requested page's cache entry with an `IItemLock`, drops `_displayCache.SizeCapacity` to `DisplayBytes − w*h*4` (the setter's `Trim` evicts LRU, skips the pinned page), records the reservation. `ReleaseDetail()` (new `IReaderPageSource` member, called from `PageCanvas.ClearDetail`) and a page-change check in `SetVirtualizationWindow` both restore full capacity. One reservation at a time. **Verified:** eviction happens, active page survives, `ReleaseDetail` restores headroom. | A ~55 MiB detail bitmap decoded entirely outside the budget pushes real memory past the cap on a zoom-in. |
+| 4 | **Pre-size `MultiExtractToStreamsCallback`'s streams** (§4.7 — narrower than first specified). | The two stream sessions already allocate one exact `byte[]` from `entry.Size`; untouched. The callback now takes `knownSizes` (gathered from `kpidSize` **before** `Extract` — 7z.dll forbids it reentrant), does `new MemoryStream(capacity)`, and captures the bytes in `SetOperationResult` (`GetBuffer()` when exact, `ToArray()` otherwise) **before** `OutStreamWrapper.Dispose()` closes the stream. | Growing `MemoryStream` reaches size through geometric doubling — several LOH arrays per page. |
+| 5 | **~30 ms debounce on the prefetch-fringe recompute.** | `SetVirtualizationWindow` split: immediate = set `_activePageIndex`, detail-release check, evict outside the widest bound `[min−BackFringe … max+MaxForwardFringe]`, ensure `_window` covers it, high-priority enqueue `[min…max]`, arm `_fringeTimer.Change(30, ∞)`. `RecomputeFringe` (trailing edge) = precise fringe from `_forwardFringe`, exact eviction, `_window` rebuild, low-priority fringe enqueue. **Verified:** a 12-call burst → 1 recompute; spaced calls → 1 each. | Every fringe decode a held-key flip starts is superseded before the single reader thread reads it. |
+
+### Implementation notes
+
+- Items 1 and 4: engine (`Readers/Archive/SevenZipEngine.cs`, `Common/Compression/SevenZip/MultiExtractToStreamsCallback.cs`).
+  Items 2: engine (`Readers/Pdf/PdfiumReaderEngine.cs`). Items 3, 5: App (`Services/Reader/ReaderImagePipeline.cs`,
+  `Services/Reader/IReaderPageSource.cs`, `Views/PageCanvas.cs`).
+- Item 1 supersedes the `_readerLock`-only approach for the 7z path; `_readerLock` stays as the
+  caller-serialisation gate and for zip/tar/rar (no apartment constraint on those).
+- Item 3 added `IReaderPageSource.ReleaseDetail()` and kept `ReaderMemoryBudget` immutable — the
+  pipeline drives `_displayCache.SizeCapacity` directly. `IComicAccessorSession` unchanged;
+  `MultiExtractToStreamsCallback` gained an optional `knownSizes` ctor arg. `Paperbunkr.Engine`
+  gained `[InternalsVisibleTo("Paperbunkr.App.Tests")]` for the two test seams
+  (`SevenZipEngine.OnSessionComWork`, `PdfiumReaderEngine.OnPageLoaded`).
+- Plan: `docs/superpowers/specs/2026-09-10-reader-rev3-addenda-plan.md`. Tests in
+  `SevenZipAccessorSessionTests`, `PdfPipelineSessionTests`, `ReaderImagePipelineTests`
+  (§12.4). Full-suite build + targeted reader tests green; the fast-flip AccessViolation
+  remains GUI-unverified.
+
+---
+
+## 16. As-built deltas — what PR #68 shipped vs this design
+
+PR #68 (`825f146` / squashed `ed758bb`, merged to `master` 2026-09-09) implemented Phases 1–4.
+Several seams shipped differently from §3–§4 above; the design sections are kept as the historical
+record and this section is the reconciliation. Nothing here is a defect — they are deliberate
+simplifications made during implementation — but the rev-3 addenda (§15) and any future work must
+target the shipped names.
+
+| Design (§3–§4) | Shipped (PR #68) | Note |
+|---|---|---|
+| `IReaderPageSource : IDisposable`, clean-slate | `IReaderPageSource : IPageImageDecoder` — keeps `GetPage` / `GetThumbnail`, **adds** the window/peek/detail members | Kept `PageDecodeService`'s member names so `PageCanvas` changed only its `is`-check. |
+| `SetActiveWindow(PageRange window, PagePriority priority)` | `SetVirtualizationWindow(int minIndex, int maxIndex)` | No `PageRange` / `PagePriority` types. Priority is implicit: window = high channel, fringe = low, decided inside the method. |
+| `TryGet(int) → ReaderPageHandle?` that **holds** an `IItemLock` for the caller's draw | `TryGetCachedPage(int) → Bitmap?` — peeks, copies the reference out, releases the lock immediately | The "pinned against eviction while drawing" guarantee did **not** ship. Mitigation is the deferred-dispose sweep (evicted bitmaps disposed 4 s later + a 2 s timer), not a render-time lock. |
+| `event Action<int> PageReady` | `event Action<int> BackgroundDecodeCompleted` | Same semantics, `PageDecodeService`'s name. |
+| — | `int ActivePageIndex` (centre of last window), `void SetViewportWidth(int)`, `int DecodedPageCount` | Added members not in the §3.1 sketch. `ActivePageIndex` is what the detail-tier settle-timer reads. |
+| `GetDetail(int, PixelSize) → ReaderPageHandle` | `GetDetailPage(int pageIndex, PixelSize targetSize) → Bitmap` | Caller disposes the bitmap directly. Wired in Phase 2 via a `PageCanvas` settle-timer keyed off `ActivePageIndex`. **No budget accounting** (§15 #3). |
+| separate `IPdfDocumentSession { RenderPageBytes(int, targetLongEdgePx) }` | **no** `IPdfDocumentSession` — `PdfiumReaderEngine.PdfiumAccessorSession : IComicAccessorSession`, `ReadEntryBytes(name)` → `RenderPageToJpeg(_doc, index, disposeDoc:false)` | One session interface for archives and PDF. `targetLongEdgePx` render-to-size did not ship; PDF renders at its fixed path and the pipeline downsamples. No page-handle cache (§15 #2). |
+| `IComicAccessorSession.ReadPageBytes(int index)` | `IComicAccessorSession.ReadEntryBytes(string entryName)` | By in-container name, so one contract spans index-addressed (7z) and name-addressed (SharpZipLib / SharpCompress) engines. `Count` unchanged. |
+| session impls named per engine, unspecified | `SevenZipEngine.SevenZipAccessorSession` (nested), `SharpCompressAccessorSession`, `ZipSharpAccessorSession`, `TarSharpZipEngine` session; `SevenZip/MultiExtractToStreamsCallback` in `Paperbunkr.Common` | 7z forward-batch = **8** (`ForwardBatch`), with `passedByBuffer` holding the extra entries a range extract produced. |
+| `ReaderMemoryBudget` "immutable snapshot per session + settings-change hook" | immutable snapshot, **no setter / no hook** — `Resolve(int? userLimitMb)` → `{ TotalBytes, DisplayBytes = Total − Thumbnail, ThumbnailBytes, RawBytesBytes }` | A settings change takes effect on the next issue open, not live. `RawBytesBytes` (`min(64 MiB, total/4)`) backs the process-wide `SharedRawCache`. |
+| `RawBytesCache` per session | `SharedRawCache` — **process-wide** compressed-bytes tier | Gives instant issue-back-nav (§9) without a per-session copy; keyed by `PageId` including a container discriminator. |
+| `AppSettings.ReaderMemoryLimitMb` + Preferences → Reader control | column + `20260909221449_AddReaderMemoryLimitMb` migration (no-op `Down()`) shipped; **Preferences control deferred** (Auto works without it) | §5.2's UI is still open work. |
+| §11 big-strip band decode | design-only doc shipped: `docs/superpowers/specs/2026-09-09-reader-webtoon-strip-band-decode-design.md` | Phase 3 not implemented. |
+| fast-flip AV fix (not in original design) | shipped: `_readerLock` serialising container reads; evicted-bitmap dispose deferred 4 s + 2 s timer sweep; paged render pushes coalesced to one per animation frame; transition bitmaps pre-converted to `SKImage` at message time; a coalesced multi-turn `FlushPagedPush` does an **instant swap** (no animate-from-recycled-`_lastRenderedPage`) | **GUI retest with transitions still pending** (per `docs/alpha-todo.md` and the memory note). §15 #1 and #5 harden two links of this chain. |
+
+### Files (PR #68)
+
+- **New (App):** `Services/Reader/{IReaderPageSource,ReaderImagePipeline,ReaderCacheTypes,ReaderMemoryBudget,ReaderPerfStats}.cs`
+- **New (Engine):** `Readers/IComicAccessorSession.cs`, `Readers/Archive/{SharpCompressAccessorSession,ZipSharpAccessorSession}.cs`, `Common/Compression/SevenZip/MultiExtractToStreamsCallback.cs`
+- **Deleted:** `Services/{PageImageDecoder,PageDecodeService}.cs` (+ their tests); one-shot callers → `PageDecodeCore.DecodeSinglePage`
+- **Modified:** `PageCanvas.cs` (+291), `ReaderPageVisualHandler.cs` (+164), `ReaderScreenViewModel.cs`, `PdfPageReaderScreenViewModel.cs`, `PageDecodeCore.cs`, `SevenZipEngine.cs` (+124), `PdfiumReaderEngine.cs` (+68), `ReaderScreen.axaml`(.cs) (Ctrl+Shift+P perf overlay), `AppSettings.cs`
+- **New (test/bench):** `Paperbunkr.Benchmarks/` (BenchmarkDotNet), `App.Tests/Reader/*`, `AccessorSessionTests`, `SevenZipAccessorSessionTests`, `PdfPipelineSessionTests`

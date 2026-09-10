@@ -1,11 +1,14 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Runtime.ExceptionServices;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Threading;
 using cYo.Common.ComponentModel;
 using cYo.Common.Compression.SevenZip;
 using cYo.Common.IO;
@@ -117,18 +120,112 @@ namespace cYo.Projects.ComicRack.Engine.IO.Provider.Readers.Archive
         /// <summary>Last <see cref="SevenZipAccessorSession"/> open failure, for diagnostics - a failed session open is non-fatal (§4.5: the pipeline falls back to the stateless read path).</summary>
         internal static System.Exception LastSessionOpenError { get; private set; }
 
+        /// <summary>
+        /// Test seam (rev-3 addendum, design §15 #1): invoked with <see cref="Environment.CurrentManagedThreadId"/>
+        /// at the head of every action the 7z session runs on its COM executor thread, so a test can
+        /// assert every <see cref="IInArchive"/> touch happens on the one owning thread.
+        /// </summary>
+        internal static Action<int> OnSessionComWork;
+
+        /// <summary>
+        /// Serialises <b>and pins the thread of</b> every 7z.dll COM call for one reading session
+        /// (design §15 #1). <see cref="IInArchive"/>, its <see cref="InStreamWrapper"/> and the
+        /// <see cref="MultiExtractToStreamsCallback"/> are apartment-bound COM objects; invoking them
+        /// from a thread other than their creator crosses an apartment boundary and can fault
+        /// natively with no managed exception (the fast-flip <c>AccessViolation</c> class). The
+        /// pipeline's caller-side lock is not sufficient - correctness needs thread affinity. One
+        /// long-lived STA thread (plain dedicated thread off Windows - 7z.dll is Windows-only, but
+        /// the affinity guarantee still holds) drains a work queue; the archive handle is created,
+        /// used and released only inside actions posted here.
+        /// </summary>
+        private sealed class ComExecutor : IDisposable
+        {
+            private readonly BlockingCollection<Action> queue = new BlockingCollection<Action>();
+            private readonly Thread thread;
+
+            public ComExecutor()
+            {
+                thread = new Thread(Loop) { IsBackground = true, Name = "7z-session-com" };
+                if (OperatingSystem.IsWindows())
+                {
+                    try { thread.SetApartmentState(ApartmentState.STA); }
+                    catch (PlatformNotSupportedException) { }
+                    catch (InvalidOperationException) { }
+                }
+                thread.Start();
+            }
+
+            private void Loop()
+            {
+                try
+                {
+                    foreach (Action work in queue.GetConsumingEnumerable())
+                    {
+                        try { work(); } catch { }
+                    }
+                }
+                catch (ObjectDisposedException) { }
+                catch (InvalidOperationException) { }
+            }
+
+            public T Run<T>(Func<T> work)
+            {
+                if (Thread.CurrentThread == thread)
+                {
+                    return work();
+                }
+
+                T result = default;
+                Exception error = null;
+                using ManualResetEventSlim done = new ManualResetEventSlim(false);
+                try
+                {
+                    queue.Add(() =>
+                    {
+                        OnSessionComWork?.Invoke(Environment.CurrentManagedThreadId);
+                        try { result = work(); }
+                        catch (Exception ex) { error = ex; }
+                        finally { done.Set(); }
+                    });
+                }
+                catch (InvalidOperationException)
+                {
+                    // Queue already completed (Dispose raced) - last-resort inline run.
+                    return work();
+                }
+
+                done.Wait();
+                if (error != null)
+                {
+                    ExceptionDispatchInfo.Capture(error).Throw();
+                }
+                return result;
+            }
+
+            public void Run(Action work) => Run<object>(() => { work(); return null; });
+
+            public void Dispose()
+            {
+                try { queue.CompleteAdding(); } catch { }
+                try { if (thread.IsAlive) thread.Join(TimeSpan.FromSeconds(5)); } catch { }
+                try { queue.Dispose(); } catch { }
+            }
+        }
+
         private sealed class SevenZipAccessorSession : IComicAccessorSession
         {
             private const int ForwardBatch = 8;
 
+            private readonly ComExecutor executor;
             private readonly IDisposable handle;
             private readonly IInArchive archive;
             private readonly Dictionary<string, int> nameToIndex;
             private readonly Dictionary<int, byte[]> passedByBuffer = new Dictionary<int, byte[]>();
             private int maxExtracted = -1;
 
-            private SevenZipAccessorSession(IDisposable handle, IInArchive archive, Dictionary<string, int> nameToIndex)
+            private SevenZipAccessorSession(ComExecutor executor, IDisposable handle, IInArchive archive, Dictionary<string, int> nameToIndex)
             {
+                this.executor = executor;
                 this.handle = handle;
                 this.archive = archive;
                 this.nameToIndex = nameToIndex;
@@ -136,31 +233,41 @@ namespace cYo.Projects.ComicRack.Engine.IO.Provider.Readers.Archive
 
             public static SevenZipAccessorSession TryOpen(SevenZipEngine owner, string source)
             {
-                IInArchive archive = null;
-                IDisposable handle = null;
-                try
+                ComExecutor executor = new ComExecutor();
+                SevenZipAccessorSession session = executor.Run(() =>
                 {
-                    handle = owner.OpenArchive(source, out archive);
-                    int count = archive.GetNumberOfItems();
-                    var map = new Dictionary<string, int>(count, StringComparer.OrdinalIgnoreCase);
-                    for (int i = 0; i < count; i++)
+                    IInArchive archive = null;
+                    IDisposable handle = null;
+                    try
                     {
-                        PropVariant path = default(PropVariant);
-                        archive.GetProperty(i, ItemPropId.kpidPath, ref path);
-                        string name = path.GetObject()?.ToString();
-                        if (!string.IsNullOrEmpty(name))
+                        handle = owner.OpenArchive(source, out archive);
+                        int count = archive.GetNumberOfItems();
+                        var map = new Dictionary<string, int>(count, StringComparer.OrdinalIgnoreCase);
+                        for (int i = 0; i < count; i++)
                         {
-                            map[name] = i;
+                            PropVariant path = default(PropVariant);
+                            archive.GetProperty(i, ItemPropId.kpidPath, ref path);
+                            string name = path.GetObject()?.ToString();
+                            if (!string.IsNullOrEmpty(name))
+                            {
+                                map[name] = i;
+                            }
                         }
+                        return new SevenZipAccessorSession(executor, handle, archive, map);
                     }
-                    return new SevenZipAccessorSession(handle, archive, map);
-                }
-                catch (System.Exception ex)
+                    catch (System.Exception ex)
+                    {
+                        LastSessionOpenError = ex;
+                        handle?.Dispose();
+                        return null;
+                    }
+                });
+
+                if (session == null)
                 {
-                    LastSessionOpenError = ex;
-                    handle?.Dispose();
-                    return null;
+                    executor.Dispose();
                 }
+                return session;
             }
 
             public int Count => nameToIndex.Count;
@@ -172,6 +279,14 @@ namespace cYo.Projects.ComicRack.Engine.IO.Provider.Readers.Archive
                     return null;
                 }
 
+                // Everything below - the passedByBuffer lookup, the Extract, the forward mark -
+                // runs on the one COM thread, so passedByBuffer/maxExtracted need no lock even when
+                // ReadEntryBytes is called concurrently from several threads (they queue).
+                return executor.Run(() => ExtractOnComThread(index));
+            }
+
+            private byte[] ExtractOnComThread(int index)
+            {
                 if (passedByBuffer.TryGetValue(index, out byte[] buffered))
                 {
                     passedByBuffer.Remove(index);
@@ -183,12 +298,14 @@ namespace cYo.Projects.ComicRack.Engine.IO.Provider.Readers.Archive
                     bool forward = index > maxExtracted && index <= maxExtracted + ForwardBatch;
                     int start = forward ? maxExtracted + 1 : index;
                     int[] indices = new int[index - start + 1];
+                    var sizes = new Dictionary<int, long>(indices.Length);
                     for (int k = 0; k < indices.Length; k++)
                     {
                         indices[k] = start + k;
+                        sizes[indices[k]] = EntrySize(indices[k]); // before Extract - 7z.dll forbids reentrant GetProperty
                     }
 
-                    var callback = new MultiExtractToStreamsCallback(indices);
+                    var callback = new MultiExtractToStreamsCallback(indices, sizes);
                     archive.Extract(indices, indices.Length, 0, callback);
                     var results = callback.GetResults();
 
@@ -217,10 +334,33 @@ namespace cYo.Projects.ComicRack.Engine.IO.Provider.Readers.Archive
                 }
             }
 
+            /// <summary>Uncompressed size of entry <paramref name="index"/> (kpidSize), or 0 if unavailable - lets <see cref="MultiExtractToStreamsCallback"/> pre-size each stream (design §4.7). Runs on the COM thread (only ever called from <see cref="ExtractOnComThread"/>).</summary>
+            private long EntrySize(int index)
+            {
+                try
+                {
+                    PropVariant size = default(PropVariant);
+                    archive.GetProperty(index, ItemPropId.kpidSize, ref size);
+                    return size.longValue;
+                }
+                catch
+                {
+                    return 0;
+                }
+            }
+
             public void Dispose()
             {
-                passedByBuffer.Clear();
-                handle?.Dispose();
+                try
+                {
+                    executor.Run(() =>
+                    {
+                        passedByBuffer.Clear();
+                        handle?.Dispose();
+                    });
+                }
+                catch { }
+                executor.Dispose();
             }
         }
 

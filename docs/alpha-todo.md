@@ -90,6 +90,42 @@ this file itself already did once (see the note below).
 > off-UI); the `ReaderMemoryLimitMb` Preferences checkbox.
 > **A manual or FlaUI GUI pass on the running reader is the one gate before this merges.**
 >
+> **Manual session note (2026-09-10, reader-pipeline rev-3 addenda):** follow-up hardening on
+> top of PR #68, from a technical review of the shipped code. Branch
+> `claude/reader-rev3-addenda` (off `master`), spec §15 of
+> `2026-09-08-reader-decode-cache-prefetch-pipeline-design.md`, plan
+> `2026-09-10-reader-rev3-addenda-plan.md`. Five items, all coded + targeted reader tests green
+> (312/312 on the reader/PDF/archive filter):
+> (1) 7z.dll COM now runs on **one dedicated executor thread** per session (`SevenZipEngine.ComExecutor`,
+>     STA on Windows) — thread affinity, not just a lock, for the apartment-bound `IInArchive`;
+> (2) `PdfiumAccessorSession` keeps an **LRU of 3 `PdfPage`** objects instead of load+close per render;
+> (3) **detail-tier bitmaps now count against `ReaderMemoryBudget`** — `GetDetailPage` reserves
+>     `w*h*4`, drops the display cache's `SizeCapacity`, `ReleaseDetail()` restores it;
+> (4) `MultiExtractToStreamsCallback` **pre-sizes its streams** from `kpidSize` (the two stream
+>     sessions were already exact-size — item narrower than the review assumed);
+> (5) the **prefetch-fringe recompute is debounced ~30 ms** so a held-key flip stops churning
+>     superseded fringe decodes.
+> **User GUI check (2026-09-10):** reader "way smoother" in normal use. User **hammered the
+> fast-flip AccessViolation repro** (CBZ + image adjustment + machine-gunning the turn key)
+> **both with and without the Slide transition — no crash, stayed stable.** The AV that survived
+> multiple GUI-unverified fix chains now looks fixed — not formally declared closed (one session;
+> native AVs can be load/timing-dependent) but strong evidence. Rev-3 items (1) 7z COM thread
+> affinity and (5) fringe debounce are the likely closers.
+> **Residual (smoothness, not crash — lower priority):** page-turn transitions are still "a bit
+> choppy" per the user ("big leap from yesterday" though). Likely the `ReaderPageVisualHandler`
+> transition render path competing with background decode. Not yet investigated.
+>
+> **Also 2026-09-10 — startup dead-splash bug (separate, startup-pipeline):** `App.RunDesktopStartupAsync`
+> built `new SplashWindow()` (App.axaml.cs:53) — whose ctor reads `AppSettings` via
+> `SkinService.GetReducedMotion()` — **before** the migration step and **outside** the try/catch.
+> On a post-update cold start with a stale dev DB (`%APPDATA%` db was at `AddLastRunVersion`, missing
+> PR #68's `AddReaderMemoryLimitMb`), the read threw `SqliteException`, the fire-and-forget startup
+> Task faulted unobserved, no MainWindow → app looked frozen (message loop idle, no window).
+> Diagnosed from a full dump. Fixes: `SplashWindow` ctor `TryGetReducedMotion()` (try/catch →
+> motion-on) so the splash never hard-depends on DB schema; splash construction moved inside the
+> `RunDesktopStartupAsync` try so failures hit `ReportFatalStartupError`. DB migrated forward with
+> `dotnet ef database update`. 2 files, own commit, still uncommitted.
+>
 > **Manual session note (2026-09-05, Duplicate Finder shipped + grouped review/bulk delete/scan
 > alerts):** follow-up to the Plugin API v2 backlog-finish note directly below. Duplicate Finder
 > moved from a `Paperbunkr.Plugins.Tests`-only fixture to a real, downloadable plugin

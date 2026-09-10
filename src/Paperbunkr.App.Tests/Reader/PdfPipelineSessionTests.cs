@@ -1,4 +1,6 @@
+using System.Collections.Generic;
 using cYo.Projects.ComicRack.Engine.IO.Provider.Readers;
+using cYo.Projects.ComicRack.Engine.IO.Provider.Readers.Pdf;
 using Paperbunkr.App.Services;
 using Paperbunkr.App.Services.Reader;
 
@@ -16,6 +18,7 @@ public class PdfPipelineSessionTests : IDisposable
 
     public void Dispose()
     {
+        PdfiumReaderEngine.OnPageLoaded = null;
         try { if (File.Exists(_pdfPath)) File.Delete(_pdfPath); } catch (IOException) { }
     }
 
@@ -56,5 +59,35 @@ public class PdfPipelineSessionTests : IDisposable
         var page = pipeline.GetPage(0);
         Assert.NotNull(page);
         Assert.True(page.PixelSize.Width > 0 && page.PixelSize.Height > 0);
+    }
+
+    // --- rev-3 addendum: PdfPage LRU cache (design §15 #2) ------------------------------------
+
+    [Fact]
+    public void Session_CachesUpToThreePages_ReloadsOnlyAfterEviction()
+    {
+        PdfFixture.Create(_pdfPath, "1", "2", "3", "4", "5");
+        var provider = PageDecodeCore.TryOpenProvider(_pdfPath);
+        var pdf = Assert.IsType<PdfComicProvider>(provider);
+
+        var loads = new List<int>();
+        PdfiumReaderEngine.OnPageLoaded = i => { lock (loads) loads.Add(i); };
+
+        using var session = pdf.TryOpenReaderSession()!;
+
+        foreach (int i in new[] { 2, 3, 4, 2 })
+        {
+            Assert.NotNull(session.ReadEntryBytes(i.ToString()));
+        }
+        // page 2's repeat is a cache hit - 3 loads, not 4. LRU now (MRU->LRU): 2, 4, 3.
+        Assert.Equal(new[] { 2, 3, 4 }, loads);
+
+        // 4th distinct page -> evicts the LRU entry (page 3).
+        Assert.NotNull(session.ReadEntryBytes("0"));
+        Assert.Equal(new[] { 2, 3, 4, 0 }, loads);
+
+        // page 3 was evicted -> reload.
+        Assert.NotNull(session.ReadEntryBytes("3"));
+        Assert.Equal(new[] { 2, 3, 4, 0, 3 }, loads);
     }
 }

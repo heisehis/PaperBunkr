@@ -646,14 +646,41 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
     [ObservableProperty]
     private double _pageMarginMultiplier = 1.0;
 
-    private static IBrush ComputeCanvasBackgroundBrush(ImageBackgroundMode mode, string? colorName)
-    {
-        if (mode != ImageBackgroundMode.Color || string.IsNullOrWhiteSpace(colorName))
-        {
-            return DefaultCanvasBackgroundBrush;
-        }
+    /// <summary>Item 1 §1.5 of docs/superpowers/specs/2026-09-10-reader-backlog-batch-b-design.md - a soft drop-shadow around the page, only when the background is a Texture and the mode is paged (continuous/webtoon pages abut, no per-page shadow there). Computed in <see cref="RefreshDisplaySettings"/>.</summary>
+    [ObservableProperty]
+    private bool _showPageShadow;
 
-        return Color.TryParse(colorName, out var color) ? new ImmutableSolidColorBrush(color) : DefaultCanvasBackgroundBrush;
+    /// <summary>
+    /// Item 1 of docs/superpowers/specs/2026-09-10-reader-backlog-batch-b-design.md - a tiled
+    /// texture background, alongside the pre-existing Auto/Color modes.
+    /// </summary>
+    private static IBrush ComputeCanvasBackgroundBrush(ImageBackgroundMode mode, string? colorName, string? textureId)
+    {
+        switch (mode)
+        {
+            case ImageBackgroundMode.Texture:
+                try
+                {
+                    var bitmap = Services.Reader.ReaderBackgroundTextures.LoadBitmap(textureId);
+                    var tile = new RelativeRect(0, 0, bitmap.PixelSize.Width, bitmap.PixelSize.Height, RelativeUnit.Absolute);
+                    // ImmutableImageBrush's own type is internal to Avalonia.Base - build a transient
+                    // mutable ImageBrush (never shared/read cross-thread - discarded immediately) and
+                    // call ToImmutable(), same net effect. Native pixel size, TileMode.Tile,
+                    // Stretch.None - a static tile (deliberately NOT zoom-scaled like CE's own
+                    // background texture; see the design doc §1.4).
+                    return new ImageBrush(bitmap) { SourceRect = tile, DestinationRect = tile, Stretch = Stretch.None, TileMode = TileMode.Tile }.ToImmutable();
+                }
+                catch (Exception)
+                {
+                    return DefaultCanvasBackgroundBrush; // missing/corrupt asset - never let a background choice crash the reader
+                }
+
+            case ImageBackgroundMode.Color when !string.IsNullOrWhiteSpace(colorName) && Color.TryParse(colorName, out var color):
+                return new ImmutableSolidColorBrush(color);
+
+            default:
+                return DefaultCanvasBackgroundBrush;
+        }
     }
 
     /// <summary>
@@ -668,7 +695,10 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
     {
         using var context = PaperbunkrDb.CreateContext();
         var appSettings = context.GetOrCreateAppSettings();
-        CanvasBackgroundBrush = ComputeCanvasBackgroundBrush(appSettings.ImageBackgroundMode, appSettings.BackgroundColor);
+        CanvasBackgroundBrush = ComputeCanvasBackgroundBrush(appSettings.ImageBackgroundMode, appSettings.BackgroundColor, appSettings.BackgroundTexture);
+        // Item 1 §1.5 - a page drop-shadow only when a texture background is active (solid Color/
+        // Auto are visually unchanged), and only in paged modes (continuous/webtoon pages abut).
+        ShowPageShadow = appSettings.ImageBackgroundMode == ImageBackgroundMode.Texture && !IsContinuousMode;
         PageMarginMultiplier = appSettings.PageMarginEnabled ? 1.0 - appSettings.PageMarginPercentWidth : 1.0;
 
         // Real bug, found via manual testing: these two were originally Load-only (matching

@@ -55,4 +55,14 @@ public interface IReaderPageSource : IPageImageDecoder
     /// the compositor mid-slide. Re-arming or a shorter value both take effect immediately.
     /// </summary>
     void SuppressFringePrefetch(int milliseconds);
+
+    /// <summary>
+    /// Requests a header-only page-size peek (docs/superpowers/specs/2026-09-09-reader-webtoon-
+    /// strip-band-decode-design.md §4.3) — fire-and-forget, never blocks the calling thread. A
+    /// no-op if the size is already known. <see cref="PageSizeAvailable"/> fires once it lands.
+    /// </summary>
+    void RequestPageSize(int pageIndex);
+
+    /// <summary>Raised (off the UI thread) when a requested page size lands — subscribers marshal to the UI thread, update their own size cache, and re-layout.</summary>
+    event Action<int, PixelSize> PageSizeAvailable;
 }

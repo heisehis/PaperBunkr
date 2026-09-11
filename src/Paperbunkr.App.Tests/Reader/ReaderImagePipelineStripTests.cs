@@ -112,4 +112,92 @@ public class ReaderImagePipelineStripTests : IDisposable
         // cached independently of it.
         Assert.True(pipeline.IsStrip(0));
     }
+
+    // --- Step 4: async RequestPageSize/PageSizeAvailable -----------------------------------
+
+    [Fact]
+    public void RequestPageSize_FiresPageSizeAvailable_WithTheCorrectSize()
+    {
+        CbzFixture.Create(_cbzPath, pageCount: 1, pageSize: _ => new Size(800, 6000));
+        using var pipeline = ReaderImagePipeline.TryOpen(_cbzPath)!;
+
+        var landed = new ManualResetEventSlim(false);
+        Avalonia.PixelSize? received = null;
+        pipeline.PageSizeAvailable += (index, size) =>
+        {
+            if (index == 0) { received = size; landed.Set(); }
+        };
+
+        pipeline.SetVirtualizationWindow(0, 0); // the peek is window-gated, same as whole-page decode
+        pipeline.RequestPageSize(0);
+
+        Assert.True(landed.Wait(TimeSpan.FromSeconds(5)), "PageSizeAvailable never fired");
+        Assert.NotNull(received);
+        Assert.Equal(800, received!.Value.Width);
+        Assert.Equal(6000, received.Value.Height);
+    }
+
+    [Fact]
+    public void RequestPageSize_PeekRunsOffTheCallingThread()
+    {
+        // Same shape as ReaderImagePipelineTests.BackgroundDecode_RunsOffTheCallingThread, for the
+        // size-peek path specifically - the whole reason RequestPageSize is async (design rev 3,
+        // §4.3) is that the naive synchronous version would have run PeekPageSize's container read
+        // inline on whichever thread called it, reintroducing the parent pipeline's original
+        // UI-thread-blocking-decode problem.
+        CbzFixture.Create(_cbzPath, pageCount: 1, pageSize: _ => new Size(800, 6000));
+        using var pipeline = ReaderImagePipeline.TryOpen(_cbzPath)!;
+
+        int callingThread = Environment.CurrentManagedThreadId;
+        int? peekThread = null;
+        var seen = new ManualResetEventSlim(false);
+        pipeline.OnBeforePageSizePeek = _ => { peekThread ??= Environment.CurrentManagedThreadId; seen.Set(); };
+
+        pipeline.SetVirtualizationWindow(0, 0);
+        pipeline.RequestPageSize(0);
+
+        Assert.True(seen.Wait(TimeSpan.FromSeconds(5)));
+        Assert.NotNull(peekThread);
+        Assert.NotEqual(callingThread, peekThread);
+    }
+
+    [Fact]
+    public void RequestPageSize_DoesNotReturnBlocked_RegardlessOfBackgroundState()
+    {
+        CbzFixture.Create(_cbzPath, pageCount: 1, pageSize: _ => new Size(800, 6000));
+        using var pipeline = ReaderImagePipeline.TryOpen(_cbzPath)!;
+        pipeline.SetVirtualizationWindow(0, 0);
+
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        pipeline.RequestPageSize(0);
+        sw.Stop();
+
+        // RequestPageSize's body is a lock + channel enqueue - no I/O, no decode - so it must return
+        // essentially instantly regardless of whatever the background consumer loop is doing. A
+        // generous bound (real work here is sub-millisecond) rather than a tight one, to keep this
+        // robust under CI/load variance while still catching a regression that made it synchronous.
+        Assert.True(sw.ElapsedMilliseconds < 500, $"RequestPageSize took {sw.ElapsedMilliseconds}ms - should be near-instant (fire-and-forget)");
+    }
+
+    [Fact]
+    public void RequestPageSize_AlreadyKnown_DoesNotRePeek()
+    {
+        CbzFixture.Create(_cbzPath, pageCount: 1, pageSize: _ => new Size(800, 6000));
+        using var pipeline = ReaderImagePipeline.TryOpen(_cbzPath)!;
+
+        int peekCount = 0;
+        pipeline.OnBeforePageSizePeek = _ => Interlocked.Increment(ref peekCount);
+
+        var landed = new ManualResetEventSlim(false);
+        pipeline.PageSizeAvailable += (index, _) => { if (index == 0) landed.Set(); };
+
+        pipeline.SetVirtualizationWindow(0, 0);
+        pipeline.RequestPageSize(0);
+        Assert.True(landed.Wait(TimeSpan.FromSeconds(5)));
+
+        // Now that the size is known, a second request must not trigger another peek at all.
+        pipeline.RequestPageSize(0);
+        Thread.Sleep(200); // give a wrongly-re-enqueued request a chance to run before asserting
+        Assert.Equal(1, peekCount);
+    }
 }

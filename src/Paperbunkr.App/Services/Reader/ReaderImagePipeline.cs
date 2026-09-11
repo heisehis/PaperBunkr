@@ -110,14 +110,29 @@ public sealed class ReaderImagePipeline : IReaderPageSource
     /// </summary>
     private readonly object _readerLock = new();
 
-    private readonly HashSet<int> _enqueued = new();
+    private readonly HashSet<PipelineRequest> _enqueued = new();
     private readonly HashSet<int> _window = new();
 
     /// <summary>Per-page strip-or-not verdict (design §3/§4.2), cached since callers ask every window/eviction pass. Guarded by <see cref="_sync"/>.</summary>
     private readonly Dictionary<int, bool> _stripVerdict = new();
 
-    private readonly Channel<int> _highPriority = Channel.CreateUnbounded<int>(new UnboundedChannelOptions { SingleReader = true });
-    private readonly Channel<int> _lowPriority = Channel.CreateUnbounded<int>(new UnboundedChannelOptions { SingleReader = true });
+    /// <summary>Header-declared page sizes learned via <see cref="RequestPageSize"/>/<see cref="PeekPageSize"/> (design §4.3) - separate from <see cref="PageCanvas"/>'s own <c>_knownPageSizes</c> (the pipeline doesn't reach into the view layer); that one mirrors this one via <see cref="PageSizeAvailable"/>. Guarded by <see cref="_sync"/>.</summary>
+    private readonly Dictionary<int, PixelSize> _knownPageSize = new();
+
+    public event Action<int, PixelSize>? PageSizeAvailable;
+
+    /// <summary>
+    /// One queued unit of background work (design §4.2/§4.3, rev 5) - a page's whole-bitmap decode,
+    /// a header-only size peek, or (Step 5) a strip band decode, all sharing one high/low-priority
+    /// queue and one <see cref="_window"/>/<see cref="_enqueued"/> staleness-check mechanism rather
+    /// than three parallel ones.
+    /// </summary>
+    private enum RequestKind { WholePage, PageSize }
+
+    private readonly record struct PipelineRequest(RequestKind Kind, int PageIndex);
+
+    private readonly Channel<PipelineRequest> _highPriority = Channel.CreateUnbounded<PipelineRequest>(new UnboundedChannelOptions { SingleReader = true });
+    private readonly Channel<PipelineRequest> _lowPriority = Channel.CreateUnbounded<PipelineRequest>(new UnboundedChannelOptions { SingleReader = true });
     private readonly CancellationTokenSource _cts = new();
     private readonly Task _consumerLoop;
 
@@ -130,6 +145,9 @@ public sealed class ReaderImagePipeline : IReaderPageSource
 
     /// <summary>Test seam - invoked on the consumer loop just before each background decode (mirrors <see cref="Paperbunkr.App.Services.PageDecodeService.OnBeforeBackgroundDecode"/>).</summary>
     internal Action<int>? OnBeforeBackgroundDecode { get; set; }
+
+    /// <summary>Test seam, same shape as <see cref="OnBeforeBackgroundDecode"/> - invoked on the consumer loop just before each header-only page-size peek (design §4.3), so a test can observe it running off the calling thread and count how many times it actually ran.</summary>
+    internal Action<int>? OnBeforePageSizePeek { get; set; }
 
     public event Action<int>? BackgroundDecodeCompleted;
 
@@ -689,19 +707,29 @@ public sealed class ReaderImagePipeline : IReaderPageSource
                 }
             }
 
-            // The window gates ProcessQueuedPage; the high-priority pages enqueued just below must
-            // be in it. The debounced pass narrows it to the precise fringe.
+            // The window gates ProcessQueuedRequest; the high-priority requests enqueued just below
+            // must be in it. The debounced pass narrows it to the precise fringe.
             for (int i = safeMin; i <= safeMax; i++)
             {
                 _window.Add(i);
             }
-            _enqueued.RemoveWhere(i => i < safeMin || i > safeMax);
+            _enqueued.RemoveWhere(r => r.PageIndex < safeMin || r.PageIndex > safeMax);
         }
 
         // Immediate: the page(s) actually on screen, high priority, every call.
         for (int i = minIndex; i <= maxIndex; i++)
         {
-            TryEnqueue(i, _highPriority);
+            TryEnqueue(new PipelineRequest(RequestKind.WholePage, i), _highPriority);
+
+            // A size peek (design §4.3) for a visible page whose true size isn't known yet - high
+            // priority too, since an inaccurate estimate for something actually on screen is the
+            // exact lurch this exists to avoid, not just a background nicety.
+            bool sizeKnown;
+            lock (_sync) { sizeKnown = _knownPageSize.ContainsKey(i); }
+            if (!sizeKnown)
+            {
+                TryEnqueue(new PipelineRequest(RequestKind.PageSize, i), _highPriority);
+            }
         }
 
         // Debounced: the low-priority fringe recompute + enqueue.
@@ -755,32 +783,68 @@ public sealed class ReaderImagePipeline : IReaderPageSource
             {
                 _window.Add(i);
             }
-            _enqueued.RemoveWhere(i => i < fringeMin || i > fringeMax);
+            _enqueued.RemoveWhere(r => r.PageIndex < fringeMin || r.PageIndex > fringeMax);
         }
 
         for (int i = fringeMin; i < minIndex; i++)
         {
-            TryEnqueue(i, _lowPriority);
+            TryEnqueue(new PipelineRequest(RequestKind.WholePage, i), _lowPriority);
         }
         for (int i = maxIndex + 1; i <= fringeMax; i++)
         {
-            TryEnqueue(i, _lowPriority);
+            TryEnqueue(new PipelineRequest(RequestKind.WholePage, i), _lowPriority);
+        }
+
+        // Size peeks for the wider fringe too, same low priority as the fringe's own whole-page
+        // prefetch - a page this far out doesn't need its real size *now*, just eventually, before
+        // it's actually close enough to matter.
+        for (int i = fringeMin; i <= fringeMax; i++)
+        {
+            bool sizeKnown;
+            lock (_sync) { sizeKnown = _knownPageSize.ContainsKey(i); }
+            if (!sizeKnown)
+            {
+                TryEnqueue(new PipelineRequest(RequestKind.PageSize, i), _lowPriority);
+            }
         }
 
         OnFringeRecomputed?.Invoke();
     }
 
-    private void TryEnqueue(int pageIndex, Channel<int> channel)
+    private void TryEnqueue(PipelineRequest request, Channel<PipelineRequest> channel)
     {
         lock (_sync)
         {
-            if (_enqueued.Contains(pageIndex) || _displayCache.IsCached(DisplayId(pageIndex)))
+            if (_enqueued.Contains(request))
             {
                 return;
             }
-            _enqueued.Add(pageIndex);
+            switch (request.Kind)
+            {
+                case RequestKind.WholePage when _displayCache.IsCached(DisplayId(request.PageIndex)):
+                case RequestKind.PageSize when _knownPageSize.ContainsKey(request.PageIndex):
+                    return;
+            }
+            _enqueued.Add(request);
         }
-        channel.Writer.TryWrite(pageIndex);
+        channel.Writer.TryWrite(request);
+    }
+
+    /// <summary>
+    /// Requests a header-only size peek for <paramref name="pageIndex"/> (design §4.3) -
+    /// fire-and-forget, same shape as <see cref="SetVirtualizationWindow"/> itself: enqueues and
+    /// returns immediately, never touching the container/decode work synchronously on the calling
+    /// thread. A no-op if the size is already known or already enqueued (<see cref="TryEnqueue"/>'s
+    /// own dedup). <see cref="PageSizeAvailable"/> fires once the background consumer loop actually
+    /// processes it.
+    /// </summary>
+    public void RequestPageSize(int pageIndex)
+    {
+        if (pageIndex < 0 || pageIndex >= PageCount)
+        {
+            return;
+        }
+        TryEnqueue(new PipelineRequest(RequestKind.PageSize, pageIndex), _highPriority);
     }
 
     private async Task RunConsumerLoopAsync()
@@ -790,14 +854,14 @@ public sealed class ReaderImagePipeline : IReaderPageSource
         {
             while (!token.IsCancellationRequested)
             {
-                if (_highPriority.Reader.TryRead(out int high))
+                if (_highPriority.Reader.TryRead(out var high))
                 {
-                    ProcessQueuedPage(high);
+                    ProcessQueuedRequest(high);
                     continue;
                 }
-                if (_lowPriority.Reader.TryRead(out int low))
+                if (_lowPriority.Reader.TryRead(out var low))
                 {
-                    ProcessQueuedPage(low);
+                    ProcessQueuedRequest(low);
                     continue;
                 }
 
@@ -815,11 +879,61 @@ public sealed class ReaderImagePipeline : IReaderPageSource
         }
     }
 
+    private void ProcessQueuedRequest(PipelineRequest request)
+    {
+        switch (request.Kind)
+        {
+            case RequestKind.WholePage:
+                ProcessQueuedPage(request.PageIndex);
+                break;
+            case RequestKind.PageSize:
+                ProcessPageSizeRequest(request.PageIndex);
+                break;
+        }
+    }
+
+    /// <summary>
+    /// The header-only-peek counterpart to <see cref="ProcessQueuedPage"/> (design §4.3) - runs on
+    /// the background consumer loop, never the UI thread, so <see cref="PeekPageSize"/>'s
+    /// <see cref="ReadRawBytes"/> call (a real, potentially-blocking container read for anything not
+    /// already in <see cref="SharedRawCache"/>) never risks a synchronous UI-thread stall the way a
+    /// naive "peek inline as each page enters the window" implementation would have.
+    /// </summary>
+    private void ProcessPageSizeRequest(int pageIndex)
+    {
+        lock (_sync)
+        {
+            _enqueued.Remove(new PipelineRequest(RequestKind.PageSize, pageIndex));
+            if (!_window.Contains(pageIndex) || _knownPageSize.ContainsKey(pageIndex))
+            {
+                return;
+            }
+        }
+
+        OnBeforePageSizePeek?.Invoke(pageIndex);
+        var size = PeekPageSize(pageIndex);
+        if (size is not { } resolved)
+        {
+            return;
+        }
+
+        lock (_sync)
+        {
+            if (!_window.Contains(pageIndex))
+            {
+                return;
+            }
+            _knownPageSize[pageIndex] = resolved;
+        }
+
+        try { PageSizeAvailable?.Invoke(pageIndex, resolved); } catch { }
+    }
+
     private void ProcessQueuedPage(int pageIndex)
     {
         lock (_sync)
         {
-            _enqueued.Remove(pageIndex);
+            _enqueued.Remove(new PipelineRequest(RequestKind.WholePage, pageIndex));
             if (!_window.Contains(pageIndex) || _displayCache.IsCached(DisplayId(pageIndex)))
             {
                 return;

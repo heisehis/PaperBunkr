@@ -205,6 +205,15 @@
                                         </Border>
                                         <!-- Rotation indicator (docs/ce-feature-inventory.md §A). -->
                                         <fi:SymbolIcon Symbol="ArrowRotateClockwise" FontSize="{StaticResource PbIconSizeXs}" Foreground="White" IsVisible="{Binding IsRotated}" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,3,2" />
+                                        <!-- Manual spread-position indicator (docs/superpowers/specs/2026-09-10-reader-backlog-
+                                             batch-b-design.md Item 2) - bottom-center so it doesn't collide with the type badge
+                                             (bottom-left) or rotation indicator (bottom-right). -->
+                                        <fi:SymbolIcon Symbol="CaretLeft" FontSize="{StaticResource PbIconSizeXs}" Foreground="White" IsVisible="{Binding IsNearHint}"
+                                                       HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,2"
+                                                       ToolTip.Tip="Near side (leading)" AutomationProperties.Name="Leading page" />
+                                        <fi:SymbolIcon Symbol="CaretRight" FontSize="{StaticResource PbIconSizeXs}" Foreground="White" IsVisible="{Binding IsFarHint}"
+                                                       HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,2"
+                                                       ToolTip.Tip="Far side (trailing)" AutomationProperties.Name="Trailing page" />
                                     </Grid>
                                 </Border>
                             </DataTemplate>

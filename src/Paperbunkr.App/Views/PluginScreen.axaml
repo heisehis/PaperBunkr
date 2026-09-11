@@ -23,7 +23,7 @@
                 <TextBlock Grid.Column="0" Text="Plugins" FontSize="22" FontWeight="Bold"
                            Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
                 <Button Grid.Column="1" Content="Install Package…" Command="{Binding InstallPackageCommand}"
-                        ToolTip.Tip="Installs a plugin package (.zip containing plugin.xml + scripts) - matches ComicRackCE's own Script Archive format. Takes effect immediately, no restart needed." />
+                        ToolTip.Tip="Installs a plugin package (.pbplugin or .zip). A script package (plugin.xml + .csx scripts) takes effect immediately. A native package (a compiled plugin with full read/write access to your library database) takes effect after you restart Paperbunkr." />
             </Grid>
 
             <!--
@@ -45,6 +45,17 @@
                                     <TextBlock Text="{Binding Version, StringFormat='v{0}'}" FontSize="11"
                                                Foreground="{DynamicResource PbTextMutedBrush}"
                                                IsVisible="{Binding Version, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
+                                    <!-- Native-tier trust notice (docs/superpowers/specs/2026-09-11-plugin-api-v4-native-tier-
+                                         design.md §2) - full read/write access, no audited-write gate, separate from and in
+                                         addition to the per-command confirmWrites flag which only applies to the .csx tier. -->
+                                    <Border IsVisible="{Binding IsNativeTier}" Background="#3A2E0E" CornerRadius="3" Padding="5,1">
+                                        <TextBlock Text="Full read/write access" FontSize="10" Foreground="#E0B84D"
+                                                   ToolTip.Tip="This is a native plugin: it has full read/write access to your library database and does not go through the audited-write gate scripted plugins use." />
+                                    </Border>
+                                    <Border IsVisible="{Binding IsPending}" Background="#1E3A5A" CornerRadius="3" Padding="5,1">
+                                        <TextBlock Text="Restart to apply" FontSize="10" Foreground="#6EB4E8"
+                                                   ToolTip.Tip="This change (install or remove) is staged and takes effect the next time you restart Paperbunkr." />
+                                    </Border>
                                 </StackPanel>
 
                                 <TextBlock Grid.Column="1" Text="{Binding Author}" FontSize="12" Margin="0,0,12,0"

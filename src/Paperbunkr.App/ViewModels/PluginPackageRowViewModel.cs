@@ -26,5 +26,17 @@ public sealed class PluginPackageRowViewModel
 
     public string? Author => string.IsNullOrEmpty(_package.Author) ? null : _package.Author;
 
+    /// <summary>Full-trust, not audited-write, tier (docs/superpowers/specs/2026-09-11-plugin-api-v4-
+    /// native-tier-design.md §2) - drives the Plugin screen's "Full read/write access to your library
+    /// database" notice, separate from and in addition to the per-command `confirmWrites` flag, which
+    /// only ever applies to the audited `.csx` tier.</summary>
+    public bool IsNativeTier => _package.IsNativeTier;
+
+    /// <summary>True while an install/uninstall is staged but not yet applied (v4 §4's restart-to-
+    /// apply model - always true for a Native-tier package right after Install/Uninstall, and false
+    /// again once <see cref="Plugins.PluginPackageService.ApplyPendingChanges"/> runs at next launch).
+    /// A Script-tier package never reaches this state - it always commits immediately.</summary>
+    public bool IsPending => _package.PackageType is PackageManager.PackageType.PendingInstall or PackageManager.PackageType.PendingRemove;
+
     public TwoStepConfirm DeleteConfirm { get; }
 }

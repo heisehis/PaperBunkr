@@ -175,6 +175,52 @@ public sealed class PluginScreenViewModelTests : IDisposable
     }
 
     [Fact]
+    public async Task InstallPackage_WithANativeTierZip_ShowsTrustNoticeAndStaysPendingUntilRestart()
+    {
+        // Implementation plan Phase 2 Step 2.3 - the Packages panel row must actually surface
+        // IsNativeTier/IsPending through the real InstallPackage command, not just at the
+        // PackageManager/PluginPackageService layer already covered by
+        // PluginPackageServiceNativeTierTests.
+        string root = MakeTempDir();
+        string staging = MakeTempDir();
+        string zipPath = Path.Combine(Path.GetTempPath(), $"native-pack-{Guid.NewGuid():N}.zip");
+        try
+        {
+            BuildFlatZip(zipPath, new Dictionary<string, string>
+            {
+                ["plugin.xml"] = """
+                    <Plugin key="native-fixture" name="Native Fixture" tier="Native" assembly="NativeFixture.dll">
+                    </Plugin>
+                    """,
+                ["NativeFixture.dll"] = "not a real dll",
+                ["package.ini"] = "Name = Native Fixture Pack",
+            });
+
+            var host = new PluginHostService();
+            host.InitializeForTests(MakeEnvironment());
+            var vm = new PluginScreenViewModel(new FakeFilePicker(zipPath), new FakeDialogService(), new PluginPackageService(root, staging));
+            vm.AttachHost(host);
+
+            await vm.InstallPackageCommand.ExecuteAsync(null);
+
+            var package = Assert.Single(vm.Packages);
+            Assert.Equal("Native Fixture Pack", package.Name);
+            Assert.True(package.IsNativeTier);
+            Assert.True(package.IsPending);
+
+            // Not yet copied into the final root - still sitting in the staging folder until a
+            // restart applies it (v4 §4).
+            Assert.False(Directory.Exists(Path.Combine(root, "Native Fixture Pack")));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+            Directory.Delete(staging, recursive: true);
+            File.Delete(zipPath);
+        }
+    }
+
+    [Fact]
     public async Task InstallPackage_WithAnUnreadableZip_LeavesPackagesEmpty_AndDoesNotThrow()
     {
         string root = MakeTempDir();

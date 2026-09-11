@@ -99,7 +99,7 @@ public partial class PluginScreenViewModel : ViewModelBase
     [RelayCommand]
     private async Task InstallPackage()
     {
-        string? file = await _filePicker.PickOpenFileAsync("Install Plugin Package", "zip", "Plugin Package (.zip)");
+        string? file = await _filePicker.PickPluginPackageFileAsync("Install Plugin Package");
         if (file is null)
         {
             return;
@@ -118,13 +118,20 @@ public partial class PluginScreenViewModel : ViewModelBase
 
         if (!_packageService.Install(file))
         {
-            _host?.ShowToast("Plugin package", "That file isn't a readable plugin package (.zip).");
+            _host?.ShowToast("Plugin package", "That file isn't a readable plugin package (.pbplugin/.zip).");
             return;
         }
 
         _host?.RediscoverPlugins();
         Refresh();
-        _host?.ShowToast("Plugin package", "Installed - no restart needed.");
+
+        // A Native-tier install stays pending until the next launch (docs/superpowers/specs/2026-09-
+        // 11-plugin-api-v4-native-tier-design.md §4) - the toast has to say so, not claim "no restart
+        // needed" the way every Script-tier install still truthfully can.
+        var justInstalled = Packages.FirstOrDefault(p => p.Package.PackageType == PackageManager.PackageType.PendingInstall);
+        _host?.ShowToast("Plugin package", justInstalled is not null
+            ? "Installed - restart Paperbunkr to finish setting it up (full read/write access to your library database)."
+            : "Installed - no restart needed.");
     }
 
     private void RemovePackage(PackageManager.Package package)

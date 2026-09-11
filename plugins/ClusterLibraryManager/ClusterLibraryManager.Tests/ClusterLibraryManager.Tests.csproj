@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <!--
+    Standalone from Paperbunkr.sln (implementation plan Phase 3 Step 3.8), matching the plugin
+    project itself - built/run independently (dotnet test from this folder), following this repo's
+    Paperbunkr.App.Tests/Paperbunkr.Plugins.Tests conventions in style (xUnit, fixture patterns) only.
+  -->
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" Version="6.0.4" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="xunit" Version="2.5.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.5.3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\ClusterLibraryManager.csproj" />
+    <!-- Test-only: verifying the plugin actually loads through the real host engine (PluginLoadContext/
+         PluginEngine) is a legitimate thing for this suite to check, even though the plugin's own
+         runtime code (ClusterLibraryManager.csproj) never references Paperbunkr.Plugins itself - that
+         separation is what keeps "ships independently" true for the shipped artifact. -->
+    <ProjectReference Include="..\..\..\src\Paperbunkr.Plugins\Paperbunkr.Plugins.csproj" />
+  </ItemGroup>
+
+</Project>

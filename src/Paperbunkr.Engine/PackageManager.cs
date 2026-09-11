@@ -4,6 +4,7 @@ using System.Drawing;
 using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
+using System.Xml.Linq;
 using cYo.Common.Collections;
 using cYo.Common.Drawing;
 using cYo.Common.IO;
@@ -91,6 +92,24 @@ namespace cYo.Projects.ComicRack.Engine
 				private set;
 			}
 
+			/// <summary>
+			/// True when this package's own <c>plugin.xml</c> (at <see cref="PackagePath"/>'s root)
+			/// declares <c>tier="Native"</c> (docs/superpowers/specs/2026-09-11-plugin-api-v4-native-
+			/// tier-design.md §4, implementation plan Phase 2 Step 2.1). Computed once here, in
+			/// <see cref="InitValues"/>, so both the fresh-zip-peek path (<see cref="CreateFromFile"/>,
+			/// via its own temp flat-unzip already done to read package.ini) and the read-from-disk
+			/// path (<see cref="CreateFromPath(string,bool)"/>, used by <see cref="PackageManager.GetPackages"/>
+			/// for an already-pending or already-installed package) agree, without a second manifest
+			/// read. A raw <see cref="XDocument"/> peek, not the real <c>PluginManifest</c> type -
+			/// this project has no dependency on <c>Paperbunkr.Plugins</c> and shouldn't gain one just
+			/// for a single attribute check.
+			/// </summary>
+			public bool IsNativeTier
+			{
+				get;
+				private set;
+			}
+
 			private Package(string name)
 			{
 				Name = name;
@@ -119,6 +138,28 @@ namespace cYo.Projects.ComicRack.Engine
 				catch
 				{
 				}
+
+				IsNativeTier = DetectNativeTier(PackagePath);
+			}
+
+			private static bool DetectNativeTier(string packagePath)
+			{
+				string manifestPath = Path.Combine(packagePath, "plugin.xml");
+				if (!File.Exists(manifestPath))
+				{
+					return false;
+				}
+
+				try
+				{
+					XDocument manifest = XDocument.Load(manifestPath);
+					string? tier = manifest.Root?.Attribute("tier")?.Value;
+					return string.Equals(tier, "Native", StringComparison.OrdinalIgnoreCase);
+				}
+				catch
+				{
+					return false;
+				}
 			}
 
 			private static string FileToName(string file)
@@ -131,6 +172,20 @@ namespace cYo.Projects.ComicRack.Engine
 
 			public static void UnzipFile(string packagePath, string targetPath)
 			{
+				UnzipFile(packagePath, targetPath, preserveStructure: false);
+			}
+
+			/// <summary>
+			/// <paramref name="preserveStructure"/> true keeps each entry's full relative directory
+			/// path instead of flattening to its bare filename - required for a Native-tier package
+			/// whose own build output includes e.g. `runtimes/&lt;rid&gt;/native/...` (docs/superpowers/
+			/// specs/2026-09-11-plugin-api-v4-native-tier-design.md §4). Flattening (the original,
+			/// default behavior, still exactly what every `Script`-tier package continues to get)
+			/// silently breaks native-dependency resolution for a `Native` package - a real bug found
+			/// during external review of the design, not a hypothetical.
+			/// </summary>
+			public static void UnzipFile(string packagePath, string targetPath, bool preserveStructure)
+			{
 				Directory.CreateDirectory(targetPath);
 				using (ZipFile zipFile = new ZipFile(packagePath))
 				{
@@ -138,7 +193,17 @@ namespace cYo.Projects.ComicRack.Engine
 						where ze.IsFile
 						select ze)
 					{
-						using (FileStream destination = File.Create(Path.Combine(targetPath, Path.GetFileName(item.Name))))
+						string destinationPath = preserveStructure
+							? Path.Combine(targetPath, item.Name.Replace('/', Path.DirectorySeparatorChar))
+							: Path.Combine(targetPath, Path.GetFileName(item.Name));
+
+						string? destinationDir = Path.GetDirectoryName(destinationPath);
+						if (preserveStructure && !string.IsNullOrEmpty(destinationDir))
+						{
+							Directory.CreateDirectory(destinationDir);
+						}
+
+						using (FileStream destination = File.Create(destinationPath))
 						{
 							using (Stream stream = zipFile.GetInputStream(item))
 							{
@@ -337,7 +402,7 @@ namespace cYo.Projects.ComicRack.Engine
 			try
 			{
 				FileUtility.SafeDirectoryDelete(text);
-				Package.UnzipFile(packageFile, text);
+				Package.UnzipFile(packageFile, text, package.IsNativeTier);
 				return true;
 			}
 			catch (Exception)
@@ -428,10 +493,17 @@ namespace cYo.Projects.ComicRack.Engine
 						FileUtility.SafeDirectoryDelete(item2);
 					}
 				}
-				string[] files = Directory.GetFiles(package.PackagePath);
-				foreach (string text2 in files)
+				if (package.IsNativeTier)
 				{
-					File.Copy(text2, Path.Combine(text, Path.GetFileName(text2)), overwrite: true);
+					CopyDirectoryPreservingStructure(package.PackagePath, text);
+				}
+				else
+				{
+					string[] files = Directory.GetFiles(package.PackagePath);
+					foreach (string text2 in files)
+					{
+						File.Copy(text2, Path.Combine(text, Path.GetFileName(text2)), overwrite: true);
+					}
 				}
 				return true;
 			}
@@ -443,6 +515,30 @@ namespace cYo.Projects.ComicRack.Engine
 			finally
 			{
 				FileUtility.SafeDirectoryDelete(package.PackagePath);
+			}
+		}
+
+		/// <summary>
+		/// The second of two flattening sites found during implementation (the first being
+		/// <see cref="Package.UnzipFile"/> above) - <see cref="CommitInstallPackage"/>'s original,
+		/// non-recursive <c>Directory.GetFiles</c> copy would silently discard subfolder structure
+		/// again even after fixing extraction alone, for a `Native`-tier package that had it preserved
+		/// correctly up to this point (docs/superpowers/specs/2026-09-11-plugin-api-v4-native-tier-
+		/// design.md §4).
+		/// </summary>
+		private static void CopyDirectoryPreservingStructure(string sourceDir, string destinationDir)
+		{
+			foreach (string filePath in Directory.GetFiles(sourceDir, "*", SearchOption.AllDirectories))
+			{
+				string relativePath = Path.GetRelativePath(sourceDir, filePath);
+				string destinationPath = Path.Combine(destinationDir, relativePath);
+				string? destinationFileDir = Path.GetDirectoryName(destinationPath);
+				if (!string.IsNullOrEmpty(destinationFileDir))
+				{
+					Directory.CreateDirectory(destinationFileDir);
+				}
+
+				File.Copy(filePath, destinationPath, overwrite: true);
 			}
 		}
 

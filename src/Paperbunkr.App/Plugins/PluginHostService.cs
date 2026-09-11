@@ -29,6 +29,12 @@ public sealed class PluginHostService
     {
         _main = main;
 
+        // Applies any Native-tier install/uninstall that stayed pending from a previous session
+        // (docs/superpowers/specs/2026-09-11-plugin-api-v4-native-tier-design.md §4) - must run
+        // before Discover below picks up the plugins directory. A no-op the common case (nothing
+        // pending, or only Script-tier packages, which already self-commit at install time).
+        new PluginPackageService().ApplyPendingChanges();
+
         var baseEnvironment = new PaperbunkrPluginEnvironment
         {
             MainWindow = new PaperbunkrPluginHostWindow(mainWindow),

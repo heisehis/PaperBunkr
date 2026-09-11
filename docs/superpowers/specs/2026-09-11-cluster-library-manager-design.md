@@ -263,10 +263,11 @@ loop (the same non-blocking `await`-inside-a-`foreach` idiom already used at
 `PreferencesScreenViewModel.cs:3178-3228`'s `OpenBulkRemoveConfirm` — confirmed during external
 review that this does not block Avalonia's render thread; the loop *pausing* to wait for a user
 decision is the intended behavior, not a defect). A pre-scan staged conflicts screen
-(`MigrationViewModel`-style, resolving every collision before any move starts) was raised twice during
-review as the more batch-robust alternative and is still on the table if large-batch collision counts
-turn out to make modal-per-file too tedious in practice — the "apply to all remaining" checkbox is
-this design's mitigation for that in the meantime, not a claim the concern is fully moot.
+(`MigrationViewModel`-style, resolving every collision before any move starts) was raised repeatedly
+during review as the more batch-robust alternative; the project owner considered it and made a final
+call to keep modal-per-file for literal CE fidelity, accepting the "apply to all remaining" checkbox
+as the real, deliberate mitigation for large batches rather than a stopgap — **this is settled, not
+open**.
 
 ## 7. Profiles
 

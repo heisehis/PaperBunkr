@@ -155,4 +155,40 @@ public class ReaderImagePipelineBandTests : IDisposable
         string trace = string.Join("\n", order);
         Assert.True(band9 is null, $"band 9 decoded when it should have been stale. Trace:\n{trace}");
     }
+
+    [Fact]
+    public void SetStripBandWindow_ScrollingThroughAWholeStrip_KeepsResidentBandBytesBounded()
+    {
+        // 800x24000 is the design's own §6 memory-bound example. 24000/4096 = 6 bands total for the
+        // whole strip (~13.1MB/band at 800px wide, Bgra8888) - if nothing were ever evicted while
+        // scrolling through it, resident bytes would climb toward that whole-strip total. The bound
+        // this test enforces (design §6, fixed-source-pixels-so-no-zoom-conversion-needed):
+        // ~4*BandHeight*width*4 bytes + slack - comfortably less than half the whole strip.
+        const int width = 800;
+        CbzFixture.Create(_cbzPath, pageCount: 1, pageSize: _ => new Size(width, 24000), imageFormat: _ => ImageFormat.Jpeg);
+        using var pipeline = ReaderImagePipeline.TryOpen(_cbzPath)!;
+
+        OpenAndSettleFirstPass(pipeline, 0);
+        Assert.True(pipeline.IsStrip(0));
+
+        // The eviction range is [visibleBand - 2*BandHeight, visibleBand + 2*BandHeight] (design
+        // §4.2/§6) - a *closed* range, so for a single visible band that's band-2..band+2
+        // surviving = 5 bands resident at steady state, not 4 (the design text's own "~4*BandHeight"
+        // was a rough approximation predating the exact eviction-range arithmetic landing at ±2).
+        long bound = (5L * ReaderImagePipeline.BandHeight * width * 4) + (8L * 1024 * 1024); // + 8MiB slack
+        int bandCount = (int)Math.Ceiling(24000.0 / ReaderImagePipeline.BandHeight);
+
+        for (int center = 0; center < bandCount; center++)
+        {
+            var landed = new ManualResetEventSlim(false);
+            pipeline.BackgroundDecodeCompleted += p => { if (p == 0) landed.Set(); };
+
+            pipeline.SetStripBandWindow(0, minBand: center, maxBand: center);
+            landed.Wait(TimeSpan.FromSeconds(5)); // best-effort settle per step - the bound below is what actually matters
+            Thread.Sleep(50);
+
+            Assert.True(pipeline.DecodedBandBytes <= bound,
+                $"resident band bytes {pipeline.DecodedBandBytes:N0} exceeded bound {bound:N0} at scroll step (center band {center})");
+        }
+    }
 }

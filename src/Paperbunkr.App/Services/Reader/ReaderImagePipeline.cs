@@ -313,6 +313,12 @@ public sealed class ReaderImagePipeline : IReaderPageSource
         get { lock (_sync) { return _displayCache.Count; } }
     }
 
+    /// <summary>Test seam (design §6's memory-bound test): total bytes currently resident in <see cref="_bandCache"/>, the same observable "decoded [bands] are a hard-bounded resource" signal <see cref="DecodedPageCount"/> is for whole pages.</summary>
+    internal long DecodedBandBytes
+    {
+        get { lock (_sync) { return _bandCache.Size; } }
+    }
+
     public int ActivePageIndex => _activePageIndex;
 
     /// <summary>Whether the container's held-open reading session was opened (§4) - <see langword="false"/> means the pipeline is on the stateless per-page fallback.</summary>

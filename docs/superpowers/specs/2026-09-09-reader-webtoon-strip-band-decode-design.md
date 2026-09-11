@@ -309,9 +309,12 @@ Phase 1 deliberately shaped the pipeline so this doesn't need a rewrite:
 - **Seam test**: assert adjacent bands' computed destination rects share an exact boundary
   (no gap, no overlap) across a range of `BandHeight`/zoom/viewport combinations — the render-math
   regression class §4.1.2 exists to prevent.
-- **Memory bound**: scroll a 800×24000 strip end to end at a scripted velocity, assert resident band
-  bytes stay within `~4·BandHeight·width·4` (fixed source pixels now, so no zoom conversion needed)
-  + budget slack.
+- **Memory bound**: scroll a 800×24000 strip end to end, assert resident band bytes stay within
+  `5·BandHeight·width·4` + budget slack (fixed source pixels now, so no zoom conversion needed) - 5,
+  not 4: §4.2's own eviction range `[visibleBand − 2, visibleBand + 2]` is a *closed* range, so a
+  single visible band keeps 5 bands resident at steady state (corrected here after the
+  implementation's own test caught this doc's earlier "~4" as a rough pre-eviction-range-arithmetic
+  approximation, not the actual bound the stated formula produces).
 - **Layout**: a strip with only bands 3–5 resident still reports the correct total scroll extent,
   and that extent is correct once `PageSizeAvailable` has fired, even before any band decodes.
 - **Benchmark**: add `WebtoonScrollSimulation` to `Paperbunkr.Benchmarks` — decoded MP/sec at fixed

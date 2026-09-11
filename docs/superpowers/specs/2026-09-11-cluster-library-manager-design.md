@@ -141,6 +141,15 @@ ignore-blank-value toggles (CE's `ow_existing_b`/`ignore_blanks_b`), same mechan
 Editing already uses. No `MetadataProposal` detour: the review dialog itself is the confirmation
 step, so a second proposal-acceptance layer on top would be redundant (grilling Q11).
 
+**Persisted per book, not batched into one final `SaveChanges()`.** Each book's match is confirmed
+individually in the review dialog (§4 above), so it's saved individually too, right after
+confirmation — matching the granularity the user already interacted at. Batching hundreds of
+confirmed books' changes into one `PaperbunkrDbContext` and calling `SaveChanges()` once at the end
+would mean a single constraint violation on book #742 rolls back all 1,000 already-user-confirmed
+books by default EF behavior — discarding legitimate, explicitly-approved work over one bad row.
+Same principle as §6's file-move batch: the unit of atomicity is one item, failures are logged and
+skipped, the run continues.
+
 **Field-toggle matrix**: CE's 20-entry `CheckedListBox` (series, number, published, released, title,
 crossovers, writer, penciller, inker, cover_artist, colorist, letterer, editor, summary, imprint,
 publisher, volume, characters, teams, locations, webpage) maps onto real `Issue` properties
@@ -221,6 +230,23 @@ Two-phase, modeled on `MigrationViewModel`'s Locate→Preview→Conflicts→Comm
   `LibraryScreenViewModel.ImportDroppedPathsAsync`. Move/Copy/Simulate modes match CE's `Mode` enum
   (`locommon.py:165-168`); default is Move, per CE's own default.
 
+**Failure isolation — per-item, not one batch-wide transaction.** Review correctly flagged that this
+spec left partial-batch failure behavior unstated. The fix is *not* wrapping the whole batch in one
+EF transaction, though — that would be actively wrong for this workload: a file move is a real
+filesystem side effect a database transaction cannot roll back, so if item 400 of 1,000 failed and
+the DB transaction for the whole batch rolled back, files 1–399 would already be physically sitting
+at their new paths while the database still pointed at their old ones — a worse, actively-corrupted
+state than no rollback at all. A single long-lived transaction spanning a large batch's worth of file
+I/O is also its own anti-pattern against a SQLite-backed store (lock contention across a
+long-running operation). The correct unit is **per-item**: move (or copy) one file, then immediately
+persist that one `Issue`'s updated path, as one small step; on failure, log it, leave every
+already-completed item's file and database state exactly as it landed, and continue to the next item
+— exactly CE's own verified behavior (`lobookmover.py`'s `process_books`: a single book's `Failed`
+result increments a counter and the loop continues, the batch is never aborted by one item's
+failure). The Undo log (§8) already gives a real, if manual, way to reverse a batch after the fact,
+which is the actual answer to "what if it partially fails" for an operation whose real-world side
+effects can't be transactionally undone in the first place.
+
 **Collision resolution — modal-per-file** (grilling Q9=B, the literal-CE-style option): a **new**
 purpose-built dialog (`FileConflictDialogViewModel`/`View`, grilling Q15=B — not an extension of the
 existing core-app `ConfirmDialog`, which only supports two buttons, no checkbox, and no custom
@@ -283,16 +309,23 @@ Two earlier drafts of this section are both superseded here, for different reaso
   schema, not serialized into a settings key-value store, once there's no sandboxing reason forcing
   that compromise.
 
-**Resolved approach**: the plugin ships its **own separate SQLite database file** (its own `DbContext`,
-own migrations, own connection string) stored alongside its installed folder under
-`%AppData%\Paperbunkr\plugins\cluster-library-manager\` — fully isolated from the core `paperbunkr.db`
-schema and its migration history. Tables:
+**Resolved approach, revised after external review**: the plugin ships its **own separate embedded
+database file**, isolated from the core `paperbunkr.db` schema and migration history, stored under
+`%AppData%\Paperbunkr\plugins\cluster-library-manager\`. This uses **LiteDB**, not SQLite/EF Core —
+a pure-managed, zero-native-interop embedded .NET database. Review correctly flagged a real packaging
+bug in the original SQLite choice: `Microsoft.Data.Sqlite` needs a native binary
+(`e_sqlite3.dll`) resolved from a `runtimes/<rid>/native/` path structure that the plugin
+install pipeline was flattening away (see v4 §4 for the general fix to that pipeline, which now
+preserves subfolders for `Native`-tier packages regardless). LiteDB sidesteps the problem at this
+plugin's own level, on top of that general fix, since it has no native binary to place correctly in
+the first place — simpler, and one fewer native-library-loading edge case for this specific plugin's
+install to get right. Collections:
 - `ComicVineMatchMemory` — search key → chosen volume id (matchscore priorscore).
 - `OrganizerProfile` — named organizer profiles.
-- A compact move-log table for Undo (old path, new path, batch/job id, timestamp).
-- Simple scalar settings (API key, toggles, mode) can still live in this same database rather than
-  `IPluginConfig`, now that the plugin manages its own storage end to end — one database file, not two
-  storage mechanisms for one plugin's state.
+- A compact move-log collection for Undo (old path, new path, batch/job id, timestamp).
+- Simple scalar settings (API key, toggles, mode) live here too rather than `IPluginConfig`, now that
+  the plugin manages its own storage end to end — one database file, not two storage mechanisms for
+  one plugin's state.
 
 `INativePluginEnvironment.CreateDbContext` (v4 §3) is specifically the *core* `PaperbunkrDbContext`
 factory, for reading/writing library data (`Issue`, `Series`, etc.) — this plugin-owned SQLite file is

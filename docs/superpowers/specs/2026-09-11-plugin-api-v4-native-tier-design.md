@@ -92,14 +92,26 @@ instead of one bespoke hosting mechanism per plugin.
 
 ## 4. Package format and install (reuses existing, CE-ported infrastructure)
 
-**No new install pipeline.** `PluginPackageService.Install(zipFile)` (`src/Paperbunkr.App/Plugins/PluginPackageService.cs`)
-already extracts a flat zip (CE's own "Script Archive|\*.zip" format, ported verbatim via
-`Paperbunkr.Engine`'s `PackageManager`) into `%AppData%\Paperbunkr\plugins\<key>\`. A native package
-is the same shape — `plugin.xml` (extended: `tier="Native"`, an `assembly` attribute naming the
-plugin's main `.dll`) + that `.dll` + any of its own dependency `.dll`s, flat at the zip root
-alongside optional `package.ini`/icon (the existing `Package.UnzipFile` flattens every entry to the
-root filename — **no subfolders**, a real constraint already true for `.csx` packages that a native
-package's dependency DLLs must also respect).
+**No new install pipeline for `Script`-tier packages** — `PluginPackageService.Install(zipFile)`
+(`src/Paperbunkr.App/Plugins/PluginPackageService.cs`) keeps extracting those exactly as today (flat,
+CE's own "Script Archive|\*.zip" format) into `%AppData%\Paperbunkr\plugins\<key>\`.
+
+**`Native`-tier packages need real subfolder structure preserved on extraction — this was wrong in an
+earlier draft of this spec** and is fixed here rather than shipped broken. A compiled plugin project
+that references `Microsoft.Data.Sqlite` (or any package with a native/`P/Invoke` dependency)
+publishes its native binary under `runtimes/<rid>/native/...` in its own build output, and
+`AssemblyDependencyResolver.ResolveUnmanagedDllToPath` (used by `PluginLoadContext`, below) resolves
+native libraries by looking up that exact relative path against the plugin's `.deps.json`. Flattening
+the zip on extraction — as `Package.UnzipFile` does today for `Script` packages, done blindly to a
+`Native` package's ZIP entries too, in the draft this corrects — puts `e_sqlite3.dll` at the plugin's
+root instead of `runtimes/win-x64/native/e_sqlite3.dll` underneath it; the resolver looks for the
+latter, doesn't find it, and native SQLite fails to load at plugin startup. Fix: before extracting,
+`PluginPackageService` peeks the zip's `plugin.xml` entry directly via `ZipArchive` (no full
+extraction needed just to read one small XML entry) to read `tier`; `Script` packages extract via
+today's flattening `Package.UnzipFile` path unchanged, `Native` packages extract via a new path that
+preserves each entry's full relative directory structure exactly as authored in the zip. This is a
+general, durable fix — it protects *any* future native plugin with *any* native dependency, not a
+one-off patch for this one plugin's SQLite choice.
 
 **Canonical extension: `.pbplugin`** (grilling Q18=B), superseding the generic `.zip` label in the
 install picker for *all* plugin packages going forward, script or native — bare `.zip` stays accepted

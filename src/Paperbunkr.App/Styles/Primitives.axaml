@@ -168,6 +168,33 @@
         <Setter Property="BorderBrush" Value="{DynamicResource PbBadgeBrush}" />
     </Style>
 
+    <!-- Reader background texture picker swatches (docs/superpowers/specs/2026-09-10-reader-
+         backlog-batch-b-design.md Item 1) - a clickable Button chrome around a filled preview
+         Border, active state shown as an accent ring rather than color alone (a11y: never convey
+         state by color alone). -->
+    <Style Selector="Button.textureSwatch">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Padding" Value="2" />
+        <Setter Property="CornerRadius" Value="8" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Transitions">
+            <Transitions>
+                <BrushTransition Property="BorderBrush" Duration="{DynamicResource PbMotionFast}" Easing="{StaticResource PbMotionEase}" />
+            </Transitions>
+        </Setter>
+    </Style>
+    <Style Selector="Button.textureSwatch.active">
+        <Setter Property="BorderThickness" Value="2" />
+        <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
+    </Style>
+    <Style Selector="Border.textureSwatchFill">
+        <Setter Property="Width" Value="56" />
+        <Setter Property="Height" Value="38" />
+        <Setter Property="CornerRadius" Value="6" />
+        <Setter Property="ClipToBounds" Value="True" />
+    </Style>
+
     <!--
         FloatingPanel chrome - the shared outer container for overlay-style views (design doc's
         FloatingPanel migration: ReadingListPropertiesOverlay, IssuePropertiesScreen,

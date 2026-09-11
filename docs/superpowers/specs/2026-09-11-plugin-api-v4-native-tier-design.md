@@ -66,8 +66,16 @@ public interface INativePluginModule
 public interface INativePluginEnvironment : IPluginEnvironment
 {
     Func<PaperbunkrDbContext> CreateDbContext { get; }
+    Func<ActivityJobKind, string, bool, IActivityJobHandle> StartActivityJob { get; }
 }
 ```
+**Added while surveying for the implementation plan, not a new design decision**: CLM §6/§9 assume a
+native plugin can report determinate progress through the host's real
+`IActivityService`/`IActivityJobHandle` (already coalesced to ~10/s specifically to avoid flooding the
+dispatcher — see CLM's rebuttal to the fourth review round) — that capability was simply missing from
+this interface as first drafted. `StartActivityJob` mirrors `IActivityService.StartJob`'s real
+signature (`ActivityJobKind kind, string title, bool cancellable`), narrowed to what a plugin actually
+needs; the host's real implementation closes over its own `IActivityService` instance.
 ```csharp
 // Paperbunkr.Plugins.Abstractions.Ui — only a plugin that has UI references this.
 public interface INativePluginSettingsUi
@@ -131,6 +139,14 @@ today's flattening `Package.UnzipFile` path unchanged, `Native` packages extract
 preserves each entry's full relative directory structure exactly as authored in the zip. This is a
 general, durable fix — it protects *any* future native plugin with *any* native dependency, not a
 one-off patch for this one plugin's SQLite choice.
+
+**Second flattening point found while surveying for the implementation plan** — `Package.UnzipFile`
+isn't the only place structure gets discarded. `PackageManager.CommitInstallPackage` (the step that
+copies a package from its pending/staged location into its final installed folder) also copies via a
+non-recursive `Directory.GetFiles(package.PackagePath)` — top-level files only. Fixing only
+`UnzipFile` would preserve subfolders through *extraction* and then lose them again at *commit*. Both
+sites need the same tier-conditional treatment: recursive, structure-preserving for `Native`, today's
+behavior unchanged for `Script`.
 
 **Canonical extension: `.pbplugin`** (grilling Q18=B), superseding the generic `.zip` label in the
 install picker for *all* plugin packages going forward, script or native — bare `.zip` stays accepted

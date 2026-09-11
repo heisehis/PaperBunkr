@@ -327,11 +327,23 @@ use before richer undo (partial-batch undo, undo history beyond the last run) ge
 "Scrape with ComicVine" and "Organize Library" register as new task types in Paperbunkr's existing
 Scheduled Tasks system (Preferences → Automation — see project memory: 7-task scheduler shipped
 2026-09-06) rather than shipping a second, parallel automation UI local to this plugin (grilling
-Q13=A). **Unverified, flagged rather than assumed**: this requires the Scheduled Tasks system to
-expose a public registration point a native plugin assembly can add a task type to. That surface
-wasn't inspected during this grilling pass — the implementation plan needs to check it directly
-before committing to this approach; if no such extension point exists, the fallback is a
-plugin-local automation setting in its own settings view (§2) instead.
+Q13=A) — **superseded, now that this has actually been checked while surveying for the implementation
+plan**: `ScheduledTaskCatalog` is a closed, hardcoded 7-entry set with its own doc comment stating
+outright "Not user-extensible"; the only constructor overload accepting an alternate catalog is an
+`internal` test seam unreachable from a plugin assembly; the Automation Preferences UI is a pure
+projection of that same closed catalog. **No extension point exists** — Q13=A isn't available as
+designed, and per the spec's own already-agreed contingency, CLM uses the fallback instead:
+
+**Plugin-local automation, fully self-contained, no host changes required.** `OrganizerScraperPlugin`
+starts its own lightweight interval timer inside `Initialize` (gated by an "Enable automatic
+organize"/"Enable automatic scrape" toggle + interval field in the plugin's own settings UI, §2) —
+not a new `ScheduledTaskDescriptor`, since none can be registered. This runs only while Paperbunkr
+itself is running, same real-world constraint the host's own scheduler already has (it isn't a true
+OS-level background service either — both check-and-run only during a live process). Firing this
+timer is exactly the `isInteractive: false` path already specified in §4/§6 — the skip-and-log and
+`AutomationCollisionPolicy` fallbacks exist precisely so this self-timed path never hangs on a modal.
+Does not appear in Preferences → Automation (it isn't part of that catalog); its own toggle lives in
+the plugin's Settings screen instead.
 
 **Second, equally hard prerequisite, added after external review**: registering as a Scheduled Task
 means these commands can run fully unattended, with nobody present to answer an interactive prompt.

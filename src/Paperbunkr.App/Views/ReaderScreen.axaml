@@ -237,6 +237,7 @@
                               LeftCommand="{Binding GoLeftCommand}"
                               RightCommand="{Binding GoRightCommand}"
                               HighQualityDisplay="{Binding HighQualityPageDisplay}"
+                              ShowPageShadow="{Binding ShowPageShadow}"
                               LeftKey="{Binding PageTurnLeftKey}"
                               RightKey="{Binding PageTurnRightKey}"
                               PanLeftGesture="{Binding PanLeftKey}"

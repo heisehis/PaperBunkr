@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using Avalonia;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
+using Avalonia.Media.Immutable;
 using Avalonia.Rendering.Composition;
 using Avalonia.Skia;
 using Paperbunkr.App.Services;
@@ -33,7 +34,10 @@ internal sealed record ReaderPageVisualData(
     bool FitOnlyIfOversized,
     int RotationDegrees,
     Bitmap? SecondaryBitmap = null,
-    bool IsRightToLeft = false);
+    bool IsRightToLeft = false,
+    // Item 1 §1.5 of docs/superpowers/specs/2026-09-10-reader-backlog-batch-b-design.md - drawn
+    // behind the page/spread rect, texture-background mode only.
+    bool ShowShadow = false);
 
 /// <summary>One page's already-computed on-screen placement (docs/superpowers/specs/2026-08-10-reader-polish-continuous-scroll-chrome-overlays-design.md §2/§4) - <see cref="Rect"/> comes straight from <see cref="ReaderLayoutModel.ComputeContinuousLayout"/>, already in viewport space, so the handler just scales-and-draws rather than repeating fit/pan math per page.</summary>
 internal readonly record struct ContinuousPageEntry(Rect Rect, Bitmap? Bitmap);
@@ -575,6 +579,11 @@ public sealed class ReaderPageVisualHandler : CompositionCustomVisualHandler
         {
             var pixelSize = data.Bitmap.PixelSize;
             var plan = ComputeDrawPlan(data.Bounds, pixelSize, data.Zoom, data.PanOffsetX, data.PanOffsetY, data.FitMode, data.FitOnlyIfOversized, data.RotationDegrees);
+            if (data.ShowShadow)
+            {
+                DrawPageShadow(context, plan.DestRect);
+            }
+
             // §10: with a colour filter active, the leased path converts to SKImage - cache that
             // across frames (a pan/zoom with adjustment on re-copies nothing) rather than the
             // former per-frame double pixel copy. EvictStaleContinuousScales keys off the visible
@@ -586,8 +595,30 @@ public sealed class ReaderPageVisualHandler : CompositionCustomVisualHandler
 
         RenderSpread(context, data.Bounds, data.Bitmap, data.SecondaryBitmap, data.Zoom, data.PanOffsetX, data.PanOffsetY,
             data.FitMode, data.FitOnlyIfOversized, data.HighQuality, data.IsRightToLeft, lease, colorFilter, offset: default, alpha: 1.0,
-            skImageResolver: colorFilter is not null ? GetOrCreateSkImage : null);
+            showShadow: data.ShowShadow, skImageResolver: colorFilter is not null ? GetOrCreateSkImage : null);
     }
+
+    /// <summary>
+    /// Item 1 §1.5 of docs/superpowers/specs/2026-09-10-reader-backlog-batch-b-design.md - a soft
+    /// drop-shadow behind the page/spread rect, drawn only when the reader background is a
+    /// Texture. Plain <see cref="ImmediateDrawingContext.DrawRectangle"/>, no Skia lease needed -
+    /// <see cref="BoxShadows"/> is a standard Avalonia drawing primitive, same mechanism XAML's own
+    /// <c>Border.BoxShadow</c> uses. Deliberately not drawn during <see cref="RenderTransition"/> -
+    /// a page-turn slide is brief, and threading the flag through that separate, more complex path
+    /// wasn't worth it for this pass.
+    /// </summary>
+    private static void DrawPageShadow(ImmediateDrawingContext context, Rect rect)
+    {
+        if (rect.Width <= 0 || rect.Height <= 0)
+        {
+            return;
+        }
+
+        var shadow = new BoxShadow { OffsetX = 0, OffsetY = 6, Blur = 20, Color = Color.FromArgb(140, 0, 0, 0) };
+        context.DrawRectangle(TransparentFillBrush, null, rect, 0, 0, new BoxShadows(shadow));
+    }
+
+    private static readonly ImmutableSolidColorBrush TransparentFillBrush = new(Colors.Transparent);
 
     /// <summary>
     /// Draws two bitmaps as one double-page spread (docs/superpowers/specs/2026-08-15-reader-double-
@@ -609,6 +640,7 @@ public sealed class ReaderPageVisualHandler : CompositionCustomVisualHandler
     private static void RenderSpread(ImmediateDrawingContext context, Rect bounds, Bitmap primary, Bitmap secondary,
         double zoom, double panOffsetX, double panOffsetY, ImageFitMode fitMode, bool fitOnlyIfOversized, bool highQuality,
         bool isRightToLeft, ISkiaSharpApiLease? lease, SKColorFilter? colorFilter, Vector offset, double alpha,
+        bool showShadow = false,
         SKImage? primaryCachedImage = null, SKImage? secondaryCachedImage = null, Func<Bitmap, SKImage>? skImageResolver = null)
     {
         if (alpha <= 0)
@@ -622,6 +654,13 @@ public sealed class ReaderPageVisualHandler : CompositionCustomVisualHandler
 
         var combinedPlan = ComputeDrawPlan(bounds, spreadSize.Combined, zoom, panOffsetX, panOffsetY, fitMode, fitOnlyIfOversized, rotationDegrees: 0);
         var shiftedDestRect = combinedPlan.DestRect.Translate(offset);
+
+        // One shadow behind the whole spread (not one per half) - it reads as a single card, same
+        // as RenderPaged's solo-page shadow (Item 1 §1.5).
+        if (showShadow)
+        {
+            DrawPageShadow(context, shiftedDestRect);
+        }
 
         // For RTL, the fraction passed to SplitSpread flips too, not just which output rect gets
         // labeled "primary" - SplitSpread always gives its Left result leftWidthFraction's share, so
@@ -702,8 +741,11 @@ public sealed class ReaderPageVisualHandler : CompositionCustomVisualHandler
             return;
         }
 
+        // showShadow deliberately omitted (stays false) - not drawn during a page-turn transition,
+        // see RenderSpread's own doc comment.
         RenderSpread(context, data.Bounds, bitmap, secondaryBitmap, data.Zoom, data.PanOffsetX, data.PanOffsetY,
-            data.FitMode, data.FitOnlyIfOversized, data.HighQuality, isRightToLeft, lease, colorFilter, offset, alpha, cachedImage, secondaryCachedImage);
+            data.FitMode, data.FitOnlyIfOversized, data.HighQuality, isRightToLeft, lease, colorFilter, offset, alpha,
+            primaryCachedImage: cachedImage, secondaryCachedImage: secondaryCachedImage);
     }
 
     /// <summary>

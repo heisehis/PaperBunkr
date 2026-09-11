@@ -100,6 +100,10 @@ public class PageCanvas : Control
     public static readonly StyledProperty<bool> HighQualityDisplayProperty =
         AvaloniaProperty.Register<PageCanvas, bool>(nameof(HighQualityDisplay), defaultValue: true);
 
+    /// <summary>Item 1 §1.5 of docs/superpowers/specs/2026-09-10-reader-backlog-batch-b-design.md - a soft drop-shadow behind the paged-mode page/spread, set by the VM only when the background is a Texture and the mode is paged.</summary>
+    public static readonly StyledProperty<bool> ShowPageShadowProperty =
+        AvaloniaProperty.Register<PageCanvas, bool>(nameof(ShowPageShadow), defaultValue: false);
+
     public static readonly StyledProperty<IReadOnlyList<KeyGesture>> LeftKeyProperty =
         AvaloniaProperty.Register<PageCanvas, IReadOnlyList<KeyGesture>>(nameof(LeftKey), defaultValue: [new KeyGesture(Key.Left)]);
 
@@ -511,7 +515,7 @@ public class PageCanvas : Control
     /// </summary>
     private static readonly AvaloniaProperty[] RenderAffectingProperties =
     [
-        PageProperty, SecondaryPageProperty, HighQualityDisplayProperty, ZoomLevelProperty, PanOffsetXProperty, PanOffsetYProperty,
+        PageProperty, SecondaryPageProperty, HighQualityDisplayProperty, ShowPageShadowProperty, ZoomLevelProperty, PanOffsetXProperty, PanOffsetYProperty,
         FitModeProperty, FitOnlyIfOversizedProperty, ManualRotationDegreesProperty, AutoRotateProperty, PageRotationOverrideDegreesProperty,
         ReadingModeProperty, DecoderProperty, PageCountProperty, ScrollOffsetProperty, PageMarginMultiplierProperty
     ];
@@ -635,6 +639,12 @@ public class PageCanvas : Control
     {
         get => GetValue(ZoomOutCommandProperty);
         set => SetValue(ZoomOutCommandProperty, value);
+    }
+
+    public bool ShowPageShadow
+    {
+        get => GetValue(ShowPageShadowProperty);
+        set => SetValue(ShowPageShadowProperty, value);
     }
 
     public bool HighQualityDisplay
@@ -1734,7 +1744,8 @@ public class PageCanvas : Control
 
         _visual?.SendHandlerMessage(new ReaderPageVisualData(
             new Rect(Bounds.Size), primary, HighQualityDisplay, ZoomLevel * PageMarginMultiplier, PanOffsetX, PanOffsetY,
-            FitMode, FitOnlyIfOversized, EffectiveRotationDegrees(), SecondaryPage, ReadingMode == ReadingMode.RightToLeft));
+            FitMode, FitOnlyIfOversized, EffectiveRotationDegrees(), SecondaryPage, ReadingMode == ReadingMode.RightToLeft,
+            ShowShadow: ShowPageShadow));
 
         _lastRenderedPage = Page;
         _lastRenderedSecondaryPage = SecondaryPage;

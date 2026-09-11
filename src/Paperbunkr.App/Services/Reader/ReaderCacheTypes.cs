@@ -22,6 +22,19 @@ public enum PageTier
 public readonly record struct PageId(string Container, long ContainerStamp, int Index, PageTier Tier);
 
 /// <summary>
+/// Identity for one decoded band of a webtoon-strip page (docs/superpowers/specs/2026-09-09-reader-
+/// webtoon-strip-band-decode-design.md §4.1 rev 4) - parallel to <see cref="PageId"/>, not a field
+/// grafted onto it, since a strip's bands and a normal page's whole bitmap are never the same cache
+/// row. <see cref="Band"/> is a fixed-source-pixel ordinal (band 0 = source rows
+/// <c>[0, BandHeight)</c>, band 1 = <c>[BandHeight, 2*BandHeight)</c>, ...) - deliberately *not*
+/// zoom-dependent (rev 3/4 dropped rev 2's zoom-bucketed key once the scanline-decode session
+/// turned out to need stable, zoom-independent band boundaries), so one decoded band serves every
+/// zoom level; the compositor rescales it at render time the same way it already does for whole
+/// continuous-mode pages.
+/// </summary>
+public readonly record struct StripBandId(string Container, long ContainerStamp, int PageIndex, int Band);
+
+/// <summary>
 /// A decoded reader page, sized so <see cref="Cache{K,T}"/>'s byte bound (<see cref="IDataSize"/>)
 /// accounts for it. Owns its <see cref="AvaloniaBitmap"/> - disposed when the cache evicts it
 /// (wired via <c>Cache.ItemRemoved</c>).

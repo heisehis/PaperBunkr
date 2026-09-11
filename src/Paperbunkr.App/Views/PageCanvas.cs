@@ -1356,6 +1356,8 @@ public class PageCanvas : Control
         {
             decodeService.BackgroundDecodeCompleted -= OnBackgroundDecodeCompleted;
             decodeService.BackgroundDecodeCompleted += OnBackgroundDecodeCompleted;
+            decodeService.PageSizeAvailable -= OnPageSizeAvailable;
+            decodeService.PageSizeAvailable += OnPageSizeAvailable;
         }
 
         PushRenderData();
@@ -1371,6 +1373,7 @@ public class PageCanvas : Control
         if (Decoder is Paperbunkr.App.Services.Reader.IReaderPageSource decodeService)
         {
             decodeService.BackgroundDecodeCompleted -= OnBackgroundDecodeCompleted;
+            decodeService.PageSizeAvailable -= OnPageSizeAvailable;
         }
 
         _detailSettleTimer?.Stop();
@@ -1385,6 +1388,26 @@ public class PageCanvas : Control
     {
         Dispatcher.UIThread.Post(() =>
         {
+            if (IsContinuous)
+            {
+                RequestContinuousPush();
+            }
+        });
+    }
+
+    /// <summary>
+    /// A requested header-only page-size peek landed (design §4.3, fires off the UI thread - same
+    /// shape as <see cref="OnBackgroundDecodeCompleted"/>). Updates <see cref="_knownPageSizes"/>
+    /// (the same dictionary a real decode already populates, so <see cref="EstimatedPageSizes"/>/
+    /// <see cref="PushContinuousVisualData"/> don't need to know which source a size came from) and
+    /// re-pushes so a strip's scroll extent is correct as soon as its true size is known, without
+    /// waiting for its first band to decode.
+    /// </summary>
+    private void OnPageSizeAvailable(int pageIndex, PixelSize size)
+    {
+        Dispatcher.UIThread.Post(() =>
+        {
+            _knownPageSizes[pageIndex] = new Size(size.Width, size.Height);
             if (IsContinuous)
             {
                 RequestContinuousPush();
@@ -1419,11 +1442,13 @@ public class PageCanvas : Control
             if (change.OldValue is Paperbunkr.App.Services.Reader.IReaderPageSource oldDecodeService)
             {
                 oldDecodeService.BackgroundDecodeCompleted -= OnBackgroundDecodeCompleted;
+                oldDecodeService.PageSizeAvailable -= OnPageSizeAvailable;
             }
 
             if (change.NewValue is Paperbunkr.App.Services.Reader.IReaderPageSource newDecodeService)
             {
                 newDecodeService.BackgroundDecodeCompleted += OnBackgroundDecodeCompleted;
+                newDecodeService.PageSizeAvailable += OnPageSizeAvailable;
             }
 
             // A new issue was opened (or continuous mode's decoder was swapped) - yesterday's page
@@ -1914,6 +1939,19 @@ public class PageCanvas : Control
             int viewportCrossSize = (int)(ContinuousAxis == ReaderLayoutModel.Axis.Vertical ? Bounds.Width : Bounds.Height);
             decodeService.SetViewportWidth(Math.Max(1, viewportCrossSize));
             decodeService.SetVirtualizationWindow(layout[0].Index, layout[^1].Index);
+
+            // A strip's true size (design §4.3) - requested for every page entering the window
+            // whose size isn't known yet, so a webtoon strip's scroll extent is correct from the
+            // moment it scrolls near, not only after its first band decodes. RequestPageSize is a
+            // no-op if already known/already enqueued (its own dedup), so calling it every push is
+            // cheap and simple rather than tracking "did I already ask" here too.
+            for (int i = layout[0].Index; i <= layout[^1].Index; i++)
+            {
+                if (!_knownPageSizes.ContainsKey(i))
+                {
+                    decodeService.RequestPageSize(i);
+                }
+            }
         }
 
         // PageDecodeService decodes on a background loop; peek its cache without blocking rather than
@@ -1933,6 +1971,17 @@ public class PageCanvas : Control
         var entries = new List<ContinuousPageEntry>(layout.Count);
         foreach (var page in layout)
         {
+            // A page already known to be a bandable strip (design §4.2) is built as a list of band
+            // slots instead of one whole bitmap - a page not yet classified (or known-and-not-a-
+            // strip, or known-strip-but-unbandable, e.g. a PNG strip per §4.1's rev 5 finding) still
+            // goes through the ordinary whole-page path below, same non-blocking-peek philosophy the
+            // whole-page path already had.
+            if (decodeService is not null && decodeService.IsKnownBandableStrip(page.Index) && _knownPageSizes.TryGetValue(page.Index, out var nativeSize))
+            {
+                entries.Add(BuildStripBandEntry(decodeService, page, nativeSize));
+                continue;
+            }
+
             Bitmap? bitmap;
             try
             {
@@ -1952,6 +2001,60 @@ public class PageCanvas : Control
         }
 
         _visual.SendHandlerMessage(new ReaderContinuousVisualData(Bounds.Size, entries, HighQualityDisplay));
+    }
+
+    /// <summary>
+    /// Builds one strip page's <see cref="ContinuousPageEntry"/> (design §4.2/§4.3): figures out
+    /// which bands of the strip actually overlap the viewport from <paramref name="page"/>'s own
+    /// already-placed whole-strip <see cref="ReaderLayoutModel.LayoutPage.Rect"/>, tells the
+    /// pipeline via <see cref="Paperbunkr.App.Services.Reader.IReaderPageSource.SetStripBandWindow"/>,
+    /// and returns a band-slot list covering that range plus one band's margin either side (so a
+    /// band decoded just ahead of the strict visible range shows up without an extra frame's lag) -
+    /// a non-cached band's slot carries a <see langword="null"/> bitmap, drawn as a gap by
+    /// <see cref="ReaderPageVisualHandler.RenderContinuous"/>, same as an undecoded whole page.
+    /// </summary>
+    private ContinuousPageEntry BuildStripBandEntry(Paperbunkr.App.Services.Reader.IReaderPageSource decodeService, ReaderLayoutModel.LayoutPage page, Size nativeSize)
+    {
+        int bandHeight = decodeService.BandHeight;
+        double nativeMain = ContinuousAxis == ReaderLayoutModel.Axis.Vertical ? nativeSize.Height : nativeSize.Width;
+        double displayMain = ContinuousAxis == ReaderLayoutModel.Axis.Vertical ? page.Rect.Height : page.Rect.Width;
+        int bandCount = Math.Max(1, (int)Math.Ceiling(nativeMain / bandHeight));
+
+        int minBand = 0;
+        int maxBand = bandCount - 1;
+        if (nativeMain > 0 && displayMain > 0)
+        {
+            double scale = displayMain / nativeMain;
+            var viewport = new Rect(Bounds.Size);
+            double stripStart = ContinuousAxis == ReaderLayoutModel.Axis.Vertical ? page.Rect.Top : page.Rect.Left;
+            double viewportStart = ContinuousAxis == ReaderLayoutModel.Axis.Vertical ? viewport.Top : viewport.Left;
+            double viewportEnd = ContinuousAxis == ReaderLayoutModel.Axis.Vertical ? viewport.Bottom : viewport.Right;
+
+            // The visible sub-range of the strip, in viewport space, clamped to the strip's own
+            // extent - then mapped back to source-pixel band indices via the same single scale
+            // factor ComputeStripBandRect itself uses.
+            double visibleDisplayStart = Math.Max(stripStart, viewportStart) - stripStart;
+            double visibleDisplayEnd = Math.Min(stripStart + displayMain, viewportEnd) - stripStart;
+            if (visibleDisplayEnd > visibleDisplayStart)
+            {
+                minBand = Math.Clamp((int)Math.Floor(visibleDisplayStart / scale / bandHeight), 0, bandCount - 1);
+                maxBand = Math.Clamp((int)Math.Floor((visibleDisplayEnd / scale) / bandHeight), 0, bandCount - 1);
+            }
+        }
+
+        decodeService.SetStripBandWindow(page.Index, minBand, maxBand);
+
+        int slotMin = Math.Max(0, minBand - 1);
+        int slotMax = Math.Min(bandCount - 1, maxBand + 1);
+        var bands = new List<StripBandSlot>(slotMax - slotMin + 1);
+        for (int b = slotMin; b <= slotMax; b++)
+        {
+            var bitmap = decodeService.TryGetCachedBand(page.Index, b);
+            var rect = ReaderLayoutModel.ComputeStripBandRect(page.Rect, nativeSize, ContinuousAxis, b, bandHeight);
+            bands.Add(new StripBandSlot(rect, bitmap));
+        }
+
+        return new ContinuousPageEntry(page.Rect, null, bands);
     }
 
     protected override void OnPointerPressed(PointerPressedEventArgs e)

@@ -249,6 +249,26 @@ docs. Deliberately out of scope: CE's *other* texture feature — an actual pape
 over the page image itself, not just the canvas background — remains a genuine, separate gap (see
 `ce-feature-inventory.md`).
 
+**"Reader backlog Batch C" — webtoon strip band decode, the last item from §11 of the reader
+decode/cache/prefetch pipeline design (2026-09-08), shipped 2026-09-12**
+(docs/superpowers/specs/2026-09-09-reader-webtoon-strip-band-decode-design.md, rev 5, +
+`-plan.md`, branch `claude/reader-backlog-batch-c`, 9 steps). A tall webtoon/manhwa page (10,000–
+30,000px) now decodes in bounded-memory bands as it scrolls into view instead of all at once —
+`StripDecodeSession` walks the page forward via SkiaSharp's scanline API
+(`StartScanlineDecode`/`SkipScanlines`/`GetScanlines`), the only mechanism that actually works for
+this: `SKCodec.GetPixels(..., Subset)`, the API the design originally assumed would give
+independent per-band decode, is rejected outright by Skia's own JPEG *and* PNG codecs, found by
+reading Skia's actual source rather than trusting the SkiaSharp binding's mere existence. Real
+row-range decode turned out **JPEG-only** in this Skia build — PNG's codec has neither a working
+scanline path nor a working incremental-decode-with-subset path (verified by running it, not just
+reading source); a PNG page shaped like a strip still benefits from a new header-only size-peek
+(`RequestPageSize`/`PageSizeAvailable`, so the scroll layout is correct immediately rather than
+lurching once a full decode lands) but falls back to the existing whole-page decode, unchanged.
+Two review rounds during design, then a third correction found only by actually implementing and
+running the code (not by more review) — including a real, reproducible native test-host crash
+(a session's `SKCodec` disposed under one lock while still in use under a different, finer-grained
+one) found and fixed before this shipped, not after.
+
 ### Metadata editing extras
 Copy/paste fields between books, templated/token text field editor, Quick Rating + free-text
 Review popup (Review isn't a schema field yet), undo/redo for metadata edits, per-page type

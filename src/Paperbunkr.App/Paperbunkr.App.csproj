@@ -45,6 +45,10 @@
     <!-- CoverThumbnailService's internal test-injection constructor (docs/superpowers/specs/
          2026-08-06-cover-thumbnails-design.md §2) needs this. -->
     <InternalsVisibleTo Include="Paperbunkr.App.Tests" />
+    <!-- WebtoonScrollBenchmarks (docs/superpowers/specs/2026-09-09-reader-webtoon-strip-band-
+         decode-design.md §6/§8) needs ReaderImagePipeline.BandHeight/DecodedBandBytes, the same
+         internal test seams Paperbunkr.App.Tests already gets. -->
+    <InternalsVisibleTo Include="Paperbunkr.Benchmarks" />
   </ItemGroup>
 
   <ItemGroup>

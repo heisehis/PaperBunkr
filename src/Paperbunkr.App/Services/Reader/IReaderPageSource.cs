@@ -55,4 +55,49 @@ public interface IReaderPageSource : IPageImageDecoder
     /// the compositor mid-slide. Re-arming or a shorter value both take effect immediately.
     /// </summary>
     void SuppressFringePrefetch(int milliseconds);
+
+    /// <summary>
+    /// Requests a header-only page-size peek (docs/superpowers/specs/2026-09-09-reader-webtoon-
+    /// strip-band-decode-design.md §4.3) — fire-and-forget, never blocks the calling thread. A
+    /// no-op if the size is already known. <see cref="PageSizeAvailable"/> fires once it lands.
+    /// </summary>
+    void RequestPageSize(int pageIndex);
+
+    /// <summary>Raised (off the UI thread) when a requested page size lands — subscribers marshal to the UI thread, update their own size cache, and re-layout.</summary>
+    event Action<int, PixelSize> PageSizeAvailable;
+
+    /// <summary>
+    /// Non-blocking display-tier cache peek for one band of a strip page (docs/superpowers/specs/
+    /// 2026-09-09-reader-webtoon-strip-band-decode-design.md §4.1) — the band if already decoded,
+    /// else <see langword="null"/> (caller draws a gap and waits for
+    /// <see cref="BackgroundDecodeCompleted"/>, same as <see cref="TryGetCachedPage"/>). A page that
+    /// isn't actually a strip, or a strip whose format doesn't support band decode (PNG, in
+    /// practice — §4.1's finding), never has cached bands; callers should have routed those through
+    /// the ordinary whole-page path instead.
+    /// </summary>
+    Bitmap? TryGetCachedBand(int pageIndex, int band);
+
+    /// <summary>
+    /// Declares which bands of one strip page are actually near the viewport right now (design
+    /// §4.2) — the sub-page-range analogue of <see cref="SetVirtualizationWindow"/>, needed because
+    /// that method only carries whole-page granularity and a single strip page can span far more of
+    /// the viewport than that. The pipeline decodes <paramref name="minBand"/>..<paramref name="maxBand"/>
+    /// plus a small margin at high priority, prefetches a bit further via the same adaptive fringe
+    /// whole-page decode already uses, and evicts bands well outside that range. A no-op for a page
+    /// that isn't a strip (or isn't currently in the window <see cref="SetVirtualizationWindow"/>
+    /// last declared).
+    /// </summary>
+    void SetStripBandWindow(int pageIndex, int minBand, int maxBand);
+
+    /// <summary>
+    /// Non-blocking: whether <paramref name="pageIndex"/> is currently known to be a strip whose
+    /// format actually supports band decode (design §4.1/§4.2) - never peeks or triggers I/O if
+    /// unknown, just reports <see langword="false"/> (the caller should then route this page as an
+    /// ordinary whole page for this one frame - the same "safe default until classified" shape
+    /// <see cref="SetVirtualizationWindow"/> itself already uses internally).
+    /// </summary>
+    bool IsKnownBandableStrip(int pageIndex);
+
+    /// <summary>The fixed source-pixel band size band decode uses (design §4.1.1) - <see cref="Paperbunkr.App.Views.PageCanvas"/> needs this to convert a strip's visible pixel sub-range into band indices for <see cref="SetStripBandWindow"/>.</summary>
+    int BandHeight { get; }
 }

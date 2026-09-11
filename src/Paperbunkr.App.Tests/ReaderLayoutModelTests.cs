@@ -363,6 +363,81 @@ public class ReaderLayoutModelTests
         }
     }
 
+    // ===================== ComputeStripBandRect (docs/superpowers/specs/2026-09-09-reader-
+    // webtoon-strip-band-decode-design.md §4.1.2) =====================
+
+    [Theory]
+    [InlineData(1.0)]
+    [InlineData(0.5)]
+    [InlineData(2.37)] // an arbitrary non-round zoom - the seam property must hold regardless of scale
+    public void ComputeStripBandRect_AdjacentBands_ShareAnExactBoundary_NoGapNoOverlap(double displayScaleHint)
+    {
+        var native = new Size(800, 24000); // a real-shaped webtoon strip
+        var stripRect = new Rect(0, 0, native.Width * displayScaleHint, native.Height * displayScaleHint);
+        const int bandHeight = 4096; // ReaderImagePipeline.BandHeight, duplicated here to keep this test free of an App-project dependency beyond Views
+
+        int bandCount = (int)Math.Ceiling(native.Height / bandHeight);
+        Rect? previous = null;
+        for (int b = 0; b < bandCount; b++)
+        {
+            var rect = ReaderLayoutModel.ComputeStripBandRect(stripRect, native, ReaderLayoutModel.Axis.Vertical, b, bandHeight);
+
+            if (previous is { } prev)
+            {
+                // The exact same floating-point value, not merely "close" - that's the whole point
+                // of deriving every band from the strip's one Rect/scale rather than the previous
+                // band's own already-placed rect.
+                Assert.Equal(prev.Bottom, rect.Top);
+            }
+            Assert.Equal(stripRect.X, rect.X);
+            Assert.Equal(stripRect.Width, rect.Width);
+            previous = rect;
+        }
+
+        // The last band ends exactly at the strip's own bottom edge - no leftover gap past it.
+        Assert.Equal(stripRect.Bottom, previous!.Value.Bottom, precision: 9);
+    }
+
+    [Fact]
+    public void ComputeStripBandRect_LastBand_ClippedToRemainingHeight()
+    {
+        var native = new Size(800, 10000); // bands: [0,4096) [4096,8192) [8192,10000) - last is 1808 rows
+        var stripRect = new Rect(0, 0, 800, 10000); // 1:1 scale for a simple expected value
+        const int bandHeight = 4096;
+
+        var lastBand = ReaderLayoutModel.ComputeStripBandRect(stripRect, native, ReaderLayoutModel.Axis.Vertical, bandIndex: 2, bandHeight);
+
+        Assert.Equal(8192, lastBand.Top);
+        Assert.Equal(10000, lastBand.Bottom);
+        Assert.Equal(1808, lastBand.Height);
+    }
+
+    [Fact]
+    public void ComputeStripBandRect_HorizontalAxis_UsesWidthAsMainAxis()
+    {
+        var native = new Size(24000, 800); // a horizontal strip, hypothetically
+        var stripRect = new Rect(0, 0, 12000, 400); // 0.5x scale
+        const int bandHeight = 4096;
+
+        var band0 = ReaderLayoutModel.ComputeStripBandRect(stripRect, native, ReaderLayoutModel.Axis.Horizontal, bandIndex: 0, bandHeight);
+
+        Assert.Equal(0, band0.X);
+        Assert.Equal(4096 * 0.5, band0.Width);
+        Assert.Equal(stripRect.Y, band0.Y);
+        Assert.Equal(stripRect.Height, band0.Height);
+    }
+
+    [Fact]
+    public void ComputeStripBandRect_BandEntirelyPastNativeHeight_ReturnsDefault()
+    {
+        var native = new Size(800, 5000);
+        var stripRect = new Rect(0, 0, 800, 5000);
+
+        var band = ReaderLayoutModel.ComputeStripBandRect(stripRect, native, ReaderLayoutModel.Axis.Vertical, bandIndex: 5, bandHeightSourcePixels: 4096);
+
+        Assert.Equal(default, band);
+    }
+
     // ===================== ComputeContinuousZoomAnchor (docs/superpowers/specs/2026-09-12-
     // continuous-mode-cursor-anchored-zoom-design.md) =====================
 

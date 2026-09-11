@@ -20,15 +20,21 @@ internal static class CbzFixture
     /// (portrait) size per page index - for double-page-spread pairing tests (docs/superpowers/specs/
     /// 2026-08-15-reader-double-page-spread-design.md §7), which need real landscape pages (width >
     /// height) to exercise the "doesn't pair" path against actually-decoded <c>PixelSize</c>s.
+    /// <paramref name="imageFormat"/> optionally overrides the default PNG encoding per page index -
+    /// the webtoon band-decode tests (docs/superpowers/specs/2026-09-09-reader-webtoon-strip-band-
+    /// decode-design.md §6) need both a real JPEG and a real PNG fixture, since Skia's JPEG and PNG
+    /// codecs were verified to have independent scanline-decode code paths.
     /// </summary>
-    public static string Create(string path, int pageCount, cYo.Projects.ComicRack.Engine.ComicInfo? comicInfo = null, Func<int, Size>? pageSize = null)
+    public static string Create(string path, int pageCount, cYo.Projects.ComicRack.Engine.ComicInfo? comicInfo = null, Func<int, Size>? pageSize = null, Func<int, ImageFormat>? imageFormat = null)
     {
         using var zip = ZipFile.Open(path, ZipArchiveMode.Create);
         var colors = new[] { Color.Firebrick, Color.SteelBlue, Color.Goldenrod, Color.SeaGreen, Color.Orchid };
 
         for (int i = 0; i < pageCount; i++)
         {
-            var entry = zip.CreateEntry($"page_{i:D3}.png", CompressionLevel.Fastest);
+            var format = imageFormat?.Invoke(i) ?? ImageFormat.Png;
+            string extension = ReferenceEquals(format, ImageFormat.Jpeg) ? "jpg" : "png";
+            var entry = zip.CreateEntry($"page_{i:D3}.{extension}", CompressionLevel.Fastest);
             var size = pageSize?.Invoke(i) ?? new Size(64, 96);
             using var bitmap = new Bitmap(size.Width, size.Height);
             using (var g = Graphics.FromImage(bitmap))
@@ -37,7 +43,7 @@ internal static class CbzFixture
             }
 
             using var entryStream = entry.Open();
-            bitmap.Save(entryStream, ImageFormat.Png);
+            bitmap.Save(entryStream, format);
         }
 
         if (comicInfo is not null)

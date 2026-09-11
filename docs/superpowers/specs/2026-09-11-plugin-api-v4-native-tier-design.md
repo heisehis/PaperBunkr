@@ -101,7 +101,12 @@ public interface INativePluginSettingsUi
 
 public interface INativePluginUiEnvironment : INativePluginEnvironment
 {
-    Task<TResult> ShowModalAsync<TResult>(Avalonia.Controls.Control content);
+    // A factory, not an already-built Control - refined during Phase 1 implementation once it became
+    // concrete how a plugin's opaque ViewModel actually signals "done, here's the result" back with
+    // no shared marker interface. The host builds the resolve callback first and hands it to the
+    // factory, so the plugin's own ViewModel constructor captures it and invokes it directly:
+    //   await uiEnv.ShowModalAsync<Choice>(resolve => new MyDialogView { DataContext = new MyDialogViewModel(resolve) });
+    Task<TResult> ShowModalAsync<TResult>(Func<Action<TResult>, Avalonia.Controls.Control> contentFactory);
 }
 ```
 

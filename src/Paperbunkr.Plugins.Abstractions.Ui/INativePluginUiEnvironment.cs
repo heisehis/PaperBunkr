@@ -12,10 +12,22 @@ namespace Paperbunkr.Plugins.Abstractions.Ui;
 /// </summary>
 public interface INativePluginUiEnvironment : INativePluginEnvironment
 {
-    /// <summary>Shows <paramref name="content"/> — a plugin-compiled <see cref="Control"/> (e.g. a
-    /// settings screen, a collision dialog, a match-review dialog) — as a modal overlay hosted by the
-    /// app's own generic native-plugin modal host (one shared <c>OverlayShell</c> slot, not a bespoke
-    /// one per dialog type), and awaits a result the plugin's own view/viewmodel supplies. The plugin
-    /// can't touch <c>MainWindow.axaml</c> itself, so this is the one hosting primitive it gets.</summary>
-    Task<TResult> ShowModalAsync<TResult>(Control content);
+    /// <summary>
+    /// Shows a plugin-compiled <see cref="Control"/> (e.g. a collision dialog, a match-review dialog)
+    /// as a modal overlay hosted by the app's own generic native-plugin modal host (one shared
+    /// <c>OverlayShell</c> slot, not a bespoke one per dialog type) and awaits a result. The plugin
+    /// can't touch <c>MainWindow.axaml</c> itself, so this is the one hosting primitive it gets.
+    ///
+    /// <paramref name="contentFactory"/> is a factory, not an already-built <see cref="Control"/>,
+    /// because the host has no way to know what the plugin's own view/viewmodel needs in order to
+    /// signal "done, here's the result" back - there's no shared marker interface a plugin's
+    /// arbitrary ViewModel is required to implement. Instead the host builds the resolve callback
+    /// FIRST and hands it to the factory, so the plugin's own ViewModel constructor can capture it
+    /// and invoke it directly from whichever command/button should close the dialog:
+    /// <code>
+    /// var choice = await uiEnv.ShowModalAsync&lt;CollisionChoice&gt;(resolve =>
+    ///     new FileConflictDialogView { DataContext = new FileConflictDialogViewModel(book, existing, resolve) });
+    /// </code>
+    /// </summary>
+    Task<TResult> ShowModalAsync<TResult>(Func<Action<TResult>, Control> contentFactory);
 }

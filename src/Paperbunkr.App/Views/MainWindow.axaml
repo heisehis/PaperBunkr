@@ -915,6 +915,15 @@
         <views:ConfirmDialogView DataContext="{Binding ConfirmDialog}" />
     </controls:OverlayShell>
 
+    <!-- ============ Native plugin modal host (docs/superpowers/specs/2026-09-11-plugin-api-v4-
+         native-tier-design.md §3) - the one generic slot every native plugin's own compiled dialog
+         (settings screen, collision dialog, match-review dialog) is shown through. Unlike
+         ConfirmDialog above, the hosted view isn't a fixed type - Content is bound directly to
+         whatever Control the plugin supplied, via a bare ContentControl. ============ -->
+    <controls:OverlayShell IsOpen="{Binding NativePluginModalHost.IsOpen}" CloseCommand="{Binding NativePluginModalHost.DismissCommand}">
+        <ContentControl Content="{Binding NativePluginModalHost.HostedContent}" />
+    </controls:OverlayShell>
+
     <!-- ============ Reading List properties overlay (docs/superpowers/specs/2026-08-23-reading-
          list-tags-design.md) - same backdrop-popup pattern as the Migration overlay above, not a
          screen swap ============ -->

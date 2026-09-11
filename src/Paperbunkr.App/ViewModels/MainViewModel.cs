@@ -101,6 +101,7 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         // in PluginHostService) needs Dialogs available via this VM's reference.
         ConfirmDialog = new ConfirmDialogViewModel();
         Dialogs = new DialogService(ConfirmDialog);
+        NativePluginModalHost = new NativePluginModalHostViewModel();
 
         // Reading-event log recorder (docs/superpowers/specs/2026-09-05-insights-dashboard-design.md
         // §5) - one instance, shared by the three reader VMs that write events and the Insights
@@ -416,6 +417,12 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
     /// feedback-notification-system-design.md §2).</summary>
     public ConfirmDialogViewModel ConfirmDialog { get; }
     public IDialogService Dialogs { get; }
+
+    /// <summary>Backs the single shared generic modal-host OverlayShell mounted in MainWindow.axaml -
+    /// what every native plugin's own compiled dialog (settings screen, collision dialog, match-review
+    /// dialog) is actually shown through (docs/superpowers/specs/2026-09-11-plugin-api-v4-native-tier-
+    /// design.md §3). Driven exclusively via <c>Plugins.PaperbunkrNativePluginEnvironment.ShowModalAsync</c>.</summary>
+    public NativePluginModalHostViewModel NativePluginModalHost { get; }
     public WelcomeOverlayViewModel Welcome { get; }
     public UpdateAvailableOverlayViewModel Update { get; }
     public WhatsNewOverlayViewModel WhatsNew { get; }

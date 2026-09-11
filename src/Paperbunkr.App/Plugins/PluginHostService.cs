@@ -29,7 +29,7 @@ public sealed class PluginHostService
     {
         _main = main;
 
-        _environment = new PaperbunkrPluginEnvironment
+        var baseEnvironment = new PaperbunkrPluginEnvironment
         {
             MainWindow = new PaperbunkrPluginHostWindow(mainWindow),
             App = new PaperbunkrApplication(main),
@@ -41,6 +41,12 @@ public sealed class PluginHostService
             Writer = new PaperbunkrMetadataWriter(),
             ThemePlugin = new PaperbunkrThemePlugin(),
         };
+
+        // Native-capable (docs/superpowers/specs/2026-09-11-plugin-api-v4-native-tier-design.md §3) -
+        // there's only one real environment instance; a headless native plugin just never casts to
+        // the wider INativePluginUiEnvironment, and a .csx script only ever sees it through the base
+        // IPluginEnvironment interface, so nothing about the existing script sandbox changes.
+        _environment = new PaperbunkrNativePluginEnvironment(baseEnvironment, main.Activity, main.NativePluginModalHost);
 
         DiscoverAndApplyOverrides();
 

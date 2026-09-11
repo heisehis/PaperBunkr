@@ -1,12 +1,14 @@
 # Cluster Library Manager — Design Spec
 
-*Date: 2026-09-11. Scope: a from-scratch port of ComicRack CE's two plugins — **ComicVineScraper**
-(v1.0.102) and **Library Organizer** (v2.1.13) — into one Paperbunkr feature: "Cluster Library
-Manager." Reference source for every CE-behavior claim below is the actual `.crplugin` bundles the
-user supplied (extracted IronPython source, not memory/guesswork), per the project's standing rule
-to verify against `_reference/ComicRackCE`-equivalent source before assuming any field, default, or
-behavior. Produced via a `/grilling` pass (17 rounds) per CLAUDE.md's override of `brainstorming`'s
-default one-question clarification step.*
+*Date: 2026-09-11 (revised same day after external review — see §2). Scope: a from-scratch port of
+ComicRack CE's two plugins — **ComicVineScraper** (v1.0.102) and **Library Organizer** (v2.1.13) —
+into one Paperbunkr feature: "Cluster Library Manager," built as the first real consumer of
+`docs/superpowers/specs/2026-09-11-plugin-api-v4-native-tier-design.md` (v4). Reference source for
+every CE-behavior claim below is the actual `.crplugin` bundles the user supplied (extracted
+IronPython source, not memory/guesswork), per the project's standing rule to verify against
+`_reference/ComicRackCE`-equivalent source before assuming any field, default, or behavior. Produced
+via a `/grilling` pass (22 rounds, the last 5 revisiting architecture after external review) per
+CLAUDE.md's override of `brainstorming`'s default one-question clarification step.*
 
 ## 1. Goals and non-goals
 
@@ -22,79 +24,56 @@ ported faithfully; presentation (dialogs, screens) is native Paperbunkr.
 
 **Confirms prior project intent.** `docs/superpowers/specs/2026-08-24-plugin-api-v2-design.md` §1
 already named "Comic Vine Scraper" among CE plugins to be "retired and absorbed as core Paperbunkr
-features, not ported as plugins" — this spec's architecture (§2) independently arrived at the same
-conclusion via the current grilling pass, and this is the first spec to act on it concretely.
+features, not ported as plugins" — an early draft of this spec's architecture independently arrived
+at a version of the same conclusion (a core-app hybrid), before external review and a direct
+statement of intent from the project owner (a genuinely modular app, third-party devs able to ship
+real standalone plugins, matching what CE's own `.crplugin` bundles offered) pushed the design one
+step further, to §2 below.
 
 ## 2. Architecture: where this lives
 
-Paperbunkr plugins are sandboxed `.csx` script bundles (`plugin.xml` + script files) invoked through
-a fixed `IPluginEnvironment` — no typed `HttpClient`, no custom compiled view, no DI (confirmed: zero
-`IServiceCollection`/`AddSingleton`/`ServiceProvider` usage anywhere in `src/`). The host app itself
-has no DI container either; it's manually composed throughout (constructor injection of concrete
-services, e.g. `PreferencesScreenViewModel`).
+**Revision note:** this section originally proposed a "hybrid" — compiled services living inside
+`Paperbunkr.Data`/`Paperbunkr.App`, with thin `.csx` wrapper commands exposing them through the
+existing sandboxed plugin tier. That design was reopened after external review (via Gemini, relayed
+by the project owner) correctly identified it didn't deliver a standalone plugin at all — the compiled
+logic would have been core-app code wearing a plugin manifest, not something a third party could ship
+independently. That review also forced a real correction to this document's own earlier reasoning:
+it had claimed a compiled native-assembly plugin tier would necessarily be "fully unsandboxed," which
+isn't accurate — the actual enforcement mechanism in Paperbunkr's plugin design is *what interfaces a
+plugin is given a reference to*, not whether its code arrives as script text or a compiled assembly.
+That correction, combined with the project owner's explicit statement that the plugin system exists
+specifically so third-party developers can add standalone pieces to a modular app, is what motivated
+building a real native tier rather than patching the hybrid further.
 
-Given that, Cluster Library Manager is a **hybrid**, not a pure `.csx` plugin and not a compiled
-native-assembly plugin tier:
+Cluster Library Manager is now a genuine **native-tier plugin**, per
+`docs/superpowers/specs/2026-09-11-plugin-api-v4-native-tier-design.md` (v4) — a real compiled .NET
+project, shipped as its own `.pbplugin` package, installed independently of the Paperbunkr source
+tree:
 
-- **Heavy logic is plain compiled C# classes** in `Paperbunkr.Data`/`Paperbunkr.App` —
-  `ComicVineService`, `LibraryOrganizerService`, the token engine, `MatchScoreCalculator` — composed
-  manually at app startup, same idiom as `TrackerHttpClients` (`src/Paperbunkr.Data/Tracking/TrackerHttpClients.cs`):
-  static-readonly `HttpClient` fields, no `IHttpClientFactory` (that app-wide precedent's own doc
-  comment: "no DI container/`IHttpClientFactory` in this app, and this app's single-user scale
-  doesn't need one").
-- **The plugin surface is thin `.csx` wrapper commands** (`plugin.xml` with `Library`/`Startup`/etc.
-  hooks) so the feature still appears, enables/disables, and is discoverable through the existing
-  Plugins screen like any other plugin — but the wrapper scripts call into the compiled services
-  rather than reimplementing logic in script.
-- Rejected: a native-assembly plugin tier (reflection/`AssemblyLoadContext`-loaded compiled plugin
-  DLLs). This was the most literal reading of the original ask (`OrganizerScraperPlugin.cs`
-  registering services, a plugin-authored `SettingsView.axaml`) but was explicitly ruled out during
-  grilling — it would run fully unsandboxed code, and this codebase has deliberately built walls
-  against exactly that (`Paperbunkr.Data`'s query-builders are being made `internal` with
-  `[InternalsVisibleTo("Paperbunkr.App")]` specifically to keep `.csx` scripts off them per
-  `docs/superpowers/specs/2026-08-28-plugin-api-v3-data-manager-design.md` §7; every plugin write
-  already goes through an audited `IMetadataWriter` gate). A second, parallel unsandboxed plugin tier
-  would undercut both.
-
-### 2.1 New plugin-engine capabilities
-
-Two small, deliberately general additions — usable by any future plugin, not special-cased to this
-one:
-
-**Host-service bridge.** `IPluginEnvironment` gains:
-```csharp
-T? GetHostService<T>(string key) where T : class;
-```
-Core-app startup populates a small `IPluginServiceRegistry` (in-memory, not persisted) —
-`registry.Register<IComicVineService>("comicvine", comicVineService)` — and `.csx` command scripts
-pull typed instances out by key. This is a keyed lookup, not a general DI container: it exists so a
-compiled host service can be reached from script without the engine growing full dependency
-injection.
-
-**Declarative settings schema.** `plugin.xml` gains an optional `<Settings>` block, sibling to
-`<Command>` elements:
-```xml
-<Settings>
-  <Field key="ApiKey" type="Password" label="ComicVine API Key" testCommand="TestConnection" />
-  <Field key="AutoChoose" type="Checkbox" label="Auto-select best match" default="false" />
-  <Field key="FolderTemplate" type="TemplateEditor" label="Folder Template" />
-  <Field key="Profiles" type="ProfileManager" label="Organizer Profiles" />
-</Settings>
-```
-The engine renders this through **one new generic `PluginSettingsView`/`PluginSettingsViewModel`**
-(property-bag driven), reachable from the existing gear icon on `PluginCommandRowViewModel`
-(`src/Paperbunkr.App/ViewModels/PluginCommandRowViewModel.cs`). Field values persist through the
-existing `IPluginConfig.GetSetting`/`SetSetting` (already auto-scoped by `PluginKey`). This is
-additive: a plugin with no `<Settings>` block keeps using today's `ConfigScript`-hook path unchanged.
-`type="ProfileManager"` is the one field type that doesn't render inline — it opens the dedicated
-compiled profile-CRUD sub-screen described in §8, because CE-parity multi-profile management (named
-profiles, each with a full template/mode/exclude-rule set) is genuinely too rich for a flat
-declarative field list.
+- **`OrganizerScraperPlugin`** is the plugin's `INativePluginModule` implementation (v4 §3) — this is
+  the literal fulfillment of the original ask, not a reinterpretation of it. It implements
+  `Initialize`, `RegisterCommands` (wiring `Library`/`Startup`/etc. hook handlers), and
+  `CreateSettingsView`.
+- **`ComicVineService` and `LibraryOrganizerService` ship inside the plugin's own compiled project**
+  (its own `.csproj`, its own `.dll` in the installed `.pbplugin` package) — not `Paperbunkr.Data`,
+  not `Paperbunkr.App`. Nothing about this feature's logic lives in the core solution.
+  `TrackerHttpClients`'s static-readonly-`HttpClient` idiom (`src/Paperbunkr.Data/Tracking/TrackerHttpClients.cs`)
+  is still the right pattern to follow for `ComicVineService`'s own `HttpClient` field — that
+  precedent's rationale (no DI container anywhere in this codebase, single-user scale) applies to the
+  plugin's own code exactly as it does to the host's.
+- **`SettingsViewModel`/`SettingsView.axaml` are the plugin's own compiled Avalonia view and
+  viewmodel**, returned from `CreateSettingsView` and hosted by the app through the new
+  `INativePluginEnvironment.ShowModalAsync<TResult>(Control)` primitive (v4 §3) — a real,
+  plugin-authored settings screen, not a declarative schema the host renders generically.
+- **Trust model**: per v4 §2 (grilling Q20=B), this is a **full-trust** native plugin — it receives
+  its own `PaperbunkrDbContext` via `INativePluginEnvironment.CreateDbContext` and writes directly,
+  not through the audited `IMetadataWriter` gate the `.csx` tier uses. The Plugin screen shows this
+  plugin with the "full read/write access to your library database" notice v4 §2 specifies.
 
 ## 3. `ComicVineService`
 
-Compiled class (`Paperbunkr.Data` or `Paperbunkr.App`, static-readonly `HttpClient`). All facts below
-verified directly against the extracted CE source (`cvconnection.py`, `cvdb.py`, `utils.py`,
+Compiled class inside the plugin's own project (static-readonly `HttpClient`, per §2). All facts
+below verified directly against the extracted CE source (`cvconnection.py`, `cvdb.py`, `utils.py`,
 `matchscore.py`, `cvimprints.py`, `configuration.py`).
 
 **Endpoints** (all four CE-verified endpoints, base `https://comicvine.gamespot.com/api/`):
@@ -244,26 +223,33 @@ Two-phase, modeled on `MigrationViewModel`'s Locate→Preview→Conflicts→Comm
 
 **Collision resolution — modal-per-file** (grilling Q9=B, the literal-CE-style option): a **new**
 purpose-built dialog (`FileConflictDialogViewModel`/`View`, grilling Q15=B — not an extension of the
-existing `ConfirmDialog`, which only supports two buttons, no checkbox, and no custom content slot,
-confirmed by direct inspection of `src/Paperbunkr.App/Services/IDialogService.cs` and
-`ConfirmDialogView.axaml`). Hosted the same way as `ConfirmDialog` — a shared instance inside its own
-`OverlayShell` in `MainWindow.axaml`, exposed through `IDialogService`. Shows: Replace / Rename /
-Skip buttons, a "do this for all remaining conflicts" checkbox, side-by-side cover thumbnail +
-metadata for the incoming vs. existing book (mirrors CE's `DuplicateForm`). Rename uses CE's exact
+existing core-app `ConfirmDialog`, which only supports two buttons, no checkbox, and no custom
+content slot, confirmed by direct inspection of `src/Paperbunkr.App/Services/IDialogService.cs` and
+`ConfirmDialogView.axaml`). Since this is now the plugin's own compiled view (§2), it isn't added into
+`MainWindow.axaml` or exposed through the core `IDialogService` — it's shown via
+`INativePluginEnvironment.ShowModalAsync<TResult>(Control)` (v4 §3), the same generic hosting
+primitive `CreateSettingsView`'s view uses, awaited inline from `ExecuteAsync`. Shows: Replace /
+Rename / Skip buttons, a "do this for all remaining conflicts" checkbox, side-by-side cover thumbnail
++ metadata for the incoming vs. existing book (mirrors CE's `DuplicateForm`). Rename uses CE's exact
 numeric-suffix algorithm (`lobookmover.py:670-689`): strip an existing `" (N)"` suffix, then try
 `" (1)"`, `" (2)"`, … up to 100 attempts. `ExecuteAsync` awaits this per collision inline in its move
-loop (following the plain-`await`-inside-a-`foreach` idiom already used at
-`PreferencesScreenViewModel.cs:3178-3228`'s `OpenBulkRemoveConfirm`). A pre-scan staged conflicts
-screen (`MigrationViewModel`-style, resolving every collision before any move starts) was considered
-during grilling and rejected in favor of matching CE's own per-file interaction model literally.
+loop (the same non-blocking `await`-inside-a-`foreach` idiom already used at
+`PreferencesScreenViewModel.cs:3178-3228`'s `OpenBulkRemoveConfirm` — confirmed during external
+review that this does not block Avalonia's render thread; the loop *pausing* to wait for a user
+decision is the intended behavior, not a defect). A pre-scan staged conflicts screen
+(`MigrationViewModel`-style, resolving every collision before any move starts) was raised twice during
+review as the more batch-robust alternative and is still on the table if large-batch collision counts
+turn out to make modal-per-file too tedious in practice — the "apply to all remaining" checkbox is
+this design's mitigation for that in the meantime, not a claim the concern is fully moot.
 
 ## 7. Profiles
 
-Full CE-parity multiple named profiles (grilling Q16=B, not a single active configuration). New
-`OrganizerProfile` entity — name, folder/file templates, mode, sanitization overrides, exclude-rule
-reference (into the reused `IRulesEngine`), remove-empty-folders flag, etc. — with CRUD in a
-dedicated compiled sub-screen opened from the `ProfileManager` settings field (§2.1). Selectable per
-organize run, matching CE's own profile-switch UX.
+Full CE-parity multiple named profiles (grilling Q16=B, not a single active configuration).
+`OrganizerProfile` — name, folder/file templates, mode, sanitization overrides, exclude-rule
+reference (into the reused `IRulesEngine`), remove-empty-folders flag, etc. — with CRUD in its own
+view within the plugin's compiled settings UI (§2), not a declarative schema the host renders.
+Selectable per organize run, matching CE's own profile-switch UX. Persistence: see §10 — the
+plugin's own database, not a core Paperbunkr migration.
 
 ## 8. Undo
 
@@ -277,16 +263,41 @@ use before richer undo (partial-batch undo, undo history beyond the last run) ge
 "Scrape with ComicVine" and "Organize Library" register as new task types in Paperbunkr's existing
 Scheduled Tasks system (Preferences → Automation — see project memory: 7-task scheduler shipped
 2026-09-06) rather than shipping a second, parallel automation UI local to this plugin (grilling
-Q13=A).
+Q13=A). **Unverified, flagged rather than assumed**: this requires the Scheduled Tasks system to
+expose a public registration point a native plugin assembly can add a task type to. That surface
+wasn't inspected during this grilling pass — the implementation plan needs to check it directly
+before committing to this approach; if no such extension point exists, the fallback is a
+plugin-local automation setting in its own settings view (§2) instead.
 
-## 10. New persisted state (EF migrations)
+## 10. Persisted state — the plugin's own database, not core migrations
 
+Two earlier drafts of this section are both superseded here, for different reasons:
+- The original draft proposed new EF Core migrations directly on `Paperbunkr.Data`'s core schema —
+  rightly flagged during external review as coupling the core migration history to one optional
+  plugin's concerns ("database schema contamination").
+- An intermediate revision proposed avoiding that by cramming `OrganizerProfile`/`ComicVineMatchMemory`
+  into `IPluginConfig`'s flat JSON-blob settings storage instead. That was a reasonable compromise
+  under the *previous* sandboxed-extension architecture, where the plugin had no database access at
+  all. It's no longer the right call now that this is a full-trust native plugin (§2) with its own
+  `PaperbunkrDbContext` access and its own compiled project — relational data belongs in a real
+  schema, not serialized into a settings key-value store, once there's no sandboxing reason forcing
+  that compromise.
+
+**Resolved approach**: the plugin ships its **own separate SQLite database file** (its own `DbContext`,
+own migrations, own connection string) stored alongside its installed folder under
+`%AppData%\Paperbunkr\plugins\cluster-library-manager\` — fully isolated from the core `paperbunkr.db`
+schema and its migration history. Tables:
 - `ComicVineMatchMemory` — search key → chosen volume id (matchscore priorscore).
 - `OrganizerProfile` — named organizer profiles.
 - A compact move-log table for Undo (old path, new path, batch/job id, timestamp).
-- No changes needed to `PluginSettingState`/`IPluginConfig` — simple settings (API key, toggles,
-  mode) still fit its existing sparse key-value shape; only profiles and match-memory need real
-  tables.
+- Simple scalar settings (API key, toggles, mode) can still live in this same database rather than
+  `IPluginConfig`, now that the plugin manages its own storage end to end — one database file, not two
+  storage mechanisms for one plugin's state.
+
+`INativePluginEnvironment.CreateDbContext` (v4 §3) is specifically the *core* `PaperbunkrDbContext`
+factory, for reading/writing library data (`Issue`, `Series`, etc.) — this plugin-owned SQLite file is
+a second, separate database the plugin manages itself for its own concerns, not something routed
+through that factory.
 
 ## 11. Testing approach
 
@@ -305,9 +316,11 @@ Q13=A).
 - `ExecuteAsync`: integration-style tests against a temp directory, covering Move/Copy/Simulate modes
   and each collision-resolution branch (Replace/Rename/Skip) via a stub resolver delegate (no real
   dialog in tests).
-- Follows this project's existing `Paperbunkr.App.Tests`/`Paperbunkr.Plugins.Tests` conventions; no
-  UI automation planned for this pass beyond what's already covered by the existing FlaUI/UIA3
-  harness if a smoke test is added later.
+- Lives in the plugin's own test project (e.g. `ClusterLibraryManager.Tests`), following this
+  project's existing `Paperbunkr.App.Tests`/`Paperbunkr.Plugins.Tests` conventions in style but built
+  and run independently of the host solution, matching §2's standalone packaging. No UI automation
+  planned for this pass beyond what the existing FlaUI/UIA3 harness already covers, if a smoke test
+  targeting the installed plugin is added later.
 
 ## 12. Out of scope / future work
 
@@ -316,3 +329,6 @@ Q13=A).
   without architecture changes.
 - Richer Undo (partial-batch, multi-run history) — noted in §8 as intentional follow-on work.
 - CE's batch-level `scrape_in_groups_b`/summary-dialog behaviors beyond what §4's review flow covers.
+- Everything v4 itself scopes out (collectible-ALC live unload, a published/versioned NuGet-style
+  distribution channel for `Paperbunkr.Plugins.Abstractions`) — this plugin ships against v4 as
+  designed, restart-to-apply included.

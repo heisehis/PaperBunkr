@@ -66,16 +66,32 @@ public interface INativePluginModule
 public interface INativePluginEnvironment : IPluginEnvironment
 {
     Func<PaperbunkrDbContext> CreateDbContext { get; }
-    Func<ActivityJobKind, string, bool, IActivityJobHandle> StartActivityJob { get; }
+    Func<ActivityJobKind, string, bool, IPluginActivityHandle> StartActivityJob { get; }
+}
+
+/// <summary>Dependency-clean progress surface for native plugins — deliberately NOT the real
+/// IActivityJobHandle, which exposes ActivityJob (an ObservableObject in Paperbunkr.App.Models);
+/// Abstractions can never reference that without a circular dependency.</summary>
+public interface IPluginActivityHandle : IDisposable
+{
+    CancellationToken CancellationToken { get; }
+    void Report(int done, int total, string? detail = null);
+    void Succeed(string summary);
+    void Fail(string summary);
 }
 ```
-**Added while surveying for the implementation plan, not a new design decision**: CLM §6/§9 assume a
-native plugin can report determinate progress through the host's real
+**Added while surveying for the implementation plan, corrected again during Phase 1 implementation**:
+CLM §6/§9 assume a native plugin can report determinate progress through the host's real
 `IActivityService`/`IActivityJobHandle` (already coalesced to ~10/s specifically to avoid flooding the
 dispatcher — see CLM's rebuttal to the fourth review round) — that capability was simply missing from
-this interface as first drafted. `StartActivityJob` mirrors `IActivityService.StartJob`'s real
-signature (`ActivityJobKind kind, string title, bool cancellable`), narrowed to what a plugin actually
-needs; the host's real implementation closes over its own `IActivityService` instance.
+this interface as first drafted, and the first attempt to add it (`Func<ActivityJobKind, string, bool,
+IActivityJobHandle>`) didn't actually compile cleanly here — `IActivityJobHandle.Job` is typed
+`ActivityJob`, that same `Paperbunkr.App.Models` type, so referencing the real interface at all would
+have created the identical circular-dependency problem one level up. `IPluginActivityHandle` above is
+the actual fix: `StartActivityJob`'s parameters still mirror `IActivityService.StartJob`'s real
+signature (`ActivityJobKind kind, string title, bool cancellable`), but the return type is the new
+narrow interface; the host's real implementation wraps a real `IActivityJobHandle` in a small adapter
+implementing it.
 ```csharp
 // Paperbunkr.Plugins.Abstractions.Ui — only a plugin that has UI references this.
 public interface INativePluginSettingsUi

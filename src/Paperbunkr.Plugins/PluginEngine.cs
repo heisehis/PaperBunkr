@@ -1,4 +1,6 @@
+using Paperbunkr.Plugins.Abstractions.Native;
 using Paperbunkr.Plugins.Hooks;
+using Paperbunkr.Plugins.Native;
 
 namespace Paperbunkr.Plugins;
 
@@ -30,6 +32,18 @@ public sealed class PluginEngine
         foreach (string manifestFile in Directory.EnumerateFiles(pluginsRoot, "plugin.xml", SearchOption.AllDirectories))
         {
             string pluginDir = Path.GetDirectoryName(manifestFile) ?? pluginsRoot;
+
+            // Native-tier plugins (docs/superpowers/specs/2026-09-11-plugin-api-v4-native-tier-
+            // design.md §3/§4) declare no <Command> elements at all - their commands come from
+            // RegisterCommands, not manifest-declared scripts - so they take a separate path
+            // entirely rather than going through XmlPluginInitializer.GetCommands below.
+            PluginManifest? manifest = XmlPluginInitializer.ReadManifest(manifestFile);
+            if (manifest is not null && string.Equals(manifest.Tier, "Native", StringComparison.OrdinalIgnoreCase))
+            {
+                DiscoverNative(manifest, pluginDir, baseEnvironment);
+                continue;
+            }
+
             foreach (Command cmd in XmlPluginInitializer.GetCommands(manifestFile))
             {
                 if (!cmd.Initialize(baseEnvironment, pluginDir))
@@ -61,6 +75,64 @@ public sealed class PluginEngine
             {
                 owner.Configure = cfg;
             }
+        }
+    }
+
+    /// <summary>
+    /// Loads a Native-tier plugin's assembly and adds its registered commands into the same
+    /// <see cref="_commands"/> collection scripted commands populate, so they're indistinguishable to
+    /// <see cref="GetCommands"/>/<see cref="InvokeAsync{TGlobals}"/> (docs/superpowers/specs/
+    /// 2026-09-11-plugin-api-v4-native-tier-design.md §3). Skips silently (contributes no commands,
+    /// same "one bad plugin doesn't abort the rest" contract as scripted discovery) if
+    /// <paramref name="baseEnvironment"/> isn't native-capable, the manifest doesn't name an
+    /// assembly, or that assembly doesn't exist. A load/reflection failure inside
+    /// <see cref="PluginLoadContext.LoadPlugin"/> is also swallowed here - there's no natural
+    /// <see cref="Command.CompileError"/>-style surface for a native load failure since it never
+    /// becomes a <see cref="Command"/> at all, so today this is a genuinely silent failure beyond
+    /// contributing zero commands. Surfacing a distinct "plugin failed to load" row on the Plugin
+    /// screen is real follow-up work, out of scope for this pass.
+    /// </summary>
+    private void DiscoverNative(PluginManifest manifest, string pluginDir, IPluginEnvironment baseEnvironment)
+    {
+        if (baseEnvironment is not INativePluginEnvironment nativeEnvironment)
+        {
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(manifest.Assembly))
+        {
+            return;
+        }
+
+        string assemblyPath = Path.Combine(pluginDir, manifest.Assembly);
+        if (!File.Exists(assemblyPath))
+        {
+            return;
+        }
+
+        string pluginKey = string.IsNullOrWhiteSpace(manifest.Key) ? Path.GetFileName(pluginDir) : manifest.Key;
+
+        try
+        {
+            (_, IReadOnlyList<NativeCommand> commands) = PluginLoadContext.LoadPlugin(assemblyPath, pluginKey, nativeEnvironment);
+            foreach (NativeCommand cmd in commands)
+            {
+                if (!cmd.Initialize(baseEnvironment, pluginDir))
+                {
+                    continue;
+                }
+
+                if (_commands.Any(c => c.Key == cmd.Key))
+                {
+                    continue;
+                }
+
+                _commands.Add(cmd);
+            }
+        }
+        catch (Exception)
+        {
+            // Intentionally swallowed - see method doc comment.
         }
     }
 

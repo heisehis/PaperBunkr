@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <!-- Test fixture only (implementation plan Phase 1 Step 1.3/1.4 verification) - a minimal, real,
+       compiled native-tier plugin exercising PluginLoadContext/PluginEngine's native discovery path
+       end to end. Deliberately headless: references only Paperbunkr.Plugins.Abstractions, proving a
+       native plugin with no settings UI never needs an Avalonia reference at all. -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\Paperbunkr.Plugins.Abstractions\Paperbunkr.Plugins.Abstractions.csproj" />
+  </ItemGroup>
+
+</Project>

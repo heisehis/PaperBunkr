@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <!-- Companion to Paperbunkr.Plugins.Abstractions (docs/superpowers/specs/2026-09-11-plugin-api-v4-
+       native-tier-design.md §3, implementation plan Phase 1 Step 1.2) - split out specifically so a
+       purely headless native plugin never needs an Avalonia reference at all. Only a plugin that
+       actually has a compiled settings view references this project.
+
+       Avalonia version MUST match src/Paperbunkr.App/Paperbunkr.App.csproj's exact pinned version
+       (checked here: 12.1.1) - a mismatch would mean the plugin's compiled Control type and the
+       host's loaded Avalonia assemblies aren't the same type identity at the PluginLoadContext
+       boundary. Verify this version against Paperbunkr.App.csproj again if it's ever bumped there. -->
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="12.1.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Paperbunkr.Plugins.Abstractions\Paperbunkr.Plugins.Abstractions.csproj" />
+  </ItemGroup>
+
+</Project>

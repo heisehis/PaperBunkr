@@ -8,6 +8,12 @@
     <AssemblyName>ClusterLibraryManager</AssemblyName>
   </PropertyGroup>
 
+  <ItemGroup>
+    <!-- Test-only seams (internal ComicVineService constructor, throttle/retry timing overrides,
+         etc.) - the plugin's own shipped public surface is unaffected. -->
+    <InternalsVisibleTo Include="ClusterLibraryManager.Tests" />
+  </ItemGroup>
+
   <!--
     Cluster Library Manager - ComicVine scraper + library organizer, ported from ComicRack CE's
     ComicVineScraper (1.0.102) and Library Organizer (2.1.13). Design: docs/superpowers/specs/

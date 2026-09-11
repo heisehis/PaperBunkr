@@ -362,4 +362,203 @@ public class ReaderLayoutModelTests
             Assert.Equal(pages[i].Rect.Y, offset);
         }
     }
+
+    // ===================== ComputeContinuousZoomAnchor (docs/superpowers/specs/2026-09-12-
+    // continuous-mode-cursor-anchored-zoom-design.md) =====================
+
+    /// <summary>
+    /// The round-trip every test below checks: the anchor's page + fraction (or gap/off-stack
+    /// offset) found at the *current* zoom/scroll must land back at the exact same viewport
+    /// coordinate once the layout is recomputed at the *new* zoom/scroll ComputeContinuousZoomAnchor
+    /// returns. Asserts against the whole-page main-axis coordinate directly (not a separately-
+    /// re-derived fraction), so this actually exercises the placement math end to end rather than
+    /// just re-checking the same formula the function under test used internally.
+    /// </summary>
+    private static void AssertAnchorSurvivesZoom(
+        Size[] sizes, double scrollOffset, double zoom, double crossPan, Size viewport,
+        ReaderLayoutModel.Axis axis, Point anchor, double targetZoom, double mainAxisGap = 0, bool reverse = false)
+    {
+        var identityBefore = FindAnchorIdentity(sizes, scrollOffset, zoom, crossPan, viewport, axis, anchor, mainAxisGap, reverse);
+
+        var (newScroll, newCrossPan) = ReaderLayoutModel.ComputeContinuousZoomAnchor(
+            sizes, scrollOffset, zoom, crossPan, viewport, axis, anchor, targetZoom, mainAxisGap, reverse);
+
+        var identityAfter = FindAnchorIdentity(sizes, newScroll, targetZoom, newCrossPan, viewport, axis, anchor, mainAxisGap, reverse);
+
+        Assert.Equal(identityBefore.PageIndex, identityAfter.PageIndex);
+        Assert.Equal(identityBefore.Fraction, identityAfter.Fraction, precision: 4);
+        Assert.Equal(identityBefore.CrossFraction, identityAfter.CrossFraction, precision: 4);
+    }
+
+    private readonly record struct AnchorIdentity(int PageIndex, double Fraction, double CrossFraction);
+
+    /// <summary>
+    /// Independently re-derives "which page (or, negative, which gap/off-stack margin) + what
+    /// fraction/pixel-offset is at <paramref name="anchor"/>" from <see cref="ReaderLayoutModel.ComputeContinuousLayout"/>
+    /// directly - the same "re-derive from the forward placement formula, compare before/after"
+    /// pattern <c>ZoomPanMathTests.ComputeCursorFraction</c> already uses for
+    /// <see cref="ZoomPanMath.PanToKeepPointFixed"/>, so this test suite isn't just re-invoking the
+    /// function under test on itself. A gap/off-stack anchor is reported as a negative synthetic
+    /// "page index" (<c>-2 - referencePageIndex</c>, so -1 and -2 stay distinguishable) with the
+    /// gap's own pixel offset folded into <see cref="AnchorIdentity.Fraction"/> instead of a real
+    /// page fraction - not a real page index, just enough for the before/after comparison above to
+    /// tell "same gap position" from "different position."
+    /// </summary>
+    private static AnchorIdentity FindAnchorIdentity(
+        Size[] sizes, double scrollOffset, double zoom, double crossPan, Size viewport,
+        ReaderLayoutModel.Axis axis, Point anchor, double mainAxisGap, bool reverse)
+    {
+        var layout = ReaderLayoutModel.ComputeContinuousLayout(sizes, scrollOffset, viewport, axis,
+            virtualizationRadius: sizes.Length, zoom: zoom, crossAxisPanOffset: crossPan,
+            mainAxisGap: mainAxisGap, reverseMainAxis: reverse);
+
+        double viewportMainSize = axis == ReaderLayoutModel.Axis.Vertical ? viewport.Height : viewport.Width;
+        double anchorMain = axis == ReaderLayoutModel.Axis.Vertical ? anchor.Y : anchor.X;
+        double anchorCross = axis == ReaderLayoutModel.Axis.Vertical ? anchor.X : anchor.Y;
+
+        double ToStackSpace(double viewportMainCoord) => reverse
+            ? viewportMainSize + scrollOffset - viewportMainCoord
+            : viewportMainCoord + scrollOffset;
+
+        double s = ToStackSpace(anchorMain);
+
+        int onPageIndex = -1;
+        double onPageFraction = 0;
+        double onPageCrossFraction = 0;
+        int referencePageIndex = -1;
+        double referenceStackEnd = 0;
+
+        foreach (var page in layout)
+        {
+            double top = axis == ReaderLayoutModel.Axis.Vertical ? page.Rect.Top : page.Rect.Left;
+            double bottom = axis == ReaderLayoutModel.Axis.Vertical ? page.Rect.Bottom : page.Rect.Right;
+            double crossTop = axis == ReaderLayoutModel.Axis.Vertical ? page.Rect.Left : page.Rect.Top;
+            double crossSize = axis == ReaderLayoutModel.Axis.Vertical ? page.Rect.Width : page.Rect.Height;
+            double stackA = ToStackSpace(top);
+            double stackB = ToStackSpace(bottom);
+            double stackStart = Math.Min(stackA, stackB);
+            double stackEnd = Math.Max(stackA, stackB);
+
+            if (stackEnd > stackStart && s >= stackStart && s <= stackEnd)
+            {
+                onPageIndex = page.Index;
+                onPageFraction = Math.Clamp((s - stackStart) / (stackEnd - stackStart), 0, 1);
+                onPageCrossFraction = crossSize > 0 ? Math.Clamp((anchorCross - crossTop) / crossSize, 0, 1) : 0.5;
+            }
+
+            if (stackEnd <= s && (referencePageIndex < 0 || page.Index > referencePageIndex))
+            {
+                referencePageIndex = page.Index;
+                referenceStackEnd = stackEnd;
+            }
+        }
+
+        if (onPageIndex >= 0)
+        {
+            return new AnchorIdentity(onPageIndex, onPageFraction, onPageCrossFraction);
+        }
+
+        double pixelOffset = s - referenceStackEnd;
+        return new AnchorIdentity(-2 - referencePageIndex, pixelOffset, 0);
+    }
+
+    [Fact]
+    public void ComputeContinuousZoomAnchor_OnAPage_KeepsThePointVisuallyFixed()
+    {
+        var sizes = new[] { new Size(400, 600), new Size(400, 800), new Size(400, 500) };
+        var viewport = new Size(400, 300);
+
+        // Zoom = 1, scroll = 0: page 0 fills [0,600). Anchor at y=150 (a quarter down page 0).
+        AssertAnchorSurvivesZoom(sizes, scrollOffset: 0, zoom: 1.0, crossPan: 0, viewport,
+            ReaderLayoutModel.Axis.Vertical, anchor: new Point(200, 150), targetZoom: 2.0);
+    }
+
+    [Fact]
+    public void ComputeContinuousZoomAnchor_NearAPageBoundary_KeepsThePointVisuallyFixed()
+    {
+        var sizes = new[] { new Size(400, 600), new Size(400, 800) };
+        var viewport = new Size(400, 300);
+
+        AssertAnchorSurvivesZoom(sizes, scrollOffset: 590, zoom: 1.0, crossPan: 0, viewport,
+            ReaderLayoutModel.Axis.Vertical, anchor: new Point(200, 5), targetZoom: 1.5);
+    }
+
+    [Fact]
+    public void ComputeContinuousZoomAnchor_InAGap_KeepsThePointVisuallyFixed_NotClampedToEdge()
+    {
+        var sizes = new[] { new Size(400, 600), new Size(400, 800) };
+        var viewport = new Size(400, 300);
+        const double gap = 20;
+
+        // Page 0 ends at y=600, gap runs [600,620), page 1 starts at 620. Anchor square in the
+        // middle of the gap.
+        AssertAnchorSurvivesZoom(sizes, scrollOffset: 590, zoom: 1.0, crossPan: 0, viewport,
+            ReaderLayoutModel.Axis.Vertical, anchor: new Point(200, 20), targetZoom: 2.5, mainAxisGap: gap);
+    }
+
+    [Fact]
+    public void ComputeContinuousZoomAnchor_BeforeTheFirstPage_KeepsThePointVisuallyFixed()
+    {
+        var sizes = new[] { new Size(400, 600) };
+        var viewport = new Size(400, 300);
+
+        // scrollOffset negative-ish via a small page and a viewport taller than it, so the anchor
+        // can sit above page 0's own top.
+        AssertAnchorSurvivesZoom(sizes, scrollOffset: -50, zoom: 1.0, crossPan: 0, viewport,
+            ReaderLayoutModel.Axis.Vertical, anchor: new Point(200, 10), targetZoom: 1.8);
+    }
+
+    [Fact]
+    public void ComputeContinuousZoomAnchor_AfterTheLastPage_KeepsThePointVisuallyFixed()
+    {
+        var sizes = new[] { new Size(400, 200) };
+        var viewport = new Size(400, 300);
+
+        AssertAnchorSurvivesZoom(sizes, scrollOffset: 0, zoom: 1.0, crossPan: 0, viewport,
+            ReaderLayoutModel.Axis.Vertical, anchor: new Point(200, 250), targetZoom: 2.0);
+    }
+
+    [Fact]
+    public void ComputeContinuousZoomAnchor_ReverseMainAxis_KeepsThePointVisuallyFixed()
+    {
+        var sizes = new[] { new Size(600, 400), new Size(800, 400), new Size(500, 400) };
+        var viewport = new Size(300, 400);
+
+        AssertAnchorSurvivesZoom(sizes, scrollOffset: 100, zoom: 1.0, crossPan: 0, viewport,
+            ReaderLayoutModel.Axis.Horizontal, anchor: new Point(120, 200), targetZoom: 2.2, reverse: true);
+    }
+
+    [Fact]
+    public void ComputeContinuousZoomAnchor_CrossAxisPan_KeepsThePointVisuallyFixed()
+    {
+        var sizes = new[] { new Size(400, 600) };
+        var viewport = new Size(400, 300);
+
+        // Zoomed in on the cross axis already (crossPan != 0) - the anchor's cross-axis position
+        // must also survive the main-axis zoom change unchanged.
+        AssertAnchorSurvivesZoom(sizes, scrollOffset: 0, zoom: 1.5, crossPan: 60, viewport,
+            ReaderLayoutModel.Axis.Vertical, anchor: new Point(350, 100), targetZoom: 2.5);
+    }
+
+    [Fact]
+    public void ComputeContinuousZoomAnchor_BoundaryFlip_NoDiscontinuity()
+    {
+        // Two anchor points 1px apart straddling the page0/gap boundary must resolve to close
+        // results, not a jump - the property that makes locking the pinch anchor once at gesture
+        // start (rather than re-deriving every frame) a sufficient fix (design rev 2 §5).
+        var sizes = new[] { new Size(400, 600), new Size(400, 800) };
+        var viewport = new Size(400, 300);
+        const double gap = 20;
+
+        var (scrollJustBefore, _) = ReaderLayoutModel.ComputeContinuousZoomAnchor(
+            sizes, currentScrollOffset: 590, currentZoom: 1.0, currentCrossAxisPanOffset: 0, viewport,
+            ReaderLayoutModel.Axis.Vertical, anchorPoint: new Point(200, 9.999), targetZoom: 2.0, mainAxisGap: gap);
+
+        var (scrollJustAfter, _) = ReaderLayoutModel.ComputeContinuousZoomAnchor(
+            sizes, currentScrollOffset: 590, currentZoom: 1.0, currentCrossAxisPanOffset: 0, viewport,
+            ReaderLayoutModel.Axis.Vertical, anchorPoint: new Point(200, 10.001), targetZoom: 2.0, mainAxisGap: gap);
+
+        Assert.True(Math.Abs(scrollJustAfter - scrollJustBefore) < 1.0,
+            $"a 0.002px anchor difference produced a {Math.Abs(scrollJustAfter - scrollJustBefore):F3}px scroll discontinuity");
+    }
 }

@@ -13,6 +13,7 @@ using cYo.Common.ComponentModel;
 using cYo.Projects.ComicRack.Engine.IO.Provider;
 using cYo.Projects.ComicRack.Engine.IO.Provider.Readers;
 using cYo.Projects.ComicRack.Engine.IO.Provider.Readers.Archive;
+using SkiaSharp;
 using AvaloniaBitmap = Avalonia.Media.Imaging.Bitmap;
 
 namespace Paperbunkr.App.Services.Reader;
@@ -46,6 +47,23 @@ public sealed class ReaderImagePipeline : IReaderPageSource
     private const int BackFringe = 2;
     private const int MinForwardFringe = 2;
     private const int MaxForwardFringe = 6;
+
+    /// <summary>
+    /// A page whose height/width ratio exceeds this is a webtoon/manhwa "strip" (docs/superpowers/
+    /// specs/2026-09-09-reader-webtoon-strip-band-decode-design.md §3) - a normal manga page is
+    /// ~1.5, a double-page spread ~0.77, a strip is 8-30. Only strips take the band-decode path;
+    /// everything else is unaffected.
+    /// </summary>
+    private const double StripAspectThreshold = 3.0;
+
+    /// <summary>
+    /// Fixed **source**-pixel band size for strip decode (design §4.1.1, rev 3/4 - reverted from an
+    /// earlier display-pixel-sized draft once the scanline-decode session (<see cref="StripDecodeSession"/>)
+    /// turned out to need band boundaries that don't move with zoom). Also the chunk size the
+    /// reverse-scroll-restart skip is sliced into under <see cref="_readerLock"/> (design rev 4), so
+    /// a waiting synchronous cold-miss is never blocked longer than one chunk's skip.
+    /// </summary>
+    internal const int BandHeight = 4096;
 
     private readonly ImageProvider _provider;
     private readonly ArchiveComicProvider? _archiveProvider;
@@ -94,6 +112,9 @@ public sealed class ReaderImagePipeline : IReaderPageSource
 
     private readonly HashSet<int> _enqueued = new();
     private readonly HashSet<int> _window = new();
+
+    /// <summary>Per-page strip-or-not verdict (design §3/§4.2), cached since callers ask every window/eviction pass. Guarded by <see cref="_sync"/>.</summary>
+    private readonly Dictionary<int, bool> _stripVerdict = new();
 
     private readonly Channel<int> _highPriority = Channel.CreateUnbounded<int>(new UnboundedChannelOptions { SingleReader = true });
     private readonly Channel<int> _lowPriority = Channel.CreateUnbounded<int>(new UnboundedChannelOptions { SingleReader = true });
@@ -363,6 +384,69 @@ public sealed class ReaderImagePipeline : IReaderPageSource
         double scale = (double)targetWidth / size.Width;
         var target = new PixelSize(targetWidth, Math.Max(1, (int)Math.Round(size.Height * scale)));
         return native.CreateScaledBitmap(target, BitmapInterpolationMode.HighQuality);
+    }
+
+    // --- Strip classification / header-only size peek (design §3/§4.3) -----------
+
+    /// <summary>
+    /// Reads a page's true pixel size straight off its encoded header - <b>no pixel decode</b>
+    /// (design §4.3). Opens an <see cref="SKCodec"/> on the already-cached raw bytes (§4/§9 - costs
+    /// no container I/O beyond whatever already fetching those bytes cost) and reads
+    /// <see cref="SKCodec.Info"/> only. Returns <see langword="null"/> for anything the header can't
+    /// be read from (missing bytes, a format `SKCodec.Create` doesn't recognise, etc.) - callers
+    /// fall back to whatever estimate they already had, same as every other "couldn't decode this
+    /// one page" tolerance in this pipeline.
+    /// </summary>
+    internal PixelSize? PeekPageSize(int pageIndex)
+    {
+        byte[]? bytes = ReadRawBytes(pageIndex);
+        if (bytes is not { Length: > 0 })
+        {
+            return null;
+        }
+
+        try
+        {
+            using var codec = SKCodec.Create(new SKMemoryStream(bytes));
+            if (codec is null)
+            {
+                return null;
+            }
+            var info = codec.Info;
+            return info.Width > 0 && info.Height > 0 ? new PixelSize(info.Width, info.Height) : null;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Whether the page is a webtoon/manhwa "strip" (design §3) - cached per page index
+    /// (<see cref="_stripVerdict"/>, guarded by <see cref="_sync"/>) since <see cref="PeekPageSize"/>
+    /// re-reads the header on every call and callers (§4.2's window/eviction passes) ask this every
+    /// frame. A page whose header can't be read (<see cref="PeekPageSize"/> returns
+    /// <see langword="null"/>) is treated as not-a-strip - it falls back to the ordinary whole-page
+    /// path, same as any other undecodable-header case elsewhere in this pipeline.
+    /// </summary>
+    internal bool IsStrip(int pageIndex)
+    {
+        lock (_sync)
+        {
+            if (_stripVerdict.TryGetValue(pageIndex, out bool cached))
+            {
+                return cached;
+            }
+        }
+
+        var size = PeekPageSize(pageIndex);
+        bool verdict = size is { Width: > 0 } s && s.Height / (double)s.Width > StripAspectThreshold;
+
+        lock (_sync)
+        {
+            _stripVerdict[pageIndex] = verdict;
+        }
+        return verdict;
     }
 
     private void RecordDecodeMs(double ms)

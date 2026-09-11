@@ -39,8 +39,19 @@ internal sealed record ReaderPageVisualData(
     // behind the page/spread rect, texture-background mode only.
     bool ShowShadow = false);
 
-/// <summary>One page's already-computed on-screen placement (docs/superpowers/specs/2026-08-10-reader-polish-continuous-scroll-chrome-overlays-design.md §2/§4) - <see cref="Rect"/> comes straight from <see cref="ReaderLayoutModel.ComputeContinuousLayout"/>, already in viewport space, so the handler just scales-and-draws rather than repeating fit/pan math per page.</summary>
-internal readonly record struct ContinuousPageEntry(Rect Rect, Bitmap? Bitmap);
+/// <summary>
+/// One page's already-computed on-screen placement (docs/superpowers/specs/2026-08-10-reader-polish-continuous-scroll-chrome-overlays-design.md §2/§4) - <see cref="Rect"/> comes straight from <see cref="ReaderLayoutModel.ComputeContinuousLayout"/>, already in viewport space, so the handler just scales-and-draws rather than repeating fit/pan math per page.
+/// <see cref="Bands"/> (docs/superpowers/specs/2026-09-09-reader-webtoon-strip-band-decode-design.md
+/// §4.3), when non-<see langword="null"/>, means this entry is a webtoon strip decoded in bands
+/// rather than as one whole bitmap - <see cref="Bitmap"/> is then unused (always
+/// <see langword="null"/> for a strip entry) and <see cref="RenderContinuous"/> draws each slot in
+/// <see cref="Bands"/> instead, using <see cref="Rect"/> only for the whole-strip visibility
+/// quick-reject.
+/// </summary>
+internal readonly record struct ContinuousPageEntry(Rect Rect, Bitmap? Bitmap, IReadOnlyList<StripBandSlot>? Bands = null);
+
+/// <summary>One band's already-computed on-screen placement within a strip (design §4.1.2) - <see cref="Rect"/> is derived from one continuous coordinate mapping across every band of the strip (not independently rounded per band), specifically to avoid a hairline seam where adjacent bands meet.</summary>
+internal readonly record struct StripBandSlot(Rect Rect, Bitmap? Bitmap);
 
 /// <summary>Continuous mode's per-frame draw data - unlike <see cref="ReaderPageVisualData"/>'s single bitmap, a whole page list, each with its own placement. No fit-mode/rotation fields - continuous mode has neither (spec §5/§9's named scope, rotation isn't part of this pass for continuous mode).</summary>
 internal sealed record ReaderContinuousVisualData(Size Bounds, IReadOnlyList<ContinuousPageEntry> Pages, bool HighQuality);
@@ -801,42 +812,71 @@ public sealed class ReaderPageVisualHandler : CompositionCustomVisualHandler
     private void RenderContinuous(ImmediateDrawingContext context, ReaderContinuousVisualData data, ISkiaSharpApiLease? lease, SKColorFilter? colorFilter)
     {
         var mode = data.HighQuality ? BitmapInterpolationMode.HighQuality : BitmapInterpolationMode.LowQuality;
+        var viewport = new Rect(data.Bounds);
+
         foreach (var entry in data.Pages)
         {
-            if (entry.Bitmap is null || entry.Rect.Width <= 0 || entry.Rect.Height <= 0)
+            if (entry.Rect.Width <= 0 || entry.Rect.Height <= 0)
             {
                 continue;
             }
 
-            // Pages entirely outside the viewport (the virtualization fringe, kept decoded for
-            // smoothness but not on-screen right now) don't need a draw call at all.
-            if (!entry.Rect.Intersects(new Rect(data.Bounds)))
+            // Pages (or, for a strip, its whole span) entirely outside the viewport (the
+            // virtualization fringe, kept decoded for smoothness but not on-screen right now) don't
+            // need a draw call at all.
+            if (!entry.Rect.Intersects(viewport))
             {
                 continue;
             }
 
-            if (lease is not null && colorFilter is not null)
+            if (entry.Bands is { } bands)
             {
-                var pixelSize = entry.Bitmap.PixelSize;
-                var skImage = GetOrCreateSkImage(entry.Bitmap); // cached across frames (§10), not per-frame
-                using var paint = new SKPaint { ColorFilter = colorFilter, IsAntialias = true };
-                var sourceRect = new SKRect(0, 0, pixelSize.Width, pixelSize.Height);
-                var destRectSk = new SKRect((float)entry.Rect.X, (float)entry.Rect.Y, (float)(entry.Rect.X + entry.Rect.Width), (float)(entry.Rect.Y + entry.Rect.Height));
-                lease.SkCanvas.DrawImage(skImage, sourceRect, destRectSk, paint);
+                // Webtoon strip (design §4.3) - each band slot draws (or, for a still-decoding
+                // slot, is simply skipped, drawing a gap) independently, at its own already-
+                // continuous-mapped Rect (§4.1.2 - never re-derived from a neighboring band's
+                // rounded rect, which is what would create a seam).
+                foreach (var band in bands)
+                {
+                    if (band.Bitmap is null || band.Rect.Width <= 0 || band.Rect.Height <= 0 || !band.Rect.Intersects(viewport))
+                    {
+                        continue;
+                    }
+                    DrawOneContinuousBitmap(context, band.Bitmap, band.Rect, mode, lease, colorFilter);
+                }
                 continue;
             }
 
-            // Was: CreateScaledBitmap(entry.Rect size) + DrawBitmap every compose pass - a full Skia
-            // resample and a fresh bitmap allocation per visible page per frame, sustained through
-            // every scroll, which is what starved the render thread and showed as tearing/judder.
-            // Now: hand the compositor the source bitmap for a 1:1 / upscale draw (the default
-            // fit-width zoom), or a cached downscale that survives across frames (see
-            // _continuousScaledCache).
-            var drawBitmap = ResolveContinuousDrawBitmap(entry.Bitmap, entry.Rect, mode);
-            context.DrawBitmap(drawBitmap, new Rect(drawBitmap.Size), entry.Rect);
+            if (entry.Bitmap is null)
+            {
+                continue;
+            }
+            DrawOneContinuousBitmap(context, entry.Bitmap, entry.Rect, mode, lease, colorFilter);
         }
 
         EvictStaleContinuousScales(data.Pages);
+    }
+
+    /// <summary>One page's or one band's actual draw call - split out of <see cref="RenderContinuous"/> so the whole-page and per-band paths (design §4.3) share identical draw logic rather than two copies drifting apart.</summary>
+    private void DrawOneContinuousBitmap(ImmediateDrawingContext context, Bitmap bitmap, Rect rect, BitmapInterpolationMode mode, ISkiaSharpApiLease? lease, SKColorFilter? colorFilter)
+    {
+        if (lease is not null && colorFilter is not null)
+        {
+            var pixelSize = bitmap.PixelSize;
+            var skImage = GetOrCreateSkImage(bitmap); // cached across frames (§10), not per-frame
+            using var paint = new SKPaint { ColorFilter = colorFilter, IsAntialias = true };
+            var sourceRect = new SKRect(0, 0, pixelSize.Width, pixelSize.Height);
+            var destRectSk = new SKRect((float)rect.X, (float)rect.Y, (float)(rect.X + rect.Width), (float)(rect.Y + rect.Height));
+            lease.SkCanvas.DrawImage(skImage, sourceRect, destRectSk, paint);
+            return;
+        }
+
+        // Was: CreateScaledBitmap(rect size) + DrawBitmap every compose pass - a full Skia resample
+        // and a fresh bitmap allocation per visible page per frame, sustained through every scroll,
+        // which is what starved the render thread and showed as tearing/judder. Now: hand the
+        // compositor the source bitmap for a 1:1 / upscale draw (the default fit-width zoom), or a
+        // cached downscale that survives across frames (see _continuousScaledCache).
+        var drawBitmap = ResolveContinuousDrawBitmap(bitmap, rect, mode);
+        context.DrawBitmap(drawBitmap, new Rect(drawBitmap.Size), rect);
     }
 
     /// <summary>
@@ -881,6 +921,29 @@ public sealed class ReaderPageVisualHandler : CompositionCustomVisualHandler
         return scaled;
     }
 
+    /// <summary>Whether <paramref name="bitmap"/> is still referenced by this frame's page list - either as a whole page's own <see cref="ContinuousPageEntry.Bitmap"/>, or as one of a strip's <see cref="ContinuousPageEntry.Bands"/> (design §4.3).</summary>
+    private static bool IsBitmapLive(Bitmap bitmap, IReadOnlyList<ContinuousPageEntry> pages)
+    {
+        foreach (var entry in pages)
+        {
+            if (ReferenceEquals(entry.Bitmap, bitmap))
+            {
+                return true;
+            }
+            if (entry.Bands is { } bands)
+            {
+                foreach (var band in bands)
+                {
+                    if (ReferenceEquals(band.Bitmap, bitmap))
+                    {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
     /// <summary>Drops (and disposes) any cached downscale whose source page has left the visible set - the counterpart to <see cref="ResolveContinuousDrawBitmap"/> populating it, so the cache tracks the virtualization window rather than growing without bound.</summary>
     private void EvictStaleContinuousScales(IReadOnlyList<ContinuousPageEntry> pages)
     {
@@ -892,17 +955,7 @@ public sealed class ReaderPageVisualHandler : CompositionCustomVisualHandler
         List<Bitmap>? stale = null;
         foreach (var key in _continuousScaledCache.Keys)
         {
-            bool live = false;
-            foreach (var entry in pages)
-            {
-                if (ReferenceEquals(entry.Bitmap, key))
-                {
-                    live = true;
-                    break;
-                }
-            }
-
-            if (!live)
+            if (!IsBitmapLive(key, pages))
             {
                 (stale ??= new List<Bitmap>()).Add(key);
             }
@@ -913,12 +966,7 @@ public sealed class ReaderPageVisualHandler : CompositionCustomVisualHandler
         {
             foreach (var key in _skImageCache.Keys)
             {
-                bool live = false;
-                foreach (var entry in pages)
-                {
-                    if (ReferenceEquals(entry.Bitmap, key)) { live = true; break; }
-                }
-                if (!live)
+                if (!IsBitmapLive(key, pages))
                 {
                     (stale ??= new List<Bitmap>()).Add(key);
                 }

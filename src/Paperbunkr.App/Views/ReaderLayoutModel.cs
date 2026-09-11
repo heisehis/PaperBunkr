@@ -256,4 +256,42 @@ public static class ReaderLayoutModel
 
         return maxBump * pullDistance / (pullDistance + maxBump);
     }
+
+    /// <summary>
+    /// One band's display rect within a strip page already placed by
+    /// <see cref="ComputeContinuousLayout"/> (docs/superpowers/specs/2026-09-09-reader-webtoon-
+    /// strip-band-decode-design.md §4.1.2) - the seam-prevention primitive that design section
+    /// exists for. <paramref name="stripRect"/> is the whole strip's own already-computed
+    /// <see cref="LayoutPage.Rect"/>; every band's rect is derived from *that one* rect and *one*
+    /// scale factor (<paramref name="stripRect"/>'s main-axis size ÷ <paramref name="nativeSize"/>'s
+    /// own), never from a neighboring band's already-placed rect - so two adjacent bands always
+    /// share an exact boundary (this band's end equals the next band's start, in exact
+    /// floating-point terms, not just "close"), with no independently-accumulated rounding drift
+    /// between them. Cross-axis (width, for a vertical strip) is uninvolved - every band spans the
+    /// strip's full cross-axis extent.
+    /// </summary>
+    public static Rect ComputeStripBandRect(Rect stripRect, Size nativeSize, Axis axis, int bandIndex, int bandHeightSourcePixels)
+    {
+        double nativeMain = axis == Axis.Vertical ? nativeSize.Height : nativeSize.Width;
+        double displayMain = axis == Axis.Vertical ? stripRect.Height : stripRect.Width;
+        if (nativeMain <= 0 || bandHeightSourcePixels <= 0 || bandIndex < 0)
+        {
+            return default;
+        }
+
+        double scale = displayMain / nativeMain;
+        double bandStartSource = bandIndex * (double)bandHeightSourcePixels;
+        double bandEndSource = Math.Min(bandStartSource + bandHeightSourcePixels, nativeMain);
+        if (bandEndSource <= bandStartSource)
+        {
+            return default;
+        }
+
+        double mainStart = (axis == Axis.Vertical ? stripRect.Top : stripRect.Left) + (bandStartSource * scale);
+        double mainSize = (bandEndSource - bandStartSource) * scale;
+
+        return axis == Axis.Vertical
+            ? new Rect(stripRect.X, mainStart, stripRect.Width, mainSize)
+            : new Rect(mainStart, stripRect.Y, mainSize, stripRect.Height);
+    }
 }

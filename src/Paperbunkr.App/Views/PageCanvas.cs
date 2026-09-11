@@ -482,9 +482,12 @@ public class PageCanvas : Control
     private double _pinchLastScale = 1.0;
     private DateTime _pinchStartTime;
     private double _pinchStartZoom;
-    private double _pinchStartScrollOffset;
-    private double _pinchStartPanX;
-    private double _pinchStartPanY;
+
+    /// <summary>Continuous mode's pinch anchor identity (docs/superpowers/specs/2026-09-12-
+    /// continuous-mode-cursor-anchored-zoom-design.md §4) - found once, from <see cref="_pinchStartOrigin"/>,
+    /// when the gesture starts, then reused for every frame of that same gesture. Only meaningful
+    /// while <see cref="_pinchActive"/> is true and <see cref="IsContinuous"/>.</summary>
+    private ReaderLayoutModel.ContinuousZoomAnchorIdentity _pinchAnchorIdentity;
 
     /// <summary>Progressive-refinement cache for continuous mode's layout (see <see cref="DefaultEstimatedPageSize"/>) - every page this control has actually decoded/rendered at least once, so re-layout after the first pass uses real sizes instead of the estimate. Cleared whenever <see cref="Decoder"/> changes (a new issue was opened).</summary>
     private readonly Dictionary<int, Size> _knownPageSizes = new();
@@ -2186,11 +2189,33 @@ public class PageCanvas : Control
         {
             if (e.KeyModifiers.HasFlag(KeyModifiers.Control))
             {
-                // Free/unclamped upward per spec §5 - no cursor-anchor math for continuous mode this
-                // pass (a named simplification: cursor-anchored zoom needs per-page anchor tracking
-                // that doesn't exist yet here). Scroll/cross-axis pan re-clamping against the new zoom
-                // now happens centrally in OnPropertyChanged whenever ZoomLevel changes, not just here.
-                ZoomLevel = ZoomPanMath.ClampZoom(ZoomLevel + (e.Delta.Y * WheelZoomStep), ContinuousMaxZoom, ContinuousMinZoom);
+                // Cursor-anchored zoom (docs/superpowers/specs/2026-09-12-continuous-mode-cursor-
+                // anchored-zoom-design.md §4): find the anchor's stack-space identity at the *current*
+                // zoom/scroll/pan (read before ZoomLevel is reassigned below, same ordering paged
+                // mode's own Ctrl+wheel branch uses with PanToKeepPointFixed), then solve for the
+                // ScrollOffset/cross-axis pan that puts that same identity back under the cursor at
+                // the new zoom. The ZoomLevelProperty-changed reflex-clamp (OnPropertyChanged) still
+                // fires when ZoomLevel is assigned below and re-clamps the stale pre-zoom ScrollOffset/
+                // Pan against the new zoom first - harmless, since the explicit assignments right after
+                // immediately overwrite it with the anchor-computed (and then re-clamped) result.
+                double newZoom = ZoomPanMath.ClampZoom(ZoomLevel + (e.Delta.Y * WheelZoomStep), ContinuousMaxZoom, ContinuousMinZoom);
+                var cursor = e.GetPosition(this);
+                double crossAxisPan = ContinuousAxis == ReaderLayoutModel.Axis.Vertical ? PanOffsetX : PanOffsetY;
+                var (newScrollOffset, newCrossAxisPan) = ReaderLayoutModel.ComputeContinuousZoomAnchor(
+                    EstimatedPageSizes(), ScrollOffset, ZoomLevel, crossAxisPan, Bounds.Size, ContinuousAxis,
+                    cursor, newZoom, ContinuousMainAxisGap, IsContinuousReversed);
+
+                ZoomLevel = newZoom;
+                ScrollOffset = ClampScrollOffset(newScrollOffset);
+                if (ContinuousAxis == ReaderLayoutModel.Axis.Vertical)
+                {
+                    PanOffsetX = ClampContinuousCrossAxisPan(newCrossAxisPan);
+                }
+                else
+                {
+                    PanOffsetY = ClampContinuousCrossAxisPan(newCrossAxisPan);
+                }
+
                 e.Handled = true;
                 return;
             }
@@ -2451,9 +2476,19 @@ public class PageCanvas : Control
             _pinchStartOrigin = e.ScaleOrigin;
             _pinchStartTime = DateTime.UtcNow;
             _pinchStartZoom = ZoomLevel;
-            _pinchStartScrollOffset = ScrollOffset;
-            _pinchStartPanX = PanOffsetX;
-            _pinchStartPanY = PanOffsetY;
+
+            if (IsContinuous)
+            {
+                // Cursor-anchored zoom (design §4): lock the pinch anchor's stack-space identity
+                // once, here at gesture start, rather than re-deriving "which page/gap is under the
+                // origin" every frame - re-deriving fresh risks a visible jump if the origin sits
+                // near a page/gap boundary and a sub-pixel touch-sampling difference flips which
+                // page/gap is found between two adjacent frames (design rev 2).
+                double crossAxisPan = ContinuousAxis == ReaderLayoutModel.Axis.Vertical ? PanOffsetX : PanOffsetY;
+                _pinchAnchorIdentity = ReaderLayoutModel.FindContinuousZoomAnchorIdentity(
+                    EstimatedPageSizes(), ScrollOffset, ZoomLevel, crossAxisPan, Bounds.Size, ContinuousAxis,
+                    _pinchStartOrigin, ContinuousMainAxisGap, IsContinuousReversed);
+            }
 
             // A second finger joining mid-drag would otherwise leave the one-finger drag handling
             // in OnPointerMoved (started by the first finger's OnPointerPressed) still active
@@ -2467,23 +2502,31 @@ public class PageCanvas : Control
 
         double minZoom = IsContinuous ? ContinuousMinZoom : ZoomPanMath.MinZoom;
         double maxZoom = IsContinuous ? ContinuousMaxZoom : ZoomPanMath.MaxZoom;
-        ZoomLevel = ZoomPanMath.ClampZoom(_pinchStartZoom * e.Scale, maxZoom, minZoom);
+        double newZoom = ZoomPanMath.ClampZoom(_pinchStartZoom * e.Scale, maxZoom, minZoom);
+        ZoomLevel = newZoom;
 
         if (IsContinuous)
         {
-            double originDx = e.ScaleOrigin.X - _pinchStartOrigin.X;
-            double originDy = e.ScaleOrigin.Y - _pinchStartOrigin.Y;
-            double mainDelta = ContinuousAxis == ReaderLayoutModel.Axis.Vertical ? originDy : originDx;
-            double crossDelta = ContinuousAxis == ReaderLayoutModel.Axis.Vertical ? originDx : originDy;
+            // Every subsequent frame reuses the gesture-start-locked identity, feeding just this
+            // frame's live origin/zoom into steps 2-4 - so the anchored content still tracks the
+            // live origin position (stays under your fingers as they move) without ever re-deciding
+            // *which* page/gap it's anchored to mid-gesture. This replaces the old origin-delta pan/
+            // scroll adjustment entirely (design §4): solving "keep this content point under
+            // wherever the origin currently is" already produces the correct pan shift for a
+            // near-1.0-scale two-finger drag, so the two mechanisms would otherwise double-count
+            // movement.
+            var (newScrollOffset, newCrossAxisPan) = ReaderLayoutModel.ResolveContinuousZoomAnchor(
+                _pinchAnchorIdentity, EstimatedPageSizes(), Bounds.Size, ContinuousAxis,
+                e.ScaleOrigin, newZoom, ContinuousMainAxisGap, IsContinuousReversed);
 
-            ScrollOffset = ClampScrollOffset(_pinchStartScrollOffset - mainDelta);
+            ScrollOffset = ClampScrollOffset(newScrollOffset);
             if (ContinuousAxis == ReaderLayoutModel.Axis.Vertical)
             {
-                PanOffsetX = ClampContinuousCrossAxisPan(_pinchStartPanX + crossDelta);
+                PanOffsetX = ClampContinuousCrossAxisPan(newCrossAxisPan);
             }
             else
             {
-                PanOffsetY = ClampContinuousCrossAxisPan(_pinchStartPanY + crossDelta);
+                PanOffsetY = ClampContinuousCrossAxisPan(newCrossAxisPan);
             }
         }
 

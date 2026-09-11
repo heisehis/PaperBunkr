@@ -294,4 +294,209 @@ public static class ReaderLayoutModel
             ? new Rect(stripRect.X, mainStart, stripRect.Width, mainSize)
             : new Rect(mainStart, stripRect.Y, mainSize, stripRect.Height);
     }
+
+    /// <summary>
+    /// Continuous mode's counterpart to <see cref="ZoomPanMath.PanToKeepPointFixed"/> (docs/
+    /// superpowers/specs/2026-09-12-continuous-mode-cursor-anchored-zoom-design.md) - keeps the
+    /// content under <paramref name="anchorPoint"/> visually fixed as zoom changes from
+    /// <paramref name="currentZoom"/> to <paramref name="targetZoom"/>. Needs its own math (not a
+    /// reused call) because <c>ScrollOffset</c> is zoom-dependent stack-space - the same value means
+    /// a different logical document position at a different zoom - unlike paged mode's single image.
+    ///
+    /// Finds the anchor's zoom-invariant *identity* at the current zoom, then re-places that same
+    /// identity at the target zoom:
+    /// <list type="bullet">
+    /// <item>On a page: <c>(pageIndex, fraction)</c> - a fraction of that page's own content, since
+    /// every page scales uniformly with zoom.</item>
+    /// <item>In a gap, or past either end of the stack: <c>(referencePageIndex, pixelOffset)</c> -
+    /// <see cref="ContinuousMainAxisGap"/> doesn't scale with zoom at all (a flat pixel constant, not
+    /// a fraction of anything), so a raw signed pixel offset past the last page whose trailing edge
+    /// is at or before the anchor (or past the stack's own start, <c>referencePageIndex = -1</c>, if
+    /// the anchor is before page 0) survives a zoom change exactly as read - no scaling needed. This
+    /// is a deliberate design choice for the past-either-end case (there's no real content there to
+    /// scale), not something forced by any existing formula - see the design doc §3.
+    /// </list>
+    ///
+    /// Returns unclamped values (design §3) - <see cref="ComputeContinuousLayout"/>-shaped callers
+    /// already own their own clamping (<c>PageCanvas.ClampScrollOffset</c>/
+    /// <c>ClampContinuousCrossAxisPan</c>), not visible to this static layer.
+    /// </summary>
+    public static (double ScrollOffset, double CrossAxisPanOffset) ComputeContinuousZoomAnchor(
+        IReadOnlyList<Size> pageNativeSizes,
+        double currentScrollOffset,
+        double currentZoom,
+        double currentCrossAxisPanOffset,
+        Size viewportSize,
+        Axis axis,
+        Point anchorPoint,
+        double targetZoom,
+        double mainAxisGap = 0.0,
+        bool reverseMainAxis = false)
+    {
+        var identity = FindContinuousZoomAnchorIdentity(pageNativeSizes, currentScrollOffset, currentZoom,
+            currentCrossAxisPanOffset, viewportSize, axis, anchorPoint, mainAxisGap, reverseMainAxis);
+        return ResolveContinuousZoomAnchor(identity, pageNativeSizes, viewportSize, axis, anchorPoint, targetZoom, mainAxisGap, reverseMainAxis);
+    }
+
+    /// <summary>
+    /// The anchor's zoom-invariant identity (design §3, step 1) - one of two shapes:
+    /// <list type="bullet">
+    /// <item>On a page: <c>PageIndex</c> is the real page, <c>OnPage</c> is true, <c>MainOffset</c>
+    /// is a fraction [0,1] of that page's own content.</item>
+    /// <item>In a gap, or past either end of the stack: <c>OnPage</c> is false, <c>PageIndex</c> is
+    /// the last page whose trailing edge is at or before the anchor (-1 if the anchor is before page
+    /// 0), <c>MainOffset</c> is a raw signed pixel offset past that page's trailing edge (or past the
+    /// stack's own start, when <c>PageIndex</c> is -1) - unscaled, since a gap/off-stack margin never
+    /// changes size with zoom.</item>
+    /// </list>
+    /// <c>CrossFraction</c> is the anchor's fraction of the cross-axis "virtual wide page," same
+    /// meaning in both cases. See <see cref="ComputeContinuousZoomAnchor"/>'s own remarks for the
+    /// full derivation this splits into two independently reusable halves - <see cref="FindContinuousZoomAnchorIdentity"/>
+    /// (step 1) and <see cref="ResolveContinuousZoomAnchor"/> (steps 2-4) - so a caller (pinch) can
+    /// find this identity once and reuse it across many frames, each resolved against that frame's
+    /// own live target point/zoom, rather than re-finding it every frame.
+    /// </summary>
+    public readonly record struct ContinuousZoomAnchorIdentity(int PageIndex, bool OnPage, double MainOffset, double CrossFraction);
+
+    /// <summary>Step 1 of <see cref="ComputeContinuousZoomAnchor"/> - see <see cref="ContinuousZoomAnchorIdentity"/> for the shape.</summary>
+    public static ContinuousZoomAnchorIdentity FindContinuousZoomAnchorIdentity(
+        IReadOnlyList<Size> pageNativeSizes,
+        double currentScrollOffset,
+        double currentZoom,
+        double currentCrossAxisPanOffset,
+        Size viewportSize,
+        Axis axis,
+        Point anchorPoint,
+        double mainAxisGap = 0.0,
+        bool reverseMainAxis = false)
+    {
+        double viewportMainSize = axis == Axis.Vertical ? viewportSize.Height : viewportSize.Width;
+        double anchorMain = axis == Axis.Vertical ? anchorPoint.Y : anchorPoint.X;
+
+        // Every page's rect is placed via `mainPosition = stackOffset - scrollOffset`, then (if
+        // reverseMainAxis) overwritten to `viewportMainSize - mainPosition - mainSize`. Substituting
+        // a point at stack position s = stackOffset + f*mainSize into that second formula and
+        // simplifying shows the per-page stackOffset/mainSize terms cancel completely - the mirror
+        // reduces to one *global* transform, independent of which page s falls in:
+        //   unmirrored: viewportPos(s) = s - scrollOffset
+        //   mirrored:   viewportPos(s) = viewportMainSize + scrollOffset - s
+        // ToStackSpace is that transform's inverse, applied at the *current* zoom/scroll - used both
+        // to convert the anchor itself and each candidate page's own rect edges into one consistent,
+        // direction-agnostic stack-space frame, so "which page/fraction" reasoning below never has
+        // to separately track which physical rect edge is which in mirrored vs. unmirrored layout
+        // (an earlier draft tried that directly off rect.Top and had the on-page fraction backwards
+        // for reverseMainAxis - caught while re-deriving this, not left for a test to find).
+        double ToStackSpace(double viewportMainCoord) => reverseMainAxis
+            ? viewportMainSize + currentScrollOffset - viewportMainCoord
+            : viewportMainCoord + currentScrollOffset;
+
+        var currentLayout = ComputeContinuousLayout(pageNativeSizes, currentScrollOffset, viewportSize, axis,
+            virtualizationRadius: pageNativeSizes.Count, zoom: currentZoom, crossAxisPanOffset: currentCrossAxisPanOffset,
+            mainAxisGap: mainAxisGap, reverseMainAxis: reverseMainAxis);
+
+        double s = ToStackSpace(anchorMain);
+
+        int onPageIndex = -1;
+        double onPageFraction = 0;
+        int referencePageIndex = -1;
+        double referenceStackEnd = 0; // stack-space end of referencePageIndex's own range (0 = the stack's own start, when referencePageIndex is -1)
+
+        foreach (var page in currentLayout)
+        {
+            double top = axis == Axis.Vertical ? page.Rect.Top : page.Rect.Left;
+            double bottom = axis == Axis.Vertical ? page.Rect.Bottom : page.Rect.Right;
+            double stackA = ToStackSpace(top);
+            double stackB = ToStackSpace(bottom);
+            double stackStart = Math.Min(stackA, stackB);
+            double stackEnd = Math.Max(stackA, stackB);
+
+            if (stackEnd > stackStart && s >= stackStart && s <= stackEnd)
+            {
+                onPageIndex = page.Index;
+                onPageFraction = Math.Clamp((s - stackStart) / (stackEnd - stackStart), 0, 1);
+            }
+
+            if (stackEnd <= s && (referencePageIndex < 0 || page.Index > referencePageIndex))
+            {
+                referencePageIndex = page.Index;
+                referenceStackEnd = stackEnd;
+            }
+        }
+
+        double crossFraction = ComputeCrossAxisFraction(viewportSize, axis, anchorPoint, currentZoom, currentCrossAxisPanOffset);
+
+        if (onPageIndex >= 0)
+        {
+            return new ContinuousZoomAnchorIdentity(onPageIndex, OnPage: true, onPageFraction, crossFraction);
+        }
+
+        double pixelOffset = s - referenceStackEnd; // zoom-invariant by design (§3 of the design doc) - a gap/off-stack margin never scales
+        return new ContinuousZoomAnchorIdentity(referencePageIndex, OnPage: false, pixelOffset, crossFraction);
+    }
+
+    /// <summary>Steps 2-4 of <see cref="ComputeContinuousZoomAnchor"/> - re-places a previously-found <see cref="ContinuousZoomAnchorIdentity"/> at <paramref name="targetZoom"/>, solving for the <c>ScrollOffset</c>/cross-axis pan that puts it back under <paramref name="targetViewportPoint"/> (which need not be the same point the identity was originally found at - see pinch's gesture-start-locked usage in <c>PageCanvas.OnPinch</c>, where the identity is found once but resolved every frame against the gesture's live, moving origin).</summary>
+    public static (double ScrollOffset, double CrossAxisPanOffset) ResolveContinuousZoomAnchor(
+        ContinuousZoomAnchorIdentity identity,
+        IReadOnlyList<Size> pageNativeSizes,
+        Size viewportSize,
+        Axis axis,
+        Point targetViewportPoint,
+        double targetZoom,
+        double mainAxisGap = 0.0,
+        bool reverseMainAxis = false)
+    {
+        double viewportMainSize = axis == Axis.Vertical ? viewportSize.Height : viewportSize.Width;
+        double targetMain = axis == Axis.Vertical ? targetViewportPoint.Y : targetViewportPoint.X;
+
+        double newStackPos;
+        if (identity.OnPage)
+        {
+            double newPageMainSize = PageMainSizeAtZoom(pageNativeSizes[identity.PageIndex], viewportSize, axis, targetZoom);
+            newStackPos = ComputeStackOffsetOfPage(pageNativeSizes, identity.PageIndex, viewportSize, axis, targetZoom, mainAxisGap) + (identity.MainOffset * newPageMainSize);
+        }
+        else
+        {
+            double referenceStackPosNew = identity.PageIndex < 0
+                ? 0
+                : ComputeStackOffsetOfPage(pageNativeSizes, identity.PageIndex + 1, viewportSize, axis, targetZoom, mainAxisGap) - mainAxisGap;
+            newStackPos = referenceStackPosNew + identity.MainOffset;
+        }
+
+        // Invert the same ToStackSpace transform FindContinuousZoomAnchorIdentity uses, now at the
+        // target zoom's viewport-space (newScrollOffset is what's being solved for, so this can't
+        // reuse that closure, which is built over a possibly different scroll offset).
+        double newScrollOffset = reverseMainAxis
+            ? targetMain - viewportMainSize + newStackPos
+            : newStackPos - targetMain;
+
+        // --- Cross axis: same "one wide virtual page" derivation PanToKeepPointFixed uses --------
+
+        double viewportCrossSize = axis == Axis.Vertical ? viewportSize.Width : viewportSize.Height;
+        double targetCross = axis == Axis.Vertical ? targetViewportPoint.X : targetViewportPoint.Y;
+        double crossAxisSize = viewportCrossSize * targetZoom;
+        double newCrossAxisPanOffset = targetCross - (identity.CrossFraction * crossAxisSize) - ((viewportCrossSize - crossAxisSize) / 2);
+
+        return (newScrollOffset, newCrossAxisPanOffset);
+    }
+
+    /// <summary>The anchor's fraction of the cross-axis "one wide virtual page" - same derivation <see cref="ZoomPanMath.PanToKeepPointFixed"/> uses, factored out since both <see cref="FindContinuousZoomAnchorIdentity"/> (finding it) and <see cref="ResolveContinuousZoomAnchor"/> (re-placing it) need the fraction/inverse-fraction shape of this formula.</summary>
+    private static double ComputeCrossAxisFraction(Size viewportSize, Axis axis, Point anchorPoint, double zoom, double crossAxisPanOffset)
+    {
+        double viewportCrossSize = axis == Axis.Vertical ? viewportSize.Width : viewportSize.Height;
+        double anchorCross = axis == Axis.Vertical ? anchorPoint.X : anchorPoint.Y;
+        double crossAxisSize = viewportCrossSize * zoom;
+        double crossAxisStart = ((viewportCrossSize - crossAxisSize) / 2) + crossAxisPanOffset;
+        return crossAxisSize > 0 ? Math.Clamp((anchorCross - crossAxisStart) / crossAxisSize, 0, 1) : 0.5;
+    }
+
+    /// <summary>One page's main-axis size at a given zoom - the same per-page scale formula <see cref="ComputeContinuousLayout"/>/<see cref="ComputeStackOffsetOfPage"/> use, factored out for <see cref="ComputeContinuousZoomAnchor"/>'s own on-page case.</summary>
+    private static double PageMainSizeAtZoom(Size nativeSize, Size viewportSize, Axis axis, double zoom)
+    {
+        double viewportCrossSize = axis == Axis.Vertical ? viewportSize.Width : viewportSize.Height;
+        double crossAxisSize = viewportCrossSize * zoom;
+        double nativeCross = axis == Axis.Vertical ? nativeSize.Width : nativeSize.Height;
+        double nativeMain = axis == Axis.Vertical ? nativeSize.Height : nativeSize.Width;
+        double scale = nativeCross > 0 ? crossAxisSize / nativeCross : 0;
+        return nativeMain * scale;
+    }
 }

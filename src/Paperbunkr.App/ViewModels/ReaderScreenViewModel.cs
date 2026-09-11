@@ -1085,6 +1085,7 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
                 IsBookmarked = _bookmarkedPages.Contains(page),
                 PageType = pageOverride?.PageType ?? PageType.Story,
                 IsRotated = (pageOverride?.RotationDegrees ?? 0) != 0,
+                SpreadHint = pageOverride?.SpreadPosition ?? PageSpreadPosition.Default,
             });
         }
 
@@ -1579,12 +1580,12 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
     /// Shared by every Set* command below - resolves the thumbnail that was right-clicked to a page
     /// number the same way <see cref="SelectThumbnail"/> does, upserts the row (fresh context, same
     /// "inline, no separate resolver" convention as bookmarks), and deletes it again if the result is
-    /// back to the all-default Story/0deg state - keeps storage sparse, matching <see
-    /// cref="IssuePage"/>'s own doc comment. <paramref name="newType"/>/<paramref name="newRotation"/>
-    /// are each null when the caller isn't changing that half (a page-type command leaves rotation
-    /// alone and vice versa).
+    /// back to the all-default Story/0deg/Default state - keeps storage sparse, matching <see
+    /// cref="IssuePage"/>'s own doc comment. <paramref name="newType"/>/<paramref name="newRotation"/>/
+    /// <paramref name="newSpread"/> are each null when the caller isn't changing that part (a
+    /// page-type command leaves rotation/spread alone, etc.).
     /// </summary>
-    private void SetPageOverride(ReaderThumbnailSample? thumbnail, PageType? newType, int? newRotation)
+    private void SetPageOverride(ReaderThumbnailSample? thumbnail, PageType? newType, int? newRotation, PageSpreadPosition? newSpread = null)
     {
         if (thumbnail is null || _loadedIssueId is not int issueId)
         {
@@ -1601,8 +1602,9 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
         var row = context.IssuePages.FirstOrDefault(p => p.IssueId == issueId && p.PageNumber == pageNumber);
         PageType effectiveType = newType ?? row?.PageType ?? PageType.Story;
         int effectiveRotation = newRotation ?? row?.RotationDegrees ?? 0;
+        PageSpreadPosition effectiveSpread = newSpread ?? row?.SpreadPosition ?? PageSpreadPosition.Default;
 
-        if (effectiveType == PageType.Story && effectiveRotation == 0)
+        if (effectiveType == PageType.Story && effectiveRotation == 0 && effectiveSpread == PageSpreadPosition.Default)
         {
             if (row is not null)
             {
@@ -1622,6 +1624,7 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
 
             row.PageType = effectiveType;
             row.RotationDegrees = effectiveRotation;
+            row.SpreadPosition = effectiveSpread == PageSpreadPosition.Default ? null : effectiveSpread;
             context.SaveChanges();
             _pageOverrides[pageNumber] = row;
         }
@@ -1634,11 +1637,20 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
             IsBookmarked = thumbnail.IsBookmarked,
             PageType = effectiveType,
             IsRotated = effectiveRotation != 0,
+            SpreadHint = effectiveSpread,
         };
 
         if (pageNumber == _currentPageIndex)
         {
             PageRotationOverrideDegrees = effectiveRotation;
+        }
+
+        // A spread-position change can re-phase pairing starting at whichever page the user is on
+        // (docs/superpowers/specs/2026-09-10-reader-backlog-batch-b-design.md §2.3) - re-run
+        // immediately rather than waiting for the next turn.
+        if (newSpread is not null)
+        {
+            RefreshCurrentPage();
         }
     }
 
@@ -1646,6 +1658,10 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
     [RelayCommand] private void SetPageTypeCover(ReaderThumbnailSample? thumbnail) => SetPageOverride(thumbnail, PageType.Cover, null);
     [RelayCommand] private void SetPageTypeAdvertisement(ReaderThumbnailSample? thumbnail) => SetPageOverride(thumbnail, PageType.Advertisement, null);
     [RelayCommand] private void SetPageTypeDeleted(ReaderThumbnailSample? thumbnail) => SetPageOverride(thumbnail, PageType.Deleted, null);
+
+    [RelayCommand] private void SetSpreadPositionDefault(ReaderThumbnailSample? thumbnail) => SetPageOverride(thumbnail, null, null, PageSpreadPosition.Default);
+    [RelayCommand] private void SetSpreadPositionNear(ReaderThumbnailSample? thumbnail) => SetPageOverride(thumbnail, null, null, PageSpreadPosition.Near);
+    [RelayCommand] private void SetSpreadPositionFar(ReaderThumbnailSample? thumbnail) => SetPageOverride(thumbnail, null, null, PageSpreadPosition.Far);
 
     [RelayCommand] private void SetPageRotation0(ReaderThumbnailSample? thumbnail) => SetPageOverride(thumbnail, null, 0);
     [RelayCommand] private void SetPageRotation90(ReaderThumbnailSample? thumbnail) => SetPageOverride(thumbnail, null, 90);
@@ -1664,7 +1680,7 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
         Thumbnails[page] = new ReaderThumbnailSample
         {
             CoverBrush = CoverBrush, CoverImage = existing.CoverImage, IsSelected = existing.IsSelected, IsBookmarked = isBookmarked,
-            PageType = existing.PageType, IsRotated = existing.IsRotated,
+            PageType = existing.PageType, IsRotated = existing.IsRotated, SpreadHint = existing.SpreadHint,
         };
     }
 
@@ -1864,7 +1880,7 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
                     Thumbnails[capturedPage] = new ReaderThumbnailSample
                     {
                         CoverBrush = CoverBrush, CoverImage = thumb, IsSelected = existing.IsSelected, IsBookmarked = existing.IsBookmarked,
-                        PageType = existing.PageType, IsRotated = existing.IsRotated,
+                        PageType = existing.PageType, IsRotated = existing.IsRotated, SpreadHint = existing.SpreadHint,
                     };
                 });
             }
@@ -2093,7 +2109,7 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
             Thumbnails[page] = new ReaderThumbnailSample
             {
                 CoverBrush = CoverBrush, CoverImage = existing.CoverImage, IsSelected = page == _currentPageIndex, IsBookmarked = existing.IsBookmarked,
-                PageType = existing.PageType, IsRotated = existing.IsRotated,
+                PageType = existing.PageType, IsRotated = existing.IsRotated, SpreadHint = existing.SpreadHint,
             };
         }
 
@@ -2185,6 +2201,10 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
         GoToPage(index);
     }
 
+    /// <summary>Item 2 of docs/superpowers/specs/2026-09-10-reader-backlog-batch-b-design.md - the per-page manual spread-phase override; <see cref="PageSpreadPosition.Default"/> when the page has no <see cref="IssuePage"/> row (the common case).</summary>
+    private PageSpreadPosition SpreadPositionAt(int index) =>
+        _pageOverrides.TryGetValue(index, out var row) ? row.SpreadPosition ?? PageSpreadPosition.Default : PageSpreadPosition.Default;
+
     [RelayCommand]
     private void PreviousPage()
     {
@@ -2194,6 +2214,17 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
             // the current position is itself eligible to pair, else 1 - same as solo-page stepping
             // when double-page mode isn't active (ArePagesPaired is always false then).
             int step = ArePagesPaired(_currentPageIndex - 2) ? 2 : 1;
+            // Manual spread-position override (Item 2 §2.2, mirrors CE's DisplayPreviousPage): force
+            // a 1-step back if the page immediately behind wants to stay Near (leading) and the one
+            // behind that isn't explicitly Far (trailing) - i.e. don't pull a Near page backward into
+            // the second/right slot of the prior spread.
+            if (step == 2
+                && SpreadPositionAt(_currentPageIndex - 1) == PageSpreadPosition.Near
+                && SpreadPositionAt(_currentPageIndex - 2) != PageSpreadPosition.Far)
+            {
+                step = 1;
+            }
+
             GoToPage(_currentPageIndex - step);
             return;
         }
@@ -2210,6 +2241,14 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
             // GoToPage's own Math.Clamp already handles landing exactly on the last page if the pair
             // would otherwise overshoot PageCount-1.
             int step = CurrentPageSecondary is not null ? 2 : 1;
+            // Manual spread-position override (Item 2 §2.2, mirrors CE's DisplayNextPage): if the
+            // page right after the current one wants to be Near (leading), advance only 1 instead of
+            // 2 - that forces it to lead the next spread, re-phasing every pairing from there on.
+            if (step == 2 && SpreadPositionAt(_currentPageIndex + 1) == PageSpreadPosition.Near)
+            {
+                step = 1;
+            }
+
             GoToPage(_currentPageIndex + step);
             return;
         }

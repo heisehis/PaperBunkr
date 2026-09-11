@@ -31,4 +31,15 @@ public sealed class ReaderThumbnailSample
 
     /// <summary>Persisted per-page rotation override (docs/ce-feature-inventory.md §A) - drives a small rotated-corner indicator so a rotated page is visible in the rail, not just when you turn to it.</summary>
     public bool IsRotated { get; init; }
+
+    /// <summary>Manual double-page-spread phase override (docs/superpowers/specs/2026-09-10-reader-backlog-batch-b-design.md Item 2) - drives a small chevron indicator, matching the rotation indicator's "only show when set" precedent.</summary>
+    public Paperbunkr.Data.Entities.PageSpreadPosition SpreadHint { get; init; }
+
+    public bool HasSpreadHint => SpreadHint != Paperbunkr.Data.Entities.PageSpreadPosition.Default;
+
+    /// <summary>True for <see cref="Paperbunkr.Data.Entities.PageSpreadPosition.Near"/> - a leading/left-pointing chevron.</summary>
+    public bool IsNearHint => SpreadHint == Paperbunkr.Data.Entities.PageSpreadPosition.Near;
+
+    /// <summary>True for <see cref="Paperbunkr.Data.Entities.PageSpreadPosition.Far"/> - a trailing/right-pointing chevron.</summary>
+    public bool IsFarHint => SpreadHint == Paperbunkr.Data.Entities.PageSpreadPosition.Far;
 }

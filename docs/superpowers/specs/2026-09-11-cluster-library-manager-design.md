@@ -62,9 +62,13 @@ tree:
   precedent's rationale (no DI container anywhere in this codebase, single-user scale) applies to the
   plugin's own code exactly as it does to the host's.
 - **`SettingsViewModel`/`SettingsView.axaml` are the plugin's own compiled Avalonia view and
-  viewmodel**, returned from `CreateSettingsView` and hosted by the app through the new
-  `INativePluginEnvironment.ShowModalAsync<TResult>(Control)` primitive (v4 §3) — a real,
-  plugin-authored settings screen, not a declarative schema the host renders generically.
+  viewmodel**, returned from `INativePluginSettingsUi.CreateSettingsView` and hosted by the app
+  through `INativePluginUiEnvironment.ShowModalAsync<TResult>(Control)` (v4 §3, revised into a
+  separate UI-only companion contract after external review) — a real, plugin-authored settings
+  screen, not a declarative schema the host renders generically. `OrganizerScraperPlugin` implements
+  both `INativePluginModule` and `INativePluginSettingsUi`, since this plugin does have a real
+  settings UI (unlike a hypothetical headless-only native plugin, which would implement only the
+  former and never reference Avalonia at all).
 - **Trust model**: per v4 §2 (grilling Q20=B), this is a **full-trust** native plugin — it receives
   its own `PaperbunkrDbContext` via `INativePluginEnvironment.CreateDbContext` and writes directly,
   not through the audited `IMetadataWriter` gate the `.csx` tier uses. The Plugin screen shows this
@@ -135,6 +139,19 @@ book; user picks one or skips. This is gated by a plain boolean, matching CE exa
 threshold (verified: no scoring cutoff exists anywhere in `configuration.py`/`configform.py`). When
 auto-choose is on, the top-scored candidate is applied without showing the modal at all; when it's
 off, the modal always shows, regardless of how high the top score is.
+
+**Non-interactive (Scheduled Task) runs never show this modal at all — this was a real, previously
+unaddressed gap.** External review correctly identified that "Scrape with ComicVine" is also
+registered as a Scheduled Task (§9), and an unattended run with auto-choose off that hits
+`ShowModalAsync` would hang indefinitely — nobody is present to click it, and nothing in an earlier
+draft prevented that. Fix: `ComicVineService`'s scrape-and-apply entry point takes an explicit
+`isInteractive: bool` (sourced from the caller — `true` from the Plugin/Library screen's own
+UI-triggered run, `false` from the Scheduled Task runner). When `isInteractive` is `false`, auto-choose
+being off no longer means "always show the modal" — it means "skip this book and log it as needing
+manual review" instead; the batch continues rather than blocking. Auto-choose *on* behaves identically
+either way (top match applied, no modal, ever) and needed no change. This requirement is a hard
+prerequisite of §9's automation integration, not an independent nice-to-have — the two must be
+designed together.
 
 **Write path**: applied fields write **directly** to `Issue` — respecting overwrite-existing /
 ignore-blank-value toggles (CE's `ow_existing_b`/`ignore_blanks_b`), same mechanism as Bulk Issue
@@ -269,6 +286,26 @@ call to keep modal-per-file for literal CE fidelity, accepting the "apply to all
 as the real, deliberate mitigation for large batches rather than a stopgap — **this is settled, not
 open**.
 
+**Non-interactive (Scheduled Task) runs never call `ShowModalAsync` for a collision either — same gap
+as §4's, same fix.** `OrganizerProfile` gains an `AutomationCollisionPolicy` field (Skip / Rename /
+Overwrite, default Rename — CE's own numeric-suffix algorithm is the least destructive automatic
+choice) used only when `ExecuteAsync` runs with `isInteractive: false`. An interactive run always
+shows the dialog regardless of this setting; it exists purely to make unattended runs resolve
+deterministically instead of hanging. Like §4's fix, this is a hard prerequisite of §9's automation
+integration, not separable from it.
+
+**Undo-log write ordering — addresses the LiteDB/core-SQLite dual-write concern raised in review.**
+The claim that a LiteDB write failure here "permanently fractures" application state overstates it —
+the library's actual source of truth (the file on disk plus the core `Issue.FilePath` in
+`PaperbunkrDbContext`) is unaffected by anything happening in the plugin's own LiteDB file; a failure
+there degrades only this one item's Undo coverage, not the library's correctness. A cross-database
+two-phase-commit protocol would be disproportionate engineering for what §8 already scopes as a
+lightweight first pass. The actual gap review found — this ordering was genuinely unspecified before
+— is fixed simply: per item, the file move and the core `Issue.FilePath` update happen first and are
+authoritative; the Undo-log append happens after, wrapped in its own try/catch, and a failure there is
+logged clearly ("this move succeeded but will not be undoable via the last batch") and does not retry
+the move, does not touch the already-committed core state, and does not abort the batch.
+
 ## 7. Profiles
 
 Full CE-parity multiple named profiles (grilling Q16=B, not a single active configuration).
@@ -295,6 +332,14 @@ expose a public registration point a native plugin assembly can add a task type 
 wasn't inspected during this grilling pass — the implementation plan needs to check it directly
 before committing to this approach; if no such extension point exists, the fallback is a
 plugin-local automation setting in its own settings view (§2) instead.
+
+**Second, equally hard prerequisite, added after external review**: registering as a Scheduled Task
+means these commands can run fully unattended, with nobody present to answer an interactive prompt.
+§4 and §6 both now specify an `isInteractive: false` path for exactly that case (auto-skip instead of
+the match-review modal, a configured `AutomationCollisionPolicy` instead of the collision dialog) —
+the implementation plan must wire the Scheduled Task runner to actually pass `isInteractive: false`
+through to both, not just register the task type and stop there. A task type that exists but can
+still deadlock on an unattended run isn't actually done.
 
 ## 10. Persisted state — the plugin's own database, not core migrations
 

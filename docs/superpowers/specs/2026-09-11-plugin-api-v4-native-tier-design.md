@@ -48,16 +48,36 @@ public API Paperbunkr.App itself uses — not the internal helpers.
 
 ## 3. `INativePluginModule` — the entry-point contract
 
-New interface in `Paperbunkr.Plugins.Abstractions` (which gains an Avalonia dependency to support
-`CreateSettingsView`, described below — a deliberate, contained addition, not a general dependency
-bloat):
+New interface in `Paperbunkr.Plugins.Abstractions` — **revised after external review**: an earlier
+draft put `CreateSettingsView` directly on this interface and `ShowModalAsync` directly on the base
+environment interface, which meant *every* native plugin needed an Avalonia reference just to
+implement the base contract — even a purely headless background plugin with no UI at all. That's a
+real interface-segregation failure, fixed here by splitting the UI-capable pieces into a separate,
+optional companion assembly, `Paperbunkr.Plugins.Abstractions.Ui`:
 
 ```csharp
+// Paperbunkr.Plugins.Abstractions — no Avalonia dependency, ever.
 public interface INativePluginModule
 {
     void Initialize(INativePluginEnvironment environment);
     void RegisterCommands(INativeCommandRegistrar registrar);
-    Avalonia.Controls.Control? CreateSettingsView(INativePluginEnvironment environment);
+}
+
+public interface INativePluginEnvironment : IPluginEnvironment
+{
+    Func<PaperbunkrDbContext> CreateDbContext { get; }
+}
+```
+```csharp
+// Paperbunkr.Plugins.Abstractions.Ui — only a plugin that has UI references this.
+public interface INativePluginSettingsUi
+{
+    Avalonia.Controls.Control? CreateSettingsView(INativePluginUiEnvironment environment);
+}
+
+public interface INativePluginUiEnvironment : INativePluginEnvironment
+{
+    Task<TResult> ShowModalAsync<TResult>(Avalonia.Controls.Control content);
 }
 ```
 
@@ -66,29 +86,28 @@ public interface INativePluginModule
   scripted commands appear side by side in the same hook-grouped list on the Plugin screen; a user
   can't tell which tier a command came from just by looking at the list, only via the plugin-level
   trust notice from §2.
-- `CreateSettingsView` returns a real, plugin-compiled `Control` — this is what actually delivers a
-  literal, plugin-authored settings view (grilling Q21=A), not the declarative-schema mechanism CLM's
-  original draft proposed before this tier existed. Returning `null` means the plugin has no settings
-  UI (equivalent to no `ConfigScript` pairing today).
+- A plugin with a settings UI implements both interfaces on the same class (`class
+  OrganizerScraperPlugin : INativePluginModule, INativePluginSettingsUi`) and references both
+  assemblies. A purely headless plugin implements only `INativePluginModule`, references only the
+  base (Avalonia-free) assembly, and never pays for UI binaries it doesn't use.
+- The host always constructs the richer `INativePluginUiEnvironment` in practice and hands it to
+  `Initialize` (there's only one real environment implementation) — a UI-capable plugin recovers the
+  wider surface with `if (environment is INativePluginUiEnvironment ui) { ... }` to call
+  `ShowModalAsync`; a headless plugin simply never does that check and never needs the companion
+  assembly to compile at all. The host detects settings-UI capability the same way:
+  `if (moduleInstance is INativePluginSettingsUi settingsUi) { var view =
+  settingsUi.CreateSettingsView(env); ... }`; returning `null` (or not implementing the interface at
+  all) means no settings UI, equivalent to no `ConfigScript` pairing today.
 
-**`INativePluginEnvironment : IPluginEnvironment`** — extends the *existing* environment interface
-scripts already get, adding exactly what full trust requires:
-```csharp
-public interface INativePluginEnvironment : IPluginEnvironment
-{
-    Func<PaperbunkrDbContext> CreateDbContext { get; }
-    Task<TResult> ShowModalAsync<TResult>(Control content);
-}
-```
-Critically, this is a **separate, wider interface** — the base `IPluginEnvironment` that `.csx`
-scripts receive is untouched, so nothing about this tier loosens the existing script sandbox.
 `CreateDbContext` mirrors the existing `PaperbunkrDb.CreateContext` factory idiom already used
 elsewhere (e.g. `PreferencesScreenViewModel`'s internal test-seam constructor) rather than handing
-out one shared long-lived context. `ShowModalAsync` is the connective tissue a plugin needs to
-actually show `CreateSettingsView`'s `Control` (and any other plugin-authored dialog, e.g. CLM's
+out one shared long-lived context. `ShowModalAsync` is the connective tissue a UI-capable plugin needs
+to actually show `CreateSettingsView`'s `Control` (and any other plugin-authored dialog, e.g. CLM's
 collision/match-review dialogs) as a real overlay — the plugin can't touch `MainWindow.axaml` itself,
 so the host provides one generic "host this Control as a modal, await a typed result" primitive
-instead of one bespoke hosting mechanism per plugin.
+instead of one bespoke hosting mechanism per plugin. Both remain a **separate, wider surface** from
+the base `IPluginEnvironment` that `.csx` scripts receive — nothing about this tier loosens the
+existing script sandbox.
 
 ## 4. Package format and install (reuses existing, CE-ported infrastructure)
 

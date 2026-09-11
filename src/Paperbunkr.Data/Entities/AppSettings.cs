@@ -153,6 +153,15 @@ public class AppSettings
     /// <summary>CE default "WhiteSmoke" (<c>DisplayWorkspace.BackgroundColor</c>'s <c>[DefaultValue("WhiteSmoke")]</c>), a named color, hex or named string.</summary>
     public string BackgroundColor { get; set; } = "WhiteSmoke";
 
+    /// <summary>
+    /// Which bundled texture is used when <see cref="ImageBackgroundMode"/> is
+    /// <see cref="ImageBackgroundMode.Texture"/> (docs/superpowers/specs/2026-09-10-reader-backlog-
+    /// batch-b-design.md Item 1) - a texture <b>id</b> (<c>"neutral-dark"</c> / <c>"carbon"</c> /
+    /// <c>"linen"</c>), never a file path (CE stores a path; deliberate deviation). Null / empty /
+    /// unknown resolves to the first texture. Global-only, like the rest of the background settings.
+    /// </summary>
+    public string? BackgroundTexture { get; set; }
+
     /// <summary>CE default false (<c>DisplayWorkspace.PageMargin</c>'s <c>[DefaultValue(false)]</c>).</summary>
     public bool PageMarginEnabled { get; set; }
 

@@ -292,6 +292,9 @@ public class PaperbunkrDbContext : DbContext
         {
             builder.HasKey(p => p.Id);
             builder.Property(p => p.PageType).HasConversion<string>().HasMaxLength(32);
+            // Nullable, no default/sentinel (see IssuePage.SpreadPosition's own doc comment) - null
+            // is a real "not overridden" value here, not CLR-default ambiguity.
+            builder.Property(p => p.SpreadPosition).HasConversion<string>().HasMaxLength(16);
             builder.HasIndex(p => new { p.IssueId, p.PageNumber }).IsUnique();
         });
 
@@ -875,6 +878,10 @@ public class PaperbunkrDbContext : DbContext
                 .HasDefaultValue(ImageBackgroundMode.Color)
                 .HasSentinel(ImageBackgroundMode.Auto);
             builder.Property(a => a.BackgroundColor).IsRequired().HasDefaultValue("WhiteSmoke");
+            // Nullable, no default - unlike ImageBackgroundMode above, null is a real, meaningful
+            // value here (falls back to the first texture in ReaderBackgroundTextures.All), not an
+            // "unset, use the CLR default" ambiguity that needs a sentinel to resolve.
+            builder.Property(a => a.BackgroundTexture).HasMaxLength(64);
             builder.Property(a => a.PageMarginEnabled).HasDefaultValue(false);
             builder.Property(a => a.PageMarginPercentWidth).HasDefaultValue(0.05);
             builder.Property(a => a.ShowScrubberOverlay).HasDefaultValue(true);

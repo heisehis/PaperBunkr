@@ -1881,6 +1881,69 @@ public class ReaderScreenViewModelTests : IDisposable
         Assert.Equal(Color.Parse("#0B0C0F"), brush.Color);
     }
 
+    // ===== Texture background (docs/superpowers/specs/2026-09-10-reader-backlog-batch-b-design.md Item 1) =====
+
+    private static void SetBackgroundTexture(string? id)
+    {
+        using var context = PaperbunkrDb.CreateContext();
+        context.GetOrCreateAppSettings().BackgroundTexture = id;
+        context.SaveChanges();
+    }
+
+    [Fact]
+    public void CanvasBackgroundBrush_TextureMode_ReturnsATiledNonStretchedBrush()
+    {
+        SetImageBackgroundMode(ImageBackgroundMode.Texture);
+        SetBackgroundTexture("carbon");
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+
+        vm.LoadIssue(_issue1Id);
+
+        var tileBrush = Assert.IsAssignableFrom<ITileBrush>(vm.CanvasBackgroundBrush);
+        Assert.Equal(TileMode.Tile, tileBrush.TileMode);
+        Assert.Equal(Stretch.None, tileBrush.Stretch);
+    }
+
+    [Fact]
+    public void CanvasBackgroundBrush_TextureMode_UnknownId_StillReturnsATiledBrush_ViaTheFallbackTexture()
+    {
+        SetImageBackgroundMode(ImageBackgroundMode.Texture);
+        SetBackgroundTexture("not-a-real-texture-id");
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+
+        vm.LoadIssue(_issue1Id);
+
+        var tileBrush = Assert.IsAssignableFrom<ITileBrush>(vm.CanvasBackgroundBrush);
+        Assert.Equal(TileMode.Tile, tileBrush.TileMode);
+    }
+
+    [Fact]
+    public void RefreshDisplaySettings_TextureMode_SetsShowPageShadow_ButNotInContinuousMode()
+    {
+        SetImageBackgroundMode(ImageBackgroundMode.Texture);
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id);
+
+        vm.RefreshDisplaySettings();
+        Assert.True(vm.ShowPageShadow);
+
+        vm.SetReadingModeCommand.Execute(ReadingMode.VerticalContinuous);
+        vm.RefreshDisplaySettings();
+        Assert.False(vm.ShowPageShadow);
+    }
+
+    [Fact]
+    public void RefreshDisplaySettings_ColorMode_ShowPageShadowStaysFalse()
+    {
+        SetImageBackgroundMode(ImageBackgroundMode.Color);
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        vm.LoadIssue(_issue1Id);
+
+        vm.RefreshDisplaySettings();
+
+        Assert.False(vm.ShowPageShadow);
+    }
+
     [Fact]
     public void FitMode_ReflectsAppSettingsDefault_ForAnIssueWithNoOverride()
     {

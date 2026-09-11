@@ -566,6 +566,47 @@ public class PreferencesScreenViewModelTests : IDisposable
         Assert.False(settings.AutoNavigateComics);
     }
 
+    [Theory]
+    [InlineData("neutral-dark")]
+    [InlineData("carbon")]
+    [InlineData("linen")]
+    public void SetBackgroundTexture_PersistsAndFlipsTheActiveSwatch(string id)
+    {
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+
+        vm.SetBackgroundTextureCommand.Execute(id);
+
+        Assert.Equal(id, vm.BackgroundTexture);
+        Assert.Equal(id == "neutral-dark", vm.IsTextureNeutralDark);
+        Assert.Equal(id == "carbon", vm.IsTextureCarbon);
+        Assert.Equal(id == "linen", vm.IsTextureLinen);
+
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        Assert.Equal(id, context.GetOrCreateAppSettings().BackgroundTexture);
+    }
+
+    [Fact]
+    public void EnsureLoaded_HydratesBackgroundTexture_AndUnsetFallsBackToNeutralDark()
+    {
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+
+        Assert.Null(vm.BackgroundTexture);
+        Assert.True(vm.IsTextureNeutralDark); // Resolve(null) falls back to the first texture
+
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            context.GetOrCreateAppSettings().BackgroundTexture = "linen";
+            context.SaveChanges();
+        }
+
+        var reloaded = CreateViewModel();
+        reloaded.EnsureLoaded();
+        Assert.Equal("linen", reloaded.BackgroundTexture);
+        Assert.True(reloaded.IsTextureLinen);
+    }
+
     [Fact]
     public void EnsureLoaded_PopulatesBehaviorBatch2FlagsFromAppSettings()
     {

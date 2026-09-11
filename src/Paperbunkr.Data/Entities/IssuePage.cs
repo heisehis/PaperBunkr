@@ -1,11 +1,12 @@
 namespace Paperbunkr.Data.Entities;
 
 /// <summary>
-/// Per-page type tagging + persisted rotation override (docs/ce-feature-inventory.md §A), keyed on
+/// Per-page type tagging + persisted rotation + spread-position override (docs/ce-feature-inventory.md
+/// §A; docs/superpowers/specs/2026-09-10-reader-backlog-batch-b-design.md Item 2), keyed on
 /// <see cref="IssueId"/>+<see cref="PageNumber"/>. Sparse by design, same convention as <see
-/// cref="IssueBookmark"/> - a page with no row is implicitly <see cref="PageType.Story"/> and
-/// <c>RotationDegrees</c> 0; only pages the user actually tags/rotates get a row at all, rather than
-/// one row per page in every comic.
+/// cref="IssueBookmark"/> - a page with no row is implicitly <see cref="PageType.Story"/>,
+/// <c>RotationDegrees</c> 0 and <see cref="PageSpreadPosition.Default"/>; only pages the user
+/// actually overrides get a row at all, rather than one row per page in every comic.
 /// </summary>
 public class IssuePage
 {
@@ -24,4 +25,12 @@ public class IssuePage
     /// value is persisted and applies every time this specific page is viewed, in every future
     /// reading session.</summary>
     public int RotationDegrees { get; set; }
+
+    /// <summary>
+    /// Manual double-page-spread phase override (docs/superpowers/specs/2026-09-10-reader-backlog-
+    /// batch-b-design.md Item 2). Nullable: <c>null</c> is equivalent to
+    /// <see cref="PageSpreadPosition.Default"/> - avoids a DB-level default / sentinel on this
+    /// column's <c>ALTER TABLE</c> against a possibly-populated table.
+    /// </summary>
+    public PageSpreadPosition? SpreadPosition { get; set; }
 }

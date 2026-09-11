@@ -5,6 +5,7 @@
              xmlns:entities="using:Paperbunkr.Data.Entities"
              xmlns:conv="using:Avalonia.Data.Converters"
              xmlns:pref="using:Paperbunkr.App.Views.Preferences"
+             xmlns:views="using:Paperbunkr.App.Views"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d" d:DesignWidth="640" d:DesignHeight="900"
@@ -109,7 +110,7 @@
         <StackPanel Tag="reader.background">
             <TextBlock Classes="settingsGroupCaption" Text="BACKGROUND &amp; MARGIN" />
             <pref:SettingsRow Icon="ColorBackground" Title="Canvas background"
-                               Description="Auto keeps the app's own background; Color fills the canvas with the color below.">
+                               Description="Auto keeps the app's own background; Color fills the canvas with the color below; Texture tiles one of the swatches below that.">
                 <pref:SettingsRow.SettingsContent>
                     <controls:SuggestBox IsStrict="True" Text="{Binding ImageBackgroundModeText}"
                                          Suggestions="{Binding BackgroundModeNames}" Width="150" />
@@ -125,6 +126,33 @@
                         <controls:SuggestBox Text="{Binding BackgroundColor}"
                                              Suggestions="{Binding BackgroundColorPresetNames}" Width="130" Watermark="Presets" />
                         <TextBox Text="{Binding BackgroundColor}" Width="130" ToolTip.Tip="A named color (e.g. WhiteSmoke) or hex value (e.g. #F5F5F5)" />
+                    </StackPanel>
+                </pref:SettingsRow.SettingsContent>
+            </pref:SettingsRow>
+            <!-- Texture swatch picker (docs/superpowers/specs/2026-09-10-reader-backlog-batch-b-
+                 design.md Item 1) - 3 clickable preview swatches, same "compound content" shape as
+                 the Background color row above. ReaderTextureSwatchConverter ignores the bound value
+                 and reads the texture id straight off ConverterParameter, since each swatch is a
+                 fixed id, not a bound property. -->
+            <pref:SettingsRow Icon="ColorBackground" Title="Background texture"
+                               IsVisible="{Binding ImageBackgroundMode, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:ImageBackgroundMode.Texture}}">
+                <pref:SettingsRow.SettingsContent>
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Button Classes="textureSwatch" Classes.active="{Binding IsTextureNeutralDark}"
+                                Command="{Binding SetBackgroundTextureCommand}" CommandParameter="neutral-dark"
+                                ToolTip.Tip="Neutral dark" AutomationProperties.Name="Neutral dark texture">
+                            <Border Classes="textureSwatchFill" Background="{Binding Converter={x:Static views:ReaderTextureSwatchConverter.Instance}, ConverterParameter=neutral-dark}" />
+                        </Button>
+                        <Button Classes="textureSwatch" Classes.active="{Binding IsTextureCarbon}"
+                                Command="{Binding SetBackgroundTextureCommand}" CommandParameter="carbon"
+                                ToolTip.Tip="Carbon" AutomationProperties.Name="Carbon texture">
+                            <Border Classes="textureSwatchFill" Background="{Binding Converter={x:Static views:ReaderTextureSwatchConverter.Instance}, ConverterParameter=carbon}" />
+                        </Button>
+                        <Button Classes="textureSwatch" Classes.active="{Binding IsTextureLinen}"
+                                Command="{Binding SetBackgroundTextureCommand}" CommandParameter="linen"
+                                ToolTip.Tip="Linen" AutomationProperties.Name="Linen texture">
+                            <Border Classes="textureSwatchFill" Background="{Binding Converter={x:Static views:ReaderTextureSwatchConverter.Instance}, ConverterParameter=linen}" />
+                        </Button>
                     </StackPanel>
                 </pref:SettingsRow.SettingsContent>
             </pref:SettingsRow>

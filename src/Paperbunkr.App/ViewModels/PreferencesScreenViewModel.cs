@@ -11,6 +11,7 @@ using Microsoft.EntityFrameworkCore;
 using NetSparkleUpdater.Enums;
 using Paperbunkr.App.Models;
 using Paperbunkr.App.Services;
+using Paperbunkr.App.Services.Reader;
 using Paperbunkr.Data;
 using Paperbunkr.Data.Credentials;
 using Paperbunkr.Data.Entities;
@@ -547,6 +548,34 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     [ObservableProperty]
     private string _backgroundColor = "WhiteSmoke";
 
+    /// <summary>
+    /// Which bundled texture backs <see cref="ImageBackgroundMode.Texture"/> (docs/superpowers/specs/
+    /// 2026-09-10-reader-backlog-batch-b-design.md Item 1) - a texture id, resolved via
+    /// <see cref="ReaderBackgroundTextures.Resolve"/> (null/unknown -&gt; the first texture).
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsTextureNeutralDark))]
+    [NotifyPropertyChangedFor(nameof(IsTextureCarbon))]
+    [NotifyPropertyChangedFor(nameof(IsTextureLinen))]
+    private string? _backgroundTexture;
+
+    public bool IsTextureNeutralDark => ReaderBackgroundTextures.Resolve(BackgroundTexture).Id == "neutral-dark";
+    public bool IsTextureCarbon => ReaderBackgroundTextures.Resolve(BackgroundTexture).Id == "carbon";
+    public bool IsTextureLinen => ReaderBackgroundTextures.Resolve(BackgroundTexture).Id == "linen";
+
+    [RelayCommand]
+    private void SetBackgroundTexture(string id)
+    {
+        if (BackgroundTexture == id)
+        {
+            return;
+        }
+
+        BackgroundTexture = id; // generated setter raises the three NotifyPropertyChangedFor
+        PersistBehaviorSetting(s => s.BackgroundTexture = id);
+        ReaderDisplaySettingsChanged?.Invoke();
+    }
+
     /// <summary>CE default false (<c>DisplayWorkspace.PageMargin</c>).</summary>
     [ObservableProperty]
     private bool _pageMarginEnabled;
@@ -718,6 +747,7 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         DefaultGamma = settings.DefaultGamma;
         ImageBackgroundMode = settings.ImageBackgroundMode;
         BackgroundColor = settings.BackgroundColor;
+        BackgroundTexture = settings.BackgroundTexture;
         PageMarginEnabled = settings.PageMarginEnabled;
         PageMarginPercentWidth = settings.PageMarginPercentWidth;
         RenderingBackend = settings.RenderingBackend;

@@ -88,4 +88,16 @@ public interface IReaderPageSource : IPageImageDecoder
     /// last declared).
     /// </summary>
     void SetStripBandWindow(int pageIndex, int minBand, int maxBand);
+
+    /// <summary>
+    /// Non-blocking: whether <paramref name="pageIndex"/> is currently known to be a strip whose
+    /// format actually supports band decode (design §4.1/§4.2) - never peeks or triggers I/O if
+    /// unknown, just reports <see langword="false"/> (the caller should then route this page as an
+    /// ordinary whole page for this one frame - the same "safe default until classified" shape
+    /// <see cref="SetVirtualizationWindow"/> itself already uses internally).
+    /// </summary>
+    bool IsKnownBandableStrip(int pageIndex);
+
+    /// <summary>The fixed source-pixel band size band decode uses (design §4.1.1) - <see cref="Paperbunkr.App.Views.PageCanvas"/> needs this to convert a strip's visible pixel sub-range into band indices for <see cref="SetStripBandWindow"/>.</summary>
+    int BandHeight { get; }
 }

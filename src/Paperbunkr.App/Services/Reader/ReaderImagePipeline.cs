@@ -1029,6 +1029,12 @@ public sealed class ReaderImagePipeline : IReaderPageSource
         }
     }
 
+    /// <summary>Public-facing wrapper around <see cref="ShouldRouteAsStrip"/> (design §4.2) - same non-blocking, cached-verdict-only check the pipeline uses for its own routing, exposed so <see cref="Paperbunkr.App.Views.PageCanvas"/> can decide whether to build a whole-page or band-slot <see cref="Paperbunkr.App.Views.ContinuousPageEntry"/> for a given page.</summary>
+    public bool IsKnownBandableStrip(int pageIndex) => ShouldRouteAsStrip(pageIndex);
+
+    /// <summary>Explicit interface implementation (design §4.1.1) - this class already has an internal const of the same name (<see cref="BandHeight"/>) that every internal caller (<see cref="StripDecodeSession"/>, this class's own tests) uses directly; exposing it on <see cref="IReaderPageSource"/> too needs a differently-bound member, not a renamed constant every existing reference would need updating for.</summary>
+    int IReaderPageSource.BandHeight => BandHeight;
+
     private async Task RunConsumerLoopAsync()
     {
         var token = _cts.Token;

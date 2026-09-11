@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <!-- Extracted from Paperbunkr.Plugins (docs/superpowers/specs/2026-09-11-plugin-api-v4-native-tier-
+       design.md §3/§9, Phase 0 of the implementation plan) so a native-tier plugin project can
+       reference the environment/hook contracts without also pulling in Paperbunkr.Plugins' Roslyn
+       scripting + IronPython dependencies, which a compiled native plugin has no use for. Namespaces
+       were deliberately left unchanged from their pre-extraction values (still `Paperbunkr.Plugins`,
+       `Paperbunkr.Plugins.Automation`, etc.) to keep this a pure move with zero `using`-statement
+       changes required anywhere else in the solution - project name and namespace don't have to
+       match, and minimizing surface area was the whole point of this being step 0.1, not a rename. -->
+  <ItemGroup>
+    <ProjectReference Include="..\Paperbunkr.Data\Paperbunkr.Data.csproj" />
+  </ItemGroup>
+
+</Project>

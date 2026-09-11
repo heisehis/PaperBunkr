@@ -231,6 +231,24 @@ verification" section near the top of this backlog); this session's three new it
 battery + "Part X/Y" label, split-page part navigation, and touch center-zone chrome toggle —
 user-confirmed live 2026-09-05.
 
+**Two more items thought closed above turned out to have real remaining gaps, revisited as
+"reader backlog Batch B" and shipped 2026-09-11**
+(docs/superpowers/specs/2026-09-10-reader-backlog-batch-b-design.md +
+`-plan.md`): a tiled **background texture** mode for the reader canvas (`ImageBackgroundMode.
+Texture`, 3 bundled seamless swatches generated via `tools/gen-reader-textures/`, tiled with
+`ImageBrush.ToImmutable()` since Avalonia's `ImmutableImageBrush` type is `internal`; a texture-
+only page drop-shadow via `ImmediateDrawingContext.DrawRectangle(...BoxShadows)`, which needs no
+Skia lease) and a **per-page manual Near/Far spread-position override** (`PageSpreadPosition` on
+`IssuePage`, a reader context-menu submenu, thumbnail chevron glyph, and read-only import from
+embedded `ComicInfo.xml`'s per-page `Position` attribute on fresh scan — CE-verified to affect only
+`NextPage`/`PreviousPage` step size, never the pairing test itself). Part 1 (data model, texture
+rendering, context-menu spread controls, Preferences swatch row) merged to master via
+[PR #78](https://github.com/heisehis/PaperBunkr/pull/78) (`f999fb1`); part 2 (thumbnail glyph, page
+shadow, ComicInfo import, migration replay test) followed on a second branch, same design/plan
+docs. Deliberately out of scope: CE's *other* texture feature — an actual paper texture rendered
+over the page image itself, not just the canvas background — remains a genuine, separate gap (see
+`ce-feature-inventory.md`).
+
 ### Metadata editing extras
 Copy/paste fields between books, templated/token text field editor, Quick Rating + free-text
 Review popup (Review isn't a schema field yet), undo/redo for metadata edits, per-page type

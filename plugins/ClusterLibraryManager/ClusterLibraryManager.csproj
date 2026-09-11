@@ -46,6 +46,14 @@
          SQLite native-library packaging concern raised during design review entirely at this
          plugin's own level. -->
     <PackageReference Include="LiteDB" Version="5.0.21" />
+    <!-- Direct reference required for Avalonia's own MSBuild targets (CompileAvaloniaXamlTask etc.)
+         to activate for THIS project's .axaml files (Phase 3 Step 3.5/3.6) - build-time XAML
+         compilation tooling doesn't flow transitively through the ProjectReference to
+         Paperbunkr.Plugins.Abstractions.Ui the way compile-time types do. MUST match the host's
+         exact pinned version (verified: src/Paperbunkr.App/Paperbunkr.App.csproj, 12.1.1) - see that
+         project's own comment on Paperbunkr.Plugins.Abstractions.Ui.csproj for why. -->
+    <PackageReference Include="Avalonia" Version="12.1.1" />
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
   </ItemGroup>
 
   <ItemGroup>

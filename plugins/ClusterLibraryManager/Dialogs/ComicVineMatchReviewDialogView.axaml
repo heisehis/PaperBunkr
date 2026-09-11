@@ -1,0 +1,38 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="using:ClusterLibraryManager.Dialogs"
+             mc:Ignorable="d" d:DesignWidth="440" d:DesignHeight="360"
+             x:Class="ClusterLibraryManager.Dialogs.ComicVineMatchReviewDialogView"
+             x:DataType="vm:ComicVineMatchReviewDialogViewModel">
+
+    <!-- Design doc §4: ranked candidates for one book; pick one or skip. No cover-thumbnail rendering
+         in this pass, same rationale as FileConflictDialogView. -->
+    <Border Background="{DynamicResource PbSurfaceBrush}" CornerRadius="8" Padding="20" Width="440">
+        <StackPanel Spacing="14">
+            <TextBlock Text="Which ComicVine series is this?" FontSize="16" FontWeight="Bold"
+                       Foreground="{DynamicResource PbTextBrush}" />
+            <TextBlock Text="{Binding BookLabel}" FontSize="12" Foreground="{DynamicResource PbTextMutedBrush}" TextWrapping="Wrap" />
+
+            <ScrollViewer MaxHeight="240">
+                <ItemsControl ItemsSource="{Binding Candidates}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:ComicVineMatchCandidateViewModel">
+                            <Button HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+                                    Margin="0,2" Command="{Binding ChooseCommand}">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <TextBlock Text="{Binding DisplayLabel}" TextWrapping="Wrap" />
+                                    <TextBlock Text="{Binding Score, StringFormat='score {0:0}'}" FontSize="11"
+                                               Foreground="{DynamicResource PbTextMutedBrush}" />
+                                </StackPanel>
+                            </Button>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+
+            <Button Content="Skip this book" HorizontalAlignment="Right" Command="{Binding SkipCommand}" />
+        </StackPanel>
+    </Border>
+</UserControl>

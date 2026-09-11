@@ -1,0 +1,47 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="using:ClusterLibraryManager.Dialogs"
+             mc:Ignorable="d" d:DesignWidth="420" d:DesignHeight="260"
+             x:Class="ClusterLibraryManager.Dialogs.FileConflictDialogView"
+             x:DataType="vm:FileConflictDialogViewModel">
+
+    <!--
+        Design doc §6 (grilling Q9=B/Q15=B): Replace/Rename/Skip + "apply to all remaining" checkbox,
+        incoming-vs-existing book identification. No real cover-thumbnail rendering in this pass - the
+        plugin has no access to Paperbunkr's own reader/decode pipeline, so this shows the book labels
+        as text rather than actual decoded cover images (a deliberate, scoped-down simplification, not
+        an oversight).
+    -->
+    <Border Background="{DynamicResource PbSurfaceBrush}" CornerRadius="8" Padding="20" Width="420">
+        <StackPanel Spacing="14">
+            <TextBlock Text="A file already exists at the destination" FontSize="16" FontWeight="Bold"
+                       Foreground="{DynamicResource PbTextBrush}" TextWrapping="Wrap" />
+
+            <StackPanel Spacing="4">
+                <TextBlock Text="Destination" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource PbTextMutedBrush}" />
+                <TextBlock Text="{Binding DestinationPath}" FontSize="12" Foreground="{DynamicResource PbTextBrush}" TextWrapping="Wrap" />
+            </StackPanel>
+
+            <Grid ColumnDefinitions="*,*" ColumnSpacing="12">
+                <StackPanel Grid.Column="0" Spacing="4">
+                    <TextBlock Text="Incoming" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource PbTextMutedBrush}" />
+                    <TextBlock Text="{Binding IncomingBookLabel}" FontSize="12" Foreground="{DynamicResource PbTextBrush}" TextWrapping="Wrap" />
+                </StackPanel>
+                <StackPanel Grid.Column="1" Spacing="4">
+                    <TextBlock Text="Already there" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource PbTextMutedBrush}" />
+                    <TextBlock Text="{Binding ExistingBookLabel}" FontSize="12" Foreground="{DynamicResource PbTextBrush}" TextWrapping="Wrap" />
+                </StackPanel>
+            </Grid>
+
+            <CheckBox Content="Do this for all remaining conflicts" IsChecked="{Binding ApplyToAllRemaining}" />
+
+            <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+                <Button Content="Skip" Command="{Binding SkipCommand}" />
+                <Button Content="Rename" Command="{Binding RenameCommand}" />
+                <Button Content="Replace" Classes="destructive" Command="{Binding ReplaceCommand}" />
+            </StackPanel>
+        </StackPanel>
+    </Border>
+</UserControl>

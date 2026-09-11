@@ -16,7 +16,7 @@ public class ReaderPageContextMenuBuilderTests
     private static ReaderThumbnailSample MakeThumbnail() => new() { CoverBrush = Brushes.Gray };
 
     [Fact]
-    public void Build_Thumbnail_ReturnsPageTypeAndRotateSubmenus()
+    public void Build_Thumbnail_ReturnsPageTypeRotateAndSpreadPositionSubmenus()
     {
         var vm = new ReaderScreenViewModel(goBack: () => { });
         var builder = new ReaderPageContextMenuBuilder(vm);
@@ -25,9 +25,42 @@ public class ReaderPageContextMenuBuilderTests
         var entries = builder.Build(thumbnail);
 
         Assert.NotNull(entries);
-        Assert.Equal(2, entries!.Count);
+        Assert.Equal(3, entries!.Count);
         Assert.Equal("Page Type", entries[0].Header);
         Assert.Equal("Rotate", entries[1].Header);
+        Assert.Equal("Spread position", entries[2].Header);
+    }
+
+    [Fact]
+    public void Build_Thumbnail_SpreadPositionSubmenuHasThreeOptions()
+    {
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        var builder = new ReaderPageContextMenuBuilder(vm);
+        var thumbnail = MakeThumbnail();
+
+        var entries = builder.Build(thumbnail);
+        var spread = entries![2];
+
+        Assert.NotNull(spread.Children);
+        Assert.Equal(new[] { "Automatic", "Near side (leading)", "Far side (trailing)" }, spread.Children!.Select(c => c.Header));
+        Assert.Same(vm.SetSpreadPositionNearCommand, spread.Children[1].Command);
+        Assert.Same(thumbnail, spread.Children[1].CommandParameter);
+    }
+
+    /// <summary>Pairing (and therefore the manual spread-position escape hatch) never applies in
+    /// continuous/webtoon scroll - the submenu is omitted entirely rather than shown disabled.</summary>
+    [Fact]
+    public void Build_Thumbnail_InContinuousMode_OmitsTheSpreadPositionSubmenu()
+    {
+        var vm = new ReaderScreenViewModel(goBack: () => { }) { IsContinuousMode = true };
+        var builder = new ReaderPageContextMenuBuilder(vm);
+        var thumbnail = MakeThumbnail();
+
+        var entries = builder.Build(thumbnail);
+
+        Assert.NotNull(entries);
+        Assert.Equal(2, entries!.Count);
+        Assert.DoesNotContain(entries, e => e.Header == "Spread position");
     }
 
     [Fact]

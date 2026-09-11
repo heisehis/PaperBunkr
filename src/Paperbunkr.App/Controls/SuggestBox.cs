@@ -317,20 +317,44 @@ public class SuggestBox : TemplatedControl
         return $"{prefix}{picked.Trim()}, ";
     }
 
-    private void Repopulate()
+    /// <summary>
+    /// The suggestion list a popup-open should show. <see cref="IsStrict"/> fields render an
+    /// <c>IsReadOnly</c> <c>TextBox</c> (see the <c>ControlTheme</c> in FormControls.axaml) - the
+    /// user can never type into one, so <see cref="Text"/> there is never "what's being typed to
+    /// filter," it's always the already-committed value. Filtering by it (as the non-strict path
+    /// does) means a strict field's own current selection is the only thing that can ever match
+    /// itself, permanently hiding every other option the moment a value is set - found 2026-09-11
+    /// when the reader's "Canvas background" picker (Auto/Color/Texture) could only ever show
+    /// "Auto" once that was the set value. Strict fields always get the unfiltered full list;
+    /// only the free-typing (non-strict, e.g. multi-value tag) path filters by what's typed.
+    /// </summary>
+    internal static List<string> FilterSuggestions(IEnumerable<string>? suggestions, string? text, bool isStrict, bool multiValue, int maxRows)
     {
-        string filter = CurrentSegment(Text);
-        var source = Suggestions ?? Array.Empty<string>();
+        var source = suggestions ?? Array.Empty<string>();
 
-        IEnumerable<string> matches = filter.Length == 0
-            ? source
-            : source.Where(s => s?.Contains(filter, StringComparison.OrdinalIgnoreCase) == true);
+        IEnumerable<string> matches;
+        if (isStrict)
+        {
+            matches = source;
+        }
+        else
+        {
+            string filter = CurrentSegment(text, multiValue);
+            matches = filter.Length == 0
+                ? source
+                : source.Where(s => s?.Contains(filter, StringComparison.OrdinalIgnoreCase) == true);
+        }
 
-        var wanted = matches
+        return matches
             .Where(s => !string.IsNullOrEmpty(s))
             .Distinct(StringComparer.OrdinalIgnoreCase)
-            .Take(MaxRows)
+            .Take(maxRows)
             .ToList();
+    }
+
+    private void Repopulate()
+    {
+        var wanted = FilterSuggestions(Suggestions, Text, IsStrict, IsMultiValue, MaxRows);
 
         // In-place update so the ListBox doesn't churn its whole container set each keystroke.
         FilteredItems.Clear();
@@ -348,8 +372,6 @@ public class SuggestBox : TemplatedControl
             SetCurrentValue(IsDropDownOpenProperty, false);
         }
     }
-
-    private string CurrentSegment(string? text) => CurrentSegment(text, IsMultiValue);
 
     internal static string CurrentSegment(string? text, bool multiValue)
     {

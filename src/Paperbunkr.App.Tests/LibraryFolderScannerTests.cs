@@ -281,6 +281,32 @@ public class LibraryFolderScannerTests : IDisposable
         Assert.Empty(issue.MetadataProposals);
     }
 
+    /// <summary>docs/superpowers/specs/2026-09-10-reader-backlog-batch-b-design.md §2.4 - read-only
+    /// import of CE's per-page manual spread-position flag on a fresh scan. Only the flagged page
+    /// gets an IssuePage row; an unflagged page (Default) gets none, same sparse convention as
+    /// every other per-page field.</summary>
+    [Fact]
+    public async Task ScanAllAsync_EmbeddedComicInfoWithPagePosition_ImportsSpreadPositionOntoTheFlaggedPage()
+    {
+        var embedded = new cYo.Projects.ComicRack.Engine.ComicInfo { Series = "Spread Series" };
+        embedded.Pages.Add(new cYo.Projects.ComicRack.Engine.ComicPageInfo
+        {
+            ImageIndex = 1,
+            PagePosition = cYo.Projects.ComicRack.Engine.ComicPagePosition.Near,
+        });
+        CbzFixture.Create(Path.Combine(_scanRoot, "Spread Series 001 (2020).cbz"), pageCount: 3, embedded);
+        AddWatchedFolder(_scanRoot);
+
+        var result = await CreateScanner().ScanAllAsync(new Progress<(int, int)>());
+
+        Assert.Equal(1, result.IssuesAdded);
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        var issue = Assert.Single(context.Issues);
+        var page = Assert.Single(context.IssuePages.Where(p => p.IssueId == issue.Id));
+        Assert.Equal(1, page.PageNumber);
+        Assert.Equal(PageSpreadPosition.Near, page.SpreadPosition);
+    }
+
     [Fact]
     public async Task ScanAllAsync_EmbeddedComicInfoMissingAField_FallsBackToFilenameForThatFieldOnly()
     {

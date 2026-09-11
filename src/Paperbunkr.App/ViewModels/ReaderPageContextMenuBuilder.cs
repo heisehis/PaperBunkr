@@ -21,7 +21,18 @@ public sealed class ReaderPageContextMenuBuilder
 
     public IReadOnlyList<ContextMenuEntry>? Build(object? target) => target switch
     {
-        ReaderThumbnailSample thumbnail => new[]
+        ReaderThumbnailSample thumbnail => BuildForThumbnail(thumbnail),
+        _ => null,
+    };
+
+    /// <summary>
+    /// "Spread position" (docs/superpowers/specs/2026-09-10-reader-backlog-batch-b-design.md Item
+    /// 2) is only meaningful in paged double-page mode - continuous/webtoon scroll never pairs
+    /// pages, so the submenu is omitted entirely there rather than shown disabled.
+    /// </summary>
+    private IReadOnlyList<ContextMenuEntry> BuildForThumbnail(ReaderThumbnailSample thumbnail)
+    {
+        var entries = new List<ContextMenuEntry>
         {
             ContextMenuEntry.SubMenu("Page Type", new[]
             {
@@ -29,15 +40,27 @@ public sealed class ReaderPageContextMenuBuilder
                 ContextMenuEntry.Item("Cover", _vm.SetPageTypeCoverCommand, thumbnail),
                 ContextMenuEntry.Item("Advertisement", _vm.SetPageTypeAdvertisementCommand, thumbnail),
                 ContextMenuEntry.Item("Deleted", _vm.SetPageTypeDeletedCommand, thumbnail),
-            }),
+            })!,
             ContextMenuEntry.SubMenu("Rotate", new[]
             {
                 ContextMenuEntry.Item("No rotation", _vm.SetPageRotation0Command, thumbnail),
                 ContextMenuEntry.Item("90°", _vm.SetPageRotation90Command, thumbnail),
                 ContextMenuEntry.Item("180°", _vm.SetPageRotation180Command, thumbnail),
                 ContextMenuEntry.Item("270°", _vm.SetPageRotation270Command, thumbnail),
-            }),
-        },
-        _ => null,
-    };
+            })!,
+        };
+
+        var spreadMenu = ContextMenuEntry.SubMenu("Spread position", new[]
+        {
+            ContextMenuEntry.Item("Automatic", _vm.SetSpreadPositionDefaultCommand, thumbnail),
+            ContextMenuEntry.Item("Near side (leading)", _vm.SetSpreadPositionNearCommand, thumbnail),
+            ContextMenuEntry.Item("Far side (trailing)", _vm.SetSpreadPositionFarCommand, thumbnail),
+        }, isVisible: !_vm.IsContinuousMode);
+        if (spreadMenu is not null)
+        {
+            entries.Add(spreadMenu);
+        }
+
+        return entries;
+    }
 }

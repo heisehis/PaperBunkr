@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using Avalonia;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
+using Avalonia.Media.Immutable;
 using Avalonia.Rendering.Composition;
 using Avalonia.Skia;
 using Paperbunkr.App.Services;
@@ -33,7 +34,10 @@ internal sealed record ReaderPageVisualData(
     bool FitOnlyIfOversized,
     int RotationDegrees,
     Bitmap? SecondaryBitmap = null,
-    bool IsRightToLeft = false);
+    bool IsRightToLeft = false,
+    // Item 1 §1.5 of docs/superpowers/specs/2026-09-10-reader-backlog-batch-b-design.md - drawn
+    // behind the page/spread rect, texture-background mode only.
+    bool ShowShadow = false);
 
 /// <summary>One page's already-computed on-screen placement (docs/superpowers/specs/2026-08-10-reader-polish-continuous-scroll-chrome-overlays-design.md §2/§4) - <see cref="Rect"/> comes straight from <see cref="ReaderLayoutModel.ComputeContinuousLayout"/>, already in viewport space, so the handler just scales-and-draws rather than repeating fit/pan math per page.</summary>
 internal readonly record struct ContinuousPageEntry(Rect Rect, Bitmap? Bitmap);
@@ -406,6 +410,26 @@ public sealed class ReaderPageVisualHandler : CompositionCustomVisualHandler
     {
         var colorFilter = GetColorFilter();
 
+        // Real bug, found 2026-09-12 via manual testing: the page-shadow (Item 1 §1.5) drew via
+        // plain context.DrawRectangle from inside RenderPaged/RenderSpread, *after* the lease
+        // below was already checked out whenever a colour filter was active (which is most of the
+        // time - Preferences' own default gamma is non-zero, so the identity short-circuit rarely
+        // applies). Avalonia's DrawingContextImpl.CheckLease() throws InvalidOperationException
+        // ("The underlying graphics API is currently leased") the instant an ordinary draw call
+        // runs while an ISkiaSharpApiLease is held - so every paged/spread frame with texture-mode
+        // shadow *and* a live adjustment threw, and OnRender's uncaught exception left that frame
+        // (and every one after it, since Invalidate() never got a chance to re-request one) simply
+        // undrawn: a blank page, not a crash. Continuous mode never hit this (RenderContinuous has
+        // no shadow), which is exactly the split the user reported: paged blank, continuous fine.
+        // Fixed by drawing the shadow here, strictly before the lease exists - DrawRectangle's
+        // BoxShadows overload genuinely needs no lease (confirmed by reading Avalonia's own
+        // DrawingContextImpl.DrawRectangle source), it just can't run *while one from this same
+        // context is already checked out*.
+        if (_pagedData is { ShowShadow: true } shadowSource)
+        {
+            DrawPagedShadowsOnly(context, shadowSource);
+        }
+
         // A crossfade needs the leased-canvas/SKPaint path regardless of whether a brightness/
         // contrast colorFilter is active - plain ImmediateDrawingContext.DrawBitmap has no opacity
         // overload (confirmed via reflection against the actual Avalonia 12.1.1 assembly), so alpha
@@ -575,6 +599,7 @@ public sealed class ReaderPageVisualHandler : CompositionCustomVisualHandler
         {
             var pixelSize = data.Bitmap.PixelSize;
             var plan = ComputeDrawPlan(data.Bounds, pixelSize, data.Zoom, data.PanOffsetX, data.PanOffsetY, data.FitMode, data.FitOnlyIfOversized, data.RotationDegrees);
+
             // §10: with a colour filter active, the leased path converts to SKImage - cache that
             // across frames (a pan/zoom with adjustment on re-copies nothing) rather than the
             // former per-frame double pixel copy. EvictStaleContinuousScales keys off the visible
@@ -588,6 +613,60 @@ public sealed class ReaderPageVisualHandler : CompositionCustomVisualHandler
             data.FitMode, data.FitOnlyIfOversized, data.HighQuality, data.IsRightToLeft, lease, colorFilter, offset: default, alpha: 1.0,
             skImageResolver: colorFilter is not null ? GetOrCreateSkImage : null);
     }
+
+    /// <summary>
+    /// Item 1 §1.5 of docs/superpowers/specs/2026-09-10-reader-backlog-batch-b-design.md - draws
+    /// this frame's page-shadow(s), strictly before <see cref="RenderCore"/> takes any Skia lease
+    /// (see that method's own doc comment for why the two can't interleave). Recomputes the same
+    /// plan <see cref="RenderPaged"/>/<see cref="RenderSpread"/> compute for the actual bitmap
+    /// draw - duplicate but cheap (plain arithmetic, no allocation of consequence beyond a record
+    /// struct), and keeps this pre-lease pass entirely independent of whatever runs after it.
+    /// Deliberately never called for a transition (<see cref="RenderTransition"/>) - a page-turn
+    /// slide is brief, and threading the flag through that separate, more complex path wasn't
+    /// worth it for this pass.
+    /// </summary>
+    private static void DrawPagedShadowsOnly(ImmediateDrawingContext context, ReaderPageVisualData data)
+    {
+        if (data.Bitmap is null || data.Bounds.Width <= 0 || data.Bounds.Height <= 0)
+        {
+            return;
+        }
+
+        if (data.SecondaryBitmap is null)
+        {
+            var pixelSize = data.Bitmap.PixelSize;
+            var plan = ComputeDrawPlan(data.Bounds, pixelSize, data.Zoom, data.PanOffsetX, data.PanOffsetY, data.FitMode, data.FitOnlyIfOversized, data.RotationDegrees);
+            DrawPageShadow(context, plan.DestRect);
+            return;
+        }
+
+        // One shadow behind the whole spread (not one per half) - it reads as a single card.
+        var primaryPixelSize = data.Bitmap.PixelSize;
+        var secondaryPixelSize = data.SecondaryBitmap.PixelSize;
+        var spreadSize = SpreadLayoutMath.ComputeCombinedSize(primaryPixelSize, secondaryPixelSize);
+        var combinedPlan = ComputeDrawPlan(data.Bounds, spreadSize.Combined, data.Zoom, data.PanOffsetX, data.PanOffsetY, data.FitMode, data.FitOnlyIfOversized, rotationDegrees: 0);
+        DrawPageShadow(context, combinedPlan.DestRect);
+    }
+
+    /// <summary>
+    /// Plain <see cref="ImmediateDrawingContext.DrawRectangle"/>, no Skia lease needed -
+    /// <see cref="BoxShadows"/> is a standard Avalonia drawing primitive, same mechanism XAML's own
+    /// <c>Border.BoxShadow</c> uses - but see <see cref="RenderCore"/>'s own doc comment: it still
+    /// throws if called while this same context's lease is already checked out elsewhere, so every
+    /// caller of this method must run before that lease is taken, never after.
+    /// </summary>
+    private static void DrawPageShadow(ImmediateDrawingContext context, Rect rect)
+    {
+        if (rect.Width <= 0 || rect.Height <= 0)
+        {
+            return;
+        }
+
+        var shadow = new BoxShadow { OffsetX = 0, OffsetY = 6, Blur = 20, Color = Color.FromArgb(140, 0, 0, 0) };
+        context.DrawRectangle(TransparentFillBrush, null, rect, 0, 0, new BoxShadows(shadow));
+    }
+
+    private static readonly ImmutableSolidColorBrush TransparentFillBrush = new(Colors.Transparent);
 
     /// <summary>
     /// Draws two bitmaps as one double-page spread (docs/superpowers/specs/2026-08-15-reader-double-
@@ -622,6 +701,10 @@ public sealed class ReaderPageVisualHandler : CompositionCustomVisualHandler
 
         var combinedPlan = ComputeDrawPlan(bounds, spreadSize.Combined, zoom, panOffsetX, panOffsetY, fitMode, fitOnlyIfOversized, rotationDegrees: 0);
         var shiftedDestRect = combinedPlan.DestRect.Translate(offset);
+
+        // Shadow (Item 1 §1.5), when this is a paged (non-transition) spread, is drawn by
+        // DrawPagedShadowsOnly before RenderCore ever takes a lease - not here. This method also
+        // draws a transition's spread side, where a shadow is deliberately never drawn at all.
 
         // For RTL, the fraction passed to SplitSpread flips too, not just which output rect gets
         // labeled "primary" - SplitSpread always gives its Left result leftWidthFraction's share, so
@@ -703,7 +786,8 @@ public sealed class ReaderPageVisualHandler : CompositionCustomVisualHandler
         }
 
         RenderSpread(context, data.Bounds, bitmap, secondaryBitmap, data.Zoom, data.PanOffsetX, data.PanOffsetY,
-            data.FitMode, data.FitOnlyIfOversized, data.HighQuality, isRightToLeft, lease, colorFilter, offset, alpha, cachedImage, secondaryCachedImage);
+            data.FitMode, data.FitOnlyIfOversized, data.HighQuality, isRightToLeft, lease, colorFilter, offset, alpha,
+            primaryCachedImage: cachedImage, secondaryCachedImage: secondaryCachedImage);
     }
 
     /// <summary>

@@ -242,6 +242,7 @@ public class LibraryFolderScanner
                 if (embeddedInfo is not null)
                 {
                     CeLibraryMigrator.MapStoryFields(embeddedInfo, issue);
+                    ImportPageSpreadPositions(context, issue, embeddedInfo);
 
                     // Classification/reading-direction detection (docs/superpowers/specs/2026-08-16-
                     // manga-content-type-classification-design.md §4) - guarded to a brand-new series
@@ -663,5 +664,37 @@ public class LibraryFolderScanner
 
         issue.MetadataProposals.Add(proposal);
         context.MetadataProposals.Add(proposal);
+    }
+
+    /// <summary>
+    /// Read-only import of per-page manual spread-position flags from embedded <c>ComicInfo.xml</c>
+    /// (docs/superpowers/specs/2026-09-10-reader-backlog-batch-b-design.md §2.4) - CE's own
+    /// per-page override, <see cref="CeLibraryMigrator.MapSpreadPosition"/> maps it 1:1 onto
+    /// Paperbunkr's <see cref="PageSpreadPosition"/>. Only pages CE actually flagged
+    /// (<c>PagePosition != Default</c>) get a row, same sparse convention as every other
+    /// <see cref="IssuePage"/> field - the common case (an unflagged book) adds nothing. Uses the
+    /// <c>Issue = issue</c> navigation-property pattern (like <see cref="AddFilenameProposal"/>
+    /// above), not <c>IssueId</c> directly - <paramref name="issue"/> hasn't been saved yet at this
+    /// point in a fresh scan, so its <c>Id</c> isn't assigned; EF's change tracker fixes up the FK
+    /// once <c>SaveChanges</c> runs. Write-back of this flag stays deferred, same as per-page
+    /// type/rotation.
+    /// </summary>
+    private static void ImportPageSpreadPositions(PaperbunkrDbContext context, Issue issue, ComicInfo embeddedInfo)
+    {
+        foreach (var page in embeddedInfo.Pages)
+        {
+            var spread = CeLibraryMigrator.MapSpreadPosition(page.PagePosition);
+            if (spread == PageSpreadPosition.Default)
+            {
+                continue;
+            }
+
+            context.IssuePages.Add(new IssuePage
+            {
+                Issue = issue,
+                PageNumber = page.ImageIndex,
+                SpreadPosition = spread,
+            });
+        }
     }
 }

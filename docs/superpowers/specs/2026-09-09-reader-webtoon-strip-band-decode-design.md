@@ -1,7 +1,7 @@
 # Reader webtoon-strip band decode — design (Phase 3 / reader backlog Batch C)
 
-**Status:** design settled, rev 3 — ready for `writing-plans`.
-**Date:** 2026-09-09 (rev 2: 2026-09-12; rev 3: 2026-09-12).
+**Status:** design settled, rev 4 — ready for `writing-plans`.
+**Date:** 2026-09-09 (rev 2: 2026-09-12; rev 3: 2026-09-12; rev 4: 2026-09-12).
 **Parent:** `docs/superpowers/specs/2026-09-08-reader-decode-cache-prefetch-pipeline-design.md` §11
 (this is the focused mini-design that §14 decision #3 said Phase 3 would get).
 
@@ -12,6 +12,7 @@
 | 1 | 2026-09-09 | Initial design, written design-only with §7 open questions. |
 | 2 | 2026-09-12 | Grilling pass against the *current* pipeline code — closed §7's open questions, corrected one wrong assumption (strip height "from the header" needing no new work — it does), added display-pixel bands + a zoom-bucketed cache key. |
 | 3 | 2026-09-12 | **External review caught rev 2's central mechanism was unbuildable.** `SKCodec.GetPixels(..., Subset)` — the API rev 2 verified *exists* and built the whole band-decode plan on — is rejected at runtime by Skia's own JPEG and PNG codecs (`onGetPixels` returns `kUnimplemented` whenever `options.fSubset` is set, for *both* formats — confirmed by reading Skia's actual `SkJpegCodec.cpp`/`SkPngCodec.cpp` source, not just SkiaSharp's C# surface). Rev 2 checked that the property existed, not that the decoder honors it — corrected here. Real row-range decode requires the **scanline API** (`StartScanlineDecode`/`SkipScanlines`/`GetScanlines`), which is stateful and forward-only per strip, not a stateless per-band call — this reshapes §4.1 substantially beyond the review's literal three points. Also adopted from the review: fixed source-pixel `BandHeight` (dropping display-pixel bands and the zoom bucket entirely — independently required now, not just simpler), asynchronous `PeekPageSize` (rev 2's version would have run synchronous container I/O on the UI thread), and queue handling for stale band requests during rapid scroll (extending the pipeline's existing, already-verified `_window` lazy-skip mechanism rather than adding new cancellation-token plumbing). See §7 for the full before/after per point. |
+| 4 | 2026-09-12 | **Second external review pass on rev 3's `StripDecodeSession`/`_readerLock` interaction.** Rev 3 said the lock "guards a session's `SkipScanlines`/`GetScanlines` calls" without addressing hold *duration* — a naive implementation would acquire it once for an entire reverse-scroll restart skip (tens of thousands of rows), stalling any synchronous UI-thread cold-miss that needs the same lock meanwhile. §4.1 now requires chunked skipping (at most `BandHeight` rows per lock acquisition) so a waiting cold-miss is never blocked longer than one chunk. |
 
 ---
 
@@ -119,6 +120,16 @@ backward or jump forward without skipping through. `ReaderImagePipeline` therefo
   synchronous cold-miss"), so the session object must tolerate being touched from either the UI
   thread (a synchronous cold miss) or the background consumer loop, never both at once — `_readerLock`
   already exists for exactly this shape of problem, extended to cover session advancement too.
+  **The lock must not be held for the full duration of a large skip** (a reverse-scroll restart can
+  mean tens of thousands of rows): the existing lock's own doc comment is explicit that it's "held
+  only for the byte read, never across the Skia decode, so the two threads still decode in
+  parallel" — a multi-second `SkipScanlines(25000)` held under one lock acquisition would violate
+  that same invariant and reintroduce a real stall for any synchronous UI-thread cold-miss that
+  needs the lock meanwhile (a different page, a different strip, or this same strip from a second
+  caller). **Fix: chunk the skip.** `SkipScanlines`/`GetScanlines` calls happen in slices of at most
+  `BandHeight` rows at a time, each its own short `_readerLock` acquire/release, rather than one
+  acquisition spanning the whole requested skip distance — a waiting cold-miss is never blocked
+  longer than one chunk's skip time, matching the granularity the byte-read path already uses.
 
 Decoded bands are downsampled once via the existing `Downsample` helper (viewport-width cap, same
 as whole pages) and cached at **native/downsampled resolution — not scaled for zoom at decode
@@ -263,6 +274,10 @@ Phase 1 deliberately shaped the pipeline so this doesn't need a rewrite:
 - **Backward-jump session restart test**: request band 5, then band 1 (out of order) — assert band
   1's pixels are still correct (the session tore down and restarted from row 0, not silently wrong
   output from a session that can't actually seek backward).
+- **Lock-chunking test**: a large skip (simulate a reverse-scroll restart across many bands) does
+  not hold `_readerLock` for its full duration — assert a second, concurrent request for a
+  *different* page/strip is served between chunks rather than waiting for the whole skip to finish
+  (e.g. instrument the fake reader session to record how long a competing lock acquisition waited).
 - **`RequestPageSize` async test**: asserts it never blocks the calling thread (e.g. request a page
   size while a slow/blocked fake container read is in flight on `_readerLock`, assert the request
   call itself returns immediately) and that `PageSizeAvailable` eventually fires with the correct

@@ -424,6 +424,21 @@ public class CeLibraryMigrator
     };
 
     /// <summary>
+    /// Identical member names, different enums - <see cref="ComicPagePosition"/> (CE's, on the
+    /// ported <see cref="ComicPageInfo"/>) to <see cref="PageSpreadPosition"/> (Paperbunkr's, on
+    /// <see cref="IssuePage"/>). Read-only import support for docs/superpowers/specs/2026-09-10-
+    /// reader-backlog-batch-b-design.md §2.4 - callers upsert <see cref="IssuePage"/> rows for
+    /// pages this doesn't map to <see cref="PageSpreadPosition.Default"/>, same sparse convention
+    /// as every other <see cref="IssuePage"/> field.
+    /// </summary>
+    public static PageSpreadPosition MapSpreadPosition(ComicPagePosition position) => position switch
+    {
+        ComicPagePosition.Near => PageSpreadPosition.Near,
+        ComicPagePosition.Far => PageSpreadPosition.Far,
+        _ => PageSpreadPosition.Default,
+    };
+
+    /// <summary>
     /// Maps CE's cached fields first (today's baseline, unchanged), then - when the book's own file
     /// is reachable - re-applies <see cref="MapStoryFields"/> a second time from the freshly-read
     /// embedded <c>ComicInfo.xml</c>, which overwrites every field the embedded file actually has a

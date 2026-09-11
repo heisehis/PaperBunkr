@@ -1,7 +1,7 @@
 # Reader webtoon-strip band decode — design (Phase 3 / reader backlog Batch C)
 
-**Status:** design settled, rev 4 — ready for `writing-plans`.
-**Date:** 2026-09-09 (rev 2: 2026-09-12; rev 3: 2026-09-12; rev 4: 2026-09-12).
+**Status:** design settled, rev 5 — implementation in progress.
+**Date:** 2026-09-09 (rev 2: 2026-09-12; rev 3: 2026-09-12; rev 4: 2026-09-12; rev 5: 2026-09-12).
 **Parent:** `docs/superpowers/specs/2026-09-08-reader-decode-cache-prefetch-pipeline-design.md` §11
 (this is the focused mini-design that §14 decision #3 said Phase 3 would get).
 
@@ -13,6 +13,7 @@
 | 2 | 2026-09-12 | Grilling pass against the *current* pipeline code — closed §7's open questions, corrected one wrong assumption (strip height "from the header" needing no new work — it does), added display-pixel bands + a zoom-bucketed cache key. |
 | 3 | 2026-09-12 | **External review caught rev 2's central mechanism was unbuildable.** `SKCodec.GetPixels(..., Subset)` — the API rev 2 verified *exists* and built the whole band-decode plan on — is rejected at runtime by Skia's own JPEG and PNG codecs (`onGetPixels` returns `kUnimplemented` whenever `options.fSubset` is set, for *both* formats — confirmed by reading Skia's actual `SkJpegCodec.cpp`/`SkPngCodec.cpp` source, not just SkiaSharp's C# surface). Rev 2 checked that the property existed, not that the decoder honors it — corrected here. Real row-range decode requires the **scanline API** (`StartScanlineDecode`/`SkipScanlines`/`GetScanlines`), which is stateful and forward-only per strip, not a stateless per-band call — this reshapes §4.1 substantially beyond the review's literal three points. Also adopted from the review: fixed source-pixel `BandHeight` (dropping display-pixel bands and the zoom bucket entirely — independently required now, not just simpler), asynchronous `PeekPageSize` (rev 2's version would have run synchronous container I/O on the UI thread), and queue handling for stale band requests during rapid scroll (extending the pipeline's existing, already-verified `_window` lazy-skip mechanism rather than adding new cancellation-token plumbing). See §7 for the full before/after per point. |
 | 4 | 2026-09-12 | **Second external review pass on rev 3's `StripDecodeSession`/`_readerLock` interaction.** Rev 3 said the lock "guards a session's `SkipScanlines`/`GetScanlines` calls" without addressing hold *duration* — a naive implementation would acquire it once for an entire reverse-scroll restart skip (tens of thousands of rows), stalling any synchronous UI-thread cold-miss that needs the same lock meanwhile. §4.1 now requires chunked skipping (at most `BandHeight` rows per lock acquisition) so a waiting cold-miss is never blocked longer than one chunk. |
+| 5 | 2026-09-12 | **Implementation-time testing (not just source-reading) found two more real problems while building `StripDecodeSession`.** (1) `SkPngCodec` implements *neither* `onStartScanlineDecode` nor `onStartIncrementalDecode`-with-usable-subset-output — confirmed by actually running `StartScanlineDecode` against a real PNG (`SKCodecResult.Unimplemented`) and separately by running `StartIncrementalDecode` with a `Subset` against a real PNG (returns `Success` but `IncrementalDecode` decodes zero rows into the target region — not a working row-range mechanism in practice, whatever its intended use is). JPEG's scanline path (§4.1) was independently re-confirmed working end to end (start/skip/read all succeed, correct pixels). **PNG strips fall back to the existing Phase 1 whole-page decode path, unchanged — true band decode is JPEG-strip-only for v1** (§4.1 rewritten: `StripDecodeSession` construction probes scanline-decode support up front and reports unusable rather than assuming success; `ReaderImagePipeline` treats "strip but scanline-unsupported" as "decode this one as a whole page anyway," not an error). (2) Re-examined why rev 4 put the reverse-scroll skip under the pipeline's *global* `_readerLock` at all: that lock's actual job is serialising **container reads** (7z.dll COM etc.), and a `StripDecodeSession`'s `SkipScanlines`/`GetScanlines` calls touch only already-in-memory bytes — reusing the global lock for them meant an unrelated page's real container read could contend with a same-strip Skia decode call for no reason, which is what rev 4's chunking was working around indirectly. **Replaced with a lock scoped to the individual `StripDecodeSession`** — the actual constraint (don't touch one session's stateful `SKCodec` from two threads at once) is satisfied more precisely this way, and it structurally can't block any *other* page/strip's request, which is a stronger property than "never blocked longer than one chunk." Chunking (rev 4) is kept anyway, now for a narrower reason: a same-strip request from the other thread (UI cold-miss vs. background prefetch on the *same* strip, a real if less common case) still shouldn't wait for an entire reverse-scroll restart skip to finish uninterrupted. |
 
 ---
 
@@ -91,9 +92,21 @@ entry point. Real row-range decode lives in a different API:
   `jpeg_skip_scanlines()` — entropy-decodes skipped rows to keep decoder state consistent but skips
   the expensive IDCT + color-convert + output work for them. Not free, but materially cheaper than
   decoding-and-discarding through `GetScanlines`.
-- PNG's zlib-stream row-by-row structure decodes at scanline granularity natively; the same
-  Skip/Get pair is expected to work there too, verified for real (not just by reading source) in
-  the implementation-time test this design already calls for (§6).
+- **PNG does not support this at all (rev 5 finding, from actually running it, not just reading
+  source): `SkPngCodec` implements neither `onStartScanlineDecode` nor a working row-range
+  `onStartIncrementalDecode`.** `StartScanlineDecode` against a real PNG returns
+  `SKCodecResult.Unimplemented`. `StartIncrementalDecode` with a `Subset` option returns `Success`
+  but the follow-up `IncrementalDecode()` call decodes **zero rows** into the target region (verified
+  empirically — the API accepts the call and reports success while doing nothing useful for this
+  purpose). **PNG strips therefore fall back to the existing Phase 1 whole-page decode path,
+  unchanged — true band decode only applies to strips whose codec actually supports scanline
+  decode, JPEG in practice.** `StripDecodeSession`'s construction probes `StartScanlineDecode` up
+  front; anything other than `Success` means "not bandable," reported to the caller rather than
+  assumed. This is a real, deliberate scope reduction from earlier revisions (which assumed both
+  formats would work symmetrically) — not a bug to route around, since Skia genuinely has no other
+  working row-range primitive for PNG in this build. A PNG strip still benefits from §4.3's
+  header-only size peek (that only needs `.Info`, not scanline support) — only the *decode* itself
+  falls back to whole-page.
 
 **Consequence: band decode is not "N independent decode calls," it's one ordered walk through a
 strip.** To read band `k` (rows `[k·BandHeight, (k+1)·BandHeight)`), a session must have already
@@ -113,23 +126,27 @@ backward or jump forward without skipping through. `ReaderImagePipeline` therefo
   reverse-scroll-through-a-strip turns out to be a real, common pattern in practice.
 - Disposed when every one of the strip's bands falls outside the eviction range (§4.2) — same
   lifetime shape as a decoded bitmap leaving `_displayCache`, just for the session object instead.
-- **Single-threaded access, same as every other container read (§1 of the parent doc's own design):
-  `_readerLock` guards a `StripDecodeSession`'s `SkipScanlines`/`GetScanlines` calls, not just the
-  raw-bytes read.** A strip's very first band can hit the same synchronous UI-thread cold-miss path
-  whole-page `GetPage` already has (§1's "decode never runs on the UI thread except a deliberate
-  synchronous cold-miss"), so the session object must tolerate being touched from either the UI
-  thread (a synchronous cold miss) or the background consumer loop, never both at once — `_readerLock`
-  already exists for exactly this shape of problem, extended to cover session advancement too.
-  **The lock must not be held for the full duration of a large skip** (a reverse-scroll restart can
-  mean tens of thousands of rows): the existing lock's own doc comment is explicit that it's "held
-  only for the byte read, never across the Skia decode, so the two threads still decode in
-  parallel" — a multi-second `SkipScanlines(25000)` held under one lock acquisition would violate
-  that same invariant and reintroduce a real stall for any synchronous UI-thread cold-miss that
-  needs the lock meanwhile (a different page, a different strip, or this same strip from a second
-  caller). **Fix: chunk the skip.** `SkipScanlines`/`GetScanlines` calls happen in slices of at most
-  `BandHeight` rows at a time, each its own short `_readerLock` acquire/release, rather than one
-  acquisition spanning the whole requested skip distance — a waiting cold-miss is never blocked
-  longer than one chunk's skip time, matching the granularity the byte-read path already uses.
+- **Single-threaded access — but scoped to the session, not the pipeline's global `_readerLock`
+  (rev 5 correction).** Rev 3/4 guarded `SkipScanlines`/`GetScanlines` with the pipeline's own
+  `_readerLock` (the same lock `ReadRawBytes` uses to serialise real container reads). Reconsidered:
+  that lock's job is serialising access to the single-threaded *container reader* (7z.dll COM
+  etc.) — a `StripDecodeSession`'s scanline calls touch only already-in-memory bytes handed to its
+  own private `SKCodec`, no container access at all. Reusing the global lock meant an unrelated
+  page's real container read could contend with a same-strip Skia decode call for no reason, and
+  rev 4's chunking was a workaround for the resulting stall risk rather than addressing the actual
+  cause. **Fix: each `StripDecodeSession` owns its own lock**, guarding only its own
+  `SkipScanlines`/`GetScanlines`/`StartScanlineDecode` calls. The real constraint this exists for —
+  a strip's very first band can hit the same synchronous UI-thread cold-miss path whole-page
+  `GetPage` already has (§1's "decode never runs on the UI thread except a deliberate synchronous
+  cold-miss"), so a session must tolerate being touched from either the UI thread or the background
+  consumer loop, never both at once — is satisfied more precisely this way, and it structurally
+  cannot block any *other* page's or strip's request, which is a stronger guarantee than "never
+  blocked longer than one chunk." **Chunking (rev 4) is kept anyway**, now for a narrower reason: a
+  request for the *same* strip from the other thread (UI cold-miss racing background prefetch on
+  that strip specifically — real, if less common than the cross-page case rev 4 was written
+  against) still shouldn't have to wait for an entire reverse-scroll restart skip to finish
+  uninterrupted. `SkipScanlines`/`GetScanlines` calls happen in slices of at most `BandHeight` rows
+  at a time, each its own short session-lock acquire/release.
 
 Decoded bands are downsampled once via the existing `Downsample` helper (viewport-width cap, same
 as whole pages) and cached at **native/downsampled resolution — not scaled for zoom at decode
@@ -267,17 +284,19 @@ Phase 1 deliberately shaped the pipeline so this doesn't need a rewrite:
 
 ## 6. Testing
 
-- **Scanline-session band decode test**: a synthetic 400×6000 (or larger) strip; assert
-  sequentially-requested bands' pixels match a full-decode's corresponding rows, for both a JPEG
-  and a PNG fixture (the two codecs' scanline paths were verified independently in this design —
-  confirm both for real, not just by reading source).
+- **Scanline-session band decode test**: a synthetic 400×6000 (or larger) JPEG strip; assert
+  sequentially-requested bands' pixels match a full-decode's corresponding rows.
+- **PNG-strip-is-unbandable test (rev 5)**: `StripDecodeSession` construction (or a `TryCreate`-
+  style factory) against a PNG strip reports "not usable for banding," and the pipeline falls back
+  to whole-page decode for it — not a silent wrong-pixel bug, a deliberate, observable fallback.
 - **Backward-jump session restart test**: request band 5, then band 1 (out of order) — assert band
   1's pixels are still correct (the session tore down and restarted from row 0, not silently wrong
   output from a session that can't actually seek backward).
-- **Lock-chunking test**: a large skip (simulate a reverse-scroll restart across many bands) does
-  not hold `_readerLock` for its full duration — assert a second, concurrent request for a
-  *different* page/strip is served between chunks rather than waiting for the whole skip to finish
-  (e.g. instrument the fake reader session to record how long a competing lock acquisition waited).
+- **Lock-chunking test (rev 5: session-scoped, not the pipeline's `_readerLock`)**: a large skip
+  (simulate a reverse-scroll restart across many bands) does not hold the session's own lock for its
+  full duration — assert a second, concurrent request for the *same* strip's session is served
+  between chunks rather than waiting for the whole skip to finish. A *different* page/strip's
+  request needs no such test — it was never at risk, since it never shares this lock.
 - **`RequestPageSize` async test**: asserts it never blocks the calling thread (e.g. request a page
   size while a slow/blocked fake container read is in flight on `_readerLock`, assert the request
   call itself returns immediately) and that `PageSizeAvailable` eventually fires with the correct
@@ -335,3 +354,18 @@ unbuildable) and rev 2's own §7 (open questions from v1):
 7. **Strip rotation / per-band fit** — kept out of scope, unchanged from v1/rev 2.
 8. **Band prefetch policy** — reuses the pipeline's existing adaptive fringe mechanism (1→3 bands),
    unchanged from rev 2.
+9. **PNG scanline/row-range decode (rev 5, found while actually implementing and running
+   `StripDecodeSession`, not from a review round)** — doesn't work. `StartScanlineDecode` against a
+   real PNG returns `Unimplemented`; `StartIncrementalDecode`+`Subset` reports `Success` but decodes
+   zero rows into the target region. **True band decode is JPEG-strip-only for v1** — a PNG strip
+   still gets the header-only size-peek benefit (§4.3) but falls back to whole-page decode, same as
+   before this feature. `StripDecodeSession` construction probes and reports "unusable" rather than
+   assuming every strip can be banded.
+10. **`_readerLock` scope for `SkipScanlines`/`GetScanlines` (rev 5, reconsidered after rev 4)** —
+    switched from the pipeline's global container-read lock to a lock owned by each
+    `StripDecodeSession` itself. The global lock's actual job (serialising the single-threaded
+    container reader) was never actually at stake for these calls, which touch only already-in-
+    memory bytes — reusing it just meant an unrelated page's real container read could contend with
+    a same-strip Skia decode for no reason. A per-session lock satisfies the actual constraint (one
+    session's `SKCodec` touched by one thread at a time) without that cross-page blocking risk at
+    all. Chunking (rev 4) is kept, now scoped to the narrower same-strip-concurrent-access case.

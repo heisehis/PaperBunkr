@@ -76,9 +76,21 @@ public sealed partial class NativePluginModalHostViewModel : ViewModelBase
         Advance();
     }
 
+    /// <summary>
+    /// Opportunistic, not mandated (docs/superpowers/specs/2026-09-12-plugin-management-screen-
+    /// redesign-design.md §4.4) - disposes the outgoing content's <c>DataContext</c> and/or the
+    /// content <see cref="Control"/> itself if either implements <see cref="IDisposable"/>, and does
+    /// nothing otherwise. No native plugin's settings UI holds anything disposable today (verified:
+    /// ClusterLibraryManager's own Settings/ has no Timer/Subscribe/IDisposable at all) - this costs
+    /// that plugin nothing and closes the gap for free the moment a future one's settings view model
+    /// ever does hold something real, without requiring every <c>INativePluginSettingsUi</c>
+    /// implementation to opt into a new mandatory interface member for a need nothing has yet.
+    /// </summary>
     private void Advance()
     {
         IsOpen = false;
+        (_current?.Content.DataContext as IDisposable)?.Dispose();
+        (_current?.Content as IDisposable)?.Dispose();
         HostedContent = null;
         _current = null;
 

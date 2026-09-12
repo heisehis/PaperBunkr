@@ -2,7 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
+using System.Linq;
 using System.Threading.Tasks;
+using cYo.Projects.ComicRack.Engine;
 using Microsoft.EntityFrameworkCore;
 using Paperbunkr.App.Plugins;
 using Paperbunkr.App.Services;
@@ -16,15 +18,14 @@ using Paperbunkr.Plugins.Theme;
 namespace Paperbunkr.App.Tests;
 
 /// <summary>
-/// Plugin screen: (1) grouping by hook/extension-point instead of by installed plugin, matching
-/// ComicRackCE's real Preferences → Scripts tab (docs/superpowers/specs/2026-08-24-plugin-api-v2-
-/// design.md §6, <c>_reference/ComicRackCE/ComicRack/Dialogs/PreferencesDialog.cs</c>'s
-/// <c>FillScriptsList</c>); (2) the Packages panel's install/uninstall via
-/// <see cref="PluginPackageService"/>. Every test that constructs a <see cref="PluginScreenViewModel"/>
+/// Plugin screen master-detail (docs/superpowers/specs/2026-09-12-plugin-management-screen-redesign-
+/// design.md): a sidebar of installed packages plus a detail pane per selection, replacing the
+/// previous flat Packages-panel-plus-hook-grouped-commands layout (docs/superpowers/specs/2026-08-24-
+/// plugin-api-v2-design.md §6). Every test that constructs a <see cref="PluginScreenViewModel"/>
 /// uses its internal test-seam constructor with a <see cref="PluginPackageService"/> pointed at an
 /// isolated temp folder pair - the default (public) constructor's <see cref="PluginPackageService"/>
 /// targets the real <c>%AppData%\Paperbunkr\plugins</c> location, which must never be touched by a
-/// test. Needs <see cref="AvaloniaTestCollection"/> since <see cref="PluginPackageRowViewModel.DeleteConfirm"/>
+/// test. Needs <see cref="AvaloniaTestCollection"/> since <see cref="PluginPackageDetailViewModel.DeleteConfirm"/>
 /// constructs a <c>DispatcherTimer</c> (same requirement as <see cref="TwoStepConfirmTests"/>), and a
 /// temp-file <see cref="PaperbunkrDbContext.DatabasePathOverride"/> (same seam as
 /// <see cref="PluginHostServiceTests"/>) since <see cref="PluginHostService.RediscoverPlugins"/>
@@ -55,7 +56,7 @@ public sealed class PluginScreenViewModelTests : IDisposable
     }
 
     [Fact]
-    public void Refresh_GroupsAcrossPlugins_ByHookLabel_AndReadsPackageFromEachCommandsOwnFolder()
+    public void Selecting_a_package_populates_its_detail_with_only_its_own_commands()
     {
         string root = MakeTempDir();
         string pluginA = Path.Combine(root, "plugin-a");
@@ -71,7 +72,6 @@ public sealed class PluginScreenViewModelTests : IDisposable
                 </Plugin>
                 """);
             File.WriteAllText(Path.Combine(pluginA, "s.csx"), "return 1;");
-            File.WriteAllText(Path.Combine(pluginA, "package.ini"), "Name = Widget Pack");
 
             File.WriteAllText(Path.Combine(pluginB, "plugin.xml"), """
                 <Plugin key="plugin-b" name="Plugin B">
@@ -79,29 +79,27 @@ public sealed class PluginScreenViewModelTests : IDisposable
                 </Plugin>
                 """);
             File.WriteAllText(Path.Combine(pluginB, "s.csx"), "return 2;");
-            // Deliberately no package.ini here - Package should fall back to CE's own "Other".
 
             var host = new PluginHostService();
             host.Engine.Discover(root, MakeEnvironment());
             Assert.All(host.Engine.AllCommands, c => Assert.False(c.IsBroken));
 
-            var vm = new PluginScreenViewModel(new NoOpFilePicker(), new FakeDialogService(), MakeIsolatedPackageService());
+            // The sidebar's Packages come from PluginPackageService reading real folders - point it
+            // at the same root the engine just discovered from, not an unrelated isolated one.
+            var vm = new PluginScreenViewModel(new NoOpFilePicker(), new FakeDialogService(), new PluginPackageService(root, MakeTempDir()));
             vm.AttachHost(host);
 
-            Assert.True(vm.HasPlugins);
-            Assert.Equal(2, vm.Groups.Count); // one group per hook label, not per plugin
+            Assert.Equal(2, vm.Packages.Count);
+            Assert.Null(vm.SelectedPackageDetail);
 
-            var startupGroup = Assert.Single(vm.Groups, g => g.Header == "Actions when Paperbunkr starts");
-            Assert.Equal(2, startupGroup.Commands.Count); // A Startup and B Startup share one group despite different plugins
+            var rowA = Assert.Single(vm.Packages, p => p.Name == "Plugin A");
+            rowA.SelectCommand.Execute(null);
 
-            var aStartup = Assert.Single(startupGroup.Commands, c => c.Name == "A Startup");
-            Assert.Equal("Widget Pack", aStartup.Package);
-
-            var bStartup = Assert.Single(startupGroup.Commands, c => c.Name == "B Startup");
-            Assert.Equal("Other", bStartup.Package);
-
-            var libraryGroup = Assert.Single(vm.Groups, g => g.Header == "Edit/Update Books Commands");
-            Assert.Single(libraryGroup.Commands);
+            Assert.NotNull(vm.SelectedPackageDetail);
+            Assert.Equal(2, vm.SelectedPackageDetail!.Commands.Count);
+            Assert.Contains(vm.SelectedPackageDetail.Commands, c => c.Name == "A Startup");
+            Assert.Contains(vm.SelectedPackageDetail.Commands, c => c.Name == "A Library");
+            Assert.DoesNotContain(vm.SelectedPackageDetail.Commands, c => c.Name == "B Startup");
         }
         finally
         {
@@ -110,12 +108,47 @@ public sealed class PluginScreenViewModelTests : IDisposable
     }
 
     [Fact]
-    public void Refresh_WithNoHost_LeavesHasPluginsFalse()
+    public void Refresh_WithNoHost_LeavesPackagesEmpty()
     {
         var vm = new PluginScreenViewModel(new NoOpFilePicker(), new FakeDialogService(), MakeIsolatedPackageService());
         vm.Refresh();
-        Assert.False(vm.HasPlugins);
-        Assert.Empty(vm.Groups);
+        Assert.Empty(vm.Packages);
+        Assert.Null(vm.SelectedPackageDetail);
+    }
+
+    [Fact]
+    public void FilterText_narrows_FilteredPackages_by_a_case_insensitive_name_substring()
+    {
+        string root = MakeTempDir();
+        string pluginA = Path.Combine(root, "widget-pack");
+        string pluginB = Path.Combine(root, "gizmo-pack");
+        Directory.CreateDirectory(pluginA);
+        Directory.CreateDirectory(pluginB);
+        try
+        {
+            File.WriteAllText(Path.Combine(pluginA, "plugin.xml"), """<Plugin key="widget" name="Widget Pack"></Plugin>""");
+            File.WriteAllText(Path.Combine(pluginB, "plugin.xml"), """<Plugin key="gizmo" name="Gizmo Pack"></Plugin>""");
+
+            var host = new PluginHostService();
+            host.Engine.Discover(root, MakeEnvironment());
+
+            var vm = new PluginScreenViewModel(new NoOpFilePicker(), new FakeDialogService(), new PluginPackageService(root, MakeTempDir()));
+            vm.AttachHost(host);
+            Assert.Equal(2, vm.FilteredPackages.Count);
+
+            vm.FilterText = "widget";
+            Assert.Single(vm.FilteredPackages, p => p.Name == "Widget Pack");
+
+            vm.FilterText = "PACK"; // case-insensitive, matches both
+            Assert.Equal(2, vm.FilteredPackages.Count);
+
+            vm.FilterText = "nothing-matches-this";
+            Assert.Empty(vm.FilteredPackages);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
     }
 
     [Fact]
@@ -158,13 +191,15 @@ public sealed class PluginScreenViewModelTests : IDisposable
             }
 
             var package = Assert.Single(vm.Packages);
-            Assert.Equal("Zippy Pack", package.Name);
-            Assert.True(File.Exists(Path.Combine(root, "Zippy Pack", "plugin.xml")));
+            // plugin.xml's own name attribute is now authoritative over package.ini's (docs
+            // §4.1) - this fixture's manifest says name="Zippy", not "Zippy Pack".
+            Assert.Equal("Zippy", package.Name);
+            Assert.True(File.Exists(Path.Combine(root, "Zippy", "plugin.xml")));
 
             // No restart needed (docs on PluginPackageService) - the newly installed command is
-            // already visible in the grouped list.
-            var startupGroup = Assert.Single(vm.Groups, g => g.Header == "Actions when Paperbunkr starts");
-            Assert.Single(startupGroup.Commands, c => c.Name == "Zippy Startup");
+            // already visible once selected.
+            package.SelectCommand.Execute(null);
+            Assert.Single(vm.SelectedPackageDetail!.Commands, c => c.Name == "Zippy Startup");
         }
         finally
         {
@@ -193,7 +228,6 @@ public sealed class PluginScreenViewModelTests : IDisposable
                     </Plugin>
                     """,
                 ["NativeFixture.dll"] = "not a real dll",
-                ["package.ini"] = "Name = Native Fixture Pack",
             });
 
             var host = new PluginHostService();
@@ -204,13 +238,15 @@ public sealed class PluginScreenViewModelTests : IDisposable
             await vm.InstallPackageCommand.ExecuteAsync(null);
 
             var package = Assert.Single(vm.Packages);
-            Assert.Equal("Native Fixture Pack", package.Name);
+            // plugin.xml's own name attribute is now authoritative (docs/superpowers/specs/2026-09-
+            // 12-plugin-management-screen-redesign-design.md §4.1) - no package.ini needed here.
+            Assert.Equal("Native Fixture", package.Name);
             Assert.True(package.IsNativeTier);
             Assert.True(package.IsPending);
 
             // Not yet copied into the final root - still sitting in the staging folder until a
             // restart applies it (v4 §4).
-            Assert.False(Directory.Exists(Path.Combine(root, "Native Fixture Pack")));
+            Assert.False(Directory.Exists(Path.Combine(root, "Native Fixture")));
         }
         finally
         {
@@ -254,20 +290,31 @@ public sealed class PluginScreenViewModelTests : IDisposable
             BuildFlatZip(zipPath, new Dictionary<string, string>
             {
                 ["plugin.xml"] = """<Plugin key="removable" name="Removable"></Plugin>""",
-                ["package.ini"] = "Name = Removable Pack",
             });
 
+            var host = new PluginHostService();
+            host.InitializeForTests(MakeEnvironment());
             var vm = new PluginScreenViewModel(new FakeFilePicker(zipPath), new FakeDialogService(), new PluginPackageService(root, staging));
+            vm.AttachHost(host);
             await vm.InstallPackageCommand.ExecuteAsync(null);
             var row = Assert.Single(vm.Packages);
-            string installedPath = Path.Combine(root, "Removable Pack");
+            string installedPath = Path.Combine(root, "Removable");
             Assert.True(Directory.Exists(installedPath));
 
-            row.DeleteConfirm.TriggerCommand.Execute(null); // first click just arms
-            Assert.True(row.DeleteConfirm.IsArmed);
+            row.SelectCommand.Execute(null);
+            var detail = vm.SelectedPackageDetail!;
+
+            detail.DeleteConfirm.TriggerCommand.Execute(null); // first click just arms
+            Assert.True(detail.DeleteConfirm.IsArmed);
             Assert.Single(vm.Packages); // not removed yet
 
-            row.DeleteConfirm.TriggerCommand.Execute(null); // second click confirms
+            detail.DeleteConfirm.TriggerCommand.Execute(null); // second click confirms
+
+            // RemovePackage defers Refresh() via Dispatcher.UIThread.Post (see its own doc comment -
+            // avoids detaching this same button mid-route). Headless tests have no running dispatcher
+            // loop, so the queued job needs an explicit pump (same idiom already used elsewhere in
+            // this test project, e.g. ReaderScreenViewModelTests).
+            Avalonia.Threading.Dispatcher.UIThread.RunJobs();
 
             Assert.Empty(vm.Packages);
             Assert.False(Directory.Exists(installedPath));
@@ -277,6 +324,211 @@ public sealed class PluginScreenViewModelTests : IDisposable
             Directory.Delete(root, recursive: true);
             Directory.Delete(staging, recursive: true);
             File.Delete(zipPath);
+        }
+    }
+
+    // ---- PluginPackageDetailViewModel: tri-state master toggle, Configure/LoadError/Reload -----
+
+    /// <summary>
+    /// <see cref="PluginHostService.InitializeForTests"/> discovers from the static
+    /// <see cref="PluginPaths.RootDirectory"/>, not a parameter - matches the existing convention in
+    /// this file's own install tests (temporarily redirect, discover, restore).
+    /// </summary>
+    private (PluginHostService host, PackageManager.Package package, List<Command> commands) MakeHostWithScriptCommands(string root, int commandCount)
+    {
+        string dir = Path.Combine(root, "widget");
+        Directory.CreateDirectory(dir);
+        string commandsXml = string.Join("\n", Enumerable.Range(1, commandCount)
+            .Select(i => $"""<Command hook="Startup" key="widget.cmd{i}" name="Cmd {i}" script="s.csx" />"""));
+        File.WriteAllText(Path.Combine(dir, "plugin.xml"), $"""
+            <Plugin key="widget" name="Widget">
+            {commandsXml}
+            </Plugin>
+            """);
+        File.WriteAllText(Path.Combine(dir, "s.csx"), "return 1;");
+
+        string originalRoot = PluginPaths.RootDirectory;
+        PluginPaths.RootDirectory = root;
+        try
+        {
+            var host = new PluginHostService();
+            host.InitializeForTests(MakeEnvironment());
+            var package = PackageManager.Package.CreateFromPath(dir, pending: false);
+            var commands = host.Engine.AllCommands.Where(c => c.PluginKey == "widget").ToList();
+            return (host, package, commands);
+        }
+        finally
+        {
+            PluginPaths.RootDirectory = originalRoot;
+        }
+    }
+
+    [Fact]
+    public void EnabledState_is_true_when_every_command_is_enabled()
+    {
+        string root = MakeTempDir();
+        try
+        {
+            var (host, package, commands) = MakeHostWithScriptCommands(root, 2);
+            var detail = new PluginPackageDetailViewModel(package, commands, host, new NoOpFilePicker(), null, false, () => { }, () => { });
+            Assert.True(detail.EnabledState);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void EnabledState_is_false_when_every_command_is_disabled()
+    {
+        string root = MakeTempDir();
+        try
+        {
+            var (host, package, commands) = MakeHostWithScriptCommands(root, 2);
+            foreach (var c in commands)
+            {
+                host.SetCommandEnabled(c, false);
+            }
+
+            var detail = new PluginPackageDetailViewModel(package, commands, host, new NoOpFilePicker(), null, false, () => { }, () => { });
+            Assert.False(detail.EnabledState);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void EnabledState_is_null_when_commands_are_mixed()
+    {
+        string root = MakeTempDir();
+        try
+        {
+            var (host, package, commands) = MakeHostWithScriptCommands(root, 2);
+            host.SetCommandEnabled(commands[0], false);
+
+            var detail = new PluginPackageDetailViewModel(package, commands, host, new NoOpFilePicker(), null, false, () => { }, () => { });
+            Assert.Null(detail.EnabledState);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    /// <summary>External review round 2's specific case: Avalonia's own three-state click cycle is
+    /// true → null → false → true, so clicking from a mixed/indeterminate state must never rely on
+    /// that cycle - this asserts the command-driven path actually enables everything, not disables
+    /// it (docs/superpowers/specs/2026-09-12-plugin-management-screen-redesign-design.md §4.4).</summary>
+    [Fact]
+    public void MasterEnabledClick_from_a_mixed_state_enables_every_command()
+    {
+        string root = MakeTempDir();
+        try
+        {
+            var (host, package, commands) = MakeHostWithScriptCommands(root, 2);
+            host.SetCommandEnabled(commands[0], false);
+            var detail = new PluginPackageDetailViewModel(package, commands, host, new NoOpFilePicker(), null, false, () => { }, () => { });
+            Assert.Null(detail.EnabledState);
+
+            detail.MasterEnabledClickCommand.Execute(null);
+
+            Assert.All(commands, c => Assert.True(c.Enabled));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void MasterEnabledClick_from_fully_enabled_disables_every_command()
+    {
+        string root = MakeTempDir();
+        try
+        {
+            var (host, package, commands) = MakeHostWithScriptCommands(root, 2);
+            var detail = new PluginPackageDetailViewModel(package, commands, host, new NoOpFilePicker(), null, false, () => { }, () => { });
+            Assert.True(detail.EnabledState);
+
+            detail.MasterEnabledClickCommand.Execute(null);
+
+            Assert.All(commands, c => Assert.False(c.Enabled));
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void HasConfigure_and_LoadError_reflect_the_values_passed_in()
+    {
+        string root = MakeTempDir();
+        try
+        {
+            var (host, package, commands) = MakeHostWithScriptCommands(root, 1);
+
+            var withConfigureAndError = new PluginPackageDetailViewModel(package, commands, host, new NoOpFilePicker(), "boom", true, () => { }, () => { });
+            Assert.True(withConfigureAndError.HasConfigure);
+            Assert.True(withConfigureAndError.HasLoadError);
+            Assert.Equal("boom", withConfigureAndError.LoadError);
+
+            var withNeither = new PluginPackageDetailViewModel(package, commands, host, new NoOpFilePicker(), null, false, () => { }, () => { });
+            Assert.False(withNeither.HasConfigure);
+            Assert.False(withNeither.HasLoadError);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task CopyErrorCommand_copies_the_exact_LoadError_text()
+    {
+        string root = MakeTempDir();
+        try
+        {
+            var (host, package, commands) = MakeHostWithScriptCommands(root, 1);
+            var clipboard = new RecordingFilePicker();
+            var detail = new PluginPackageDetailViewModel(package, commands, host, clipboard, "something broke", false, () => { }, () => { });
+
+            await detail.CopyErrorCommand.ExecuteAsync(null);
+
+            Assert.Equal("something broke", clipboard.CopiedText);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void ShowReload_is_true_for_script_tier_and_false_for_native_tier()
+    {
+        string root = MakeTempDir();
+        try
+        {
+            var (scriptHost, scriptPackage, scriptCommands) = MakeHostWithScriptCommands(root, 1);
+            var scriptDetail = new PluginPackageDetailViewModel(scriptPackage, scriptCommands, scriptHost, new NoOpFilePicker(), null, false, () => { }, () => { });
+            Assert.True(scriptDetail.ShowReload);
+
+            string nativeDir = Path.Combine(root, "native-widget");
+            Directory.CreateDirectory(nativeDir);
+            File.WriteAllText(Path.Combine(nativeDir, "plugin.xml"),
+                """<Plugin key="native-widget" name="Native Widget" tier="Native" assembly="missing.dll"></Plugin>""");
+            var nativePackage = PackageManager.Package.CreateFromPath(nativeDir, pending: false);
+            var nativeHost = new PluginHostService();
+            nativeHost.InitializeForTests(MakeEnvironment());
+            var nativeDetail = new PluginPackageDetailViewModel(nativePackage, new List<Command>(), nativeHost, new NoOpFilePicker(), null, false, () => { }, () => { });
+            Assert.False(nativeDetail.ShowReload);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
         }
     }
 
@@ -340,6 +592,15 @@ public sealed class PluginScreenViewModelTests : IDisposable
         public Task<string?> PickSaveFileAsync(string title, string suggestedFileName, string extension, string extensionLabel) => Task.FromResult<string?>(null);
         public Task<string?> PickFolderAsync(string title) => Task.FromResult<string?>(null);
         public Task SetClipboardTextAsync(string text) => Task.CompletedTask;
+    }
+
+    private sealed class RecordingFilePicker : IFilePickerService
+    {
+        public string? CopiedText { get; private set; }
+        public Task<string?> PickOpenFileAsync(string title, string extension, string extensionLabel) => Task.FromResult<string?>(null);
+        public Task<string?> PickSaveFileAsync(string title, string suggestedFileName, string extension, string extensionLabel) => Task.FromResult<string?>(null);
+        public Task<string?> PickFolderAsync(string title) => Task.FromResult<string?>(null);
+        public Task SetClipboardTextAsync(string text) { CopiedText = text; return Task.CompletedTask; }
     }
 
     private sealed class StubHostWindow : IPluginHostWindow { public object Owner { get; } = new(); }

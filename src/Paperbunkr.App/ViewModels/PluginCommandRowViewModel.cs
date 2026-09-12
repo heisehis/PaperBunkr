@@ -1,8 +1,6 @@
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
-using cYo.Common.Runtime;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Paperbunkr.App.Plugins;
@@ -34,18 +32,6 @@ public partial class PluginCommandRowViewModel : ViewModelBase
     public string Hook => _command.Hook;
 
     public string HookGroupLabel => PluginHooks.ValidHooks.TryGetValue(_command.Hook, out var label) && !string.IsNullOrEmpty(label) ? label : _command.Hook;
-
-    /// <summary>
-    /// Live-read from a <c>package.ini</c> file in this command's own plugin folder, matching
-    /// ComicRackCE's exact mechanism (<c>_reference/ComicRackCE/ComicRack/Dialogs/PreferencesDialog.cs</c>
-    /// <c>FillScriptsList</c>: <c>IniFile.GetValue(Path.Combine(command.Environment.CommandPath,
-    /// "package.ini"), "Name", "Other")</c>) rather than anything stored on the manifest at discovery
-    /// time - installing/removing a package.ini next to a plugin takes effect on the next screen
-    /// refresh with no re-discovery needed. "Other" is CE's own fallback, not a Paperbunkr default.
-    /// </summary>
-    public string Package => _command.Environment is null
-        ? "Other"
-        : IniFile.GetValue(Path.Combine(_command.Environment.CommandPath, "package.ini"), "Name", "Other");
 
     public bool IsBroken => _command.IsBroken;
 

@@ -934,12 +934,27 @@
          file is host-assembly code, not a plugin's) is the one place that chrome now lives;
          MaxWidth caps it without forcing every hosted view to the same width, since
          FileConflictDialogView/ComicVineMatchReviewDialogView/SettingsRootView each still declare
-         their own narrower intended width on their own root element. ============ -->
-    <controls:OverlayShell IsOpen="{Binding NativePluginModalHost.IsOpen}" CloseCommand="{Binding NativePluginModalHost.DismissCommand}">
+         their own narrower intended width on their own root element.
+
+         ShowCloseButton="False" on the shell itself - its own template's close button floats at the
+         card's outer corner via a deliberate negative margin (Styles/Overlays.axaml), which every
+         other overlay's plain scrim-colored backdrop hides but looks like it's falling off this
+         card now that it has a real visible border/shadow. Own close button below instead, drawn
+         inside this Border's own padding - same "overlayCloseButton" class (hover/danger-red) as
+         the shared one, same DismissCommand, just positioned to stay on the card. ============ -->
+    <controls:OverlayShell IsOpen="{Binding NativePluginModalHost.IsOpen}" CloseCommand="{Binding NativePluginModalHost.DismissCommand}"
+                            ShowCloseButton="False">
         <Border Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}"
                 BorderThickness="1" CornerRadius="8" Padding="20" MaxWidth="680"
                 BoxShadow="{StaticResource PbElevationShadow}">
-            <ContentControl Content="{Binding NativePluginModalHost.HostedContent}" />
+            <Grid>
+                <ContentControl Content="{Binding NativePluginModalHost.HostedContent}" />
+                <Button Classes="overlayCloseButton" Width="28" Height="28"
+                        HorizontalAlignment="Right" VerticalAlignment="Top"
+                        Command="{Binding NativePluginModalHost.DismissCommand}" ToolTip.Tip="Close">
+                    <fi:SymbolIcon Symbol="Dismiss" FontSize="{StaticResource PbIconSizeSm}" />
+                </Button>
+            </Grid>
         </Border>
     </controls:OverlayShell>
 

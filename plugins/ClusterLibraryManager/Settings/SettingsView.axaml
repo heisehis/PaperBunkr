@@ -8,7 +8,7 @@
              x:DataType="vm:SettingsViewModel">
 
     <ScrollViewer>
-        <StackPanel Spacing="16" Margin="4">
+        <StackPanel Spacing="16" Margin="4,4,16,4">
             <StackPanel Spacing="6">
                 <TextBlock Text="ComicVine API Key" FontWeight="Bold" Foreground="#ECE7DB" />
                 <TextBox Text="{Binding ApiKey}" PasswordChar="•" Watermark="Paste your ComicVine API key" />
@@ -30,12 +30,12 @@
                 <ItemsControl ItemsSource="{Binding ScrapeFieldToggles}">
                     <ItemsControl.ItemsPanel>
                         <ItemsPanelTemplate>
-                            <WrapPanel />
+                            <StackPanel Orientation="Vertical" />
                         </ItemsPanelTemplate>
                     </ItemsControl.ItemsPanel>
                     <ItemsControl.ItemTemplate>
                         <DataTemplate x:DataType="vm:ScrapeFieldToggleViewModel">
-                            <CheckBox Content="{Binding Label}" IsChecked="{Binding IsEnabled}" Margin="0,0,12,4" />
+                            <CheckBox Content="{Binding Label}" IsChecked="{Binding IsEnabled}" Margin="0,0,0,4" />
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>

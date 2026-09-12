@@ -15,12 +15,19 @@ namespace Paperbunkr.App.Views;
 
 public partial class LibraryScreen : UserControl
 {
+    private readonly TypeAheadSearch.Buffer _typeAheadBuffer = new();
+
     public LibraryScreen()
     {
         InitializeComponent();
         // Tunnel so Escape closes the Add-issue overlay even while a field inside it has focus
         // (the series-name SuggestBox otherwise swallows Escape to close its own dropdown).
         AddHandler(KeyDownEvent, OnLibraryScreenKeyDown, RoutingStrategies.Tunnel);
+        // Type-ahead (docs/superpowers/specs/2026-09-12-grid-typeahead-rangeselect-quit-design.md) -
+        // Tunnel from the screen root rather than per-template, so it works regardless of which of
+        // the 5 view modes is currently active, same "resolve the real ItemsControl from e.Source"
+        // idiom OnLibraryScreenKeyDown's own "/" handling already uses.
+        AddHandler(TextInputEvent, OnLibraryScreenTextInput, RoutingStrategies.Tunnel);
         Toolbar.FocusGridRequested += (_, _) => FocusFirstGridItem();
         DataContextChanged += OnDataContextChanged;
     }
@@ -92,6 +99,59 @@ public partial class LibraryScreen : UserControl
             vm.DeleteCurrentSelectionCommand.Execute(null);
             e.Handled = true;
         }
+        // Type-ahead backspace - Avalonia's TextInput event doesn't fire for Backspace (unlike
+        // WinForms KeyPress, which is why CE's own KeySearch could treat it as just another
+        // character); handled here instead, sharing the same Buffer/matching logic.
+        else if (e.Key == Key.Back && e.KeyModifiers == KeyModifiers.None)
+        {
+            if (HandleTypeAhead('\b', e.Source))
+            {
+                e.Handled = true;
+            }
+        }
+    }
+
+    /// <summary>Type-ahead jump (docs/superpowers/specs/2026-09-12-grid-typeahead-rangeselect-quit-
+    /// design.md) - resolves <paramref name="source"/>'s ancestor grid the same way arrow-nav does,
+    /// dispatches issue-vs-series text selector/clear-selection by the matched item's own type
+    /// (mirrors <see cref="OnCardKeyDown"/>'s own dispatch), not <see cref="LibraryScreenViewModel.IsIssueGranularity"/> -
+    /// the ancestor grid could in principle host either row type depending on which template is
+    /// currently live.</summary>
+    private bool HandleTypeAhead(char typedChar, object? source)
+    {
+        if (DataContext is not LibraryScreenViewModel vm || source is not Control control ||
+            control.FindAncestorOfType<ItemsControl>() is not { } itemsControl)
+        {
+            return false;
+        }
+
+        return TypeAheadSearch.TryHandleTextInput<object>(
+            _typeAheadBuffer, typedChar, itemsControl,
+            item => item switch { IssueListRow row => row.SeriesName, SeriesCardSample card => card.Name, _ => string.Empty },
+            () =>
+            {
+                vm.ClearSelectionCommand.Execute(null);
+                vm.ClearSeriesSelectionCommand.Execute(null);
+            });
+    }
+
+    private void OnLibraryScreenTextInput(object? sender, TextInputEventArgs e)
+    {
+        if (e.Source is TextBox || string.IsNullOrEmpty(e.Text))
+        {
+            return;
+        }
+
+        bool handled = false;
+        foreach (char c in e.Text)
+        {
+            handled = HandleTypeAhead(c, e.Source);
+        }
+
+        if (handled)
+        {
+            e.Handled = true;
+        }
     }
 
     /// <summary>
@@ -161,7 +221,24 @@ public partial class LibraryScreen : UserControl
         // Two independent card types can occupy this same handler depending on Granularity - see
         // this file's own top doc comment and docs/superpowers/specs/2026-08-18-library-book-
         // centric-redesign-design.md Slice 3's follow-up.
-        if ((item is IssueListRow or SeriesCardSample) && GridKeyboardNavigation.TryHandleArrowKey(itemsControl, button, e.Key))
+        Action<object>? extendSelection = null;
+        if (e.KeyModifiers.HasFlag(KeyModifiers.Shift) && DataContext is LibraryScreenViewModel vm)
+        {
+            extendSelection = target =>
+            {
+                switch (target)
+                {
+                    case IssueListRow row:
+                        vm.ToggleIssueSelection(row, isShiftHeld: true);
+                        break;
+                    case SeriesCardSample card:
+                        vm.ToggleSeriesSelection(card, isShiftHeld: true);
+                        break;
+                }
+            };
+        }
+
+        if ((item is IssueListRow or SeriesCardSample) && GridKeyboardNavigation.TryHandleArrowKey(itemsControl, button, e.Key, extendSelection))
         {
             e.Handled = true;
         }

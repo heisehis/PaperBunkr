@@ -205,4 +205,14 @@ public class GridKeyboardNavigationTests
 
         Assert.Same(stale, result);
     }
+
+    // --- Shift+arrow range-select hook (docs/superpowers/specs/2026-09-12-grid-typeahead-
+    // rangeselect-quit-design.md) - Navigate<T> itself has no selection concept; the live wrapper
+    // (TryHandleArrowKey) invokes an optional callback with the computed target instead. Exercised
+    // here at the Navigate<T> level is not possible (the callback lives in the live-control wrapper,
+    // which needs real Avalonia ItemsControl/Control instances this headless test file's own
+    // precedent - GridKeyboardNavigationTests - deliberately avoids). See LibraryScreenViewModelTests/
+    // BooksScreenViewModelTests/DetailTabsViewModelTests for the selection-extension behavior itself,
+    // exercised directly against ToggleIssueSelection/ToggleSeriesSelection/ToggleBookSelection -
+    // the same methods the live wrapper's callback calls.
 }

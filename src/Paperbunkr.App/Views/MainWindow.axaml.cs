@@ -171,6 +171,14 @@ public partial class MainWindow : Window
             viewModel.RedoCommand.Execute(null);
             e.Handled = true;
         }
+        // Ctrl+Q quit (docs/superpowers/specs/2026-09-12-grid-typeahead-rangeselect-quit-design.md) -
+        // CE's File>Exit menu accelerator (MainForm.Designer.cs). Close() already flows through
+        // OnWindowClosing's tray-aware logic below, matching CE's own Exit semantics exactly.
+        else if (e.Key == Key.Q && e.KeyModifiers == KeyModifiers.Control)
+        {
+            Close();
+            e.Handled = true;
+        }
     }
 
     /// <summary>

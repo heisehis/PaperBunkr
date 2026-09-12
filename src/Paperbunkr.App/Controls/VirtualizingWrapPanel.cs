@@ -259,6 +259,13 @@ public class VirtualizingWrapPanel : VirtualizingPanel
         return -1;
     }
 
+    /// <summary>Public forwarder for <see cref="ScrollIntoView(int)"/> - callers outside this panel
+    /// (e.g. type-ahead jump-to-item, docs/superpowers/specs/2026-09-12-grid-typeahead-rangeselect-
+    /// quit-design.md) can't call the protected override directly. <c>ListBox</c>'s own
+    /// <c>ScrollIntoView</c> is already public for the same reason - this just closes that gap for
+    /// the plain-<c>ItemsControl</c>-backed grids that use this panel instead.</summary>
+    public Control? ScrollToIndex(int index) => ScrollIntoView(index);
+
     protected override Control? ScrollIntoView(int index)
     {
         var items = Items;

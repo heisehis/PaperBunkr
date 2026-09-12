@@ -236,6 +236,10 @@ public class VirtualizingVariableWrapPanel : VirtualizingPanel
         return -1;
     }
 
+    /// <summary>Public forwarder for <see cref="ScrollIntoView(int)"/> - see
+    /// <see cref="VirtualizingWrapPanel.ScrollToIndex"/>'s identical doc comment.</summary>
+    public Control? ScrollToIndex(int index) => ScrollIntoView(index);
+
     protected override Control? ScrollIntoView(int index)
     {
         var items = Items;

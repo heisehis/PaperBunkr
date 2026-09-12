@@ -1,3 +1,4 @@
+using System;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.VisualTree;
@@ -80,7 +81,19 @@ public partial class DetailTabs : UserControl
             return;
         }
 
-        if (control.FindAncestorOfType<ItemsControl>() is { } list && GridKeyboardNavigation.TryHandleArrowKey(list, control, e.Key))
+        Action<object>? extendSelection = null;
+        if (e.KeyModifiers.HasFlag(KeyModifiers.Shift))
+        {
+            extendSelection = target =>
+            {
+                if (target is IssueCardSample targetIssue)
+                {
+                    viewModel.ToggleIssueSelection(targetIssue, isShiftHeld: true);
+                }
+            };
+        }
+
+        if (control.FindAncestorOfType<ItemsControl>() is { } list && GridKeyboardNavigation.TryHandleArrowKey(list, control, e.Key, extendSelection))
         {
             e.Handled = true;
         }

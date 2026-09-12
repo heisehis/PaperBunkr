@@ -138,11 +138,11 @@ public static class GridKeyboardNavigation
     /// <c>ScrollIntoView</c> to realize the target) - generalized here into the one shared entry
     /// point every grid-nav call site now uses, instead of Smart Lists carrying its own duplicate.
     /// </summary>
-    public static bool TryHandleArrowKey(ItemsControl itemsControl, Control fromControl, Key key)
+    public static bool TryHandleArrowKey(ItemsControl itemsControl, Control fromControl, Key key, Action<object>? onNavigated = null)
     {
         if (itemsControl.ItemsPanelRoot is INavigableContainer navigable)
         {
-            return TryHandleArrowKeyVirtualized(navigable, fromControl, key);
+            return TryHandleArrowKeyVirtualized(navigable, fromControl, key, onNavigated);
         }
 
         GridNavigationDirection? direction = key switch
@@ -177,6 +177,7 @@ public static class GridKeyboardNavigation
         }
 
         object target = Navigate(items, currentItem, direction.Value);
+        onNavigated?.Invoke(target);
         if (itemsControl.ContainerFromItem(target) is Control targetContainer)
         {
             targetContainer.Focus();
@@ -185,7 +186,7 @@ public static class GridKeyboardNavigation
         return true;
     }
 
-    private static bool TryHandleArrowKeyVirtualized(INavigableContainer navigable, Control fromControl, Key key)
+    private static bool TryHandleArrowKeyVirtualized(INavigableContainer navigable, Control fromControl, Key key, Action<object>? onNavigated)
     {
         NavigationDirection? direction = key switch
         {
@@ -214,6 +215,11 @@ public static class GridKeyboardNavigation
         if (navigable.GetControl(direction.Value, fromControl, wrap: false) is Control target)
         {
             var focusable = target.Focusable ? target : target.GetVisualDescendants().OfType<InputElement>().FirstOrDefault(c => c.Focusable);
+            if (onNavigated is not null && (focusable?.DataContext ?? target.DataContext) is { } dataContext)
+            {
+                onNavigated(dataContext);
+            }
+
             focusable?.Focus();
         }
 

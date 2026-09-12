@@ -179,6 +179,29 @@ public class BooksScreenViewModelTests : IDisposable
         Assert.All(vm.Books, c => Assert.False(c.IsSelected));
     }
 
+    /// <summary>
+    /// Backs Shift+arrow range-select (docs/superpowers/specs/2026-09-12-grid-typeahead-
+    /// rangeselect-quit-design.md) - the code-behind calls this exact method with
+    /// <c>isShiftHeld: true</c>, same as the existing checkbox path calls it with <c>false</c>.
+    /// No prior test exercised the shift-range branch for Books specifically (Library/DetailTabs
+    /// already had their own equivalents) - this closes that gap, not a new behavior.
+    /// </summary>
+    [Fact]
+    public void ToggleBookSelection_ShiftHeld_SelectsContiguousRange()
+    {
+        int a = AddBook("Alpha");
+        int b = AddBook("Bravo");
+        int c = AddBook("Charlie");
+        var vm = CreateViewModel();
+        vm.LoadFromDatabase();
+
+        vm.ToggleBookSelection(vm.Books.Single(x => x.BookId == a), isShiftHeld: false);
+        vm.ToggleBookSelection(vm.Books.Single(x => x.BookId == c), isShiftHeld: true);
+
+        Assert.Equal(3, vm.SelectionCount);
+        Assert.All(vm.Books, card => Assert.True(card.IsSelected));
+    }
+
     [Fact]
     public void Selection_ClearedByDatabaseReload()
     {

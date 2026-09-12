@@ -47,6 +47,16 @@ public sealed class LibraryTile
     /// <summary>Book tiles only - see the type doc comment.</summary>
     public Bitmap? CoverImage { get; init; }
 
+    /// <summary>
+    /// Shared-element cover flight key (docs/superpowers/specs/2026-09-04-navigation-transition-
+    /// system-design.md) - same "series-cover:{id}"/"issue-cover:{id}" scheme every other
+    /// Series/Issue tile registers under, so a Collection grid's tiles participate in the same
+    /// cover flight to Detail as every other grid. <see langword="null"/> for Book tiles, matching
+    /// <c>DetailHero</c>'s own "null SharedElementKey means no participation" convention - Book
+    /// Detail was deliberately never wired into the shared-element system.
+    /// </summary>
+    public string? SharedElementKey { get; init; }
+
     /// <summary>Resolves one <see cref="CollectionMember"/> into a tile - shared by
     /// <see cref="LibraryScreenViewModel"/>'s mixed grid and <see cref="HomeCollectionCard"/>'s cover
     /// resolution, same factory-method convention as <see cref="SeriesCardSample.FromSeries"/>/
@@ -64,6 +74,7 @@ public sealed class LibraryTile
             CoverKey = CoverIssueFor(series) is { } coverIssue
                 ? CoverFingerprint.Stem(coverIssue.Id, coverIssue.FilePath, coverIssue.FileSize)
                 : null,
+            SharedElementKey = $"series-cover:{series.Id}",
         },
         CollectionMemberKind.Issue when member.Issue is { } issue => new LibraryTile
         {
@@ -74,6 +85,7 @@ public sealed class LibraryTile
             CoverBrush = SeriesCardSample.CoverBrushFor(member.DisplayTitle),
             CoverIssueId = issue.Id,
             CoverKey = CoverFingerprint.Stem(issue.Id, issue.FilePath, issue.FileSize),
+            SharedElementKey = $"issue-cover:{issue.Id}",
         },
         CollectionMemberKind.Book when member.Book is { } book => new LibraryTile
         {

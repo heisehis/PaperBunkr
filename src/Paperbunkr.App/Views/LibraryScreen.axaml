@@ -805,7 +805,11 @@
              three entity kinds those badges don't uniformly apply to. Series/Issue tiles resolve
              their cover lazily via CoverKey; Book tiles carry an already-decoded CoverImage
              instead (see LibraryTile's own doc comment) - stacking both Images is simpler than a
-             null-check converter, since whichever one is unbound just renders nothing. -->
+             null-check converter, since whichever one is unbound just renders nothing.
+             Shared-element cover flight (docs/superpowers/specs/2026-09-04-navigation-transition-
+             system-design.md), same idiom as every other grid template - LibraryTile.SharedElementKey
+             is precomputed per-kind (null for Book, matching DetailHero's own no-participation
+             convention for Book Detail). -->
         <DataTemplate x:Key="CollectionTileTemplate" x:DataType="models:LibraryTile">
             <Button Classes="card" Margin="0"
                     Width="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PosterCardWidth}"
@@ -813,9 +817,11 @@
                     CommandParameter="{Binding}">
                 <Grid RowDefinitions="*,Auto">
                     <Border Grid.Row="0" Classes="cover posterCover" Background="{Binding CoverBrush}"
-                            Height="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PosterCoverHeight}">
+                            Height="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PosterCoverHeight}"
+                            controls:SharedElement.Key="{Binding SharedElementKey}"
+                            controls:SharedElement.ImageSource="{Binding #CollectionTileCoverImage.Source}">
                         <Grid>
-                            <Image views:AsyncCoverImage.SourceId="{Binding CoverKey}" Stretch="UniformToFill" />
+                            <Image x:Name="CollectionTileCoverImage" views:AsyncCoverImage.SourceId="{Binding CoverKey}" Stretch="UniformToFill" />
                             <Image Source="{Binding CoverImage}" Stretch="UniformToFill" />
                             <Border Classes="posterScrim" />
                         </Grid>

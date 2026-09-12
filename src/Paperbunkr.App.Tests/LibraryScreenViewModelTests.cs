@@ -428,6 +428,13 @@ public class LibraryScreenViewModelTests : IDisposable
         Assert.Equal("Alpha Series", vm.CollectionTiles[0].Title);
         Assert.Equal("Some Novel", vm.CollectionTiles[2].Title);
         Assert.True(vm.HasAnyResults);
+
+        // Shared-element cover flight keys (docs/superpowers/specs/2026-09-04-navigation-transition-
+        // system-design.md) - Series/Issue tiles participate like every other grid; Book tiles don't
+        // (matches DetailHero's own null-SharedElementKey convention for Book Detail).
+        Assert.Equal($"series-cover:{seriesId}", vm.CollectionTiles[0].SharedElementKey);
+        Assert.Equal($"issue-cover:{issueId}", vm.CollectionTiles[1].SharedElementKey);
+        Assert.Null(vm.CollectionTiles[2].SharedElementKey);
     }
 
     [Fact]

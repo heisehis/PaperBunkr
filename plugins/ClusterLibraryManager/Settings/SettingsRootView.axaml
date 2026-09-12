@@ -7,21 +7,15 @@
              x:Class="ClusterLibraryManager.Settings.SettingsRootView"
              x:DataType="vm:SettingsRootViewModel">
 
-    <!-- Hardcoded colors, not DynamicResource - this plugin's compiled Control is loaded via its own
-         AssemblyLoadContext (docs/superpowers/specs/2026-09-11-plugin-api-v4-native-tier-design.md),
-         and host-theme DynamicResource lookups (PbChromeBrush/PbBorderBrush) never resolved for it in
-         practice even after using the correct key name - found on-screen, not in a test. Matching
-         Paperbunkr's own dark theme values (App.axaml: PbChromeColor/PbBorderColor) directly sidesteps
-         whatever cross-assembly resource-resolution gap causes that, rather than depending on it. -->
-    <Border Background="#131519" BorderBrush="#2A2E37"
-            BorderThickness="1" CornerRadius="8" Padding="16" Width="640" Height="620">
-        <TabControl>
-            <TabItem Header="General">
-                <vm:SettingsView DataContext="{Binding General}" />
-            </TabItem>
-            <TabItem Header="Profiles">
-                <vm:ProfileManagerView DataContext="{Binding Profiles}" />
-            </TabItem>
-        </TabControl>
-    </Border>
+    <!-- No card chrome here - the host's NativePluginModalHost Border (MainWindow.axaml) now owns
+         background/border/corner-radius/elevation for every dialog it hosts. Only this view's own
+         intended width/height stay here - the host caps width, it doesn't dictate it. -->
+    <TabControl Width="640" Height="620">
+        <TabItem Header="General">
+            <vm:SettingsView DataContext="{Binding General}" />
+        </TabItem>
+        <TabItem Header="Profiles">
+            <vm:ProfileManagerView DataContext="{Binding Profiles}" />
+        </TabItem>
+    </TabControl>
 </UserControl>

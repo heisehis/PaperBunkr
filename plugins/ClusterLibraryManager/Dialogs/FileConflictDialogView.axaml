@@ -14,36 +14,33 @@
         as text rather than actual decoded cover images (a deliberate, scoped-down simplification, not
         an oversight).
     -->
-    <!-- Hardcoded colors, not DynamicResource - see SettingsRootView.axaml's own comment for why. -->
-    <Border Background="#131519" BorderBrush="#2A2E37"
-            BorderThickness="1" CornerRadius="8" Padding="20" Width="420">
-        <StackPanel Spacing="14">
-            <TextBlock Text="A file already exists at the destination" FontSize="16" FontWeight="Bold"
-                       Foreground="#ECE7DB" TextWrapping="Wrap" />
+    <!-- No card chrome here - the host's NativePluginModalHost Border (MainWindow.axaml) now owns it. -->
+    <StackPanel Spacing="14" Width="420">
+        <TextBlock Text="A file already exists at the destination" FontSize="16" FontWeight="Bold"
+                   Foreground="#ECE7DB" TextWrapping="Wrap" />
 
-            <StackPanel Spacing="4">
-                <TextBlock Text="Destination" FontSize="11" FontWeight="Bold" Foreground="#B3ADA0" />
-                <TextBlock Text="{Binding DestinationPath}" FontSize="12" Foreground="#ECE7DB" TextWrapping="Wrap" />
-            </StackPanel>
-
-            <Grid ColumnDefinitions="*,*" ColumnSpacing="12">
-                <StackPanel Grid.Column="0" Spacing="4">
-                    <TextBlock Text="Incoming" FontSize="11" FontWeight="Bold" Foreground="#B3ADA0" />
-                    <TextBlock Text="{Binding IncomingBookLabel}" FontSize="12" Foreground="#ECE7DB" TextWrapping="Wrap" />
-                </StackPanel>
-                <StackPanel Grid.Column="1" Spacing="4">
-                    <TextBlock Text="Already there" FontSize="11" FontWeight="Bold" Foreground="#B3ADA0" />
-                    <TextBlock Text="{Binding ExistingBookLabel}" FontSize="12" Foreground="#ECE7DB" TextWrapping="Wrap" />
-                </StackPanel>
-            </Grid>
-
-            <CheckBox Content="Do this for all remaining conflicts" IsChecked="{Binding ApplyToAllRemaining}" />
-
-            <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
-                <Button Content="Skip" Command="{Binding SkipCommand}" />
-                <Button Content="Rename" Command="{Binding RenameCommand}" />
-                <Button Content="Replace" Classes="destructive" Command="{Binding ReplaceCommand}" />
-            </StackPanel>
+        <StackPanel Spacing="4">
+            <TextBlock Text="Destination" FontSize="11" FontWeight="Bold" Foreground="#B3ADA0" />
+            <TextBlock Text="{Binding DestinationPath}" FontSize="12" Foreground="#ECE7DB" TextWrapping="Wrap" />
         </StackPanel>
-    </Border>
+
+        <Grid ColumnDefinitions="*,*" ColumnSpacing="12">
+            <StackPanel Grid.Column="0" Spacing="4">
+                <TextBlock Text="Incoming" FontSize="11" FontWeight="Bold" Foreground="#B3ADA0" />
+                <TextBlock Text="{Binding IncomingBookLabel}" FontSize="12" Foreground="#ECE7DB" TextWrapping="Wrap" />
+            </StackPanel>
+            <StackPanel Grid.Column="1" Spacing="4">
+                <TextBlock Text="Already there" FontSize="11" FontWeight="Bold" Foreground="#B3ADA0" />
+                <TextBlock Text="{Binding ExistingBookLabel}" FontSize="12" Foreground="#ECE7DB" TextWrapping="Wrap" />
+            </StackPanel>
+        </Grid>
+
+        <CheckBox Content="Do this for all remaining conflicts" IsChecked="{Binding ApplyToAllRemaining}" />
+
+        <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+            <Button Content="Skip" Command="{Binding SkipCommand}" />
+            <Button Content="Rename" Command="{Binding RenameCommand}" />
+            <Button Content="Replace" Classes="destructive" Command="{Binding ReplaceCommand}" />
+        </StackPanel>
+    </StackPanel>
 </UserControl>

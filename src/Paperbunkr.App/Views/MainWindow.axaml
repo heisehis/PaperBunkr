@@ -919,9 +919,28 @@
          native-tier-design.md §3) - the one generic slot every native plugin's own compiled dialog
          (settings screen, collision dialog, match-review dialog) is shown through. Unlike
          ConfirmDialog above, the hosted view isn't a fixed type - Content is bound directly to
-         whatever Control the plugin supplied, via a bare ContentControl. ============ -->
+         whatever Control the plugin supplied.
+
+         The host owns the card chrome (background/border/padding/corner radius/elevation), not the
+         plugin - found the hard way (docs/superpowers/specs/2026-09-12-plugin-management-screen-
+         redesign-design.md's Configure button was the first time any of ClusterLibraryManager's own
+         three views hosted here ever actually rendered on-screen): every one of them had
+         independently hand-rolled its own near-identical Border wrapper, and one of them had it
+         wrong (a nonexistent resource key, rendering fully transparent). Requiring every plugin
+         author to redraw this chrome themselves - guessing at this app's exact corner radius,
+         border color, and elevation - doesn't scale and isn't this app's job to demand. This Border
+         (using the same PbChromeBrush/PbBorderBrush/PbElevationShadow this app's own ConfirmDialogView
+         and elevated-card style already use - a real DynamicResource, safely resolvable since this
+         file is host-assembly code, not a plugin's) is the one place that chrome now lives;
+         MaxWidth caps it without forcing every hosted view to the same width, since
+         FileConflictDialogView/ComicVineMatchReviewDialogView/SettingsRootView each still declare
+         their own narrower intended width on their own root element. ============ -->
     <controls:OverlayShell IsOpen="{Binding NativePluginModalHost.IsOpen}" CloseCommand="{Binding NativePluginModalHost.DismissCommand}">
-        <ContentControl Content="{Binding NativePluginModalHost.HostedContent}" />
+        <Border Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}"
+                BorderThickness="1" CornerRadius="8" Padding="20" MaxWidth="680"
+                BoxShadow="{StaticResource PbElevationShadow}">
+            <ContentControl Content="{Binding NativePluginModalHost.HostedContent}" />
+        </Border>
     </controls:OverlayShell>
 
     <!-- ============ Reading List properties overlay (docs/superpowers/specs/2026-08-23-reading-

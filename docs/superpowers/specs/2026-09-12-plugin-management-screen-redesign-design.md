@@ -143,7 +143,28 @@ public IReadOnlyDictionary<string, NativePluginLoadResult> NativeLoadResults => 
 
 `DiscoverNative` populates one entry per native package it attempts, on both the success and
 `catch` paths — the `catch` path now records `ex.Message` instead of doing nothing. Script-tier
-packages simply have no entry (native-only concept).
+packages simply have no entry (native-only concept). Writes use the indexer
+(`_nativeLoadResults[pluginKey] = result`), never `Dictionary.Add` - `Add` throws
+`ArgumentException` on a duplicate key, an indexer-set just overwrites, so this alone cannot crash
+the engine (external review round 2 described this as a crash risk; it isn't one as specified, and
+`PackageManager`/§4.1's `Package.Key` lives in a plain `List<Package>` with no dictionary at all -
+`GetPackages()` never indexes by key, before or after this design, so that half of the claim
+doesn't apply either).
+
+What the indexer-overwrite *would* do silently, though, is exactly the kind of silent data loss
+this whole redesign exists to stop: if a user copies a plugin's install folder as a backup (both
+folders then share the identical `plugin.xml` key), the second one processed would quietly
+overwrite the first's healthy `NativePluginLoadResult` with its own - one of the two native modules
+effectively vanishes from `NativeLoadResults`, indistinguishable from having never loaded, with no
+signal anywhere. `DiscoverNative` therefore checks before writing: if `pluginKey` is already present
+in `_nativeLoadResults`, the *second* package gets `LoadError = $"Duplicate plugin key '{pluginKey}'
+- a plugin with this key was already loaded from {existingPath}."` instead of overwriting the
+first's real result. The first-discovered package is unaffected. (Commands already have equivalent,
+pre-existing protection one level down - `_commands.Any(c => c.Key == cmd.Key)` at
+[PluginEngine.cs:125](../../../src/Paperbunkr.Plugins/PluginEngine.cs) already first-wins-skips a
+second package's identically-keyed commands today, silently; this native-load-result guard is the
+same scenario at the package level, made visible instead of silent, consistent with §4.3's health
+model.)
 
 ### 4.3 Package-level health
 
@@ -195,12 +216,34 @@ Two-column layout (`avalonia-pro-max/layout-patterns`'s Master-Detail pattern �
     `bool?` and already supports it natively). Bound to a computed tri-state: `true` when every
     child command is enabled, `false` when every child command is disabled, `null` (indeterminate)
     when mixed (external review round 1: an always-unchecked mixed state was ambiguous about what
-    clicking it would do). Click handling is explicit, not the CheckBox's own default 3-way cycle:
-    the view model's `IsEnabledChanged` handler only ever receives `true`/`false` from a real user
-    click (a user can't click *into* indeterminate — only `Refresh()` recomputing a genuinely mixed
-    state produces it) and bulk-writes that value via `PluginHostService.SetPackageEnabled` for
-    every command whose `PluginKey` matches this package, reusing the existing persisted
-    `PluginCommandState` mechanism (no new persisted field).
+    clicking it would do).
+
+    **Must NOT use Avalonia's own default three-state click cycle.** Verified directly against
+    `ToggleButton`'s real `Toggle()` source
+    (https://github.com/AvaloniaUI/Avalonia/blob/master/src/Avalonia.Controls/Primitives/ToggleButton.cs) -
+    the built-in cycle is `true → null → false → true`, so a plain two-way `IsChecked` binding
+    would hand the view model `false` on a click starting from indeterminate (external review round
+    2 caught this correctly - my round-1 fix asserted the VM "only ever receives true/false", which
+    is technically true but sidestepped that Avalonia's own default makes indeterminate resolve to
+    *disable everything*, the opposite of what a user clicking a half-filled master checkbox almost
+    certainly means). The fix: `IsChecked` binds **one-way, view model → view**
+    (`{Binding EnabledState, Mode=OneWay}`) so `ToggleButton.Toggle()` never runs and never writes
+    back on its own. The `CheckBox`'s `Click` routed event is handled explicitly instead:
+
+    ```csharp
+    private void OnMasterEnabledClick(object? sender, RoutedEventArgs e)
+    {
+        bool next = EnabledState != true; // true only when already fully enabled; anything else
+                                           // (false OR indeterminate) resolves to enabling all
+        _host.SetPackageEnabled(PluginKey, next);
+        Refresh(); // recomputes EnabledState from the now-updated child commands
+    }
+    ```
+
+    This makes the only two reachable outcomes "enable everything" (from `false` or `null`) and
+    "disable everything" (from `true`) - indeterminate is a display-only state the user can see but
+    never manually re-enter by clicking; it only reappears if `Refresh()` recomputes a genuinely
+    mixed state some other way (e.g. a per-command toggle changed individually).
   - **⚙ Configure** button in the header — shown only when this package's `NativeLoadResults`
     entry has a `Module` that also implements `INativePluginSettingsUi`. Clicking it calls
     `CreateSettingsView` and hosts the result through the same shared
@@ -218,13 +261,30 @@ Two-column layout (`avalonia-pro-max/layout-patterns`'s Master-Detail pattern �
     scrim-dismissed native dialog already does today (documented on `ShowAsync` itself) -
     `OpenPluginSettingsAsync` just catches `OperationCanceledException` and returns, no special
     case needed. External review round 1 raised a real gap here (no documented way to close it),
-    but the fix is "the mechanism already exists, use it" - not a new `SaveCommand`/`CancelCommand`
-    contract on `INativePluginSettingsUi`. That would force every plugin's settings screen into an
-    OK/Cancel-with-rollback shape; `ClusterLibraryManager`'s own `SettingsViewModel` already has its
-    own `SaveCommand` that persists immediately on click
-    ([SettingsView.axaml:62](../../../plugins/ClusterLibraryManager/Settings/SettingsView.axaml)) -
-    Save and Close are two independent, decoupled actions, and that's fine: closing without saving
-    just discards in-memory edits, same as any ordinary settings dialog.
+    and the fix is "the mechanism already exists, use it" - not a new `SaveCommand`/`CancelCommand`
+    contract on `INativePluginSettingsUi`.
+
+    **Explicit contract, stated once and not contradicted elsewhere (external review round 2 read
+    an earlier version of this paragraph as self-contradictory - it wasn't a logic error, the
+    wording just juxtaposed two different moments badly):** persistence is entirely the plugin's
+    own business, and the host's Close (X/scrim) never rolls anything back, because it has nothing
+    to roll back - there is no host-managed transaction. `ClusterLibraryManager`'s own
+    `SettingsViewModel` already has its own `SaveCommand` that writes straight to its LiteDB store
+    the moment it's clicked
+    ([SettingsView.axaml:62](../../../plugins/ClusterLibraryManager/Settings/SettingsView.axaml)).
+    So concretely: an edit typed but never followed by clicking that plugin's own Save button was
+    never persisted anywhere, and closing the modal (by any means) simply loses that unsaved edit,
+    same as abandoning any form you never submitted. An edit that *was* already Saved is already
+    committed to the plugin's own storage before Close is even possible to reach - Close cannot
+    "discard" it, because there is nothing left in memory to discard by that point. These are two
+    different points in time, not two conflicting behaviors for the same click. A plugin author who
+    wants cancel-with-rollback semantics is free to build that entirely within their own settings
+    view model (keep an in-memory draft, only write on an explicit Save) - the host deliberately
+    imposes no transaction boundary of its own. One plugin's settings might reasonably want
+    live-apply-per-toggle (arguably true of several of `ClusterLibraryManager`'s own checkboxes
+    already) and another might want batch-everything-on-Save; picking one and forcing it onto every
+    future plugin author via a required interface member is prescriptive scope creep the host has
+    no business enforcing.
   - Commands list, scoped to this package only (previously scattered across hook-grouped
     sections): each row keeps its existing shape (Name, enabled toggle, Run button if
     `CanRunManually`, compile-error text if `IsBroken`) plus, for a script-tier command that has a
@@ -243,9 +303,11 @@ right-hand pane's "nothing selected" content instead of the whole screen's conte
 
 - `PluginPackageRowViewModel` — sidebar row only now: health dot state, name, badges,
   `SelectCommand`. Loses the inline `DeleteConfirm` (moved to detail header).
-- New `PluginPackageDetailViewModel` — header fields, master `Enabled` (`bool?`, tri-state per
-  §4.4, computed from children + explicit bulk setter on click), `ConfigureCommand` (visible only
-  if applicable), `ReloadCommand` (script-tier only), `DeleteConfirm`, and its own
+- New `PluginPackageDetailViewModel` — header fields, `EnabledState` (`bool?`, tri-state per §4.4,
+  one-way display value recomputed by `Refresh()` from child commands - never written to directly
+  by the view), a `MasterEnabledClickCommand` that reads the current `EnabledState` and bulk-writes
+  its negation-of-`true` per §4.4's explicit click logic, `ConfigureCommand` (visible only if
+  applicable), `ReloadCommand` (script-tier only), `DeleteConfirm`, and its own
   `ObservableCollection<PluginCommandRowViewModel>` scoped to this package's commands (reuses the
   existing row VM unchanged, just filtered by `PluginKey` instead of grouped by hook).
 - `PluginScreenViewModel` — owns `Packages` (sidebar) + `SelectedPackage` (drives
@@ -276,23 +338,26 @@ right-hand pane's "nothing selected" content instead of the whole screen's conte
 - `Paperbunkr.Plugins.Tests`: `PluginEngine.DiscoverNative` records a `NativePluginLoadResult` with
   a non-null `LoadError` when the module constructor throws (new fixture plugin that throws in its
   constructor, alongside the existing `MinimalNative` happy-path fixture); confirms a healthy load
-  still records `LoadError: null` with the real module instance.
+  still records `LoadError: null` with the real module instance; two fixture folders sharing an
+  identical manifest key produce a healthy result for the first and a "Duplicate plugin key"
+  `LoadError` for the second, with neither entry silently overwritten.
 - `PackageManager` currently has no dedicated test project (verified — no `Paperbunkr.Engine.Tests`
   or equivalent exists, and nothing under an existing test project references it). New tests for
   `Package.Key`/`Package.Name` (`plugin.xml` root attributes take priority over `package.ini`/
   folder heuristic; falls back correctly when `plugin.xml` is missing) land in a new
   `Paperbunkr.Engine.Tests` project, matching this repo's one-test-project-per-library convention.
 - `Paperbunkr.App.Tests`: `PluginScreenViewModelTests` — selecting a package populates
-  `SelectedPackage`'s commands filtered to that `PluginKey` only; master `Enabled` toggle bulk-
-  writes every child command's persisted state and reads back correctly; three cases for the
-  tri-state master toggle (all-enabled → `true`, all-disabled → `false`, mixed → `null`), and that
-  clicking it while indeterminate produces a real `true`/`false` write, never a re-entrant
-  indeterminate; `ConfigureCommand` visibility is true only for a module implementing
-  `INativePluginSettingsUi`; a broken native package's detail pane shows its `LoadError` text and
-  its "Copy error" action copies that exact string; the Reload button (script-tier only) calls
-  `RediscoverPlugins()` and a previously-broken command's `IsBroken` clears after the underlying
-  script is fixed on disk between calls; the sidebar filter `TextBox` narrows `Packages` by a
-  case-insensitive name substring.
+  `SelectedPackage`'s commands filtered to that `PluginKey` only; `EnabledState` computes to
+  `true`/`false`/`null` correctly for all-enabled/all-disabled/mixed child commands; clicking
+  `MasterEnabledClickCommand` from `false` bulk-enables and from `null` (indeterminate) *also*
+  bulk-enables (the specific case external review round 2 caught - must not bulk-disable from
+  indeterminate), and from `true` bulk-disables; `ConfigureCommand` visibility is true only for a
+  module implementing `INativePluginSettingsUi`; a broken native package's detail pane shows its
+  `LoadError` text (including the "Duplicate plugin key" case) and its "Copy error" action copies
+  that exact string; the Reload button (script-tier only) calls `RediscoverPlugins()` and a
+  previously-broken command's `IsBroken` clears after the underlying script is fixed on disk
+  between calls; the sidebar filter `TextBox` narrows `Packages` by a case-insensitive name
+  substring.
 - Manual on-screen check (this is UI-rearrangement work): install ClusterLibraryManager (already
   done), open Preferences → Plugins, select it in the sidebar, confirm Configure opens its real
   `SettingsRootView` in the existing modal overlay, toggle master Enabled off/on and confirm its

@@ -107,14 +107,29 @@ private static string DetectKey(string packagePath)
         // fall through to the folder-name fallback below
     }
 
-    // Never string.Empty - two folders with no/unreadable plugin.xml would otherwise collide on
-    // the same "" key (external review round 1 caught this). The install folder's own name is
-    // already OS-guaranteed unique among its siblings, so it's a safe, simple fallback - no need
-    // for a humanized/slugified derivative (that path invites its own collisions, e.g. "My Plugin"
-    // and "my-plugin" both slugifying to "my-plugin").
-    return Path.GetFileName(packagePath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+    // Never string.Empty (external review round 1) - and never just the bare folder name either
+    // (external review round 3): Paperbunkr's own Install-Package flow always names the install
+    // folder after the source file, never a generic internal path segment
+    // (PackageManager.GetPackagePath -> Path.Combine(..., package.Name), package.Name from
+    // FileToName(sourceFile) - verified, no "dist"/"Release"-shaped folder is ever produced by it).
+    // But the empty-state hint text already documents a second, user-driven path - "drop a plugin
+    // folder into %AppData%\Paperbunkr\plugins" - where the user picks the folder name themselves,
+    // and two such folders (from different plugin authors) could plausibly share a generic name.
+    // A hash of the full absolute path is trivially unique across the whole plugins root, with no
+    // heuristic list of "generic-sounding" names to guess and maintain:
+    return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(
+        Path.GetFullPath(packagePath).ToUpperInvariant())))[..16];
 }
 ```
+
+(Note: this fallback only ever fires for a package with no valid `plugin.xml` - and without one,
+`PluginEngine.Discover`'s own `Directory.EnumerateFiles(pluginsRoot, "plugin.xml", AllDirectories)`
+never finds anything to discover for that folder at all, so it produces zero commands and no
+`NativeLoadResults` entry regardless of what its `Key` resolves to. This fallback exists purely so
+the Packages panel can still list and remove a manifest-less folder - existing CE-parity behavior,
+untouched by this redesign - not to correlate it against anything else. Sidebar selection in §4.4
+is by list-item object reference (`SelectedItem`), not a dictionary keyed on `Package.Key`, so even
+two manifest-less packages colliding on the same fallback key select and remove independently.)
 
 `Package.Name` itself now prefers `plugin.xml`'s `name` attribute (same read), falling back to
 `package.ini`'s `Name` then the existing `FileToName` folder heuristic only if neither manifest
@@ -218,20 +233,20 @@ Two-column layout (`avalonia-pro-max/layout-patterns`'s Master-Detail pattern �
     when mixed (external review round 1: an always-unchecked mixed state was ambiguous about what
     clicking it would do).
 
-    **Must NOT use Avalonia's own default three-state click cycle.** Verified directly against
-    `ToggleButton`'s real `Toggle()` source
-    (https://github.com/AvaloniaUI/Avalonia/blob/master/src/Avalonia.Controls/Primitives/ToggleButton.cs) -
-    the built-in cycle is `true → null → false → true`, so a plain two-way `IsChecked` binding
-    would hand the view model `false` on a click starting from indeterminate (external review round
-    2 caught this correctly - my round-1 fix asserted the VM "only ever receives true/false", which
-    is technically true but sidestepped that Avalonia's own default makes indeterminate resolve to
-    *disable everything*, the opposite of what a user clicking a half-filled master checkbox almost
-    certainly means). The fix: `IsChecked` binds **one-way, view model → view**
-    (`{Binding EnabledState, Mode=OneWay}`) so `ToggleButton.Toggle()` never runs and never writes
-    back on its own. The `CheckBox`'s `Click` routed event is handled explicitly instead:
+    **Bound entirely through a ViewModel `Command`, no code-behind event handler** (external review
+    round 3 correctly flagged an earlier draft's `OnMasterEnabledClick(object? sender,
+    RoutedEventArgs e)` code-behind snippet as contradicting §4.5's own `MasterEnabledClickCommand`
+    - fixed by actually writing it as the `[RelayCommand]` it was always described as):
+
+    ```xml
+    <CheckBox IsThreeState="True"
+              IsChecked="{Binding EnabledState, Mode=OneWay}"
+              Command="{Binding MasterEnabledClickCommand}" />
+    ```
 
     ```csharp
-    private void OnMasterEnabledClick(object? sender, RoutedEventArgs e)
+    [RelayCommand]
+    private void MasterEnabledClick()
     {
         bool next = EnabledState != true; // true only when already fully enabled; anything else
                                            // (false OR indeterminate) resolves to enabling all
@@ -240,10 +255,24 @@ Two-column layout (`avalonia-pro-max/layout-patterns`'s Master-Detail pattern �
     }
     ```
 
-    This makes the only two reachable outcomes "enable everything" (from `false` or `null`) and
-    "disable everything" (from `true`) - indeterminate is a display-only state the user can see but
-    never manually re-enter by clicking; it only reappears if `Refresh()` recomputes a genuinely
-    mixed state some other way (e.g. a per-command toggle changed individually).
+    **Binding a `Command` is necessary but, on its own, does not fix the underlying bug** - verified
+    directly against `ToggleButton`'s real source
+    (https://github.com/AvaloniaUI/Avalonia/blob/master/src/Avalonia.Controls/Primitives/ToggleButton.cs):
+    `OnClick()` is `Toggle(); base.OnClick();` - unconditional, with no check for whether a `Command`
+    is bound - and `Toggle()`'s own transition table is `true → null`, `null → false`, `false →
+    true`. So `Toggle()` still runs, and still calls `SetCurrentValue(IsCheckedProperty, ...)` with
+    its own (here, wrong) next value, on *every* click regardless of the bound `Command` - external
+    review round 3's proposed fix ("bind `Command` directly... keep UI routing out of code-behind")
+    would, by itself, still hand a click starting from indeterminate straight to `Toggle()`'s own
+    `false`. What actually neutralizes that: `IsChecked`'s `Mode=OneWay` binding (kept from the
+    previous round's fix, and still load-bearing, not optional) means the control's local value set
+    by `Toggle()` is *transient* - `base.OnClick()` invokes the bound `Command` synchronously, in the
+    same UI-thread call, immediately after `Toggle()` runs and before any render pass; `Refresh()`
+    re-raises `EnabledState`'s `PropertyChanged`, and the one-way binding re-pushes the correct value
+    over whatever `Toggle()` just set - all before the frame that would have shown the wrong value
+    ever paints. `Mode=OneWay` and the bound `Command` are both required together; either alone is
+    insufficient (`OneWay` alone leaves the trigger in code-behind, which is the actual MVVM
+    complaint; `Command` alone doesn't stop `Toggle()`'s own always-wrong-from-indeterminate write).
   - **⚙ Configure** button in the header — shown only when this package's `NativeLoadResults`
     entry has a `Module` that also implements `INativePluginSettingsUi`. Clicking it calls
     `CreateSettingsView` and hosts the result through the same shared
@@ -285,6 +314,22 @@ Two-column layout (`avalonia-pro-max/layout-patterns`'s Master-Detail pattern �
     already) and another might want batch-everything-on-Save; picking one and forcing it onto every
     future plugin author via a required interface member is prescriptive scope creep the host has
     no business enforcing.
+
+    **Opportunistic disposal, not a mandate** (external review round 3 asked what happens to any
+    event subscription/background task/lock a settings view might hold when the modal is abandoned
+    via scrim/X). Verified against the actual shipped consumer: grepped
+    `plugins/ClusterLibraryManager/Settings/` for `Timer`/`Subscribe`/`IDisposable`/event-handler
+    registrations - none exist; its `PluginDatabase` connection is opened once in
+    `OrganizerScraperPlugin.Initialize` and lives for the plugin's whole session, not per-settings-
+    view, so there is nothing for the settings view itself to leak today. Requiring every future
+    `INativePluginSettingsUi` implementation to also implement `IDisposable` would be a new mandatory
+    member on an interface that already ships with a working consumer, for a need nothing currently
+    has - real scope creep past what this redesign is fixing. Instead, purely additively:
+    `NativePluginModalHostViewModel.Advance()` (called on every dismiss/complete path) checks
+    `(HostedContent?.DataContext as IDisposable)?.Dispose()` then `(HostedContent as
+    IDisposable)?.Dispose()` before clearing `HostedContent`. Costs nothing for a plugin that
+    implements neither (`ClusterLibraryManager`, today), and closes the gap for free the moment a
+    future plugin's settings view model ever does hold something real.
   - Commands list, scoped to this package only (previously scattered across hook-grouped
     sections): each row keeps its existing shape (Name, enabled toggle, Run button if
     `CanRunManually`, compile-error text if `IsBroken`) plus, for a script-tier command that has a
@@ -320,7 +365,9 @@ right-hand pane's "nothing selected" content instead of the whole screen's conte
   (bulk-loops `Engine.AllCommands.Where(c => c.PluginKey == pluginKey)` through the existing
   `SetCommandEnabled`).
 
-### 4.6 Explicitly rejected (external review round 1 enhancements)
+### 4.6 Explicitly rejected
+
+External review round 1:
 
 - **Plugin metadata links** (`<Url>` tag, clickable Author) — `PluginManifest`'s root element has
   no `Url` attribute and never has ([PluginManifest.cs](../../../src/Paperbunkr.Plugins/PluginManifest.cs) -
@@ -333,6 +380,26 @@ right-hand pane's "nothing selected" content instead of the whole screen's conte
   across an engine upgrade and the project decides that's worth solving structurally - not a
   reactive UI addition now.
 
+External review round 3:
+
+- **Require `CreateSettingsView` to return a ViewModel, host maps it via a `ViewLocator`** — this
+  is the v4 native-tier design's own already-made, already-shipped decision, not something open to
+  relitigate from a screen redesign. `INativePluginSettingsUi.CreateSettingsView` returning a
+  `Control` directly (docs/superpowers/specs/2026-09-11-plugin-api-v4-native-tier-design.md) was
+  deliberate: a third-party plugin's compiled assembly should never have to match Paperbunkr's own
+  internal View-naming/registration convention just to show its own UI. It already has a real,
+  working consumer (`ClusterLibraryManager`). Changing it now is a breaking interface change to
+  shipped plugin infrastructure for a stylistic preference, not a fix for anything broken.
+- **Debounce the sidebar filter `TextBox`** — the suggested mechanism (`ReactiveUI`'s `.Throttle()`)
+  isn't available in this codebase at all (Paperbunkr is CommunityToolkit.Mvvm throughout, no
+  ReactiveUI/DynamicData dependency - established project convention). The underlying concern also
+  doesn't apply at this list's actual scale: it filters the *sidebar's installed-package rows*
+  (realistically single digits to a few dozen), not the larger per-package *commands* list -
+  re-filtering that on every keystroke is microseconds of work, not a stutter risk. Not adding
+  debounce machinery for a problem this list is never going to have; a `DispatcherTimer`-restart
+  debounce (the idiomatic non-Rx equivalent here) is a one-line addition later if this app ever
+  legitimately has hundreds of installed plugins.
+
 ## 5. Testing
 
 - `Paperbunkr.Plugins.Tests`: `PluginEngine.DiscoverNative` records a `NativePluginLoadResult` with
@@ -344,20 +411,26 @@ right-hand pane's "nothing selected" content instead of the whole screen's conte
 - `PackageManager` currently has no dedicated test project (verified — no `Paperbunkr.Engine.Tests`
   or equivalent exists, and nothing under an existing test project references it). New tests for
   `Package.Key`/`Package.Name` (`plugin.xml` root attributes take priority over `package.ini`/
-  folder heuristic; falls back correctly when `plugin.xml` is missing) land in a new
-  `Paperbunkr.Engine.Tests` project, matching this repo's one-test-project-per-library convention.
+  folder heuristic; falls back to the path-hash when `plugin.xml` is missing, and that hash is
+  stable across two `Package` instances built from the same path but differs for two different
+  paths, including two folders that share a bare name like `dist` at different parents) land in a
+  new `Paperbunkr.Engine.Tests` project, matching this repo's one-test-project-per-library
+  convention.
 - `Paperbunkr.App.Tests`: `PluginScreenViewModelTests` — selecting a package populates
   `SelectedPackage`'s commands filtered to that `PluginKey` only; `EnabledState` computes to
-  `true`/`false`/`null` correctly for all-enabled/all-disabled/mixed child commands; clicking
-  `MasterEnabledClickCommand` from `false` bulk-enables and from `null` (indeterminate) *also*
-  bulk-enables (the specific case external review round 2 caught - must not bulk-disable from
-  indeterminate), and from `true` bulk-disables; `ConfigureCommand` visibility is true only for a
-  module implementing `INativePluginSettingsUi`; a broken native package's detail pane shows its
-  `LoadError` text (including the "Duplicate plugin key" case) and its "Copy error" action copies
-  that exact string; the Reload button (script-tier only) calls `RediscoverPlugins()` and a
-  previously-broken command's `IsBroken` clears after the underlying script is fixed on disk
-  between calls; the sidebar filter `TextBox` narrows `Packages` by a case-insensitive name
-  substring.
+  `true`/`false`/`null` correctly for all-enabled/all-disabled/mixed child commands; invoking
+  `MasterEnabledClickCommand` (as a command, not by setting `IsChecked` directly - the whole point
+  being verified is that the click path never relies on `Toggle()`'s own transition) from `false`
+  bulk-enables and from `null` (indeterminate) *also* bulk-enables (external review round 2's case),
+  and from `true` bulk-disables; `ConfigureCommand` visibility is true only for a module
+  implementing `INativePluginSettingsUi`; `NativePluginModalHostViewModel` calls `Dispose()` on a
+  hosted `DataContext`/`Control` that implements `IDisposable` when dismissed, and does nothing
+  (no exception, no-op) when neither does - covering both `ClusterLibraryManager` today and a
+  fixture that does implement it; a broken native package's detail pane shows its `LoadError` text
+  (including the "Duplicate plugin key" case) and its "Copy error" action copies that exact string;
+  the Reload button (script-tier only) calls `RediscoverPlugins()` and a previously-broken
+  command's `IsBroken` clears after the underlying script is fixed on disk between calls; the
+  sidebar filter `TextBox` narrows `Packages` by a case-insensitive name substring.
 - Manual on-screen check (this is UI-rearrangement work): install ClusterLibraryManager (already
   done), open Preferences → Plugins, select it in the sidebar, confirm Configure opens its real
   `SettingsRootView` in the existing modal overlay, toggle master Enabled off/on and confirm its

@@ -6,6 +6,13 @@
     <Nullable>enable</Nullable>
     <RootNamespace>ClusterLibraryManager</RootNamespace>
     <AssemblyName>ClusterLibraryManager</AssemblyName>
+    <!-- Class libraries don't copy PackageReference dlls to output by default - this plugin's own
+         build output IS its shipped package (see the Deliberately-not-in-sln comment below), so
+         LiteDB.dll (this plugin's own, un-shared-by-the-host dependency) must land next to
+         ClusterLibraryManager.dll for PluginLoadContext's AssemblyDependencyResolver to find it on
+         a machine with no dev NuGet cache. Avalonia/CommunityToolkit.Mvvm also copy but are
+         harmless duplicates - PluginLoadContext.Load prefers the host's own already-loaded copies. -->
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
   </PropertyGroup>
 
   <ItemGroup>

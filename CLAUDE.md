@@ -27,6 +27,25 @@ Before adding any field, default, or behavior, verify it against the original Co
 source/behavior (`_reference/ComicRackCE`) rather than assuming — this project is a from-scratch
 rewrite aiming for CE parity plus deliberate deviations, not a guess at what CE probably did.
 
+## Communication style — caveman is a prerequisite for this project
+
+The `caveman` plugin (https://github.com/JuliusBrussee/caveman, installed 2026-09-12 at user scope
+via `claude plugin marketplace add JuliusBrussee/caveman && claude plugin install caveman@caveman`)
+is required for all sessions working in this repo: prose responses should stay in its
+ultra-compressed "caveman" register — short, technically accurate, no throat-clearing — rather than
+the fuller sentences this file's other guidance might otherwise pull toward. It auto-activates via
+its own `SessionStart`/`UserPromptSubmit` hooks once installed, so no per-session invocation is
+needed; treat it as satisfied automatically rather than something to re-check each session. This
+governs prose only — it does not change code style, comments, commit messages, or any other rule
+in this file.
+
+The optional `caveman-mcp` shrink middleware (`mcp/README.md` in that repo) was **not** installed:
+registering it (`claude mcp add caveman --scope user -- npx -y caveman-mcp`) was blocked by the
+auto-mode permission classifier because its launcher auto-downloads and executes a third-party
+binary into `~/.caveman/bin` on first use. If a future session wants it, that install needs the
+user to run the command themselves (or explicitly approve it in an interactive session) — don't
+retry it silently.
+
 ## Design workflow — grilling is the clarifying-questions step
 
 The `brainstorming` skill (still mandatory before any feature/behavior work, per its own
@@ -168,3 +187,38 @@ also means `TextLines.Count`/`Height` alone don't prove wrapping works in a test
 *increases* for longer text at the *same* width (a single short/narrow smoke-test measurement can
 pass even when wrapping is completely broken, since one clipped line still reports a positive,
 plausible-looking height).
+
+## Runtime gotcha: don't remove/detach a control from inside a routed event it's still raising
+
+Found 2026-09-12 chasing an `Avalonia.ArgumentOutOfRangeException` inside
+`Visual.OnDetachedFromVisualTreeCore` → `AvaloniaList<T>.Remove` → `SetVisualParent` — first
+reported from `SuggestBox`'s dropdown, then found independently in well over a dozen more spots
+(Library/Books workspace + reading-list + collection + smart-list + continuity/event delete
+buttons, the reader's TOC/bookmark/highlight/search drawers and their delete buttons, Detail
+screen's external-metadata/tracker linking, Activity Center's peek popover and alert dismiss, the
+plugin manager, Library Health's missing-files list, the PDF reader's captures drawer, keyboard
+shortcut chip removal — see `git log` around this date for the full fix set across ~15 files).
+
+The shape is always the same: a `Button` (or other control) lives **inside** a `Popup`'s content or
+an `ItemsControl`/`ListBox` row, and the command that `Button` raises — still synchronously routing
+that very `Click`/`PointerReleased`/`KeyDown` event — closes the `Popup` (sets its bound `IsOpen`
+property to `false`) or mutates the `ObservableCollection` backing that same row (`.Remove()`,
+`.Clear()`, a full reload that clears-and-repopulates). Either one detaches the clicking control's
+own visual subtree while Avalonia is still walking up the route calling handlers on it, which
+corrupts the framework's internal child-list bookkeeping and throws — reliably if the removal is
+unconditional and synchronous, intermittently if it's behind an `await` that sometimes completes
+without yielding (e.g. a cache hit skipping a real I/O round-trip).
+
+**Fix: defer the close/removal one dispatcher tick** — `Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+/* IsOpen = false, or collection.Remove(item)/.Clear() */)` — so it runs after the triggering event
+has finished routing instead of synchronously inline. Apply this at the specific call site inside
+the command, not by making the whole shared helper it calls (`RefreshSidebar`, `LoadFromDatabase`,
+etc.) asynchronous, since those helpers are usually also called from genuinely safe contexts. If a
+`using var context = ...` from the same method is needed only for the deferred branch, create a
+*fresh* context inside the `Dispatcher.UIThread.Post` lambda instead of capturing the outer one —
+the outer `using` disposes it as soon as the (now non-blocking) command method returns, before the
+deferred callback ever runs.
+
+Any brand-new "remove this row" / "link this item and dismiss" / "close this popup from a row
+inside it" button is a candidate for this bug — check it against this pattern before assuming a
+plain synchronous property-set or `.Remove()` call is fine.

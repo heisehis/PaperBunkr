@@ -43,4 +43,18 @@ public static class GroupStrategies
     public static (Func<IssueListRow, string> Key, Comparison<string> Order) Boolean(Func<IssueListRow, bool> get, string trueLabel, string falseLabel) =>
         (row => get(row) ? trueLabel : falseLabel,
          (a, b) => string.Compare(a, b, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>
+    /// Bucket a <c>bool?</c> into 3 labeled groups, ordered Unknown &lt; No &lt; Yes - matching CE's
+    /// own <c>YesNo</c> enum ordering (docs/superpowers/specs/2026-09-12-library-sort-group-axes-
+    /// design.md §4), not alphabetical like <see cref="Boolean"/> above (alphabetical would misorder
+    /// e.g. "Final issue"/"Not final"/"Unknown").
+    /// </summary>
+    public static (Func<IssueListRow, string> Key, Comparison<string> Order) TriState(
+        Func<IssueListRow, bool?> get, string yesLabel, string noLabel, string unknownLabel)
+    {
+        int Rank(string label) => label == unknownLabel ? 0 : label == noLabel ? 1 : 2;
+        return (row => get(row) switch { true => yesLabel, false => noLabel, null => unknownLabel },
+                (a, b) => Rank(a).CompareTo(Rank(b)));
+    }
 }

@@ -343,6 +343,34 @@ unmappable comparer/grouper concepts — AlternateCount/variant tracking, a Book
 OpenCount/access tracking, a Proposed-metadata workflow, per-issue SeriesComplete — none of which
 List Layouts needed).
 
+**Pluggable sort/group strategies resumed and (mostly) shipped 2026-09-12** — design:
+`docs/superpowers/specs/2026-09-12-library-sort-group-axes-design.md`, plan:
+`docs/superpowers/specs/2026-09-12-library-sort-group-axes-plan.md`. Re-verified against current
+code first, not the pause notes above: `BookmarkCount`/`OpenCount` sort had already shipped as
+`IssueListFieldCatalog` entries by the time this resumed (no work needed), and the CE-ported
+`ComicBook`/comparer/grouper engine (~138 classes) is confirmed 100% dead code — this stayed
+entirely inside the real, live catalog system instead of touching it. Of the original 5 concepts:
+`AlternateCount`/variant tracking is still explicitly split off to its own future `IssueEdition`
+item (real scope, not done here); the other 4 resolved as **Virtual Tags** (new dynamic per-tag
+sort/group entries — `IssueListSortField.VirtualTag`/`GroupField.VirtualTag`, one live entry per
+enabled `VirtualTagDefinition`, resolved via `IssueListFieldCatalog.BuildVirtualTagSortDescriptor`/
+`BuildVirtualTagGroupDescriptor` rather than the static per-enum dictionaries, since the field
+family is user-defined and variable-count — mirrors `SmartListField.VirtualTag`'s existing
+`VirtualTagId` pattern), **Needs Review** (`NeedsReview`/`PendingProposalCount`, deliberately
+grounded in Paperbunkr's real `MetadataProposal` pending-review queue rather than CE's actual
+`EnableProposed` concept, which turned out on inspection to be a different, inapplicable
+filename-fallback flag), **`OpenCount` grouper** (new — CE's literal fixed ranges, 0-20/21-50/.../
+&gt;1000, sort already existed), and **`IsFinalIssue` tri-state** (`bool` → `bool?`, EF migration
+`LibrarySortGroupAxesAndFinalIssueTriState`, tri-state `CheckBox` replacing the old `ToggleSwitch`
+on Issue Properties — forward-looking only, since `CeLibraryMigrator` already collapsed CE's
+`SeriesComplete` Unknown/No into a plain `false` before this field existed, so no CE-migrated
+library can ever recover a true historical Unknown). New tests across
+`IssueListFieldCatalogTests`/`SortGroupStrategiesTests`/`IssueListScreenViewModelTests`/a new
+migration test/write-back-null-case tests, all passing (targeted-filter runs, not full-suite, per
+the project's own flaky-full-suite caveat). **Not yet done: on-screen verification** of the new
+toolbar sort/group entries and the tri-state checkbox — standing no-computer-use caveat, flagged
+rather than assumed.
+
 **On-screen verification gap closed the same session** (docs/onboarding.md §17): the "no
 unattended desktop GUI automation available" caveat repeated across ~15 specs/roadmap entries is no
 longer categorically true. `src/Paperbunkr.App.UiTests` (FlaUI/UIA3) now drives the real compiled

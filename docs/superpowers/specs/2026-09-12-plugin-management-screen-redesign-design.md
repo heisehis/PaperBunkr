@@ -197,10 +197,17 @@ model.)
 A small computed status, not new persisted state:
 
 - **Broken** — a native package with a `NativeLoadResults` entry whose `LoadError` is non-null, OR
-  a package (either tier) whose discovered commands are all `IsBroken` (or it discovered zero
-  commands at all, while other same-tier packages in the same run did produce commands — i.e. it
-  isn't just "a plugin with no commands by design", which script-tier already allows for a
-  config-only package). Shows the error/compile-error text inline.
+  a package (either tier) that produced at least one command and every one of them is `IsBroken`.
+  Shows the error/compile-error text inline.
+
+  **Correction made during implementation:** an earlier draft of this bullet also flagged a package
+  with *zero* discovered commands as broken "when other same-tier packages in the same run did
+  produce commands." Writing the actual comparison out revealed it doesn't hold up: whether package
+  A has zero commands by legitimate design (a config-only script package, or a native package that
+  simply registers nothing) has no relationship to what package B happened to produce in the same
+  pass - using B's command count as a signal about A is arbitrary, not a real health check. Zero
+  commands is not, by itself, treated as broken; only a genuine native load failure or a package
+  where every one of its own commands actually failed counts.
 - **Healthy** — otherwise.
 - **Pending** — reuses the existing `IsPending`/`PackageType.PendingInstall` /
   `PendingRemove` concept unchanged; pending takes visual precedence over broken/healthy since the

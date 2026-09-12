@@ -7,6 +7,7 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Media;
+using Avalonia.Threading;
 using Paperbunkr.App.Models;
 using Paperbunkr.App.ViewModels;
 using Paperbunkr.Data.Entities;
@@ -803,11 +804,18 @@ public partial class BookReaderScreen : UserControl
     {
         if (DataContext is BookReaderScreenViewModel vm)
         {
-            vm.CloseTocCommand.Execute(null);
-            vm.CloseFontSheetCommand.Execute(null);
-            vm.CloseBookmarksCommand.Execute(null);
-            vm.CloseHighlightsCommand.Execute(null);
-            vm.CloseSearchCommand.Execute(null);
+            // Deferred: the scrim itself lives inside the drawer/sheet Popup's own content, so
+            // closing synchronously here would detach that content mid pointer-event-route -
+            // Avalonia's detach walk crashes with an ArgumentOutOfRangeException (see
+            // Paperbunkr.App.Controls.SuggestBox.Commit for the fully diagnosed case).
+            Dispatcher.UIThread.Post(() =>
+            {
+                vm.CloseTocCommand.Execute(null);
+                vm.CloseFontSheetCommand.Execute(null);
+                vm.CloseBookmarksCommand.Execute(null);
+                vm.CloseHighlightsCommand.Execute(null);
+                vm.CloseSearchCommand.Execute(null);
+            });
         }
 
         e.Handled = true;

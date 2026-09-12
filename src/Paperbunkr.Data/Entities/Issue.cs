@@ -52,10 +52,14 @@ public class Issue
     /// Replaces the never-ported per-issue <c>SeriesComplete</c> (docs/superpowers/specs/2026-08-17-
     /// metadata-model-phase1-canonical-metadata-design.md) - "this issue is the one that completes
     /// the series," distinct from <see cref="Series.Status"/> ("this series is known to be
-    /// complete"). Schema-present, deliberately dormant this phase - no source to backfill from
-    /// (CE's flag was never carried into Paperbunkr's schema) and no editor UI yet.
+    /// complete"). Editor UI shipped 2026-08-18 (Issue Properties checkbox). Tri-state as of
+    /// docs/superpowers/specs/2026-09-12-library-sort-group-axes-design.md §4: <see langword="null"/>
+    /// is "Unknown" (the default for new/never-touched issues), matching CE's own tri-state
+    /// <c>SeriesComplete</c> shape - though CE-migrated libraries can never recover a true
+    /// <see langword="null"/> for pre-existing issues, since <c>CeLibraryMigrator</c> already
+    /// collapsed CE's Unknown/No into a plain <see langword="false"/> before this field existed.
     /// </summary>
-    public bool IsFinalIssue { get; set; }
+    public bool? IsFinalIssue { get; set; }
 
     /// <summary>
     /// New field — confirmed absent from CE's ComicInfo entirely (docs/onboarding.md §6). This is

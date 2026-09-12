@@ -315,10 +315,14 @@ public partial class IssuePropertiesScreenViewModel : ViewModelBase
 
     /// <summary>Replaces CE's per-issue Yes/No/Unknown <c>SeriesComplete</c> checkbox - had shipped
     /// data (docs/superpowers/specs/2026-08-17-metadata-model-phase1-canonical-metadata-design.md)
-    /// with no editor UI until now (docs/superpowers/specs/2026-08-18-metadata-model-ui-gaps-status-
-    /// and-bookmarks-design.md). A plain bool, not tri-state like CE's - CE's "Unknown" state doesn't
-    /// have a real Paperbunkr equivalent here since this is a user-set flag, not inferred data.</summary>
-    [ObservableProperty] private bool _isFinalIssue;
+    /// with no editor UI until 2026-08-18 (docs/superpowers/specs/2026-08-18-metadata-model-ui-gaps-
+    /// status-and-bookmarks-design.md), initially as a plain bool. Tri-state as of
+    /// docs/superpowers/specs/2026-09-12-library-sort-group-axes-design.md §4 - bound to a
+    /// three-state <c>CheckBox</c> in the view. Forward-looking only: CE-migrated libraries can
+    /// never recover a true "Unknown" for pre-existing issues (<c>CeLibraryMigrator</c> already
+    /// collapsed CE's own Unknown/No into a plain <see langword="false"/> before this field existed),
+    /// so <see langword="null"/> here only ever means "never explicitly set since this shipped."</summary>
+    [ObservableProperty] private bool? _isFinalIssue;
 
     // ===================== Plot & Notes tab =====================
 
@@ -352,7 +356,7 @@ public partial class IssuePropertiesScreenViewModel : ViewModelBase
         string Publisher, string Imprint, string Format, string BookAge, string YearText, string MonthText,
         string DayText, string Genre, string Tags, string Writer, string Penciller, string Inker,
         string Colorist, string Letterer, string CoverArtist, string Editor, string Translator,
-        string AgeRating, string LanguageIso, string ColorModeText, bool IsFinalIssue,
+        string AgeRating, string LanguageIso, string ColorModeText, bool? IsFinalIssue,
         string Characters, string Teams, string MainCharacterOrTeam, string Locations, string Web,
         string ScanInformation, string Summary, string Notes, string Review);
 
@@ -393,7 +397,12 @@ public partial class IssuePropertiesScreenViewModel : ViewModelBase
     [RelayCommand]
     private async Task RunEditorPlugin(Command command)
     {
-        IsEditorPluginMenuOpen = false;
+        // Deferred: this command runs from a row Button.Click still routing through the plugin
+        // menu Popup's own content. Closing the popup synchronously here detaches that same row's
+        // visual tree mid-route, which crashes Avalonia's detach walk with an
+        // ArgumentOutOfRangeException (see Paperbunkr.App.Controls.SuggestBox.Commit for the fully
+        // diagnosed case).
+        Dispatcher.UIThread.Post(() => IsEditorPluginMenuOpen = false);
         if (_pluginHost is null || _issueId is not int issueId)
         {
             return;

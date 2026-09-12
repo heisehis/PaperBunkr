@@ -706,7 +706,21 @@
 
         <!-- ================= ACTIVITY TAB ================= -->
         <StackPanel IsVisible="{Binding IsActivityTab}" Margin="0,20,0,0" Spacing="4">
-            <TextBlock Text="No recent activity." FontSize="12.5" Foreground="{DynamicResource PbTextFaintBrush}" />
+            <TextBlock IsVisible="{Binding !HasActivity}" Text="No recent activity." FontSize="12.5" Foreground="{DynamicResource PbTextFaintBrush}" />
+            <ItemsControl ItemsSource="{Binding Activity}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="models:ActivitySample">
+                        <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,0,0,10">
+                            <fi:SymbolIcon Symbol="{Binding Icon}" FontSize="{StaticResource PbIconSizeSm}"
+                                           Foreground="{DynamicResource PbTextMutedBrush}" VerticalAlignment="Center" />
+                            <TextBlock Text="{Binding Label}" FontSize="12.5" Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
+                            <TextBlock Text="·" FontSize="12.5" Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" />
+                            <TextBlock Text="{Binding TimestampUtc, Converter={x:Static views:RelativeTimeConverter.Instance}}"
+                                       FontSize="12.5" Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
         </StackPanel>
 
         <!-- ================= PLUGINS TAB ================= (docs/superpowers/specs/2026-09-05-

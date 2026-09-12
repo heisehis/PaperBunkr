@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Threading.Tasks;
+using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.EntityFrameworkCore;
@@ -310,7 +311,12 @@ public partial class BooksScreenViewModel : ViewModelBase, IContextMenuProvider
         }
 
         RefreshWorkspaces();
-        ActiveDropdown = null;
+
+        // Deferred: this command runs from a row Button.Click still routing through the Workspace
+        // Popup's own content. Closing the popup synchronously here detaches that same row's visual
+        // tree mid-route, which crashes Avalonia's detach walk with an ArgumentOutOfRangeException
+        // (see Paperbunkr.App.Controls.SuggestBox.Commit for the fully diagnosed case).
+        Dispatcher.UIThread.Post(() => ActiveDropdown = null);
     }
 
     [RelayCommand]
@@ -368,7 +374,10 @@ public partial class BooksScreenViewModel : ViewModelBase, IContextMenuProvider
             PersistActiveWorkspaceId();
         }
 
-        RefreshWorkspaces();
+        // Deferred: this command runs from the row's own ✕ Button.Click still routing through the
+        // Workspaces row's own ItemsControl - see ApplyWorkspace above for the fully diagnosed crash
+        // this avoids.
+        Dispatcher.UIThread.Post(RefreshWorkspaces);
     }
 
     [RelayCommand] private void MoveWorkspaceUp(int id) => MoveWorkspace(id, -1);
@@ -386,7 +395,11 @@ public partial class BooksScreenViewModel : ViewModelBase, IContextMenuProvider
 
         (user[index], user[target]) = (user[target], user[index]);
         _workspaceService.Reorder(WorkspaceScreen.Books, user);
-        RefreshWorkspaces();
+
+        // Deferred: this command runs from the row's own ▲/▼ Button.Click still routing through the
+        // Workspaces row's own ItemsControl - see ApplyWorkspace above for the fully diagnosed crash
+        // this avoids.
+        Dispatcher.UIThread.Post(RefreshWorkspaces);
     }
 
     [RelayCommand]

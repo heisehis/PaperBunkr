@@ -472,6 +472,22 @@
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
+                            <!-- Virtual Tags - dynamic, one entry per enabled VirtualTagDefinition
+                                 (docs/superpowers/specs/2026-09-12-library-sort-group-axes-design.md
+                                 §1), deliberately not in SortFieldOptions (no single fixed comparer
+                                 exists for the whole family). Hidden entirely when none are enabled. -->
+                            <ItemsControl ItemsSource="{Binding IssueList.AvailableVirtualTags}" IsVisible="{Binding IssueList.HasVirtualTags}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="models:VirtualTagOption">
+                                        <Button Classes="modeOption"
+                                                Classes.active="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).IssueList.ActiveVirtualTagSortId, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={Binding Id}}"
+                                                Content="{Binding Name}"
+                                                Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).IssueList.SetVirtualTagSortFieldCommand}"
+                                                CommandParameter="{Binding}"
+                                                AutomationProperties.AutomationId="{Binding Id, StringFormat='LibrarySortOption_VirtualTag_{0}'}" />
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
                             <Border Height="1" Background="{DynamicResource PbBorderBrush}" Margin="0,8" />
                             <Button Classes="modeOption" Classes.active="{Binding IssueList.SortDirection, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:SortDirection.Ascending}}"
                                     Content="↑ Ascending" Command="{Binding IssueList.ToggleSortDirectionCommand}" AutomationProperties.AutomationId="LibrarySortAscending" />
@@ -492,6 +508,19 @@
                                                 Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).IssueList.SetGroupFieldCommand}"
                                                 CommandParameter="{Binding Field}"
                                                 AutomationProperties.AutomationId="{Binding Field, StringFormat='LibraryGroupOption_{0}'}" />
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <!-- Virtual Tags - see the Sort tab's own section above for rationale. -->
+                            <ItemsControl ItemsSource="{Binding IssueList.AvailableVirtualTags}" IsVisible="{Binding IssueList.HasVirtualTags}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="models:VirtualTagOption">
+                                        <Button Classes="modeOption"
+                                                Classes.active="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).IssueList.ActiveVirtualTagGroupId, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={Binding Id}}"
+                                                Content="{Binding Name}"
+                                                Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).IssueList.SetVirtualTagGroupFieldCommand}"
+                                                CommandParameter="{Binding}"
+                                                AutomationProperties.AutomationId="{Binding Id, StringFormat='LibraryGroupOption_VirtualTag_{0}'}" />
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>

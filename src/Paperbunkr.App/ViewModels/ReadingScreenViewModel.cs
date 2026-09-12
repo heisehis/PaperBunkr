@@ -5,6 +5,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Avalonia.Media.Imaging;
+using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.EntityFrameworkCore;
@@ -758,32 +759,43 @@ public partial class ReadingScreenViewModel : ViewModelBase, IContextMenuProvide
         context.ReadingLists.Remove(list);
         context.SaveChanges();
 
-        if (_activeReadingListId == readingListId)
+        var nextId = _activeReadingListId == readingListId
+            ? context.ReadingLists.OrderBy(r => r.SortOrder).Select(r => (int?)r.Id).FirstOrDefault()
+            : null;
+
+        // Deferred: this command runs from the row's own TwoStepConfirm "Confirm" Button.Click
+        // still routing through the sidebar's own ItemsControl. RefreshSidebar (and the Groups/Tags
+        // resets below) clear the very collection that row belongs to, which would detach it
+        // mid-route and crash Avalonia's detach walk with an ArgumentOutOfRangeException (see
+        // Paperbunkr.App.Controls.SuggestBox.Commit for the fully diagnosed case).
+        Dispatcher.UIThread.Post(() =>
         {
-            _activeReadingListId = null;
-            OnPropertyChanged(nameof(IsListOpen));
-            var nextId = context.ReadingLists.OrderBy(r => r.SortOrder).Select(r => (int?)r.Id).FirstOrDefault();
-            if (nextId is int id)
+            if (_activeReadingListId == readingListId)
             {
-                LoadReadingList(id);
-                return;
+                _activeReadingListId = null;
+                OnPropertyChanged(nameof(IsListOpen));
+                if (nextId is int id)
+                {
+                    LoadReadingList(id);
+                    return;
+                }
+
+                ListName = string.Empty;
+                Subtitle = string.Empty;
+                TypeLabel = string.Empty;
+                CreatedAtLabel = string.Empty;
+                Groups.Clear();
+                Tags.Clear();
+                TotalCount = 0;
+                OwnedCount = 0;
+                MissingCount = 0;
+                ReadCount = 0;
+                ContinueTarget = null;
+                ContinueLabel = string.Empty;
             }
 
-            ListName = string.Empty;
-            Subtitle = string.Empty;
-            TypeLabel = string.Empty;
-            CreatedAtLabel = string.Empty;
-            Groups.Clear();
-            Tags.Clear();
-            TotalCount = 0;
-            OwnedCount = 0;
-            MissingCount = 0;
-            ReadCount = 0;
-            ContinueTarget = null;
-            ContinueLabel = string.Empty;
-        }
-
-        RefreshSidebar();
+            RefreshSidebar();
+        });
     }
 
     // --- Phase 4c overhaul (docs/superpowers/specs/2026-08-17-metadata-model-phase4c-reading-

@@ -189,4 +189,86 @@ public class IssueListScreenViewModelTests
 
         Assert.Equal(42, openedId);
     }
+
+    // --- docs/superpowers/specs/2026-09-12-library-sort-group-axes-design.md §1 ---
+
+    [Fact]
+    public void SetVirtualTagSortField_SortsByThatTagsEvaluatedValue()
+    {
+        var vm = new IssueListScreenViewModel(goReaderForIssue: _ => { });
+        var tag = new VirtualTagDefinition { Id = 1, Name = "Writer Tag", CaptionFormat = "{Writer}", IsEnabled = true };
+        vm.SetVirtualTags(new[] { tag });
+        vm.SetRows(new[] { MakeIssue("Series A", "One", writer: "Zeb"), MakeIssue("Series A", "Two", writer: "Adam") });
+        vm.SortDirection = SortDirection.Ascending;
+
+        vm.SetVirtualTagSortFieldCommand.Execute(new VirtualTagOption(tag.Id, tag.Name));
+
+        Assert.Equal(IssueListSortField.VirtualTag, vm.SortField);
+        Assert.Equal(tag.Id, vm.SortVirtualTagId);
+        // Ascending by evaluated Writer value: "Adam" (issue "Two") before "Zeb" (issue "One").
+        Assert.Equal("Two", vm.Rows[0].Title);
+        Assert.Equal("One", vm.Rows[1].Title);
+    }
+
+    [Fact]
+    public void SetVirtualTagGroupField_GroupsByThatTagsEvaluatedValue()
+    {
+        var vm = new IssueListScreenViewModel(goReaderForIssue: _ => { });
+        var tag = new VirtualTagDefinition { Id = 1, Name = "Writer Tag", CaptionFormat = "{Writer}", IsEnabled = true };
+        vm.SetVirtualTags(new[] { tag });
+        vm.SetRows(new[] { MakeIssue("Series A", "One", writer: "Marvel Team"), MakeIssue("Series A", "Two", writer: "Marvel Team") });
+
+        vm.SetVirtualTagGroupFieldCommand.Execute(new VirtualTagOption(tag.Id, tag.Name));
+
+        Assert.Equal(IssueListGroupField.VirtualTag, vm.GroupField);
+        Assert.Equal(tag.Id, vm.GroupVirtualTagId);
+        Assert.True(vm.IsGrouped);
+        var group = Assert.Single(vm.Groups);
+        Assert.Equal("Marvel Team", group.Header);
+        Assert.Equal(2, group.Items.Count);
+    }
+
+    [Fact]
+    public void SortFieldLabel_ForVirtualTag_ShowsTheTagsName()
+    {
+        var vm = new IssueListScreenViewModel(goReaderForIssue: _ => { });
+        var tag = new VirtualTagDefinition { Id = 5, Name = "Reading Status", CaptionFormat = "{Writer}", IsEnabled = true };
+        vm.SetVirtualTags(new[] { tag });
+
+        vm.SetVirtualTagSortFieldCommand.Execute(new VirtualTagOption(tag.Id, tag.Name));
+
+        Assert.Equal("Reading Status", vm.SortFieldLabel);
+    }
+
+    [Fact]
+    public void AvailableVirtualTags_And_HasVirtualTags_ReflectSetVirtualTags()
+    {
+        var vm = new IssueListScreenViewModel(goReaderForIssue: _ => { });
+        Assert.False(vm.HasVirtualTags);
+        Assert.Empty(vm.AvailableVirtualTags);
+
+        vm.SetVirtualTags(new[] { new VirtualTagDefinition { Id = 1, Name = "Tag A" } });
+
+        Assert.True(vm.HasVirtualTags);
+        Assert.Equal("Tag A", Assert.Single(vm.AvailableVirtualTags).Name);
+    }
+
+    /// <summary>A selected Virtual Tag deleted after selection (no longer in the enabled-tags list)
+    /// must fall back to the default sort field rather than throwing when resolving the descriptor.</summary>
+    [Fact]
+    public void SortRows_SelectedVirtualTagNoLongerExists_FallsBackWithoutThrowing()
+    {
+        var vm = new IssueListScreenViewModel(goReaderForIssue: _ => { });
+        var tag = new VirtualTagDefinition { Id = 1, Name = "Gone Tag", CaptionFormat = "{Writer}", IsEnabled = true };
+        vm.SetVirtualTags(new[] { tag });
+        vm.SetRows(new[] { MakeIssue("Series A", "One") });
+        vm.SetVirtualTagSortFieldCommand.Execute(new VirtualTagOption(tag.Id, tag.Name));
+
+        // The tag is now gone from the available set (e.g. deleted), but SortField/SortVirtualTagId
+        // still point at it until something else changes them.
+        var ex = Record.Exception(() => vm.SetVirtualTags(Array.Empty<VirtualTagDefinition>()));
+
+        Assert.Null(ex);
+        Assert.Single(vm.Rows);
+    }
 }

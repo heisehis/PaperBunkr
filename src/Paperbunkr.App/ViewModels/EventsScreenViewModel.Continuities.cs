@@ -1,6 +1,7 @@
 using System;
 using System.Collections.ObjectModel;
 using System.Linq;
+using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.EntityFrameworkCore;
@@ -372,27 +373,36 @@ public partial class EventsScreenViewModel
             context.SaveChanges();
         }
 
-        if (_activeContinuityId == continuityId)
+        // Deferred: this command runs from the row's own TwoStepConfirm "Confirm" Button.Click still
+        // routing through the sidebar's own ItemsControl. RefreshContinuitiesSidebar (and the
+        // Overlapping/Shared/Members resets below) clear the very collection that row belongs to,
+        // which would detach it mid-route and crash Avalonia's detach walk with an
+        // ArgumentOutOfRangeException (see Paperbunkr.App.Controls.SuggestBox.Commit for the fully
+        // diagnosed case).
+        Dispatcher.UIThread.Post(() =>
         {
-            _activeContinuityId = null;
-            NotifySelectionChanged();
-            ContinuityName = string.Empty;
-            ContinuityDescription = string.Empty;
-            ContinuityPublisher = string.Empty;
-            ContinuityMembers.Clear();
-            OverlappingContinuities.Clear();
-            SharedContinuitySeries.Clear();
-            OnPropertyChanged(nameof(HasActiveContinuity));
-            OnPropertyChanged(nameof(HasNoContinuityMembers));
-        }
+            if (_activeContinuityId == continuityId)
+            {
+                _activeContinuityId = null;
+                NotifySelectionChanged();
+                ContinuityName = string.Empty;
+                ContinuityDescription = string.Empty;
+                ContinuityPublisher = string.Empty;
+                ContinuityMembers.Clear();
+                OverlappingContinuities.Clear();
+                SharedContinuitySeries.Clear();
+                OnPropertyChanged(nameof(HasActiveContinuity));
+                OnPropertyChanged(nameof(HasNoContinuityMembers));
+            }
 
-        RefreshContinuitiesSidebar();
+            RefreshContinuitiesSidebar();
 
-        // Fall back to the first remaining continuity, matching the sidebar's first-load behaviour.
-        if (_activeContinuityId is null && Continuities.Count > 0)
-        {
-            LoadContinuity(Continuities[0].Id);
-        }
+            // Fall back to the first remaining continuity, matching the sidebar's first-load behaviour.
+            if (_activeContinuityId is null && Continuities.Count > 0)
+            {
+                LoadContinuity(Continuities[0].Id);
+            }
+        });
     }
 
     /// <summary>"Delete continuity" from the ⋯ Manage menu - arms the active row's own two-step confirm.</summary>
@@ -420,9 +430,18 @@ public partial class EventsScreenViewModel
         }
 
         _activeContinuityId = null;
-        RefreshContinuitiesSidebar();
-        LoadContinuity(targetId);
-        _notify("Continuities merged", $"Series folded into \"{targetName}\".");
+
+        // Deferred: this command runs from the overlap card's own "Merge into this" Button.Click
+        // still routing through the OverlappingContinuities row's own ItemsControl. LoadContinuity
+        // clears OverlappingContinuities, which would detach that same card mid-route and crash
+        // Avalonia's detach walk with an ArgumentOutOfRangeException (see
+        // Paperbunkr.App.Controls.SuggestBox.Commit for the fully diagnosed case).
+        Dispatcher.UIThread.Post(() =>
+        {
+            RefreshContinuitiesSidebar();
+            LoadContinuity(targetId);
+            _notify("Continuities merged", $"Series folded into \"{targetName}\".");
+        });
     }
 
     // --- Bulk selection: continuity surfaces (docs/superpowers/specs/2026-08-28-bulk-selection-lists-continuities-events-design.md) ---

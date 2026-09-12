@@ -8,9 +8,9 @@ public class SortGroupStrategiesTests
 {
     private static readonly IBrush Brush = Brushes.Black;
 
-    private static IssueListRow Row(string? writer = null, int? pageCount = null, DateTime? added = null, bool isMissing = false) => new()
+    private static IssueListRow Row(string? writer = null, int? pageCount = null, DateTime? added = null, bool isMissing = false, bool? isFinalIssue = null) => new()
     {
-        SeriesName = "S", Title = "T", Writer = writer, PageCount = pageCount, AddedTime = added, IsMissing = isMissing, CoverBrush = Brush,
+        SeriesName = "S", Title = "T", Writer = writer, PageCount = pageCount, AddedTime = added, IsMissing = isMissing, CoverBrush = Brush, IsFinalIssue = isFinalIssue,
     };
 
     [Fact]
@@ -78,5 +78,24 @@ public class SortGroupStrategiesTests
         var (key, _) = GroupStrategies.Boolean(r => r.IsMissing, "Missing", "Available");
         Assert.Equal("Missing", key(Row(isMissing: true)));
         Assert.Equal("Available", key(Row(isMissing: false)));
+    }
+
+    [Fact]
+    public void TriState_GroupKey_UsesProvidedLabels_ForAllThreeStates()
+    {
+        var (key, _) = GroupStrategies.TriState(r => r.IsFinalIssue, "Final issue", "Not final", "Unknown");
+        Assert.Equal("Final issue", key(Row(isFinalIssue: true)));
+        Assert.Equal("Not final", key(Row(isFinalIssue: false)));
+        Assert.Equal("Unknown", key(Row(isFinalIssue: null)));
+    }
+
+    [Fact]
+    public void TriState_GroupOrder_IsUnknownThenNoThenYes_NotAlphabetical()
+    {
+        // Alphabetically "Final issue" < "Not final" < "Unknown" - the real rank order must differ.
+        var (_, order) = GroupStrategies.TriState(r => r.IsFinalIssue, "Final issue", "Not final", "Unknown");
+        Assert.True(order("Unknown", "Not final") < 0);
+        Assert.True(order("Not final", "Final issue") < 0);
+        Assert.True(order("Unknown", "Final issue") < 0);
     }
 }

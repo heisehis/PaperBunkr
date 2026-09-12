@@ -477,6 +477,8 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         IssueList.SortField = settings.LibraryIssueListSortField;
         IssueList.SortDirection = settings.LibraryIssueListSortDirection;
         IssueList.GroupField = settings.LibraryIssueListGroupField;
+        IssueList.SortVirtualTagId = settings.LibrarySortVirtualTagId;
+        IssueList.GroupVirtualTagId = settings.LibraryGroupVirtualTagId;
     }
 
     /// <summary>Immediate write-back for every field <see cref="LoadLibrarySettings"/> seeds, called from each field's own change hook - no debounce, matching this ViewModel's existing no-debounce philosophy (see <see cref="SearchQuery"/>'s doc comment) and <see cref="Paperbunkr.App.ViewModels.ReaderScreenViewModel"/>'s equivalent immediate-write precedent for <c>AppSettings</c>.</summary>
@@ -507,6 +509,8 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         settings.LibraryIssueListSortField = IssueList.SortField;
         settings.LibraryIssueListSortDirection = IssueList.SortDirection;
         settings.LibraryIssueListGroupField = IssueList.GroupField;
+        settings.LibrarySortVirtualTagId = IssueList.SortVirtualTagId;
+        settings.LibraryGroupVirtualTagId = IssueList.GroupVirtualTagId;
         settings.LibraryViewMode = ViewMode;
         settings.LibraryGridDensity = GridDensity;
         settings.LibraryShowTileTitles = ShowTileTitles;
@@ -877,8 +881,14 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         // collection includes multiplies out to millions of rows for EF to de-duplicate and track
         // on the UI thread. Split query = one linear query per include level; no-tracking drops the
         // identity map and change-snapshot cost.
+        // ThenInclude(MetadataProposals) - IssueListRow.HasPendingProposal/PendingProposalCount
+        // (docs/superpowers/specs/2026-09-12-library-sort-group-axes-design.md §2) need it eager-
+        // loaded; a separate Include(s => s.Issues) call rather than chaining off the Tags
+        // ThenInclude, since AsSplitQuery makes this one more linear query pass, not a multiplied
+        // join - same rationale as the other sibling Includes here.
         _allSeries = context.Series
             .Include(s => s.Issues).ThenInclude(i => i.Tags)
+            .Include(s => s.Issues).ThenInclude(i => i.MetadataProposals)
             .Include(s => s.CollectionItems)
             .Include(s => s.TrackingLinks)
             .Include(s => s.Titles)
@@ -886,6 +896,13 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
             .AsSplitQuery()
             .OrderBy(s => s.SortName ?? s.Name)
             .ToList();
+
+        // Enabled Virtual Tags, for IssueList's dynamic per-tag sort/group entries (design §1) -
+        // same query shape as SmartScreenViewModel's own _virtualTagOptions load.
+        IssueList.SetVirtualTags(context.VirtualTagDefinitions
+            .Where(t => t.IsEnabled)
+            .OrderBy(t => t.SortOrder)
+            .ToList());
 
         // Warm the aspect-ratio store from what's already persisted, so Panorama renders correct
         // cover shapes on the very first frame (no progressive-learning reflow) once a library has
@@ -1458,7 +1475,12 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
             SaveLibrarySettings();
         }
 
-        LoadFromDatabase();
+        // Deferred: this command runs from the row's own TwoStepConfirm "Confirm" Button.Click
+        // still routing through the Collections row's own ItemsControl. LoadFromDatabase clears
+        // Collections, which would detach that same row mid-route and crash Avalonia's detach walk
+        // with an ArgumentOutOfRangeException (see Paperbunkr.App.Controls.SuggestBox.Commit for the
+        // fully diagnosed case).
+        Dispatcher.UIThread.Post(LoadFromDatabase);
     }
 
     /// <summary>
@@ -1662,7 +1684,11 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
     [RelayCommand]
     private void SelectSuggestion(SearchSuggestion suggestion)
     {
-        IsSuggestionsOpen = false;
+        // Deferred: this command runs from a Button.Click still routing through a row inside the
+        // suggestions Popup's own content. Closing the popup synchronously here detaches that same
+        // row's visual tree mid-route, which crashes Avalonia's detach walk with an
+        // ArgumentOutOfRangeException (see SuggestBox.Commit for the fully diagnosed case).
+        Dispatcher.UIThread.Post(() => IsSuggestionsOpen = false);
         SelectedSuggestionIndex = -1;
 
         if (suggestion.Kind == SearchSuggestionKind.SavedSearch)
@@ -1967,7 +1993,10 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         }
 
         ApplyLibraryState(WorkspaceStateJson.DeserializeLibrary(row.StateJson), id);
-        ActiveDropdown = null;
+
+        // Deferred for the same reason as SelectSuggestion above: this command runs from a row
+        // Button.Click still routing through the Workspace Popup's own content.
+        Dispatcher.UIThread.Post(() => ActiveDropdown = null);
     }
 
     private void ApplyLibraryState(LibraryWorkspaceState s, int workspaceId)
@@ -2106,7 +2135,10 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
             PersistActiveWorkspaceId();
         }
 
-        RefreshWorkspaces();
+        // Deferred: this command runs from the row's own ✕ Button.Click still routing through the
+        // Workspaces row's own ItemsControl - see ApplyWorkspace above for the fully diagnosed crash
+        // this avoids.
+        Dispatcher.UIThread.Post(RefreshWorkspaces);
     }
 
     [RelayCommand]
@@ -2127,7 +2159,11 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
 
         (user[index], user[target]) = (user[target], user[index]);
         _workspaceService.Reorder(WorkspaceScreen.Library, user);
-        RefreshWorkspaces();
+
+        // Deferred: this command runs from the row's own ▲/▼ Button.Click still routing through the
+        // Workspaces row's own ItemsControl - see ApplyWorkspace above for the fully diagnosed crash
+        // this avoids.
+        Dispatcher.UIThread.Post(RefreshWorkspaces);
     }
 
     /// <summary>The dropdown's "Reset to default view" row - applies the "All comics" built-in.</summary>
@@ -2554,7 +2590,10 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
 
         AddIssuesToReadingList(context, list, Selection.SelectedIds.ToList());
         context.SaveChanges();
-        ActiveDropdown = null;
+
+        // Deferred for the same reason as SelectSuggestion above: this command runs from a row
+        // Button.Click still routing through the "Add to List" Popup's own content.
+        Dispatcher.UIThread.Post(() => ActiveDropdown = null);
     }
 
     /// <summary>Context-menu "Add to Reading List ▸ &lt;list&gt;". Acts on the right-click union
@@ -2693,7 +2732,10 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
 
         AddIssuesToReadingList(context, list, Selection.SelectedIds.ToList());
         context.SaveChanges();
-        ActiveDropdown = null;
+
+        // Deferred for the same reason as SelectSuggestion above: this command runs from the
+        // "+ New Reading List…" Button.Click still routing through the "Add to List" Popup's own content.
+        Dispatcher.UIThread.Post(() => ActiveDropdown = null);
         LoadFromDatabase();
     }
 

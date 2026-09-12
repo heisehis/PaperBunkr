@@ -85,6 +85,44 @@ public class DetailTabsViewModelTests : IDisposable
     }
 
     [Fact]
+    public void LoadSeries_NoReadingEvents_ActivityEmpty()
+    {
+        var vm = CreateViewModel();
+
+        vm.LoadSeries(LoadSeriesEntity());
+
+        Assert.False(vm.HasActivity);
+        Assert.Empty(vm.Activity);
+    }
+
+    [Fact]
+    public void LoadSeries_PopulatesActivity_FromReadingEventsForSeriesIssues()
+    {
+        int issue2Id;
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            issue2Id = context.Issues.First(i => i.SeriesId == _seriesId && i.Number == "2").Id;
+            context.ReadingEvents.Add(new ReadingEvent
+            {
+                ItemType = ReadingItemType.Comic,
+                ItemId = issue2Id,
+                Kind = ReadingEventKind.Finished,
+                TimestampUtc = DateTime.UtcNow,
+                PagesRead = 22,
+                SeriesId = _seriesId,
+            });
+            context.SaveChanges();
+        }
+
+        var vm = CreateViewModel();
+        vm.LoadSeries(LoadSeriesEntity());
+
+        Assert.True(vm.HasActivity);
+        Assert.Single(vm.Activity);
+        Assert.Equal("Finished Issue #2 · 22 pages", vm.Activity[0].Label);
+    }
+
+    [Fact]
     public void ToggleReadingMode_LeftToRight_FlipsToRightToLeft_AndPersists()
     {
         var vm = CreateViewModel();

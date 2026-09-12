@@ -199,6 +199,18 @@ public class AppSettings
     public IssueListGroupField LibraryIssueListGroupField { get; set; } = IssueListGroupField.None;
 
     /// <summary>
+    /// Which <c>VirtualTagDefinition</c> is selected when <see cref="LibraryIssueListSortField"/> is
+    /// <see cref="IssueListSortField.VirtualTag"/> - meaningless otherwise. Same shape as
+    /// <c>SmartListCondition.VirtualTagId</c> (docs/superpowers/specs/2026-09-12-library-sort-
+    /// group-axes-design.md §1). Not a foreign key - a deleted tag just falls back to the default
+    /// sort field at load time rather than needing cascade cleanup.
+    /// </summary>
+    public int? LibrarySortVirtualTagId { get; set; }
+
+    /// <summary>See <see cref="LibrarySortVirtualTagId"/>, but for <see cref="LibraryIssueListGroupField"/>.</summary>
+    public int? LibraryGroupVirtualTagId { get; set; }
+
+    /// <summary>
     /// Card granularity - series-aggregate cards vs per-issue tiles, independent of
     /// <see cref="LibraryViewMode"/>'s layout *shape*. See <see cref="LibraryContentGranularity"/>.
     /// </summary>

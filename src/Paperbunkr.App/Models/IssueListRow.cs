@@ -1,10 +1,12 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using Avalonia.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Paperbunkr.App.Services;
 using Paperbunkr.Data.Entities;
 using Paperbunkr.Data.Metadata;
+using Paperbunkr.Data.VirtualTags;
 
 namespace Paperbunkr.App.Models;
 
@@ -134,6 +136,17 @@ public sealed partial class IssueListRow : ObservableObject, ISelectableCard, IV
     public int SeriesIssueCount { get; init; }
     public int SeriesUnreadCount { get; init; }
 
+    // --- docs/superpowers/specs/2026-09-12-library-sort-group-axes-design.md. ---
+    public bool? IsFinalIssue { get; init; }
+    public bool HasPendingProposal { get; init; }
+    public int PendingProposalCount { get; init; }
+
+    /// <summary>Evaluated <c>VirtualTagDefinition.CaptionFormat</c> result per enabled tag, keyed by
+    /// <c>VirtualTagDefinition.Id</c> - only populated when <see cref="FromIssue"/> is given a
+    /// non-empty <c>virtualTags</c> list. Empty otherwise, never null, so
+    /// <c>GetValueOrDefault</c> callers don't need a null check.</summary>
+    public IReadOnlyDictionary<int, string> VirtualTagValues { get; init; } = new Dictionary<int, string>();
+
     [ObservableProperty]
     private bool _isSelected;
 
@@ -145,7 +158,8 @@ public sealed partial class IssueListRow : ObservableObject, ISelectableCard, IV
     /// - a cover issue reached through a series' <c>Issues</c> collection may have its back-ref
     /// navigation unset.
     /// </summary>
-    public static IssueListRow FromIssue(Issue issue, Series series, Func<int, bool>? isSelected = null) => new()
+    public static IssueListRow FromIssue(Issue issue, Series series, Func<int, bool>? isSelected = null,
+        IReadOnlyList<VirtualTagDefinition>? virtualTags = null) => new()
     {
         Id = issue.Id,
         SeriesId = issue.SeriesId,
@@ -217,6 +231,12 @@ public sealed partial class IssueListRow : ObservableObject, ISelectableCard, IV
             issue.CoverAspectRatio ?? CoverAspectRatioStore.Get(issue.Id) ?? SeriesCardSample.DefaultCoverAspectRatio),
         SeriesIssueCount = series.Issues.Count,
         SeriesUnreadCount = series.Issues.Count(i => i.LastPageRead is null or 0),
+        IsFinalIssue = issue.IsFinalIssue,
+        HasPendingProposal = issue.MetadataProposals.Any(p => p.Status == MetadataProposalStatus.Pending),
+        PendingProposalCount = issue.MetadataProposals.Count(p => p.Status == MetadataProposalStatus.Pending),
+        VirtualTagValues = virtualTags is { Count: > 0 }
+            ? virtualTags.ToDictionary(t => t.Id, t => VirtualTagTemplateEvaluator.Evaluate(t.CaptionFormat, issue, series))
+            : new Dictionary<int, string>(),
         IsSelected = isSelected?.Invoke(issue.Id) ?? false,
     };
 }

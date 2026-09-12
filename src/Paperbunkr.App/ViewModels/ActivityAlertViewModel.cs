@@ -1,4 +1,5 @@
 using System;
+using Avalonia.Threading;
 using CommunityToolkit.Mvvm.Input;
 using Paperbunkr.App.Models;
 
@@ -10,7 +11,13 @@ public sealed class ActivityAlertViewModel
     public ActivityAlertViewModel(ActivityAlert alert, Action<Guid> dismiss, Action<ActivityLink> followLink)
     {
         Alert = alert;
-        DismissCommand = new RelayCommand(() => dismiss(alert.Id));
+        // Deferred: this command runs from the row's own ✕ Button.Click still routing through the
+        // Alerts row's own ItemsControl. IActivityService.DismissAlert dispatches synchronously
+        // when already on the UI thread (ActivityService.DefaultDispatch), which would rebuild
+        // Alerts and detach that same row mid-route, crashing Avalonia's detach walk with an
+        // ArgumentOutOfRangeException (see Paperbunkr.App.Controls.SuggestBox.Commit for the fully
+        // diagnosed case).
+        DismissCommand = new RelayCommand(() => Dispatcher.UIThread.Post(() => dismiss(alert.Id)));
         FollowLinkCommand = new RelayCommand(
             () => { if (alert.ActionLink is { } link) followLink(link); },
             () => alert.ActionLink is not null);

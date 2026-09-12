@@ -4,6 +4,7 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Linq;
 using System.Threading.Tasks;
+using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.EntityFrameworkCore;
@@ -115,7 +116,12 @@ public partial class BulkIssuePropertiesScreenViewModel : ViewModelBase
     [RelayCommand]
     private async Task RunEditorPlugin(Command command)
     {
-        IsEditorPluginMenuOpen = false;
+        // Deferred: this command runs from a row Button.Click still routing through the plugin
+        // menu Popup's own content. Closing the popup synchronously here detaches that same row's
+        // visual tree mid-route, which crashes Avalonia's detach walk with an
+        // ArgumentOutOfRangeException (see Paperbunkr.App.Controls.SuggestBox.Commit for the fully
+        // diagnosed case).
+        Dispatcher.UIThread.Post(() => IsEditorPluginMenuOpen = false);
         if (_pluginHost is null || _issueIds.Count == 0)
         {
             return;

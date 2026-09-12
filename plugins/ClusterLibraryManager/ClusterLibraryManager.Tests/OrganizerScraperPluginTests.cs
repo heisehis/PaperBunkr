@@ -28,17 +28,18 @@ public sealed class OrganizerScraperPluginTests
     }
 
     [Fact]
-    public void Plugin_loads_and_registers_its_startup_command()
+    public void Plugin_loads_and_registers_all_three_of_its_commands()
     {
         string pluginsRoot = BuildPluginFolder();
 
         var engine = new PluginEngine();
         engine.Discover(pluginsRoot, new FakeNativePluginEnvironment());
 
-        var command = Assert.Single(engine.AllCommands);
-        Assert.False(command.IsBroken);
-        Assert.Equal("cluster-library-manager.startup", command.Key);
-        Assert.Equal(PluginHooks.Startup, command.Hook);
+        Assert.Equal(3, engine.AllCommands.Count);
+        Assert.All(engine.AllCommands, c => Assert.False(c.IsBroken));
+        Assert.Contains(engine.AllCommands, c => c.Key == "cluster-library-manager.startup" && c.Hook == PluginHooks.Startup);
+        Assert.Contains(engine.AllCommands, c => c.Key == "cluster-library-manager.organize" && c.Hook == PluginHooks.Library);
+        Assert.Contains(engine.AllCommands, c => c.Key == "cluster-library-manager.scrape" && c.Hook == PluginHooks.Library);
     }
 
     [Fact]

@@ -1,0 +1,65 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="using:ClusterLibraryManager.Settings"
+             mc:Ignorable="d" d:DesignWidth="480" d:DesignHeight="600"
+             x:Class="ClusterLibraryManager.Settings.SettingsView"
+             x:DataType="vm:SettingsViewModel">
+
+    <ScrollViewer>
+        <StackPanel Spacing="16" Margin="4">
+            <StackPanel Spacing="6">
+                <TextBlock Text="ComicVine API Key" FontWeight="Bold" Foreground="{DynamicResource PbTextBrush}" />
+                <TextBox Text="{Binding ApiKey}" PasswordChar="•" Watermark="Paste your ComicVine API key" />
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <Button Content="Test Connection" Command="{Binding TestConnectionCommand}" IsEnabled="{Binding !IsTestingConnection}" />
+                    <TextBlock Text="{Binding TestConnectionStatus}" VerticalAlignment="Center" Foreground="{DynamicResource PbTextMutedBrush}" />
+                </StackPanel>
+            </StackPanel>
+
+            <StackPanel Spacing="6">
+                <TextBlock Text="Apply behavior" FontWeight="Bold" Foreground="{DynamicResource PbTextBrush}" />
+                <CheckBox Content="Overwrite fields that already have a value" IsChecked="{Binding OverwriteExisting}" />
+                <CheckBox Content="Don't overwrite an existing value with a blank one" IsChecked="{Binding IgnoreBlankValues}" />
+                <CheckBox Content="Auto-select the best-scoring match (skip the review dialog)" IsChecked="{Binding AutoChooseTopMatch}" />
+            </StackPanel>
+
+            <StackPanel Spacing="6">
+                <TextBlock Text="Fields to scrape" FontWeight="Bold" Foreground="{DynamicResource PbTextBrush}" />
+                <ItemsControl ItemsSource="{Binding ScrapeFieldToggles}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <WrapPanel />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:ScrapeFieldToggleViewModel">
+                            <CheckBox Content="{Binding Label}" IsChecked="{Binding IsEnabled}" Margin="0,0,12,4" />
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
+
+            <StackPanel Spacing="6">
+                <TextBlock Text="Automation" FontWeight="Bold" Foreground="{DynamicResource PbTextBrush}" />
+                <TextBlock Text="Runs while Paperbunkr is open, on its own timer - Paperbunkr's Scheduled Tasks list isn't extensible, so this doesn't appear there."
+                           FontSize="11" Foreground="{DynamicResource PbTextMutedBrush}" TextWrapping="Wrap" />
+                <CheckBox Content="Automatically scrape new/unscraped issues" IsChecked="{Binding AutomaticScrapeEnabled}" />
+                <StackPanel Orientation="Horizontal" Spacing="6" Margin="20,0,0,0">
+                    <TextBlock Text="Every" VerticalAlignment="Center" />
+                    <NumericUpDown Value="{Binding AutomaticScrapeIntervalHours}" Minimum="1" Maximum="168" Width="100" />
+                    <TextBlock Text="hours" VerticalAlignment="Center" />
+                </StackPanel>
+                <CheckBox Content="Automatically organize the library" IsChecked="{Binding AutomaticOrganizeEnabled}" />
+                <StackPanel Orientation="Horizontal" Spacing="6" Margin="20,0,0,0">
+                    <TextBlock Text="Every" VerticalAlignment="Center" />
+                    <NumericUpDown Value="{Binding AutomaticOrganizeIntervalHours}" Minimum="1" Maximum="168" Width="100" />
+                    <TextBlock Text="hours" VerticalAlignment="Center" />
+                </StackPanel>
+            </StackPanel>
+
+            <Button Content="Save" Command="{Binding SaveCommand}" HorizontalAlignment="Right" />
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

@@ -114,6 +114,17 @@ public static class IssueListFieldCatalog
         // sort/group pool was unified across per-issue and per-series cards (2026-09-03). ---
         [IssueListSortField.SeriesIssueCount] = new(IssueListSortField.SeriesIssueCount, "Issue Count", (a, b) => a.SeriesIssueCount.CompareTo(b.SeriesIssueCount)),
         [IssueListSortField.SeriesUnreadCount] = new(IssueListSortField.SeriesUnreadCount, "Unread Count", (a, b) => a.SeriesUnreadCount.CompareTo(b.SeriesUnreadCount)),
+
+        // --- docs/superpowers/specs/2026-09-12-library-sort-group-axes-design.md. NeedsReview/
+        // PendingProposalCount deliberately deviate from CE's own (inapplicable) EnableProposed
+        // concept - see design §2. IssueListSortField.VirtualTag is NOT registered here - see its
+        // enum-declaration comment; IssueListFieldCatalog.BuildVirtualTagSortDescriptor resolves it
+        // dynamically per selected VirtualTagDefinition instead. ---
+        [IssueListSortField.NeedsReview] = new(IssueListSortField.NeedsReview, "Needs Review", SortStrategies.Boolean(r => r.HasPendingProposal)),
+        [IssueListSortField.PendingProposalCount] = new(IssueListSortField.PendingProposalCount, "Pending Proposals", (a, b) => a.PendingProposalCount.CompareTo(b.PendingProposalCount)),
+        // Nullable.Compare's null-sorts-first semantics already give Unknown(null) < No(false) <
+        // Yes(true), matching CE's own YesNo ordering (design §4) - no special-casing needed.
+        [IssueListSortField.IsFinalIssue] = new(IssueListSortField.IsFinalIssue, "Final Issue", SortStrategies.Numeric<bool>(r => r.IsFinalIssue)),
     };
 
         // Per-field cell-text projection for the configurable Details table (design §8). Everything
@@ -179,6 +190,9 @@ public static class IssueListFieldCatalog
         Col(IssueListSortField.ScanInformation, r => r.ScanInformation);
         Col(IssueListSortField.SeriesIssueCount, r => r.SeriesIssueCount.ToString(CultureInfo.InvariantCulture));
         Col(IssueListSortField.SeriesUnreadCount, r => r.SeriesUnreadCount.ToString(CultureInfo.InvariantCulture));
+        Col(IssueListSortField.NeedsReview, r => r.HasPendingProposal ? "Needs Review" : "Up to Date");
+        Col(IssueListSortField.PendingProposalCount, r => r.PendingProposalCount.ToString(CultureInfo.InvariantCulture));
+        Col(IssueListSortField.IsFinalIssue, r => r.IsFinalIssue switch { true => "Yes", false => "No", null => null });
 
         return d;
     }
@@ -295,10 +309,54 @@ public static class IssueListFieldCatalog
             r => r.SeriesName.Length > 0 && char.IsAsciiLetter(r.SeriesName[0]) ? char.ToUpperInvariant(r.SeriesName[0]).ToString() : "#",
             (a, b) => string.Compare(a, b, StringComparison.OrdinalIgnoreCase)),
         [IssueListGroupField.SeriesIssueCount] = MakeGroup(IssueListGroupField.SeriesIssueCount, "Issue Count", GroupStrategies.NumericBucket(r => r.SeriesIssueCount)),
+
+        // --- docs/superpowers/specs/2026-09-12-library-sort-group-axes-design.md.
+        // IssueListGroupField.VirtualTag is NOT registered here - see BuildVirtualTagGroupDescriptor
+        // below and its enum-declaration comment. ---
+        [IssueListGroupField.NeedsReview] = MakeGroup(IssueListGroupField.NeedsReview, "Needs Review", GroupStrategies.Boolean(r => r.HasPendingProposal, "Needs Review", "Up to Date")),
+        // CE's own fixed ranges (ComicBookGroupOpenCount/ItemGroupCount, resource key "CountGroups"),
+        // minus its 8th "Unspecified" bucket (only reachable for negative values, which OpenCount
+        // can't be here).
+        [IssueListGroupField.OpenCount] = new(IssueListGroupField.OpenCount, "Times Opened", OpenCountBucketKey, OpenCountBucketOrder),
+        [IssueListGroupField.IsFinalIssue] = MakeGroup(IssueListGroupField.IsFinalIssue, "Final Issue", GroupStrategies.TriState(r => r.IsFinalIssue, "Final issue", "Not final", "Unknown")),
     };
+
+    private static readonly (int Max, string Label)[] OpenCountRanges =
+    {
+        (20, "0-20"), (50, "21-50"), (100, "51-100"), (200, "101-200"),
+        (500, "201-500"), (1000, "501-1000"), (int.MaxValue, ">1000"),
+    };
+
+    private static string OpenCountBucketKey(IssueListRow row) => OpenCountRanges.First(r => row.OpenCount <= r.Max).Label;
+
+    private static int OpenCountBucketOrder(string a, string b) =>
+        Array.FindIndex(OpenCountRanges, r => r.Label == a).CompareTo(Array.FindIndex(OpenCountRanges, r => r.Label == b));
 
     private static IssueListGroupFieldDescriptor MakeGroup(IssueListGroupField field, string displayName, (Func<IssueListRow, string> Key, Comparison<string> Order) strategy) =>
         new(field, displayName, strategy.Key, strategy.Order);
+
+    /// <summary>
+    /// Dynamic sort descriptor for one specific <see cref="VirtualTagDefinition"/> - deliberately
+    /// NOT cached in <see cref="SortFields"/>, since there's no single fixed comparer for
+    /// <see cref="IssueListSortField.VirtualTag"/> (docs/superpowers/specs/2026-09-12-library-sort-
+    /// group-axes-design.md §1). Ascending, case-insensitive string compare on the tag's evaluated
+    /// value - matches CE's <c>ComicBookVirtualTagComparer</c>.
+    /// </summary>
+    public static IssueListSortFieldDescriptor BuildVirtualTagSortDescriptor(VirtualTagDefinition tag) =>
+        new(IssueListSortField.VirtualTag, tag.Name,
+            SortStrategies.CaseInsensitiveString(r => r.VirtualTagValues.GetValueOrDefault(tag.Id)));
+
+    /// <summary>
+    /// Dynamic group descriptor for one specific <see cref="VirtualTagDefinition"/> - one bucket per
+    /// exact evaluated value, "Unspecified" fallback for empty/missing - matches CE's
+    /// <c>ComicBookVirtualTagGrouper</c> exactly, reusing <see cref="GroupStrategies.Alphabetical"/>
+    /// with a non-default fallback rather than a bespoke helper.
+    /// </summary>
+    public static IssueListGroupFieldDescriptor BuildVirtualTagGroupDescriptor(VirtualTagDefinition tag)
+    {
+        var (key, order) = GroupStrategies.Alphabetical(r => r.VirtualTagValues.GetValueOrDefault(tag.Id), fallback: "Unspecified");
+        return new IssueListGroupFieldDescriptor(IssueListGroupField.VirtualTag, tag.Name, key, order);
+    }
 
     /// <summary>Primary comparison, falling back to <paramref name="tieBreak"/> when equal - backs <see cref="IssueListSortField.Series"/>'s simplified (name, then number) tie-break, a deliberate simplification of CE's real three-level Format-&gt;Volume-&gt;Number tie-break (see the spec).</summary>
     private static Comparison<IssueListRow> Combine(Comparison<IssueListRow> primary, Comparison<IssueListRow> tieBreak) =>

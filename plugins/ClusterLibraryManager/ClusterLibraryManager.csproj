@@ -1,0 +1,73 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>ClusterLibraryManager</RootNamespace>
+    <AssemblyName>ClusterLibraryManager</AssemblyName>
+    <!-- Class libraries don't copy PackageReference dlls to output by default - this plugin's own
+         build output IS its shipped package (see the Deliberately-not-in-sln comment below), so
+         LiteDB.dll (this plugin's own, un-shared-by-the-host dependency) must land next to
+         ClusterLibraryManager.dll for PluginLoadContext's AssemblyDependencyResolver to find it on
+         a machine with no dev NuGet cache. Avalonia/CommunityToolkit.Mvvm also copy but are
+         harmless duplicates - PluginLoadContext.Load prefers the host's own already-loaded copies. -->
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Test-only seams (internal ComicVineService constructor, throttle/retry timing overrides,
+         etc.) - the plugin's own shipped public surface is unaffected. -->
+    <InternalsVisibleTo Include="ClusterLibraryManager.Tests" />
+  </ItemGroup>
+
+  <!--
+    Cluster Library Manager - ComicVine scraper + library organizer, ported from ComicRack CE's
+    ComicVineScraper (1.0.102) and Library Organizer (2.1.13). Design: docs/superpowers/specs/
+    2026-09-11-cluster-library-manager-design.md. Implementation plan: docs/superpowers/specs/
+    2026-09-11-cluster-library-manager-plan.md (Phase 3).
+
+    Deliberately NOT added to Paperbunkr.sln / not referenced by any Paperbunkr.App/Paperbunkr.Data
+    project - the whole point of the native tier (v4) is that this plugin ships independently,
+    installed as a compiled .pbplugin package, not built into the host solution. Its own project
+    references below (Paperbunkr.Plugins.Abstractions[.Ui], which transitively brings in
+    Paperbunkr.Data for Issue/Series/PaperbunkrDbContext) are for THIS repo's own dev/build
+    convenience only - a real third-party plugin author would reference the published contract
+    assemblies instead (packaging those for external consumption is out of scope for this pass, per
+    the design doc's own §12).
+  -->
+  <ItemGroup>
+    <!-- ClusterLibraryManager.Tests is its own SDK project nested under this one - excluded from
+         this project's own default **/*.cs glob so its sources/generated obj/ files aren't compiled
+         twice (same nested-project globbing collision found in Phase 1 with MinimalNative). -->
+    <Compile Remove="ClusterLibraryManager.Tests\**\*.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Paperbunkr.Plugins.Abstractions\Paperbunkr.Plugins.Abstractions.csproj" />
+    <ProjectReference Include="..\..\src\Paperbunkr.Plugins.Abstractions.Ui\Paperbunkr.Plugins.Abstractions.Ui.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Own local persistence (CLM design §10) - pure managed, no native interop, sidestepping the
+         SQLite native-library packaging concern raised during design review entirely at this
+         plugin's own level. -->
+    <PackageReference Include="LiteDB" Version="5.0.21" />
+    <!-- Direct reference required for Avalonia's own MSBuild targets (CompileAvaloniaXamlTask etc.)
+         to activate for THIS project's .axaml files (Phase 3 Step 3.5/3.6) - build-time XAML
+         compilation tooling doesn't flow transitively through the ProjectReference to
+         Paperbunkr.Plugins.Abstractions.Ui the way compile-time types do. MUST match the host's
+         exact pinned version (verified: src/Paperbunkr.App/Paperbunkr.App.csproj, 12.1.1) - see that
+         project's own comment on Paperbunkr.Plugins.Abstractions.Ui.csproj for why. -->
+    <PackageReference Include="Avalonia" Version="12.1.1" />
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Copied to output so a build already produces a ready-to-zip plugin folder (dll + manifest
+         sitting together) - also what lets ClusterLibraryManager.Tests locate a real plugin.xml next
+         to the built assembly for its own end-to-end loading test. -->
+    <None Include="plugin.xml" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

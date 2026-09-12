@@ -6,6 +6,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Avalonia.Media;
+using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.EntityFrameworkCore;
@@ -83,6 +84,7 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
         ContinuityRail = new ObservableCollection<PosterRailItem>();
         EventRail = new ObservableCollection<PosterRailItem>();
         MoreLikeThisRail = new ObservableCollection<PosterRailItem>();
+        Activity = new ObservableCollection<ActivitySample>();
     }
 
     /// <summary>
@@ -236,6 +238,7 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
             RefreshMoreLikeThis(context, series.Id);
             RefreshExternalLinks(context, series.Id);
             RefreshTrackerLinks(context, series.Id);
+            RefreshActivity(context, series.Id);
         }
 
         IsSearchingMetadata = false;
@@ -786,6 +789,11 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
 
     public bool HasExternalLinks => ExternalLinks.Count > 0;
 
+    /// <summary>Backing collection for the Activity tab - see <see cref="RefreshActivity"/>.</summary>
+    public ObservableCollection<ActivitySample> Activity { get; }
+
+    public bool HasActivity => Activity.Count > 0;
+
     private void RefreshExternalLinks(PaperbunkrDbContext context, int seriesId)
     {
         ExternalLinks.Clear();
@@ -800,6 +808,46 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
         }
 
         OnPropertyChanged(nameof(HasExternalLinks));
+    }
+
+    /// <summary>
+    /// Most recent 20 <see cref="ReadingEvent"/> rows (docs/superpowers/specs/2026-09-05-insights-
+    /// dashboard-design.md §4) for any issue in this series - CE has no per-series activity/history
+    /// feature to port (checked <c>_reference/ComicRackCE</c>: no such concept exists there), so this
+    /// is Paperbunkr-original, reusing the append-only reading log the Insights screen already
+    /// writes. Issue label comes from <see cref="Issues"/> (already populated earlier in
+    /// <see cref="LoadSeries"/>) rather than a second query.
+    /// </summary>
+    private void RefreshActivity(PaperbunkrDbContext context, int seriesId)
+    {
+        Activity.Clear();
+        var issueTitles = Issues.ToDictionary(i => i.Id, i => i.Title);
+
+        var events = context.ReadingEvents
+            .Where(e => e.SeriesId == seriesId)
+            .OrderByDescending(e => e.TimestampUtc)
+            .Take(20)
+            .ToList();
+
+        foreach (var e in events)
+        {
+            string issueLabel = issueTitles.TryGetValue(e.ItemId, out var title) ? title : "#?";
+            string label = e.Kind switch
+            {
+                ReadingEventKind.Finished when e.PagesRead is int pages and > 0 => $"Finished Issue {issueLabel} · {pages} pages",
+                ReadingEventKind.Finished => $"Finished Issue {issueLabel}",
+                _ => $"Opened Issue {issueLabel}",
+            };
+
+            Activity.Add(new ActivitySample
+            {
+                Label = label,
+                TimestampUtc = e.TimestampUtc,
+                Icon = e.Kind == ReadingEventKind.Finished ? FluentIcons.Common.Symbol.CheckmarkCircle : FluentIcons.Common.Symbol.Play,
+            });
+        }
+
+        OnPropertyChanged(nameof(HasActivity));
     }
 
     // --- Plugin API v2 NetSearch hook (docs/superpowers/specs/2026-09-05-plugin-api-v2-remaining-hooks-plan.md §8) ---
@@ -1038,9 +1086,19 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
         }
 
         RefreshExternalLinks(context, currentSeriesId);
-        IsSearchingMetadata = false;
-        MetadataSearchQuery = string.Empty;
-        MetadataSearchResults.Clear();
+
+        // Deferred: this command is bound to the row's own "Link" Button, which lives inside
+        // MetadataSearchResults - clearing that collection removes the very row still routing this
+        // Button.Click. The await above usually already moves us past that click's stack frame, but
+        // if LinkAsync ever completes synchronously (e.g. no real network round-trip needed), this
+        // continuation runs inline instead and hits the same detach-mid-route crash Popup closes
+        // do (see Paperbunkr.App.Controls.SuggestBox.Commit for the fully diagnosed case).
+        Dispatcher.UIThread.Post(() =>
+        {
+            IsSearchingMetadata = false;
+            MetadataSearchQuery = string.Empty;
+            MetadataSearchResults.Clear();
+        });
     }
 
     [RelayCommand]
@@ -1255,9 +1313,20 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
         TrackerLinkResolver.Link(context, currentSeriesId, SelectedTrackerService, externalId);
 
         RefreshTrackerLinks(context, currentSeriesId);
-        IsLinkingTracker = false;
-        TrackerSearchQuery = string.Empty;
-        TrackerSearchResults.Clear();
+
+        // Deferred: this runs synchronously from the row's own TwoStepConfirm "Confirm" Button.Click
+        // (see TwoStepConfirm.Trigger) still routing through TrackerSearchResults - clearing that
+        // collection here removes the very row still routing the click, which crashes Avalonia's
+        // detach walk with an ArgumentOutOfRangeException (see
+        // Paperbunkr.App.Controls.SuggestBox.Commit for the fully diagnosed case). Unlike
+        // LinkMetadataAsync this path is fully synchronous, so it crashes every time, not just on a
+        // fast-completing await.
+        Dispatcher.UIThread.Post(() =>
+        {
+            IsLinkingTracker = false;
+            TrackerSearchQuery = string.Empty;
+            TrackerSearchResults.Clear();
+        });
     }
 
     [RelayCommand]

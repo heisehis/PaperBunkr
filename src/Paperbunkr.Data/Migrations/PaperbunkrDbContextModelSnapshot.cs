@@ -320,6 +320,9 @@ namespace Paperbunkr.Data.Migrations
                         .HasColumnType("REAL")
                         .HasDefaultValue(1.0);
 
+                    b.Property<int?>("LibraryGroupVirtualTagId")
+                        .HasColumnType("INTEGER");
+
                     b.Property<int>("LibraryHealthConfirmedMissingThreshold")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER")
@@ -383,6 +386,9 @@ namespace Paperbunkr.Data.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER")
                         .HasDefaultValue(true);
+
+                    b.Property<int?>("LibrarySortVirtualTagId")
+                        .HasColumnType("INTEGER");
 
                     b.Property<bool>("LibraryUseLanguageIcon")
                         .ValueGeneratedOnAdd()
@@ -1359,7 +1365,7 @@ namespace Paperbunkr.Data.Migrations
                     b.Property<string>("Inker")
                         .HasColumnType("TEXT");
 
-                    b.Property<bool>("IsFinalIssue")
+                    b.Property<bool?>("IsFinalIssue")
                         .HasColumnType("INTEGER");
 
                     b.Property<bool>("IsPlaceholder")

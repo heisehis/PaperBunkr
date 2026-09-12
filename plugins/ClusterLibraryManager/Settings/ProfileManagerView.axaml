@@ -1,0 +1,76 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:conv="using:Avalonia.Data.Converters"
+             xmlns:vm="using:ClusterLibraryManager.Settings"
+             mc:Ignorable="d" d:DesignWidth="640" d:DesignHeight="600"
+             x:Class="ClusterLibraryManager.Settings.ProfileManagerView"
+             x:DataType="vm:ProfileManagerViewModel">
+
+    <Grid ColumnDefinitions="180,*" Margin="4">
+        <StackPanel Grid.Column="0" Spacing="6">
+            <TextBlock Text="Profiles" FontWeight="Bold" Foreground="#ECE7DB" />
+            <ListBox ItemsSource="{Binding Profiles}" SelectedItem="{Binding Selected}">
+                <ListBox.ItemTemplate>
+                    <DataTemplate x:DataType="vm:OrganizerProfileRowViewModel">
+                        <TextBlock Text="{Binding Name}" />
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+            <Button Content="New Profile" Command="{Binding AddProfileCommand}" HorizontalAlignment="Stretch" />
+        </StackPanel>
+
+        <ScrollViewer Grid.Column="1" Margin="16,0,0,0"
+                      IsVisible="{Binding Selected, Converter={x:Static conv:ObjectConverters.IsNotNull}}">
+            <StackPanel Spacing="10">
+                <TextBlock Text="Name" FontWeight="Bold" />
+                <TextBox Text="{Binding Selected.Name}" />
+
+                <TextBlock Text="Base folder" FontWeight="Bold" />
+                <TextBox Text="{Binding Selected.BaseFolder}" Watermark="Root folder this profile organizes into" />
+
+                <TextBlock Text="Folder template" FontWeight="Bold" />
+                <TextBox Text="{Binding Selected.FolderTemplate}" AcceptsReturn="False" />
+
+                <TextBlock Text="File template" FontWeight="Bold" />
+                <TextBox Text="{Binding Selected.FileTemplate}" AcceptsReturn="False" />
+
+                <TextBlock Text="Insert token into folder / file template:" FontSize="11"
+                           Foreground="#B3ADA0" />
+                <ItemsControl ItemsSource="{Binding InsertableTokens}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <WrapPanel />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:InsertableToken">
+                            <StackPanel Orientation="Horizontal" Spacing="2" Margin="0,0,4,4">
+                                <Button Content="{Binding Token}" FontSize="11" Padding="6,2"
+                                        Command="{Binding InsertIntoFolder}" CommandParameter="{Binding Token}"
+                                        ToolTip.Tip="Insert into folder template" />
+                                <Button Content="→file" FontSize="11" Padding="6,2"
+                                        Command="{Binding InsertIntoFile}" CommandParameter="{Binding Token}"
+                                        ToolTip.Tip="Insert into file template" />
+                            </StackPanel>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+
+                <TextBlock Text="Mode" FontWeight="Bold" />
+                <ComboBox ItemsSource="{Binding AvailableModes}" SelectedItem="{Binding Selected.Mode}" />
+
+                <TextBlock Text="When run automatically and a file already exists" FontWeight="Bold" />
+                <ComboBox ItemsSource="{Binding AvailableCollisionPolicies}" SelectedItem="{Binding Selected.AutomationCollisionPolicy}" />
+
+                <CheckBox Content="Remove empty folders left behind after organizing" IsChecked="{Binding Selected.RemoveEmptyFolders}" />
+
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <Button Content="Save" Command="{Binding SaveSelectedCommand}" />
+                    <Button Content="Delete" Classes="destructive" Command="{Binding DeleteSelectedCommand}" />
+                </StackPanel>
+            </StackPanel>
+        </ScrollViewer>
+    </Grid>
+</UserControl>

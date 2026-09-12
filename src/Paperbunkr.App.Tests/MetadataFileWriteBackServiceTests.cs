@@ -115,6 +115,28 @@ public class MetadataFileWriteBackServiceTests : IDisposable
         Assert.True(parsed.IsFinalIssue);
     }
 
+    /// <summary>docs/superpowers/specs/2026-09-12-library-sort-group-axes-design.md §4 - IsFinalIssue
+    /// is now tri-state; the existing test above only ever covered <see langword="true"/>.</summary>
+    [Fact]
+    public async Task WriteAsync_Sidecar_IsFinalIssueUnknown_RoundTripsAsNull()
+    {
+        string cbz = Path.Combine(_dir, "sidecar-unknown.cbz");
+        CbzFixture.Create(cbz, pageCount: 1);
+        int id = SeedIssue(cbz, i => { i.Rating = 2f; i.IsFinalIssue = null; });
+
+        await Service().WriteAsync(id, includeSidecar: true);
+
+        using var zip = ZipFile.OpenRead(cbz);
+        var entry = zip.GetEntry("paperbunkr.json");
+        Assert.NotNull(entry);
+        using var stream = entry!.Open();
+        using var ms = new MemoryStream();
+        stream.CopyTo(ms);
+        var parsed = PaperbunkrSidecar.TryParse(ms.ToArray());
+        Assert.NotNull(parsed);
+        Assert.Null(parsed!.IsFinalIssue);
+    }
+
     [Fact]
     public async Task WriteAsync_NoSidecar_NoJsonEntry()
     {

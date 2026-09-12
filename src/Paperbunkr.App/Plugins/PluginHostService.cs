@@ -7,6 +7,7 @@ using Paperbunkr.App.Services;
 using Paperbunkr.App.ViewModels;
 using Paperbunkr.Data.Entities;
 using Paperbunkr.Plugins;
+using Paperbunkr.Plugins.Abstractions.Ui;
 using Paperbunkr.Plugins.Hooks;
 
 namespace Paperbunkr.App.Plugins;
@@ -29,7 +30,13 @@ public sealed class PluginHostService
     {
         _main = main;
 
-        _environment = new PaperbunkrPluginEnvironment
+        // Applies any Native-tier install/uninstall that stayed pending from a previous session
+        // (docs/superpowers/specs/2026-09-11-plugin-api-v4-native-tier-design.md §4) - must run
+        // before Discover below picks up the plugins directory. A no-op the common case (nothing
+        // pending, or only Script-tier packages, which already self-commit at install time).
+        new PluginPackageService().ApplyPendingChanges();
+
+        var baseEnvironment = new PaperbunkrPluginEnvironment
         {
             MainWindow = new PaperbunkrPluginHostWindow(mainWindow),
             App = new PaperbunkrApplication(main),
@@ -41,6 +48,12 @@ public sealed class PluginHostService
             Writer = new PaperbunkrMetadataWriter(),
             ThemePlugin = new PaperbunkrThemePlugin(),
         };
+
+        // Native-capable (docs/superpowers/specs/2026-09-11-plugin-api-v4-native-tier-design.md §3) -
+        // there's only one real environment instance; a headless native plugin just never casts to
+        // the wider INativePluginUiEnvironment, and a .csx script only ever sees it through the base
+        // IPluginEnvironment interface, so nothing about the existing script sandbox changes.
+        _environment = new PaperbunkrNativePluginEnvironment(baseEnvironment, main.Activity, main.NativePluginModalHost);
 
         DiscoverAndApplyOverrides();
 
@@ -207,6 +220,57 @@ public sealed class PluginHostService
         RunCommandAsync(command, new ComicInfoHookGlobals { Environment = _environment!, Book = book });
 
     public void ShowToast(string title, string message) => _main?.ShowToastForPlugin(title, message);
+
+    /// <summary>
+    /// Opens a native plugin's compiled settings UI (docs/superpowers/specs/2026-09-12-plugin-
+    /// management-screen-redesign-design.md §4.4/§4.5) - the entry point that didn't exist before
+    /// this redesign. A no-op if the package never loaded (no <c>NativeLoadResults</c> entry), its
+    /// module doesn't implement <see cref="INativePluginSettingsUi"/>, or <c>CreateSettingsView</c>
+    /// itself returns null. Hosted through the same shared <c>NativePluginModalHostViewModel</c> +
+    /// <c>OverlayShell</c> every other native-plugin dialog already uses - dismissal is scrim/X-only
+    /// (no <c>resolve</c> callback is ever invoked from inside the settings view), which throws
+    /// <see cref="OperationCanceledException"/> on the awaited task exactly the way any other
+    /// scrim-dismissed native dialog already does; that's the expected, only way out, not an error.
+    /// </summary>
+    public async Task OpenPluginSettingsAsync(string pluginKey)
+    {
+        if (_environment is not INativePluginUiEnvironment uiEnvironment)
+        {
+            return;
+        }
+
+        if (!Engine.NativeLoadResults.TryGetValue(pluginKey, out var loadResult) || loadResult.Module is not INativePluginSettingsUi settingsUi)
+        {
+            return;
+        }
+
+        Control? view = settingsUi.CreateSettingsView(uiEnvironment);
+        if (view is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await uiEnvironment.ShowModalAsync<object?>(_ => view).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            // Dismissed via the shell's own scrim/close button - the expected, only way this modal
+            // ever ends, not a failure.
+        }
+    }
+
+    /// <summary>Master enable/disable for every command a package owns at once (docs §4.4/§4.5) -
+    /// a bulk write over the existing per-command <see cref="PluginCommandState"/> mechanism, no new
+    /// persisted state of its own.</summary>
+    public void SetPackageEnabled(string pluginKey, bool enabled)
+    {
+        foreach (Command command in Engine.AllCommands.Where(c => c.PluginKey == pluginKey))
+        {
+            SetCommandEnabled(command, enabled);
+        }
+    }
 
     /// <summary>Persists a user toggle and applies it immediately (docs §3's <see cref="PluginCommandState"/> sparse-table convention) - called from the Plugin screen.</summary>
     public void SetCommandEnabled(Command command, bool enabled)

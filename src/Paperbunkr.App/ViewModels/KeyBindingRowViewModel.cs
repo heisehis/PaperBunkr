@@ -148,9 +148,17 @@ public partial class KeyBindingRowViewModel : ViewModelBase
         }
 
         _service.RemoveKey(CommandId, option.Gesture);
-        BoundKeys.Remove(option);
-        OnPropertyChanged(nameof(AvailableKeyOptions));
-        OnPropertyChanged(nameof(AvailableKeyOptionNames));
-        _onChanged();
+
+        // Deferred: this command runs from the chip's own ✕ Button.Click still routing through
+        // BoundKeys' own ItemsControl - removing the item here would detach that same chip mid-route
+        // and crash Avalonia's detach walk with an ArgumentOutOfRangeException (see
+        // Paperbunkr.App.Controls.SuggestBox.Commit for the fully diagnosed case).
+        Dispatcher.UIThread.Post(() =>
+        {
+            BoundKeys.Remove(option);
+            OnPropertyChanged(nameof(AvailableKeyOptions));
+            OnPropertyChanged(nameof(AvailableKeyOptionNames));
+            _onChanged();
+        });
     }
 }

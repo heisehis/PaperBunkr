@@ -13,6 +13,17 @@ public interface IFilePickerService
     /// <summary>Returns the picked file's local path, or null if the user cancelled.</summary>
     Task<string?> PickOpenFileAsync(string title, string extension, string extensionLabel);
 
+    /// <summary>
+    /// Plugin-package picker accepting both `.pbplugin` (canonical going forward, implementation plan
+    /// Phase 2 Step 2.3, grilling Q18=B) and `.zip` (backward compatibility with packages already in
+    /// circulation). Default implementation falls back to a single-extension `.zip` pick via
+    /// <see cref="PickOpenFileAsync"/> - existing <see cref="IFilePickerService"/> fakes don't need to
+    /// implement this at all; only the real <c>FilePickerService</c> overrides it with an actual
+    /// dual-pattern OS file-type filter.
+    /// </summary>
+    Task<string?> PickPluginPackageFileAsync(string title) =>
+        PickOpenFileAsync(title, "zip", "Plugin Package (.zip)");
+
     /// <summary>Returns the chosen save path, or null if the user cancelled.</summary>
     Task<string?> PickSaveFileAsync(string title, string suggestedFileName, string extension, string extensionLabel);
 

@@ -3051,8 +3051,16 @@ public partial class PreferencesScreenViewModel : ViewModelBase
             }
         }
 
-        using var refreshContext = _contextFactory();
-        RefreshLibraryHealth(refreshContext);
+        // Deferred: this command runs from the row's own TwoStepConfirm "Confirm" Button.Click still
+        // routing through the MissingFileItems row's own ItemsControl. RefreshLibraryHealth clears
+        // that collection, which would detach that same row mid-route and crash Avalonia's detach
+        // walk with an ArgumentOutOfRangeException (see Paperbunkr.App.Controls.SuggestBox.Commit
+        // for the fully diagnosed case).
+        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+        {
+            using var refreshContext = _contextFactory();
+            RefreshLibraryHealth(refreshContext);
+        });
     }
 
     private void DismissMissingFile(int issueId)
@@ -3067,8 +3075,14 @@ public partial class PreferencesScreenViewModel : ViewModelBase
             }
         }
 
-        using var refreshContext = _contextFactory();
-        RefreshLibraryHealth(refreshContext);
+        // Deferred: same reason as RemoveMissingFile above - this command runs from a single click
+        // on the row's own "Dismiss" Button still routing through the MissingFileItems row's own
+        // ItemsControl.
+        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+        {
+            using var refreshContext = _contextFactory();
+            RefreshLibraryHealth(refreshContext);
+        });
     }
 
     /// <summary>
@@ -3269,7 +3283,15 @@ public partial class PreferencesScreenViewModel : ViewModelBase
             context.SaveChanges();
         }
 
-        using var refreshContext = _contextFactory();
-        RefreshLibraryHealth(refreshContext);
+        // Deferred: this command runs from the row's own "Restore" Button.Click still routing
+        // through the RecentlyRemovedItems row's own ItemsControl. RefreshLibraryHealth clears that
+        // collection, which would detach that same row mid-route and crash Avalonia's detach walk
+        // with an ArgumentOutOfRangeException (see Paperbunkr.App.Controls.SuggestBox.Commit for the
+        // fully diagnosed case).
+        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+        {
+            using var refreshContext = _contextFactory();
+            RefreshLibraryHealth(refreshContext);
+        });
     }
 }

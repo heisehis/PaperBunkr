@@ -2,6 +2,7 @@ using System;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.Threading;
 using Paperbunkr.App.ViewModels;
 
 namespace Paperbunkr.App.Views;
@@ -46,7 +47,12 @@ public partial class PdfPageReaderScreen : UserControl
     {
         if (DataContext is PdfPageReaderScreenViewModel vm)
         {
-            vm.CloseCapturesCommand.Execute(null);
+            // Deferred: the scrim itself lives inside the drawer/sheet Popup's own content, so
+            // closing synchronously here would detach that content mid pointer-event-route -
+            // Avalonia's detach walk crashes with an ArgumentOutOfRangeException (see
+            // Paperbunkr.App.Controls.SuggestBox.Commit for the fully diagnosed case, and
+            // BookReaderScreen.axaml.cs.OnScrimPointerPressed for the same fix already applied there).
+            Dispatcher.UIThread.Post(() => vm.CloseCapturesCommand.Execute(null));
         }
 
         e.Handled = true;
@@ -57,7 +63,8 @@ public partial class PdfPageReaderScreen : UserControl
     {
         if (DataContext is PdfPageReaderScreenViewModel vm)
         {
-            vm.CloseFontThemeCommand.Execute(null);
+            // Deferred: same reason as OnCapturesScrimPointerPressed above.
+            Dispatcher.UIThread.Post(() => vm.CloseFontThemeCommand.Execute(null));
         }
 
         e.Handled = true;

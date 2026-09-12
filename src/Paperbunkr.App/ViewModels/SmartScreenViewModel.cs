@@ -567,13 +567,21 @@ public partial class SmartScreenViewModel : ViewModelBase
         context.SmartLists.Remove(list);
         context.SaveChanges();
 
-        if (_activeSmartListId == smartListId)
+        // Deferred: this command runs from the row's own TwoStepConfirm "Confirm" Button.Click
+        // still routing through the sidebar's own ItemsControl. RefreshSidebar (and EnsureListLoaded's
+        // own refresh) clears/rebuilds the very collection that row belongs to, which would detach it
+        // mid-route and crash Avalonia's detach walk with an ArgumentOutOfRangeException (see
+        // Paperbunkr.App.Controls.SuggestBox.Commit for the fully diagnosed case).
+        Dispatcher.UIThread.Post(() =>
         {
-            _activeSmartListId = null;
-            EnsureListLoaded();
-        }
+            if (_activeSmartListId == smartListId)
+            {
+                _activeSmartListId = null;
+                EnsureListLoaded();
+            }
 
-        RefreshSidebar();
+            RefreshSidebar();
+        });
     }
 
     private void RecomputeMatchCount()

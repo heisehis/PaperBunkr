@@ -1,6 +1,7 @@
 using System;
 using System.Collections.ObjectModel;
 using System.Linq;
+using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.EntityFrameworkCore;
@@ -553,24 +554,35 @@ public partial class EventsScreenViewModel : ViewModelBase
         context.StoryEvents.Remove(storyEvent);
         context.SaveChanges();
 
-        if (_activeEventId == storyEventId)
+        var nextId = _activeEventId == storyEventId
+            ? context.StoryEvents.OrderBy(e => e.Name).Select(e => (int?)e.Id).FirstOrDefault()
+            : null;
+
+        // Deferred: this command runs from the row's own TwoStepConfirm "Confirm" Button.Click
+        // still routing through the sidebar's own ItemsControl. RefreshSidebar (and the Members
+        // reset below) clear the very collection that row belongs to, which would detach it
+        // mid-route and crash Avalonia's detach walk with an ArgumentOutOfRangeException (see
+        // Paperbunkr.App.Controls.SuggestBox.Commit for the fully diagnosed case).
+        Dispatcher.UIThread.Post(() =>
         {
-            _activeEventId = null;
-            var nextId = context.StoryEvents.OrderBy(e => e.Name).Select(e => (int?)e.Id).FirstOrDefault();
-            if (nextId is int id)
+            if (_activeEventId == storyEventId)
             {
-                LoadEvent(id);
-                return;
+                _activeEventId = null;
+                if (nextId is int id)
+                {
+                    LoadEvent(id);
+                    return;
+                }
+
+                EventName = string.Empty;
+                Description = string.Empty;
+                TotalMembers = "0";
+                Members.Clear();
+                OnPropertyChanged(nameof(HasNoMembers));
             }
 
-            EventName = string.Empty;
-            Description = string.Empty;
-            TotalMembers = "0";
-            Members.Clear();
-            OnPropertyChanged(nameof(HasNoMembers));
-        }
-
-        RefreshSidebar();
+            RefreshSidebar();
+        });
     }
 
     /// <summary>"Delete event" from the ⋯ Manage menu (docs/superpowers/specs/2026-08-28-continuity-editing-design.md).</summary>

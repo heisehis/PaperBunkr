@@ -642,7 +642,9 @@ public partial class BookReaderScreenViewModel : ViewModelBase
 
         _history.Push(_position);
         _position = new BookPosition(highlight.ChapterIndex, highlight.BlockId);
-        IsHighlightsOpen = false;
+        // Deferred: same reason as GoToChapter above - this command runs from a row Button.Click
+        // still routing through the Highlights drawer's own Popup content.
+        Dispatcher.UIThread.Post(() => IsHighlightsOpen = false);
         RecomputeCurrentPage();
         PersistPosition();
         PositionRestoreRequested?.Invoke(highlight.BlockId);
@@ -664,7 +666,12 @@ public partial class BookReaderScreenViewModel : ViewModelBase
             context.SaveChanges();
         }
 
-        Highlights.Remove(highlight);
+        // Deferred: this command runs from the row's own "Remove" Button.Click still routing
+        // through the Highlights ItemsControl - removing the item here detaches that same row's
+        // visual tree mid-route, which crashes Avalonia's detach walk with an
+        // ArgumentOutOfRangeException (see Paperbunkr.App.Controls.SuggestBox.Commit for the fully
+        // diagnosed case).
+        Dispatcher.UIThread.Post(() => Highlights.Remove(highlight));
         RecomputeCurrentPage();
     }
 
@@ -767,7 +774,10 @@ public partial class BookReaderScreenViewModel : ViewModelBase
             Highlights.Insert(0, ToSummary(entity));
         }
 
-        IsHighlightPopupOpen = false;
+        // Deferred: this command (and the two below) run from a swatch/action Button.Click still
+        // routing through the highlight-color Popup's own content - see GoToChapter above for the
+        // fully diagnosed crash this avoids.
+        Dispatcher.UIThread.Post(() => IsHighlightPopupOpen = false);
         _pendingHighlightSelection = null;
         _editingHighlightId = null;
     }
@@ -784,14 +794,14 @@ public partial class BookReaderScreenViewModel : ViewModelBase
             }
         }
 
-        IsHighlightPopupOpen = false;
+        Dispatcher.UIThread.Post(() => IsHighlightPopupOpen = false);
         _editingHighlightId = null;
     }
 
     [RelayCommand]
     private void CancelHighlightPopup()
     {
-        IsHighlightPopupOpen = false;
+        Dispatcher.UIThread.Post(() => IsHighlightPopupOpen = false);
         _pendingHighlightSelection = null;
         _editingHighlightId = null;
     }
@@ -820,7 +830,12 @@ public partial class BookReaderScreenViewModel : ViewModelBase
 
         _history.Push(_position);
         _position = new BookPosition(chapter.Index);
-        IsTocOpen = false;
+        // Deferred: this command runs from a row Button.Click still routing through the TOC
+        // drawer's own Popup content. Closing it synchronously here detaches that same row's
+        // visual tree mid-route, which crashes Avalonia's detach walk with an
+        // ArgumentOutOfRangeException (see Paperbunkr.App.Controls.SuggestBox.Commit for the fully
+        // diagnosed case).
+        Dispatcher.UIThread.Post(() => IsTocOpen = false);
         RecomputeCurrentPage();
         PersistPosition();
     }
@@ -956,7 +971,9 @@ public partial class BookReaderScreenViewModel : ViewModelBase
             context.SaveChanges();
         }
 
-        Bookmarks.Remove(bookmark);
+        // Deferred: same reason as DeleteHighlight above - this command runs from the row's own
+        // "Remove" Button.Click still routing through the Bookmarks ItemsControl.
+        Dispatcher.UIThread.Post(() => Bookmarks.Remove(bookmark));
         if (bookmark.ChapterIndex == _position.ChapterIndex && bookmark.BlockId == (_position.BlockId ?? string.Empty))
         {
             IsCurrentPositionBookmarked = false;
@@ -984,7 +1001,9 @@ public partial class BookReaderScreenViewModel : ViewModelBase
 
         _history.Push(_position);
         _position = new BookPosition(bookmark.ChapterIndex, bookmark.BlockId);
-        IsBookmarksOpen = false;
+        // Deferred: same reason as GoToChapter above - this command runs from a row Button.Click
+        // still routing through the Bookmarks drawer's own Popup content.
+        Dispatcher.UIThread.Post(() => IsBookmarksOpen = false);
         RecomputeCurrentPage();
         PersistPosition();
         PositionRestoreRequested?.Invoke(bookmark.BlockId);
@@ -1006,7 +1025,9 @@ public partial class BookReaderScreenViewModel : ViewModelBase
         // Converting search to a BlockId anchor is explicitly deferred - see that design doc's
         // Background section.
         _position = new BookPosition(result.ChapterIndex);
-        IsSearchOpen = false;
+        // Deferred: same reason as GoToChapter above - this command runs from a row Button.Click
+        // still routing through the Search drawer's own Popup content.
+        Dispatcher.UIThread.Post(() => IsSearchOpen = false);
         SearchQuery = string.Empty;
         RecomputeCurrentPage();
         PersistPosition();

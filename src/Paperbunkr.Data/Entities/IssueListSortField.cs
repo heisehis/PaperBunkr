@@ -77,4 +77,17 @@ public enum IssueListSortField
     // On a per-issue card these read the issue's own series' totals. ---
     SeriesIssueCount,
     SeriesUnreadCount,
+
+    // --- docs/superpowers/specs/2026-09-12-library-sort-group-axes-design.md: resumes the
+    // 2026-08-16-paused "pluggable sort/group strategies" item. NeedsReview/PendingProposalCount
+    // are a deliberate deviation from CE's own (inapplicable) EnableProposed concept - see the
+    // design doc §2. VirtualTag is dynamic - deliberately NOT registered in
+    // IssueListFieldCatalog.SortFields (no single fixed comparer exists for it); it's always paired
+    // with a companion tag id (AppSettings.LibrarySortVirtualTagId /
+    // IssueListScreenViewModel.SortVirtualTagId) and resolved on the fly by
+    // IssueListFieldCatalog.BuildVirtualTagSortDescriptor. ---
+    NeedsReview,
+    PendingProposalCount,
+    IsFinalIssue,
+    VirtualTag,
 }

@@ -60,6 +60,35 @@ public class FilePickerService : IFilePickerService
         return files.Count > 0 ? files[0].TryGetLocalPath() : null;
     }
 
+    /// <summary>
+    /// Plugin-package picker accepting both extensions (implementation plan Phase 2 Step 2.3,
+    /// grilling Q18=B) - `.pbplugin` is the canonical extension going forward for every plugin
+    /// package, script or native; bare `.zip` stays accepted for packages already in circulation
+    /// before this extension existed. Not on <see cref="IFilePickerService"/>, same rationale as
+    /// <see cref="PickImageFileAsync"/>'s own doc comment - a multi-pattern filter doesn't fit that
+    /// interface's single-pattern shape.
+    /// </summary>
+    public async Task<string?> PickPluginPackageFileAsync(string title)
+    {
+        var topLevel = GetTopLevel();
+        if (topLevel is null)
+        {
+            return null;
+        }
+
+        var files = await topLevel.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+        {
+            Title = title,
+            AllowMultiple = false,
+            FileTypeFilter = new[]
+            {
+                new FilePickerFileType("Plugin Package") { Patterns = new[] { "*.pbplugin", "*.zip" } },
+            },
+        });
+
+        return files.Count > 0 ? files[0].TryGetLocalPath() : null;
+    }
+
     public async Task<string?> PickSaveFileAsync(string title, string suggestedFileName, string extension, string extensionLabel)
     {
         var topLevel = GetTopLevel();

@@ -7,6 +7,7 @@ using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.Threading;
 
 namespace Paperbunkr.App.Controls;
 
@@ -273,6 +274,7 @@ public class SuggestBox : TemplatedControl
         if (_list?.SelectedItem is string picked)
         {
             Commit(picked);
+            e.Handled = true;
         }
     }
 
@@ -305,8 +307,17 @@ public class SuggestBox : TemplatedControl
 
         _syncingText = false;
 
-        SetCurrentValue(IsDropDownOpenProperty, false);
-        _textBox?.Focus();
+        // Don't close the popup synchronously here: this runs *inside* the PointerReleased/KeyDown
+        // handler that the list item itself raised, and closing detaches the popup's whole content
+        // tree - including the ListBox still mid-route for that very event. Avalonia's detach walk
+        // (OnDetachedFromVisualTreeCore -> SetVisualParent -> AvaloniaList<T>.Remove) isn't
+        // reentrant-safe against being torn down mid-event, and throws ArgumentOutOfRangeException.
+        // Defer the close to the next dispatcher cycle so the event finishes routing first.
+        Dispatcher.UIThread.Post(() =>
+        {
+            SetCurrentValue(IsDropDownOpenProperty, false);
+            _textBox?.Focus();
+        });
     }
 
     internal static string SpliceMultiValue(string? current, string picked)

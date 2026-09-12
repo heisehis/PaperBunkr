@@ -62,4 +62,11 @@ public enum IssueListGroupField
     ContentType,
     Alphabetical,
     SeriesIssueCount,
+
+    // --- docs/superpowers/specs/2026-09-12-library-sort-group-axes-design.md. VirtualTag is
+    // dynamic - see the matching comment on IssueListSortField.VirtualTag. ---
+    NeedsReview,
+    OpenCount,
+    IsFinalIssue,
+    VirtualTag,
 }

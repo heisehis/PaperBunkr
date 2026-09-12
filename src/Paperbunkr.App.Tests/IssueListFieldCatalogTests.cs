@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Linq;
 using Avalonia.Media;
 using Paperbunkr.App.Models;
@@ -14,12 +15,16 @@ public class IssueListFieldCatalogTests
         string seriesName = "S", string title = "T", string? writer = null, string? publisher = null,
         string? genre = null, int? year = null, bool isMissing = false, float? numberSortKey = null,
         float? volumeSortKey = null, string? penciller = null, bool isRead = false, float? bookPrice = null,
-        string? contentTypeLabel = null, int seriesIssueCount = 0, int seriesUnreadCount = 0) => new()
+        string? contentTypeLabel = null, int seriesIssueCount = 0, int seriesUnreadCount = 0,
+        bool? isFinalIssue = null, bool hasPendingProposal = false, int pendingProposalCount = 0,
+        int openCount = 0, IReadOnlyDictionary<int, string>? virtualTagValues = null) => new()
     {
         SeriesName = seriesName, Title = title, Writer = writer, Publisher = publisher, Genre = genre,
         Year = year, IsMissing = isMissing, NumberSortKey = numberSortKey, CoverBrush = Brush,
         VolumeSortKey = volumeSortKey, Penciller = penciller, IsRead = isRead, BookPrice = bookPrice,
         ContentTypeLabel = contentTypeLabel, SeriesIssueCount = seriesIssueCount, SeriesUnreadCount = seriesUnreadCount,
+        IsFinalIssue = isFinalIssue, HasPendingProposal = hasPendingProposal, PendingProposalCount = pendingProposalCount,
+        OpenCount = openCount, VirtualTagValues = virtualTagValues ?? new Dictionary<int, string>(),
     };
 
     // --- Union members carried over from the retired LibraryFieldCatalog (2026-09-03) ---
@@ -63,20 +68,28 @@ public class IssueListFieldCatalogTests
     }
 
     [Fact]
-    public void EverySortField_HasACatalogEntry()
+    public void EverySortField_ExceptVirtualTag_HasACatalogEntry()
     {
+        // VirtualTag is deliberately dynamic - no single fixed descriptor exists for the whole
+        // family (docs/superpowers/specs/2026-09-12-library-sort-group-axes-design.md §1);
+        // BuildVirtualTagSortDescriptor_/BuildVirtualTagGroupDescriptor_ tests below cover it instead.
         foreach (IssueListSortField field in Enum.GetValues<IssueListSortField>())
         {
+            if (field == IssueListSortField.VirtualTag)
+            {
+                continue;
+            }
+
             Assert.True(IssueListFieldCatalog.SortFields.ContainsKey(field), $"Missing sort descriptor for {field}");
         }
     }
 
     [Fact]
-    public void EveryGroupField_ExceptNone_HasACatalogEntry()
+    public void EveryGroupField_ExceptNoneAndVirtualTag_HasACatalogEntry()
     {
         foreach (IssueListGroupField field in Enum.GetValues<IssueListGroupField>())
         {
-            if (field == IssueListGroupField.None)
+            if (field is IssueListGroupField.None or IssueListGroupField.VirtualTag)
             {
                 continue;
             }
@@ -276,5 +289,98 @@ public class IssueListFieldCatalogTests
             Assert.True(IssueListFieldCatalog.SortFields.TryGetValue(field, out var d), $"No descriptor for {field}");
             Assert.NotNull(d!.Display);
         }
+    }
+
+    // --- docs/superpowers/specs/2026-09-12-library-sort-group-axes-design.md ---
+
+    [Fact]
+    public void NeedsReviewSort_FalseSortsBeforeTrue_AndGroupLabelsCorrectly()
+    {
+        var sort = IssueListFieldCatalog.SortFields[IssueListSortField.NeedsReview];
+        Assert.True(sort.Compare(Row(hasPendingProposal: false), Row(hasPendingProposal: true)) < 0);
+
+        var group = IssueListFieldCatalog.GroupFields[IssueListGroupField.NeedsReview];
+        Assert.Equal("Needs Review", group.GroupKey(Row(hasPendingProposal: true)));
+        Assert.Equal("Up to Date", group.GroupKey(Row(hasPendingProposal: false)));
+    }
+
+    [Fact]
+    public void PendingProposalCountSort_OrdersNumerically()
+    {
+        var sort = IssueListFieldCatalog.SortFields[IssueListSortField.PendingProposalCount];
+        Assert.True(sort.Compare(Row(pendingProposalCount: 1), Row(pendingProposalCount: 5)) < 0);
+    }
+
+    [Fact]
+    public void IsFinalIssueSort_OrdersUnknownThenNoThenYes_MatchingCEsYesNoOrdering()
+    {
+        var sort = IssueListFieldCatalog.SortFields[IssueListSortField.IsFinalIssue];
+        var unknown = Row(isFinalIssue: null);
+        var no = Row(isFinalIssue: false);
+        var yes = Row(isFinalIssue: true);
+
+        Assert.True(sort.Compare(unknown, no) < 0);
+        Assert.True(sort.Compare(no, yes) < 0);
+        Assert.True(sort.Compare(unknown, yes) < 0);
+    }
+
+    [Fact]
+    public void IsFinalIssueGroup_HasThreeBuckets_OrderedUnknownThenNoThenYes()
+    {
+        var group = IssueListFieldCatalog.GroupFields[IssueListGroupField.IsFinalIssue];
+        Assert.Equal("Final issue", group.GroupKey(Row(isFinalIssue: true)));
+        Assert.Equal("Not final", group.GroupKey(Row(isFinalIssue: false)));
+        Assert.Equal("Unknown", group.GroupKey(Row(isFinalIssue: null)));
+
+        Assert.True(group.GroupOrder("Unknown", "Not final") < 0);
+        Assert.True(group.GroupOrder("Not final", "Final issue") < 0);
+    }
+
+    [Theory]
+    [InlineData(0, "0-20")]
+    [InlineData(20, "0-20")]
+    [InlineData(21, "21-50")]
+    [InlineData(100, "51-100")]
+    [InlineData(1000, "501-1000")]
+    [InlineData(1001, ">1000")]
+    public void OpenCountGroup_BucketsIntoCEsFixedRanges(int openCount, string expectedBucket)
+    {
+        var group = IssueListFieldCatalog.GroupFields[IssueListGroupField.OpenCount];
+        Assert.Equal(expectedBucket, group.GroupKey(Row(openCount: openCount)));
+    }
+
+    [Fact]
+    public void OpenCountGroup_OrdersByRange_NotAlphabetically()
+    {
+        // Alphabetically ">1000" < "0-20" (">" sorts before digits) - the range order must not be that.
+        var group = IssueListFieldCatalog.GroupFields[IssueListGroupField.OpenCount];
+        Assert.True(group.GroupOrder("0-20", ">1000") < 0);
+        Assert.True(group.GroupOrder("21-50", "0-20") > 0);
+    }
+
+    [Fact]
+    public void BuildVirtualTagSortDescriptor_SortsByEvaluatedValue_CaseInsensitively()
+    {
+        var tag = new VirtualTagDefinition { Id = 7, Name = "Reading Status", CaptionFormat = "{Status}" };
+        var descriptor = IssueListFieldCatalog.BuildVirtualTagSortDescriptor(tag);
+
+        Assert.Equal("Reading Status", descriptor.DisplayName);
+        var a = Row(virtualTagValues: new Dictionary<int, string> { [7] = "alice" });
+        var b = Row(virtualTagValues: new Dictionary<int, string> { [7] = "BOB" });
+        Assert.True(descriptor.Compare(a, b) < 0);
+    }
+
+    [Fact]
+    public void BuildVirtualTagGroupDescriptor_BucketsByExactValue_MissingFallsBackToUnspecified()
+    {
+        var tag = new VirtualTagDefinition { Id = 7, Name = "Reading Status", CaptionFormat = "{Status}" };
+        var descriptor = IssueListFieldCatalog.BuildVirtualTagGroupDescriptor(tag);
+
+        Assert.Equal("Reading Status", descriptor.DisplayName);
+        Assert.Equal("Ongoing", descriptor.GroupKey(Row(virtualTagValues: new Dictionary<int, string> { [7] = "Ongoing" })));
+        // No entry at all for this tag id (e.g. it wasn't enabled when this row was built).
+        Assert.Equal("Unspecified", descriptor.GroupKey(Row()));
+        // Different tag id present, but not this one.
+        Assert.Equal("Unspecified", descriptor.GroupKey(Row(virtualTagValues: new Dictionary<int, string> { [99] = "Ongoing" })));
     }
 }

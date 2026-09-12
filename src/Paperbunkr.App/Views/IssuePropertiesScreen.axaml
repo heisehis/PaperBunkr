@@ -405,7 +405,7 @@
                                     <StackPanel Classes="field" VerticalAlignment="Bottom">
                                         <Grid ColumnDefinitions="*,Auto">
                                             <TextBlock Grid.Column="0" Text="Final issue" VerticalAlignment="Center" Foreground="{DynamicResource PbTextBrush}" Margin="0,0,8,0" />
-                                            <ToggleSwitch Grid.Column="1" IsChecked="{Binding IsFinalIssue}" OnContent="{x:Null}" OffContent="{x:Null}" />
+                                            <CheckBox Grid.Column="1" IsThreeState="True" IsChecked="{Binding IsFinalIssue}" />
                                         </Grid>
                                     </StackPanel>
                                 </WrapPanel>

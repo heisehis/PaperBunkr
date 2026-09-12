@@ -231,6 +231,16 @@ verification" section near the top of this backlog); this session's three new it
 battery + "Part X/Y" label, split-page part navigation, and touch center-zone chrome toggle —
 user-confirmed live 2026-09-05.
 
+**Reader backlog Batch A designed 2026-09-10, code unmerged** (branch
+`claude/reader-backlog-batch-a`, design + plan `docs/superpowers/specs/2026-09-10-reader-backlog-
+batch-a-*.md`): three items scoped — (1) the deferred Preferences → Reader control for
+`AppSettings.ReaderMemoryLimitMb`; (2) a narrow async-swap-on-cold-miss in `ReaderScreenViewModel`
+for large jumps only, plus §17 of the pipeline design doc recording that the fuller async-paged
+restructure stays deferred/declined; (3) type-to-jump-to-page (`ReaderGoToPage`). The branch's
+author reported the code building clean with tests green, but it was never merged and no on-screen
+verification happened — treat the branch's code as unlanded until it's actually merged; only the
+design/plan docs are captured here.
+
 **Two more items thought closed above turned out to have real remaining gaps, revisited as
 "reader backlog Batch B" and shipped 2026-09-11**
 (docs/superpowers/specs/2026-09-10-reader-backlog-batch-b-design.md +
@@ -332,6 +342,34 @@ remains explicitly paused/skipped this session (still waiting on the user's idea
 unmappable comparer/grouper concepts — AlternateCount/variant tracking, a Bookmarks system,
 OpenCount/access tracking, a Proposed-metadata workflow, per-issue SeriesComplete — none of which
 List Layouts needed).
+
+**Pluggable sort/group strategies resumed and (mostly) shipped 2026-09-12** — design:
+`docs/superpowers/specs/2026-09-12-library-sort-group-axes-design.md`, plan:
+`docs/superpowers/specs/2026-09-12-library-sort-group-axes-plan.md`. Re-verified against current
+code first, not the pause notes above: `BookmarkCount`/`OpenCount` sort had already shipped as
+`IssueListFieldCatalog` entries by the time this resumed (no work needed), and the CE-ported
+`ComicBook`/comparer/grouper engine (~138 classes) is confirmed 100% dead code — this stayed
+entirely inside the real, live catalog system instead of touching it. Of the original 5 concepts:
+`AlternateCount`/variant tracking is still explicitly split off to its own future `IssueEdition`
+item (real scope, not done here); the other 4 resolved as **Virtual Tags** (new dynamic per-tag
+sort/group entries — `IssueListSortField.VirtualTag`/`GroupField.VirtualTag`, one live entry per
+enabled `VirtualTagDefinition`, resolved via `IssueListFieldCatalog.BuildVirtualTagSortDescriptor`/
+`BuildVirtualTagGroupDescriptor` rather than the static per-enum dictionaries, since the field
+family is user-defined and variable-count — mirrors `SmartListField.VirtualTag`'s existing
+`VirtualTagId` pattern), **Needs Review** (`NeedsReview`/`PendingProposalCount`, deliberately
+grounded in Paperbunkr's real `MetadataProposal` pending-review queue rather than CE's actual
+`EnableProposed` concept, which turned out on inspection to be a different, inapplicable
+filename-fallback flag), **`OpenCount` grouper** (new — CE's literal fixed ranges, 0-20/21-50/.../
+&gt;1000, sort already existed), and **`IsFinalIssue` tri-state** (`bool` → `bool?`, EF migration
+`LibrarySortGroupAxesAndFinalIssueTriState`, tri-state `CheckBox` replacing the old `ToggleSwitch`
+on Issue Properties — forward-looking only, since `CeLibraryMigrator` already collapsed CE's
+`SeriesComplete` Unknown/No into a plain `false` before this field existed, so no CE-migrated
+library can ever recover a true historical Unknown). New tests across
+`IssueListFieldCatalogTests`/`SortGroupStrategiesTests`/`IssueListScreenViewModelTests`/a new
+migration test/write-back-null-case tests, all passing (targeted-filter runs, not full-suite, per
+the project's own flaky-full-suite caveat). **Not yet done: on-screen verification** of the new
+toolbar sort/group entries and the tri-state checkbox — standing no-computer-use caveat, flagged
+rather than assumed.
 
 **On-screen verification gap closed the same session** (docs/onboarding.md §17): the "no
 unattended desktop GUI automation available" caveat repeated across ~15 specs/roadmap entries is no

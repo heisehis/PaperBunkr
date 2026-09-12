@@ -1,0 +1,2 @@
+<Plugin key="cluster-library-manager" name="Cluster Library Manager" tier="Native" assembly="ClusterLibraryManager.dll">
+</Plugin>

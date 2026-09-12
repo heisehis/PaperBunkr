@@ -28,6 +28,7 @@ public partial class IssueListScreenViewModel : ViewModelBase
     private readonly Action<int> _goReaderForIssue;
     private readonly Func<int, bool> _isSelected;
     private List<Issue> _sourceIssues = new();
+    private IReadOnlyList<VirtualTagDefinition> _availableVirtualTagDefinitions = new List<VirtualTagDefinition>();
 
     /// <summary>
     /// <paramref name="isSelected"/> (docs/superpowers/specs/2026-08-24-library-multiselect-slice1-
@@ -63,6 +64,16 @@ public partial class IssueListScreenViewModel : ViewModelBase
     public static IReadOnlyList<IssueListSortFieldDescriptor> SortFieldOptions => IssueListFieldCatalog.SortFields.Values.ToList();
     public static IReadOnlyList<IssueListGroupFieldDescriptor> GroupFieldOptions => IssueListFieldCatalog.GroupFields.Values.ToList();
 
+    /// <summary>Enabled Virtual Tags, for the toolbar's dynamic per-tag sort/group entries
+    /// (docs/superpowers/specs/2026-09-12-library-sort-group-axes-design.md §1) - populated by
+    /// <see cref="SetVirtualTags"/>, called from <c>LibraryScreenViewModel</c> alongside <see cref="SetRows"/>.</summary>
+    public IReadOnlyList<VirtualTagOption> AvailableVirtualTags =>
+        _availableVirtualTagDefinitions.Select(t => new VirtualTagOption(t.Id, t.Name)).ToList();
+
+    /// <summary>Gates the toolbar's Virtual Tag sort/group sections - hidden entirely for a library
+    /// with none enabled, rather than showing an empty section.</summary>
+    public bool HasVirtualTags => _availableVirtualTagDefinitions.Count > 0;
+
     [ObservableProperty]
     private IssueListSortField _sortField = IssueListSortField.Added;
 
@@ -72,10 +83,41 @@ public partial class IssueListScreenViewModel : ViewModelBase
     [ObservableProperty]
     private IssueListGroupField _groupField = IssueListGroupField.None;
 
+    /// <summary>Meaningful only when <see cref="SortField"/> is <see cref="IssueListSortField.VirtualTag"/>.</summary>
+    [ObservableProperty]
+    private int? _sortVirtualTagId;
+
+    /// <summary>Meaningful only when <see cref="GroupField"/> is <see cref="IssueListGroupField.VirtualTag"/>.</summary>
+    [ObservableProperty]
+    private int? _groupVirtualTagId;
+
     public bool IsGrouped => GroupField != IssueListGroupField.None;
 
-    public string SortFieldLabel => IssueListFieldCatalog.SortFields.TryGetValue(SortField, out var d) ? d.DisplayName : SortField.ToString();
-    public string GroupFieldLabel => GroupField == IssueListGroupField.None ? "None" : IssueListFieldCatalog.GroupFields[GroupField].DisplayName;
+    private VirtualTagDefinition? ResolveVirtualTag(int? id) =>
+        id is int tagId ? _availableVirtualTagDefinitions.FirstOrDefault(t => t.Id == tagId) : null;
+
+    public string SortFieldLabel =>
+        SortField == IssueListSortField.VirtualTag
+            ? ResolveVirtualTag(SortVirtualTagId)?.Name ?? "Virtual Tag"
+            : IssueListFieldCatalog.SortFields.TryGetValue(SortField, out var d) ? d.DisplayName : SortField.ToString();
+
+    public string GroupFieldLabel =>
+        GroupField == IssueListGroupField.None ? "None"
+        : GroupField == IssueListGroupField.VirtualTag ? ResolveVirtualTag(GroupVirtualTagId)?.Name ?? "Virtual Tag"
+        : IssueListFieldCatalog.GroupFields[GroupField].DisplayName;
+
+    /// <summary>
+    /// Null unless <see cref="SortField"/> is actually <see cref="IssueListSortField.VirtualTag"/> -
+    /// collapses the compound "field is VirtualTag AND id matches" check the toolbar's dynamic
+    /// per-tag buttons need down to a single nullable-int comparison, so their
+    /// <c>Classes.active</c> binding can reuse the existing single-value
+    /// <see cref="Avalonia.Data.Converters.ObjectConverters.Equal"/> pattern every other sort/group
+    /// option button already uses, instead of a new <c>MultiBinding</c>/converter.
+    /// </summary>
+    public int? ActiveVirtualTagSortId => SortField == IssueListSortField.VirtualTag ? SortVirtualTagId : null;
+
+    /// <summary>Group equivalent of <see cref="ActiveVirtualTagSortId"/>.</summary>
+    public int? ActiveVirtualTagGroupId => GroupField == IssueListGroupField.VirtualTag ? GroupVirtualTagId : null;
 
     /// <summary>Toolbar pill text - <see cref="SortFieldLabel"/> plus a direction glyph, since
     /// Library's Sort pill (the only Sort control now that every Display mode is per-issue) shows
@@ -94,6 +136,17 @@ public partial class IssueListScreenViewModel : ViewModelBase
     {
         _sourceIssues = issues.Where(i => i.Series != null).ToList();
         Render();
+    }
+
+    /// <summary>Called by <see cref="LibraryScreenViewModel"/> whenever the enabled Virtual Tag set
+    /// changes (mirrors <see cref="SetRows"/>'s call shape). Re-renders since a changed tag's
+    /// <c>CaptionFormat</c> or enabled-state can change previously-cached row values.</summary>
+    public void SetVirtualTags(IReadOnlyList<VirtualTagDefinition> tags)
+    {
+        _availableVirtualTagDefinitions = tags;
+        OnPropertyChanged(nameof(AvailableVirtualTags));
+        OnPropertyChanged(nameof(HasVirtualTags));
+        Reload();
     }
 
     /// <summary>
@@ -160,13 +213,45 @@ public partial class IssueListScreenViewModel : ViewModelBase
     // is actually realized - not decoded here regardless of visibility (docs/superpowers/specs/
     // 2026-08-22-cover-memory-virtualization-design.md). The projection itself lives on
     // IssueListRow.FromIssue so per-series cards' representative rows build from the same code.
-    private IssueListRow ToRow(Issue issue) => IssueListRow.FromIssue(issue, issue.Series!, _isSelected);
+    private IssueListRow ToRow(Issue issue) => IssueListRow.FromIssue(issue, issue.Series!, _isSelected, _availableVirtualTagDefinitions);
+
+    /// <summary>Resolves <see cref="SortField"/>/<see cref="GroupField"/> to a descriptor, handling
+    /// the dynamic <see cref="IssueListSortField.VirtualTag"/>/<see cref="IssueListGroupField.VirtualTag"/>
+    /// case (not in the static catalog dictionaries - built on the fly from the selected tag id) and
+    /// falling back to a sane default when a selected tag id no longer resolves (e.g. the tag was
+    /// deleted after being selected).</summary>
+    private IssueListSortFieldDescriptor ResolveSortDescriptor()
+    {
+        if (SortField == IssueListSortField.VirtualTag)
+        {
+            var tag = ResolveVirtualTag(SortVirtualTagId);
+            if (tag is not null)
+            {
+                return IssueListFieldCatalog.BuildVirtualTagSortDescriptor(tag);
+            }
+        }
+        else if (IssueListFieldCatalog.SortFields.TryGetValue(SortField, out var found))
+        {
+            return found;
+        }
+
+        return IssueListFieldCatalog.SortFields[IssueListSortField.Added];
+    }
+
+    private IssueListGroupFieldDescriptor? ResolveGroupDescriptor()
+    {
+        if (GroupField == IssueListGroupField.VirtualTag)
+        {
+            var tag = ResolveVirtualTag(GroupVirtualTagId);
+            return tag is not null ? IssueListFieldCatalog.BuildVirtualTagGroupDescriptor(tag) : null;
+        }
+
+        return IssueListFieldCatalog.GroupFields.TryGetValue(GroupField, out var descriptor) ? descriptor : null;
+    }
 
     private List<IssueListRow> SortRows(List<IssueListRow> rows)
     {
-        var descriptor = IssueListFieldCatalog.SortFields.TryGetValue(SortField, out var found)
-            ? found
-            : IssueListFieldCatalog.SortFields[IssueListSortField.Added];
+        var descriptor = ResolveSortDescriptor();
 
         var result = rows.ToList();
         result.Sort(descriptor.Compare);
@@ -180,7 +265,8 @@ public partial class IssueListScreenViewModel : ViewModelBase
 
     private IEnumerable<IssueListRowGroup> GroupRows(List<IssueListRow> rows)
     {
-        if (!IssueListFieldCatalog.GroupFields.TryGetValue(GroupField, out var descriptor))
+        var descriptor = ResolveGroupDescriptor();
+        if (descriptor is null)
         {
             return Enumerable.Empty<IssueListRowGroup>();
         }
@@ -195,6 +281,7 @@ public partial class IssueListScreenViewModel : ViewModelBase
     {
         OnPropertyChanged(nameof(SortFieldLabel));
         OnPropertyChanged(nameof(SortLabelWithDirection));
+        OnPropertyChanged(nameof(ActiveVirtualTagSortId));
         Reload();
     }
 
@@ -208,6 +295,22 @@ public partial class IssueListScreenViewModel : ViewModelBase
     {
         OnPropertyChanged(nameof(IsGrouped));
         OnPropertyChanged(nameof(GroupFieldLabel));
+        OnPropertyChanged(nameof(ActiveVirtualTagGroupId));
+        Reload();
+    }
+
+    partial void OnSortVirtualTagIdChanged(int? value)
+    {
+        OnPropertyChanged(nameof(SortFieldLabel));
+        OnPropertyChanged(nameof(SortLabelWithDirection));
+        OnPropertyChanged(nameof(ActiveVirtualTagSortId));
+        Reload();
+    }
+
+    partial void OnGroupVirtualTagIdChanged(int? value)
+    {
+        OnPropertyChanged(nameof(GroupFieldLabel));
+        OnPropertyChanged(nameof(ActiveVirtualTagGroupId));
         Reload();
     }
 
@@ -222,6 +325,48 @@ public partial class IssueListScreenViewModel : ViewModelBase
 
     [RelayCommand]
     private void SetGroupField(IssueListGroupField field) => GroupField = field;
+
+    /// <summary>Sets both <see cref="SortField"/> (to <see cref="IssueListSortField.VirtualTag"/>)
+    /// and <see cref="SortVirtualTagId"/> in one shot - suppressing <see cref="Render"/> in between
+    /// so setting the pair doesn't render twice, same rationale as <see cref="ConfigureSortGroup"/>.</summary>
+    [RelayCommand]
+    private void SetVirtualTagSortField(VirtualTagOption tag)
+    {
+        _suppressRender = true;
+        try
+        {
+            SortVirtualTagId = tag.Id;
+            SortField = IssueListSortField.VirtualTag;
+        }
+        finally
+        {
+            _suppressRender = false;
+        }
+
+        OnPropertyChanged(nameof(SortFieldLabel));
+        OnPropertyChanged(nameof(SortLabelWithDirection));
+        Reload();
+    }
+
+    /// <summary>See <see cref="SetVirtualTagSortField"/>.</summary>
+    [RelayCommand]
+    private void SetVirtualTagGroupField(VirtualTagOption tag)
+    {
+        _suppressRender = true;
+        try
+        {
+            GroupVirtualTagId = tag.Id;
+            GroupField = IssueListGroupField.VirtualTag;
+        }
+        finally
+        {
+            _suppressRender = false;
+        }
+
+        OnPropertyChanged(nameof(IsGrouped));
+        OnPropertyChanged(nameof(GroupFieldLabel));
+        Reload();
+    }
 
     [RelayCommand]
     private void OpenIssue(IssueListRow? row)

@@ -94,6 +94,21 @@ public class MetadataFileFieldSnapshotTests
         Assert.Equal("Defining", tag.Weight);
     }
 
+    /// <summary>docs/superpowers/specs/2026-09-12-library-sort-group-axes-design.md §4 - IsFinalIssue
+    /// is now tri-state; the test above only ever covered <see langword="true"/>.</summary>
+    [Fact]
+    public void Sidecar_RoundTripsThroughJson_IsFinalIssueUnknown_AsNull()
+    {
+        var issue = SampleIssue();
+        issue.IsFinalIssue = null;
+
+        var original = PaperbunkrSidecar.FromIssue(issue);
+        var parsed = PaperbunkrSidecar.TryParse(original.ToJsonBytes());
+
+        Assert.NotNull(parsed);
+        Assert.Null(parsed!.IsFinalIssue);
+    }
+
     [Fact]
     public void Sidecar_TryParse_Garbage_ReturnsNull()
     {

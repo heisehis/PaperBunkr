@@ -19,6 +19,12 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Paperbunkr.Data\Paperbunkr.Data.csproj" />
+    <!-- IPluginEnvironment/IPluginConfig/the 17 hook-global types moved out to
+         Paperbunkr.Plugins.Abstractions (docs/superpowers/specs/2026-09-11-plugin-api-v4-native-tier-
+         design.md, implementation plan Phase 0) so a native-tier plugin project can reference just
+         the contracts without Roslyn scripting/IronPython. Namespaces unchanged, so no `using`
+         updates were needed anywhere in this project. -->
+    <ProjectReference Include="..\Paperbunkr.Plugins.Abstractions\Paperbunkr.Plugins.Abstractions.csproj" />
   </ItemGroup>
 
 </Project>

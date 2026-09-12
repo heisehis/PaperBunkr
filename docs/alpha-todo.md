@@ -90,6 +90,35 @@ this file itself already did once (see the note below).
 > off-UI); the `ReaderMemoryLimitMb` Preferences checkbox.
 > **A manual or FlaUI GUI pass on the running reader is the one gate before this merges.**
 >
+> **Manual session note (2026-09-10, reader backlog Batch A):** Beta-backlog reader work, P0–P7
+> unchanged. Branch `claude/reader-backlog-batch-a` (off `master`), unmerged. Design + plan:
+> `docs/superpowers/specs/2026-09-10-reader-backlog-batch-a-{design,plan}.md`; pipeline design doc
+> gained §17 (decision record). Three items:
+> 1. **`ReaderMemoryLimitMb` Preferences control** — the control PR #68 shipped the column+migration
+>    for but deferred. Segmented Auto / 512 / 1024 in Preferences → Reader → PERFORMANCE; `segTab`
+>    style promoted from `LibrarySection.axaml` to `Styles/Primitives.axaml`. No migration.
+> 2. **Async-swap-on-cold-miss** — `ReaderScreenViewModel.RefreshCurrentPage`'s paged branch no
+>    longer blocks the UI thread on a **large jump** (`|new−old| > 3` — thumbnail click, type-to-jump)
+>    to an undecoded page: it keeps the outgoing page up, shows a `…` indicator (`IsPageLoading`),
+>    and swaps in on `BackgroundDecodeCompleted` (primary, then the spread's pair via
+>    `ResolveSecondaryPage`), with a 5 s `DispatcherTimer` → `ErrorMessage` fallback. **Adjacent
+>    turns keep the synchronous path** — first attempt made *every* turn async and regressed
+>    deterministic double-page pairing (3 pre-existing tests); scoping to large jumps fixed that.
+>    §17 records the full async-paged restructure, N decode workers, and an `IReaderPageSource`
+>    queue-cancel API all staying deferred/declined (the queue already drops stale entries at
+>    dequeue — a 50-jump burst does ~3 real decodes).
+> 3. **Type-to-jump-to-page** — deliberate deviation (CE has no numeric go-to-page; its `D1`–`D0`
+>    are zoom/layout). New `ReaderGoToPage` command (default `G`) + an inline `TextBox` (`MaxLength=7`,
+>    digit-only via `TextInput`/`DataObject.Pasting` filters, `long.TryParse`+clamp on commit) that
+>    replaces the `PAGE x / y` readout. New `NavigateToPageIndex` helper shared with `SelectThumbnail`.
+>    `PageCanvas` gained `GoToPageGesture`/`GoToPageCommand`/`PageInputActive` styled props.
+> **Verified:** App + Tests build clean (obj-dll delete + rebuild, XAML weave confirmed via test run);
+> `ReaderScreenViewModelTests` 206/206 (incl. 21 new + the 3 double-page fixes), `KeyBindingServiceTests`
+> + `PreferencesScreenViewModelTests` green (149). **Not done:** on-screen verification (no computer-use).
+> New `App.Tests/Fakes/FakeReaderPageSource.cs` for the async-swap tests. Landed on top of the
+> concurrently-committed dropdown-freeze fix (`a03a29d`, a different session — the shared worktree
+> briefly clobbered `ReaderScreen.axaml.cs` mid-edit, recovered via a checkpoint commit).
+>
 > **Manual session note (2026-09-10, reader-pipeline rev-3 addenda):** follow-up hardening on
 > top of PR #68, from a technical review of the shipped code. Branch
 > `claude/reader-rev3-addenda` (off `master`), spec §15 of

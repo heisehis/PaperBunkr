@@ -16,6 +16,25 @@ public static class XmlPluginInitializer
 {
     private static readonly XmlSerializer Serializer = new(typeof(PluginManifest));
 
+    /// <summary>Parse-only read of a manifest, used by <see cref="PluginEngine.Discover"/> to check
+    /// <see cref="PluginManifest.Tier"/> before deciding whether to walk <see cref="GetCommands"/>'s
+    /// script-command path or the Native-tier assembly-loading path (docs/superpowers/specs/
+    /// 2026-09-11-plugin-api-v4-native-tier-design.md §4, implementation plan Phase 1 Step 1.4).
+    /// Never throws - null on any parse failure, same "one bad manifest doesn't abort the rest"
+    /// contract as <see cref="GetCommands"/>.</summary>
+    public static PluginManifest? ReadManifest(string manifestFile)
+    {
+        try
+        {
+            using var stream = File.OpenRead(manifestFile);
+            return Serializer.Deserialize(stream) as PluginManifest;
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
+
     /// <summary>Never throws - a malformed manifest yields an empty command list so one bad plugin can't abort discovery of the rest (docs §2).</summary>
     public static IEnumerable<Command> GetCommands(string manifestFile)
     {

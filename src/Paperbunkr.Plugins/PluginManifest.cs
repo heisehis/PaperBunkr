@@ -20,6 +20,19 @@ public sealed class PluginManifest
     [XmlAttribute("name")]
     public string Name { get; set; } = string.Empty;
 
+    /// <summary>"Script" (default, unchanged from before this attribute existed - every manifest
+    /// written before Plugin API v4 has no `tier` attribute at all and defaults here) or "Native"
+    /// (docs/superpowers/specs/2026-09-11-plugin-api-v4-native-tier-design.md §4). A Native-tier
+    /// manifest declares no <see cref="Commands"/> at all - its commands come from
+    /// <see cref="Assembly"/>'s <c>INativePluginModule.RegisterCommands</c> instead.</summary>
+    [XmlAttribute("tier")]
+    public string Tier { get; set; } = "Script";
+
+    /// <summary>Relative path (from the manifest's own folder) to the plugin's main compiled
+    /// assembly. Required when <see cref="Tier"/> is "Native"; ignored otherwise.</summary>
+    [XmlAttribute("assembly")]
+    public string? Assembly { get; set; }
+
     [XmlElement("Command")]
     public List<CommandManifestEntry> Commands { get; set; } = new();
 }

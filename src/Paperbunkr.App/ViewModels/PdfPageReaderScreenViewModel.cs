@@ -5,6 +5,7 @@ using System.Linq;
 using Avalonia;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
+using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.EntityFrameworkCore;
@@ -286,7 +287,11 @@ public partial class PdfPageReaderScreenViewModel : ViewModelBase
         {
         }
 
-        AnnotationImages.Remove(capture);
+        // Deferred: this command runs from the row's own ✕ Button.Click still routing through the
+        // AnnotationImages row's own ItemsControl - removing the item here would detach that same
+        // row mid-route and crash Avalonia's detach walk with an ArgumentOutOfRangeException (see
+        // Paperbunkr.App.Controls.SuggestBox.Commit for the fully diagnosed case).
+        Dispatcher.UIThread.Post(() => AnnotationImages.Remove(capture));
     }
 
     /// <summary>

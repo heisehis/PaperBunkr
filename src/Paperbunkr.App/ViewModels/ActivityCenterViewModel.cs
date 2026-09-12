@@ -399,7 +399,12 @@ public sealed partial class ActivityCenterViewModel : ViewModelBase
     [RelayCommand]
     private void OpenDrawer()
     {
-        IsPeekOpen = false;
+        // Deferred: this command runs from the "See all →" Button.Click still routing through the
+        // peek Popup's own content. Closing the popup synchronously here detaches that same
+        // button's visual tree mid-route, which crashes Avalonia's detach walk with an
+        // ArgumentOutOfRangeException (see Paperbunkr.App.Controls.SuggestBox.Commit for the fully
+        // diagnosed case).
+        Dispatcher.UIThread.Post(() => IsPeekOpen = false);
         IsDrawerOpen = true;
         ActiveTab = ActivityDrawerTab.Active;
     }
@@ -434,7 +439,11 @@ public sealed partial class ActivityCenterViewModel : ViewModelBase
         if (link is not null)
         {
             _followLink(link);
-            Close();
+
+            // Deferred: this command runs from a job/alert row Button.Click still routing through
+            // the peek Popup's own content - see OpenDrawer above for the fully diagnosed crash
+            // Close() (which also sets IsPeekOpen = false) would cause if called synchronously here.
+            Dispatcher.UIThread.Post(Close);
         }
     }
 }

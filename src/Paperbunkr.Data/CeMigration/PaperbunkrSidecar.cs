@@ -33,7 +33,7 @@ public sealed record PaperbunkrSidecar
     /// <summary>Personal rating (<see cref="Issue.Rating"/>). ComicInfo only carries CommunityRating.</summary>
     public float? Rating { get; init; }
 
-    public bool IsFinalIssue { get; init; }
+    public bool? IsFinalIssue { get; init; }
 
     public string? StoryArcNumber { get; init; }
 

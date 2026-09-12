@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <!-- Test fixture only (implementation plan docs/superpowers/specs/2026-09-12-plugin-management-
+       screen-redesign-plan.md Step 2) - a native-tier plugin whose module constructor throws, to
+       prove PluginEngine.DiscoverNative records a real NativePluginLoadResult.LoadError instead of
+       swallowing the exception. Mirrors MinimalNative's shape exactly. -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\Paperbunkr.Plugins.Abstractions\Paperbunkr.Plugins.Abstractions.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -1253,7 +1253,40 @@ assuming symmetry with the card-grid case.
 
 Explicitly out of scope, flagged rather than silently dropped: command palette, type-ahead-by-letter,
 `Shift+`arrow range-select, and a `Ctrl+Q` quit binding (no evidence anything needs it beyond the OS
-default) — each is real interaction/design work, not plumbing.
+default) — each is real interaction/design work, not plumbing. Command palette shipped 2026-09-03
+(`Ctrl+P` Quick Open); the remaining three shipped 2026-09-12, see below.
+
+**Type-ahead, Shift+arrow range-select, and Ctrl+Q shipped 2026-09-12** (design + plan:
+`docs/superpowers/specs/2026-09-12-grid-typeahead-rangeselect-quit-{design,plan}.md`), closing the
+three items named above. Verified against CE source first, not assumed: type-ahead ports
+`cYo.Common.Windows.Forms.KeySearch` exactly (buffered multi-character prefix search, 2.5s idle
+reset, leading articles ignored) as new `TypeAheadSearch`, wired onto Library/Books/Smart Lists —
+the "browse many named items" grids, matching CE's own scope (`KeySearch` was wired only to the main
+`ItemView`, never a Detail-page sub-list). A real reuse win: `Paperbunkr.Common`'s ported
+`cYo.Common.Text.StringUtility.StartsWith(...,ignoreArticles)` already existed with zero call sites
+before this — the article-skipping logic didn't need reimplementing. Shift+arrow range-select
+extends `GridKeyboardNavigation.TryHandleArrowKey` with an optional selection-extend callback,
+reusing each screen's existing `ToggleIssueSelection`/`ToggleSeriesSelection`/`ToggleBookSelection`
+(the same methods Shift+Click already calls) — wired at the 3 grids with a real selection model to
+extend (Library, Books, Detail's Issue tiles); Smart Lists and Book Detail have no selection state to
+extend, so Shift stays a no-op there, unchanged. Ctrl+Q is one new branch in `MainWindow`'s existing
+`OnMainWindowKeyDown`, calling the same `Close()` that already flows through `OnWindowClosing`'s
+tray-aware logic — matching CE's own File>Exit accelerator exactly, no new close-path logic needed.
+**Real gap found and fixed as part of this work, not a pre-existing bug:** off-screen/unrealized
+items in the plain-`ItemsControl`-backed grids (Poster/Panorama/Tiles, Smart Lists' three result
+grids) had no way to scroll into view from outside their own panel — `VirtualizingWrapPanel`/
+`VirtualizingVariableWrapPanel`'s own `ScrollIntoView` override is `protected`, unlike `ListBox`'s
+public one List/Details already relies on. Both panels gained a public `ScrollToIndex` forwarder,
+needed for type-ahead to jump to an item not currently realized. Verified: `Paperbunkr.App` builds
+clean; new `TypeAheadSearchTests` (the ported buffer/match logic), extended
+`GridKeyboardNavigationTests`/`BooksScreenViewModelTests` (a `ToggleBookSelection` shift-range case —
+Library/DetailTabs already had their own equivalents from earlier work). **Real pre-existing bugs
+found while verifying (not caused by this change, flagged separately):** the same `TwoStepConfirm`
+delete bug already known for Library/Smart Lists/Reading Lists, and one `DetailTabsViewModelTests`
+failure (`LinkMetadataAsync_CreatesLinkAndClosesSearch`) whose isolation was inconclusive due to
+concurrent-session contention on the shared working tree but has no plausible code overlap with this
+change. On-screen verification of the actual type-ahead jump feel, Shift+arrow range-select, and
+Ctrl+Q's tray-vs-quit behavior not done — standing no-computer-use caveat.
 
 Tests: 10 new (`MainViewModelTests` cycle-forward/back incl. wraparound and drill-down no-op;
 `LibraryScreenViewModelTests` Ctrl+A/Delete dispatch-by-granularity incl. empty-selection no-op) —

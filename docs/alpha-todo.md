@@ -22,6 +22,29 @@ this file itself already did once (see the note below).
 
 ## What's left (as of 2026-08-12, HEAD `85fb681`)
 
+> **Manual session note (2026-09-12, grid type-ahead/Shift+arrow range-select/Ctrl+Q shipped):**
+> Beta-backlog work, P0–P7 unchanged. Design + plan: `docs/superpowers/specs/2026-09-12-grid-
+> typeahead-rangeselect-quit-{design,plan}.md`. Closed the last 3 of 4 items the 2026-08-31 keyboard-
+> shortcuts spec had explicitly deferred (command palette shipped separately, 2026-09-03). All three
+> verified against CE source first: type-ahead ports CE's `KeySearch` exactly (buffered prefix
+> search, 2.5s idle reset, articles ignored), wired to Library/Books/Smart Lists only, matching CE's
+> own narrow scope; Shift+arrow range-select extends `GridKeyboardNavigation` with a selection-extend
+> callback reusing each screen's existing Shift+Click selection methods, wired only where a real
+> selection model exists (Library, Books, Detail's Issue tiles); Ctrl+Q routes through the same
+> tray-aware `Close()` path CE's own File>Exit accelerator uses. Found and fixed a real gap along the
+> way: the custom virtualizing panels' `ScrollIntoView` was `protected`, so nothing outside the panel
+> could scroll to an off-screen item — added a public `ScrollToIndex` forwarder. Verified:
+> `Paperbunkr.App` builds clean, new/extended tests pass (`TypeAheadSearchTests`,
+> `GridKeyboardNavigationTests`, `BooksScreenViewModelTests`).
+> **Real pre-existing bugs found while verifying (not caused by this change, flagged separately):**
+> the already-known `TwoStepConfirm` delete bug (Library/Smart Lists/Reading Lists) reproduced again
+> here; one `DetailTabsViewModelTests` failure (`LinkMetadataAsync_CreatesLinkAndClosesSearch`)
+> couldn't be cleanly isolated via git-stash due to a concurrent session repeatedly launching the app
+> during this session, but has no plausible code overlap with this change — flagged as likely-
+> pre-existing pending confirmation.
+> **Not done:** on-screen verification of the type-ahead jump feel, Shift+arrow range-select, and
+> Ctrl+Q's tray-vs-quit behavior (standing no-computer-use caveat).
+
 > **Manual session note (2026-09-12, Entrance-animation v2 shipped):** Beta-backlog work, P0–P7
 > unchanged. Design + plan: `docs/superpowers/specs/2026-09-12-entrance-animation-v2-{design,plan}.md`.
 > Extended the shipped staggered-grid-entrance system (`EntranceAnimation`) from Library+Home to the

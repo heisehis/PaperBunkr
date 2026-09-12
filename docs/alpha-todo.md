@@ -22,6 +22,26 @@ this file itself already did once (see the note below).
 
 ## What's left (as of 2026-08-12, HEAD `85fb681`)
 
+> **Manual session note (2026-09-12, Issue.AlternateCount gap closed):** Beta-backlog work, P0–P7
+> unchanged. Design + plan: `docs/superpowers/specs/2026-09-12-issue-alternate-count-{design,plan}.md`.
+> Closed a real, twice-previously-deferred gap (`2026-08-07-bulk-issue-editing-design.md` §3;
+> `IssueToComicInfoMapper.cs`'s own unmodeled-elements list; split off from the same-day
+> sort/group-axes work) — CE's `AlternateSeries`/`AlternateNumber`/`AlternateCount` ComicInfo.xml
+> trio had its first two fields fully ported but never the third. New `Issue.AlternateCount`
+> (`int?`) + migration + ComicInfo.xml round-trip + Issue Properties editor field + Library sort/group
+> (group reuses `OpenCount`'s CE-exact bucket ranges, generalized for `null` → `"Unspecified"`) +
+> Bulk Issue Editing + Smart Lists. Verified: `Paperbunkr.Data.Tests` and targeted
+> `Paperbunkr.App.Tests` green (~19 new test cases; two pre-existing tests corrected since they
+> asserted the old, now-wrong "unmodeled"/"excluded" behavior for this field).
+> **Real pre-existing bug found and flagged separately (not fixed here, confirmed unrelated to this
+> change via git-stash isolation):** `AddCoverAspectRatioMigrationTests` fails on `master` on its
+> own — its hardcoded multi-migration rollback target now crosses the same-day
+> `LibrarySortGroupAxesAndFinalIssueTriState` migration and hits a SQLite full-table-rebuild `NOT
+> NULL` collision on `IsFinalIssue`. Spawned as a separate task
+> (`Fix migration rollback: IsFinalIssue NOT NULL bug`). **Not done:** on-screen verification of the
+> new Issue Properties field and Library sort/group toolbar entries (standing no-computer-use
+> caveat).
+
 > **Manual session note (2026-09-06, migration rollback-chain bug fixed):** `Paperbunkr.Data.Tests`
 > had 7 tests failing on clean HEAD — every deep `Migrate(PriorMigration)` rollback died with
 > `SQLite Error 1: 'no such column: "LibraryGroupField"'`. Root cause: two migrations

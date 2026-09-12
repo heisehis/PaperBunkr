@@ -371,6 +371,32 @@ the project's own flaky-full-suite caveat). **Not yet done: on-screen verificati
 toolbar sort/group entries and the tri-state checkbox — standing no-computer-use caveat, flagged
 rather than assumed.
 
+**`AlternateCount` gap closed 2026-09-12** (design + plan: `docs/superpowers/specs/
+2026-09-12-issue-alternate-count-{design,plan}.md`), split off from the sort/group axes work above.
+CE's `AlternateSeries`/`AlternateNumber`/`AlternateCount` ComicInfo.xml trio (crossover/tie-in
+numbering, not variant-cover tracking — that alternate reading was investigated and ruled out) was
+missing only its third field on `Issue`; `AlternateSeries`/`AlternateNumber` already had full
+end-to-end support. Closed the gap the same way as `Count`'s own shape: new `Issue.AlternateCount`
+(`int?`, migration `AddIssueAlternateCount`, real `DropColumn` on `Down()`), ComicInfo.xml
+round-trip (`CeLibraryMigrator`/`IssueToComicInfoMapper`), Issue Properties editor field, Library
+sort + group (group reuses `OpenCount`'s CE-exact fixed-range bucket helper, generalized to handle
+`null` as CE's own 8th `"Unspecified"` bucket), Bulk Issue Editing, and Smart Lists — the last two
+had explicitly excluded `AlternateCount` before (`2026-08-07-bulk-issue-editing-design.md` §3) only
+because the column didn't exist yet; both now include it, matching `Count`'s own coverage. ~19 new targeted test cases across
+`Paperbunkr.Data.Tests`/`Paperbunkr.App.Tests` (mapper round-trip, CE-migrator read-through incl.
+`onlyIfBlank` semantics, the migration itself, sort/group incl. bucket boundaries and the new
+`"Unspecified"` case, bulk-editor round-trip, Issue Properties load/save/clipboard, and the
+metadata-write-back pipeline), all passing; two existing tests corrected (they had asserted
+`AlternateCount` as an "unmodeled" ComicInfo.xml element and a "deliberately excluded" bulk field —
+both no longer true). **Real pre-existing bug found while
+verifying the migration (not caused by this change, not fixed here, flagged separately):**
+`AddCoverAspectRatioMigrationTests` fails on `master` regardless of this feature — its hardcoded
+multi-step rollback target now crosses the same-day `LibrarySortGroupAxesAndFinalIssueTriState`
+migration and hits a SQLite full-table-rebuild `NOT NULL` collision on `IsFinalIssue`; confirmed via
+git-stash isolation that zero of this feature's code is involved. On-screen verification of the new
+Issue Properties field and Library sort/group toolbar entries not done — standing no-computer-use
+caveat.
+
 **On-screen verification gap closed the same session** (docs/onboarding.md §17): the "no
 unattended desktop GUI automation available" caveat repeated across ~15 specs/roadmap entries is no
 longer categorically true. `src/Paperbunkr.App.UiTests` (FlaUI/UIA3) now drives the real compiled

@@ -42,6 +42,7 @@ public static class SmartListCatalog
             new(SmartListField.Number, "Number", SmartListDataType.Text),
             new(SmartListField.AlternateSeries, "Alternate Series", SmartListDataType.Text),
             new(SmartListField.AlternateNumber, "Alternate Number", SmartListDataType.Text),
+            new(SmartListField.AlternateCount, "Alternate Count", SmartListDataType.Number),
             new(SmartListField.StoryArc, "Story Arc", SmartListDataType.Text),
             new(SmartListField.StoryArcNumber, "Story Arc Number", SmartListDataType.Text),
             new(SmartListField.SeriesGroup, "Series Group", SmartListDataType.Text),
@@ -204,6 +205,7 @@ public static class SmartListCatalog
             // Reads through EffectiveVolume (Phase 2a) so a filename-inferred value still filters.
             [SmartListField.Volume] = i => float.TryParse(i.EffectiveVolume(), out var vol) ? vol : -1,
             [SmartListField.Count] = i => i.Count ?? -1,
+            [SmartListField.AlternateCount] = i => i.AlternateCount ?? -1,
             [SmartListField.PageCount] = i => i.PageCount ?? -1,
             [SmartListField.Rating] = i => i.Rating ?? 0,
             [SmartListField.CommunityRating] = i => i.CommunityRating ?? 0,

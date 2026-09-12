@@ -520,6 +520,7 @@ public class CeLibraryMigrator
         issue.Volume = Pick(issue.Volume, info.Volume != 0 ? info.Volume.ToString() : null);
         issue.AlternateSeries = Pick(issue.AlternateSeries, NullIfEmpty(info.AlternateSeries));
         issue.AlternateNumber = Pick(issue.AlternateNumber, NullIfEmpty(info.AlternateNumber));
+        issue.AlternateCount = Pick(issue.AlternateCount, info.AlternateCount > 0 ? info.AlternateCount : null);
         issue.StoryArc = Pick(issue.StoryArc, NullIfEmpty(info.StoryArc));
         // StoryArcNumber has no CE source field - confirmed absent entirely (§6) - left null.
         issue.SeriesGroup = Pick(issue.SeriesGroup, NullIfEmpty(info.SeriesGroup));

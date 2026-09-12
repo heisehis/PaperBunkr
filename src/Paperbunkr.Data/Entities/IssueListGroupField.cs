@@ -54,6 +54,7 @@ public enum IssueListGroupField
     Count,
     AlternateSeries,
     AlternateNumber,
+    AlternateCount,
     Month,
     Day,
     ScanInformation,

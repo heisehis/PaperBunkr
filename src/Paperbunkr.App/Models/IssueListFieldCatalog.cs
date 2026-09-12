@@ -106,6 +106,7 @@ public static class IssueListFieldCatalog
         [IssueListSortField.Count] = new(IssueListSortField.Count, "Count", SortStrategies.Numeric(r => r.Count)),
         [IssueListSortField.AlternateSeries] = new(IssueListSortField.AlternateSeries, "Alternate Series", SortStrategies.CaseInsensitiveString(r => r.AlternateSeries)),
         [IssueListSortField.AlternateNumber] = new(IssueListSortField.AlternateNumber, "Alternate Number", SortStrategies.CaseInsensitiveString(r => r.AlternateNumber)),
+        [IssueListSortField.AlternateCount] = new(IssueListSortField.AlternateCount, "Alternate Count", SortStrategies.Numeric(r => r.AlternateCount)),
         [IssueListSortField.Month] = new(IssueListSortField.Month, "Month", SortStrategies.Numeric(r => r.Month)),
         [IssueListSortField.Day] = new(IssueListSortField.Day, "Day", SortStrategies.Numeric(r => r.Day)),
         [IssueListSortField.ScanInformation] = new(IssueListSortField.ScanInformation, "Scan Information", SortStrategies.CaseInsensitiveString(r => r.ScanInformation)),
@@ -185,6 +186,7 @@ public static class IssueListFieldCatalog
         Col(IssueListSortField.Count, r => r.Count?.ToString(CultureInfo.InvariantCulture));
         Col(IssueListSortField.AlternateSeries, r => r.AlternateSeries);
         Col(IssueListSortField.AlternateNumber, r => r.AlternateNumber);
+        Col(IssueListSortField.AlternateCount, r => r.AlternateCount?.ToString(CultureInfo.InvariantCulture));
         Col(IssueListSortField.Month, r => r.Month?.ToString(CultureInfo.InvariantCulture));
         Col(IssueListSortField.Day, r => r.Day?.ToString(CultureInfo.InvariantCulture));
         Col(IssueListSortField.ScanInformation, r => r.ScanInformation);
@@ -293,6 +295,7 @@ public static class IssueListFieldCatalog
         [IssueListGroupField.Count] = MakeGroup(IssueListGroupField.Count, "Count", GroupStrategies.NumericBucket(r => r.Count)),
         [IssueListGroupField.AlternateSeries] = MakeGroup(IssueListGroupField.AlternateSeries, "Alternate Series", GroupStrategies.Alphabetical(r => r.AlternateSeries)),
         [IssueListGroupField.AlternateNumber] = MakeGroup(IssueListGroupField.AlternateNumber, "Alternate Number", GroupStrategies.Alphabetical(r => r.AlternateNumber)),
+        [IssueListGroupField.AlternateCount] = new(IssueListGroupField.AlternateCount, "Alternate Count", r => CountBucketKey(r.AlternateCount), CountBucketOrder),
         [IssueListGroupField.Month] = MakeGroup(IssueListGroupField.Month, "Month", GroupStrategies.NumericBucket(r => r.Month)),
         [IssueListGroupField.Day] = MakeGroup(IssueListGroupField.Day, "Day", GroupStrategies.NumericBucket(r => r.Day)),
         [IssueListGroupField.ScanInformation] = MakeGroup(IssueListGroupField.ScanInformation, "Scan Information", GroupStrategies.Alphabetical(r => r.ScanInformation)),
@@ -314,23 +317,31 @@ public static class IssueListFieldCatalog
         // IssueListGroupField.VirtualTag is NOT registered here - see BuildVirtualTagGroupDescriptor
         // below and its enum-declaration comment. ---
         [IssueListGroupField.NeedsReview] = MakeGroup(IssueListGroupField.NeedsReview, "Needs Review", GroupStrategies.Boolean(r => r.HasPendingProposal, "Needs Review", "Up to Date")),
-        // CE's own fixed ranges (ComicBookGroupOpenCount/ItemGroupCount, resource key "CountGroups"),
-        // minus its 8th "Unspecified" bucket (only reachable for negative values, which OpenCount
-        // can't be here).
-        [IssueListGroupField.OpenCount] = new(IssueListGroupField.OpenCount, "Times Opened", OpenCountBucketKey, OpenCountBucketOrder),
+        // CE's own fixed ranges (ComicBookGroupOpenCount/ComicBookGroupAlternateCount both subclass
+        // ItemGroupCount, sharing its "CountGroups" resource) - shared here as CountBucketKey/Order
+        // rather than duplicated per field. OpenCount is a non-nullable int so it never reaches CE's
+        // 8th "Unspecified" bucket; AlternateCount is nullable (never-set is a real state), so
+        // Unspecified is re-added here for it, ordered first.
+        [IssueListGroupField.OpenCount] = new(IssueListGroupField.OpenCount, "Times Opened", r => CountBucketKey(r.OpenCount), CountBucketOrder),
         [IssueListGroupField.IsFinalIssue] = MakeGroup(IssueListGroupField.IsFinalIssue, "Final Issue", GroupStrategies.TriState(r => r.IsFinalIssue, "Final issue", "Not final", "Unknown")),
     };
 
-    private static readonly (int Max, string Label)[] OpenCountRanges =
+    private const string UnspecifiedCountBucket = "Unspecified";
+
+    private static readonly (int Max, string Label)[] CountRanges =
     {
         (20, "0-20"), (50, "21-50"), (100, "51-100"), (200, "101-200"),
         (500, "201-500"), (1000, "501-1000"), (int.MaxValue, ">1000"),
     };
 
-    private static string OpenCountBucketKey(IssueListRow row) => OpenCountRanges.First(r => row.OpenCount <= r.Max).Label;
+    private static string CountBucketKey(int? value) =>
+        value is int v ? CountRanges.First(r => v <= r.Max).Label : UnspecifiedCountBucket;
 
-    private static int OpenCountBucketOrder(string a, string b) =>
-        Array.FindIndex(OpenCountRanges, r => r.Label == a).CompareTo(Array.FindIndex(OpenCountRanges, r => r.Label == b));
+    private static int CountBucketOrder(string a, string b)
+    {
+        int Rank(string label) => label == UnspecifiedCountBucket ? -1 : Array.FindIndex(CountRanges, r => r.Label == label);
+        return Rank(a).CompareTo(Rank(b));
+    }
 
     private static IssueListGroupFieldDescriptor MakeGroup(IssueListGroupField field, string displayName, (Func<IssueListRow, string> Key, Comparison<string> Order) strategy) =>
         new(field, displayName, strategy.Key, strategy.Order);

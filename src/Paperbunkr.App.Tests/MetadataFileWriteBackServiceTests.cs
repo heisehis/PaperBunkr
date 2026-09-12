@@ -75,7 +75,11 @@ public class MetadataFileWriteBackServiceTests : IDisposable
     public async Task WriteAsync_RoundTripsFields_AndPreservesUnmodeledElements()
     {
         string cbz = Path.Combine(_dir, "book.cbz");
-        CbzFixture.Create(cbz, pageCount: 2, new ComicInfo { Summary = "old", AlternateCount = 7 });
+        // AlternateCount used to be unmodeled here too - now overwritten like every other modeled
+        // field (docs/superpowers/specs/2026-09-12-issue-alternate-count-design.md), covered
+        // separately by WriteAsync_RoundTripsAlternateCount below. PreferredFrontCover has no
+        // Paperbunkr equivalent and is still genuinely unmodeled.
+        CbzFixture.Create(cbz, pageCount: 2, new ComicInfo { Summary = "old", PreferredFrontCover = 3 });
         int id = SeedIssue(cbz, i =>
         {
             i.Summary = "A new summary.";
@@ -90,8 +94,25 @@ public class MetadataFileWriteBackServiceTests : IDisposable
         Assert.Equal("A new summary.", info.Summary);
         Assert.Equal("Jane Writer", info.Writer);
         Assert.Equal("Kilo Station", info.Series);
-        Assert.Equal(7, info.AlternateCount); // unmodeled - survived
+        Assert.Equal(3, info.PreferredFrontCover); // unmodeled - survived
         Assert.Equal(2, info.PageCount);
+    }
+
+    [Fact]
+    public async Task WriteAsync_RoundTripsAlternateCount()
+    {
+        string cbz = Path.Combine(_dir, "alt-count.cbz");
+        CbzFixture.Create(cbz, pageCount: 1);
+        int id = SeedIssue(cbz, i =>
+        {
+            i.AlternateCount = 6;
+            i.PageCount = 1;
+        });
+
+        var outcome = await Service().WriteAsync(id, includeSidecar: false);
+
+        Assert.Equal(MetadataWriteBackResult.Success, outcome.Result);
+        Assert.Equal(6, ReadBack(cbz).AlternateCount);
     }
 
     [Fact]

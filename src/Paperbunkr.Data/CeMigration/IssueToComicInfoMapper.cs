@@ -11,9 +11,8 @@ namespace Paperbunkr.Data.CeMigration;
 /// <see cref="MetadataProposal"/>s factored in via <see cref="IssueMetadataExtensions"/>). Used by
 /// the file metadata write-back feature (docs/superpowers/specs/2026-09-03-file-metadata-write-back-
 /// design.md) - the caller loads the file's <i>current</i> embedded ComicInfo.xml first, so any
-/// element Paperbunkr doesn't model (e.g. <c>AlternateCount</c>, <c>PreferredFrontCover</c>, the
-/// <c>&lt;Pages&gt;</c> list) survives untouched; this only overwrites what the metadata editors can
-/// change.
+/// element Paperbunkr doesn't model (e.g. <c>PreferredFrontCover</c>, the <c>&lt;Pages&gt;</c> list)
+/// survives untouched; this only overwrites what the metadata editors can change.
 ///
 /// Whole-field overwrite from DB truth, not a diff - a field that's null/empty on the issue is
 /// written as <see cref="string.Empty"/> (ComicInfo's own "unset" for string fields) or 0 (its
@@ -38,6 +37,7 @@ public static class IssueToComicInfoMapper
         target.Volume = int.TryParse(issue.EffectiveVolume(), out int volume) ? volume : 0;
         target.AlternateSeries = Str(issue.AlternateSeries);
         target.AlternateNumber = Str(issue.AlternateNumber);
+        target.AlternateCount = issue.AlternateCount ?? 0;
         target.StoryArc = Str(issue.StoryArc);
         target.SeriesGroup = Str(issue.SeriesGroup);
         target.Summary = Str(issue.Summary);

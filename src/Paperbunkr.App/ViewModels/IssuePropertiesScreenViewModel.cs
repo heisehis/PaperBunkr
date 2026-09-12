@@ -208,6 +208,7 @@ public partial class IssuePropertiesScreenViewModel : ViewModelBase
     [ObservableProperty] private string _title = string.Empty;
     [ObservableProperty] private string _alternateSeries = string.Empty;
     [ObservableProperty] private string _alternateNumber = string.Empty;
+    [ObservableProperty] private string _alternateCountText = string.Empty;
     [ObservableProperty] private string _storyArc = string.Empty;
     [ObservableProperty] private string _storyArcNumber = string.Empty;
     [ObservableProperty] private string _seriesGroup = string.Empty;
@@ -352,7 +353,7 @@ public partial class IssuePropertiesScreenViewModel : ViewModelBase
     private sealed record FieldClipboard(
         int? MyRating, int? CommunityRating,
         string Number, string VolumeText, string CountText, string Title, string AlternateSeries,
-        string AlternateNumber, string StoryArc, string StoryArcNumber, string SeriesGroup,
+        string AlternateNumber, string AlternateCountText, string StoryArc, string StoryArcNumber, string SeriesGroup,
         string Publisher, string Imprint, string Format, string BookAge, string YearText, string MonthText,
         string DayText, string Genre, string Tags, string Writer, string Penciller, string Inker,
         string Colorist, string Letterer, string CoverArtist, string Editor, string Translator,
@@ -423,7 +424,7 @@ public partial class IssuePropertiesScreenViewModel : ViewModelBase
     {
         _clipboard = new FieldClipboard(
             MyRating, CommunityRating, Number, VolumeText, CountText, Title, AlternateSeries,
-            AlternateNumber, StoryArc, StoryArcNumber, SeriesGroup, Publisher, Imprint, Format, BookAge,
+            AlternateNumber, AlternateCountText, StoryArc, StoryArcNumber, SeriesGroup, Publisher, Imprint, Format, BookAge,
             YearText, MonthText, DayText, Genre, Tags, Writer, Penciller, Inker, Colorist, Letterer,
             CoverArtist, Editor, Translator, AgeRating, LanguageIso, ColorModeText, IsFinalIssue,
             Characters, Teams, MainCharacterOrTeam, Locations, Web, ScanInformation, Summary, Notes,
@@ -450,6 +451,7 @@ public partial class IssuePropertiesScreenViewModel : ViewModelBase
         Title = c.Title;
         AlternateSeries = c.AlternateSeries;
         AlternateNumber = c.AlternateNumber;
+        AlternateCountText = c.AlternateCountText;
         StoryArc = c.StoryArc;
         StoryArcNumber = c.StoryArcNumber;
         SeriesGroup = c.SeriesGroup;
@@ -550,6 +552,7 @@ public partial class IssuePropertiesScreenViewModel : ViewModelBase
         Title = issue.Title ?? string.Empty;
         AlternateSeries = issue.AlternateSeries ?? string.Empty;
         AlternateNumber = issue.AlternateNumber ?? string.Empty;
+        AlternateCountText = issue.AlternateCount?.ToString() ?? string.Empty;
         StoryArc = issue.StoryArc ?? string.Empty;
         StoryArcNumber = issue.StoryArcNumber ?? string.Empty;
         SeriesGroup = issue.SeriesGroup ?? string.Empty;
@@ -667,6 +670,7 @@ public partial class IssuePropertiesScreenViewModel : ViewModelBase
         issue.Title = NullIfEmpty(Title);
         issue.AlternateSeries = NullIfEmpty(AlternateSeries);
         issue.AlternateNumber = NullIfEmpty(AlternateNumber);
+        issue.AlternateCount = ParseInt(AlternateCountText);
         issue.StoryArc = NullIfEmpty(StoryArc);
         issue.StoryArcNumber = NullIfEmpty(StoryArcNumber);
         issue.SeriesGroup = NullIfEmpty(SeriesGroup);

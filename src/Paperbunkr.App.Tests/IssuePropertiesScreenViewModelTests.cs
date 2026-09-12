@@ -205,12 +205,40 @@ public class IssuePropertiesScreenViewModelTests : IDisposable
 
         vm.VolumeText = string.Empty;
         vm.YearText = "not-a-number";
+        vm.AlternateCountText = "not-a-number";
 
         vm.SaveCommand.Execute(null);
 
         var issue = GetIssue();
         Assert.Null(issue.Volume);
         Assert.Null(issue.Year);
+        Assert.Null(issue.AlternateCount);
+    }
+
+    [Fact]
+    public void Save_AlternateCountText_RoundTrips()
+    {
+        var vm = new IssuePropertiesScreenViewModel(() => { }, () => new PaperbunkrDbContext(_dbOptions));
+        vm.Load(_issueId);
+
+        vm.AlternateCountText = "6";
+        vm.SaveCommand.Execute(null);
+
+        Assert.Equal(6, GetIssue().AlternateCount);
+    }
+
+    [Fact]
+    public void CopyFields_ThenPasteFields_CarriesAlternateCountText()
+    {
+        var vm = new IssuePropertiesScreenViewModel(() => { }, () => new PaperbunkrDbContext(_dbOptions));
+        vm.Load(_issueId);
+        vm.AlternateCountText = "9";
+
+        vm.CopyFieldsCommand.Execute(null);
+        vm.AlternateCountText = string.Empty;
+        vm.PasteFieldsCommand.Execute(null);
+
+        Assert.Equal("9", vm.AlternateCountText);
     }
 
     [Fact]

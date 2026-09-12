@@ -46,6 +46,8 @@ public class Issue
 
     public string? AlternateNumber { get; set; }
 
+    public int? AlternateCount { get; set; }
+
     public string? StoryArc { get; set; }
 
     /// <summary>

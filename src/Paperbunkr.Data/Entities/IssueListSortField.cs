@@ -68,6 +68,7 @@ public enum IssueListSortField
     Count,
     AlternateSeries,
     AlternateNumber,
+    AlternateCount,
     Month,
     Day,
     ScanInformation,

@@ -95,6 +95,7 @@ public sealed partial class IssueListRow : ObservableObject, ISelectableCard, IV
     public int? Count { get; init; }
     public string? AlternateSeries { get; init; }
     public string? AlternateNumber { get; init; }
+    public int? AlternateCount { get; init; }
     public int? Month { get; init; }
     public int? Day { get; init; }
     public string? ScanInformation { get; init; }
@@ -219,6 +220,7 @@ public sealed partial class IssueListRow : ObservableObject, ISelectableCard, IV
         Count = issue.EffectiveCount(),
         AlternateSeries = issue.AlternateSeries,
         AlternateNumber = issue.AlternateNumber,
+        AlternateCount = issue.AlternateCount,
         Month = issue.Month,
         Day = issue.Day,
         ScanInformation = issue.ScanInformation,

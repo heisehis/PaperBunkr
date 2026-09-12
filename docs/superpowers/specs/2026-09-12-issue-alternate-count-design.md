@@ -82,7 +82,21 @@ surfaces built on top of it.
    real `DropColumn` (not a no-op): this is a brand-new EF-mapped column with no prior unmapped-orphan
    collateral-damage risk, so it doesn't fall under the no-op-`Down()` rule documented on
    `AddNavRailHoverExpandEnabled` — it matches `AddReadingEventLog`'s precedent instead (a genuine,
-   safe-to-drop new column).
+   safe-to-drop new column). Confirmed by directly reverting just this one migration on a scratch
+   database (`dotnet ef database update` to the prior migration) — clean, no error.
+
+   **Pre-existing bug found while verifying this (unrelated to this change, not fixed here):**
+   `AddCoverAspectRatioMigrationTests` fails on current `master` even with none of this spec's
+   changes applied — confirmed by testing the exact pre-this-session `HEAD` in isolation. Its own
+   `Migrate(PriorMigration)` call reverts *every* migration back to `20260903133114_
+   UnifyLibrarySortGroupFields` (a multi-migration rollback, not a single-step one - that test's
+   hardcoded `PriorMigration` constant has just never been updated as later migrations accumulated
+   in the 9 days since it was written), and that multi-step rollback now crosses
+   `LibrarySortGroupAxesAndFinalIssueTriState` (merged the same day as this feature, just before
+   this session started) - which fails with `SQLite Error 19: NOT NULL constraint failed:
+   ef_temp_Issues.IsFinalIssue` during that migration's own SQLite full-table-rebuild path, despite
+   its `Down()` being a documented no-op. Out of scope for this spec (this migration's own `Down()`
+   isn't the cause - confirmed above); flagged separately rather than silently patched here.
 
 ## 3. Explicitly out of scope
 

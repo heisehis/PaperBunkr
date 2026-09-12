@@ -17,14 +17,14 @@ public class IssueListFieldCatalogTests
         float? volumeSortKey = null, string? penciller = null, bool isRead = false, float? bookPrice = null,
         string? contentTypeLabel = null, int seriesIssueCount = 0, int seriesUnreadCount = 0,
         bool? isFinalIssue = null, bool hasPendingProposal = false, int pendingProposalCount = 0,
-        int openCount = 0, IReadOnlyDictionary<int, string>? virtualTagValues = null) => new()
+        int openCount = 0, int? alternateCount = null, IReadOnlyDictionary<int, string>? virtualTagValues = null) => new()
     {
         SeriesName = seriesName, Title = title, Writer = writer, Publisher = publisher, Genre = genre,
         Year = year, IsMissing = isMissing, NumberSortKey = numberSortKey, CoverBrush = Brush,
         VolumeSortKey = volumeSortKey, Penciller = penciller, IsRead = isRead, BookPrice = bookPrice,
         ContentTypeLabel = contentTypeLabel, SeriesIssueCount = seriesIssueCount, SeriesUnreadCount = seriesUnreadCount,
         IsFinalIssue = isFinalIssue, HasPendingProposal = hasPendingProposal, PendingProposalCount = pendingProposalCount,
-        OpenCount = openCount, VirtualTagValues = virtualTagValues ?? new Dictionary<int, string>(),
+        OpenCount = openCount, AlternateCount = alternateCount, VirtualTagValues = virtualTagValues ?? new Dictionary<int, string>(),
     };
 
     // --- Union members carried over from the retired LibraryFieldCatalog (2026-09-03) ---
@@ -356,6 +356,35 @@ public class IssueListFieldCatalogTests
         var group = IssueListFieldCatalog.GroupFields[IssueListGroupField.OpenCount];
         Assert.True(group.GroupOrder("0-20", ">1000") < 0);
         Assert.True(group.GroupOrder("21-50", "0-20") > 0);
+    }
+
+    [Fact]
+    public void AlternateCount_SortsNumerically()
+    {
+        var s = IssueListFieldCatalog.SortFields[IssueListSortField.AlternateCount];
+        Assert.True(s.Compare(Row(alternateCount: 2), Row(alternateCount: 10)) < 0);
+    }
+
+    [Theory]
+    [InlineData(0, "0-20")]
+    [InlineData(20, "0-20")]
+    [InlineData(21, "21-50")]
+    [InlineData(100, "51-100")]
+    [InlineData(1000, "501-1000")]
+    [InlineData(1001, ">1000")]
+    public void AlternateCountGroup_BucketsIntoCEsFixedRanges_SharedWithOpenCount(int alternateCount, string expectedBucket)
+    {
+        var group = IssueListFieldCatalog.GroupFields[IssueListGroupField.AlternateCount];
+        Assert.Equal(expectedBucket, group.GroupKey(Row(alternateCount: alternateCount)));
+    }
+
+    [Fact]
+    public void AlternateCountGroup_NullBucketsAsUnspecified_OrderedFirst()
+    {
+        var group = IssueListFieldCatalog.GroupFields[IssueListGroupField.AlternateCount];
+        Assert.Equal("Unspecified", group.GroupKey(Row(alternateCount: null)));
+        Assert.True(group.GroupOrder("Unspecified", "0-20") < 0);
+        Assert.True(group.GroupOrder("0-20", "Unspecified") > 0);
     }
 
     [Fact]

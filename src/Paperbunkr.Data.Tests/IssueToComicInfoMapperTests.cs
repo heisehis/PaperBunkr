@@ -26,6 +26,7 @@ public class IssueToComicInfoMapperTests
             Volume = "2",
             AlternateSeries = "Kilo Station Annual",
             AlternateNumber = "1",
+            AlternateCount = 6,
             StoryArc = "Signal War",
             SeriesGroup = "Kilo",
             Summary = "A summary.",
@@ -69,6 +70,7 @@ public class IssueToComicInfoMapperTests
         Assert.Equal(2, info.Volume);
         Assert.Equal("Kilo Station Annual", info.AlternateSeries);
         Assert.Equal("1", info.AlternateNumber);
+        Assert.Equal(6, info.AlternateCount);
         Assert.Equal("Signal War", info.StoryArc);
         Assert.Equal("Kilo", info.SeriesGroup);
         Assert.Equal("A summary.", info.Summary);
@@ -145,11 +147,21 @@ public class IssueToComicInfoMapperTests
     [Fact]
     public void Apply_PreservesUnmodeledElements()
     {
-        var info = new ComicInfo { AlternateCount = 5, PreferredFrontCover = 3 };
+        // AlternateCount used to be unmodeled too - now overwritten like every other modeled
+        // field, covered separately by Apply_WritesEveryModeledField.
+        var info = new ComicInfo { PreferredFrontCover = 3 };
         IssueToComicInfoMapper.Apply(new Issue { Title = "X" }, info);
 
-        Assert.Equal(5, info.AlternateCount);
         Assert.Equal(3, info.PreferredFrontCover);
+    }
+
+    [Fact]
+    public void Apply_NullAlternateCount_WritesZero_ComicInfosUnsetSentinel()
+    {
+        var info = new ComicInfo { AlternateCount = 5 };
+        IssueToComicInfoMapper.Apply(new Issue { Title = "X", AlternateCount = null }, info);
+
+        Assert.Equal(0, info.AlternateCount);
     }
 
     [Theory]

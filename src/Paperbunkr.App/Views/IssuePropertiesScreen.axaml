@@ -305,6 +305,7 @@
                                         </Grid>
                                     </StackPanel>
                                     <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="ALTERNATE NUMBER" /><TextBox Text="{Binding AlternateNumber}" beh:TextSpinner.Enabled="True" /></StackPanel>
+                                    <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="ALTERNATE COUNT" /><NumericUpDown HorizontalAlignment="Stretch" Minimum="0" FormatString="0" Value="{Binding AlternateCountText, Converter={x:Static v:NullableDecimalStringConverter.Instance}}" /></StackPanel>
                                     <StackPanel Classes="field">
                                         <TextBlock Classes="fieldLabel" Text="STORY ARC" />
                                         <Grid ColumnDefinitions="*,Auto">

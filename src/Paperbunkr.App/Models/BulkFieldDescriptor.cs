@@ -48,8 +48,10 @@ public sealed record BulkFieldDescriptor(
 /// The full bulk-editable field set, verified field-by-field against CE's real
 /// <c>MultipleComicBooksDialog.Designer.cs</c>/<c>.cs</c> (docs/superpowers/specs/
 /// 2026-08-07-bulk-issue-editing-design.md §3) - <c>StoryArcNumber</c>/<c>Series</c>/<c>Manga</c>/
-/// <c>EnableProposed</c>/<c>AlternateCount</c> are deliberately absent, see the spec for why each
-/// one is excluded. CE's own <c>SeriesComplete</c> now has a real Paperbunkr home below (the
+/// <c>EnableProposed</c> are deliberately absent, see the spec for why each one is excluded.
+/// <c>AlternateCount</c> was excluded there too (no <see cref="Issue"/> column existed yet) but
+/// shipped here once docs/superpowers/specs/2026-09-12-issue-alternate-count-design.md closed that
+/// gap. CE's own <c>SeriesComplete</c> now has a real Paperbunkr home below (the
 /// Series-level <c>Status</c> row, docs/superpowers/specs/2026-08-18-metadata-model-ui-gaps-status-
 /// and-bookmarks-design.md) - not the same shape as CE's per-issue Yes/No/Unknown flag, which is
 /// <see cref="Issue.IsFinalIssue"/> instead, edited on the single-issue Issue Properties screen.
@@ -106,6 +108,7 @@ public static class BulkFieldRegistry
         Text("Title", Main, i => i.Title, (i, v) => i.Title = v, vocab: VocabField.Title),
         Text("Alternate Series", Main, i => i.AlternateSeries, (i, v) => i.AlternateSeries = v, vocab: VocabField.AlternateSeries),
         NumericText("Alternate Number", Main, i => i.AlternateNumber, (i, v) => i.AlternateNumber = v),
+        Numeric("Alternate Count", Main, i => i.AlternateCount, (i, v) => i.AlternateCount = v, min: 0),
         Text("Series Group", Main, i => i.SeriesGroup, (i, v) => i.SeriesGroup = v, vocab: VocabField.SeriesGroup),
         Text("Story Arc", Main, i => i.StoryArc, (i, v) => i.StoryArc = v, vocab: VocabField.StoryArc),
         // Genre/Tags read/write through the structured IssueTag collection now (docs/superpowers/

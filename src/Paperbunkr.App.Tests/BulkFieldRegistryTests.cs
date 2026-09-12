@@ -40,6 +40,23 @@ public class BulkFieldRegistryTests
         Assert.Null(issue.Count);
     }
 
+    /// <summary>Alternate Count (docs/superpowers/specs/2026-09-12-issue-alternate-count-design.md) -
+    /// same Numeric shape as Count, added to the bulk registry once the underlying Issue column
+    /// existed (it was on the deliberately-absent list before that).</summary>
+    [Fact]
+    public void AlternateCountField_RoundTrips_AndParsesInvalidToNull()
+    {
+        var descriptor = Find("Alternate Count");
+        var issue = new Issue();
+
+        descriptor.Set(issue, "3");
+        Assert.Equal(3, issue.AlternateCount);
+        Assert.Equal("3", descriptor.Get(issue));
+
+        descriptor.Set(issue, "not-a-number");
+        Assert.Null(issue.AlternateCount);
+    }
+
     /// <summary>Volume is a Text field, not Numeric (docs/superpowers/specs/2026-08-17-metadata-model-phase1-canonical-metadata-design.md) - preserves the original display value like Number, no int coercion.</summary>
     [Fact]
     public void VolumeField_RoundTrips_AsText()
@@ -122,7 +139,6 @@ public class BulkFieldRegistryTests
     [InlineData("Series Complete")]
     [InlineData("Manga")]
     [InlineData("Enable Proposed")]
-    [InlineData("Alternate Count")]
     public void DeliberatelyExcludedFields_AreNotInRegistry(string label)
     {
         Assert.DoesNotContain(BulkFieldRegistry.All, f => f.Label == label);

@@ -40,6 +40,7 @@ public enum SmartListField
     Count,
     AlternateSeries,
     AlternateNumber,
+    AlternateCount,
     StoryArc,
     StoryArcNumber,
     SeriesGroup,

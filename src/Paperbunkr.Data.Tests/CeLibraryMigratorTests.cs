@@ -643,4 +643,43 @@ public class CeLibraryMigratorTests : IDisposable
 
         Assert.Equal("Incoming Writer", issue.Writer); // default (onlyIfBlank: false) always overwrites
     }
+
+    [Theory]
+    [InlineData(5, 5)]
+    [InlineData(0, null)] // ComicInfo's unset sentinel (0 or negative) reads through as null
+    [InlineData(-1, null)]
+    public void MapStoryFields_ReadsAlternateCountFromComicInfo(int infoValue, int? expected)
+    {
+        var info = new ComicInfo { AlternateCount = infoValue };
+        var issue = new Issue();
+
+        CeLibraryMigrator.MapStoryFields(info, issue);
+
+        Assert.Equal(expected, issue.AlternateCount);
+    }
+
+    [Fact]
+    public void MapStoryFields_DefaultBehavior_OverwritesAlternateCountEvenWhenIncomingIsUnset()
+    {
+        // Matches MapStoryFields_DefaultBehavior_AlwaysOverwrites above: onlyIfBlank defaults to
+        // false, so Pick returns the incoming value unconditionally - a blank/unset ComicInfo
+        // still clobbers an existing Issue value here, same as every other field's default path.
+        var info = new ComicInfo { AlternateCount = 0 };
+        var issue = new Issue { AlternateCount = 7 };
+
+        CeLibraryMigrator.MapStoryFields(info, issue);
+
+        Assert.Null(issue.AlternateCount);
+    }
+
+    [Fact]
+    public void MapStoryFields_OnlyIfBlank_PreservesExistingAlternateCount()
+    {
+        var info = new ComicInfo { AlternateCount = 0 };
+        var issue = new Issue { AlternateCount = 7 };
+
+        CeLibraryMigrator.MapStoryFields(info, issue, onlyIfBlank: true);
+
+        Assert.Equal(7, issue.AlternateCount);
+    }
 }

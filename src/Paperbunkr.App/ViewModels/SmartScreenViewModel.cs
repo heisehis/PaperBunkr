@@ -584,8 +584,19 @@ public partial class SmartScreenViewModel : ViewModelBase
         });
     }
 
+    /// <summary>Staggered results-grid entrance (docs/superpowers/specs/2026-09-12-entrance-
+    /// animation-v2-design.md) - set true by both <see cref="RecomputeMatchCount()"/> overloads,
+    /// the one real funnel every results-repopulation path reaches: <see cref="LoadSmartList"/>'s
+    /// nav-in and the rule-tree editor's live <c>onChanged</c> condition-edit callback alike. Read
+    /// once per container preparation by <see cref="Controls.EntranceAnimation.Prepare"/>, not a
+    /// live binding, so ordinary scroll-driven virtualization recycling never replays it.</summary>
+    [ObservableProperty]
+    private bool _playEntranceAnimation;
+
     private void RecomputeMatchCount()
     {
+        PlayEntranceAnimation = true;
+
         if (_workingList is null)
         {
             return;
@@ -637,6 +648,8 @@ public partial class SmartScreenViewModel : ViewModelBase
     /// </summary>
     private void RecomputeMatchCount(SmartListQueryBuilder.LibrarySnapshot snapshot)
     {
+        PlayEntranceAnimation = true;
+
         if (_workingList is null)
         {
             return;

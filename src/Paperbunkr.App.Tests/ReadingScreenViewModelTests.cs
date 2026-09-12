@@ -530,6 +530,97 @@ public class ReadingScreenViewModelTests : IDisposable
         return listId;
     }
 
+    // --- Entrance-animation v2 (docs/superpowers/specs/2026-09-12-entrance-animation-v2-design.md
+    // §3) - LoadReadingList's triggerEntrance parameter distinguishes a genuine list switch/nav-in
+    // from the many same-list mutation call sites that reuse this method to refresh after an edit. ---
+
+    [Fact]
+    public void LoadReadingList_TriggerEntranceTrue_SetsFlag()
+    {
+        int listId = SeedListWith(SeedOwnedIssue("R", "1"));
+        var vm = new ReadingScreenViewModel(_filePicker, (_, _) => { });
+
+        vm.LoadReadingList(listId, triggerEntrance: true);
+
+        Assert.True(vm.PlayEntranceAnimation);
+    }
+
+    [Fact]
+    public void LoadReadingList_DefaultTriggerEntranceFalse_LeavesFlagUnset()
+    {
+        int listId = SeedListWith(SeedOwnedIssue("R", "1"));
+        var vm = new ReadingScreenViewModel(_filePicker, (_, _) => { });
+
+        vm.LoadReadingList(listId);
+
+        Assert.False(vm.PlayEntranceAnimation);
+    }
+
+    [Fact]
+    public void SelectList_TriggersEntrance()
+    {
+        int listId = SeedListWith(SeedOwnedIssue("R", "1"));
+        var vm = new ReadingScreenViewModel(_filePicker, (_, _) => { });
+        var summary = vm.Lists.Single(l => l.Id == listId);
+
+        vm.SelectListCommand.Execute(summary);
+
+        Assert.True(vm.PlayEntranceAnimation);
+    }
+
+    [Fact]
+    public void CreateNew_TriggersEntrance()
+    {
+        var vm = new ReadingScreenViewModel(_filePicker, (_, _) => { });
+
+        vm.CreateNewCommand.Execute(null);
+
+        Assert.True(vm.PlayEntranceAnimation);
+    }
+
+    [Fact]
+    public void EnsureListLoaded_TriggersEntrance()
+    {
+        int listId = SeedListWith(SeedOwnedIssue("R", "1"));
+        var vm = new ReadingScreenViewModel(_filePicker, (_, _) => { });
+        vm.LoadReadingList(listId);
+        vm.PlayEntranceAnimation = false;
+
+        vm.EnsureListLoaded();
+
+        Assert.True(vm.PlayEntranceAnimation);
+    }
+
+    [Fact]
+    public void AddIssue_DoesNotTriggerEntrance()
+    {
+        SeedOwnedIssue("Findable Series", "1");
+        int listId = SeedListWith();
+        var vm = new ReadingScreenViewModel(_filePicker, (_, _) => { });
+        vm.LoadReadingList(listId);
+        vm.SearchQuery = "Findable Series";
+        vm.SearchCommand.Execute(null);
+        vm.PlayEntranceAnimation = false;
+
+        vm.AddIssueCommand.Execute(vm.SearchResults[0]);
+
+        Assert.False(vm.PlayEntranceAnimation);
+    }
+
+    [Fact]
+    public void RemoveSelectedMembers_DoesNotTriggerEntrance()
+    {
+        int listId = SeedListWith(SeedOwnedIssue("R", "1"), SeedOwnedIssue("R", "2"));
+        var vm = new ReadingScreenViewModel(_filePicker, (_, _) => { });
+        vm.LoadReadingList(listId);
+        vm.ToggleMemberSelectionCommand.Execute(vm.Groups.SelectMany(g => g.Rows).First());
+        vm.PlayEntranceAnimation = false;
+
+        vm.RemoveSelectedMembersCommand.Execute(null);
+
+        Assert.False(vm.PlayEntranceAnimation);
+    }
+
     [Fact]
     public void Progress_CountsReadOwnedAndMissing()
     {

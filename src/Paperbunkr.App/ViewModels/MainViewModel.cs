@@ -784,7 +784,7 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
     private void GoReadingWithList(int readingListId)
     {
         Reading.RefreshSidebar();
-        Reading.LoadReadingList(readingListId);
+        Reading.LoadReadingList(readingListId, triggerEntrance: true);
         CurrentScreen = "reading";
         ResetHistoryRoot("reading");
     }
@@ -1100,7 +1100,7 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
     private void OnNewReadingListCreated(int listId)
     {
         IsNewReadingListDialogOpen = false;
-        Reading.LoadReadingList(listId);
+        Reading.LoadReadingList(listId, triggerEntrance: true);
         CurrentScreen = "reading";
         ResetHistoryRoot("reading");
     }

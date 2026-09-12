@@ -115,6 +115,22 @@ public class SmartScreenViewModelTests : IDisposable
     }
 
     [Fact]
+    public void PlayEntranceAnimation_TrueAfterLoad_AndAfterConditionEdit()
+    {
+        CreateSeriesWithIssues("Series One", "1");
+        var condition = new SmartListCondition { Field = SmartListField.SeriesName, Operator = SmartListOperator.Is, Value = "Nonexistent" };
+        int listId = CreateSmartList("Filtered", condition);
+
+        var vm = new SmartScreenViewModel(goToSeries: _ => { }, goToBook: _ => { });
+        vm.LoadSmartList(listId);
+        Assert.True(vm.PlayEntranceAnimation);
+
+        vm.PlayEntranceAnimation = false;
+        vm.RootGroup!.Conditions[0].Value = "Series One";
+        Assert.True(vm.PlayEntranceAnimation);
+    }
+
+    [Fact]
     public void Results_MapCoverBrushToEachIssuesOwnSeries_NotASharedBrush()
     {
         int seriesAId = CreateSeriesWithIssues("Series A", "1", "2");

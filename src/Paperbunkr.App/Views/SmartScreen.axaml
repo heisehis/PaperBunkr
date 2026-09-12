@@ -288,6 +288,7 @@
                 </StackPanel>
 
                 <ItemsControl x:Name="ResultsList" ItemsSource="{Binding Results}" Margin="0,32,0,0"
+                              controls:EntranceAnimation.Enabled="{Binding PlayEntranceAnimation}"
                               IsVisible="{Binding HasIssueResults}">
                     <ItemsControl.ItemsPanel>
                         <ItemsPanelTemplate>
@@ -315,6 +316,7 @@
                      design.md) - only one of the three results grids is ever populated at a time,
                      matching whichever target kind the active list is. -->
                 <ItemsControl x:Name="SeriesResultsList" ItemsSource="{Binding SeriesResults}" Margin="0,32,0,0"
+                              controls:EntranceAnimation.Enabled="{Binding PlayEntranceAnimation}"
                               IsVisible="{Binding HasSeriesResults}">
                     <ItemsControl.ItemsPanel>
                         <ItemsPanelTemplate>
@@ -339,6 +341,7 @@
                 </ItemsControl>
 
                 <ItemsControl x:Name="NovelResultsList" ItemsSource="{Binding NovelResults}" Margin="0,32,0,0"
+                              controls:EntranceAnimation.Enabled="{Binding PlayEntranceAnimation}"
                               IsVisible="{Binding HasNovelResults}">
                     <ItemsControl.ItemsPanel>
                         <ItemsPanelTemplate>

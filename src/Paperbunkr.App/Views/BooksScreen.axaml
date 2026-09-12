@@ -271,6 +271,7 @@
         <ScrollViewer Grid.Row="2">
             <Grid x:Name="ContentGrid">
                 <ItemsControl ItemsSource="{Binding Books}" Margin="24,22,24,40" IsVisible="{Binding !IsGrouped}"
+                              controls:EntranceAnimation.Enabled="{Binding PlayEntranceAnimation}"
                               ItemTemplate="{StaticResource BookCardTemplate}">
                     <ItemsControl.ItemsPanel>
                         <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
@@ -302,7 +303,8 @@
                                     <TextBlock DockPanel.Dock="Left" Text="{Binding Items.Count}" Classes="pbTextCaption" Margin="8,0,0,0" VerticalAlignment="Center" />
                                     <Border Height="1" VerticalAlignment="Center" Margin="14,0,0,0" Background="{DynamicResource PbBorderBrush}" />
                                 </DockPanel>
-                                <ItemsControl ItemsSource="{Binding Items}" ItemTemplate="{StaticResource BookCardTemplate}">
+                                <ItemsControl ItemsSource="{Binding Items}" ItemTemplate="{StaticResource BookCardTemplate}"
+                                              controls:EntranceAnimation.Enabled="{Binding $parent[UserControl].((vm:BooksScreenViewModel)DataContext).PlayEntranceAnimation}">
                                     <ItemsControl.ItemsPanel>
                                         <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
                                     </ItemsControl.ItemsPanel>

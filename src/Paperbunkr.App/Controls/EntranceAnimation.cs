@@ -31,6 +31,7 @@ namespace Paperbunkr.App.Controls;
 public static class EntranceAnimation
 {
     private const int PerItemDelayMs = 24;
+    private const int MaxStaggerIndex = 20;
 
     public static readonly AttachedProperty<bool> EnabledProperty =
         AvaloniaProperty.RegisterAttached<ItemsControl, bool>("Enabled", typeof(EntranceAnimation));
@@ -89,13 +90,7 @@ public static class EntranceAnimation
 
         container.Classes.Add("entranceReady");
 
-        // Reduced Motion collapses the stagger delay itself to zero, not just the fade/slide
-        // transition - otherwise items would still visibly reveal one-by-one in rhythm, just each
-        // one snapping instead of fading, which is still a motion effect Reduced Motion should
-        // suppress (self-review finding against avalonia-pro-max/review-checklist's "reduced-motion
-        // path tested" item).
-        int delayMs = MotionTokens.IsReducedMotion() ? 0 : index * PerItemDelayMs;
-        var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(delayMs) };
+        var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(ComputeDelayMs(index, MotionTokens.IsReducedMotion())) };
         timer.Tick += (_, _) =>
         {
             timer.Stop();
@@ -105,4 +100,18 @@ public static class EntranceAnimation
         PendingTimers.Add(container, timer);
         timer.Start();
     }
+
+    /// <summary>
+    /// Docs/superpowers/specs/2026-09-12-entrance-animation-v2-design.md §4: Library/Home are
+    /// virtualized, so one container-preparation burst never realizes more than a viewport's worth
+    /// of containers - <see cref="MaxStaggerIndex"/> is a no-op for them today. Books and Reading
+    /// Lists are not virtualized, so every item realizes in one burst; without this clamp, a long
+    /// list would get a stagger tail that keeps growing with its length. Reduced Motion still
+    /// collapses the delay to zero entirely, not just the growth beyond the cap - otherwise items
+    /// would still visibly reveal one-by-one in rhythm, just each one snapping instead of fading,
+    /// which is still a motion effect Reduced Motion should suppress (self-review finding against
+    /// avalonia-pro-max/review-checklist's "reduced-motion path tested" item).
+    /// </summary>
+    internal static int ComputeDelayMs(int index, bool reducedMotion) =>
+        reducedMotion ? 0 : Math.Min(index, MaxStaggerIndex) * PerItemDelayMs;
 }

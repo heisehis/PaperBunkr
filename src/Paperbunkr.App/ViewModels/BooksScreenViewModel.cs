@@ -510,8 +510,18 @@ public partial class BooksScreenViewModel : ViewModelBase, IContextMenuProvider
         await _pluginHost.RunNovelBooksCommandAsync(target.Command, new[] { book });
     }
 
+    /// <summary>Staggered grid entrance (docs/superpowers/specs/2026-09-12-entrance-animation-v2-
+    /// design.md) - set true by <see cref="Rebuild"/>, the one funnel every real trigger (nav-in
+    /// reload via <see cref="LoadFromDatabase"/>, search/sort/sort-direction changes) runs through.
+    /// Read once per container preparation by <see cref="Controls.EntranceAnimation.Prepare"/>, not
+    /// a live binding, so ordinary scroll-driven virtualization recycling never replays it.</summary>
+    [ObservableProperty]
+    private bool _playEntranceAnimation;
+
     private void Rebuild()
     {
+        PlayEntranceAnimation = true;
+
         IEnumerable<BookCardSample> cards = _allCards;
 
         string query = SearchQuery.Trim();

@@ -571,8 +571,22 @@ public partial class ReadingScreenViewModel : ViewModelBase, IContextMenuProvide
     [ObservableProperty]
     private Bitmap? _arcCoverImage;
 
-    public void LoadReadingList(int readingListId)
+    /// <summary>Staggered row entrance (docs/superpowers/specs/2026-09-12-entrance-animation-v2-
+    /// design.md) - set true only when <see cref="LoadReadingList"/> is called with
+    /// <c>triggerEntrance: true</c>, i.e. a genuine list switch/nav-in, not the many same-list
+    /// mutation call sites that reuse this method to refresh after an edit (see that design doc §3
+    /// for the full call-site classification). Read once per container preparation by
+    /// <see cref="Controls.EntranceAnimation.Prepare"/>, not a live binding.</summary>
+    [ObservableProperty]
+    private bool _playEntranceAnimation;
+
+    public void LoadReadingList(int readingListId, bool triggerEntrance = false)
     {
+        if (triggerEntrance)
+        {
+            PlayEntranceAnimation = true;
+        }
+
         _activeReadingListId = readingListId;
         OnPropertyChanged(nameof(IsListOpen));
         StatusMessage = null;
@@ -651,7 +665,7 @@ public partial class ReadingScreenViewModel : ViewModelBase, IContextMenuProvide
     {
         if (_activeReadingListId is int activeId)
         {
-            LoadReadingList(activeId);
+            LoadReadingList(activeId, triggerEntrance: true);
             return;
         }
 
@@ -659,7 +673,7 @@ public partial class ReadingScreenViewModel : ViewModelBase, IContextMenuProvide
         var firstId = context.ReadingLists.OrderBy(r => r.SortOrder).Select(r => (int?)r.Id).FirstOrDefault();
         if (firstId is int id)
         {
-            LoadReadingList(id);
+            LoadReadingList(id, triggerEntrance: true);
         }
     }
 
@@ -776,7 +790,7 @@ public partial class ReadingScreenViewModel : ViewModelBase, IContextMenuProvide
                 OnPropertyChanged(nameof(IsListOpen));
                 if (nextId is int id)
                 {
-                    LoadReadingList(id);
+                    LoadReadingList(id, triggerEntrance: true);
                     return;
                 }
 
@@ -1152,7 +1166,7 @@ public partial class ReadingScreenViewModel : ViewModelBase, IContextMenuProvide
         };
         context.ReadingLists.Add(list);
         context.SaveChanges();
-        LoadReadingList(list.Id);
+        LoadReadingList(list.Id, triggerEntrance: true);
     }
 
     [RelayCommand]
@@ -1160,7 +1174,7 @@ public partial class ReadingScreenViewModel : ViewModelBase, IContextMenuProvide
     {
         if (summary is not null)
         {
-            LoadReadingList(summary.Id);
+            LoadReadingList(summary.Id, triggerEntrance: true);
         }
     }
 

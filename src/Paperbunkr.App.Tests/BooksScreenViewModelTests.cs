@@ -112,6 +112,20 @@ public class BooksScreenViewModelTests : IDisposable
     }
 
     [Fact]
+    public void PlayEntranceAnimation_TrueAfterLoad_AndAfterSearchQueryChange()
+    {
+        AddBook("Dune");
+        var vm = CreateViewModel();
+
+        vm.LoadFromDatabase();
+        Assert.True(vm.PlayEntranceAnimation);
+
+        vm.PlayEntranceAnimation = false;
+        vm.SearchQuery = "dune";
+        Assert.True(vm.PlayEntranceAnimation);
+    }
+
+    [Fact]
     public void CardClick_WithNoSelection_InvokesBookDetailCallback_WithId()
     {
         int? captured = null;

@@ -14,7 +14,8 @@
         as text rather than actual decoded cover images (a deliberate, scoped-down simplification, not
         an oversight).
     -->
-    <Border Background="{DynamicResource PbSurfaceBrush}" CornerRadius="8" Padding="20" Width="420">
+    <Border Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}"
+            BorderThickness="1" CornerRadius="8" Padding="20" Width="420">
         <StackPanel Spacing="14">
             <TextBlock Text="A file already exists at the destination" FontSize="16" FontWeight="Bold"
                        Foreground="{DynamicResource PbTextBrush}" TextWrapping="Wrap" />

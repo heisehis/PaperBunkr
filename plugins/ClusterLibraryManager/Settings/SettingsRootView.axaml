@@ -7,7 +7,8 @@
              x:Class="ClusterLibraryManager.Settings.SettingsRootView"
              x:DataType="vm:SettingsRootViewModel">
 
-    <Border Background="{DynamicResource PbSurfaceBrush}" CornerRadius="8" Padding="16" Width="640" Height="620">
+    <Border Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}"
+            BorderThickness="1" CornerRadius="8" Padding="16" Width="640" Height="620">
         <TabControl>
             <TabItem Header="General">
                 <vm:SettingsView DataContext="{Binding General}" />

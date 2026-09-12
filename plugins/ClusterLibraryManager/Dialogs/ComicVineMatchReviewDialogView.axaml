@@ -9,7 +9,8 @@
 
     <!-- Design doc §4: ranked candidates for one book; pick one or skip. No cover-thumbnail rendering
          in this pass, same rationale as FileConflictDialogView. -->
-    <Border Background="{DynamicResource PbSurfaceBrush}" CornerRadius="8" Padding="20" Width="440">
+    <Border Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}"
+            BorderThickness="1" CornerRadius="8" Padding="20" Width="440">
         <StackPanel Spacing="14">
             <TextBlock Text="Which ComicVine series is this?" FontSize="16" FontWeight="Bold"
                        Foreground="{DynamicResource PbTextBrush}" />

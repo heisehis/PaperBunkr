@@ -22,6 +22,22 @@ this file itself already did once (see the note below).
 
 ## What's left (as of 2026-08-12, HEAD `85fb681`)
 
+> **Manual session note (2026-09-12, Entrance-animation v2 shipped):** Beta-backlog work, P0–P7
+> unchanged. Design + plan: `docs/superpowers/specs/2026-09-12-entrance-animation-v2-{design,plan}.md`.
+> Extended the shipped staggered-grid-entrance system (`EntranceAnimation`) from Library+Home to the
+> three remaining v2 targets named in the original 2026-09-07 chrome-motion-polish spec's non-goals:
+> Books, Smart Lists, Reading Lists. Also fixed a real latent risk while implementing: added a
+> `MaxStaggerIndex` clamp to the shared control since Books/Reading Lists are unvirtualized (every
+> item realizes in one burst), so a long list would otherwise get an ever-growing stagger tail.
+> Verified: `Paperbunkr.App` builds clean, ~30 new/extended targeted test cases pass.
+> **Real pre-existing bug found and flagged separately (not fixed here, confirmed unrelated via
+> git-stash isolation):** the `TwoStepConfirm` two-click delete bug already known broken for Library
+> collections also breaks Smart Lists and Reading Lists deletes identically; a separate brush-type
+> test assertion is stale after an Avalonia upgrade. Spawned as a follow-up task
+> (`Fix TwoStepConfirm delete not completing (Smart/Reading Lists) + brush-type test bug`).
+> **Not done:** on-screen verification of the stagger visual, the large-N cap, and Reduced Motion
+> across all three screens (standing no-computer-use caveat).
+
 > **Manual session note (2026-09-12, Issue.AlternateCount gap closed):** Beta-backlog work, P0–P7
 > unchanged. Design + plan: `docs/superpowers/specs/2026-09-12-issue-alternate-count-{design,plan}.md`.
 > Closed a real, twice-previously-deferred gap (`2026-08-07-bulk-issue-editing-design.md` §3;

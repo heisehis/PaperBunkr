@@ -1441,7 +1441,8 @@ closing out the effort alongside sub-project 1 above), design spec + plan
 entrance across all 5 view modes via a new `EntranceAnimation` attached-property pair (mirrors
 `SharedElement`'s shape) - one-shot per nav-in/filter/sort/group/view-mode-change trigger via
 `LibraryScreenViewModel.PlayEntranceAnimation`, read once per container preparation so ordinary
-virtualized-scroll recycling never replays it; other grids deferred to a v2 follow-up. (2)
+virtualized-scroll recycling never replays it; other grids deferred to a v2 follow-up
+(shipped 2026-09-12, see below). (2)
 `DetailHero` backdrop parallax, wired entirely inside `DetailHero.axaml.cs` (finds its own ancestor
 `ScrollViewer`) so it applies to every consumer - comic/manga/book detail, Home spotlight - with no
 per-screen code; fully disabled (not just instant) under Reduced Motion. (3) Contextual sidebar now
@@ -1469,6 +1470,33 @@ animation is a deliberate exception to the general "never animate Width" perform
 consistency with the nav rail's own pre-existing precedent since this surface toggles rarely, not on
 scroll. The actual on-screen motion feel across all six items is **not yet verified** - same standing
 `[[feedback_no_computer_use]]` limitation as sub-project 1 above.
+
+**Entrance-animation v2 shipped 2026-09-12** (design + plan: `docs/superpowers/specs/
+2026-09-12-entrance-animation-v2-{design,plan}.md`), closing the "other grids deferred to v2" item
+above for the three remaining targets (Books, Smart Lists, Reading Lists - Home's own slice had
+already shipped separately via `2026-09-08-home-navrail-visual-v2-design.md` §6). Books wires its
+single `Rebuild()` funnel (covers nav-in and search/sort alike, matching Library's own pattern);
+Smart Lists shares one flag across its three mutually-exclusive issue/series/novel result grids, set
+by both `RecomputeMatchCount()` overloads (nav-in and live condition edits); Reading Lists - a flat
+row list, not a card grid, so this staggers `ReadingListItemRowViewModel` rows via the same mechanism
+- gave `LoadReadingList` a `triggerEntrance` parameter to separate its 6 genuine list-switch/nav-in
+call sites from 18 same-list mutation call sites that reuse it to refresh after an edit, since
+replaying the whole list's entrance on every "mark one row read" click would be exactly the kind of
+animate-on-an-unrelated-trigger regression the original v1 spec had to design around for
+virtualization recycle, just reached a different way. Also extracted `EntranceAnimation`'s delay math
+into a pure `ComputeDelayMs(index, reducedMotion)` and added a `MaxStaggerIndex` clamp: Books and
+Reading Lists are unvirtualized (every item realizes in one burst, unlike Library/Home), so an
+uncapped per-item delay would give a long list a stagger tail that keeps growing with its length.
+New `EntranceAnimationTests` (the clamp math) plus extended `BooksScreenViewModelTests`/
+`SmartScreenViewModelTests`/`ReadingScreenViewModelTests`, all passing. **Real pre-existing bug found
+while verifying (not caused by this change, not fixed here, flagged separately):** the same
+`TwoStepConfirm` two-click delete already known broken for Library collections
+(`DeleteConfirm_Armed_RemovesCollection_AndFallsBackWhenActive`) also fails identically for Smart
+Lists and Reading Lists deletes - confirmed via git-stash isolation that none of this feature's code
+is involved; a separate, unrelated brush-type test assertion (`LinearGradientBrush` vs. the new
+`ImmutableLinearGradientBrush` an Avalonia upgrade returns) was found the same pass. On-screen
+verification of the stagger visual, the large-N cap, and Reduced Motion across all three screens not
+done - standing no-computer-use caveat.
 
 **Preferences Tile-Hub Redesign (Phase 1 of Preferences, sub-project 1 of the separate "Whole UI
 Re-Architecture" initiative) shipped 2026-09-07**, design + plan

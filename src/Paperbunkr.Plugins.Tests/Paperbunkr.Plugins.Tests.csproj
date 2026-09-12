@@ -21,19 +21,23 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- MinimalNative is its own SDK project nested under this one (SampleNativePlugins/MinimalNative/)
-         - excluded from this project's own default **/*.cs glob so its .cs sources and generated
-         obj/ AssemblyInfo files aren't compiled twice (once by its own .csproj, once swept in here). -->
+    <!-- MinimalNative/ThrowingNative are each their own SDK project nested under this one
+         (SampleNativePlugins/<name>/) - excluded from this project's own default **/*.cs glob so
+         their .cs sources and generated obj/ AssemblyInfo files aren't compiled twice (once by
+         their own .csproj, once swept in here). -->
     <Compile Remove="SampleNativePlugins\MinimalNative\**\*.cs" />
+    <Compile Remove="SampleNativePlugins\ThrowingNative\**\*.cs" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\Paperbunkr.Plugins\Paperbunkr.Plugins.csproj" />
-    <!-- Test fixture only (implementation plan Phase 1 Step 1.3/1.4) - a minimal real compiled
-         native-tier plugin; NativePluginTests locates its built DLL via typeof(...).Assembly.Location
+    <!-- Test fixtures only (implementation plan Phase 1 Step 1.3/1.4, and docs/superpowers/specs/
+         2026-09-12-plugin-management-screen-redesign-plan.md Step 2) - minimal real compiled
+         native-tier plugins; the tests locate each built DLL via typeof(...).Assembly.Location
          rather than relying on build-output-copying conventions, so no CopyToOutputDirectory wiring
-         is needed for this one. -->
+         is needed for either. -->
     <ProjectReference Include="SampleNativePlugins\MinimalNative\MinimalNative.csproj" />
+    <ProjectReference Include="SampleNativePlugins\ThrowingNative\ThrowingNative.csproj" />
   </ItemGroup>
 
   <ItemGroup>

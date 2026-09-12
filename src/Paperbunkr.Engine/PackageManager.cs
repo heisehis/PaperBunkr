@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
 using System.Linq;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
 using cYo.Common.Collections;
@@ -110,6 +112,22 @@ namespace cYo.Projects.ComicRack.Engine
 				private set;
 			}
 
+			/// <summary>
+			/// Correlation key matching <c>Paperbunkr.Plugins.Command.PluginKey</c> - both read the
+			/// same <c>plugin.xml</c> root <c>key</c> attribute (docs/superpowers/specs/2026-09-12-
+			/// plugin-management-screen-redesign-design.md §4.1). Previously there was no such
+			/// property at all: <see cref="Name"/> came from package.ini/a folder-name heuristic,
+			/// while commands were keyed from the manifest independently - two uncoordinated identity
+			/// systems that happened to agree only by luck of folder naming. Falls back to a hash of
+			/// the absolute install path (never the bare folder name, and never empty) when the
+			/// manifest is missing/unreadable or has no key - see <see cref="FallbackKey"/>.
+			/// </summary>
+			public string Key
+			{
+				get;
+				private set;
+			}
+
 			private Package(string name)
 			{
 				Name = name;
@@ -123,7 +141,16 @@ namespace cYo.Projects.ComicRack.Engine
 			private void InitValues()
 			{
 				IniFile iniFile = new IniFile(Path.Combine(PackagePath, "package.ini"));
-				Name = iniFile.GetValue("Name", FileToName(Name));
+
+				(bool isNative, string manifestKey, string manifestName) = ReadManifestAttributes(PackagePath);
+				IsNativeTier = isNative;
+				Key = !string.IsNullOrWhiteSpace(manifestKey) ? manifestKey : FallbackKey(PackagePath);
+
+				string originalName = Name;
+				Name = !string.IsNullOrWhiteSpace(manifestName)
+					? manifestName
+					: iniFile.GetValue("Name", FileToName(originalName));
+
 				Description = iniFile.GetValue("Description", string.Empty);
 				Author = iniFile.GetValue("Author", string.Empty);
 				Version = iniFile.GetValue("Version", string.Empty);
@@ -138,28 +165,39 @@ namespace cYo.Projects.ComicRack.Engine
 				catch
 				{
 				}
-
-				IsNativeTier = DetectNativeTier(PackagePath);
 			}
 
-			private static bool DetectNativeTier(string packagePath)
+			/// <summary>Single read of <c>plugin.xml</c>'s root attributes (tier/key/name together) -
+			/// replaces what used to be a separate <c>DetectNativeTier</c> read plus what would
+			/// otherwise be two more (docs/superpowers/specs/2026-09-12-plugin-management-screen-
+			/// redesign-design.md §4.1's illustrative split was three methods; folded into one file
+			/// read here since every call site needs all three attributes from the same file anyway).</summary>
+			private static (bool isNative, string key, string name) ReadManifestAttributes(string packagePath)
 			{
 				string manifestPath = Path.Combine(packagePath, "plugin.xml");
-				if (!File.Exists(manifestPath))
-				{
-					return false;
-				}
-
 				try
 				{
 					XDocument manifest = XDocument.Load(manifestPath);
-					string? tier = manifest.Root?.Attribute("tier")?.Value;
-					return string.Equals(tier, "Native", StringComparison.OrdinalIgnoreCase);
+					string tier = manifest.Root?.Attribute("tier")?.Value;
+					string key = manifest.Root?.Attribute("key")?.Value;
+					string name = manifest.Root?.Attribute("name")?.Value;
+					bool isNative = string.Equals(tier, "Native", StringComparison.OrdinalIgnoreCase);
+					return (isNative, key, name);
 				}
 				catch
 				{
-					return false;
+					return (false, null, null);
 				}
+			}
+
+			/// <summary>Never string.Empty and never just the bare folder name (docs/superpowers/specs/
+			/// 2026-09-12-plugin-management-screen-redesign-design.md §4.1) - a hash of the absolute
+			/// install path is trivially unique across the whole plugins root, with no heuristic list
+			/// of "generic-sounding" folder names (dist/bin/Release/...) to guess and maintain.</summary>
+			private static string FallbackKey(string packagePath)
+			{
+				byte[] hash = SHA256.HashData(Encoding.UTF8.GetBytes(Path.GetFullPath(packagePath).ToUpperInvariant()));
+				return Convert.ToHexString(hash).Substring(0, 16);
 			}
 
 			private static string FileToName(string file)

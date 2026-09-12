@@ -171,11 +171,22 @@ this whole redesign exists to stop: if a user copies a plugin's install folder a
 folders then share the identical `plugin.xml` key), the second one processed would quietly
 overwrite the first's healthy `NativePluginLoadResult` with its own - one of the two native modules
 effectively vanishes from `NativeLoadResults`, indistinguishable from having never loaded, with no
-signal anywhere. `DiscoverNative` therefore checks before writing: if `pluginKey` is already present
-in `_nativeLoadResults`, the *second* package gets `LoadError = $"Duplicate plugin key '{pluginKey}'
-- a plugin with this key was already loaded from {existingPath}."` instead of overwriting the
-first's real result. The first-discovered package is unaffected. (Commands already have equivalent,
-pre-existing protection one level down - `_commands.Any(c => c.Key == cmd.Key)` at
+signal anywhere.
+
+**Correction made during implementation:** both packages share the *identical* key, so they share
+the *same* dictionary slot - there is no separate slot where "the first-discovered package stays
+unaffected" while a second, distinct entry records the conflict. That framing (present in an
+earlier draft of this section) isn't achievable with a `Dictionary<string, NativePluginLoadResult>`
+keyed on `pluginKey`, full stop. The implementable, and actually-built, version: `DiscoverNative`
+checks before writing, and if `pluginKey` is already present in `_nativeLoadResults`, that *one
+shared slot* is overwritten with `LoadError = $"Duplicate plugin key '{pluginKey}' - more than one
+installed plugin folder declares this key."` - not either package's individual real result. Whoever
+loaded first keeps its already-added `Command`s functioning (those were added to `_commands` before
+the conflict was even detected), but the health/Configure-eligibility check any UI does against
+`NativeLoadResults[pluginKey]` will show the conflict, not a false "all clear" for one specific
+copy. That's still squarely this design's actual goal - surface the conflict instead of masking it
+- even though it's a different shape than the original paragraph described. (Commands already have
+equivalent, pre-existing protection one level down - `_commands.Any(c => c.Key == cmd.Key)` at
 [PluginEngine.cs:125](../../../src/Paperbunkr.Plugins/PluginEngine.cs) already first-wins-skips a
 second package's identically-keyed commands today, silently; this native-load-result guard is the
 same scenario at the package level, made visible instead of silent, consistent with §4.3's health

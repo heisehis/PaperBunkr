@@ -96,12 +96,23 @@ private static string DetectKey(string packagePath)
     try
     {
         XDocument manifest = XDocument.Load(manifestPath);
-        return manifest.Root?.Attribute("key")?.Value ?? string.Empty;
+        string? key = manifest.Root?.Attribute("key")?.Value;
+        if (!string.IsNullOrWhiteSpace(key))
+        {
+            return key;
+        }
     }
     catch
     {
-        return string.Empty;
+        // fall through to the folder-name fallback below
     }
+
+    // Never string.Empty - two folders with no/unreadable plugin.xml would otherwise collide on
+    // the same "" key (external review round 1 caught this). The install folder's own name is
+    // already OS-guaranteed unique among its siblings, so it's a safe, simple fallback - no need
+    // for a humanized/slugified derivative (that path invites its own collisions, e.g. "My Plugin"
+    // and "my-plugin" both slugifying to "my-plugin").
+    return Path.GetFileName(packagePath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
 }
 ```
 
@@ -154,24 +165,66 @@ Two-column layout (`avalonia-pro-max/layout-patterns`'s Master-Detail pattern �
 `Grid`, matching this app's existing hand-rolled panels rather than adopting FluentAvalonia's
 `NavigationView`/`SplitView` for a single sub-screen):
 
-- **Left (sidebar, ~220px)** — one row per installed package: health dot, name, tier/pending
-  badges. "Install Package…" action at the bottom of this column (moved from the current top-of-
-  screen button). Click selects a package into the detail pane.
+- **Left (sidebar, ~220px)** — a filter `TextBox` above the list (external review round 1 -
+  matters once someone has more than a handful of packages installed; filters `Packages` by name,
+  client-side, no new persistence), then one row per installed package: health dot, name,
+  tier/pending badges. "Install Package…" action at the bottom of this column (moved from the
+  current top-of-screen button). Click selects a package into the detail pane.
 - **Right (detail pane)** — for the selected package:
   - Header: name, version, author, tier badge ("Native"), "Full read/write access" badge (native
     only), "Restart to apply" badge (pending only), a "Failed to load: `<message>`" banner (broken
-    native only, replacing the current silent vanish).
-  - Master **Enabled** toggle — bulk-writes `PluginCommandState` (via
-    `PluginHostService.SetCommandEnabled`) for every command whose `PluginKey` matches this
-    package, reusing the existing persisted mechanism. Displayed checked only when every command
-    is currently enabled (mixed state shown unchecked, not tri-state — simplest model, matches how
-    a single bulk action naturally reads).
+    native only, replacing the current silent vanish) with a "Copy error" button next to it
+    (external review round 1 - reduces friction reporting a stack trace to a plugin's developer;
+    just `TopLevel.Clipboard.SetTextAsync(loadError)`, no new mechanism).
+  - **Reload** button (script-tier packages only) — calls the existing, already-shipped
+    `PluginHostService.RediscoverPlugins()` (today only called after Install/Uninstall,
+    [PluginScreenViewModel.cs:126](../../../src/Paperbunkr.App/ViewModels/PluginScreenViewModel.cs)),
+    then `Refresh()`. External review round 1 claimed there's "no specified mechanism to refresh
+    ... without restarting the engine" after fixing a broken script via its Configure gear - that
+    overstates it: `RediscoverPlugins()` already re-scans and recompiles every script-tier command
+    with no app restart involved, it's just never been exposed as a user-facing action outside
+    Install/Remove. The real gap is exposing a button for it, not building new file-watching
+    machinery - a `FileSystemWatcher` (as also suggested) is unnecessary complexity for what's
+    already a one-line call to something that exists. Native packages don't get this button - a
+    native package's `LoadError` can only be re-attempted by actually reloading its
+    `AssemblyLoadContext`, which is exactly what "restart to apply" already covers; a fresh
+    "Reload" button that can't do anything a restart doesn't already promise would be its own new
+    kind of misleading.
+  - Master **Enabled** toggle — a `CheckBox` with `IsThreeState="True"` (not the `ToggleSwitch`
+    per-command rows use — `ToggleSwitch` has no indeterminate concept, `CheckBox.IsChecked` is
+    `bool?` and already supports it natively). Bound to a computed tri-state: `true` when every
+    child command is enabled, `false` when every child command is disabled, `null` (indeterminate)
+    when mixed (external review round 1: an always-unchecked mixed state was ambiguous about what
+    clicking it would do). Click handling is explicit, not the CheckBox's own default 3-way cycle:
+    the view model's `IsEnabledChanged` handler only ever receives `true`/`false` from a real user
+    click (a user can't click *into* indeterminate — only `Refresh()` recomputing a genuinely mixed
+    state produces it) and bulk-writes that value via `PluginHostService.SetPackageEnabled` for
+    every command whose `PluginKey` matches this package, reusing the existing persisted
+    `PluginCommandState` mechanism (no new persisted field).
   - **⚙ Configure** button in the header — shown only when this package's `NativeLoadResults`
     entry has a `Module` that also implements `INativePluginSettingsUi`. Clicking it calls
-    `CreateSettingsView` and hosts the result exactly the way `ComicVineMatchReviewDialogView`/
-    `FileConflictDialogView` already do — through the existing `NativePluginModalHostViewModel` +
-    `MainWindow.axaml`'s `OverlayShell`/`ContentControl`, via `INativePluginUiEnvironment.
-    ShowModalAsync`. No new hosting mechanism.
+    `CreateSettingsView` and hosts the result through the same shared
+    `NativePluginModalHostViewModel` + `MainWindow.axaml`'s `OverlayShell` every native plugin
+    dialog already uses. **Dismissal already has a real answer, reused as-is, not invented here:**
+    `OverlayShell` ships its own corner close button (`ShowCloseButton`, default `true`) and
+    scrim-click dismiss (`AllowDismiss`, default `true` —
+    [OverlayShell.cs:58,37](../../../src/Paperbunkr.App/Controls/OverlayShell.cs)), both wired to
+    `NativePluginModalHostViewModel.DismissCommand`
+    ([NativePluginModalHostViewModel.cs:66-71](../../../src/Paperbunkr.App/ViewModels/NativePluginModalHostViewModel.cs)).
+    `PluginHostService.OpenPluginSettingsAsync` calls the existing generic `ShowAsync<TResult>`
+    with a `TResult` of `object?` that's never explicitly resolved from inside the settings view -
+    the only way this modal closes is that shared X/scrim, which is already there for free.
+    Closing then throws `TaskCanceledException` on the awaited task exactly the way any other
+    scrim-dismissed native dialog already does today (documented on `ShowAsync` itself) -
+    `OpenPluginSettingsAsync` just catches `OperationCanceledException` and returns, no special
+    case needed. External review round 1 raised a real gap here (no documented way to close it),
+    but the fix is "the mechanism already exists, use it" - not a new `SaveCommand`/`CancelCommand`
+    contract on `INativePluginSettingsUi`. That would force every plugin's settings screen into an
+    OK/Cancel-with-rollback shape; `ClusterLibraryManager`'s own `SettingsViewModel` already has its
+    own `SaveCommand` that persists immediately on click
+    ([SettingsView.axaml:62](../../../plugins/ClusterLibraryManager/Settings/SettingsView.axaml)) -
+    Save and Close are two independent, decoupled actions, and that's fine: closing without saving
+    just discards in-memory edits, same as any ordinary settings dialog.
   - Commands list, scoped to this package only (previously scattered across hook-grouped
     sections): each row keeps its existing shape (Name, enabled toggle, Run button if
     `CanRunManually`, compile-error text if `IsBroken`) plus, for a script-tier command that has a
@@ -190,8 +243,9 @@ right-hand pane's "nothing selected" content instead of the whole screen's conte
 
 - `PluginPackageRowViewModel` — sidebar row only now: health dot state, name, badges,
   `SelectCommand`. Loses the inline `DeleteConfirm` (moved to detail header).
-- New `PluginPackageDetailViewModel` — header fields, master `Enabled` bool (computed + bulk
-  setter), `ConfigureCommand` (visible only if applicable), `DeleteConfirm`, and its own
+- New `PluginPackageDetailViewModel` — header fields, master `Enabled` (`bool?`, tri-state per
+  §4.4, computed from children + explicit bulk setter on click), `ConfigureCommand` (visible only
+  if applicable), `ReloadCommand` (script-tier only), `DeleteConfirm`, and its own
   `ObservableCollection<PluginCommandRowViewModel>` scoped to this package's commands (reuses the
   existing row VM unchanged, just filtered by `PluginKey` instead of grouped by hook).
 - `PluginScreenViewModel` — owns `Packages` (sidebar) + `SelectedPackage` (drives
@@ -203,6 +257,19 @@ right-hand pane's "nothing selected" content instead of the whole screen's conte
   hosts via the existing modal mechanism) and `SetPackageEnabled(string pluginKey, bool enabled)`
   (bulk-loops `Engine.AllCommands.Where(c => c.PluginKey == pluginKey)` through the existing
   `SetCommandEnabled`).
+
+### 4.6 Explicitly rejected (external review round 1 enhancements)
+
+- **Plugin metadata links** (`<Url>` tag, clickable Author) — `PluginManifest`'s root element has
+  no `Url` attribute and never has ([PluginManifest.cs](../../../src/Paperbunkr.Plugins/PluginManifest.cs) -
+  just `key`/`name`/`tier`/`assembly`). Adding one is a real schema change unrelated to a screen
+  redesign - out of scope for this pass, and speculative until a real plugin author asks for it.
+- **"Required Engine Version" surface** — same issue: no version-compatibility field exists
+  anywhere in the manifest or the native tier's loading path today, and Paperbunkr has no version-
+  gating mechanism for a plugin to declare against. Building UI for a field that can't exist yet is
+  scope creep past what this redesign needs to fix. Real follow-up if/when a plugin actually breaks
+  across an engine upgrade and the project decides that's worth solving structurally - not a
+  reactive UI addition now.
 
 ## 5. Testing
 
@@ -217,9 +284,15 @@ right-hand pane's "nothing selected" content instead of the whole screen's conte
   `Paperbunkr.Engine.Tests` project, matching this repo's one-test-project-per-library convention.
 - `Paperbunkr.App.Tests`: `PluginScreenViewModelTests` — selecting a package populates
   `SelectedPackage`'s commands filtered to that `PluginKey` only; master `Enabled` toggle bulk-
-  writes every child command's persisted state and reads back correctly; `ConfigureCommand`
-  visibility is true only for a module implementing `INativePluginSettingsUi`; a broken native
-  package's detail pane shows its `LoadError` text.
+  writes every child command's persisted state and reads back correctly; three cases for the
+  tri-state master toggle (all-enabled → `true`, all-disabled → `false`, mixed → `null`), and that
+  clicking it while indeterminate produces a real `true`/`false` write, never a re-entrant
+  indeterminate; `ConfigureCommand` visibility is true only for a module implementing
+  `INativePluginSettingsUi`; a broken native package's detail pane shows its `LoadError` text and
+  its "Copy error" action copies that exact string; the Reload button (script-tier only) calls
+  `RediscoverPlugins()` and a previously-broken command's `IsBroken` clears after the underlying
+  script is fixed on disk between calls; the sidebar filter `TextBox` narrows `Packages` by a
+  case-insensitive name substring.
 - Manual on-screen check (this is UI-rearrangement work): install ClusterLibraryManager (already
   done), open Preferences → Plugins, select it in the sidebar, confirm Configure opens its real
   `SettingsRootView` in the existing modal overlay, toggle master Enabled off/on and confirm its

@@ -10,7 +10,7 @@
 
     <Grid ColumnDefinitions="180,*" Margin="4">
         <StackPanel Grid.Column="0" Spacing="6">
-            <TextBlock Text="Profiles" FontWeight="Bold" Foreground="{DynamicResource PbTextBrush}" />
+            <TextBlock Text="Profiles" FontWeight="Bold" Foreground="#ECE7DB" />
             <ListBox ItemsSource="{Binding Profiles}" SelectedItem="{Binding Selected}">
                 <ListBox.ItemTemplate>
                     <DataTemplate x:DataType="vm:OrganizerProfileRowViewModel">
@@ -37,7 +37,7 @@
                 <TextBox Text="{Binding Selected.FileTemplate}" AcceptsReturn="False" />
 
                 <TextBlock Text="Insert token into folder / file template:" FontSize="11"
-                           Foreground="{DynamicResource PbTextMutedBrush}" />
+                           Foreground="#B3ADA0" />
                 <ItemsControl ItemsSource="{Binding InsertableTokens}">
                     <ItemsControl.ItemsPanel>
                         <ItemsPanelTemplate>

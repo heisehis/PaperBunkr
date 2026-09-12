@@ -10,23 +10,23 @@
     <ScrollViewer>
         <StackPanel Spacing="16" Margin="4">
             <StackPanel Spacing="6">
-                <TextBlock Text="ComicVine API Key" FontWeight="Bold" Foreground="{DynamicResource PbTextBrush}" />
+                <TextBlock Text="ComicVine API Key" FontWeight="Bold" Foreground="#ECE7DB" />
                 <TextBox Text="{Binding ApiKey}" PasswordChar="•" Watermark="Paste your ComicVine API key" />
                 <StackPanel Orientation="Horizontal" Spacing="8">
                     <Button Content="Test Connection" Command="{Binding TestConnectionCommand}" IsEnabled="{Binding !IsTestingConnection}" />
-                    <TextBlock Text="{Binding TestConnectionStatus}" VerticalAlignment="Center" Foreground="{DynamicResource PbTextMutedBrush}" />
+                    <TextBlock Text="{Binding TestConnectionStatus}" VerticalAlignment="Center" Foreground="#B3ADA0" />
                 </StackPanel>
             </StackPanel>
 
             <StackPanel Spacing="6">
-                <TextBlock Text="Apply behavior" FontWeight="Bold" Foreground="{DynamicResource PbTextBrush}" />
+                <TextBlock Text="Apply behavior" FontWeight="Bold" Foreground="#ECE7DB" />
                 <CheckBox Content="Overwrite fields that already have a value" IsChecked="{Binding OverwriteExisting}" />
                 <CheckBox Content="Don't overwrite an existing value with a blank one" IsChecked="{Binding IgnoreBlankValues}" />
                 <CheckBox Content="Auto-select the best-scoring match (skip the review dialog)" IsChecked="{Binding AutoChooseTopMatch}" />
             </StackPanel>
 
             <StackPanel Spacing="6">
-                <TextBlock Text="Fields to scrape" FontWeight="Bold" Foreground="{DynamicResource PbTextBrush}" />
+                <TextBlock Text="Fields to scrape" FontWeight="Bold" Foreground="#ECE7DB" />
                 <ItemsControl ItemsSource="{Binding ScrapeFieldToggles}">
                     <ItemsControl.ItemsPanel>
                         <ItemsPanelTemplate>
@@ -42,9 +42,9 @@
             </StackPanel>
 
             <StackPanel Spacing="6">
-                <TextBlock Text="Automation" FontWeight="Bold" Foreground="{DynamicResource PbTextBrush}" />
+                <TextBlock Text="Automation" FontWeight="Bold" Foreground="#ECE7DB" />
                 <TextBlock Text="Runs while Paperbunkr is open, on its own timer - Paperbunkr's Scheduled Tasks list isn't extensible, so this doesn't appear there."
-                           FontSize="11" Foreground="{DynamicResource PbTextMutedBrush}" TextWrapping="Wrap" />
+                           FontSize="11" Foreground="#B3ADA0" TextWrapping="Wrap" />
                 <CheckBox Content="Automatically scrape new/unscraped issues" IsChecked="{Binding AutomaticScrapeEnabled}" />
                 <StackPanel Orientation="Horizontal" Spacing="6" Margin="20,0,0,0">
                     <TextBlock Text="Every" VerticalAlignment="Center" />

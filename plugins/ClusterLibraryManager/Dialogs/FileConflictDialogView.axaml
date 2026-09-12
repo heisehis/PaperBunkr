@@ -14,25 +14,26 @@
         as text rather than actual decoded cover images (a deliberate, scoped-down simplification, not
         an oversight).
     -->
-    <Border Background="{DynamicResource PbChromeBrush}" BorderBrush="{DynamicResource PbBorderBrush}"
+    <!-- Hardcoded colors, not DynamicResource - see SettingsRootView.axaml's own comment for why. -->
+    <Border Background="#131519" BorderBrush="#2A2E37"
             BorderThickness="1" CornerRadius="8" Padding="20" Width="420">
         <StackPanel Spacing="14">
             <TextBlock Text="A file already exists at the destination" FontSize="16" FontWeight="Bold"
-                       Foreground="{DynamicResource PbTextBrush}" TextWrapping="Wrap" />
+                       Foreground="#ECE7DB" TextWrapping="Wrap" />
 
             <StackPanel Spacing="4">
-                <TextBlock Text="Destination" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource PbTextMutedBrush}" />
-                <TextBlock Text="{Binding DestinationPath}" FontSize="12" Foreground="{DynamicResource PbTextBrush}" TextWrapping="Wrap" />
+                <TextBlock Text="Destination" FontSize="11" FontWeight="Bold" Foreground="#B3ADA0" />
+                <TextBlock Text="{Binding DestinationPath}" FontSize="12" Foreground="#ECE7DB" TextWrapping="Wrap" />
             </StackPanel>
 
             <Grid ColumnDefinitions="*,*" ColumnSpacing="12">
                 <StackPanel Grid.Column="0" Spacing="4">
-                    <TextBlock Text="Incoming" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource PbTextMutedBrush}" />
-                    <TextBlock Text="{Binding IncomingBookLabel}" FontSize="12" Foreground="{DynamicResource PbTextBrush}" TextWrapping="Wrap" />
+                    <TextBlock Text="Incoming" FontSize="11" FontWeight="Bold" Foreground="#B3ADA0" />
+                    <TextBlock Text="{Binding IncomingBookLabel}" FontSize="12" Foreground="#ECE7DB" TextWrapping="Wrap" />
                 </StackPanel>
                 <StackPanel Grid.Column="1" Spacing="4">
-                    <TextBlock Text="Already there" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource PbTextMutedBrush}" />
-                    <TextBlock Text="{Binding ExistingBookLabel}" FontSize="12" Foreground="{DynamicResource PbTextBrush}" TextWrapping="Wrap" />
+                    <TextBlock Text="Already there" FontSize="11" FontWeight="Bold" Foreground="#B3ADA0" />
+                    <TextBlock Text="{Binding ExistingBookLabel}" FontSize="12" Foreground="#ECE7DB" TextWrapping="Wrap" />
                 </StackPanel>
             </Grid>
 

@@ -75,12 +75,13 @@ No content or aggregation logic changes — this is a pure layout/grouping chang
 
 No structural change ("visual only" per the user). Current layout ([DetailTabs.axaml:353-507](../../../src/Paperbunkr.App/Views/DetailTabs.axaml#L353-L507)): Continuities chips, Collections chips, an add-related-series expander, then up to five `PosterRail`s stacked (Related, Same Continuity, Same Collection, Same Event, More Like This).
 
-Checked `PosterRail.axaml` directly - it has **no card/border wrapper today**, just a title line + a horizontally-scrolling row (each item already has its own `railCover` border, [PosterRail.axaml:26-32](../../../src/Paperbunkr.App/Views/PosterRail.axaml#L26-L32)). Concrete split for this pass, applying the "one concern = one card" rule from the Details tab section above without over-applying it:
+Checked `PosterRail.axaml` directly - it has **no card/border wrapper today**, just a title line + a horizontally-scrolling row (each item already has its own `railCover` border, [PosterRail.axaml:26-32](../../../src/Paperbunkr.App/Views/PosterRail.axaml#L26-L32)).
 
-- **Continuities** and **Collections** — each gets its own bordered card (same treatment as Details tab's cards), since these are editable concerns with their own add/remove interaction, directly analogous to Details tab's Credits/Trackers cards.
-- **The five `PosterRail`s stay as-is structurally** - no individual card wrapper per rail. Five stacked bordered cards of horizontally-scrolling content would be visually heavier than the current "title + row" convention this component already uses consistently elsewhere (e.g. Home screen's own rails), and nothing about the rails themselves was flagged as a problem. Restyle only means: rail title typography and the "+N more"/accent color choices match whatever the Details/Hero work settles on, applied via existing shared styles/tokens - no `PosterRail.axaml` structural edit.
+**Correction from an earlier draft of this section**: every group on this tab gets the same card wrapper, not just the two editable ones - Continuities, Collections, and each of the five `PosterRail`s (Related, Same Continuity, Same Collection, Same Event, More Like This) all get wrapped in the Details tab's own bordered-card treatment, so the whole tab reads as one consistent set of cards rather than two styled sections plus five unstyled ones.
 
-No new sections, no removed content, no changed data flow, no `DetailTabsViewModel` logic changes for this tab.
+`PosterRail.axaml` itself is a reusable `UserControl` also used elsewhere (e.g. Home screen's own rails) - wrapping it in a card is done at the **call site** (`DetailTabs.axaml`, each `<views:PosterRail .../>` usage wrapped in its own `Border` card), not by changing `PosterRail.axaml`'s own template. That keeps every other consumer of `PosterRail` visually untouched - only the Related tab's usage gets the card, since only the Related tab was named for this redesign.
+
+No new sections, no removed content, no changed data flow, no `DetailTabsViewModel` logic changes for this tab - purely wrapping existing blocks in cards at the XAML call-site level.
 
 ## 5. Activity tab — visual restyle only (assumed, confirmed)
 

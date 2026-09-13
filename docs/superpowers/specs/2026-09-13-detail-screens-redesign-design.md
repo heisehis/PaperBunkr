@@ -73,7 +73,14 @@ No content or aggregation logic changes — this is a pure layout/grouping chang
 
 ## 4. Related tab — visual restyle only
 
-No structural change (explicitly confirmed with the user - "no complaints here" was not selected but the fallback answer was "visual only"). Apply the same card/spacing/accent treatment as the Details tab's new card sections to the existing Continuity/Collection chip blocks and poster rails, for visual consistency across the tab strip. No new sections, no removed content, no changed data flow.
+No structural change ("visual only" per the user). Current layout ([DetailTabs.axaml:353-507](../../../src/Paperbunkr.App/Views/DetailTabs.axaml#L353-L507)): Continuities chips, Collections chips, an add-related-series expander, then up to five `PosterRail`s stacked (Related, Same Continuity, Same Collection, Same Event, More Like This).
+
+Checked `PosterRail.axaml` directly - it has **no card/border wrapper today**, just a title line + a horizontally-scrolling row (each item already has its own `railCover` border, [PosterRail.axaml:26-32](../../../src/Paperbunkr.App/Views/PosterRail.axaml#L26-L32)). Concrete split for this pass, applying the "one concern = one card" rule from the Details tab section above without over-applying it:
+
+- **Continuities** and **Collections** — each gets its own bordered card (same treatment as Details tab's cards), since these are editable concerns with their own add/remove interaction, directly analogous to Details tab's Credits/Trackers cards.
+- **The five `PosterRail`s stay as-is structurally** - no individual card wrapper per rail. Five stacked bordered cards of horizontally-scrolling content would be visually heavier than the current "title + row" convention this component already uses consistently elsewhere (e.g. Home screen's own rails), and nothing about the rails themselves was flagged as a problem. Restyle only means: rail title typography and the "+N more"/accent color choices match whatever the Details/Hero work settles on, applied via existing shared styles/tokens - no `PosterRail.axaml` structural edit.
+
+No new sections, no removed content, no changed data flow, no `DetailTabsViewModel` logic changes for this tab.
 
 ## 5. Activity tab — visual restyle only (assumed, confirmed)
 

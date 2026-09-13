@@ -87,9 +87,17 @@ No new sections, no removed content, no changed data flow, no `DetailTabsViewMod
 
 Same treatment as Related — no structural change, no reordering, no new event types beyond what this session's earlier Activity-log-expansion work already added. Purely bringing its existing list rows in line with whatever spacing/color tokens the Details/Related restyle settles on.
 
+## 6. Manga Detail screen — explicitly included
+
+Three of the five areas above already apply to `MangaDetailScreenViewModel` because it shares the exact same components as the Western screen, not by extension - restating explicitly since it was raised as a scope question:
+
+- **Hero band** (§1): `DetailHero.axaml` is the same control; `DetailMetaBadgeGroup` cap applies here automatically (`MangaDetailScreenViewModel` is one of the three real `MetaBadges` overriders confirmed in §1).
+- **Details/Related/Activity tabs** (§3/§4/§5): `MangaDetailScreenViewModel` embeds the same `DetailTabsViewModel`/`DetailTabs.axaml` with `ShowIssuesTab = false, ShowTabStrip = false` ([MangaDetailScreenViewModel.cs:50](../../../src/Paperbunkr.App/ViewModels/MangaDetailScreenViewModel.cs#L50)) - the Info/Linking split and the Related-tab card treatment ship there unchanged, no separate work needed.
+
+**New for this pass** — the Chapters tab (Manga's Issues-tab equivalent, [MangaDetailScreen.axaml:202-241](../../../src/Paperbunkr.App/Views/MangaDetailScreen.axaml#L202-L241)): each `ChapterVolumeGroup` gets the same bordered-card wrapper as the Details/Related sections, for the same visual consistency reason as §4's correction - one card per volume group, containing its `chapterRow` list, instead of a bare `TextBlock` header + unwrapped rows. `ChapterRowSample`'s own row content (number, title, New/read/bookmark/missing icons, scan-group mark, date, progress bar, [ChapterRowSample.cs:12-38](../../../src/Paperbunkr.App/Models/ChapterRowSample.cs#L12-L38)) is unchanged - no Format-badge equivalent here, since manga chapters deliberately carry no variant-cover/format concept by this screen's own original design rationale, and no complaint was raised against the row content itself, only asked to be "involved" in the broader restyle.
+
 ## Explicitly out of scope
 
-- Manga Detail screen's own chapter-list Issues-tab-equivalent (different presentation entirely, no pain point raised).
 - Metadata editors (Issue Properties / Bulk Issue Properties) — separate future spec, per the user's own scope-decomposition choice at the start of this session.
 - Any new Activity event kinds, any new Related-tab content sources, any change to what aggregates into Credits/Additional Details — all "what data shows" questions were settled in the prior spec this session; this one is "how it's laid out."
 

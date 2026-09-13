@@ -488,7 +488,7 @@ public class MangaDetailScreenViewModelTests : IDisposable
         var vm = CreateViewModel();
         vm.LoadSeries(_seriesId);
 
-        var badges = ((IDetailHeaderSource)vm).MetaBadges;
+        var badges = ((IDetailHeaderSource)vm).MetaBadges.All;
         Assert.Contains(badges, b => b.Mark == Paperbunkr.App.Controls.MarkFamily.Publisher && b.MarkValue == "Shueisha");
         Assert.Contains(badges, b => b.Text == "Ongoing");
         // chapter count / unread: a separate plain-text line (Part 4 revision, user direction), not

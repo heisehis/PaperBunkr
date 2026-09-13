@@ -82,7 +82,7 @@
                     <WrapPanel Orientation="Horizontal" Margin="0,5,0,0">
                         <views:ReadingStatusPicker DataContext="{Binding ReadingStatusPicker}" Margin="0,0,8,5" VerticalAlignment="Center"
                                                    IsVisible="{Binding #Hero.((vm:IDetailHeaderSource)DataContext).ReadingStatusPicker, Converter={x:Static conv:ObjectConverters.IsNotNull}}" />
-                        <ItemsControl ItemsSource="{Binding MetaBadges}">
+                        <ItemsControl ItemsSource="{Binding MetaBadges.Visible}">
                             <ItemsControl.ItemsPanel>
                                 <ItemsPanelTemplate><WrapPanel Orientation="Horizontal" /></ItemsPanelTemplate>
                             </ItemsControl.ItemsPanel>
@@ -103,6 +103,14 @@
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>
+                        <!-- Badge overflow toggle (docs/superpowers/specs/2026-09-13-detail-screens-
+                             redesign-design.md §1) - caps the row at 3 visible badges. -->
+                        <Border Classes="heroBadge" IsVisible="{Binding MetaBadges.HasOverflow}">
+                            <Button Command="{Binding MetaBadges.ToggleExpandCommand}" Background="Transparent" BorderThickness="0" Padding="0"
+                                    Cursor="Hand">
+                                <TextBlock Text="{Binding MetaBadges.MoreLabel}" FontSize="12" Foreground="{DynamicResource PbAccentTextBrush}" VerticalAlignment="Center" />
+                            </Button>
+                        </Border>
                         <TextBlock Text="{Binding MetaLine}" FontSize="12" Foreground="{DynamicResource PbAccentTextBrush}"
                                    VerticalAlignment="Center" IsVisible="{Binding !HasMetaBadges}" />
                     </WrapPanel>

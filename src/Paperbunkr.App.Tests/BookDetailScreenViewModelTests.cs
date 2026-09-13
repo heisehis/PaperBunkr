@@ -476,8 +476,8 @@ public class BookDetailScreenViewModelTests : IDisposable
         Assert.Null(hero.ReadingStatusPicker);
 
         // Part 4 - book badge row: format mark + "Finished" chip (this book is finished:true).
-        Assert.Contains(hero.MetaBadges, b => b.Mark == Paperbunkr.App.Controls.MarkFamily.Format);
-        Assert.Contains(hero.MetaBadges, b => b.Text == "Finished");
+        Assert.Contains(hero.MetaBadges.All, b => b.Mark == Paperbunkr.App.Controls.MarkFamily.Format);
+        Assert.Contains(hero.MetaBadges.All, b => b.Text == "Finished");
     }
 
     [Fact]
@@ -494,7 +494,7 @@ public class BookDetailScreenViewModelTests : IDisposable
         var vm = CreateViewModel();
         vm.LoadSeries(seriesId);
 
-        Assert.Empty(((IDetailHeaderSource)vm).MetaBadges);
+        Assert.Empty(((IDetailHeaderSource)vm).MetaBadges.All);
         Assert.False(((IDetailHeaderSource)vm).HasMetaBadges);
     }
 

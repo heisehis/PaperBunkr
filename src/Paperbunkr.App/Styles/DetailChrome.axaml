@@ -91,4 +91,32 @@
     <Style Selector="Button.creditName:pointerover TextBlock">
         <Setter Property="TextDecorations" Value="Underline" />
     </Style>
+
+    <!-- ============ Card wrapper (docs/superpowers/specs/2026-09-13-detail-screens-redesign-
+         design.md §3/§4/§6) - shared by DetailTabs.axaml's Details/Related tabs and
+         MangaDetailScreen.axaml's Chapters-tab volume groups, same "lift shared chrome here"
+         rationale as the tab-strip styles above. ============ -->
+    <Style Selector="Border.card">
+        <Setter Property="Background" Value="{DynamicResource PbSurface1Brush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="{DynamicResource PbRadius}" />
+        <Setter Property="Padding" Value="14" />
+    </Style>
+
+    <!-- ============ Details tab inner sub-tab strip (Info/Linking) ============ -->
+    <Style Selector="Button.detailsSubTab">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0,0,0,2" />
+        <Setter Property="BorderBrush" Value="Transparent" />
+        <Setter Property="CornerRadius" Value="0" />
+        <Setter Property="Padding" Value="0,0,0,7" />
+        <Setter Property="FontSize" Value="12.5" />
+        <Setter Property="Foreground" Value="{DynamicResource PbTextFaintBrush}" />
+        <Setter Property="Cursor" Value="Hand" />
+    </Style>
+    <Style Selector="Button.detailsSubTab.active">
+        <Setter Property="Foreground" Value="{DynamicResource PbTextBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
+    </Style>
 </Styles>

@@ -51,8 +51,8 @@ public class DetailTabsViewModelTests : IDisposable
         }
     }
 
-    private DetailTabsViewModel CreateViewModel(Action<int>? goToProperties = null, Action<IReadOnlyList<int>>? goToBulkProperties = null, Action? onSelectionChanged = null, IMetadataProvider? metadataProvider = null, Action<int>? navigateToCollection = null, Action<int>? openInReader = null) =>
-        new(goToProperties ?? (_ => { }), goToBulkProperties ?? (_ => { }), onSelectionChanged, () => new PaperbunkrDbContext(_dbOptions), metadataProvider, onQuickRate: null, navigateToSeries: null, openInReader: openInReader, navigateToCollection: navigateToCollection);
+    private DetailTabsViewModel CreateViewModel(Action<int>? goToProperties = null, Action<IReadOnlyList<int>>? goToBulkProperties = null, Action? onSelectionChanged = null, IMetadataProvider? metadataProvider = null, Action<int>? navigateToCollection = null, Action<int>? openInReader = null, Action<string>? goLibraryWithSearch = null) =>
+        new(goToProperties ?? (_ => { }), goToBulkProperties ?? (_ => { }), onSelectionChanged, () => new PaperbunkrDbContext(_dbOptions), metadataProvider, onQuickRate: null, navigateToSeries: null, openInReader: openInReader, navigateToCollection: navigateToCollection, goLibraryWithSearch: goLibraryWithSearch);
 
     /// <summary>No-network stand-in for <see cref="AniListMetadataProvider"/> - see docs/superpowers/specs/2026-08-19-metadata-model-anilist-search-and-link-design.md.</summary>
     private sealed class FakeMetadataProvider : IMetadataProvider
@@ -72,6 +72,66 @@ public class DetailTabsViewModelTests : IDisposable
     {
         using var context = new PaperbunkrDbContext(_dbOptions);
         return context.Series.Include(s => s.Issues).First(s => s.Id == _seriesId);
+    }
+
+    [Fact]
+    public void LoadSeries_IssueWithFormat_TileHasFormat()
+    {
+        var vm = CreateViewModel();
+        var series = LoadSeriesEntity();
+        // "Omnibus" is itself a SpecialFormatCatalog value (found running this test - IsSpecial()
+        // routes it into Specials, not Issues), so check both collections rather than assume Issues.
+        series.Issues[0].Format = "Omnibus";
+
+        vm.LoadSeries(series);
+
+        var tile = vm.Issues.Concat(vm.Specials).Single(i => i.Id == series.Issues[0].Id);
+        Assert.True(tile.HasFormat);
+        Assert.Equal("Omnibus", tile.Format);
+    }
+
+    [Fact]
+    public void LoadSeries_IssueWithBlankFormat_TileHasNoFormat()
+    {
+        var vm = CreateViewModel();
+        var series = LoadSeriesEntity();
+
+        vm.LoadSeries(series);
+
+        var tile = vm.Issues.Single(i => i.Id == series.Issues[0].Id);
+        Assert.False(tile.HasFormat);
+    }
+
+    [Fact]
+    public void ActiveDetailsSubTab_DefaultsToInfo_AndGoLinkingFlipsIt()
+    {
+        var vm = CreateViewModel();
+        vm.LoadSeries(LoadSeriesEntity());
+
+        Assert.True(vm.IsInfoSubTab);
+        Assert.False(vm.IsLinkingSubTab);
+
+        vm.GoLinkingSubTabCommand.Execute(null);
+
+        Assert.False(vm.IsInfoSubTab);
+        Assert.True(vm.IsLinkingSubTab);
+
+        vm.GoInfoSubTabCommand.Execute(null);
+
+        Assert.True(vm.IsInfoSubTab);
+    }
+
+    [Fact]
+    public void LoadSeries_ResetsActiveDetailsSubTabToInfo()
+    {
+        var vm = CreateViewModel();
+        vm.LoadSeries(LoadSeriesEntity());
+        vm.GoLinkingSubTabCommand.Execute(null);
+        Assert.True(vm.IsLinkingSubTab);
+
+        vm.LoadSeries(LoadSeriesEntity());
+
+        Assert.True(vm.IsInfoSubTab);
     }
 
     [Fact]
@@ -120,6 +180,65 @@ public class DetailTabsViewModelTests : IDisposable
         Assert.True(vm.HasActivity);
         Assert.Single(vm.Activity);
         Assert.Equal("Finished Issue #2 · 22 pages", vm.Activity[0].Label);
+    }
+
+    [Fact]
+    public void LoadSeries_MergesSeriesActivityEventsWithReadingEvents_InTimeOrder()
+    {
+        // ReadingEvent explicitly backdated 10 minutes; SeriesActivityLog.Record's own
+        // DateTime.UtcNow naturally lands after that with no need to override it.
+        var older = DateTime.UtcNow.AddMinutes(-10);
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            int issueId = context.Issues.First(i => i.SeriesId == _seriesId && i.Number == "1").Id;
+            context.ReadingEvents.Add(new ReadingEvent
+            {
+                ItemType = ReadingItemType.Comic,
+                ItemId = issueId,
+                Kind = ReadingEventKind.Opened,
+                TimestampUtc = older,
+                SeriesId = _seriesId,
+            });
+            SeriesActivityLog.Record(context, _seriesId, SeriesActivityEventKind.TrackerLinked, "AniList");
+            context.SaveChanges();
+        }
+
+        var vm = CreateViewModel();
+        vm.LoadSeries(LoadSeriesEntity());
+
+        Assert.Equal(2, vm.Activity.Count);
+        Assert.Equal("Linked AniList tracker", vm.Activity[0].Label);
+        Assert.Equal("Opened Issue #1", vm.Activity[1].Label);
+    }
+
+    [Fact]
+    public void LoadSeries_ActivityCap_Is20Combined_NotPerSource()
+    {
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            int issueId = context.Issues.First(i => i.SeriesId == _seriesId && i.Number == "1").Id;
+            for (int i = 0; i < 15; i++)
+            {
+                context.ReadingEvents.Add(new ReadingEvent
+                {
+                    ItemType = ReadingItemType.Comic,
+                    ItemId = issueId,
+                    Kind = ReadingEventKind.Opened,
+                    TimestampUtc = DateTime.UtcNow.AddMinutes(-i),
+                    SeriesId = _seriesId,
+                });
+            }
+            for (int i = 0; i < 15; i++)
+            {
+                SeriesActivityLog.Record(context, _seriesId, SeriesActivityEventKind.TrackerSynced, $"Sync {i}");
+            }
+            context.SaveChanges();
+        }
+
+        var vm = CreateViewModel();
+        vm.LoadSeries(LoadSeriesEntity());
+
+        Assert.Equal(20, vm.Activity.Count);
     }
 
     [Fact]
@@ -1162,6 +1281,17 @@ public class DetailTabsViewModelTests : IDisposable
 
         var link = Assert.Single(vm.ExternalLinks);
         Assert.Equal("30013", link.ExternalId);
+
+        // Asserted before IsSearchingMetadata below - that reset is deliberately deferred via
+        // Dispatcher.UIThread.Post (see LinkMetadataAsync's own comment), which a headless test
+        // never pumps, so it's a known pre-existing failure unrelated to this activity-log check.
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            var activity = Assert.Single(context.SeriesActivityEvents);
+            Assert.Equal(SeriesActivityEventKind.MetadataLinked, activity.Kind);
+            Assert.Equal(_seriesId, activity.SeriesId);
+        }
+
         Assert.False(vm.IsSearchingMetadata);
     }
 
@@ -1184,6 +1314,64 @@ public class DetailTabsViewModelTests : IDisposable
         using var verifyContext = new PaperbunkrDbContext(_dbOptions);
         Assert.NotNull(verifyContext.Series.Find(_seriesId));
         Assert.Empty(verifyContext.ExternalMediaIds.Where(e => e.SeriesId == _seriesId));
+
+        var activity = Assert.Single(verifyContext.SeriesActivityEvents);
+        Assert.Equal(SeriesActivityEventKind.MetadataUnlinked, activity.Kind);
+        Assert.Equal("AniList", activity.Detail);
+    }
+
+    [Fact]
+    public void UnlinkMetadata_NothingToRemove_LogsNoActivity()
+    {
+        var vm = CreateViewModel();
+        vm.LoadSeries(LoadSeriesEntity());
+
+        vm.UnlinkMetadataCommand.Execute(new Paperbunkr.App.Models.ExternalLinkSample { ProviderLabel = "AniList", ExternalId = "99999" });
+
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        Assert.Empty(context.SeriesActivityEvents);
+    }
+
+    [Fact]
+    public void UnlinkTracker_RemovesTheLink_LogsActivity()
+    {
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            context.TrackingLinks.Add(new TrackingLink { SeriesId = _seriesId, Service = TrackingService.AniList, ExternalId = "30013" });
+            context.SaveChanges();
+        }
+
+        var vm = CreateViewModel();
+        vm.LoadSeries(LoadSeriesEntity());
+        var link = Assert.Single(vm.TrackerLinks);
+
+        vm.UnlinkTrackerCommand.Execute(link);
+
+        Assert.Empty(vm.TrackerLinks);
+        using var verifyContext = new PaperbunkrDbContext(_dbOptions);
+        var activity = Assert.Single(verifyContext.SeriesActivityEvents);
+        Assert.Equal(SeriesActivityEventKind.TrackerUnlinked, activity.Kind);
+        Assert.Equal("AniList", activity.Detail);
+    }
+
+    [Fact]
+    public async Task SyncToTrackersAsync_NoConnectedTrackers_LogsNoActivity()
+    {
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            // Linked but never authorized (no CredentialStore entry) - SyncToTrackersAsync skips it.
+            context.TrackingLinks.Add(new TrackingLink { SeriesId = _seriesId, Service = TrackingService.AniList, ExternalId = "30013" });
+            context.SaveChanges();
+        }
+
+        var vm = CreateViewModel();
+        vm.LoadSeries(LoadSeriesEntity());
+
+        await vm.SyncToTrackersCommand.ExecuteAsync(null);
+
+        Assert.Equal("No connected trackers linked to this series.", vm.TrackerSyncStatus);
+        using var verifyContext = new PaperbunkrDbContext(_dbOptions);
+        Assert.Empty(verifyContext.SeriesActivityEvents);
     }
 
     // --- SuggestBox string projections (docs/superpowers/specs/2026-09-10-suggestbox-migration-plan.md) ---
@@ -1236,5 +1424,158 @@ public class DetailTabsViewModelTests : IDisposable
         vm.SelectedMetadataProviderText = target.Label;
 
         Assert.Equal(target.Label, vm.SelectedMetadataProvider.Label);
+    }
+
+    // --- Details tab: Publisher fallback + full credits + additional fields
+    // (docs/superpowers/specs/2026-09-13-details-tab-credits-and-fields-design.md) ---
+
+    [Fact]
+    public void LoadSeries_PublisherBlankOnSeries_FallsBackToIssuePublisher()
+    {
+        var vm = CreateViewModel();
+        var series = LoadSeriesEntity();
+        series.Publisher = null;
+        series.Issues[0].Publisher = "DC Comics";
+
+        vm.LoadSeries(series);
+
+        Assert.Equal("DC Comics", vm.Publisher);
+    }
+
+    [Fact]
+    public void LoadSeries_PublisherSetOnSeries_PreferredOverIssuePublisher()
+    {
+        var vm = CreateViewModel();
+        var series = LoadSeriesEntity();
+        series.Publisher = "Marvel";
+        series.Issues[0].Publisher = "DC Comics";
+
+        vm.LoadSeries(series);
+
+        Assert.Equal("Marvel", vm.Publisher);
+    }
+
+    [Fact]
+    public void LoadSeries_CreditRoles_AggregatesDistinctValuesAcrossIssues()
+    {
+        var vm = CreateViewModel();
+        var series = LoadSeriesEntity();
+        series.Issues[0].Writer = "Alice";
+        series.Issues[1].Writer = "Bob";
+        series.Issues[2].Writer = "alice"; // dupe, different case
+
+        vm.LoadSeries(series);
+
+        var writerGroup = Assert.Single(vm.CreditRoles, g => g.Label == "Writer");
+        Assert.Equal(new[] { "Alice", "Bob" }, writerGroup.Chips.Select(c => c.Value));
+    }
+
+    [Fact]
+    public void LoadSeries_CreditRoles_RoleWithNoValues_NotAdded()
+    {
+        var vm = CreateViewModel();
+        var series = LoadSeriesEntity();
+        // No issue has any credit fields set.
+
+        vm.LoadSeries(series);
+
+        Assert.False(vm.HasCreditRoles);
+        Assert.Empty(vm.CreditRoles);
+    }
+
+    [Fact]
+    public void LoadSeries_CreditRoles_OnlyPopulatedRolesAdded()
+    {
+        var vm = CreateViewModel();
+        var series = LoadSeriesEntity();
+        series.Issues[0].Inker = "Carl";
+
+        vm.LoadSeries(series);
+
+        Assert.Single(vm.CreditRoles);
+        Assert.Equal("Inker", vm.CreditRoles[0].Label);
+    }
+
+    [Fact]
+    public void LoadSeries_CreditChip_ClickInvokesGoLibraryWithSearch()
+    {
+        string? searched = null;
+        var vm = CreateViewModel(goLibraryWithSearch: v => searched = v);
+        var series = LoadSeriesEntity();
+        series.Issues[0].Writer = "Alice";
+
+        vm.LoadSeries(series);
+        var chip = vm.CreditRoles.Single(g => g.Label == "Writer").Chips.Single();
+        chip.SearchCommand.Execute(null);
+
+        Assert.Equal("Alice", searched);
+    }
+
+    [Fact]
+    public void LoadSeries_AdditionalDetails_FieldBlankEverywhere_NotAdded()
+    {
+        var vm = CreateViewModel();
+        var series = LoadSeriesEntity();
+
+        vm.LoadSeries(series);
+
+        Assert.False(vm.HasAdditionalDetails);
+        Assert.Empty(vm.AdditionalDetails);
+    }
+
+    [Fact]
+    public void LoadSeries_AdditionalDetails_SingleValue_ShownAsIs()
+    {
+        var vm = CreateViewModel();
+        var series = LoadSeriesEntity();
+        series.Issues[0].Imprint = "Vertigo";
+
+        vm.LoadSeries(series);
+
+        var row = Assert.Single(vm.AdditionalDetails, r => r.Label == "Imprint");
+        Assert.Equal("Vertigo", row.Value);
+    }
+
+    [Fact]
+    public void LoadSeries_AdditionalDetails_StoryArcNumber_ReadDirectlyFromIssue()
+    {
+        var vm = CreateViewModel();
+        var series = LoadSeriesEntity();
+        series.Issues[0].StoryArcNumber = "3";
+
+        vm.LoadSeries(series);
+
+        var row = Assert.Single(vm.AdditionalDetails, r => r.Label == "Story Arc Number");
+        Assert.Equal("3", row.Value);
+    }
+
+    [Fact]
+    public void LoadSeries_WebField_SingleDistinctValue_IsLinkTrue()
+    {
+        var vm = CreateViewModel();
+        var series = LoadSeriesEntity();
+        series.Issues[0].Web = "https://example.com/issue1";
+        series.Issues[1].Web = "https://example.com/issue1";
+
+        vm.LoadSeries(series);
+
+        var row = Assert.Single(vm.AdditionalDetails, r => r.Label == "Web");
+        Assert.True(row.IsLink);
+        Assert.Equal("https://example.com/issue1", row.Value);
+    }
+
+    [Fact]
+    public void LoadSeries_WebField_MultipleDistinctValues_IsLinkFalse_ValueJoined()
+    {
+        var vm = CreateViewModel();
+        var series = LoadSeriesEntity();
+        series.Issues[0].Web = "https://example.com/a";
+        series.Issues[1].Web = "https://example.com/b";
+
+        vm.LoadSeries(series);
+
+        var row = Assert.Single(vm.AdditionalDetails, r => r.Label == "Web");
+        Assert.False(row.IsLink);
+        Assert.Equal("https://example.com/a, https://example.com/b", row.Value);
     }
 }

@@ -39,7 +39,7 @@ public partial class DetailScreenViewModel : ViewModelBase, IDetailHeaderSource
         _goDetailForSeries = goDetailForSeries ?? (_ => { });
         _enqueueMetadataWriteBack = enqueueMetadataWriteBack;
         CoverBrush = SeriesCardSample.Gradient("#442a1c", "#c9803f");
-        Tabs = new DetailTabsViewModel(goToProperties, goToBulkProperties, RefreshForSelection, onQuickRate, _goDetailForSeries, goToReader, goLibraryWithCollection);
+        Tabs = new DetailTabsViewModel(goToProperties, goToBulkProperties, RefreshForSelection, onQuickRate, _goDetailForSeries, goToReader, goLibraryWithCollection, goLibraryWithSearch);
         Band = new DetailBandViewModel(goLibraryWithSearch, () => Tabs.GoDetailsCommand.Execute(null), ReweightTag);
     }
 
@@ -84,13 +84,13 @@ public partial class DetailScreenViewModel : ViewModelBase, IDetailHeaderSource
     private string _issueCountBadge = string.Empty;
     private string? _unreadBadge;
     private string? _issueSummaryLine;
-    private IReadOnlyList<DetailMetaBadge> _metaBadges = System.Array.Empty<DetailMetaBadge>();
+    private DetailMetaBadgeGroup _metaBadges = new(System.Array.Empty<DetailMetaBadge>());
 
     /// <summary>Explicit impl (not a public member) so the name doesn't clash with the
     /// <see cref="Data.Entities.ReadingStatus"/> enum type in this file's scope.</summary>
     string? IDetailHeaderSource.ReadingStatus => _readingStatus;
     ReadingStatusPickerViewModel? IDetailHeaderSource.ReadingStatusPicker => _readingStatusPicker;
-    IReadOnlyList<DetailMetaBadge> IDetailHeaderSource.MetaBadges => _metaBadges;
+    DetailMetaBadgeGroup IDetailHeaderSource.MetaBadges => _metaBadges;
     string? IDetailHeaderSource.IssueSummaryLine => _issueSummaryLine;
 
     /// <summary>
@@ -122,11 +122,11 @@ public partial class DetailScreenViewModel : ViewModelBase, IDetailHeaderSource
     private void RebuildMetaBadges(Issue? issue, bool issueFocused)
     {
         var f = _seriesFields;
-        _metaBadges = DetailMetaBadge.Build(
+        _metaBadges = new DetailMetaBadgeGroup(DetailMetaBadge.Build(
             f.Publisher, StatusLabel, _seriesComplete, f.Year,
             format:    issueFocused ? issue?.Format      : f.Format,
             ageRating: issueFocused ? issue?.AgeRating   : f.AgeRating,
-            languageIso: issueFocused ? issue?.LanguageISO : f.LanguageIso);
+            languageIso: issueFocused ? issue?.LanguageISO : f.LanguageIso));
             // issueCountLabel/unreadLabel deliberately not passed - Part 4 revision moved them to
             // IssueSummaryLine, a plain-text line rendered separately (see DetailHero.axaml).
         OnPropertyChanged(nameof(IDetailHeaderSource.MetaBadges));

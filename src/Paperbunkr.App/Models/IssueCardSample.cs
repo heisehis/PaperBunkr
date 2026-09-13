@@ -53,6 +53,13 @@ public sealed partial class IssueCardSample : ObservableObject, ISelectableCard
     /// <summary>Drives "Show in Explorer"'s IsEnabled without a converter - see FilePath's own doc comment.</summary>
     public bool HasFile => !string.IsNullOrEmpty(FilePath);
 
+    /// <summary>Issue.Format (e.g. "Omnibus", "One Shot", "TPB") - drives the Poster-view tile's
+    /// Format badge (docs/superpowers/specs/2026-09-13-detail-screens-redesign-design.md §2). Blank
+    /// for the overwhelming majority of tiles (a plain numbered issue), so normal runs stay quiet.</summary>
+    public string? Format { get; init; }
+
+    public bool HasFormat => !string.IsNullOrWhiteSpace(Format);
+
     // --- Detail-screen Issues-tab List / Card view-mode columns (docs/superpowers/specs/
     //     2026-08-28-detail-screens-streaming-redesign-design.md). Unused by the Smart Lists grid. ---
 

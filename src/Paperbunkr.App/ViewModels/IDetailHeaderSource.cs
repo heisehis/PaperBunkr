@@ -42,10 +42,11 @@ public interface IDetailHeaderSource : INotifyPropertyChanged
     /// age-rating / language (docs/superpowers/specs/2026-09-04-detail-screen-icons-and-glyphs-
     /// design.md Part 4). Empty by default so the Home spotlight keeps its plain
     /// <see cref="MetaLine"/>; the three detail screens override it.</summary>
-    IReadOnlyList<DetailMetaBadge> MetaBadges => System.Array.Empty<DetailMetaBadge>();
+    DetailMetaBadgeGroup MetaBadges => new(System.Array.Empty<DetailMetaBadge>());
 
-    /// <summary>Whether <see cref="MetaBadges"/> has anything - drives the hero's badges-vs-<see cref="MetaLine"/> switch.</summary>
-    bool HasMetaBadges => MetaBadges.Count > 0;
+    /// <summary>Whether <see cref="MetaBadges"/> has anything at all - independent of the cap, so this
+    /// stays "any badge exists" rather than "any badge is currently visible" once capping applies.</summary>
+    bool HasMetaBadges => MetaBadges.TotalCount > 0;
 
     /// <summary>Plain dot-separated "N issues · M unread" (or "N chapters · M unread" for manga) -
     /// kept as its own text line rather than a badge (user direction 2026-09-04: wanted the original

@@ -86,8 +86,8 @@ public partial class BookDetailScreenViewModel : ViewModelBase, IDetailHeaderSou
     string? IDetailHeaderSource.SecondaryTitle => null;
     DetailHeroProgress? IDetailHeaderSource.TrackerProgress => null;
 
-    private IReadOnlyList<DetailMetaBadge> _metaBadges = System.Array.Empty<DetailMetaBadge>();
-    IReadOnlyList<DetailMetaBadge> IDetailHeaderSource.MetaBadges => _metaBadges;
+    private DetailMetaBadgeGroup _metaBadges = new(System.Array.Empty<DetailMetaBadge>());
+    DetailMetaBadgeGroup IDetailHeaderSource.MetaBadges => _metaBadges;
 
     partial void OnTitleChanged(string value) => OnPropertyChanged(nameof(HeaderTitle));
     partial void OnSeriesNameChanged(string value) => OnPropertyChanged(nameof(HeaderTitle));
@@ -330,9 +330,9 @@ public partial class BookDetailScreenViewModel : ViewModelBase, IDetailHeaderSou
 
         // Hero badge row (Part 4) - books get the format mark + year + a "Finished" chip; author
         // stays in MetaLine (a person name isn't a publisher logo).
-        _metaBadges = DetailMetaBadge.Build(publisher: null,
+        _metaBadges = new DetailMetaBadgeGroup(DetailMetaBadge.Build(publisher: null,
             statusLabel: book.Finished ? "Finished" : null, isComplete: book.Finished,
-            year: Band.YearText, format: FormatBadge, ageRating: null, languageIso: null);
+            year: Band.YearText, format: FormatBadge, ageRating: null, languageIso: null));
         OnPropertyChanged(nameof(IDetailHeaderSource.MetaBadges));
         OnPropertyChanged(nameof(IDetailHeaderSource.HasMetaBadges));
 
@@ -421,7 +421,7 @@ public partial class BookDetailScreenViewModel : ViewModelBase, IDetailHeaderSou
         }
 
         _bookSeriesId = bookSeriesId;
-        _metaBadges = System.Array.Empty<DetailMetaBadge>();   // series mode: no badge row
+        _metaBadges = new DetailMetaBadgeGroup(System.Array.Empty<DetailMetaBadge>());   // series mode: no badge row
         OnPropertyChanged(nameof(IDetailHeaderSource.MetaBadges));
         OnPropertyChanged(nameof(IDetailHeaderSource.HasMetaBadges));
 

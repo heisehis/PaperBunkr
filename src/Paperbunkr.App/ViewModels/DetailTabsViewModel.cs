@@ -47,18 +47,19 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
     private readonly Action<int> _navigateToSeries;
     private readonly Action<int> _navigateToCollection;
     private readonly Action<int> _openInReader;
+    private readonly Action<string> _goLibraryWithSearch;
     private readonly Func<PaperbunkrDbContext> _contextFactory;
     private readonly IMetadataProvider _metadataProvider;
     private int? _seriesId;
     private readonly TileSelectionController<IssueCardSample> _selection = new();
 
-    public DetailTabsViewModel(Action<int> goToProperties, Action<IReadOnlyList<int>> goToBulkProperties, Action? onSelectionChanged = null, Action<int>? onQuickRate = null, Action<int>? navigateToSeries = null, Action<int>? openInReader = null, Action<int>? navigateToCollection = null)
-        : this(goToProperties, goToBulkProperties, onSelectionChanged, PaperbunkrDb.CreateContext, new AniListMetadataProvider(AniListHttpClient.Shared), onQuickRate, navigateToSeries, openInReader, navigateToCollection)
+    public DetailTabsViewModel(Action<int> goToProperties, Action<IReadOnlyList<int>> goToBulkProperties, Action? onSelectionChanged = null, Action<int>? onQuickRate = null, Action<int>? navigateToSeries = null, Action<int>? openInReader = null, Action<int>? navigateToCollection = null, Action<string>? goLibraryWithSearch = null)
+        : this(goToProperties, goToBulkProperties, onSelectionChanged, PaperbunkrDb.CreateContext, new AniListMetadataProvider(AniListHttpClient.Shared), onQuickRate, navigateToSeries, openInReader, navigateToCollection, goLibraryWithSearch)
     {
     }
 
     /// <summary>Test-only seam - production always uses the default ctor (the real per-user database and a real <see cref="AniListMetadataProvider"/>).</summary>
-    internal DetailTabsViewModel(Action<int> goToProperties, Action<IReadOnlyList<int>> goToBulkProperties, Action? onSelectionChanged, Func<PaperbunkrDbContext> contextFactory, IMetadataProvider? metadataProvider = null, Action<int>? onQuickRate = null, Action<int>? navigateToSeries = null, Action<int>? openInReader = null, Action<int>? navigateToCollection = null)
+    internal DetailTabsViewModel(Action<int> goToProperties, Action<IReadOnlyList<int>> goToBulkProperties, Action? onSelectionChanged, Func<PaperbunkrDbContext> contextFactory, IMetadataProvider? metadataProvider = null, Action<int>? onQuickRate = null, Action<int>? navigateToSeries = null, Action<int>? openInReader = null, Action<int>? navigateToCollection = null, Action<string>? goLibraryWithSearch = null)
     {
         _goToProperties = goToProperties;
         _goToBulkProperties = goToBulkProperties;
@@ -67,8 +68,11 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
         _navigateToSeries = navigateToSeries ?? (_ => { });
         _navigateToCollection = navigateToCollection ?? (_ => { });
         _openInReader = openInReader ?? (_ => { });
+        _goLibraryWithSearch = goLibraryWithSearch ?? (_ => { });
         _contextFactory = contextFactory;
         _metadataProvider = metadataProvider ?? new AniListMetadataProvider(AniListHttpClient.Shared);
+        CreditRoles = new ObservableCollection<CreditRoleGroup>();
+        AdditionalDetails = new ObservableCollection<DetailFieldRow>();
         Issues = new ObservableCollection<IssueCardSample>();
         IssueGroups = new ObservableCollection<IssueRunGroup>();
         Specials = new ObservableCollection<IssueCardSample>();
@@ -190,6 +194,51 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
     public string Publisher { get; private set; } = "Unknown";
     public string ReadingModeLabel { get; private set; } = "Left to Right";
 
+    // --- Details tab: full credits + additional metadata fields (docs/superpowers/specs/2026-09-
+    // 13-details-tab-credits-and-fields-design.md) ---
+
+    private static readonly BulkFieldDescriptor WriterField = BulkFieldRegistry.Find("Writer");
+    private static readonly BulkFieldDescriptor PencillerField = BulkFieldRegistry.Find("Penciller");
+    private static readonly BulkFieldDescriptor InkerField = BulkFieldRegistry.Find("Inker");
+    private static readonly BulkFieldDescriptor ColoristField = BulkFieldRegistry.Find("Colorist");
+    private static readonly BulkFieldDescriptor LettererField = BulkFieldRegistry.Find("Letterer");
+    private static readonly BulkFieldDescriptor CoverArtistField = BulkFieldRegistry.Find("Cover Artist");
+    private static readonly BulkFieldDescriptor EditorField = BulkFieldRegistry.Find("Editor");
+    private static readonly BulkFieldDescriptor TranslatorField = BulkFieldRegistry.Find("Translator");
+
+    private static readonly BulkFieldDescriptor ImprintField = BulkFieldRegistry.Find("Imprint");
+    private static readonly BulkFieldDescriptor WebField = BulkFieldRegistry.Find("Web");
+    private static readonly BulkFieldDescriptor NotesField = BulkFieldRegistry.Find("Notes");
+    private static readonly BulkFieldDescriptor ScanInformationField = BulkFieldRegistry.Find("Scan Information");
+    private static readonly BulkFieldDescriptor AlternateSeriesField = BulkFieldRegistry.Find("Alternate Series");
+    private static readonly BulkFieldDescriptor SeriesGroupField = BulkFieldRegistry.Find("Series Group");
+
+    /// <summary>Full credit-role breakdown - fixes the hero band's "full credits ›" link
+    /// ([DetailBand.axaml] Credits group), which previously navigated here to nothing. A role is
+    /// only added when at least one issue in the series has a non-blank value for it.</summary>
+    public ObservableCollection<CreditRoleGroup> CreditRoles { get; }
+
+    public bool HasCreditRoles => CreditRoles.Count > 0;
+
+    /// <summary>Imprint/Web/Notes/Scan Information/Alternate Series/Series Group/Story Arc Number -
+    /// ComicInfo.xml data that was previously writable (bulk/single-issue editors) but had no read
+    /// surface anywhere in the Detail screen. A row is only added when at least one issue has a
+    /// non-blank value.</summary>
+    public ObservableCollection<DetailFieldRow> AdditionalDetails { get; }
+
+    public bool HasAdditionalDetails => AdditionalDetails.Count > 0;
+
+    /// <summary>
+    /// A native plugin's own view standing in for this tab's default External Metadata/Trackers
+    /// block, if one's installed and wants this series (<see cref="PluginHostService.GetSeriesDetailExtension"/>
+    /// - in practice this means Cluster Library Manager for a Comic-typed series). Null (falls back
+    /// to the default UI) whenever no such plugin is installed, or the loaded series isn't one it
+    /// wants - both cases collapse to the same "no extension" state, no separate check needed here.
+    /// </summary>
+    public object? ComicScraperDetailView { get; private set; }
+
+    public bool HasComicScraperDetailView => ComicScraperDetailView is not null;
+
     public void LoadSeries(Series series)
     {
         var coverBrush = SeriesCardSample.CoverBrushFor(series.Name);
@@ -225,9 +274,18 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
         }
 
         _seriesId = series.Id;
-        Publisher = string.IsNullOrWhiteSpace(series.Publisher) ? "Unknown" : series.Publisher;
+        Publisher = SeriesMetaFields.FromSeries(series).Publisher ?? "Unknown";
         SetReadingModeLabel(series.ReadingMode);
         OnPropertyChanged(nameof(Publisher));
+
+        RefreshCreditRoles(series.Issues);
+        RefreshAdditionalDetails(series.Issues);
+
+        ComicScraperDetailView = _pluginHost?.GetSeriesDetailExtension(series);
+        OnPropertyChanged(nameof(ComicScraperDetailView));
+        OnPropertyChanged(nameof(HasComicScraperDetailView));
+        OnPropertyChanged(nameof(ShowDefaultSeriesDetailUi));
+        OnPropertyChanged(nameof(ShowComicScraperDetailUi));
 
         using (var context = _contextFactory())
         {
@@ -251,7 +309,69 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
         TrackerSyncStatus = null;
 
         ActiveTab = ShowIssuesTab ? "issues" : "related";
+        ActiveDetailsSubTab = "info";
         _onSelectionChanged?.Invoke();
+    }
+
+    /// <summary>Series-wide, not focused-issue-aware - deliberately simpler than <c>DetailBandViewModel</c>'s
+    /// LoadSeries/LoadIssue split (docs/superpowers/specs/2026-09-13-details-tab-credits-and-fields-
+    /// design.md, "Explicitly not doing"). Always shows the aggregate across every issue in the
+    /// series regardless of which issue (if any) is focused in the Issues tab.</summary>
+    private void RefreshCreditRoles(IReadOnlyList<Issue> issues)
+    {
+        CreditRoles.Clear();
+        AddCreditRole("Writer", WriterField, issues);
+        AddCreditRole("Penciller", PencillerField, issues);
+        AddCreditRole("Inker", InkerField, issues);
+        AddCreditRole("Colorist", ColoristField, issues);
+        AddCreditRole("Letterer", LettererField, issues);
+        AddCreditRole("Cover Artist", CoverArtistField, issues);
+        AddCreditRole("Editor", EditorField, issues);
+        AddCreditRole("Translator", TranslatorField, issues);
+        OnPropertyChanged(nameof(HasCreditRoles));
+        OnPropertyChanged(nameof(ShowCreditRoles));
+    }
+
+    private void AddCreditRole(string label, BulkFieldDescriptor field, IReadOnlyList<Issue> issues)
+    {
+        var values = CsvFieldAggregator.Distinct(issues.Select(field.Get));
+        if (values.Count == 0)
+        {
+            return;
+        }
+
+        var chips = new ObservableCollection<TagPillViewModel>(
+            values.Select(v => new TagPillViewModel(v, category: null, IssueTagWeight.Unset, _goLibraryWithSearch, reweight: null)));
+        CreditRoles.Add(new CreditRoleGroup(label, chips));
+    }
+
+    private void RefreshAdditionalDetails(IReadOnlyList<Issue> issues)
+    {
+        AdditionalDetails.Clear();
+        AddDetailField("Imprint", ImprintField.Get, issues);
+        AddDetailField("Web", WebField.Get, issues, isLinkCandidate: true);
+        AddDetailField("Notes", NotesField.Get, issues);
+        AddDetailField("Scan Information", ScanInformationField.Get, issues);
+        AddDetailField("Alternate Series", AlternateSeriesField.Get, issues);
+        AddDetailField("Series Group", SeriesGroupField.Get, issues);
+        // Not in BulkFieldRegistry - CE deliberately excludes StoryArcNumber from the bulk editor
+        // (see BulkFieldDescriptor.cs), so this is a direct property read rather than Find(...).Get.
+        AddDetailField("Story Arc Number", i => i.StoryArcNumber, issues);
+        OnPropertyChanged(nameof(HasAdditionalDetails));
+        OnPropertyChanged(nameof(ShowAdditionalDetails));
+    }
+
+    private void AddDetailField(string label, Func<Issue, string?> get, IReadOnlyList<Issue> issues, bool isLinkCandidate = false)
+    {
+        var values = CsvFieldAggregator.Distinct(issues.Select(get));
+        if (values.Count == 0)
+        {
+            return;
+        }
+
+        string joined = string.Join(", ", values);
+        bool isLink = isLinkCandidate && values.Count == 1;
+        AdditionalDetails.Add(new DetailFieldRow(label, joined, isLink));
     }
 
     private static IssueCardSample BuildIssueCard(Issue issue, int seriesId, IBrush coverBrush)
@@ -274,6 +394,7 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
             Rating = issue.Rating,
             IsRead = issue.HasBeenRead(),
             ReadFraction = readFraction,
+            Format = issue.Format,
         };
     }
 
@@ -823,31 +944,69 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
         Activity.Clear();
         var issueTitles = Issues.ToDictionary(i => i.Id, i => i.Title);
 
-        var events = context.ReadingEvents
+        // Each source capped at 20 independently, then merged and capped again - the true
+        // combined top-20-by-timestamp can never need more than 20 rows from either single
+        // source, so this two-step cap is exact, not an approximation. Deliberately not one
+        // LINQ query projecting both entity types into a shared anonymous type before
+        // materializing - that shape needs a typed null literal for whichever entity type isn't
+        // present in a given row, which most EF Core providers refuse to translate to SQL.
+        var readingEvents = context.ReadingEvents
+            .Where(e => e.SeriesId == seriesId)
+            .OrderByDescending(e => e.TimestampUtc)
+            .Take(20)
+            .ToList();
+        var activityEvents = context.SeriesActivityEvents
             .Where(e => e.SeriesId == seriesId)
             .OrderByDescending(e => e.TimestampUtc)
             .Take(20)
             .ToList();
 
-        foreach (var e in events)
-        {
-            string issueLabel = issueTitles.TryGetValue(e.ItemId, out var title) ? title : "#?";
-            string label = e.Kind switch
-            {
-                ReadingEventKind.Finished when e.PagesRead is int pages and > 0 => $"Finished Issue {issueLabel} · {pages} pages",
-                ReadingEventKind.Finished => $"Finished Issue {issueLabel}",
-                _ => $"Opened Issue {issueLabel}",
-            };
+        var merged = readingEvents.Select(e => (e.TimestampUtc, Sample: BuildFromReadingEvent(e, issueTitles)))
+            .Concat(activityEvents.Select(e => (e.TimestampUtc, Sample: BuildFromActivityEvent(e, issueTitles))))
+            .OrderByDescending(x => x.TimestampUtc)
+            .Take(20);
 
-            Activity.Add(new ActivitySample
-            {
-                Label = label,
-                TimestampUtc = e.TimestampUtc,
-                Icon = e.Kind == ReadingEventKind.Finished ? FluentIcons.Common.Symbol.CheckmarkCircle : FluentIcons.Common.Symbol.Play,
-            });
+        foreach (var (_, sample) in merged)
+        {
+            Activity.Add(sample);
         }
 
         OnPropertyChanged(nameof(HasActivity));
+    }
+
+    private static ActivitySample BuildFromReadingEvent(ReadingEvent e, IReadOnlyDictionary<int, string> issueTitles)
+    {
+        string issueLabel = issueTitles.TryGetValue(e.ItemId, out var title) ? title : "#?";
+        string label = e.Kind switch
+        {
+            ReadingEventKind.Finished when e.PagesRead is int pages and > 0 => $"Finished Issue {issueLabel} · {pages} pages",
+            ReadingEventKind.Finished => $"Finished Issue {issueLabel}",
+            _ => $"Opened Issue {issueLabel}",
+        };
+
+        return new ActivitySample
+        {
+            Label = label,
+            TimestampUtc = e.TimestampUtc,
+            Icon = e.Kind == ReadingEventKind.Finished ? FluentIcons.Common.Symbol.CheckmarkCircle : FluentIcons.Common.Symbol.Play,
+        };
+    }
+
+    private static ActivitySample BuildFromActivityEvent(SeriesActivityEvent e, IReadOnlyDictionary<int, string> issueTitles)
+    {
+        string issueLabel = e.IssueId is int id && issueTitles.TryGetValue(id, out var title) ? $" (Issue {title})" : string.Empty;
+        (string label, FluentIcons.Common.Symbol icon) = e.Kind switch
+        {
+            SeriesActivityEventKind.MetadataLinked => ($"Linked {e.Detail} metadata", FluentIcons.Common.Symbol.Link),
+            SeriesActivityEventKind.MetadataUnlinked => ($"Unlinked {e.Detail} metadata", FluentIcons.Common.Symbol.Link),
+            SeriesActivityEventKind.TrackerLinked => ($"Linked {e.Detail} tracker", FluentIcons.Common.Symbol.CloudSync),
+            SeriesActivityEventKind.TrackerUnlinked => ($"Unlinked {e.Detail} tracker", FluentIcons.Common.Symbol.CloudSync),
+            SeriesActivityEventKind.TrackerSynced => (e.Detail, FluentIcons.Common.Symbol.CloudSync),
+            SeriesActivityEventKind.RatingChanged => ($"{e.Detail}{issueLabel}", FluentIcons.Common.Symbol.Star),
+            _ => (e.Detail, FluentIcons.Common.Symbol.Info),
+        };
+
+        return new ActivitySample { Label = label, TimestampUtc = e.TimestampUtc, Icon = icon };
     }
 
     // --- Plugin API v2 NetSearch hook (docs/superpowers/specs/2026-09-05-plugin-api-v2-remaining-hooks-plan.md §8) ---
@@ -1086,6 +1245,8 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
         }
 
         RefreshExternalLinks(context, currentSeriesId);
+        SeriesActivityLog.Record(context, currentSeriesId, SeriesActivityEventKind.MetadataLinked, SelectedMetadataProvider.Label);
+        context.SaveChanges();
 
         // Deferred: this command is bound to the row's own "Link" Button, which lives inside
         // MetadataSearchResults - clearing that collection removes the very row still routing this
@@ -1117,6 +1278,7 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
         if (existing is not null)
         {
             context.ExternalMediaIds.Remove(existing);
+            SeriesActivityLog.Record(context, currentSeriesId, SeriesActivityEventKind.MetadataUnlinked, link.ProviderLabel);
             context.SaveChanges();
         }
 
@@ -1311,6 +1473,8 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
 
         using var context = _contextFactory();
         TrackerLinkResolver.Link(context, currentSeriesId, SelectedTrackerService, externalId);
+        SeriesActivityLog.Record(context, currentSeriesId, SeriesActivityEventKind.TrackerLinked, SelectedTrackerService.ToString());
+        context.SaveChanges();
 
         RefreshTrackerLinks(context, currentSeriesId);
 
@@ -1339,6 +1503,8 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
 
         using var context = _contextFactory();
         TrackerLinkResolver.Unlink(context, currentSeriesId, link.Service);
+        SeriesActivityLog.Record(context, currentSeriesId, SeriesActivityEventKind.TrackerUnlinked, link.Service.ToString());
+        context.SaveChanges();
         RefreshTrackerLinks(context, currentSeriesId);
     }
 
@@ -1428,6 +1594,13 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
             string pushedSummary = pushed.Count > 0 ? $"Synced to {string.Join(", ", pushed)}." : string.Empty;
             string failureSummary = failed.Count > 0 ? $" {string.Join(", ", failed)} sync failed, try again later." : string.Empty;
             TrackerSyncStatus = (pulledSummary + pushedSummary + failureSummary).Trim();
+
+            // A failed-only sync changed nothing about the series worth recording in its history.
+            if (pulled.Count > 0 || pushed.Count > 0)
+            {
+                SeriesActivityLog.Record(context, currentSeriesId, SeriesActivityEventKind.TrackerSynced, (pulledSummary + pushedSummary).Trim());
+                context.SaveChanges();
+            }
         }
     }
 
@@ -1484,6 +1657,50 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
     public bool IsActivityTab => ActiveTab == "activity";
     public bool IsPluginsTab => ActiveTab == "plugins";
 
+    /// <summary>Gates the Details tab's default External Metadata/Trackers blocks - hidden in favor
+    /// of <see cref="ComicScraperDetailView"/> when one's showing (see that property's own doc
+    /// comment). Combines two independently-changing sources (tab switch, series load), so both
+    /// <see cref="OnActiveTabChanged"/> and <see cref="LoadSeries"/> raise this one too rather than
+    /// relying on either alone.</summary>
+    public bool ShowDefaultSeriesDetailUi => IsDetailsTab && !HasComicScraperDetailView;
+
+    /// <summary>Gates <see cref="ComicScraperDetailView"/> itself the same two ways in reverse - a
+    /// plugin view is series-level state, not tab-level, so it must not show while some other tab
+    /// (Issues, Related, ...) is active.</summary>
+    public bool ShowComicScraperDetailUi => IsDetailsTab && HasComicScraperDetailView;
+
+    /// <summary>Gates the Credits section the same "tab switch or series load" two-source way as
+    /// <see cref="ShowDefaultSeriesDetailUi"/> - <see cref="HasCreditRoles"/> alone is just "does
+    /// this series have any credit data", not "is the Details tab even showing right now" (bug
+    /// found on-screen: without this, Credits/Additional Details rendered under every tab, not
+    /// just Details, since <see cref="DetailTabs.axaml"/> binds `IsVisible` directly to the Has*
+    /// properties with no tab check).</summary>
+    public bool ShowCreditRoles => IsDetailsTab && HasCreditRoles;
+
+    public bool ShowAdditionalDetails => IsDetailsTab && HasAdditionalDetails;
+
+    // --- Details tab: Info/Linking inner sub-tabs (docs/superpowers/specs/2026-09-13-detail-
+    // screens-redesign-design.md §3) - splits the flat Publisher/Credits/Additional Details/
+    // External Metadata/Trackers stack into two groups, each rendered as bordered cards. ---
+
+    [ObservableProperty]
+    private string _activeDetailsSubTab = "info";
+
+    public bool IsInfoSubTab => ActiveDetailsSubTab == "info";
+    public bool IsLinkingSubTab => ActiveDetailsSubTab == "linking";
+
+    [RelayCommand]
+    private void GoInfoSubTab() => ActiveDetailsSubTab = "info";
+
+    [RelayCommand]
+    private void GoLinkingSubTab() => ActiveDetailsSubTab = "linking";
+
+    partial void OnActiveDetailsSubTabChanged(string value)
+    {
+        OnPropertyChanged(nameof(IsInfoSubTab));
+        OnPropertyChanged(nameof(IsLinkingSubTab));
+    }
+
     partial void OnActiveTabChanged(string value)
     {
         OnPropertyChanged(nameof(IsIssuesTab));
@@ -1492,6 +1709,10 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
         OnPropertyChanged(nameof(IsDetailsTab));
         OnPropertyChanged(nameof(IsActivityTab));
         OnPropertyChanged(nameof(IsPluginsTab));
+        OnPropertyChanged(nameof(ShowDefaultSeriesDetailUi));
+        OnPropertyChanged(nameof(ShowComicScraperDetailUi));
+        OnPropertyChanged(nameof(ShowCreditRoles));
+        OnPropertyChanged(nameof(ShowAdditionalDetails));
 
         if (value == "plugins")
         {
@@ -1532,6 +1753,13 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
     public int? FocusedIssueId => SelectedIssueIds.Count == 1 ? SelectedIssueIds.Single() : null;
 
     public bool HasComicInfoPluginCommands => _pluginHost?.GetComicInfoCommands().Any() == true;
+
+    /// <summary>Library-hook commands (docs/superpowers/specs/2026-08-24-plugin-api-v2-design.md §5)
+    /// for the issue-tile "Plugins ▸" context-menu submenu - same shape/source as
+    /// <c>LibraryScreenViewModel.LibraryPluginCommands</c>, since both screens share this hook.</summary>
+    public IReadOnlyList<Command> LibraryPluginCommands => _pluginHost?.GetLibraryCommands().ToList() ?? new List<Command>();
+
+    public bool HasLibraryPluginCommands => LibraryPluginCommands.Count > 0;
 
     public ObservableCollection<PluginInfoPanelSample> ComicInfoPanels { get; } = new();
 
@@ -1671,6 +1899,30 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
         {
             RevealInExplorerHelper.RevealIssues(issues);
         }
+    }
+
+    /// <summary>
+    /// Real Library-hook trigger from the issue-tile "Plugins ▸" context-menu submenu - same
+    /// selection-union shape as <see cref="EditIssueProperties"/>/<see cref="RevealIssue"/> above.
+    /// </summary>
+    [RelayCommand]
+    private async Task RunLibraryPlugin((IssueCardSample Issue, Command Command) args)
+    {
+        if (_pluginHost is null)
+        {
+            return;
+        }
+
+        var ids = _selection.UnionForAction(args.Issue.Id);
+
+        using var context = _contextFactory();
+        var issues = context.Issues.Where(i => ids.Contains(i.Id)).ToList();
+        if (issues.Count == 0)
+        {
+            return;
+        }
+
+        await _pluginHost.RunLibraryCommandAsync(args.Command, issues);
     }
 
     /// <summary>

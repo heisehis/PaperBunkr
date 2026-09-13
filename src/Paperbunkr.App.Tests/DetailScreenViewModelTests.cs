@@ -266,7 +266,10 @@ public class DetailScreenViewModelTests : IDisposable
         var vm = new DetailScreenViewModel(goBack: () => { }, goToReader: _ => { }, goToProperties: _ => { }, goToBulkProperties: _ => { });
         vm.LoadSeries(_seriesId);
 
-        var badges = ((IDetailHeaderSource)vm).MetaBadges;
+        // .All, not the capped .Visible (docs/superpowers/specs/2026-09-13-detail-screens-redesign-
+        // design.md §1) - this test checks aggregation correctness, not what's on screen; AgeRating
+        // is the 4th badge here and would be in overflow behind ".Visible"'s 3-item cap.
+        var badges = ((IDetailHeaderSource)vm).MetaBadges.All;
         Assert.Contains(badges, b => b.Mark == Paperbunkr.App.Controls.MarkFamily.Publisher && b.MarkValue == "DC Comics"); // from issues, not series
         Assert.Contains(badges, b => b.Text == "Complete");
         Assert.Contains(badges, b => b.Mark == Paperbunkr.App.Controls.MarkFamily.Format && b.MarkValue == "Single Issue"); // most common
@@ -277,14 +280,14 @@ public class DetailScreenViewModelTests : IDisposable
 
         // focus the annual -> its own format/rating take over
         vm.Tabs.ToggleIssueSelection(vm.Tabs.Specials.First(i => i.Id == annualId), isShiftHeld: false);
-        var focused = ((IDetailHeaderSource)vm).MetaBadges;
+        var focused = ((IDetailHeaderSource)vm).MetaBadges.All;
         Assert.Contains(focused, b => b.Mark == Paperbunkr.App.Controls.MarkFamily.Format && b.MarkValue == "Annual");
         Assert.Contains(focused, b => b.Mark == Paperbunkr.App.Controls.MarkFamily.AgeRating && b.MarkValue == "Mature");
         Assert.Contains(focused, b => b.Mark == Paperbunkr.App.Controls.MarkFamily.Language && b.MarkValue == "en");
 
         // deselect -> back to the aggregate
         vm.Tabs.ToggleIssueSelection(vm.Tabs.Specials.First(i => i.Id == annualId), isShiftHeld: false);
-        Assert.Contains(((IDetailHeaderSource)vm).MetaBadges, b => b.Mark == Paperbunkr.App.Controls.MarkFamily.Format && b.MarkValue == "Single Issue");
+        Assert.Contains(((IDetailHeaderSource)vm).MetaBadges.All, b => b.Mark == Paperbunkr.App.Controls.MarkFamily.Format && b.MarkValue == "Single Issue");
     }
 
     /// <summary>Bug report 2026-09-04: "the unread doesn't update when i finish reading a comic" -

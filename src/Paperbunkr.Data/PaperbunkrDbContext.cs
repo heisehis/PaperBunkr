@@ -110,6 +110,8 @@ public class PaperbunkrDbContext : DbContext
 
     public DbSet<ReadingEvent> ReadingEvents => Set<ReadingEvent>();
 
+    public DbSet<SeriesActivityEvent> SeriesActivityEvents => Set<SeriesActivityEvent>();
+
     public DbSet<ScheduledTaskState> ScheduledTaskStates => Set<ScheduledTaskState>();
 
     public DbSet<RemovedLibraryEntry> RemovedLibraryEntries => Set<RemovedLibraryEntry>();
@@ -999,6 +1001,14 @@ public class PaperbunkrDbContext : DbContext
             // Library Health redesign (docs/superpowers/specs/2026-09-07-library-health-redesign-
             // design.md §7) - 2 preserves the prior hardcoded LibraryHealthService constant.
             builder.Property(a => a.LibraryHealthConfirmedMissingThreshold).HasDefaultValue(2);
+
+            // Cosmetic Preferences micro-toggles (docs/superpowers/specs/2026-09-13-preferences-
+            // cosmetic-toggles-design.md) - defaults match CE exactly.
+            builder.Property(a => a.FadeInThumbnails).HasDefaultValue(true);
+            builder.Property(a => a.DogEarThumbnails).HasDefaultValue(true);
+            builder.Property(a => a.ShowToolTips).HasDefaultValue(false);
+            builder.Property(a => a.NumericRatingThumbnails).HasDefaultValue(true);
+            builder.Property(a => a.ExportedListsContainFilenames).HasDefaultValue(false);
         });
 
         modelBuilder.Entity<VirtualTagDefinition>(builder =>
@@ -1157,6 +1167,15 @@ public class PaperbunkrDbContext : DbContext
             builder.Property(e => e.PrimaryGenre).HasMaxLength(128);
             builder.HasIndex(e => e.TimestampUtc);
             builder.HasIndex(e => new { e.ItemType, e.ItemId });
+        });
+
+        modelBuilder.Entity<SeriesActivityEvent>(builder =>
+        {
+            builder.HasKey(e => e.Id);
+            builder.Property(e => e.Kind).HasConversion<string>().HasMaxLength(24);
+            builder.Property(e => e.Detail).HasMaxLength(512);
+            builder.HasIndex(e => e.TimestampUtc);
+            builder.HasIndex(e => e.SeriesId);
         });
 
         // Scheduled-task state (docs/superpowers/specs/2026-09-06-scheduled-tasks-and-cover-

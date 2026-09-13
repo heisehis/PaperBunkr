@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Paperbunkr.App.Services;
 using Paperbunkr.Data;
 using Paperbunkr.Data.CeMigration;
+using Paperbunkr.Data.Entities;
 using Paperbunkr.Data.Metadata;
 
 namespace Paperbunkr.App.ViewModels;
@@ -95,6 +96,7 @@ public partial class QuickRateScreenViewModel : ViewModelBase
         if (issue is not null)
         {
             var before = MetadataFileFieldSnapshot.Capture(issue);
+            float? oldRating = issue.Rating;
 
             issue.Rating = Rating.HasValue ? (float?)Rating.Value : null;
             issue.Review = string.IsNullOrWhiteSpace(Review) ? null : Review;
@@ -105,6 +107,16 @@ public partial class QuickRateScreenViewModel : ViewModelBase
             if (MetadataFileFieldSnapshot.Differ(before, MetadataFileFieldSnapshot.Capture(issue)))
             {
                 _enqueueMetadataWriteBack?.Invoke(issueId);
+            }
+
+            // Activity-tab event log (docs/superpowers/specs/2026-09-13-activity-tab-event-log-
+            // expansion-design.md) - only when the rating actually changed, so re-opening this
+            // popup and hitting Save with the same value doesn't spam the history.
+            if (oldRating != issue.Rating)
+            {
+                string detail = issue.Rating is float r ? $"Rating set to {(int)r}" : "Rating cleared";
+                SeriesActivityLog.Record(context, issue.SeriesId, SeriesActivityEventKind.RatingChanged, detail, issue.Id);
+                context.SaveChanges();
             }
         }
 

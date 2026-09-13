@@ -47,7 +47,7 @@ public partial class MangaDetailScreenViewModel : ViewModelBase, IDetailHeaderSo
         _goToBulkProperties = goToBulkProperties;
         _goDetailForSeries = goDetailForSeries ?? (_ => { });
         _enqueueMetadataWriteBack = enqueueMetadataWriteBack;
-        Tabs = new DetailTabsViewModel(goToProperties, goToBulkProperties, navigateToSeries: _goDetailForSeries, openInReader: goToReader, navigateToCollection: goLibraryWithCollection) { ShowIssuesTab = false, ShowTabStrip = false };
+        Tabs = new DetailTabsViewModel(goToProperties, goToBulkProperties, navigateToSeries: _goDetailForSeries, openInReader: goToReader, navigateToCollection: goLibraryWithCollection, goLibraryWithSearch: goLibraryWithSearch) { ShowIssuesTab = false, ShowTabStrip = false };
         // No reweight callback - LoadSeries below is always the series-aggregated view (chapter-list
         // screen, no single-issue pill focus like the Western DetailScreenViewModel has), so every
         // chip's CanReweight is naturally false here regardless.
@@ -99,11 +99,11 @@ public partial class MangaDetailScreenViewModel : ViewModelBase, IDetailHeaderSo
 
     private string? _readingStatus;
     private ReadingStatusPickerViewModel? _readingStatusPicker;
-    private IReadOnlyList<DetailMetaBadge> _metaBadges = System.Array.Empty<DetailMetaBadge>();
+    private DetailMetaBadgeGroup _metaBadges = new(System.Array.Empty<DetailMetaBadge>());
     private string? _issueSummaryLine;
     string? IDetailHeaderSource.ReadingStatus => _readingStatus;
     ReadingStatusPickerViewModel? IDetailHeaderSource.ReadingStatusPicker => _readingStatusPicker;
-    IReadOnlyList<DetailMetaBadge> IDetailHeaderSource.MetaBadges => _metaBadges;
+    DetailMetaBadgeGroup IDetailHeaderSource.MetaBadges => _metaBadges;
     string? IDetailHeaderSource.IssueSummaryLine => _issueSummaryLine;
 
     private void OnReadingStatusPicked()
@@ -386,8 +386,8 @@ public partial class MangaDetailScreenViewModel : ViewModelBase, IDetailHeaderSo
         // Series-aggregate fields (Part 4) - publisher/format/rating/language pulled across every
         // chapter, not off the cover one.
         var f = SeriesMetaFields.FromSeries(series);
-        _metaBadges = DetailMetaBadge.Build(f.Publisher, StatusLabel,
-            series.Status == SeriesStatus.Completed, f.Year, f.Format, f.AgeRating, f.LanguageIso);
+        _metaBadges = new DetailMetaBadgeGroup(DetailMetaBadge.Build(f.Publisher, StatusLabel,
+            series.Status == SeriesStatus.Completed, f.Year, f.Format, f.AgeRating, f.LanguageIso));
 
         // Plain-text line (Part 4 revision, user direction) - separate row under the badges, above
         // the action buttons, same wording the original MetaLine used.

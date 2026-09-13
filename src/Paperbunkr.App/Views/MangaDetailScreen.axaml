@@ -202,6 +202,7 @@
                     <ItemsControl x:Name="ChapterGroupsList" ItemsSource="{Binding ChapterGroups}">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate x:DataType="models:ChapterVolumeGroup">
+                                <Border Classes="card" Margin="0,0,0,14">
                                 <StackPanel>
                                     <TextBlock Classes="volumeHeader" Text="{Binding VolumeLabel}" />
                                     <ItemsControl ItemsSource="{Binding Chapters}">
@@ -236,6 +237,7 @@
                                         </ItemsControl.ItemTemplate>
                                     </ItemsControl>
                                 </StackPanel>
+                                </Border>
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>

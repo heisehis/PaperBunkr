@@ -6,6 +6,8 @@
              xmlns:v="using:Paperbunkr.App.Views"
              xmlns:beh="using:Paperbunkr.App.Behaviors"
              xmlns:plugins="using:Paperbunkr.Plugins"
+             xmlns:entities="using:Paperbunkr.Data.Entities"
+             xmlns:conv="using:Avalonia.Data.Converters"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              mc:Ignorable="d" d:DesignWidth="920" d:DesignHeight="780"
@@ -33,15 +35,41 @@
             <Setter Property="FontWeight" Value="Bold" />
         </Style>
 
-        <Style Selector="Border.groupBox">
-            <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
-            <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="CornerRadius" Value="7" />
-            <Setter Property="ClipToBounds" Value="True" />
+        <Style Selector="TextBlock.cardCaption">
+            <Setter Property="FontSize" Value="10.5" />
+            <Setter Property="FontWeight" Value="Bold" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextFaintBrush}" />
+            <Setter Property="LetterSpacing" Value="0.5" />
         </Style>
-        <Style Selector="Border.groupHeader">
-            <Setter Property="Background" Value="{DynamicResource PbChromeBrush}" />
-            <Setter Property="Padding" Value="14,11" />
+
+        <!-- Weight segmented control (docs/superpowers/specs/2026-09-14-metadata-editors-redesign-
+             design.md §6) - same shape/class names as DetailTabs.axaml's Poster/List/Card view-mode
+             toggle (Avalonia styles don't share across files, so this mirrors rather than references it). -->
+        <Style Selector="Button.segItem">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="CornerRadius" Value="0" />
+            <Setter Property="Padding" Value="9,3" />
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextFaintBrush}" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style Selector="Button.segItem.active">
+            <Setter Property="Background" Value="{DynamicResource PbAccentBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource PbBadgeTextBrush}" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+        </Style>
+
+        <!-- Read-only tag-value chip (Genre/Tags Details rows, §6) -->
+        <Style Selector="Border.valueChip">
+            <Setter Property="Background" Value="{DynamicResource PbAccentSoftBrush}" />
+            <Setter Property="CornerRadius" Value="999" />
+            <Setter Property="Padding" Value="10,4" />
+        </Style>
+        <Style Selector="Border.valueChip TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource PbAccentTextBrush}" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="FontWeight" Value="SemiBold" />
         </Style>
 
         <Style Selector="TextBlock.fieldLabel">
@@ -73,14 +101,18 @@
              editor") - same toolbarPill/modeOption shape as BulkIssuePropertiesScreen.axaml's enum
              picker (Avalonia styles don't share across files, so this mirrors rather than references it). -->
         <Style Selector="Button.toolbarPill">
-            <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
-            <Setter Property="Background" Value="{DynamicResource PbChromeBrush}" />
-            <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
-            <Setter Property="CornerRadius" Value="999" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Background" Value="{DynamicResource PbAccentSoftBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource PbAccentTextBrush}" />
+            <Setter Property="CornerRadius" Value="6" />
             <Setter Property="Padding" Value="8,4" />
             <Setter Property="FontSize" Value="12" />
             <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style Selector="Button.toolbarPill:pointerover">
+            <Setter Property="Background" Value="{DynamicResource PbAccentBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource PbBadgeTextBrush}" />
         </Style>
         <Style Selector="Button.modeOption">
             <Setter Property="Background" Value="Transparent" />
@@ -188,26 +220,24 @@
                     <!-- ===================== Summary tab ===================== -->
                     <StackPanel IsVisible="{Binding IsSummaryTab}" Margin="28,0,28,40" Spacing="20">
 
-                        <Border Classes="groupBox">
+                        <Border Classes="card">
                             <StackPanel>
-                                <Border Classes="groupHeader">
-                                    <TextBlock Text="Overview" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
-                                </Border>
-                                <Grid ColumnDefinitions="120,*" Margin="14">
+                                <TextBlock Classes="cardCaption" Text="OVERVIEW" />
+                                <Grid ColumnDefinitions="120,*" Margin="0,12,0,0">
                                     <Border Grid.Column="0" Width="120" Height="168" CornerRadius="6" ClipToBounds="True" Background="{Binding CoverBrush}">
                                         <Image Source="{Binding CoverImage}" Stretch="UniformToFill" />
                                     </Border>
                                     <StackPanel Grid.Column="1" Margin="20,0,0,0" Spacing="10">
                                         <StackPanel>
-                                            <TextBlock Classes="fieldLabel" Text="TYPE" />
+                                            <StackPanel Orientation="Horizontal" Spacing="5"><fi:SymbolIcon Symbol="Layer" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextFaintBrush}" /><TextBlock Classes="fieldLabel" Text="TYPE" Margin="0" /></StackPanel>
                                             <TextBlock Text="{Binding TypeLabel}" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
                                         </StackPanel>
                                         <StackPanel>
-                                            <TextBlock Classes="fieldLabel" Text="FILE PATH" />
+                                            <StackPanel Orientation="Horizontal" Spacing="5"><fi:SymbolIcon Symbol="Document" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextFaintBrush}" /><TextBlock Classes="fieldLabel" Text="FILE PATH" Margin="0" /></StackPanel>
                                             <TextBlock Text="{Binding FilePathLabel}" FontSize="12.5" Foreground="{DynamicResource PbTextBrush}" TextWrapping="Wrap" />
                                         </StackPanel>
                                         <StackPanel>
-                                            <TextBlock Classes="fieldLabel" Text="PAGE COUNT" />
+                                            <StackPanel Orientation="Horizontal" Spacing="5"><fi:SymbolIcon Symbol="BookOpen" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextFaintBrush}" /><TextBlock Classes="fieldLabel" Text="PAGE COUNT" Margin="0" /></StackPanel>
                                             <TextBlock Text="{Binding PageCountLabel}" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
                                         </StackPanel>
                                     </StackPanel>
@@ -215,14 +245,12 @@
                             </StackPanel>
                         </Border>
 
-                        <Border Classes="groupBox">
+                        <Border Classes="card">
                             <StackPanel>
-                                <Border Classes="groupHeader">
-                                    <TextBlock Text="Ratings" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
-                                </Border>
-                                <StackPanel Margin="14" Spacing="16">
+                                <TextBlock Classes="cardCaption" Text="RATINGS" />
+                                <StackPanel Margin="0,12,0,0" Spacing="16">
                                     <StackPanel>
-                                        <TextBlock Classes="fieldLabel" Text="MY RATING" />
+                                        <StackPanel Orientation="Horizontal" Spacing="5"><fi:SymbolIcon Symbol="Star" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextFaintBrush}" /><TextBlock Classes="fieldLabel" Text="MY RATING" Margin="0" /></StackPanel>
                                         <StackPanel Orientation="Horizontal" Spacing="2">
                                             <Button Classes="star" Classes.filled="{Binding MyRatingStar1}" Command="{Binding SetMyRating1Command}"><fi:SymbolIcon Symbol="Star" /></Button>
                                             <Button Classes="star" Classes.filled="{Binding MyRatingStar2}" Command="{Binding SetMyRating2Command}"><fi:SymbolIcon Symbol="Star" /></Button>
@@ -232,7 +260,7 @@
                                         </StackPanel>
                                     </StackPanel>
                                     <StackPanel>
-                                        <TextBlock Classes="fieldLabel" Text="COMMUNITY RATING" />
+                                        <StackPanel Orientation="Horizontal" Spacing="5"><fi:SymbolIcon Symbol="PeopleStar" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextFaintBrush}" /><TextBlock Classes="fieldLabel" Text="COMMUNITY RATING" Margin="0" /></StackPanel>
                                         <StackPanel Orientation="Horizontal" Spacing="2">
                                             <Button Classes="star" Classes.filled="{Binding CommunityRatingStar1}" Command="{Binding SetCommunityRating1Command}"><fi:SymbolIcon Symbol="Star" /></Button>
                                             <Button Classes="star" Classes.filled="{Binding CommunityRatingStar2}" Command="{Binding SetCommunityRating2Command}"><fi:SymbolIcon Symbol="Star" /></Button>
@@ -247,19 +275,19 @@
 
                     </StackPanel>
 
-                    <!-- ===================== Details tab ===================== -->
+                    <!-- ===================== Details tab (docs/superpowers/specs/2026-09-14-
+                         metadata-editors-redesign-design.md §2) - split into Core Details / Credits,
+                         icon per field label (§3). ===================== -->
                     <StackPanel IsVisible="{Binding IsDetailsTab}" Margin="28,0,28,40" Spacing="20">
-                        <Border Classes="groupBox">
+                        <Border Classes="card">
                             <StackPanel>
-                                <Border Classes="groupHeader">
-                                    <TextBlock Text="Details" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
-                                </Border>
-                                <WrapPanel Margin="14,14,0,0">
-                                    <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="NUMBER" /><TextBox Text="{Binding Number}" beh:TextSpinner.Enabled="True" /></StackPanel>
-                                    <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="VOLUME" /><TextBox Text="{Binding VolumeText}" beh:TextSpinner.Enabled="True" /></StackPanel>
-                                    <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="COUNT" /><NumericUpDown HorizontalAlignment="Stretch" Minimum="0" FormatString="0" Value="{Binding CountText, Converter={x:Static v:NullableDecimalStringConverter.Instance}}" /></StackPanel>
+                                <TextBlock Classes="cardCaption" Text="CORE DETAILS" />
+                                <WrapPanel Margin="0,12,0,0">
+                                    <StackPanel Classes="field"><StackPanel Orientation="Horizontal" Spacing="5"><fi:SymbolIcon Symbol="NumberSymbol" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextFaintBrush}" /><TextBlock Classes="fieldLabel" Text="NUMBER" Margin="0" /></StackPanel><TextBox Text="{Binding Number}" beh:TextSpinner.Enabled="True" /></StackPanel>
+                                    <StackPanel Classes="field"><StackPanel Orientation="Horizontal" Spacing="5"><fi:SymbolIcon Symbol="BookNumber" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextFaintBrush}" /><TextBlock Classes="fieldLabel" Text="VOLUME" Margin="0" /></StackPanel><TextBox Text="{Binding VolumeText}" beh:TextSpinner.Enabled="True" /></StackPanel>
+                                    <StackPanel Classes="field"><StackPanel Orientation="Horizontal" Spacing="5"><fi:SymbolIcon Symbol="NumberSymbol" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextFaintBrush}" /><TextBlock Classes="fieldLabel" Text="COUNT" Margin="0" /></StackPanel><NumericUpDown HorizontalAlignment="Stretch" Minimum="0" FormatString="0" Value="{Binding CountText, Converter={x:Static v:NullableDecimalStringConverter.Instance}}" /></StackPanel>
                                     <StackPanel Classes="field">
-                                        <TextBlock Classes="fieldLabel" Text="TITLE" />
+                                        <StackPanel Orientation="Horizontal" Spacing="5"><fi:SymbolIcon Symbol="TextAlignLeft" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextFaintBrush}" /><TextBlock Classes="fieldLabel" Text="TITLE" Margin="0" /></StackPanel>
                                         <Grid ColumnDefinitions="*,Auto">
                                             <pbc:SuggestBox Grid.Column="0" Text="{Binding Title}" Suggestions="{Binding TitleVocab}" />
                                             <Button x:Name="TitleTokenButton" Grid.Column="1" Classes="toolbarPill" Content="{}{ }" Margin="4,0,0,0" ToolTip.Tip="Insert a token">
@@ -282,7 +310,7 @@
                                         </Grid>
                                     </StackPanel>
                                     <StackPanel Classes="field">
-                                        <TextBlock Classes="fieldLabel" Text="ALTERNATE SERIES" />
+                                        <StackPanel Orientation="Horizontal" Spacing="5"><fi:SymbolIcon Symbol="BookmarkMultiple" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextFaintBrush}" /><TextBlock Classes="fieldLabel" Text="ALTERNATE SERIES" Margin="0" /></StackPanel>
                                         <Grid ColumnDefinitions="*,Auto">
                                             <pbc:SuggestBox Grid.Column="0" Text="{Binding AlternateSeries}" Suggestions="{Binding AlternateSeriesVocab}" />
                                             <Button x:Name="AltSeriesTokenButton" Grid.Column="1" Classes="toolbarPill" Content="{}{ }" Margin="4,0,0,0" ToolTip.Tip="Insert a token">
@@ -304,10 +332,10 @@
                                             </Button>
                                         </Grid>
                                     </StackPanel>
-                                    <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="ALTERNATE NUMBER" /><TextBox Text="{Binding AlternateNumber}" beh:TextSpinner.Enabled="True" /></StackPanel>
-                                    <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="ALTERNATE COUNT" /><NumericUpDown HorizontalAlignment="Stretch" Minimum="0" FormatString="0" Value="{Binding AlternateCountText, Converter={x:Static v:NullableDecimalStringConverter.Instance}}" /></StackPanel>
+                                    <StackPanel Classes="field"><StackPanel Orientation="Horizontal" Spacing="5"><fi:SymbolIcon Symbol="NumberSymbol" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextFaintBrush}" /><TextBlock Classes="fieldLabel" Text="ALTERNATE NUMBER" Margin="0" /></StackPanel><TextBox Text="{Binding AlternateNumber}" beh:TextSpinner.Enabled="True" /></StackPanel>
+                                    <StackPanel Classes="field"><StackPanel Orientation="Horizontal" Spacing="5"><fi:SymbolIcon Symbol="NumberSymbol" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextFaintBrush}" /><TextBlock Classes="fieldLabel" Text="ALTERNATE COUNT" Margin="0" /></StackPanel><NumericUpDown HorizontalAlignment="Stretch" Minimum="0" FormatString="0" Value="{Binding AlternateCountText, Converter={x:Static v:NullableDecimalStringConverter.Instance}}" /></StackPanel>
                                     <StackPanel Classes="field">
-                                        <TextBlock Classes="fieldLabel" Text="STORY ARC" />
+                                        <StackPanel Orientation="Horizontal" Spacing="5"><fi:SymbolIcon Symbol="BookOpen" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextFaintBrush}" /><TextBlock Classes="fieldLabel" Text="STORY ARC" Margin="0" /></StackPanel>
                                         <Grid ColumnDefinitions="*,Auto">
                                             <pbc:SuggestBox Grid.Column="0" Text="{Binding StoryArc}" Suggestions="{Binding StoryArcVocab}" />
                                             <Button x:Name="StoryArcTokenButton" Grid.Column="1" Classes="toolbarPill" Content="{}{ }" Margin="4,0,0,0" ToolTip.Tip="Insert a token">
@@ -329,9 +357,9 @@
                                             </Button>
                                         </Grid>
                                     </StackPanel>
-                                    <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="STORY ARC NUMBER" /><TextBox Text="{Binding StoryArcNumber}" beh:TextSpinner.Enabled="True" /></StackPanel>
+                                    <StackPanel Classes="field"><StackPanel Orientation="Horizontal" Spacing="5"><fi:SymbolIcon Symbol="NumberSymbol" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextFaintBrush}" /><TextBlock Classes="fieldLabel" Text="STORY ARC NUMBER" Margin="0" /></StackPanel><TextBox Text="{Binding StoryArcNumber}" beh:TextSpinner.Enabled="True" /></StackPanel>
                                     <StackPanel Classes="field">
-                                        <TextBlock Classes="fieldLabel" Text="SERIES GROUP" />
+                                        <StackPanel Orientation="Horizontal" Spacing="5"><fi:SymbolIcon Symbol="Layer" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextFaintBrush}" /><TextBlock Classes="fieldLabel" Text="SERIES GROUP" Margin="0" /></StackPanel>
                                         <Grid ColumnDefinitions="*,Auto">
                                             <pbc:SuggestBox Grid.Column="0" Text="{Binding SeriesGroup}" Suggestions="{Binding SeriesGroupVocab}" />
                                             <Button x:Name="SeriesGroupTokenButton" Grid.Column="1" Classes="toolbarPill" Content="{}{ }" Margin="4,0,0,0" ToolTip.Tip="Insert a token">
@@ -354,11 +382,11 @@
                                         </Grid>
                                     </StackPanel>
                                     <StackPanel Classes="field">
-                                        <TextBlock Classes="fieldLabel" Text="PUBLISHER" />
+                                        <StackPanel Orientation="Horizontal" Spacing="5"><fi:SymbolIcon Symbol="Building" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextFaintBrush}" /><TextBlock Classes="fieldLabel" Text="PUBLISHER" Margin="0" /></StackPanel>
                                         <pbc:SuggestBox HorizontalAlignment="Stretch" Text="{Binding Publisher}" Suggestions="{Binding PublisherVocab}" />
                                     </StackPanel>
                                     <StackPanel Classes="field">
-                                        <TextBlock Classes="fieldLabel" Text="IMPRINT" />
+                                        <StackPanel Orientation="Horizontal" Spacing="5"><fi:SymbolIcon Symbol="Building" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextFaintBrush}" /><TextBlock Classes="fieldLabel" Text="IMPRINT" Margin="0" /></StackPanel>
                                         <pbc:SuggestBox HorizontalAlignment="Stretch" Text="{Binding Imprint}" Suggestions="{Binding ImprintVocab}" />
                                     </StackPanel>
                                     <StackPanel Classes="field">
@@ -369,22 +397,14 @@
                                         <pbc:SuggestBox HorizontalAlignment="Stretch" Text="{Binding Format}" Suggestions="{Binding FormatVocab}" />
                                     </StackPanel>
                                     <StackPanel Classes="field">
-                                        <TextBlock Classes="fieldLabel" Text="BOOK AGE" />
+                                        <StackPanel Orientation="Horizontal" Spacing="5"><fi:SymbolIcon Symbol="Calendar" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextFaintBrush}" /><TextBlock Classes="fieldLabel" Text="BOOK AGE" Margin="0" /></StackPanel>
                                         <pbc:SuggestBox HorizontalAlignment="Stretch" Text="{Binding BookAge}" Suggestions="{Binding BookAgeVocab}" />
                                     </StackPanel>
-                                    <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="YEAR" /><NumericUpDown HorizontalAlignment="Stretch" Minimum="0" Maximum="9999" FormatString="0" Value="{Binding YearText, Converter={x:Static v:NullableDecimalStringConverter.Instance}}" /></StackPanel>
-                                    <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="MONTH" /><NumericUpDown HorizontalAlignment="Stretch" Minimum="1" Maximum="12" FormatString="0" Value="{Binding MonthText, Converter={x:Static v:NullableDecimalStringConverter.Instance}}" /></StackPanel>
-                                    <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="DAY" /><NumericUpDown HorizontalAlignment="Stretch" Minimum="1" Maximum="31" FormatString="0" Value="{Binding DayText, Converter={x:Static v:NullableDecimalStringConverter.Instance}}" /></StackPanel>
-                                    <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="GENRE" /><pbc:SuggestBox Text="{Binding Genre}" Suggestions="{Binding GenreVocab}" IsMultiValue="True" /></StackPanel>
-                                    <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="TAGS" /><pbc:SuggestBox Text="{Binding Tags}" Suggestions="{Binding TagsVocab}" IsMultiValue="True" /></StackPanel>
-                                    <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="WRITER" /><pbc:SuggestBox Text="{Binding Writer}" Suggestions="{Binding WriterVocab}" IsMultiValue="True" /></StackPanel>
-                                    <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="PENCILLER" /><pbc:SuggestBox Text="{Binding Penciller}" Suggestions="{Binding PencillerVocab}" IsMultiValue="True" /></StackPanel>
-                                    <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="INKER" /><pbc:SuggestBox Text="{Binding Inker}" Suggestions="{Binding InkerVocab}" IsMultiValue="True" /></StackPanel>
-                                    <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="COLORIST" /><pbc:SuggestBox Text="{Binding Colorist}" Suggestions="{Binding ColoristVocab}" IsMultiValue="True" /></StackPanel>
-                                    <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="LETTERER" /><pbc:SuggestBox Text="{Binding Letterer}" Suggestions="{Binding LettererVocab}" IsMultiValue="True" /></StackPanel>
-                                    <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="COVER ARTIST" /><pbc:SuggestBox Text="{Binding CoverArtist}" Suggestions="{Binding CoverArtistVocab}" IsMultiValue="True" /></StackPanel>
-                                    <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="EDITOR" /><pbc:SuggestBox Text="{Binding Editor}" Suggestions="{Binding EditorVocab}" IsMultiValue="True" /></StackPanel>
-                                    <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="TRANSLATOR" /><pbc:SuggestBox Text="{Binding Translator}" Suggestions="{Binding TranslatorVocab}" IsMultiValue="True" /></StackPanel>
+                                    <StackPanel Classes="field"><StackPanel Orientation="Horizontal" Spacing="5"><fi:SymbolIcon Symbol="Calendar" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextFaintBrush}" /><TextBlock Classes="fieldLabel" Text="YEAR" Margin="0" /></StackPanel><NumericUpDown HorizontalAlignment="Stretch" Minimum="0" Maximum="9999" FormatString="0" Value="{Binding YearText, Converter={x:Static v:NullableDecimalStringConverter.Instance}}" /></StackPanel>
+                                    <StackPanel Classes="field"><StackPanel Orientation="Horizontal" Spacing="5"><fi:SymbolIcon Symbol="Calendar" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextFaintBrush}" /><TextBlock Classes="fieldLabel" Text="MONTH" Margin="0" /></StackPanel><NumericUpDown HorizontalAlignment="Stretch" Minimum="1" Maximum="12" FormatString="0" Value="{Binding MonthText, Converter={x:Static v:NullableDecimalStringConverter.Instance}}" /></StackPanel>
+                                    <StackPanel Classes="field"><StackPanel Orientation="Horizontal" Spacing="5"><fi:SymbolIcon Symbol="Calendar" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextFaintBrush}" /><TextBlock Classes="fieldLabel" Text="DAY" Margin="0" /></StackPanel><NumericUpDown HorizontalAlignment="Stretch" Minimum="1" Maximum="31" FormatString="0" Value="{Binding DayText, Converter={x:Static v:NullableDecimalStringConverter.Instance}}" /></StackPanel>
+                                    <StackPanel Classes="field"><StackPanel Orientation="Horizontal" Spacing="5"><fi:SymbolIcon Symbol="Tag" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextFaintBrush}" /><TextBlock Classes="fieldLabel" Text="GENRE" Margin="0" /></StackPanel><pbc:SuggestBox Text="{Binding Genre}" Suggestions="{Binding GenreVocab}" IsMultiValue="True" /></StackPanel>
+                                    <StackPanel Classes="field"><StackPanel Orientation="Horizontal" Spacing="5"><fi:SymbolIcon Symbol="TagMultiple" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextFaintBrush}" /><TextBlock Classes="fieldLabel" Text="TAGS" Margin="0" /></StackPanel><pbc:SuggestBox Text="{Binding Tags}" Suggestions="{Binding TagsVocab}" IsMultiValue="True" /></StackPanel>
                                     <StackPanel Classes="field">
                                         <Grid ColumnDefinitions="*,Auto">
                                             <TextBlock Grid.Column="0" Classes="fieldLabel" Text="AGE RATING" />
@@ -400,12 +420,12 @@
                                         <pbc:SuggestBox HorizontalAlignment="Stretch" Text="{Binding LanguageIso}" Suggestions="{Binding LanguageVocab}" />
                                     </StackPanel>
                                     <StackPanel Classes="field">
-                                        <TextBlock Classes="fieldLabel" Text="COLOR MODE" />
+                                        <StackPanel Orientation="Horizontal" Spacing="5"><fi:SymbolIcon Symbol="ColorBackground" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextFaintBrush}" /><TextBlock Classes="fieldLabel" Text="COLOR MODE" Margin="0" /></StackPanel>
                                         <pbc:SuggestBox HorizontalAlignment="Stretch" IsStrict="True" Text="{Binding ColorModeText}" Suggestions="{Binding ColorModeOptions}" />
                                     </StackPanel>
                                     <StackPanel Classes="field" VerticalAlignment="Bottom">
                                         <Grid ColumnDefinitions="*,Auto">
-                                            <TextBlock Grid.Column="0" Text="Final issue" VerticalAlignment="Center" Foreground="{DynamicResource PbTextBrush}" Margin="0,0,8,0" />
+                                            <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="5"><fi:SymbolIcon Symbol="Checkmark" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" /><TextBlock Text="Final issue" VerticalAlignment="Center" Foreground="{DynamicResource PbTextBrush}" Margin="0,0,8,0" /></StackPanel>
                                             <CheckBox Grid.Column="1" IsThreeState="True" IsChecked="{Binding IsFinalIssue}" />
                                         </Grid>
                                     </StackPanel>
@@ -413,23 +433,50 @@
                             </StackPanel>
                         </Border>
 
+                        <Border Classes="card">
+                            <StackPanel>
+                                <TextBlock Classes="cardCaption" Text="CREDITS" />
+                                <WrapPanel Margin="0,12,0,0">
+                                    <StackPanel Classes="field"><StackPanel Orientation="Horizontal" Spacing="5"><fi:SymbolIcon Symbol="PenSparkle" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextFaintBrush}" /><TextBlock Classes="fieldLabel" Text="WRITER" Margin="0" /></StackPanel><pbc:SuggestBox Text="{Binding Writer}" Suggestions="{Binding WriterVocab}" IsMultiValue="True" /></StackPanel>
+                                    <StackPanel Classes="field"><StackPanel Orientation="Horizontal" Spacing="5"><fi:SymbolIcon Symbol="PersonEdit" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextFaintBrush}" /><TextBlock Classes="fieldLabel" Text="PENCILLER" Margin="0" /></StackPanel><pbc:SuggestBox Text="{Binding Penciller}" Suggestions="{Binding PencillerVocab}" IsMultiValue="True" /></StackPanel>
+                                    <StackPanel Classes="field"><StackPanel Orientation="Horizontal" Spacing="5"><fi:SymbolIcon Symbol="InkingTool" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextFaintBrush}" /><TextBlock Classes="fieldLabel" Text="INKER" Margin="0" /></StackPanel><pbc:SuggestBox Text="{Binding Inker}" Suggestions="{Binding InkerVocab}" IsMultiValue="True" /></StackPanel>
+                                    <StackPanel Classes="field"><StackPanel Orientation="Horizontal" Spacing="5"><fi:SymbolIcon Symbol="PaintBrush" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextFaintBrush}" /><TextBlock Classes="fieldLabel" Text="COLORIST" Margin="0" /></StackPanel><pbc:SuggestBox Text="{Binding Colorist}" Suggestions="{Binding ColoristVocab}" IsMultiValue="True" /></StackPanel>
+                                    <StackPanel Classes="field"><StackPanel Orientation="Horizontal" Spacing="5"><fi:SymbolIcon Symbol="Highlight" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextFaintBrush}" /><TextBlock Classes="fieldLabel" Text="LETTERER" Margin="0" /></StackPanel><pbc:SuggestBox Text="{Binding Letterer}" Suggestions="{Binding LettererVocab}" IsMultiValue="True" /></StackPanel>
+                                    <StackPanel Classes="field"><StackPanel Orientation="Horizontal" Spacing="5"><fi:SymbolIcon Symbol="Image" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextFaintBrush}" /><TextBlock Classes="fieldLabel" Text="COVER ARTIST" Margin="0" /></StackPanel><pbc:SuggestBox Text="{Binding CoverArtist}" Suggestions="{Binding CoverArtistVocab}" IsMultiValue="True" /></StackPanel>
+                                    <StackPanel Classes="field"><StackPanel Orientation="Horizontal" Spacing="5"><fi:SymbolIcon Symbol="PersonBoard" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextFaintBrush}" /><TextBlock Classes="fieldLabel" Text="EDITOR" Margin="0" /></StackPanel><pbc:SuggestBox Text="{Binding Editor}" Suggestions="{Binding EditorVocab}" IsMultiValue="True" /></StackPanel>
+                                    <StackPanel Classes="field"><StackPanel Orientation="Horizontal" Spacing="5"><fi:SymbolIcon Symbol="Translate" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextFaintBrush}" /><TextBlock Classes="fieldLabel" Text="TRANSLATOR" Margin="0" /></StackPanel><pbc:SuggestBox Text="{Binding Translator}" Suggestions="{Binding TranslatorVocab}" IsMultiValue="True" /></StackPanel>
+                                </WrapPanel>
+                            </StackPanel>
+                        </Border>
+
                         <!-- Category/Weight editor rows (docs/superpowers/specs/2026-08-23-weighted-
-                             categorized-tags-design.md) - adding/removing values stays on the GENRE/TAGS
+                             categorized-tags-design.md, restyled per 2026-09-14-metadata-editors-
+                             redesign-design.md §6) - adding/removing values stays on the GENRE/TAGS
                              text boxes above; this only edits Category/Weight for values that already
                              exist. Hidden entirely when there's nothing to show (a brand-new issue with no
                              tags yet). -->
-                        <Border Classes="groupBox" IsVisible="{Binding HasGenreTagRows}">
+                        <Border Classes="card" IsVisible="{Binding HasGenreTagRows}">
                             <StackPanel>
-                                <Border Classes="groupHeader">
-                                    <TextBlock Text="Genre Details" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
-                                </Border>
-                                <ItemsControl ItemsSource="{Binding GenreTagRows}" Margin="14">
+                                <TextBlock Classes="cardCaption" Text="GENRE DETAILS" />
+                                <ItemsControl ItemsSource="{Binding GenreTagRows}" Margin="0,12,0,0">
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate x:DataType="vm:TagEditRowViewModel">
-                                            <Grid ColumnDefinitions="140,*,140" Margin="0,0,0,8">
-                                                <TextBlock Grid.Column="0" Text="{Binding Value}" VerticalAlignment="Center" FontWeight="SemiBold" />
-                                                <TextBox Grid.Column="1" Text="{Binding Category}" Watermark="Category (e.g. Theme, Setting)" Margin="0,0,8,0" />
-                                                <pbc:SuggestBox Grid.Column="2" IsStrict="True" Text="{Binding WeightText}" Suggestions="{Binding WeightNames}" HorizontalAlignment="Stretch" />
+                                            <Grid ColumnDefinitions="140,*,Auto" Margin="0,0,0,8">
+                                                <Border Grid.Column="0" Classes="valueChip" HorizontalAlignment="Left"><TextBlock Text="{Binding Value}" /></Border>
+                                                <TextBox Grid.Column="1" Text="{Binding Category}" Watermark="Category (e.g. Theme, Setting)" Margin="8,0" />
+                                                <Border Grid.Column="2" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1" CornerRadius="6" ClipToBounds="True" Height="24">
+                                                    <StackPanel Orientation="Horizontal">
+                                                        <Button Classes="segItem" Content="Unset" Classes.active="{Binding Weight, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:IssueTagWeight.Unset}}" Command="{Binding SetWeightCommand}" CommandParameter="{x:Static entities:IssueTagWeight.Unset}" />
+                                                        <Border Width="1" Background="{DynamicResource PbBorderBrush}" />
+                                                        <Button Classes="segItem" Content="Incidental" Classes.active="{Binding Weight, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:IssueTagWeight.Incidental}}" Command="{Binding SetWeightCommand}" CommandParameter="{x:Static entities:IssueTagWeight.Incidental}" />
+                                                        <Border Width="1" Background="{DynamicResource PbBorderBrush}" />
+                                                        <Button Classes="segItem" Content="Recurrent" Classes.active="{Binding Weight, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:IssueTagWeight.Recurrent}}" Command="{Binding SetWeightCommand}" CommandParameter="{x:Static entities:IssueTagWeight.Recurrent}" />
+                                                        <Border Width="1" Background="{DynamicResource PbBorderBrush}" />
+                                                        <Button Classes="segItem" Content="Defining" Classes.active="{Binding Weight, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:IssueTagWeight.Defining}}" Command="{Binding SetWeightCommand}" CommandParameter="{x:Static entities:IssueTagWeight.Defining}" />
+                                                        <Border Width="1" Background="{DynamicResource PbBorderBrush}" />
+                                                        <Button Classes="segItem" Content="Core" Classes.active="{Binding Weight, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:IssueTagWeight.Core}}" Command="{Binding SetWeightCommand}" CommandParameter="{x:Static entities:IssueTagWeight.Core}" />
+                                                    </StackPanel>
+                                                </Border>
                                             </Grid>
                                         </DataTemplate>
                                     </ItemsControl.ItemTemplate>
@@ -437,18 +484,28 @@
                             </StackPanel>
                         </Border>
 
-                        <Border Classes="groupBox" IsVisible="{Binding HasTagsTagRows}">
+                        <Border Classes="card" IsVisible="{Binding HasTagsTagRows}">
                             <StackPanel>
-                                <Border Classes="groupHeader">
-                                    <TextBlock Text="Tags Details" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
-                                </Border>
-                                <ItemsControl ItemsSource="{Binding TagsTagRows}" Margin="14">
+                                <TextBlock Classes="cardCaption" Text="TAGS DETAILS" />
+                                <ItemsControl ItemsSource="{Binding TagsTagRows}" Margin="0,12,0,0">
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate x:DataType="vm:TagEditRowViewModel">
-                                            <Grid ColumnDefinitions="140,*,140" Margin="0,0,0,8">
-                                                <TextBlock Grid.Column="0" Text="{Binding Value}" VerticalAlignment="Center" FontWeight="SemiBold" />
-                                                <TextBox Grid.Column="1" Text="{Binding Category}" Watermark="Category (e.g. Theme, Setting)" Margin="0,0,8,0" />
-                                                <pbc:SuggestBox Grid.Column="2" IsStrict="True" Text="{Binding WeightText}" Suggestions="{Binding WeightNames}" HorizontalAlignment="Stretch" />
+                                            <Grid ColumnDefinitions="140,*,Auto" Margin="0,0,0,8">
+                                                <Border Grid.Column="0" Classes="valueChip" HorizontalAlignment="Left"><TextBlock Text="{Binding Value}" /></Border>
+                                                <TextBox Grid.Column="1" Text="{Binding Category}" Watermark="Category (e.g. Theme, Setting)" Margin="8,0" />
+                                                <Border Grid.Column="2" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1" CornerRadius="6" ClipToBounds="True" Height="24">
+                                                    <StackPanel Orientation="Horizontal">
+                                                        <Button Classes="segItem" Content="Unset" Classes.active="{Binding Weight, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:IssueTagWeight.Unset}}" Command="{Binding SetWeightCommand}" CommandParameter="{x:Static entities:IssueTagWeight.Unset}" />
+                                                        <Border Width="1" Background="{DynamicResource PbBorderBrush}" />
+                                                        <Button Classes="segItem" Content="Incidental" Classes.active="{Binding Weight, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:IssueTagWeight.Incidental}}" Command="{Binding SetWeightCommand}" CommandParameter="{x:Static entities:IssueTagWeight.Incidental}" />
+                                                        <Border Width="1" Background="{DynamicResource PbBorderBrush}" />
+                                                        <Button Classes="segItem" Content="Recurrent" Classes.active="{Binding Weight, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:IssueTagWeight.Recurrent}}" Command="{Binding SetWeightCommand}" CommandParameter="{x:Static entities:IssueTagWeight.Recurrent}" />
+                                                        <Border Width="1" Background="{DynamicResource PbBorderBrush}" />
+                                                        <Button Classes="segItem" Content="Defining" Classes.active="{Binding Weight, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:IssueTagWeight.Defining}}" Command="{Binding SetWeightCommand}" CommandParameter="{x:Static entities:IssueTagWeight.Defining}" />
+                                                        <Border Width="1" Background="{DynamicResource PbBorderBrush}" />
+                                                        <Button Classes="segItem" Content="Core" Classes.active="{Binding Weight, Converter={x:Static conv:ObjectConverters.Equal}, ConverterParameter={x:Static entities:IssueTagWeight.Core}}" Command="{Binding SetWeightCommand}" CommandParameter="{x:Static entities:IssueTagWeight.Core}" />
+                                                    </StackPanel>
+                                                </Border>
                                             </Grid>
                                         </DataTemplate>
                                     </ItemsControl.ItemTemplate>
@@ -459,38 +516,34 @@
 
                     <!-- ===================== Plot & Notes tab ===================== -->
                     <StackPanel IsVisible="{Binding IsPlotNotesTab}" Margin="28,0,28,40" Spacing="20">
-                        <Border Classes="groupBox">
+                        <Border Classes="card">
                             <StackPanel>
-                                <Border Classes="groupHeader">
-                                    <TextBlock Text="Plot" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
-                                </Border>
-                                <WrapPanel Margin="14,14,0,0">
-                                    <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="CHARACTERS" /><pbc:SuggestBox Text="{Binding Characters}" Suggestions="{Binding CharactersVocab}" IsMultiValue="True" /></StackPanel>
-                                    <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="TEAMS" /><pbc:SuggestBox Text="{Binding Teams}" Suggestions="{Binding TeamsVocab}" IsMultiValue="True" /></StackPanel>
-                                    <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="MAIN CHARACTER OR TEAM" /><pbc:SuggestBox Text="{Binding MainCharacterOrTeam}" Suggestions="{Binding MainCharacterOrTeamVocab}" IsMultiValue="True" /></StackPanel>
-                                    <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="LOCATIONS" /><pbc:SuggestBox Text="{Binding Locations}" Suggestions="{Binding LocationsVocab}" IsMultiValue="True" /></StackPanel>
-                                    <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="WEB" /><TextBox Text="{Binding Web}" /></StackPanel>
-                                    <StackPanel Classes="field"><TextBlock Classes="fieldLabel" Text="SCAN INFORMATION" /><TextBox Text="{Binding ScanInformation}" /></StackPanel>
+                                <TextBlock Classes="cardCaption" Text="PLOT" />
+                                <WrapPanel Margin="0,12,0,0">
+                                    <StackPanel Classes="field"><StackPanel Orientation="Horizontal" Spacing="5"><fi:SymbolIcon Symbol="People" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextFaintBrush}" /><TextBlock Classes="fieldLabel" Text="CHARACTERS" Margin="0" /></StackPanel><pbc:SuggestBox Text="{Binding Characters}" Suggestions="{Binding CharactersVocab}" IsMultiValue="True" /></StackPanel>
+                                    <StackPanel Classes="field"><StackPanel Orientation="Horizontal" Spacing="5"><fi:SymbolIcon Symbol="PeopleTeam" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextFaintBrush}" /><TextBlock Classes="fieldLabel" Text="TEAMS" Margin="0" /></StackPanel><pbc:SuggestBox Text="{Binding Teams}" Suggestions="{Binding TeamsVocab}" IsMultiValue="True" /></StackPanel>
+                                    <StackPanel Classes="field"><StackPanel Orientation="Horizontal" Spacing="5"><fi:SymbolIcon Symbol="PersonStar" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextFaintBrush}" /><TextBlock Classes="fieldLabel" Text="MAIN CHARACTER OR TEAM" Margin="0" /></StackPanel><pbc:SuggestBox Text="{Binding MainCharacterOrTeam}" Suggestions="{Binding MainCharacterOrTeamVocab}" IsMultiValue="True" /></StackPanel>
+                                    <StackPanel Classes="field"><StackPanel Orientation="Horizontal" Spacing="5"><fi:SymbolIcon Symbol="Globe" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextFaintBrush}" /><TextBlock Classes="fieldLabel" Text="LOCATIONS" Margin="0" /></StackPanel><pbc:SuggestBox Text="{Binding Locations}" Suggestions="{Binding LocationsVocab}" IsMultiValue="True" /></StackPanel>
+                                    <StackPanel Classes="field"><StackPanel Orientation="Horizontal" Spacing="5"><fi:SymbolIcon Symbol="Globe" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextFaintBrush}" /><TextBlock Classes="fieldLabel" Text="WEB" Margin="0" /></StackPanel><TextBox Text="{Binding Web}" /></StackPanel>
+                                    <StackPanel Classes="field"><StackPanel Orientation="Horizontal" Spacing="5"><fi:SymbolIcon Symbol="Document" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextFaintBrush}" /><TextBlock Classes="fieldLabel" Text="SCAN INFORMATION" Margin="0" /></StackPanel><TextBox Text="{Binding ScanInformation}" /></StackPanel>
                                 </WrapPanel>
                             </StackPanel>
                         </Border>
 
-                        <Border Classes="groupBox">
+                        <Border Classes="card">
                             <StackPanel>
-                                <Border Classes="groupHeader">
-                                    <TextBlock Text="Notes" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
-                                </Border>
-                                <StackPanel Margin="14" Spacing="14">
+                                <TextBlock Classes="cardCaption" Text="NOTES" />
+                                <StackPanel Margin="0,12,0,0" Spacing="14">
                                     <StackPanel>
-                                        <TextBlock Classes="fieldLabel" Text="SUMMARY" />
+                                        <StackPanel Orientation="Horizontal" Spacing="5"><fi:SymbolIcon Symbol="TextAlignLeft" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextFaintBrush}" /><TextBlock Classes="fieldLabel" Text="SUMMARY" Margin="0" /></StackPanel>
                                         <TextBox Text="{Binding Summary}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="80" />
                                     </StackPanel>
                                     <StackPanel>
-                                        <TextBlock Classes="fieldLabel" Text="NOTES" />
+                                        <StackPanel Orientation="Horizontal" Spacing="5"><fi:SymbolIcon Symbol="TextAlignLeft" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextFaintBrush}" /><TextBlock Classes="fieldLabel" Text="NOTES" Margin="0" /></StackPanel>
                                         <TextBox Text="{Binding Notes}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="80" />
                                     </StackPanel>
                                     <StackPanel>
-                                        <TextBlock Classes="fieldLabel" Text="REVIEW" />
+                                        <StackPanel Orientation="Horizontal" Spacing="5"><fi:SymbolIcon Symbol="Edit" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextFaintBrush}" /><TextBlock Classes="fieldLabel" Text="REVIEW" Margin="0" /></StackPanel>
                                         <TextBox Text="{Binding Review}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="80" />
                                     </StackPanel>
                                 </StackPanel>

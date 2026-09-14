@@ -75,12 +75,21 @@ public static class TextSpinner
         up.Click += (_, _) => Nudge(box, +1);
         down.Click += (_, _) => Nudge(box, -1);
 
-        return new StackPanel
+        // Bordered pill container (docs/superpowers/specs/2026-09-14-metadata-editors-redesign-
+        // design.md §4) - the two RepeatButtons share one rounded container with a divider between
+        // them, rather than floating borderless as before.
+        var divider = new Border { Classes = { "textSpinnerDivider" } };
+
+        return new Border
         {
             Tag = new SpinnerTag(),
-            Orientation = Orientation.Vertical,
+            Classes = { "textSpinnerContainer" },
             VerticalAlignment = VerticalAlignment.Center,
-            Children = { up, down },
+            Child = new StackPanel
+            {
+                Orientation = Orientation.Vertical,
+                Children = { up, divider, down },
+            },
         };
     }
 

@@ -14,12 +14,32 @@
         these are token nudges on existing templated controls, not re-templates.
     -->
 
-    <!-- NumericUpDown: match the TextBox corner radius; keep FluentAvalonia's own spinner buttons. -->
+    <!-- NumericUpDown: match the TextBox corner radius. Its own spin buttons are now restyled too
+         (docs/superpowers/specs/2026-09-14-metadata-editors-redesign-design.md §4). Three prior
+         misses on this exact style, root cause found by fetching FluentAvalonia's real theme
+         source (amwx/FluentAvalonia, src/FluentAvalonia/Styling/ControlThemes/BasicControls/
+         NumericUpDownStyles.axaml) - App.axaml's FluentAvaloniaTheme REPLACES Avalonia's built-in
+         FluentTheme, so base Avalonia's ButtonSpinner.cs (src/Avalonia.Controls) was never the
+         control actually rendering here; every earlier attempt was reading the wrong theme's
+         source. FluentAvalonia's own template: NumericUpDown hosts a ButtonSpinner, whose own
+         template hosts a StackPanel (PART_SpinnerPanel) containing the two RepeatButtons -
+         PART_IncreaseButton / PART_DecreaseButton. Type is RepeatButton, not Button (that was
+         miss #1); two /template/ levels are required to cross both templated-control boundaries
+         (miss #2 only had one). -->
     <Style Selector="NumericUpDown">
         <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusSm}" />
         <Setter Property="Background" Value="{DynamicResource PbSurface2Brush}" />
         <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
         <Setter Property="Foreground" Value="{DynamicResource PbTextBrush}" />
+    </Style>
+    <Style Selector="NumericUpDown /template/ ButtonSpinner /template/ RepeatButton#PART_IncreaseButton, NumericUpDown /template/ ButtonSpinner /template/ RepeatButton#PART_DecreaseButton">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Foreground" Value="{DynamicResource PbTextFaintBrush}" />
+    </Style>
+    <Style Selector="NumericUpDown /template/ ButtonSpinner /template/ RepeatButton#PART_IncreaseButton:pointerover, NumericUpDown /template/ ButtonSpinner /template/ RepeatButton#PART_DecreaseButton:pointerover">
+        <Setter Property="Background" Value="{DynamicResource PbAccentBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource PbBadgeTextBrush}" />
     </Style>
 
     <!-- AutoCompleteBox: the inner TextBox is themed by FluentAvalonia; the drop-down popup is a
@@ -114,6 +134,19 @@
                                              ItemsSource="{Binding FilteredItems, RelativeSource={RelativeSource TemplatedParent}}"
                                              Background="Transparent" BorderThickness="0"
                                              SelectionMode="Single">
+                                        <!-- Non-virtualizing panel: the default VirtualizingStackPanel's
+                                             recycled-container bookkeeping corrupts when this Popup
+                                             closes (ArgumentOutOfRangeException deep in Avalonia's
+                                             detach walk, SetVisualParent -> AvaloniaList<T>.Remove),
+                                             independent of what triggers the close or when. List is
+                                             capped at MaxRows (60) in SuggestBox.cs, so virtualization
+                                             buys nothing here - a plain StackPanel sidesteps the whole
+                                             recycling path. -->
+                                        <ListBox.ItemsPanel>
+                                            <ItemsPanelTemplate>
+                                                <StackPanel />
+                                            </ItemsPanelTemplate>
+                                        </ListBox.ItemsPanel>
                                         <ListBox.ItemTemplate>
                                             <DataTemplate>
                                                 <TextBlock Text="{Binding}" FontSize="12.5"
@@ -139,23 +172,39 @@
         </Setter>
     </Style>
 
-    <!-- Text-box spinner arrows (Behaviors/TextSpinner.cs) - two stacked RepeatButtons docked in
-         TextBox.InnerRightContent. Tiny, borderless, muted; accent on hover. -->
+    <!-- Text-box spinner (Behaviors/TextSpinner.cs), restyled per docs/superpowers/specs/2026-09-14-
+         metadata-editors-redesign-design.md §4 - a bordered pill container around the two
+         RepeatButtons instead of them floating borderless, divider between the halves, solid accent
+         fill (not just a foreground-color change) on hover. -->
+    <Style Selector="Border.textSpinnerContainer">
+        <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="4" />
+        <Setter Property="ClipToBounds" Value="True" />
+        <Setter Property="Width" Value="18" />
+        <Setter Property="Height" Value="20" />
+    </Style>
+    <Style Selector="Border.textSpinnerDivider">
+        <Setter Property="Height" Value="1" />
+        <Setter Property="Background" Value="{DynamicResource PbBorderBrush}" />
+    </Style>
     <Style Selector="RepeatButton.textSpinner">
         <Setter Property="Background" Value="Transparent" />
         <Setter Property="BorderThickness" Value="0" />
-        <Setter Property="Padding" Value="2,0" />
-        <Setter Property="Width" Value="16" />
-        <Setter Property="Height" Value="10" />
+        <Setter Property="CornerRadius" Value="0" />
+        <Setter Property="Padding" Value="0" />
+        <Setter Property="Width" Value="18" />
+        <Setter Property="Height" Value="9" />
         <Setter Property="Cursor" Value="Hand" />
         <Setter Property="Foreground" Value="{DynamicResource PbTextFaintBrush}" />
         <Setter Property="HorizontalContentAlignment" Value="Center" />
         <Setter Property="VerticalContentAlignment" Value="Center" />
     </Style>
     <Style Selector="RepeatButton.textSpinner:pointerover">
-        <Setter Property="Foreground" Value="{DynamicResource PbAccentBrush}" />
+        <Setter Property="Background" Value="{DynamicResource PbAccentBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource PbBadgeTextBrush}" />
     </Style>
     <Style Selector="RepeatButton.textSpinner fi|SymbolIcon">
-        <Setter Property="FontSize" Value="9" />
+        <Setter Property="FontSize" Value="8" />
     </Style>
 </Styles>

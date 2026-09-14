@@ -16,15 +16,11 @@
          in place of this file's former local "headerAction" styles - see docs/superpowers/specs/
          2026-08-24-design-language-foundation-design.md Component Primitives section. -->
     <UserControl.Styles>
-        <Style Selector="Border.groupBox">
-            <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
-            <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="CornerRadius" Value="7" />
-            <Setter Property="ClipToBounds" Value="True" />
-        </Style>
-        <Style Selector="Border.groupHeader">
-            <Setter Property="Background" Value="{DynamicResource PbChromeBrush}" />
-            <Setter Property="Padding" Value="14,11" />
+        <Style Selector="TextBlock.cardCaption">
+            <Setter Property="FontSize" Value="10.5" />
+            <Setter Property="FontWeight" Value="Bold" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextFaintBrush}" />
+            <Setter Property="LetterSpacing" Value="0.5" />
         </Style>
 
         <Style Selector="Button.star">
@@ -46,14 +42,18 @@
              design.md §1) - same shape/class names as LibraryScreen.axaml's toolbarPill/modeOption
              (Avalonia styles don't share across files, so this mirrors rather than references them). -->
         <Style Selector="Button.toolbarPill">
-            <Setter Property="BorderThickness" Value="1" />
-            <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
-            <Setter Property="Background" Value="{DynamicResource PbChromeBrush}" />
-            <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
-            <Setter Property="CornerRadius" Value="999" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Background" Value="{DynamicResource PbAccentSoftBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource PbAccentTextBrush}" />
+            <Setter Property="CornerRadius" Value="6" />
             <Setter Property="Padding" Value="12,6" />
             <Setter Property="FontSize" Value="12" />
             <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style Selector="Button.toolbarPill:pointerover">
+            <Setter Property="Background" Value="{DynamicResource PbAccentBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource PbBadgeTextBrush}" />
         </Style>
         <Style Selector="Button.modeOption">
             <Setter Property="Background" Value="Transparent" />
@@ -71,7 +71,10 @@
         <DataTemplate x:Key="FieldRowTemplate" x:DataType="vm:BulkFieldViewModel">
             <Grid ColumnDefinitions="Auto,160,*" Margin="0,0,0,10" IsVisible="{Binding IsRowVisible}">
                 <CheckBox Grid.Column="0" IsChecked="{Binding IsStaged}" VerticalAlignment="Center" Margin="0,0,8,0" />
-                <TextBlock Grid.Column="1" Text="{Binding Label}" FontSize="12.5" Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                    <fi:SymbolIcon Symbol="{Binding IconGlyph}" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" />
+                    <TextBlock Text="{Binding Label}" FontSize="12.5" Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
+                </StackPanel>
 
                 <Grid Grid.Column="2" ColumnDefinitions="*,Auto" IsVisible="{Binding IsTextKind}">
                     <TextBox Grid.Column="0" Text="{Binding Value}" IsVisible="{Binding IsPlainTextKind}" />
@@ -208,37 +211,31 @@
             <ScrollViewer>
                 <StackPanel Margin="28,0,28,40" Spacing="20">
 
-                    <Border Classes="groupBox">
+                    <Border Classes="card">
                         <StackPanel>
-                            <Border Classes="groupHeader">
-                                <TextBlock Text="Main" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
-                            </Border>
-                            <ItemsControl Margin="14" ItemsSource="{Binding MainFields}" ItemTemplate="{StaticResource FieldRowTemplate}" />
+                            <TextBlock Classes="cardCaption" Text="MAIN" />
+                            <ItemsControl Margin="0,12,0,0" ItemsSource="{Binding MainFields}" ItemTemplate="{StaticResource FieldRowTemplate}" />
                             <!-- Content Type writes through to each selected issue's owning Series, not the Issue
                                  itself - a multi-series selection can silently reclassify more series than were
                                  explicitly selected (docs/superpowers/specs/2026-08-16-manga-content-type-
                                  classification-design.md §1). -->
-                            <TextBlock Margin="14,0,14,14" FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}"
+                            <TextBlock Margin="0,0,0,4" FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}"
                                        IsVisible="{Binding HasSeriesAffected}"
                                        Text="{Binding SeriesAffectedCount, StringFormat='{}{0} series will be affected.'}" />
                         </StackPanel>
                     </Border>
 
-                    <Border Classes="groupBox">
+                    <Border Classes="card">
                         <StackPanel>
-                            <Border Classes="groupHeader">
-                                <TextBlock Text="Artists" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
-                            </Border>
-                            <ItemsControl Margin="14" ItemsSource="{Binding ArtistFields}" ItemTemplate="{StaticResource FieldRowTemplate}" />
+                            <TextBlock Classes="cardCaption" Text="ARTISTS" />
+                            <ItemsControl Margin="0,12,0,0" ItemsSource="{Binding ArtistFields}" ItemTemplate="{StaticResource FieldRowTemplate}" />
                         </StackPanel>
                     </Border>
 
-                    <Border Classes="groupBox">
+                    <Border Classes="card">
                         <StackPanel>
-                            <Border Classes="groupHeader">
-                                <TextBlock Text="Plot &amp; Notes" FontWeight="Bold" FontSize="13" Foreground="{DynamicResource PbTextBrush}" />
-                            </Border>
-                            <ItemsControl Margin="14" ItemsSource="{Binding PlotNotesFields}" ItemTemplate="{StaticResource FieldRowTemplate}" />
+                            <TextBlock Classes="cardCaption" Text="PLOT &amp; NOTES" />
+                            <ItemsControl Margin="0,12,0,0" ItemsSource="{Binding PlotNotesFields}" ItemTemplate="{StaticResource FieldRowTemplate}" />
                         </StackPanel>
                     </Border>
 

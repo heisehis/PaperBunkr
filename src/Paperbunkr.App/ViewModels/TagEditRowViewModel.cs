@@ -1,6 +1,7 @@
 using System;
 using System.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using Paperbunkr.Data.Entities;
 
 namespace Paperbunkr.App.ViewModels;
@@ -51,4 +52,10 @@ public partial class TagEditRowViewModel : ObservableObject
     public string[] WeightNames => WeightNamesCache;
 
     partial void OnWeightChanged(IssueTagWeight value) => OnPropertyChanged(nameof(WeightText));
+
+    /// <summary>Backs the segmented Weight picker (docs/superpowers/specs/2026-09-14-metadata-
+    /// editors-redesign-design.md §6) - one button per <see cref="IssueTagWeight"/> value, each
+    /// passing its own value as the command parameter.</summary>
+    [RelayCommand]
+    private void SetWeight(IssueTagWeight weight) => Weight = weight;
 }

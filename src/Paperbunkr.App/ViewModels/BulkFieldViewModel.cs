@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using FluentIcons.Common;
 using Paperbunkr.App.Models;
 
 namespace Paperbunkr.App.ViewModels;
@@ -23,6 +24,46 @@ public partial class BulkFieldViewModel : ObservableObject
 
     public string Label => Descriptor.Label;
     public bool IsTextKind => Descriptor.Kind == FieldKind.Text;
+
+    /// <summary>Leading icon per row label (docs/superpowers/specs/2026-09-14-metadata-editors-
+    /// redesign-design.md §3) - same field-name-to-glyph mapping as IssuePropertiesScreen.axaml's
+    /// hardcoded per-field icons, applied here generically since this row is data-driven off
+    /// <see cref="BulkFieldDescriptor.Label"/> rather than one XAML block per field.</summary>
+    public Symbol IconGlyph => Label switch
+    {
+        "Number" or "Alternate Number" or "Count" or "Alternate Count" => Symbol.NumberSymbol,
+        "Volume" => Symbol.BookNumber,
+        "Title" => Symbol.TextAlignLeft,
+        "Alternate Series" => Symbol.BookmarkMultiple,
+        "Series Group" => Symbol.Layer,
+        "Story Arc" => Symbol.BookOpen,
+        "Genre" => Symbol.Tag,
+        "Tags" => Symbol.TagMultiple,
+        "Content Type" or "Status" or "Reading Status" => Symbol.Options,
+        "Publisher" or "Imprint" => Symbol.Building,
+        "Format" => Symbol.LayoutColumnTwo,
+        "Book Age" or "Year" or "Month" or "Day" => Symbol.Calendar,
+        "Age Rating" => Symbol.ShieldError,
+        "Language (ISO)" => Symbol.Translate,
+        "Color Mode" => Symbol.ColorBackground,
+        "My Rating" or "Community Rating" => Symbol.Star,
+        "Writer" => Symbol.PenSparkle,
+        "Penciller" => Symbol.PersonEdit,
+        "Inker" => Symbol.InkingTool,
+        "Colorist" => Symbol.PaintBrush,
+        "Editor" => Symbol.PersonBoard,
+        "Cover Artist" => Symbol.Image,
+        "Translator" => Symbol.Translate,
+        "Letterer" => Symbol.Highlight,
+        "Main Character or Team" => Symbol.PersonStar,
+        "Characters" => Symbol.People,
+        "Teams" => Symbol.PeopleTeam,
+        "Locations" or "Web" => Symbol.Globe,
+        "Scan Information" => Symbol.Document,
+        "Summary" or "Notes" => Symbol.TextAlignLeft,
+        "Review" => Symbol.Edit,
+        _ => Symbol.Circle,
+    };
 
     /// <summary>Library-learned candidates for this field, pushed by
     /// <see cref="BulkIssuePropertiesScreenViewModel"/> once its background vocabulary build lands

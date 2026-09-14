@@ -2492,15 +2492,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
             return;
         }
 
-        // RunLibraryHookAsync removed in the plugin engine rework (3207460, native-tier
-        // auto-update) - PluginHostService now runs one specific command at a time
-        // (RunLibraryCommandAsync), not an implicit "every enabled command" hook. Loop
-        // over GetLibraryCommands() to preserve this method's original all-enabled-commands
-        // behavior with the current API, rather than guessing at a single command here.
-        foreach (var command in _pluginHost.GetLibraryCommands())
-        {
-            await _pluginHost.RunLibraryCommandAsync(command, issues);
-        }
+        await _pluginHost.RunLibraryHookAsync(issues);
     }
 
     /// <summary>Opens the clicked tile's series in Detail (docs/superpowers/specs/

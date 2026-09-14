@@ -3,6 +3,65 @@
 All notable changes to Paperbunkr are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.4.0-beta] - 2026-09-14
+
+### Added
+
+- **Reader chrome redesign.** The comic/manga reader's floating toolbar clusters, drawer, and page
+  thumbnail rail now use a frosted-glass look consistent with the rest of the app. Reading-mode and
+  fit-mode pickers are icon-labeled pill menus instead of plain text lists; zoom is a single control
+  that works the same way in paged and continuous/long-strip modes. The Reader Tools drawer is
+  reorganized — rotate/auto-rotate/double-page as one icon grid, color adjustments tucked behind a
+  collapsible section, bookmarks always visible at the bottom instead of scrolling away. The page
+  thumbnail strip now shows a hover-magnify effect (like the macOS Dock) so individual pages stay
+  easy to pick out even in long collected editions, and never grows wider than its panel regardless
+  of page count.
+- **Issue Properties and Bulk Issue Properties redesign.** Both editors match the newer card-based
+  look, with a leading icon on every field label, a friendlier grouped layout for the single-issue
+  editor's Details tab (Core Details / Credits), and a proper multi-option picker for tag weight
+  (Unset/Incidental/Recurrent/Defining/Core) in place of a free-typed box.
+- **Detail screen redesign.** Comic and manga detail pages, the issues grid, and the Details/
+  Related/Activity tabs share the same visual language now; Details gained more credit and metadata
+  fields, and the Activity tab's event log covers more of what happens to a series.
+- **Native plugin support.** Plugins can now ship native (non-.NET) code, with automatic updates, a
+  trust notice and picker for installing a `.pbplugin` package, and a new extension point for adding
+  custom panels to the comic detail screen. The Plugin Management screen itself was redesigned
+  around a master-detail layout.
+- **Reader: page background textures.** A textured page background option (matching CE) with a
+  matching page drop-shadow.
+- **Reader: page spread position tracking.** Manually mark a page as the leading or trailing side of
+  a two-page spread, via a new context-menu submenu and a thumbnail-rail glyph; imported from
+  ComicInfo.xml's `<Pages>` data when present.
+- **Reader: smoother long-strip (webtoon) scrolling.** Very tall continuous-mode pages now decode in
+  bands instead of all at once, cutting memory use and improving scroll smoothness.
+- **Reader: cursor-anchored zoom in continuous mode.** Ctrl+scroll-wheel and pinch-zoom now zoom
+  toward the cursor/pinch point instead of the canvas center.
+- **Library: more sort/group options.** Group by Virtual Tags, a "Needs Review" grouper, group by
+  open count, and a three-state Is-Final-Issue filter.
+- **Library: keyboard navigation.** Type-ahead jump-to-item, Shift+Arrow range selection, and Ctrl+Q
+  to quit.
+- **Smoother screen-entrance animation** for the Books, Smart Lists, and Reading Lists grids,
+  matching the Library grid's existing entrance motion.
+- **`Issue.AlternateCount`** — the ComicInfo.xml crossover-issue count field is now read and
+  editable, closing a CE-parity gap.
+
+### Fixed
+
+- **Reader:** the page-position scrubber no longer stretches the whole toolbar edge-to-edge (and
+  never shows a scrollbar) on books with very high page counts, like trade paperback compilations —
+  the page dots shrink to fit instead.
+- **Reader:** the textured page background's drop-shadow no longer blanks out the whole page in
+  paged mode.
+- **A rare startup crash in native-plugin modals** (e.g. mid-scrape review dialogs), caused by a
+  plugin's background work occasionally resolving on a non-UI thread.
+- **Library plugin commands** (right-click "Plugins ▸" on a tile, or the bulk-action dropdown) were
+  silently broken since the native plugin tier landed — a leftover call to a since-renamed method
+  meant no enabled library plugin command could run. Fixed.
+- A form-field auto-complete box (`SuggestBox`, used throughout the metadata editors) in strict mode
+  could show a field's own last-typed value instead of the real current one.
+- The Library grid's collection tiles now correctly participate in the cover-flight transition when
+  opening a collection, instead of jumping straight to the destination screen.
+
 ## [0.3.1-beta] - 2026-09-10
 
 ### Fixed

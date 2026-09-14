@@ -1791,6 +1791,11 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
             return;
         }
 
+        // Activity Center alert alongside the overlay (on-screen feedback) - same alert the manual
+        // Preferences "Check Now" path raises, so Activity Center reflects update state regardless
+        // of which check found it. Not a replacement for the overlay below - additive.
+        PreferencesScreenViewModel.RaiseUpdateAvailableAlert(Activity, info.Updates[0].Version.ToString());
+
         var entries = ChangelogParser.LoadBundledEntries();
         string? changelogBody = entries.Count > 0 ? entries[0].Body : null;
         Dispatcher.UIThread.Post(() =>
@@ -2433,6 +2438,16 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
                 break;
             case ActivityLinkKind.RestartApp:
                 App.RelaunchAndExit();
+                break;
+            case ActivityLinkKind.ExternalUrl when !string.IsNullOrWhiteSpace(link.Payload):
+                // Same OS-default-browser pattern as DetailFieldRow's own link-opening (Models/
+                // DetailFieldRow.cs) - UseShellExecute=true, not a direct Process.Start(url) (which
+                // throws on .NET Core for a bare URL string on Windows).
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = link.Payload,
+                    UseShellExecute = true,
+                });
                 break;
         }
     }

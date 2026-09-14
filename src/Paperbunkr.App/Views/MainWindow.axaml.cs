@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
@@ -228,13 +229,48 @@ public partial class MainWindow : Window
     /// </summary>
     private void OnWindowClosing(object? sender, WindowClosingEventArgs e)
     {
-        if (_allowRealClose || e.CloseReason != WindowCloseReason.WindowClosing || !IsMinimizeToTrayEnabled())
+        if (_allowRealClose || e.CloseReason != WindowCloseReason.WindowClosing)
         {
             return;
         }
 
-        e.Cancel = true;
-        MinimizeToTray();
+        if (IsMinimizeToTrayEnabled())
+        {
+            e.Cancel = true;
+            MinimizeToTray();
+            return;
+        }
+
+        // Confirm-before-close (on-screen feedback) - only reached once minimize-to-tray has already
+        // had first refusal above, so this only ever fires for a close that would actually quit the
+        // app; confirming an action that just hides to the tray instead would be pure friction.
+        if (IsConfirmBeforeCloseEnabled())
+        {
+            e.Cancel = true;
+            _ = ConfirmCloseAndExitAsync();
+        }
+    }
+
+    private static bool IsConfirmBeforeCloseEnabled()
+    {
+        using var context = PaperbunkrDb.CreateContext();
+        return context.GetOrCreateAppSettings().ConfirmBeforeClose;
+    }
+
+    /// <summary>Cancelled close above re-issues itself via <see cref="_allowRealClose"/> + <see
+    /// cref="Close()"/> once confirmed - same "cancel now, real-close later" shape <see
+    /// cref="ExitFromTray"/> already uses for the tray's own Exit path.</summary>
+    private async Task ConfirmCloseAndExitAsync()
+    {
+        bool confirmed = DataContext is MainViewModel vm
+            ? await vm.Dialogs.ConfirmAsync("Close Paperbunkr?", title: "Confirm Close", confirmLabel: "Close", cancelLabel: "Cancel")
+            : true;
+
+        if (confirmed)
+        {
+            _allowRealClose = true;
+            Close();
+        }
     }
 
     private void MinimizeToTray()

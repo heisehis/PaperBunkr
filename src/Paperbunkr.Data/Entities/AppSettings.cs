@@ -323,6 +323,15 @@ public class AppSettings
     public bool MinimizeToTrayNoticeShown { get; set; }
 
     /// <summary>
+    /// Whether clicking the main window's close button asks "Close Paperbunkr?" before actually
+    /// quitting - on-screen feedback, no CE precedent, default false like every other opt-in toggle
+    /// with no CE default to match. Only gates a close that would actually exit the app - when
+    /// <see cref="MinimizeToTray"/> is already redirecting the close button to the tray instead, this
+    /// doesn't fire (confirming an action that doesn't quit anything would be pure friction).
+    /// </summary>
+    public bool ConfirmBeforeClose { get; set; }
+
+    /// <summary>
     /// Whether the nav rail's hover-expand (docs/superpowers/specs/2026-08-24-navigation-shell-
     /// motion-system-design.md) is pinned permanently open (200px, real layout reflow) rather than
     /// only expanding as a temporary hover overlay. Default false - collapsed 64px is the default look.

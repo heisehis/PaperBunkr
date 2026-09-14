@@ -284,15 +284,41 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         try
         {
             var info = await _updateService.CheckForUpdatesAsync();
-            UpdateCheckResultText = info.Status == UpdateStatus.UpdateAvailable
-                ? $"Update available: v{info.Updates[0].Version}"
-                : "You're up to date.";
+            if (info.Status == UpdateStatus.UpdateAvailable)
+            {
+                UpdateCheckResultText = $"Update available: v{info.Updates[0].Version}";
+                RaiseUpdateAvailableAlert(info.Updates[0].Version.ToString());
+            }
+            else
+            {
+                UpdateCheckResultText = "You're up to date.";
+            }
         }
         catch (Exception ex)
         {
             UpdateCheckResultText = $"Check failed: {ex.Message}";
         }
     }
+
+    /// <summary>Activity Center alert for a found update (on-screen feedback: manual "Check Now"
+    /// previously only set <see cref="UpdateCheckResultText"/> with no further action) - a link out
+    /// to the GitHub releases page, not the in-app download flow <see cref="MainViewModel.Update"/>'s
+    /// overlay already offers on the startup check path; deliberately separate, not a replacement.
+    /// Deduped so re-checking repeatedly doesn't stack alerts.</summary>
+    internal static void RaiseUpdateAvailableAlert(IActivityService activity, string version)
+    {
+        activity.RaiseAlert(new ActivityAlert
+        {
+            Severity = ActivityAlertSeverity.Info,
+            Title = $"Update available: v{version}",
+            Detail = "A new version of Paperbunkr is available.",
+            ActionLabel = "View release",
+            ActionLink = new Paperbunkr.App.Models.ActivityLink(ActivityLinkKind.ExternalUrl, "https://github.com/heisehis/PaperBunkr/releases"),
+            DedupeKey = "update-available",
+        });
+    }
+
+    private void RaiseUpdateAvailableAlert(string version) => RaiseUpdateAvailableAlert(_activity, version);
 
     public ObservableCollection<VirtualTagSummary> VirtualTags { get; }
 
@@ -493,6 +519,13 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     /// </summary>
     [ObservableProperty]
     private bool _minimizeToTray;
+
+    /// <summary>Window tab toggle (on-screen feedback) - asks "Close Paperbunkr?" on the X button,
+    /// only when that click would actually quit the app (i.e. <see cref="MinimizeToTray"/> isn't
+    /// already redirecting it to the tray instead). No CE precedent - this app's own addition, off
+    /// by default like every other opt-in toggle with no CE default to match.</summary>
+    [ObservableProperty]
+    private bool _confirmBeforeClose;
 
     [ObservableProperty]
     private bool _highQualityPageDisplay;
@@ -733,6 +766,7 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         NavRailHoverExpandEnabled = settings.NavRailHoverExpandEnabled;
         CheckForUpdatesOnStartup = settings.CheckForUpdatesOnStartup;
         MinimizeToTray = settings.MinimizeToTray;
+        ConfirmBeforeClose = settings.ConfirmBeforeClose;
         HighQualityPageDisplay = settings.HighQualityPageDisplay;
         ResetZoomOnPageChange = settings.ResetZoomOnPageChange;
         MouseWheelSpeed = settings.MouseWheelSpeed;
@@ -1033,6 +1067,8 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     partial void OnCheckForUpdatesOnStartupChanged(bool value) => PersistBehaviorSetting(s => s.CheckForUpdatesOnStartup = value);
 
     partial void OnMinimizeToTrayChanged(bool value) => PersistBehaviorSetting(s => s.MinimizeToTray = value);
+
+    partial void OnConfirmBeforeCloseChanged(bool value) => PersistBehaviorSetting(s => s.ConfirmBeforeClose = value);
 
     partial void OnHighQualityPageDisplayChanged(bool value) => PersistBehaviorSetting(s => s.HighQualityPageDisplay = value);
 

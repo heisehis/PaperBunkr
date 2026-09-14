@@ -59,6 +59,12 @@
                     <ToggleSwitch IsChecked="{Binding MinimizeToTray}" OnContent="{x:Null}" OffContent="{x:Null}" />
                 </pref:SettingsRow.SettingsContent>
             </pref:SettingsRow>
+            <pref:SettingsRow Icon="Dismiss" Title="Confirm before closing"
+                               Description="Ask &quot;Close Paperbunkr?&quot; on the close button - only when it would actually quit, not when Minimize to tray is catching it instead.">
+                <pref:SettingsRow.SettingsContent>
+                    <ToggleSwitch IsChecked="{Binding ConfirmBeforeClose}" OnContent="{x:Null}" OffContent="{x:Null}" />
+                </pref:SettingsRow.SettingsContent>
+            </pref:SettingsRow>
         </StackPanel>
     </StackPanel>
     </ScrollViewer>

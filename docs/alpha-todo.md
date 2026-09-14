@@ -1,5 +1,11 @@
 # Paperbunkr Alpha Release To-Do
 
+> **Archived — Alpha milestone closed 2026-08-07.** This file is a historical record of the Alpha
+> release-prep checklist (P0–P7) and known gaps at the time; every item below is done and none of
+> it is rewritten to use later terminology. The project has since moved past Alpha and Beta into
+> what's now called **Pre-release** — for what's currently open and any new items going forward,
+> see [`pre-release-todo.md`](pre-release-todo.md).
+
 *Scope: git/release prep + known gaps only, per `Paperbunkr-Roadmap.md` (2026-08-07). Beta backlog is
 tracked separately in that document and not repeated here.*
 

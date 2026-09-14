@@ -1,6 +1,6 @@
 # Troubleshooting
 
-> PaperBunkr is early alpha. Keep external backups of files and metadata that matter.
+> PaperBunkr is pre-release software. Keep external backups of files and metadata that matter.
 
 ## Where things live
 
@@ -57,8 +57,8 @@ Set backup frequency/retention in **Preferences → Advanced → Backup Manager*
 - **Wrong page-turn direction for manga:** set the series to **Right to Left** (right-click
   in Library → *Set Reading Direction*), or flip **Preferences → Reader → Right to Left**.
 - **Slow scrolling / high memory in webtoon mode:** turn off **high quality page display**
-  in **Preferences → Reader → Display**; very large libraries of huge scans are demanding
-  on the current alpha.
+  in **Preferences → Reader → Display**; very large libraries of huge scans are still
+  demanding.
 - **Missing file when opening:** the file moved or was deleted — **Relink…** it from the
   migration **Needs Review** queue, or the *Missing Files* Smart List.
 

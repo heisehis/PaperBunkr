@@ -3,7 +3,7 @@
 All notable changes to Paperbunkr are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [0.4.0-beta] - 2026-09-14
+## [0.4.2-beta] - 2026-09-14
 
 ### Added
 

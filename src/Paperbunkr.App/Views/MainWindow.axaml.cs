@@ -263,7 +263,7 @@ public partial class MainWindow : Window
     private async Task ConfirmCloseAndExitAsync()
     {
         bool confirmed = DataContext is MainViewModel vm
-            ? await vm.Dialogs.ConfirmAsync("Close Paperbunkr?", title: "Confirm Close", confirmLabel: "Close", cancelLabel: "Cancel")
+            ? await vm.Dialogs.ConfirmAsync("Are you sure you wanna go? (｡•́︿•̀｡)", title: "Confirm Close", confirmLabel: "Close", cancelLabel: "Cancel")
             : true;
 
         if (confirmed)

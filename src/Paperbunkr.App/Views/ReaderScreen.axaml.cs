@@ -1,12 +1,15 @@
 using System;
 using System.ComponentModel;
+using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using Paperbunkr.App.Models;
 using Paperbunkr.App.ViewModels;
 
@@ -20,6 +23,13 @@ public partial class ReaderScreen : UserControl
     {
         InitializeComponent();
         DataContextChanged += OnDataContextChanged;
+
+        // Dock-style hover magnify on the page-turn dot strip (on-screen feedback) - AddHandler with
+        // handledEventsToo: true, not the plain XAML attribute, since "not seeing it at all" traced
+        // to individual pageDot Buttons already marking PointerMoved/PointerExited handled before
+        // it bubbles up to the ItemsControl. Same fix shape as the Ctrl+Shift+P handler right below.
+        PageDotsItemsControl.AddHandler(PointerMovedEvent, OnPageDotsPointerMoved, RoutingStrategies.Bubble, handledEventsToo: true);
+        PageDotsItemsControl.AddHandler(PointerExitedEvent, OnPageDotsPointerExited, RoutingStrategies.Bubble, handledEventsToo: true);
 
         // Ctrl+Shift+P -> perf overlay (docs/superpowers/specs/2026-09-08-reader-decode-cache-
         // prefetch-pipeline-design.md §10). Handled here rather than via UserControl.KeyBindings so
@@ -167,47 +177,42 @@ public partial class ReaderScreen : UserControl
         }
     }
 
-    // ===================== Thumbnail rail auto-hide (docs/superpowers/specs/2026-08-25-reader-
-    // chrome-design.md follow-up) - pure hover UI state, not modeled in the ViewModel since nothing
-    // outside this view cares about it. Two independent triggers (the edge strip and the rail
-    // itself) both keep it open; it only collapses once the pointer has left both. =====================
+    // ===================== Dock-style hover magnify on the page-turn dot strip (on-screen feedback:
+    // "the macOS dock... can we add that to the progress bar") - each dot's ScaleTransform is driven
+    // live from pointer X distance, not a Style trigger (a pseudo-class can't express "how close is
+    // the cursor to THIS one among ~100 siblings"). Falloff: 1.0 scale at MagnifyRadius+ away, up to
+    // MagnifyMaxScale directly under the cursor, eased (squared) rather than linear so it reads as a
+    // gentle ramp near the peak like the real Dock, not a sharp cone. =====================
 
-    private bool _hoveringRailTrigger;
-    private bool _hoveringRailOverlay;
+    private const double MagnifyRadius = 34.0;
+    private const double MagnifyMaxScale = 2.2;
 
-    private void OnRailHoverEntered(object? sender, PointerEventArgs e)
+    private void OnPageDotsPointerMoved(object? sender, PointerEventArgs e)
     {
-        if (ReferenceEquals(sender, RailEdgeTrigger))
+        double pointerX = e.GetPosition(PageDotsItemsControl).X;
+        foreach (var dot in PageDotsItemsControl.GetVisualDescendants().OfType<Button>())
         {
-            _hoveringRailTrigger = true;
-        }
-        else
-        {
-            _hoveringRailOverlay = true;
-        }
+            if (!dot.Classes.Contains("pageDot"))
+            {
+                continue;
+            }
 
-        RailOverlay.Classes.Remove("hidden");
+            Point? center = dot.TranslatePoint(new Point(dot.Bounds.Width / 2, dot.Bounds.Height / 2), PageDotsItemsControl);
+            double distance = center is { } c ? Math.Abs(pointerX - c.X) : double.MaxValue;
+            double t = Math.Clamp(1.0 - distance / MagnifyRadius, 0.0, 1.0);
+            double scale = 1.0 + (MagnifyMaxScale - 1.0) * (t * t);
+            dot.RenderTransform = new ScaleTransform(scale, scale);
+        }
     }
 
-    private void OnRailHoverExited(object? sender, PointerEventArgs e)
+    private void OnPageDotsPointerExited(object? sender, PointerEventArgs e)
     {
-        if (ReferenceEquals(sender, RailEdgeTrigger))
+        foreach (var dot in PageDotsItemsControl.GetVisualDescendants().OfType<Button>())
         {
-            _hoveringRailTrigger = false;
-        }
-        else
-        {
-            _hoveringRailOverlay = false;
-        }
-
-        UpdateRailVisibility();
-    }
-
-    private void UpdateRailVisibility()
-    {
-        if (!_hoveringRailTrigger && !_hoveringRailOverlay)
-        {
-            RailOverlay.Classes.Add("hidden");
+            if (dot.Classes.Contains("pageDot"))
+            {
+                dot.RenderTransform = null;
+            }
         }
     }
 }

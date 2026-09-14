@@ -867,10 +867,10 @@ public class ReaderScreenViewModelTests : IDisposable
     {
         var vm = new ReaderScreenViewModel(goBack: () => { });
         vm.LoadIssue(_issue1Id);
-        Assert.Equal("Left to Right ▾", vm.ReadingModeLabel);
+        Assert.Equal("Left to Right", vm.ReadingModeLabel);
 
         vm.ToggleReadingModeCommand.Execute(null);
-        Assert.Equal("Right to Left ▾", vm.ReadingModeLabel);
+        Assert.Equal("Right to Left", vm.ReadingModeLabel);
 
         using (var context = PaperbunkrDb.CreateContext())
         {
@@ -878,7 +878,7 @@ public class ReaderScreenViewModelTests : IDisposable
         }
 
         vm.ToggleReadingModeCommand.Execute(null);
-        Assert.Equal("Left to Right ▾", vm.ReadingModeLabel);
+        Assert.Equal("Left to Right", vm.ReadingModeLabel);
     }
 
     /// <summary>
@@ -895,7 +895,7 @@ public class ReaderScreenViewModelTests : IDisposable
 
         vm.SetReadingModeCommand.Execute(ReadingMode.VerticalContinuous);
 
-        Assert.Equal("Vertical (Continuous) ▾", vm.ReadingModeLabel);
+        Assert.Equal("Longstrip (gapped)", vm.ReadingModeLabel);
         Assert.True(vm.IsContinuousMode);
         Assert.Equal(ReadingMode.VerticalContinuous, vm.EffectiveReadingMode);
 
@@ -916,7 +916,7 @@ public class ReaderScreenViewModelTests : IDisposable
 
         vm.SetReadingModeCommand.Execute(ReadingMode.TopToBottom);
 
-        Assert.Equal("Vertical ▾", vm.ReadingModeLabel);
+        Assert.Equal("Top to Bottom", vm.ReadingModeLabel);
         Assert.False(vm.IsContinuousMode);
         Assert.Equal(ReadingMode.TopToBottom, vm.EffectiveReadingMode);
 
@@ -932,7 +932,7 @@ public class ReaderScreenViewModelTests : IDisposable
 
         vm.LoadIssue(_issue1Id);
 
-        Assert.Equal("Vertical ▾", vm.ReadingModeLabel);
+        Assert.Equal("Top to Bottom", vm.ReadingModeLabel);
         Assert.False(vm.IsContinuousMode);
         Assert.Equal(ReadingMode.TopToBottom, vm.EffectiveReadingMode);
     }
@@ -945,7 +945,7 @@ public class ReaderScreenViewModelTests : IDisposable
 
         vm.SetReadingModeCommand.Execute(ReadingMode.HorizontalContinuous);
 
-        Assert.Equal("Horizontal (Continuous) ▾", vm.ReadingModeLabel);
+        Assert.Equal("Horizontal Long Strip", vm.ReadingModeLabel);
         Assert.True(vm.IsContinuousMode);
     }
 
@@ -958,7 +958,7 @@ public class ReaderScreenViewModelTests : IDisposable
 
         vm.SetReadingModeCommand.Execute(ReadingMode.HorizontalContinuousRightToLeft);
 
-        Assert.Equal("Horizontal RTL (Continuous) ▾", vm.ReadingModeLabel);
+        Assert.Equal("Horizontal Long Strip (RTL)", vm.ReadingModeLabel);
         Assert.True(vm.IsContinuousMode);
         Assert.Equal(ReadingMode.HorizontalContinuousRightToLeft, vm.EffectiveReadingMode);
     }
@@ -972,7 +972,7 @@ public class ReaderScreenViewModelTests : IDisposable
 
         vm.SetReadingModeCommand.Execute(ReadingMode.Webtoon);
 
-        Assert.Equal("Webtoon ▾", vm.ReadingModeLabel);
+        Assert.Equal("Long Strip", vm.ReadingModeLabel);
         Assert.True(vm.IsContinuousMode);
         Assert.NotNull(vm.Decoder); // opens the continuous-aware decoder same as the other continuous modes
     }
@@ -2509,5 +2509,49 @@ public class ReaderScreenViewModelTests : IDisposable
         vm.ToggleChromeCommand.Execute(null);
 
         Assert.True(vm.ShowChrome);
+    }
+
+    // docs/superpowers/specs/2026-09-14-reader-chrome-redesign-design.md §3/§6 - FitModeLabel and the
+    // rail/adjust-section toggles are the only genuinely new bindable surface from that redesign.
+
+    [Theory]
+    [InlineData(ImageFitMode.Original, "Original")]
+    [InlineData(ImageFitMode.Fit, "Fit Page")]
+    [InlineData(ImageFitMode.FitWidth, "Fit Width")]
+    [InlineData(ImageFitMode.FitHeight, "Fit Height")]
+    [InlineData(ImageFitMode.BestFit, "Best Fit")]
+    public void FitModeLabel_ReturnsFriendlyStringForEachFitMode(ImageFitMode mode, string expectedLabel)
+    {
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+
+        vm.FitMode = mode;
+
+        Assert.Equal(expectedLabel, vm.FitModeLabel);
+    }
+
+    [Fact]
+    public void ToggleRailCommand_DefaultsClosed_ThenTogglesOpen()
+    {
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        Assert.False(vm.IsRailOpen);
+
+        vm.ToggleRailCommand.Execute(null);
+        Assert.True(vm.IsRailOpen);
+
+        vm.ToggleRailCommand.Execute(null);
+        Assert.False(vm.IsRailOpen);
+    }
+
+    [Fact]
+    public void ToggleAdjustSectionCommand_DefaultsCollapsed_ThenTogglesExpanded()
+    {
+        var vm = new ReaderScreenViewModel(goBack: () => { });
+        Assert.False(vm.IsAdjustSectionExpanded);
+
+        vm.ToggleAdjustSectionCommand.Execute(null);
+        Assert.True(vm.IsAdjustSectionExpanded);
+
+        vm.ToggleAdjustSectionCommand.Execute(null);
+        Assert.False(vm.IsAdjustSectionExpanded);
     }
 }

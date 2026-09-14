@@ -529,6 +529,18 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
     [ObservableProperty]
     private bool _isContinuousMode;
 
+    /// <summary>The thumbnail rail only makes sense in paged mode (docs/superpowers/specs/2026-09-14-
+    /// reader-chrome-redesign-design.md §6 follow-up, on-screen feedback) - continuous/long-strip
+    /// modes scroll through pages directly, so force it closed rather than leaving it open-but-
+    /// hidden-behind-a-hidden-toggle if the user had it open before switching modes.</summary>
+    partial void OnIsContinuousModeChanged(bool value)
+    {
+        if (value)
+        {
+            IsRailOpen = false;
+        }
+    }
+
     /// <summary>
     /// Exposed so <see cref="Views.PageCanvas"/> can pull whichever pages its continuous-mode layout
     /// window needs (docs/superpowers/specs/2026-08-10-reader-polish-continuous-scroll-chrome-
@@ -542,10 +554,64 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
     [ObservableProperty]
     private int _pageCount;
 
+    // Dot-strip shrink-to-fit (on-screen feedback: a 135-page TPB blew the whole Page-turn cluster
+    // out edge-to-edge, and a horizontal scrollbar was rejected as the fix - "I dont wanna see that
+    // scroll bar"). Below DotStripTargetWidth's worth of pages, dots render at their normal base
+    // size/spacing (today's behavior, unchanged). Above it, both shrink together so every page still
+    // gets a dot and the strip never exceeds its target width - never needs to scroll.
+    private const double DotStripTargetWidth = 280.0;
+    private const double DotStripBaseWidth = 5.0;
+    private const double DotStripBaseSpacing = 3.0;
+    private const double DotStripActiveGrowRatio = 12.0 / DotStripBaseWidth;
+
+    private bool DotStripNeedsShrink => PageCount > 0 &&
+        PageCount * (DotStripBaseWidth + DotStripBaseSpacing) - DotStripBaseSpacing > DotStripTargetWidth;
+
+    /// <summary>Per-dot width (docs/superpowers/specs/2026-09-14-reader-chrome-redesign-design.md §4
+    /// follow-up). Bound from the <c>Button.pageDot</c> style's own <c>Width</c> Setter via the same
+    /// relative-binding trick this DataTemplate's Command already uses - each dot's own DataContext
+    /// is its <see cref="Models.ReaderThumbnailSample"/>, not this ViewModel.</summary>
+    public double DotStripItemWidth => DotStripNeedsShrink
+        ? Math.Max(DotStripTargetWidth / PageCount * (DotStripBaseWidth / (DotStripBaseWidth + DotStripBaseSpacing)), 1.0)
+        : DotStripBaseWidth;
+
+    /// <summary>Grown version for the <c>.active</c> (current-page) dot - same shrink math, just
+    /// scaled up by the same ratio the base 5px→12px grow already used.</summary>
+    public double DotStripActiveItemWidth => DotStripItemWidth * DotStripActiveGrowRatio;
+
+    /// <summary>Gap between dots - shrinks in lockstep with <see cref="DotStripItemWidth"/> so the
+    /// strip's total width is always exactly <see cref="DotStripTargetWidth"/> once shrinking kicks
+    /// in, never more.</summary>
+    public double DotStripSpacing => DotStripNeedsShrink
+        ? Math.Max(DotStripTargetWidth / PageCount * (DotStripBaseSpacing / (DotStripBaseWidth + DotStripBaseSpacing)), 0.5)
+        : DotStripBaseSpacing;
+
+    partial void OnPageCountChanged(int value)
+    {
+        OnPropertyChanged(nameof(DotStripItemWidth));
+        OnPropertyChanged(nameof(DotStripActiveItemWidth));
+        OnPropertyChanged(nameof(DotStripSpacing));
+    }
+
     private const double ZoomStep = 0.25;
 
     [ObservableProperty]
     private ImageFitMode _fitMode = ImageFitMode.FitWidth;
+
+    /// <summary>Friendly display string for <see cref="FitMode"/> (docs/superpowers/specs/2026-09-14-
+    /// reader-chrome-redesign-design.md §3) - the raw enum's own <c>ToString()</c> ("Fit", "FitWidth")
+    /// isn't what the picker's own buttons already showed ("Fit All", "Fit Width"), and "Fit All" is
+    /// itself renamed to "Fit Page" here. Parallel to <see cref="ReadingModeLabel"/>.</summary>
+    public string FitModeLabel => FitMode switch
+    {
+        ImageFitMode.Fit => "Fit Page",
+        ImageFitMode.FitWidth => "Fit Width",
+        ImageFitMode.FitHeight => "Fit Height",
+        ImageFitMode.BestFit => "Best Fit",
+        _ => "Original",
+    };
+
+    partial void OnFitModeChanged(ImageFitMode value) => OnPropertyChanged(nameof(FitModeLabel));
 
     [ObservableProperty]
     private bool _autoRotate;
@@ -1123,15 +1189,19 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
         IsContinuousMode = effectiveMode is ReadingMode.VerticalContinuous or ReadingMode.HorizontalContinuous
             or ReadingMode.HorizontalContinuousRightToLeft or ReadingMode.Webtoon;
         EffectiveReadingMode = effectiveMode;
+        // Renamed 2026-09-14 (docs/superpowers/specs/2026-09-14-reader-chrome-redesign-design.md §2) -
+        // the trailing " ▾" is dropped now that this feeds a segmented pill row instead of a dropdown
+        // button, and the continuous-mode names are unified around a "Long Strip" family instead of
+        // each mode inventing its own qualifier.
         ReadingModeLabel = effectiveMode switch
         {
-            ReadingMode.RightToLeft => "Right to Left ▾",
-            ReadingMode.TopToBottom => "Vertical ▾",
-            ReadingMode.VerticalContinuous => "Vertical (Continuous) ▾",
-            ReadingMode.HorizontalContinuous => "Horizontal (Continuous) ▾",
-            ReadingMode.HorizontalContinuousRightToLeft => "Horizontal RTL (Continuous) ▾",
-            ReadingMode.Webtoon => "Webtoon ▾",
-            _ => "Left to Right ▾",
+            ReadingMode.RightToLeft => "Right to Left",
+            ReadingMode.TopToBottom => "Top to Bottom",
+            ReadingMode.VerticalContinuous => "Longstrip (gapped)",
+            ReadingMode.HorizontalContinuous => "Horizontal Long Strip",
+            ReadingMode.HorizontalContinuousRightToLeft => "Horizontal Long Strip (RTL)",
+            ReadingMode.Webtoon => "Long Strip",
+            _ => "Left to Right",
         };
         OnPropertyChanged(nameof(ReadingModeLabel));
     }
@@ -1363,6 +1433,25 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
     /// <summary>Whether the Actions cluster's drawer is open (docs/superpowers/specs/2026-08-25-reader-chrome-design.md) - independent of <see cref="ShowChrome"/>: the drawer represents deliberate intent to see it, so it does not idle-fade.</summary>
     [ObservableProperty]
     private bool _isDrawerOpen;
+
+    /// <summary>Whether the thumbnail rail is open (docs/superpowers/specs/2026-09-14-reader-chrome-
+    /// redesign-design.md §6) - replaces the old code-behind hover-trigger (edge strip + rail itself)
+    /// with an explicit toggle, since the dot-strip scrubber already covers the rail's main
+    /// hover-preview job. Same deliberate-intent shape as <see cref="IsDrawerOpen"/>.</summary>
+    [ObservableProperty]
+    private bool _isRailOpen;
+
+    [RelayCommand]
+    private void ToggleRail() => IsRailOpen = !IsRailOpen;
+
+    /// <summary>Whether the drawer's ADJUST section (Brightness/Contrast/Saturation/Gamma) is expanded
+    /// (docs/superpowers/specs/2026-09-14-reader-chrome-redesign-design.md §5) - collapsed by default,
+    /// used less often than PAGE/BOOKMARKS.</summary>
+    [ObservableProperty]
+    private bool _isAdjustSectionExpanded;
+
+    [RelayCommand]
+    private void ToggleAdjustSection() => IsAdjustSectionExpanded = !IsAdjustSectionExpanded;
 
     /// <summary>Actions cluster clock (docs/superpowers/specs/2026-09-05-reader-polish-backlog-finish-design.md §2), CE-parity port of <c>NavigationOverlay</c>'s <c>timeLabel</c> - refreshed by <see cref="_clockTimer"/>, minute resolution.</summary>
     [ObservableProperty]

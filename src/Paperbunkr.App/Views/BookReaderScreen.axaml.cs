@@ -1,5 +1,6 @@
 using System;
 using System.ComponentModel;
+using System.IO;
 using System.Linq;
 using System.Text.Json;
 using Avalonia;
@@ -7,6 +8,7 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Media;
+using Avalonia.Platform;
 using Avalonia.Threading;
 using Paperbunkr.App.Models;
 using Paperbunkr.App.ViewModels;
@@ -22,6 +24,14 @@ public partial class BookReaderScreen : UserControl
     {
         InitializeComponent();
         SizeChanged += OnSizeChanged;
+
+        // Default WebView2 UserDataFolder is next to the EXE. A per-machine install (installer/
+        // Installer.iss DefaultDirName={autopf} → Program Files) is not writable by a standard,
+        // non-elevated user, so CoreWebView2Environment creation throws
+        // UnauthorizedAccessException/E_ACCESSDENIED at WebView2HwndAdapter.CreateBuilder before
+        // any navigation happens - confirmed via a real user crash report on a Program-Files
+        // install. Redirect to a per-user, always-writable folder instead.
+        ReaderWebView.EnvironmentRequested += OnReaderWebViewEnvironmentRequested;
 
         // SizeChanged alone isn't reliable for the very first time this screen becomes visible:
         // if this control was already measured with its final size while IsVisible was still
@@ -39,6 +49,16 @@ public partial class BookReaderScreen : UserControl
         // long-lived BookReaderScreenViewModel reused across every LoadBook call, so a one-time
         // PropertyChanged hook here is enough - it doesn't need to re-fire per book.
         DataContextChanged += OnDataContextChanged;
+    }
+
+    private static void OnReaderWebViewEnvironmentRequested(object? sender, WebViewEnvironmentRequestedEventArgs e)
+    {
+        if (e is WindowsWebView2EnvironmentRequestedEventArgs winArgs)
+        {
+            winArgs.UserDataFolder = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "Paperbunkr", "WebView2");
+        }
     }
 
     private bool _isPageReady;

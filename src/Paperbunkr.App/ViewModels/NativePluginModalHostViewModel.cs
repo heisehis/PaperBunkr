@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Avalonia.Controls;
+using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 
@@ -25,8 +26,64 @@ public sealed partial class NativePluginModalHostViewModel : ViewModelBase
     [ObservableProperty]
     private Control? _hostedContent;
 
+    /// <summary>Set only while a <see cref="BeginBatch"/> session is active - rendered above
+    /// <see cref="HostedContent"/> inside the same shell (docs/superpowers/specs/2026-09-13-cluster-
+    /// scraper-ui-redesign-design.md §4). Persists across whatever number of sequential
+    /// <see cref="ShowAsync{TResult}"/> calls the batch's caller makes.</summary>
+    [ObservableProperty]
+    private Control? _headerContent;
+
+    private bool _batchActive;
     private PendingModal? _current;
     private readonly Queue<PendingModal> _queue = new();
+
+    /// <summary>
+    /// Keeps the shell open (and <see cref="HeaderContent"/> mounted) across a sequence of otherwise-
+    /// independent <see cref="ShowAsync{TResult}"/> calls, so a caller doing a per-item review loop
+    /// (e.g. Cluster Library Manager's scrape batch) can show one persistent progress header instead
+    /// of it re-mounting between items. Disposing ends the batch: <see cref="HeaderContent"/> clears,
+    /// and if nothing is currently shown or queued the shell closes.
+    /// </summary>
+    internal IDisposable BeginBatch(Control header)
+    {
+        if (!Dispatcher.UIThread.CheckAccess())
+        {
+            throw new InvalidOperationException($"{nameof(BeginBatch)} must be called from the UI thread.");
+        }
+
+        _batchActive = true;
+        HeaderContent = header;
+        return new BatchScope(this);
+    }
+
+    private void EndBatch()
+    {
+        _batchActive = false;
+        HeaderContent = null;
+        if (_current is null)
+        {
+            IsOpen = false;
+        }
+    }
+
+    private sealed class BatchScope : IDisposable
+    {
+        private readonly NativePluginModalHostViewModel _owner;
+        private bool _disposed;
+
+        public BatchScope(NativePluginModalHostViewModel owner) => _owner = owner;
+
+        public void Dispose()
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            _disposed = true;
+            _owner.EndBatch();
+        }
+    }
 
     /// <summary>
     /// Builds the resolve callback first and hands it to <paramref name="contentFactory"/>, so the
@@ -37,9 +94,33 @@ public sealed partial class NativePluginModalHostViewModel : ViewModelBase
     /// task, matching <see cref="ConfirmDialogViewModel"/>'s "-1/dismissed" convention's spirit -
     /// callers awaiting this should expect a possible <see cref="System.Threading.Tasks.TaskCanceledException"/>.
     /// </summary>
+    /// <summary>
+    /// Plugin scrape/organize orchestrators (e.g. <c>ComicVineScrapeOrchestrator.ScrapeAsync</c>)
+    /// chain <c>ConfigureAwait(false)</c> through their network/DB calls, so the continuation that
+    /// resolves <c>interactiveReview</c> and reaches this method often runs on a thread-pool thread,
+    /// not the UI thread. Building the <see cref="Control"/> and setting <see cref="HostedContent"/>/
+    /// <see cref="IsOpen"/> off the UI thread gives that control the wrong thread affinity, which
+    /// later throws <c>Avalonia.Threading.Dispatcher</c> VerifyAccess errors (non-terminating from a
+    /// binding update, terminating from <c>Control.UpdateDataValidation</c>) whenever Avalonia touches
+    /// it from the real UI thread. Marshal here - the single entry point every native plugin modal
+    /// goes through - instead of fixing every orchestrator's await chain individually.
+    /// </summary>
     internal Task<TResult> ShowAsync<TResult>(Func<Action<TResult>, Control> contentFactory)
     {
+        if (!Dispatcher.UIThread.CheckAccess())
+        {
+            var onUiThread = new TaskCompletionSource<TResult>();
+            Dispatcher.UIThread.Post(() => ShowOnUiThread(contentFactory, onUiThread));
+            return onUiThread.Task;
+        }
+
         var completion = new TaskCompletionSource<TResult>();
+        ShowOnUiThread(contentFactory, completion);
+        return completion.Task;
+    }
+
+    private void ShowOnUiThread<TResult>(Func<Action<TResult>, Control> contentFactory, TaskCompletionSource<TResult> completion)
+    {
         Control content = contentFactory(result => Complete(completion, result));
         var pending = new PendingModal(content, () => completion.TrySetCanceled());
 
@@ -51,8 +132,6 @@ public sealed partial class NativePluginModalHostViewModel : ViewModelBase
         {
             Present(pending);
         }
-
-        return completion.Task;
     }
 
     private void Present(PendingModal pending)
@@ -88,7 +167,15 @@ public sealed partial class NativePluginModalHostViewModel : ViewModelBase
     /// </summary>
     private void Advance()
     {
-        IsOpen = false;
+        // While a batch is active, the shell/header stay mounted between consecutive ShowAsync calls
+        // (docs/superpowers/specs/2026-09-13-cluster-scraper-ui-redesign-design.md §4) - only
+        // HostedContent itself clears, HostedContent going briefly null between items rather than the
+        // whole shell tearing down and re-mounting with it.
+        if (!_batchActive)
+        {
+            IsOpen = false;
+        }
+
         (_current?.Content.DataContext as IDisposable)?.Dispose();
         (_current?.Content as IDisposable)?.Dispose();
         HostedContent = null;

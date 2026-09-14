@@ -142,7 +142,7 @@ namespace cYo.Projects.ComicRack.Engine
 			{
 				IniFile iniFile = new IniFile(Path.Combine(PackagePath, "package.ini"));
 
-				(bool isNative, string manifestKey, string manifestName) = ReadManifestAttributes(PackagePath);
+				(bool isNative, string manifestKey, string manifestName, string manifestVersion) = ReadManifestAttributes(PackagePath);
 				IsNativeTier = isNative;
 				Key = !string.IsNullOrWhiteSpace(manifestKey) ? manifestKey : FallbackKey(PackagePath);
 
@@ -153,7 +153,10 @@ namespace cYo.Projects.ComicRack.Engine
 
 				Description = iniFile.GetValue("Description", string.Empty);
 				Author = iniFile.GetValue("Author", string.Empty);
-				Version = iniFile.GetValue("Version", string.Empty);
+				// Native-tier packages carry their own version as a plugin.xml attribute (a plain
+				// Script-tier package, or one predating this, still falls back to package.ini's own
+				// Version= key - CE's own original convention, unchanged).
+				Version = !string.IsNullOrWhiteSpace(manifestVersion) ? manifestVersion : iniFile.GetValue("Version", string.Empty);
 				HelpLink = iniFile.GetValue("HelpLink", string.Empty);
 				KeepFiles = iniFile.GetValue("KeepFiles", string.Empty).Split(',').TrimStrings()
 					.RemoveEmpty()
@@ -172,7 +175,7 @@ namespace cYo.Projects.ComicRack.Engine
 			/// otherwise be two more (docs/superpowers/specs/2026-09-12-plugin-management-screen-
 			/// redesign-design.md §4.1's illustrative split was three methods; folded into one file
 			/// read here since every call site needs all three attributes from the same file anyway).</summary>
-			private static (bool isNative, string key, string name) ReadManifestAttributes(string packagePath)
+			private static (bool isNative, string key, string name, string version) ReadManifestAttributes(string packagePath)
 			{
 				string manifestPath = Path.Combine(packagePath, "plugin.xml");
 				try
@@ -181,12 +184,13 @@ namespace cYo.Projects.ComicRack.Engine
 					string tier = manifest.Root?.Attribute("tier")?.Value;
 					string key = manifest.Root?.Attribute("key")?.Value;
 					string name = manifest.Root?.Attribute("name")?.Value;
+					string version = manifest.Root?.Attribute("version")?.Value;
 					bool isNative = string.Equals(tier, "Native", StringComparison.OrdinalIgnoreCase);
-					return (isNative, key, name);
+					return (isNative, key, name, version);
 				}
 				catch
 				{
-					return (false, null, null);
+					return (false, null, null, null);
 				}
 			}
 
@@ -429,6 +433,17 @@ namespace cYo.Projects.ComicRack.Engine
 			}
 		}
 
+		/// <summary>
+		/// Same key (<c>plugin.xml</c>'s own <c>key</c> attribute) already <see cref="PackageType.Installed"/>
+		/// under a different name/version - used by <see cref="Install"/> to auto-stage that older copy
+		/// for removal, so re-picking a newer package file is a real one-step update rather than
+		/// requiring the user to separately Remove the old version first.
+		/// </summary>
+		public Package GetInstalledPackageByKey(string key)
+		{
+			return GetPackages().FirstOrDefault(p => p.PackageType == PackageType.Installed && string.Equals(p.Key, key, StringComparison.Ordinal));
+		}
+
 		public bool Install(string packageFile)
 		{
 			Package package = Package.CreateFromFile(packageFile);
@@ -441,6 +456,18 @@ namespace cYo.Projects.ComicRack.Engine
 			{
 				FileUtility.SafeDirectoryDelete(text);
 				Package.UnzipFile(packageFile, text, package.IsNativeTier);
+
+				// One-step update (design note, added so re-installing a newer build doesn't need a
+				// separate manual Remove first): if an older copy of this exact plugin (same key) is
+				// already Installed under a different folder name, stage it for removal too - both
+				// changes then commit together at the next restart (native tier) or immediately
+				// (script tier, via the same Commit() call InstallPackage's caller already makes).
+				Package existing = GetInstalledPackageByKey(package.Key);
+				if (existing != null && !string.Equals(existing.PackagePath, GetPackagePath(package, pending: false), StringComparison.OrdinalIgnoreCase))
+				{
+					Uninstall(existing);
+				}
+
 				return true;
 			}
 			catch (Exception)

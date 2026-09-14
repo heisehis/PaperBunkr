@@ -16,11 +16,12 @@ public sealed partial class PluginPackageRowViewModel : ViewModelBase
     private readonly PackageManager.Package _package;
     private readonly Action<PluginPackageRowViewModel> _onSelect;
 
-    public PluginPackageRowViewModel(PackageManager.Package package, bool isBroken, Action<PluginPackageRowViewModel> onSelect)
+    public PluginPackageRowViewModel(PackageManager.Package package, bool isBroken, Action<PluginPackageRowViewModel> onSelect, bool isUpdatePending = false)
     {
         _package = package;
         IsBroken = isBroken;
         _onSelect = onSelect;
+        IsUpdatePending = isUpdatePending;
     }
 
     public PackageManager.Package Package => _package;
@@ -28,6 +29,11 @@ public sealed partial class PluginPackageRowViewModel : ViewModelBase
     public string Name => _package.Name;
 
     public string? Version => string.IsNullOrEmpty(_package.Version) ? null : _package.Version;
+
+    /// <summary>True when an older, same-key copy is still <c>Installed</c> alongside this row's own
+    /// <c>PendingInstall</c> one (<see cref="PluginScreenViewModel.Refresh"/> merges them into this
+    /// one row) - a real version update staged, not a fresh install.</summary>
+    public bool IsUpdatePending { get; }
 
     /// <summary>Full-trust, not audited-write, tier (docs/superpowers/specs/2026-09-11-plugin-api-v4-
     /// native-tier-design.md §2) - drives the sidebar/detail's "Full read/write access to your library

@@ -388,8 +388,8 @@ public partial class App : Application
         }
     }
 
-    /// <summary>Same relaunch mechanism as <c>DiagnosticsService.ActOnCrashOutcome</c>'s Restart outcome - a new process, then this one exits.</summary>
-    private static void RelaunchAndExit()
+    /// <summary>Same relaunch mechanism as <c>DiagnosticsService.ActOnCrashOutcome</c>'s Restart outcome - a new process, then this one exits. Internal (not private) so <see cref="ViewModels.MainViewModel"/>'s Activity Center "Restart now" alert action (<see cref="Models.ActivityLinkKind.RestartApp"/>) can reuse it instead of a third copy of this same logic.</summary>
+    internal static void RelaunchAndExit()
     {
         try
         {

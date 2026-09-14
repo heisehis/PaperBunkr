@@ -41,15 +41,16 @@ public sealed class PluginPackageServiceNativeTierTests : IDisposable
         }
     }
 
-    private string BuildZip(string tierAttribute, IReadOnlyDictionary<string, string> entries)
+    private string BuildZip(string tierAttribute, IReadOnlyDictionary<string, string> entries, string? version = null)
     {
         string zipPath = Path.Combine(_testRoot, $"{Guid.NewGuid():N}.zip");
         Directory.CreateDirectory(_testRoot);
 
         using var archive = ZipFile.Open(zipPath, ZipArchiveMode.Create);
+        string versionAttribute = version is null ? string.Empty : $" version=\"{version}\"";
         string manifest =
             $"""
-             <Plugin key="fixture" name="Fixture"{tierAttribute}>
+             <Plugin key="fixture" name="Fixture"{tierAttribute}{versionAttribute}>
              </Plugin>
              """;
         WriteEntry(archive, "plugin.xml", manifest);
@@ -188,5 +189,93 @@ public sealed class PluginPackageServiceNativeTierTests : IDisposable
         service.ApplyPendingChanges();
 
         Assert.Empty(service.GetPackages());
+    }
+
+    [Fact]
+    public void Package_Version_reads_plugin_xmls_own_version_attribute()
+    {
+        string zipPath = BuildZip(
+            tierAttribute: " tier=\"Native\" assembly=\"MyPlugin.dll\"",
+            entries: new Dictionary<string, string> { ["MyPlugin.dll"] = "not a real dll" },
+            version: "1.2.3");
+        var service = new PluginPackageService(_rootDirectory, _stagingDirectory);
+        service.Install(zipPath);
+        service.ApplyPendingChanges();
+
+        var installed = Assert.Single(service.GetPackages());
+        Assert.Equal("1.2.3", installed.Version);
+    }
+
+    [Fact]
+    public void Installing_a_newer_same_name_native_package_updates_cleanly_with_no_manual_remove_call()
+    {
+        // The realistic case (a plugin's own display name is stable across its own version bumps):
+        // both the old and new package resolve to the same final install path by construction, so
+        // committing the update is a plain in-place overwrite - no separate PendingRemove of the old
+        // one is needed or created for this case, only for the same-key-different-name (rename) case
+        // covered by the next test.
+        var service = new PluginPackageService(_rootDirectory, _stagingDirectory);
+        service.Install(BuildZip(
+            tierAttribute: " tier=\"Native\" assembly=\"MyPlugin.dll\"",
+            entries: new Dictionary<string, string> { ["MyPlugin.dll"] = "v1" },
+            version: "1.0.0"));
+        service.ApplyPendingChanges();
+        var original = Assert.Single(service.GetPackages());
+        Assert.Equal(PackageManager.PackageType.Installed, original.PackageType);
+
+        // Re-install the same key/name at a newer version - no manual Uninstall/Remove call in
+        // between, matching the whole point of this feature: one Install call is enough.
+        service.Install(BuildZip(
+            tierAttribute: " tier=\"Native\" assembly=\"MyPlugin.dll\"",
+            entries: new Dictionary<string, string> { ["MyPlugin.dll"] = "v2" },
+            version: "1.1.0"));
+
+        var afterInstall = service.GetPackages();
+        Assert.Equal(2, afterInstall.Count); // old Installed + new PendingInstall, until restart commits
+        Assert.Contains(afterInstall, p => p.PackageType == PackageManager.PackageType.Installed && p.Version == "1.0.0");
+        Assert.Contains(afterInstall, p => p.PackageType == PackageManager.PackageType.PendingInstall && p.Version == "1.1.0");
+
+        service.ApplyPendingChanges();
+
+        var afterCommit = Assert.Single(service.GetPackages());
+        Assert.Equal(PackageManager.PackageType.Installed, afterCommit.PackageType);
+        Assert.Equal("1.1.0", afterCommit.Version);
+        string dllPath = Path.Combine(_rootDirectory, afterCommit.Name, "MyPlugin.dll");
+        Assert.Equal("v2", File.ReadAllText(dllPath));
+    }
+
+    [Fact]
+    public void Installing_a_newer_version_under_a_different_display_name_auto_stages_the_old_one_for_removal()
+    {
+        // A same-key package renamed between versions would otherwise resolve to a different final
+        // install path, silently leaving the old folder behind forever with no way for the user to
+        // notice - PackageManager.Install auto-marks it for removal (same ".remove" mechanism a
+        // manual Uninstall uses) as soon as it detects the same key already Installed elsewhere.
+        var service = new PluginPackageService(_rootDirectory, _stagingDirectory);
+        service.Install(BuildZip(
+            tierAttribute: " tier=\"Native\" assembly=\"MyPlugin.dll\"",
+            entries: new Dictionary<string, string> { ["MyPlugin.dll"] = "v1" },
+            version: "1.0.0"));
+        service.ApplyPendingChanges();
+
+        string renamedZip = Path.Combine(_testRoot, $"{Guid.NewGuid():N}.zip");
+        using (var archive = ZipFile.Open(renamedZip, ZipArchiveMode.Create))
+        {
+            WriteEntry(archive, "plugin.xml", """<Plugin key="fixture" name="Fixture Renamed" tier="Native" assembly="MyPlugin.dll" version="2.0.0"></Plugin>""");
+            WriteEntry(archive, "MyPlugin.dll", "v2");
+        }
+
+        service.Install(renamedZip);
+
+        var afterInstall = service.GetPackages();
+        Assert.Equal(2, afterInstall.Count);
+        Assert.Contains(afterInstall, p => p.PackageType == PackageManager.PackageType.PendingRemove && p.Name == "Fixture");
+        Assert.Contains(afterInstall, p => p.PackageType == PackageManager.PackageType.PendingInstall && p.Name == "Fixture Renamed");
+
+        service.ApplyPendingChanges();
+
+        var afterCommit = Assert.Single(service.GetPackages());
+        Assert.Equal("Fixture Renamed", afterCommit.Name);
+        Assert.Equal("2.0.0", afterCommit.Version);
     }
 }

@@ -66,10 +66,18 @@ public partial class PluginScreenViewModel : ViewModelBase
         Packages.Clear();
         SelectedPackageDetail = null;
 
-        foreach (PackageManager.Package package in _packageService.GetPackages())
+        // An update-in-progress (design note: PackageManager.Install now auto-stages the older,
+        // same-key copy for removal instead of requiring a separate manual Remove first) briefly
+        // has TWO folders for the one logical plugin - the still-Installed old version and the new
+        // PendingInstall one - until the next restart commits both. Group by key so that shows as
+        // one row (the pending copy, since that's what the user is about to get), not two.
+        foreach (var group in _packageService.GetPackages().GroupBy(p => p.Key))
         {
+            var candidates = group.ToList();
+            PackageManager.Package package = candidates.FirstOrDefault(p => p.PackageType == PackageManager.PackageType.PendingInstall) ?? candidates[0];
+            bool isUpdate = candidates.Count > 1;
             bool isBroken = IsPackageBroken(package);
-            var row = new PluginPackageRowViewModel(package, isBroken, SelectPackage);
+            var row = new PluginPackageRowViewModel(package, isBroken, SelectPackage, isUpdate);
             Packages.Add(row);
         }
 
@@ -161,8 +169,32 @@ public partial class PluginScreenViewModel : ViewModelBase
             return;
         }
 
-        if (_packageService.PackageFileExists(file))
+        // Version-aware confirm (design note: re-picking a newer build of an already-installed
+        // plugin is now a real one-step update - PackageManager.Install auto-stages the old, same-
+        // key copy for removal - so the prompt should say so instead of the old generic "Overwrite?"
+        // that gave no sense of what was actually changing).
+        PackageManager.Package? incoming = TryPeekPackage(file);
+        PackageManager.Package? installed = incoming is not null ? _packageService.GetInstalledPackageByKey(incoming.Key) : null;
+
+        if (installed is not null)
         {
+            string prompt = DescribeVersionChange(installed.Version, incoming!.Version) switch
+            {
+                VersionChange.Newer => $"Update \"{installed.Name}\" from v{installed.Version} to v{incoming.Version}?",
+                VersionChange.Older => $"This build (v{incoming.Version}) is older than the installed v{installed.Version} of \"{installed.Name}\". Install it anyway?",
+                VersionChange.Same => $"Reinstall \"{installed.Name}\" v{installed.Version}?",
+                _ => $"\"{installed.Name}\" is already installed. Replace it with this build?",
+            };
+            bool proceed = await _dialogs.ConfirmAsync(prompt, confirmLabel: "Install", cancelLabel: "Cancel");
+            if (!proceed)
+            {
+                return;
+            }
+        }
+        else if (_packageService.PackageFileExists(file))
+        {
+            // Same display name but a different (or unreadable) key - genuinely ambiguous, keep the
+            // original safe/generic wording rather than guessing at an update relationship.
             bool overwrite = await _dialogs.ConfirmAsync(
                 "A plugin package with this name is already installed. Overwrite it?",
                 confirmLabel: "Overwrite", cancelLabel: "Cancel");
@@ -185,9 +217,58 @@ public partial class PluginScreenViewModel : ViewModelBase
         // 11-plugin-api-v4-native-tier-design.md §4) - the toast has to say so, not claim "no restart
         // needed" the way every Script-tier install still truthfully can.
         var justInstalled = Packages.FirstOrDefault(p => p.Package.PackageType == PackageManager.PackageType.PendingInstall);
-        _host?.ShowToast("Plugin package", justInstalled is not null
-            ? "Installed - restart Paperbunkr to finish setting it up (full read/write access to your library database)."
-            : "Installed - no restart needed.");
+        if (justInstalled is not null)
+        {
+            string verb = justInstalled.IsUpdatePending ? "updating" : "setting it up";
+            _host?.ShowToast("Plugin package", $"Installed - restart Paperbunkr to finish {verb} (full read/write access to your library database).");
+            _host?.RaisePendingRestartAlert(
+                justInstalled.IsUpdatePending ? "Plugin update pending" : "Plugin install pending",
+                justInstalled.IsUpdatePending
+                    ? $"\"{justInstalled.Package.Name}\" v{justInstalled.Package.Version} is ready - restart to finish updating."
+                    : $"\"{justInstalled.Package.Name}\" needs a restart to finish installing.",
+                dedupeKey: "plugin-restart-pending");
+        }
+        else
+        {
+            _host?.ShowToast("Plugin package", "Installed - no restart needed.");
+        }
+    }
+
+    /// <summary>Peeks a package file's manifest (key/name/version) without staging an install -
+    /// <see cref="PackageManager.Package.CreateFromFile"/> already does this exact peek internally
+    /// for <see cref="PluginPackageService.PackageFileExists"/>; reusing it here directly avoids a
+    /// second, parallel peek path.</summary>
+    private static PackageManager.Package? TryPeekPackage(string file)
+    {
+        try
+        {
+            return PackageManager.Package.CreateFromFile(file);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private enum VersionChange { Unknown, Newer, Same, Older }
+
+    /// <summary>Best-effort semantic-version compare for the install-confirm prompt's wording only -
+    /// never blocks an install either way, a plugin author's own version string not parsing as a
+    /// <see cref="Version"/> just means the prompt falls back to generic "replace" wording instead of
+    /// a specific newer/older/same claim it can't actually verify.</summary>
+    private static VersionChange DescribeVersionChange(string? installedVersion, string? incomingVersion)
+    {
+        if (!System.Version.TryParse(installedVersion, out var installed) || !System.Version.TryParse(incomingVersion, out var incoming))
+        {
+            return VersionChange.Unknown;
+        }
+
+        return incoming.CompareTo(installed) switch
+        {
+            > 0 => VersionChange.Newer,
+            0 => VersionChange.Same,
+            _ => VersionChange.Older,
+        };
     }
 
     private void RemovePackage(PackageManager.Package package)
@@ -201,5 +282,15 @@ public partial class PluginScreenViewModel : ViewModelBase
         // ArgumentOutOfRangeException (see Paperbunkr.App.Controls.SuggestBox.Commit for the fully
         // diagnosed case).
         Avalonia.Threading.Dispatcher.UIThread.Post(Refresh);
+
+        // Same restart-to-apply gap as InstallPackage above - only the Native tier defers the actual
+        // removal (Uninstall just drops a ".remove" marker for it), so only that tier needs telling.
+        if (package.IsNativeTier)
+        {
+            _host?.RaisePendingRestartAlert(
+                "Plugin change pending",
+                $"\"{package.Name}\" needs a restart to finish removing.",
+                dedupeKey: "plugin-restart-pending");
+        }
     }
 }

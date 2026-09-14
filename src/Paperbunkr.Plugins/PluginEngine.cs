@@ -43,6 +43,27 @@ public sealed class PluginEngine
     /// <summary>Walks <paramref name="pluginsRoot"/> for <c>plugin.xml</c> manifests, initializing and precompiling every command found. Never throws - a broken plugin is flagged via <see cref="Command.IsBroken"/>, not skipped from discovery, and never aborts loading the rest (docs §2).</summary>
     public void Discover(string pluginsRoot, IPluginEnvironment baseEnvironment)
     {
+        // A native module holding its own file-backed resources (a local database, a timer) never
+        // gets a second chance to release them once this method drops its own reference - the
+        // non-collectible AssemblyLoadContext (design v4 §4) means the module instance itself is
+        // never reclaimed either, so a leaked LiteDB connection from a previous Discover() call (an
+        // install/uninstall/Reload cycle - see PluginHostService.RediscoverPlugins) sits open for
+        // the rest of the process, and a same-process second LiteDatabase.Open on that same file
+        // throws "used by another process" the next time anything (this Discover() re-loading the
+        // module, or an uninstall trying to delete the folder) touches it.
+        foreach (NativePluginLoadResult previous in _nativeLoadResults.Values)
+        {
+            try
+            {
+                (previous.Module as IDisposable)?.Dispose();
+            }
+            catch (Exception)
+            {
+                // Never throws (this method's own contract) - a module that fails to dispose
+                // cleanly shouldn't block discovering everything else.
+            }
+        }
+
         _commands.Clear();
         _nativeLoadResults.Clear();
         if (!Directory.Exists(pluginsRoot))
@@ -128,6 +149,18 @@ public sealed class PluginEngine
 
         string assemblyPath = Path.Combine(pluginDir, manifest.Assembly);
         if (!File.Exists(assemblyPath))
+        {
+            return;
+        }
+
+        // Marked for removal (PackageManager.Uninstall's ".remove" marker, docs/superpowers/specs/
+        // 2026-09-12-plugin-management-screen-redesign-design.md's restart-to-apply model for a
+        // Native-tier package) - the folder is still physically present until the next launch
+        // actually commits the delete, but reloading it here anyway serves no purpose: it's going
+        // away regardless, and doing so would reopen this plugin's own file-backed resources (a
+        // LiteDB connection, say) right after they were just disposed above for exactly this
+        // Discover() call, racing the OS's release of that same file instead of just leaving it shut.
+        if (File.Exists(Path.Combine(pluginDir, ".remove")))
         {
             return;
         }

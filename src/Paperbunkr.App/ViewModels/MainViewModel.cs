@@ -2431,6 +2431,9 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
                 GoSmartCommand.Execute(null);
                 _ = Smart.OpenPluginListByKey(link.Payload);
                 break;
+            case ActivityLinkKind.RestartApp:
+                App.RelaunchAndExit();
+                break;
         }
     }
 

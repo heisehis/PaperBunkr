@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Avalonia.Controls;
+using Paperbunkr.App.Models;
 using Paperbunkr.App.Services;
 using Paperbunkr.App.ViewModels;
 using Paperbunkr.Data.Entities;
@@ -102,18 +103,17 @@ public sealed class PluginHostService
 
     /// <summary>
     /// Real Library-hook anchor (docs/superpowers/specs/2026-08-24-plugin-api-v2-design.md §5) -
-    /// wired to a Library grid right-click. Paperbunkr's Library screen has no multi-selection
-    /// model (unlike Detail's Bulk Edit), so this always runs against whichever single issue was
-    /// right-clicked; <paramref name="books"/> is still a list (matching CE's own "selected books"
-    /// shape and <see cref="Hooks.BooksHookGlobals"/>) so a future multi-select Library UI can pass
-    /// more than one without any plugin-facing API change. Invokes every enabled command registered
-    /// under the Library hook, not just one plugin's.
+    /// backs Library/Detail's own "Plugins ▸" submenu and the Library toolbar's bulk-action
+    /// dropdown, one entry per enabled command (mirrors <see cref="GetEditorCommands"/>'s own
+    /// already-established shape). Replaces an earlier single hardcoded "Find Duplicates" menu item
+    /// that invoked every enabled Library-hook command at once regardless of which one the label
+    /// actually named - fine when Duplicate Finder was the only plugin registering this hook, wrong
+    /// once Cluster Library Manager's own "Organize Library"/"Scrape with ComicVine" also did.
     /// </summary>
-    public Task<IReadOnlyList<PluginInvocationResult>> RunLibraryHookAsync(IEnumerable<Issue> books)
-    {
-        var list = books.ToList();
-        return InvokeAndReportAsync(PluginHooks.Library, env => new BooksHookGlobals { Environment = env, Books = list });
-    }
+    public IEnumerable<Command> GetLibraryCommands() => Engine.GetCommands(PluginHooks.Library);
+
+    public Task<PluginInvocationResult> RunLibraryCommandAsync(Command command, IReadOnlyList<Issue> books) =>
+        RunCommandAsync(command, new BooksHookGlobals { Environment = _environment!, Books = books });
 
     /// <summary>Runs one specific command directly (bypassing hook-wide dispatch) - backs the Plugin screen's manual "Run" action for hooks like CreateBookList that need no external payload beyond <see cref="IPluginEnvironment"/>.</summary>
     public async Task<PluginInvocationResult> RunCommandAsync<TGlobals>(Command command, TGlobals globals)
@@ -143,9 +143,8 @@ public sealed class PluginHostService
 
     /// <summary>
     /// Real Editor-hook anchor - the Issue Properties/Bulk Editing overlay toolbar (docs/superpowers/
-    /// specs/2026-09-05-plugin-api-v2-remaining-hooks-plan.md §3). Unlike <see cref="RunLibraryHookAsync"/>'s
-    /// single hardcoded menu item (fine when only one plugin exists), this surfaces one entry per
-    /// enabled command - <see cref="GetEditorCommands"/> backs that enumeration.
+    /// specs/2026-09-05-plugin-api-v2-remaining-hooks-plan.md §3) - one entry per enabled command,
+    /// same shape <see cref="GetLibraryCommands"/> now also uses.
     /// </summary>
     public IEnumerable<Command> GetEditorCommands() => Engine.GetCommands(PluginHooks.Editor);
 
@@ -222,6 +221,27 @@ public sealed class PluginHostService
     public void ShowToast(string title, string message) => _main?.ShowToastForPlugin(title, message);
 
     /// <summary>
+    /// Surfaces a Native-tier install/uninstall's "restart to apply" requirement through the
+    /// Activity Center rather than only a toast the user has to remember - an "Restart now" action
+    /// link (<see cref="ActivityLinkKind.RestartApp"/>, resolved in <c>MainViewModel.ResolveActivityLink</c>)
+    /// relaunches the app immediately when clicked. Deduped by <paramref name="dedupeKey"/> so
+    /// installing/removing multiple packages in one session before restarting collapses to one
+    /// standing alert instead of stacking a fresh one per action.
+    /// </summary>
+    public void RaisePendingRestartAlert(string title, string detail, string dedupeKey)
+    {
+        _main?.Activity.RaiseAlert(new ActivityAlert
+        {
+            Severity = ActivityAlertSeverity.Info,
+            Title = title,
+            Detail = detail,
+            ActionLabel = "Restart now",
+            ActionLink = new ActivityLink(ActivityLinkKind.RestartApp),
+            DedupeKey = dedupeKey,
+        });
+    }
+
+    /// <summary>
     /// Opens a native plugin's compiled settings UI (docs/superpowers/specs/2026-09-12-plugin-
     /// management-screen-redesign-design.md §4.4/§4.5) - the entry point that didn't exist before
     /// this redesign. A no-op if the package never loaded (no <c>NativeLoadResults</c> entry), its
@@ -259,6 +279,36 @@ public sealed class PluginHostService
             // Dismissed via the shell's own scrim/close button - the expected, only way this modal
             // ever ends, not a failure.
         }
+    }
+
+    /// <summary>
+    /// Comic Detail screen's "Details" tab entry point - asks every loaded native module that
+    /// implements <see cref="INativeSeriesDetailUi"/> whether it wants to replace that tab's default
+    /// External Metadata/Trackers block for <paramref name="series"/>, returning the first non-null
+    /// view (in practice, at most one plugin implements this today). Naturally absent (returns null)
+    /// whenever no such plugin is installed, since <see cref="PluginEngine.NativeLoadResults"/> then
+    /// has nothing to check in the first place - no separate "is it installed" branch needed.
+    /// </summary>
+    public Control? GetSeriesDetailExtension(Series series)
+    {
+        if (_environment is not INativePluginUiEnvironment uiEnvironment)
+        {
+            return null;
+        }
+
+        foreach (var loadResult in Engine.NativeLoadResults.Values)
+        {
+            if (loadResult.Module is INativeSeriesDetailUi detailUi)
+            {
+                Control? view = detailUi.CreateSeriesDetailView(uiEnvironment, series);
+                if (view is not null)
+                {
+                    return view;
+                }
+            }
+        }
+
+        return null;
     }
 
     /// <summary>Master enable/disable for every command a package owns at once (docs §4.4/§4.5) -

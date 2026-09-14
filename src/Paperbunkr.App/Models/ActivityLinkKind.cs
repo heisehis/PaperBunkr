@@ -25,4 +25,10 @@ public enum ActivityLinkKind
 
     /// <summary>Open Smart Lists and the Grouped Review overlay for a specific plugin command (docs/superpowers/specs/2026-09-05-plugin-grouped-review-and-scan-alerts-design.md §4) - payload = <c>"pluginKey|commandKey"</c>.</summary>
     PluginGroupedReview,
+
+    /// <summary>Not a navigation destination like every other entry here - relaunches the app
+    /// immediately (<c>App.RelaunchAndExit</c>). Raised when a Native-tier plugin install/remove
+    /// stays pending until the next restart (docs/superpowers/specs/2026-09-11-plugin-api-v4-native-
+    /// tier-design.md §4), so the user isn't left to remember to close and reopen the app themselves.</summary>
+    RestartApp,
 }

@@ -62,6 +62,11 @@ public sealed class PluginPackageService
     /// <summary>True when a package with the same (package.ini-or-filename-derived) name is already installed - the signal for the caller to confirm an overwrite first, matching CE's own "A Script Package with the same name already exists!" prompt.</summary>
     public bool PackageFileExists(string zipFile) => Manager.PackageFileExists(zipFile);
 
+    /// <summary>The already-<c>Installed</c> package with this exact <c>plugin.xml</c> key, if any -
+    /// lets a caller (e.g. the Install-flow's own version-comparison prompt) tell an update from a
+    /// fresh install before <see cref="Install"/> itself runs.</summary>
+    public PackageManager.Package? GetInstalledPackageByKey(string key) => Manager.GetInstalledPackageByKey(key);
+
     /// <summary>
     /// Installs (or overwrites, if a same-named package already exists) <paramref name="zipFile"/>.
     /// A `Script`-tier package still commits immediately, exactly as before this method learned about

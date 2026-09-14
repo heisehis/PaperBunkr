@@ -100,7 +100,12 @@ public sealed partial class PluginPackageDetailViewModel : ViewModelBase
     private void Reload()
     {
         _host.RediscoverPlugins();
-        _onRefreshRequested();
+
+        // Deferred for the same reason MasterEnabledClick defers below (CLAUDE.md's "don't detach a
+        // control from inside a routed event it's still raising"): this Button lives inside the
+        // detail pane that _onRefreshRequested (Refresh()) is about to null-out and rebuild, and this
+        // click is still routing through it.
+        Avalonia.Threading.Dispatcher.UIThread.Post(_onRefreshRequested);
     }
 
     [RelayCommand]
@@ -130,7 +135,13 @@ public sealed partial class PluginPackageDetailViewModel : ViewModelBase
     {
         bool next = EnabledState != true;
         _host.SetPackageEnabled(_package.Key, next);
-        _onRefreshRequested();
+
+        // Deferred (CLAUDE.md's "don't detach a control from inside a routed event it's still
+        // raising"): this CheckBox lives inside the detail pane that _onRefreshRequested (Refresh())
+        // is about to null-out and rebuild from scratch, and this click is still routing through it -
+        // calling it synchronously here previously left the toggle looking like it did nothing,
+        // since the detail pane got torn down and rebuilt mid-click instead of after.
+        Avalonia.Threading.Dispatcher.UIThread.Post(_onRefreshRequested);
     }
 
     public TwoStepConfirm DeleteConfirm { get; }

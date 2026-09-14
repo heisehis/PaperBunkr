@@ -3,6 +3,17 @@
 All notable changes to Paperbunkr are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.5.0-beta] - 2026-09-14
+
+### Added
+
+- **Update-available Activity Center alert.** Checking for updates (Preferences → About →
+  "Check Now", or the automatic startup check) now raises an Activity Center alert with a "View
+  release" link straight to the GitHub releases page, alongside the existing in-app download flow.
+- **"Confirm before closing" toggle** (Preferences → General → Window). When on, clicking the
+  window's close button asks before actually quitting — only when the close button would really
+  exit the app, not when Minimize to tray is already catching it.
+
 ## [0.4.2-beta] - 2026-09-14
 
 ### Added

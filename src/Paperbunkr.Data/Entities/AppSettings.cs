@@ -589,4 +589,44 @@ public class AppSettings
     /// always populated on removal regardless of this setting - see design doc.
     /// </summary>
     public bool DontReimportRemovedFiles { get; set; }
+
+    // --- Cosmetic Preferences micro-toggles (docs/superpowers/specs/2026-09-13-preferences-
+    // cosmetic-toggles-design.md), CE's "Browser"/"Import & Export" Settings categories.
+
+    /// <summary>
+    /// Whether a comic cover thumbnail fades in from transparent on its first real decode (never on
+    /// a cache hit repaint). CE: <c>Settings.FadeInThumbnails</c>, default true.
+    /// </summary>
+    public bool FadeInThumbnails { get; set; } = true;
+
+    /// <summary>
+    /// Whether hovering or selecting a Poster/Panorama tile peeks the comic's real second page from
+    /// behind its cover - CE's own "preview the next page" affordance, not a status badge. CE:
+    /// <c>Settings.DogEarThumbnails</c>, default true. Gated on the issue having no custom cover
+    /// override, more than one page, and not being a missing file - see design doc.
+    /// </summary>
+    public bool DogEarThumbnails { get; set; } = true;
+
+    /// <summary>
+    /// Whether hovering a library tile (any view except Tiles) pops a small metadata preview -
+    /// thumbnail, title, writer/penciller, summary excerpt, file size, format. CE:
+    /// <c>Settings.ShowToolTips</c>, default false.
+    /// </summary>
+    public bool ShowToolTips { get; set; }
+
+    /// <summary>
+    /// Whether a hover-reveal badge on the tile shows the issue's numeric rating. Shares the tile's
+    /// bottom-right corner with the selection checkbox - hidden whenever any issue is selected. CE:
+    /// <c>Settings.NumericRatingThumbnails</c>, default true. No CE star-strip fallback for the off
+    /// state - see design doc.
+    /// </summary>
+    public bool NumericRatingThumbnails { get; set; } = true;
+
+    /// <summary>
+    /// Whether exporting a reading list to <c>.cbl</c> embeds each member issue's file path
+    /// alongside its metadata identifiers. CE: <c>Settings.ExportedListsContainFilenames</c>, default
+    /// false. CBL export only - CE itself never reads this setting on import, and Paperbunkr's CSV
+    /// reading-list format is untouched.
+    /// </summary>
+    public bool ExportedListsContainFilenames { get; set; }
 }

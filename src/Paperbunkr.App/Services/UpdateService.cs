@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Threading.Tasks;
 using NetSparkleUpdater;
 using NetSparkleUpdater.Enums;
@@ -44,6 +45,14 @@ public class UpdateService
     {
         UIFactory = null,
         UserInteractionMode = UserInteractionMode.NotSilent,
+        // Left unset, NetSparkle drops the downloaded installer straight in Path.GetTempPath() (its
+        // own SparkleUpdater.cs default) - fine for the immediate-restart path, but "Later" from the
+        // download-ready toast (MainViewModel.DownloadUpdateAsync) keeps a reference to that path for
+        // an indefinite amount of time, and raw OS Temp is volatile - a reboot or the OS's own temp-
+        // cleanup can remove the file before the user acts, leaving "Restart" to fail against a
+        // missing installer. Same %APPDATA%\Paperbunkr\<subfolder> convention this app already uses
+        // for backups (BackupService.DefaultBackupLocation) - persistent, not swept by Temp cleanup.
+        TmpDownloadFilePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Paperbunkr", "updates"),
     };
 
     public Task<UpdateInfo> CheckForUpdatesAsync() => _sparkle.CheckForUpdatesQuietly();

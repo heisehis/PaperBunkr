@@ -1,0 +1,150 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Paperbunkr.App.ViewModels"
+             xmlns:models="using:Paperbunkr.App.Models"
+             xmlns:views="using:Paperbunkr.App.Views"
+             xmlns:fi="using:FluentIcons.Avalonia.Fluent"
+             x:Class="Paperbunkr.App.Views.LibraryPreviewPanel"
+             x:DataType="vm:LibraryScreenViewModel">
+    <!--
+    Live preview panel (docs/superpowers/specs/2026-09-14-library-visual-redesign-design.md §4).
+    Four mutually-exclusive states gated by the VM's own computed booleans; updates on card focus
+    (LibraryScreen.axaml.cs's OnCardGotFocus) rather than selection, since Selection/SeriesSelection
+    are pure multi-select sets with no "current/primary" concept. Cover rendering mirrors the exact
+    Border.Background=CoverBrush + AsyncCoverImage.SourceId pattern every grid template already uses.
+    -->
+    <UserControl.Styles>
+        <Style Selector="TextBlock.previewTitle">
+            <Setter Property="TextWrapping" Value="Wrap" />
+        </Style>
+        <Style Selector="TextBlock.previewMeta">
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
+        </Style>
+        <Style Selector="TextBlock.previewSynopsis">
+            <Setter Property="FontSize" Value="12.5" />
+            <Setter Property="LineHeight" Value="18" />
+            <Setter Property="TextWrapping" Value="Wrap" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextBrush}" />
+        </Style>
+        <Style Selector="Border.previewCover">
+            <Setter Property="CornerRadius" Value="{DynamicResource PbRadius}" />
+            <Setter Property="ClipToBounds" Value="True" />
+            <Setter Property="Height" Value="220" />
+        </Style>
+        <Style Selector="Button.previewAction">
+            <Setter Property="Padding" Value="10,6" />
+            <Setter Property="CornerRadius" Value="{DynamicResource PbRadiusSm}" />
+            <Setter Property="Background" Value="{DynamicResource PbAccentSoftBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource PbAccentTextBrush}" />
+        </Style>
+        <Style Selector="StackPanel.previewChips">
+            <Setter Property="Orientation" Value="Horizontal" />
+            <Setter Property="Spacing" Value="6" />
+        </Style>
+        <Style Selector="Border.previewChip">
+            <Setter Property="Background" Value="{DynamicResource PbSurface2Brush}" />
+            <Setter Property="CornerRadius" Value="999" />
+            <Setter Property="Padding" Value="7,2" />
+        </Style>
+        <Style Selector="Border.previewChip TextBlock">
+            <Setter Property="FontSize" Value="10.5" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextMutedBrush}" />
+        </Style>
+        <!-- Scoped to this panel only (Avalonia styles apply within their defining control's visual
+             tree) - Detail screens' own PosterRail usages stay Tab-reachable, per the design doc's
+             §4 focus-order note: Tab-cycling here should reach this panel's own action buttons
+             without stepping through every issue-cover card in the rail first; mouse clicks are
+             unaffected, IsTabStop only gates keyboard Tab traversal. -->
+        <Style Selector="views|PosterRail Button.railCard">
+            <Setter Property="IsTabStop" Value="False" />
+        </Style>
+    </UserControl.Styles>
+
+    <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+        <Grid Margin="16">
+
+            <!-- ================= Idle state ================= -->
+            <StackPanel IsVisible="{Binding ShowIdlePreview}" VerticalAlignment="Center" Spacing="8" Margin="0,60,0,0">
+                <fi:SymbolIcon Symbol="Library" FontSize="28" Foreground="{DynamicResource PbTextFaintBrush}" HorizontalAlignment="Center" />
+                <TextBlock Text="Select a series or issue to preview" Classes="pbTextCaption" TextAlignment="Center" TextWrapping="Wrap" />
+            </StackPanel>
+
+            <!-- ================= No-results state ================= -->
+            <StackPanel IsVisible="{Binding ShowNoResultsPreview}" VerticalAlignment="Center" Spacing="8" Margin="0,60,0,0">
+                <fi:SymbolIcon Symbol="SearchInfo" FontSize="28" Foreground="{DynamicResource PbTextFaintBrush}" HorizontalAlignment="Center" />
+                <TextBlock Text="No results for this search" Classes="pbTextCaption" TextAlignment="Center" TextWrapping="Wrap" />
+            </StackPanel>
+
+            <!-- ================= Series preview ================= -->
+            <StackPanel IsVisible="{Binding ShowSeriesPreview}" Spacing="12">
+                <StackPanel Spacing="12" DataContext="{Binding PreviewSeries}" x:DataType="models:SeriesCardSample">
+                    <Border Classes="previewCover" Background="{Binding CoverBrush}">
+                        <Image views:AsyncCoverImage.SourceId="{Binding CoverKey}" Stretch="UniformToFill" />
+                    </Border>
+                    <TextBlock Text="{Binding Name}" Classes="previewTitle pbTextHeading" />
+                    <TextBlock Classes="previewMeta">
+                        <Run Text="{Binding IssueCountLabel}" /><Run Text=" · " /><Run Text="{Binding UnreadCount}" /><Run Text=" unread" />
+                    </TextBlock>
+                    <StackPanel Classes="previewChips">
+                        <Border Classes="previewChip" IsVisible="{Binding HasPublisher}"><TextBlock Text="{Binding Publisher}" /></Border>
+                        <Border Classes="previewChip" IsVisible="{Binding HasLanguage}"><TextBlock Text="{Binding LanguageIso}" /></Border>
+                    </StackPanel>
+                    <TextBlock Text="{Binding RepresentativeRow.SummaryExcerpt}" Classes="previewSynopsis"
+                               IsVisible="{Binding RepresentativeRow.HasSummaryExcerpt}" />
+                    <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,4,0,0" IsVisible="{Binding HasContinueReading}">
+                        <Button Classes="previewAction" Content="▶ Continue"
+                                Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ContinueReadingCommand}"
+                                CommandParameter="{Binding}" />
+                    </StackPanel>
+                </StackPanel>
+
+                <TextBlock Text="Issues" Classes="pbTextCaption" Margin="0,4,0,0"
+                           IsVisible="{Binding !!PreviewSeriesIssueRail.Count}" />
+                <views:PosterRail ItemsSource="{Binding PreviewSeriesIssueRail}"
+                                  ClickCommand="{Binding IssueList.OpenIssueCommand}"
+                                  IsVisible="{Binding !!PreviewSeriesIssueRail.Count}" />
+            </StackPanel>
+
+            <!-- ================= Issue preview ================= -->
+            <!-- Two nested elements, not one: IsVisible must bind against the VM (outer), while
+                 DataContext switches to PreviewIssue (inner) - putting both on the same element
+                 makes IsVisible resolve against the new DataContext instead (AVLN2000). -->
+            <StackPanel IsVisible="{Binding ShowIssuePreview}">
+                <StackPanel Spacing="12" DataContext="{Binding PreviewIssue}" x:DataType="models:IssueListRow">
+                    <Border Classes="previewCover" Background="{Binding CoverBrush}">
+                        <Image views:AsyncCoverImage.SourceId="{Binding CoverKey}" Stretch="UniformToFill" />
+                    </Border>
+                    <TextBlock Text="{Binding SeriesName}" Classes="previewTitle pbTextHeading" />
+                    <TextBlock Text="{Binding Number, StringFormat='#{0}'}" Classes="previewMeta" />
+                    <StackPanel Classes="previewChips">
+                        <Border Classes="previewChip" IsVisible="{Binding HasPublisher}"><TextBlock Text="{Binding Publisher}" /></Border>
+                        <Border Classes="previewChip" IsVisible="{Binding HasLanguage}"><TextBlock Text="{Binding LanguageIso}" /></Border>
+                        <Border Classes="previewChip" IsVisible="{Binding HasRating}"><TextBlock Text="{Binding Rating, StringFormat='★ {0:0.0}'}" /></Border>
+                        <Border Classes="previewChip" IsVisible="{Binding IsRead}"><TextBlock Text="Read" /></Border>
+                        <Border Classes="previewChip" IsVisible="{Binding !IsRead}"><TextBlock Text="Unread" /></Border>
+                    </StackPanel>
+                    <TextBlock Text="{Binding WriterAndPenciller}" Classes="previewMeta" IsVisible="{Binding HasWriterAndPenciller}" />
+                    <TextBlock Text="{Binding FileSizeDisplay}" Classes="previewMeta" IsVisible="{Binding HasFileSizeDisplay}" />
+                    <TextBlock Text="{Binding Format}" Classes="previewMeta" IsVisible="{Binding HasFormat}" />
+
+                    <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,4,0,0">
+                        <Button Classes="previewAction" Content="▶ Read"
+                                Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).IssueList.OpenIssueCommand}"
+                                CommandParameter="{Binding}" />
+                        <Button Classes="previewAction" Content="Mark unread" IsVisible="{Binding IsRead}"
+                                Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).MarkIssueUnreadCommand}"
+                                CommandParameter="{Binding Id}" />
+                        <Button Classes="previewAction" Content="Mark read" IsVisible="{Binding !IsRead}"
+                                Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).MarkIssueReadCommand}"
+                                CommandParameter="{Binding Id}" />
+                        <Button Classes="previewAction" Content="Edit metadata"
+                                Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).EditIssuePropertiesCommand}"
+                                CommandParameter="{Binding Id}" />
+                    </StackPanel>
+                </StackPanel>
+            </StackPanel>
+
+        </Grid>
+    </ScrollViewer>
+</UserControl>

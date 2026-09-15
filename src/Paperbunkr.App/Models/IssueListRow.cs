@@ -4,6 +4,7 @@ using System.Linq;
 using Avalonia.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Paperbunkr.App.Services;
+using Paperbunkr.App.Services.Covers;
 using Paperbunkr.Data.Entities;
 using Paperbunkr.Data.Metadata;
 using Paperbunkr.Data.VirtualTags;
@@ -87,6 +88,7 @@ public sealed partial class IssueListRow : ObservableObject, ISelectableCard, IV
     public string? StoryArc { get; init; }
     public string? SeriesGroup { get; init; }
     public string? FilePath { get; init; }
+    public string? Summary { get; init; }
     public string? FileName { get; init; }
     public string? FileDirectory { get; init; }
     public DateTime? FileModifiedTime { get; init; }
@@ -125,6 +127,43 @@ public sealed partial class IssueListRow : ObservableObject, ISelectableCard, IV
     public string CoverKey => CoverFingerprint.Stem(Id, FilePath, FileSize);
     public bool HasPublisher => !string.IsNullOrWhiteSpace(Publisher);
     public bool HasLanguage => !string.IsNullOrWhiteSpace(LanguageIso);
+
+    /// <summary>docs/superpowers/specs/2026-09-13-preferences-cosmetic-toggles-design.md -
+    /// NumericRatingThumbnails' hover-reveal badge only makes sense once the issue actually has a
+    /// rating.</summary>
+    public bool HasRating => Rating.HasValue;
+
+    /// <summary>docs/superpowers/specs/2026-09-13-preferences-cosmetic-toggles-design.md - the real
+    /// "has custom thumbnail" check the cover-art-override feature uses; <c>Issue.CustomThumbnailKey</c>
+    /// is a dead/unused column, not this.</summary>
+    public bool HasCustomCover { get; init; }
+
+    /// <summary>Gate for the <c>DogEarThumbnails</c> hover/selected page-2 peek - mirrors CE's own
+    /// condition exactly (<see cref="DogEarEligibility"/>).</summary>
+    public bool DogEarEligible => DogEarEligibility.IsEligible(PageCount, IsMissing, HasCustomCover) && HasFile;
+
+    // --- ShowToolTips hover-tooltip content (docs/superpowers/specs/2026-09-13-preferences-cosmetic-
+    // toggles-design.md) - CE's own tooltip fields: caption/title, artist info, summary, file size,
+    // format. This codebase splits credits into separate Writer/Penciller fields rather than CE's one
+    // combined line, so WriterAndPenciller joins the two non-null ones with ", ".
+
+    private const int SummaryExcerptMaxLength = 150;
+
+    public string? WriterAndPenciller => string.Join(", ", new[] { Writer, Penciller }.Where(s => !string.IsNullOrWhiteSpace(s)));
+
+    public bool HasWriterAndPenciller => !string.IsNullOrEmpty(WriterAndPenciller);
+
+    public string? SummaryExcerpt => string.IsNullOrEmpty(Summary)
+        ? null
+        : Summary.Length <= SummaryExcerptMaxLength ? Summary : Summary[..SummaryExcerptMaxLength] + "…";
+
+    public bool HasSummaryExcerpt => !string.IsNullOrEmpty(SummaryExcerpt);
+
+    public string? FileSizeDisplay => IssueListFieldCatalog.FormatFileSize(FileSize);
+
+    public bool HasFileSizeDisplay => !string.IsNullOrEmpty(FileSizeDisplay);
+
+    public bool HasFormat => !string.IsNullOrWhiteSpace(Format);
 
     /// <summary>Panorama grid's per-tile width, same <see cref="SeriesCardSample.ComputePanoramaWidth"/>
     /// math as the old series-card version - just fed by this issue's own cover instead of a
@@ -184,6 +223,7 @@ public sealed partial class IssueListRow : ObservableObject, ISelectableCard, IV
         ReadPercentage = issue.ReadPercentage(),
         OpenCount = issue.OpenCount,
         IsMissing = issue.FileIsMissing,
+        HasCustomCover = CustomCoverPaths.Exists(issue.Id),
         CoverBrush = SeriesCardSample.CoverBrushFor(series.Name),
         Volume = issue.EffectiveVolume(),
         VolumeSortKey = issue.VolumeSortKey(),
@@ -212,6 +252,7 @@ public sealed partial class IssueListRow : ObservableObject, ISelectableCard, IV
         StoryArc = issue.StoryArc,
         SeriesGroup = issue.SeriesGroup,
         FilePath = issue.FilePath,
+        Summary = issue.Summary,
         FileName = issue.FileName(),
         FileDirectory = issue.FileDirectory(),
         FileModifiedTime = issue.FileModifiedTime,

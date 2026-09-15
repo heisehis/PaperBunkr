@@ -219,6 +219,29 @@ public class AppSettings
     /// <summary>See <see cref="LibraryIssueListSortField"/>.</summary>
     public LibraryViewMode LibraryViewMode { get; set; } = LibraryViewMode.PosterGrid;
 
+    /// <summary>
+    /// Cover-fit/tile-style toggle within <see cref="LibraryViewMode.PosterGrid"/> - see
+    /// <see cref="LibraryGridCoverFit"/>. Master-Detail redesign (docs/superpowers/specs/
+    /// 2026-09-14-library-visual-redesign-design.md §2).
+    /// </summary>
+    public LibraryGridCoverFit LibraryGridCoverFit { get; set; } = LibraryGridCoverFit.Poster;
+
+    /// <summary>
+    /// Live preview panel's `GridSplitter`-adjusted width in the Master-Detail layout
+    /// (docs/superpowers/specs/2026-09-14-library-visual-redesign-design.md §4). Persisted so a
+    /// resize survives a restart, same rationale as <see cref="LibraryDetailsColumns"/>' persisted
+    /// column widths.
+    /// </summary>
+    public double LibraryPreviewPanelWidth { get; set; } = 320;
+
+    /// <summary>
+    /// Manual collapse for the live preview panel in <see cref="LibraryViewMode.PosterGrid"/>/
+    /// <see cref="LibraryViewMode.List"/> (independent of <see cref="LibraryViewMode.DetailsTable"/>'s
+    /// own unconditional auto-hide) - toolbar toggle + Ctrl+B
+    /// (docs/superpowers/specs/2026-09-14-library-visual-redesign-design.md §4).
+    /// </summary>
+    public bool IsLibraryPreviewPanelVisible { get; set; } = true;
+
     /// <summary>See <see cref="LibraryIssueListSortField"/>.</summary>
     public double LibraryGridDensity { get; set; } = 1.0;
 

@@ -30,4 +30,13 @@ public interface INativePluginUiEnvironment : INativePluginEnvironment
     /// </code>
     /// </summary>
     Task<TResult> ShowModalAsync<TResult>(Func<Action<TResult>, Control> contentFactory);
+
+    /// <summary>
+    /// Keeps <paramref name="header"/> mounted above whatever content a sequence of
+    /// <see cref="ShowModalAsync{TResult}"/> calls shows next, instead of the shell tearing down and
+    /// re-mounting between them - for a per-item review loop (e.g. a scrape batch) that wants one
+    /// persistent progress header across many otherwise-independent modal calls. Dispose the returned
+    /// handle to end the batch and clear the header.
+    /// </summary>
+    IDisposable BeginModalBatch(Control header);
 }

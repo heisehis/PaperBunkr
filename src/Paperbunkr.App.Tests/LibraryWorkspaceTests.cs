@@ -159,7 +159,7 @@ public class LibraryWorkspaceTests : IDisposable
     public void DeleteActiveWorkspace_ClearsTheLabel_ButLeavesTheViewAlone()
     {
         var vm = CreateVm();
-        vm.SetViewModeCommand.Execute(LibraryViewMode.Tiles);
+        vm.SelectTilesGridCommand.Execute(null);
         vm.SaveWorkspaceAsCommand.Execute(null);
         int id = vm.Workspaces.Single(w => !w.IsBuiltIn).Id;
         vm.ApplyWorkspaceCommand.Execute(id);
@@ -167,7 +167,8 @@ public class LibraryWorkspaceTests : IDisposable
         vm.DeleteWorkspaceCommand.Execute(id);
 
         Assert.Equal("Workspace", vm.ActiveWorkspaceLabel);
-        Assert.Equal(LibraryViewMode.Tiles, vm.ViewMode);
+        Assert.Equal(LibraryViewMode.PosterGrid, vm.ViewMode);
+        Assert.Equal(LibraryGridCoverFit.Tiles, vm.GridCoverFit);
         Assert.Null(ActiveWorkspaceIdInDb());
     }
 
@@ -178,7 +179,7 @@ public class LibraryWorkspaceTests : IDisposable
         vm.SetViewModeCommand.Execute(LibraryViewMode.List);
         vm.SaveWorkspaceAsCommand.Execute(null);
 
-        vm.SetViewModeCommand.Execute(LibraryViewMode.Tiles);
+        vm.SelectTilesGridCommand.Execute(null);
         vm.SaveWorkspaceAsCommand.Execute(null); // same name "Weekly"
 
         var weekly = vm.Workspaces.Where(w => !w.IsBuiltIn).ToList();
@@ -186,7 +187,8 @@ public class LibraryWorkspaceTests : IDisposable
 
         var fresh = CreateVm();
         fresh.ApplyWorkspaceCommand.Execute(weekly[0].Id);
-        Assert.Equal(LibraryViewMode.Tiles, fresh.ViewMode);
+        Assert.Equal(LibraryViewMode.PosterGrid, fresh.ViewMode);
+        Assert.Equal(LibraryGridCoverFit.Tiles, fresh.GridCoverFit);
     }
 
     [Fact]
@@ -194,7 +196,7 @@ public class LibraryWorkspaceTests : IDisposable
     {
         new WorkspaceService().EnsureBuiltInsSeeded();
         var vm = CreateVm();
-        vm.SetViewModeCommand.Execute(LibraryViewMode.Details);
+        vm.SetViewModeCommand.Execute(LibraryViewMode.DetailsTable);
         vm.FilterUnreadOnly = true;
 
         vm.ResetToDefaultViewCommand.Execute(null);

@@ -89,4 +89,42 @@ public sealed record ContextMenuEntry
             ? null
             : new ContextMenuEntry { Header = header, Icon = icon, IsDanger = isDanger, Children = kept };
     }
+
+    /// <summary>
+    /// Drops nulls (an omitted entry, or a <see cref="SubMenu"/> hidden/empty) and any resulting
+    /// leading/trailing/consecutive separators. Every <see cref="IContextMenuProvider.BuildContextMenu"/>
+    /// implementation that builds its menu as a flat <c>new[] { ... }</c> literal with conditional
+    /// entries needs this - a raw <see langword="null"/> left in the returned list crashes whatever
+    /// enumerates it looking for real entries (<see cref="Controls.ContextMenuHost"/>, or a test
+    /// asserting on <c>.Header</c>), not just render as an omitted row.
+    /// </summary>
+    public static IReadOnlyList<ContextMenuEntry> Compact(IEnumerable<ContextMenuEntry?> entries)
+    {
+        var kept = new List<ContextMenuEntry>();
+        foreach (var entry in entries)
+        {
+            if (entry is not null)
+            {
+                kept.Add(entry);
+            }
+        }
+
+        var result = new List<ContextMenuEntry>(kept.Count);
+        foreach (var entry in kept)
+        {
+            if (entry.IsSeparator && (result.Count == 0 || result[^1].IsSeparator))
+            {
+                continue;
+            }
+
+            result.Add(entry);
+        }
+
+        while (result.Count > 0 && result[^1].IsSeparator)
+        {
+            result.RemoveAt(result.Count - 1);
+        }
+
+        return result;
+    }
 }

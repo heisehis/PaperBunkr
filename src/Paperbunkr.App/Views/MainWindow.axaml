@@ -5,6 +5,7 @@
         xmlns:views="using:Paperbunkr.App.Views"
         xmlns:models="using:Paperbunkr.App.Models"
         xmlns:controls="using:Paperbunkr.App.Controls"
+        xmlns:conv="using:Avalonia.Data.Converters"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d" d:DesignWidth="1200" d:DesignHeight="760"
@@ -315,9 +316,22 @@
                         <StackPanel Spacing="1">
                             <StackPanel.Styles>
                                 <Style Selector="Border.colRow"><Setter Property="BorderBrush" Value="Transparent" /></Style>
-                                <Style Selector="Border.colRow.active">
-                                    <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
-                                    <Setter Property="Background" Value="{DynamicResource PbSurface2Brush}" />
+                                <!-- Each Collection's own AccentColor now drives its active-row tint
+                                     (docs/superpowers/specs/2026-09-14-library-visual-redesign-
+                                     design.md §6), replacing one flat PbAccentBrush/PbSurface2Brush
+                                     for every row regardless of which Collection is active. Border
+                                     stays full opacity (a thin 3px bar, not text-bearing); background
+                                     drops to ~18% alpha via the sibling tint converter so an
+                                     arbitrary user-picked color never fights row-label legibility.
+                                     Both converters fall back to the app's generic accent brush for
+                                     null/unparseable AccentColor (an unset Collection). -->
+                                <Style Selector="Border.colRow.active" x:DataType="models:CollectionSummary">
+                                    <Setter Property="BorderBrush">
+                                        <Binding Path="AccentColor" Converter="{x:Static views:AccentColorToBrushConverter.Instance}" />
+                                    </Setter>
+                                    <Setter Property="Background">
+                                        <Binding Path="AccentColor" Converter="{x:Static views:AccentColorToBackgroundTintConverter.Instance}" />
+                                    </Setter>
                                 </Style>
                                 <Style Selector="Border.colRow Button.colHover"><Setter Property="Opacity" Value="0" /><Setter Property="IsHitTestVisible" Value="False" /></Style>
                                 <Style Selector="Border.colRow:pointerover Button.colHover"><Setter Property="Opacity" Value="1" /><Setter Property="IsHitTestVisible" Value="True" /></Style>
@@ -948,7 +962,14 @@
                 BorderThickness="1" CornerRadius="8" Padding="20" MaxWidth="680"
                 BoxShadow="{StaticResource PbElevationShadow}">
             <Grid>
-                <ContentControl Content="{Binding NativePluginModalHost.HostedContent}" />
+                <!-- HeaderContent (docs/superpowers/specs/2026-09-13-cluster-scraper-ui-redesign-
+                     design.md §4) persists across a plugin's BeginModalBatch session, independent of
+                     whatever HostedContent is currently swapped in below it. -->
+                <StackPanel Spacing="14">
+                    <ContentControl Content="{Binding NativePluginModalHost.HeaderContent}"
+                                    IsVisible="{Binding NativePluginModalHost.HeaderContent, Converter={x:Static conv:ObjectConverters.IsNotNull}}" />
+                    <ContentControl Content="{Binding NativePluginModalHost.HostedContent}" />
+                </StackPanel>
                 <Button Classes="overlayCloseButton" Width="28" Height="28"
                         HorizontalAlignment="Right" VerticalAlignment="Top"
                         Command="{Binding NativePluginModalHost.DismissCommand}" ToolTip.Tip="Close">

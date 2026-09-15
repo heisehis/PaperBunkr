@@ -180,6 +180,15 @@ public partial class MainWindow : Window
             Close();
             e.Handled = true;
         }
+        // Ctrl+B toggles the Library live preview panel (docs/superpowers/specs/2026-09-14-library-
+        // visual-redesign-design.md §4) - verified unbound anywhere else in this app before picking
+        // it (Ctrl+P is already Quick Open). Library-only, matching the Ctrl+P handler's own
+        // screen-gating convention above.
+        else if (e.Key == Key.B && e.KeyModifiers == KeyModifiers.Control && viewModel.IsLibrary)
+        {
+            viewModel.Library.ToggleLibraryPreviewPanelCommand.Execute(null);
+            e.Handled = true;
+        }
     }
 
     /// <summary>

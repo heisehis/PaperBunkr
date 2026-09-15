@@ -24,6 +24,7 @@ public class AsyncCoverImageTests : IDisposable
     private readonly string _originalThumbnailDirectory;
     private readonly string _thumbnailDirectory;
     private readonly string _cbzPath;
+    private readonly bool _originalFadeInThumbnails;
 
     public AsyncCoverImageTests()
     {
@@ -31,11 +32,13 @@ public class AsyncCoverImageTests : IDisposable
         _thumbnailDirectory = Path.Combine(Path.GetTempPath(), $"paperbunkr_asynccover_test_{Guid.NewGuid():N}");
         CoverThumbnailPaths.ThumbnailDirectory = _thumbnailDirectory;
         _cbzPath = Path.Combine(Path.GetTempPath(), $"paperbunkr_asynccover_cbz_{Guid.NewGuid():N}.cbz");
+        _originalFadeInThumbnails = CosmeticThumbnailSettings.FadeInThumbnails;
     }
 
     public void Dispose()
     {
         CoverThumbnailPaths.ThumbnailDirectory = _originalThumbnailDirectory;
+        CosmeticThumbnailSettings.FadeInThumbnails = _originalFadeInThumbnails;
         try
         {
             if (File.Exists(_cbzPath)) File.Delete(_cbzPath);
@@ -119,5 +122,60 @@ public class AsyncCoverImageTests : IDisposable
         AsyncCoverImage.Apply(image, stem, generation: 1, staleDecode);
 
         Assert.Null(image.Source); // the cover for 603 must not land on a container now showing 604
+    }
+
+    [Fact]
+    public void Apply_WithFadeInThumbnailsOn_StartsOpacityAtZero_WithATransitionAttached()
+    {
+        CosmeticThumbnailSettings.FadeInThumbnails = true;
+        CbzFixture.Create(_cbzPath, pageCount: 1);
+        new CoverThumbnailService().TryGenerateThumbnail(issueId: 605, _cbzPath, fileSize: 1);
+        string stem = CoverFingerprint.Stem(605, _cbzPath, 1);
+        var decoded = CoverImageCache.DecodeFromDisk(stem)!;
+
+        var image = new Image();
+        AsyncCoverImage.SetSourceId(image, stem);
+
+        AsyncCoverImage.Apply(image, stem, generation: 1, decoded);
+
+        // Opacity is re-set to 1 synchronously right after 0 (the Transition animates the visual
+        // over subsequent frames, same as the existing CheckBox.tileSelect hover-fade idiom) - what
+        // this test can actually assert headlessly is that a transition got attached at all.
+        Assert.NotNull(image.Transitions);
+        Assert.Equal(1, image.Opacity);
+    }
+
+    [Fact]
+    public void Apply_WithFadeInThumbnailsOff_SetsOpacityToOne_WithNoTransition()
+    {
+        CosmeticThumbnailSettings.FadeInThumbnails = false;
+        CbzFixture.Create(_cbzPath, pageCount: 1);
+        new CoverThumbnailService().TryGenerateThumbnail(issueId: 606, _cbzPath, fileSize: 1);
+        string stem = CoverFingerprint.Stem(606, _cbzPath, 1);
+        var decoded = CoverImageCache.DecodeFromDisk(stem)!;
+
+        var image = new Image();
+        AsyncCoverImage.SetSourceId(image, stem);
+
+        AsyncCoverImage.Apply(image, stem, generation: 1, decoded);
+
+        Assert.Null(image.Transitions);
+        Assert.Equal(1, image.Opacity);
+    }
+
+    [Fact]
+    public void SettingSourceId_ToAnAlreadyCachedCover_NeverFades_EvenWhenFadeInThumbnailsIsOn()
+    {
+        CosmeticThumbnailSettings.FadeInThumbnails = true;
+        CbzFixture.Create(_cbzPath, pageCount: 1);
+        new CoverThumbnailService().TryGenerateThumbnail(issueId: 607, _cbzPath, fileSize: 1);
+        string stem = CoverFingerprint.Stem(607, _cbzPath, 1);
+        CoverImageCache.Get(stem); // warm the in-memory cache
+
+        var image = new Image();
+        AsyncCoverImage.SetSourceId(image, stem); // cache hit - must be instant, never fade
+
+        Assert.Null(image.Transitions);
+        Assert.Equal(1, image.Opacity);
     }
 }

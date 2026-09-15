@@ -54,7 +54,12 @@ public class RemoveComicListViewModeMigrationTests : IDisposable
             context.Database.ExecuteSqlRaw(
                 $"INSERT INTO AppSettings (Id, LibraryViewMode) VALUES (1, '{legacyValue}');");
 
-            migrator.Migrate();
+            // Pinned to this migration specifically, not latest - a later migration
+            // (ConsolidateLibraryViewModes, 2026-09-14) further remaps every value this migration's
+            // own remap and "surviving modes" list cares about, so migrating to latest here would
+            // assert against that migration's output, not this one's. This test verifies
+            // RemoveComicListViewMode's own remap in isolation.
+            migrator.Migrate("20260903122815_RemoveComicListViewMode");
         }
 
         using (var context = CreateContext())

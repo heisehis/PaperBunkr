@@ -52,7 +52,11 @@ public class LibraryPosterGridMigrationTests : IDisposable
             context.Database.ExecuteSqlRaw(
                 $"INSERT INTO AppSettings (Id, LibraryViewMode) VALUES (1, '{legacyValue}');");
 
-            migrator.Migrate();
+            // Pinned to this migration specifically, not latest - a later migration
+            // (ConsolidateLibraryViewModes, 2026-09-14) further remaps PosterGrid/List, so migrating
+            // to latest here would assert against that migration's output, not this one's. This test
+            // verifies LibraryPosterGridConsolidation's own remap in isolation.
+            migrator.Migrate("20260827045244_LibraryPosterGridConsolidation");
         }
 
         using (var context = CreateContext())

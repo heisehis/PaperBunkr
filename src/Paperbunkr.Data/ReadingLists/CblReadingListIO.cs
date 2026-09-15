@@ -52,6 +52,10 @@ public static class CblReadingListIO
             .Include(r => r.Items).ThenInclude(i => i.Issue).ThenInclude(i => i!.MetadataProposals)
             .First(r => r.Id == readingListId);
 
+        // CE: Settings.ExportedListsContainFilenames (docs/superpowers/specs/2026-09-13-preferences-
+        // cosmetic-toggles-design.md) - export-only, CE itself never reads this on import either.
+        bool includeFilenames = context.GetOrCreateAppSettings().ExportedListsContainFilenames;
+
         var container = new ComicReadingListContainer { Name = list.Name };
         foreach (var item in list.Items.OrderBy(i => i.SortOrder))
         {
@@ -63,6 +67,7 @@ public static class CblReadingListIO
                 Volume = int.TryParse(issue.EffectiveVolume(), out var volumeNumber) ? volumeNumber : -1,
                 Year = issue.EffectiveYear() ?? -1,
                 Format = issue.Format ?? string.Empty,
+                FileName = includeFilenames ? (issue.FilePath ?? string.Empty) : string.Empty,
             });
         }
 

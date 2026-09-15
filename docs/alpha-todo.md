@@ -1,11 +1,5 @@
 # Paperbunkr Alpha Release To-Do
 
-> **Archived — Alpha milestone closed 2026-08-07.** This file is a historical record of the Alpha
-> release-prep checklist (P0–P7) and known gaps at the time; every item below is done and none of
-> it is rewritten to use later terminology. The project has since moved past Alpha and Beta into
-> what's now called **Pre-release** — for what's currently open and any new items going forward,
-> see [`pre-release-todo.md`](pre-release-todo.md).
-
 *Scope: git/release prep + known gaps only, per `Paperbunkr-Roadmap.md` (2026-08-07). Beta backlog is
 tracked separately in that document and not repeated here.*
 
@@ -27,6 +21,46 @@ the tracker just keeps a lightweight view from silently going stale between thos
 this file itself already did once (see the note below).
 
 ## What's left (as of 2026-08-12, HEAD `85fb681`)
+
+> **Manual session note (2026-09-13, cosmetic Preferences micro-toggles shipped):** Beta-backlog
+> work, P0–P7 unchanged. Design + plan: `docs/superpowers/specs/2026-09-13-preferences-cosmetic-
+> toggles-{design,plan}.md`. Closes the last item in "Preferences: Behavior / CE-parity toggle
+> remainder" (`docs/Paperbunkr-Roadmap.md`) — previously flagged "low value, revisit only on
+> request," now built after CE-source research revealed 3 of the 6 named toggles (`DogEarThumbnails`,
+> `ShowToolTips`, `NumericRatingThumbnails`) are real rendering features, not plain checkboxes.
+> Shipped: `FadeInThumbnails` (opacity fade on genuine cover decode via `AsyncCoverImage`, never on a
+> cache-hit repaint), `DogEarThumbnails` (real hover/selected second-page peek — found and used
+> `PageDecodeCore.DecodeSinglePage` instead of the design doc's original `ReaderImagePipeline`
+> suggestion, which would've meant a full background-threaded reader session per tile hover),
+> `ShowToolTips` (a custom `Popup` mirroring the Activity Center peek-popover's entrance pattern),
+> `NumericRatingThumbnails` (hover-reveal badge sharing the tile's corner with the selection checkbox,
+> hidden whenever any issue is selected), `ExportedListsContainFilenames` (`CblReadingListIO` now
+> populates the already-ported-but-unused `ComicReadingListItem.FileName` from `Issue.FilePath`).
+> `CoverThumbnailsSameSize` shipped no code — confirmed already fully expressed by the existing
+> PosterGrid/Panorama view-mode split. Verified: migration round-trip (real per-column `DropColumn`
+> on `Down()`, matching the post-2026-09-06 convention, not the older no-op-`Down()` pattern found
+> still present in one sibling migration), ~35 new/extended targeted test cases across
+> `Paperbunkr.Data.Tests`/`Paperbunkr.App.Tests` all green, no regressions (the pre-existing
+> unrelated `TwoStepConfirm` delete-bug test failure reproduced again, not caused by this work).
+> **Not done:** on-screen verification of all 4 visual behaviors — standing no-computer-use caveat,
+> weighted more heavily than usual since this batch is unusually visual/interactive.
+
+> **Manual session note (2026-09-13, open-a-comic-on-launch shipped):** Beta-backlog work, P0–P7
+> unchanged. Design + plan: `docs/superpowers/specs/2026-09-13-open-file-on-launch-{design,plan}.md`.
+> Closes the `AddToLibraryOnOpen` prerequisite gap noted below in "Preferences: Behavior / CE-parity
+> toggle remainder" (`docs/Paperbunkr-Roadmap.md`) — `App.axaml.cs` now recognizes a bare supported
+> file-path CLI argument (the shape Windows' file-association launch produces) via new
+> `NavigationCliArgs.TryParseFilePathArg`, and dispatches to new `MainViewModel.OpenFilePath`: already-
+> in-library path opens the existing Issue directly (mirrors CE's `Storage.FindItemByFile`); a new
+> path is always imported via the existing `LibraryFolderScanner.ImportNewFilesAsync` then opened.
+> Per the design doc's explicit scope decision, the `AddToLibraryOnOpen` toggle itself is dropped
+> (not built) rather than added as a Preferences checkbox — a real transient/non-persisted reading
+> mode (true CE parity for the toggle's OFF state) was decided out of scope as disproportionate to
+> what the roadmap flagged as a small gap-filler. Verified: `Paperbunkr.App` + `Paperbunkr.App.Tests`
+> build clean; new `NavigationCliArgsFilePathTests` (5 cases) and 3 new `MainViewModelTests` pass,
+> plus the full 66-case `MainViewModelTests` suite re-run clean (no regressions). **Not done:**
+> on-screen verification of an actual file-association double-click launch, both cold-start and
+> while already running (standing no-computer-use caveat this session).
 
 > **Manual session note (2026-09-12, grid type-ahead/Shift+arrow range-select/Ctrl+Q shipped):**
 > Beta-backlog work, P0–P7 unchanged. Design + plan: `docs/superpowers/specs/2026-09-12-grid-

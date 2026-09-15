@@ -1,3 +1,5 @@
+using System;
+using System.IO;
 using Paperbunkr.App.Services;
 
 namespace Paperbunkr.App.Tests;
@@ -94,5 +96,83 @@ public class NavigationCliArgsTests
         Assert.True(result);
         Assert.Equal("issue", target!.Kind);
         Assert.Equal(42, target.Id);
+    }
+}
+
+/// <summary>
+/// Exercises <see cref="NavigationCliArgs.TryParseFilePathArg"/> (docs/superpowers/specs/2026-09-13-
+/// open-file-on-launch-design.md) - the bare file-path shape Windows' own file-association launch
+/// command line produces, distinct from <see cref="NavigationCliArgs.TryParseOpenArg"/>'s
+/// <c>--open kind:id</c> convention.
+/// </summary>
+public class NavigationCliArgsFilePathTests : IDisposable
+{
+    private readonly string _root;
+
+    public NavigationCliArgsFilePathTests()
+    {
+        _root = Path.Combine(Path.GetTempPath(), $"paperbunkr_clifilepath_test_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(_root);
+    }
+
+    public void Dispose()
+    {
+        try
+        {
+            Directory.Delete(_root, recursive: true);
+        }
+        catch (IOException)
+        {
+        }
+    }
+
+    [Fact]
+    public void TryParseFilePathArg_ExistingSupportedFile_Succeeds()
+    {
+        string file = CbzFixture.Create(Path.Combine(_root, "Kilo Station 001 (2020).cbz"), pageCount: 1);
+
+        bool result = NavigationCliArgs.TryParseFilePathArg(new[] { file }, out var path);
+
+        Assert.True(result);
+        Assert.Equal(file, path);
+    }
+
+    [Fact]
+    public void TryParseFilePathArg_OpenFlagWithKindId_Fails()
+    {
+        bool result = NavigationCliArgs.TryParseFilePathArg(new[] { "--open", "issue:42" }, out var path);
+
+        Assert.False(result);
+        Assert.Null(path);
+    }
+
+    [Fact]
+    public void TryParseFilePathArg_NonexistentPath_Fails()
+    {
+        bool result = NavigationCliArgs.TryParseFilePathArg(new[] { Path.Combine(_root, "missing.cbz") }, out var path);
+
+        Assert.False(result);
+        Assert.Null(path);
+    }
+
+    [Fact]
+    public void TryParseFilePathArg_UnsupportedExtension_Fails()
+    {
+        string file = Path.Combine(_root, "notes.txt");
+        File.WriteAllText(file, "not a comic");
+
+        bool result = NavigationCliArgs.TryParseFilePathArg(new[] { file }, out var path);
+
+        Assert.False(result);
+        Assert.Null(path);
+    }
+
+    [Fact]
+    public void TryParseFilePathArg_EmptyArgs_Fails()
+    {
+        bool result = NavigationCliArgs.TryParseFilePathArg(Array.Empty<string>(), out var path);
+
+        Assert.False(result);
+        Assert.Null(path);
     }
 }

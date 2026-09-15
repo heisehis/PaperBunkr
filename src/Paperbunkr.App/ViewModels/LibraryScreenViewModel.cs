@@ -436,6 +436,9 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
 #pragma warning disable MVVMTK0034
         _granularity = settings.LibraryGranularity;
         _viewMode = settings.LibraryViewMode;
+        _gridCoverFit = settings.LibraryGridCoverFit;
+        _isLibraryPreviewPanelVisible = settings.IsLibraryPreviewPanelVisible;
+        _libraryPreviewPanelWidth = settings.LibraryPreviewPanelWidth;
         _gridDensity = settings.LibraryGridDensity;
         _showTileTitles = settings.LibraryShowTileTitles;
         _showUnreadBadge = settings.LibraryShowUnreadBadge;
@@ -450,7 +453,13 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         _filterTrackedOnly = settings.LibraryFilterTrackedOnly;
         _detailsColumnsSetting = settings.LibraryDetailsColumns;
         _activeWorkspaceId = settings.LibraryActiveWorkspaceId;
+        _fadeInThumbnails = settings.FadeInThumbnails;
+        _dogEarThumbnails = settings.DogEarThumbnails;
+        _showToolTips = settings.ShowToolTips;
+        _numericRatingThumbnails = settings.NumericRatingThumbnails;
 #pragma warning restore MVVMTK0034
+
+        CosmeticThumbnailSettings.RefreshFrom(settings);
 
         _recentSearches = DeserializeRecentSearches(settings.LibraryRecentSearches);
 
@@ -512,6 +521,9 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         settings.LibrarySortVirtualTagId = IssueList.SortVirtualTagId;
         settings.LibraryGroupVirtualTagId = IssueList.GroupVirtualTagId;
         settings.LibraryViewMode = ViewMode;
+        settings.LibraryGridCoverFit = GridCoverFit;
+        settings.IsLibraryPreviewPanelVisible = IsLibraryPreviewPanelVisible;
+        settings.LibraryPreviewPanelWidth = LibraryPreviewPanelWidth;
         settings.LibraryGridDensity = GridDensity;
         settings.LibraryShowTileTitles = ShowTileTitles;
         settings.LibraryShowUnreadBadge = ShowUnreadBadge;
@@ -519,6 +531,10 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         settings.LibraryShowLanguageBadge = ShowLanguageBadge;
         settings.LibraryUseLanguageIcon = UseLanguageIcon;
         settings.LibraryShowContinueReadingButton = ShowContinueReadingButton;
+        settings.FadeInThumbnails = FadeInThumbnails;
+        settings.DogEarThumbnails = DogEarThumbnails;
+        settings.ShowToolTips = ShowToolTips;
+        settings.NumericRatingThumbnails = NumericRatingThumbnails;
         settings.LibrarySearchQuery = string.IsNullOrEmpty(SearchQuery) ? null : SearchQuery;
         settings.LibrarySearchMode = SearchMode;
         settings.LibraryActiveContentType = _activeContentType;
@@ -844,6 +860,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         OnPropertyChanged(nameof(HasAnyResults));
         OnPropertyChanged(nameof(ShowAlphabetIndex));
         RaiseChipAndEmptyState();
+        RaisePreviewGranularityChanged();
         SaveLibrarySettings();
     }
 
@@ -1980,7 +1997,8 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         string.IsNullOrEmpty(SearchQuery) ? null : SearchQuery, SearchMode,
         _activeContentType, _activeCollectionId,
         FilterUnreadOnly, FilterMissingIssues, FilterTrackedOnly,
-        DetailsColumns.Count == 0 ? _detailsColumnsSetting : SerializeDetailsColumns());
+        DetailsColumns.Count == 0 ? _detailsColumnsSetting : SerializeDetailsColumns(),
+        GridCoverFit);
 
     [RelayCommand]
     private void ApplyWorkspace(int id)
@@ -2007,6 +2025,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
 #pragma warning disable MVVMTK0034
             _granularity = s.Granularity;
             _viewMode = s.ViewMode;
+            _gridCoverFit = s.GridCoverFit;
             _gridDensity = s.GridDensity;
             _showTileTitles = s.ShowTileTitles;
             _showUnreadBadge = s.ShowUnreadBadge;
@@ -2333,6 +2352,8 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         OnPropertyChanged(nameof(EmptyStateMessage));
         OnPropertyChanged(nameof(EmptyStateActionLabel));
         OnPropertyChanged(nameof(EmptyStateActionCommand));
+        OnPropertyChanged(nameof(ShowNoResultsPreview));
+        OnPropertyChanged(nameof(ShowIdlePreview));
     }
 
     /// <summary>Clears the filter toggles and resets the search scope to All; leaves the sidebar
@@ -2462,23 +2483,52 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
     }
 
     /// <summary>
+    /// Library-hook commands (docs/superpowers/specs/2026-08-24-plugin-api-v2-design.md §5) - one
+    /// entry per enabled command, same shape as <see cref="NewBooksPluginCommands"/> above, backing
+    /// both the tile context menu's "Plugins ▸" submenu and the toolbar's bulk-action dropdown.
+    /// Replaces an earlier single hardcoded "Find Duplicates" entry that ran every enabled command
+    /// at once regardless of which one was actually wanted.
+    /// </summary>
+    public IReadOnlyList<Command> LibraryPluginCommands => _pluginHost?.GetLibraryCommands().ToList() ?? new List<Command>();
+
+    public bool HasLibraryPluginCommands => LibraryPluginCommands.Count > 0;
+
+    [ObservableProperty]
+    private bool _isLibraryPluginMenuOpen;
+
+    [RelayCommand]
+    private void ToggleLibraryPluginMenu() => IsLibraryPluginMenuOpen = !IsLibraryPluginMenuOpen;
+
+    /// <summary>
     /// Real Library-hook trigger (docs/superpowers/specs/2026-08-24-plugin-api-v2-design.md §5) -
-    /// the right-clicked tile's context menu. Now that Library has a real multi-selection model
-    /// (docs/superpowers/specs/2026-08-24-library-multiselect-slice1-design.md), this dispatches by
-    /// selection-union like every other context-menu command (<see cref="EditIssueProperties"/>,
-    /// <see cref="RevealIssue"/>): right-clicking a lone unselected tile runs against just that one
-    /// issue, right-clicking while other tiles are checked runs against the whole selection. Any
-    /// result (e.g. Duplicate Finder's match dialog) is surfaced by the plugin command itself via
-    /// <c>IApplication.AskQuestion</c>, not by this method.
+    /// the right-clicked tile's "Plugins ▸" submenu, one row per <paramref name="args"/>.Command.
+    /// Now that Library has a real multi-selection model (docs/superpowers/specs/2026-08-24-library-
+    /// multiselect-slice1-design.md), this dispatches by selection-union like every other context-
+    /// menu command (<see cref="EditIssueProperties"/>, <see cref="RevealIssue"/>): right-clicking a
+    /// lone unselected tile runs against just that one issue, right-clicking while other tiles are
+    /// checked runs against the whole selection. Any result (e.g. Duplicate Finder's match dialog)
+    /// is surfaced by the plugin command itself via <c>IApplication.AskQuestion</c>, not by this
+    /// method.
     /// </summary>
     [RelayCommand]
-    private async Task RunLibraryPlugins(int issueId) => await RunLibraryPluginsOn(Selection.UnionForAction(issueId));
+    private async Task RunLibraryPlugin((int IssueId, Command Command) args) =>
+        await RunLibraryPluginOn(Selection.UnionForAction(args.IssueId), args.Command);
 
-    /// <summary>Action bar counterpart, same as <see cref="BulkEditSelection"/>/<see cref="MarkSelectionRead"/> - runs against the whole current selection with no right-click target involved.</summary>
+    /// <summary>
+    /// Toolbar bulk-action dropdown counterpart, same as <see cref="BulkEditSelection"/>/
+    /// <see cref="MarkSelectionRead"/> - runs against the whole current selection with no right-click
+    /// target involved. Deferred (CLAUDE.md's "don't detach a control from inside a routed event it's
+    /// still raising"): this Button lives inside the Popup that <see cref="IsLibraryPluginMenuOpen"/>
+    /// closes, and this click is still routing through it.
+    /// </summary>
     [RelayCommand]
-    private async Task RunLibraryPluginsOnSelection() => await RunLibraryPluginsOn(Selection.SelectedIds.ToList());
+    private async Task RunLibraryPluginOnSelection(Command command)
+    {
+        Avalonia.Threading.Dispatcher.UIThread.Post(() => IsLibraryPluginMenuOpen = false);
+        await RunLibraryPluginOn(Selection.SelectedIds.ToList(), command);
+    }
 
-    private async Task RunLibraryPluginsOn(IReadOnlyList<int> issueIds)
+    private async Task RunLibraryPluginOn(IReadOnlyList<int> issueIds, Command command)
     {
         if (_pluginHost is null || issueIds.Count == 0)
         {
@@ -2492,15 +2542,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
             return;
         }
 
-        // RunLibraryHookAsync removed in the plugin engine rework (3207460, native-tier
-        // auto-update) - PluginHostService now runs one specific command at a time
-        // (RunLibraryCommandAsync), not an implicit "every enabled command" hook. Loop
-        // over GetLibraryCommands() to preserve this method's original all-enabled-commands
-        // behavior with the current API, rather than guessing at a single command here.
-        foreach (var command in _pluginHost.GetLibraryCommands())
-        {
-            await _pluginHost.RunLibraryCommandAsync(command, issues);
-        }
+        await _pluginHost.RunLibraryCommandAsync(command, issues);
     }
 
     /// <summary>Opens the clicked tile's series in Detail (docs/superpowers/specs/
@@ -3226,10 +3268,18 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
     [ObservableProperty]
     private LibraryViewMode _viewMode = LibraryViewMode.PosterGrid;
 
+    /// <summary>Cover-fit/tile-style sub-toggle within <see cref="LibraryViewMode.PosterGrid"/>, replacing
+    /// the old separate <c>PanoramaGrid</c> and <c>Tiles</c> modes - see
+    /// <see cref="LibraryGridCoverFit"/> for why <c>Tiles</c> lives here and not as a
+    /// <see cref="LibraryViewMode.List"/> sub-toggle (docs/superpowers/specs/2026-09-14-library-
+    /// visual-redesign-design.md §2).</summary>
+    [ObservableProperty]
+    private LibraryGridCoverFit _gridCoverFit = LibraryGridCoverFit.Poster;
+
     /// <summary>Staggered entrance trigger (docs/superpowers/specs/2026-09-07-chrome-content-motion-
     /// polish-design.md item 1) - set true by <see cref="RebuildView"/> (nav-in reload, search/sort/
-    /// group/filter) and by <see cref="OnViewModeChanged"/> (switching Poster/Panorama/List/Details/
-    /// Tiles). Read once per container preparation by LibraryScreen.axaml.cs's ContainerPrepared
+    /// group/filter) and by <see cref="OnViewModeChanged"/> (switching Grid/List/DetailsTable).
+    /// Read once per container preparation by LibraryScreen.axaml.cs's ContainerPrepared
     /// handlers via <see cref="Controls.EntranceAnimation.Prepare"/> - not a live binding, so
     /// ordinary scroll-driven virtualization recycling never replays the entrance; only a fresh
     /// trigger setting this back to true (right after whichever container-preparation burst it
@@ -3237,37 +3287,90 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
     [ObservableProperty]
     private bool _playEntranceAnimation;
 
-    /// <summary>Phase 4a: the single poster grid, replacing Compact/Comfortable/Cover-only (docs/
-    /// superpowers/specs/2026-08-27-library-browsing-4a-poster-grid-design.md).</summary>
-    /// <summary>Every normal view-mode grid is suppressed while <see cref="IsCollectionView"/> - the
+    /// <summary>Master-Detail redesign (docs/superpowers/specs/2026-09-14-library-visual-redesign-
+    /// design.md §2) consolidated the old 5-value <c>LibraryViewMode</c> (Poster/Panorama/List/
+    /// Details/Tiles) into 3: <see cref="GridCoverFit"/> now carries the Poster/Panorama/Tiles
+    /// distinction the removed grid-family values used to (List was always a structurally different
+    /// container - a real <c>ListBox</c>, not a wrap-grid - so it has no sub-toggle).
+    /// Every normal view-mode grid is suppressed while <see cref="IsCollectionView"/> - the
     /// mixed collection grid (<see cref="CollectionTiles"/>) takes over <c>Grid.Row="1"</c> instead.</summary>
-    public bool IsPosterGrid => ViewMode == LibraryViewMode.PosterGrid && !IsCollectionView;
-    public bool IsPanoramaGrid => ViewMode == LibraryViewMode.PanoramaGrid && !IsCollectionView;
+    public bool IsGridView => ViewMode == LibraryViewMode.PosterGrid && !IsCollectionView;
     public bool IsListView => ViewMode == LibraryViewMode.List && !IsCollectionView;
-    public bool IsDetailsView => ViewMode == LibraryViewMode.Details && !IsCollectionView;
-    public bool IsTilesView => ViewMode == LibraryViewMode.Tiles && !IsCollectionView;
+    public bool IsDetailsTableView => ViewMode == LibraryViewMode.DetailsTable && !IsCollectionView;
+
+    /// <summary>Sub-mode aliases kept for the grid templates, which still need to pick a Poster vs
+    /// Panorama vs Tiles template even though those are no longer separate <see cref="LibraryViewMode"/>
+    /// values - see <see cref="GridCoverFit"/> (docs/superpowers/specs/2026-09-14-library-visual-
+    /// redesign-design.md §2).</summary>
+    public bool IsPosterGrid => IsGridView && GridCoverFit == LibraryGridCoverFit.Poster;
+    public bool IsPanoramaGrid => IsGridView && GridCoverFit == LibraryGridCoverFit.Panorama;
+    public bool IsTilesView => IsGridView && GridCoverFit == LibraryGridCoverFit.Tiles;
+
+    /// <summary>Dog-ear preview scope (docs/superpowers/specs/2026-09-13-preferences-cosmetic-
+    /// toggles-design.md) - mirrors CE's own <c>DisplayType != ItemViewMode.Detail</c> exclusion;
+    /// List/DetailsTable don't get the hover peek. Was <c>IsPosterOrPanoramaGrid</c> before the
+    /// Poster/Panorama/Tiles modes merged into one <see cref="LibraryViewMode.PosterGrid"/> mode.</summary>
+    public bool IsGridDogEarScope => IsGridView;
+
+    /// <summary>Live preview panel column visibility (docs/superpowers/specs/2026-09-14-library-
+    /// visual-redesign-design.md §2/§4) - hidden unconditionally in <see cref="IsDetailsTableView"/>
+    /// (a wide sortable table and a live preview panel compete for the same width for no benefit),
+    /// otherwise follows the user's manual <see cref="IsLibraryPreviewPanelVisible"/> toggle. Also
+    /// gates the <c>GridSplitter</c> next to it, so a hidden panel never leaves a stranded splitter.</summary>
+    public bool ShowPreviewPanelColumn => IsLibraryPreviewPanelVisible && !IsDetailsTableView;
 
     partial void OnViewModeChanged(LibraryViewMode value)
     {
-        OnPropertyChanged(nameof(IsPosterGrid));
-        OnPropertyChanged(nameof(IsPanoramaGrid));
-        OnPropertyChanged(nameof(IsListView));
-        OnPropertyChanged(nameof(IsDetailsView));
-        OnPropertyChanged(nameof(IsTilesView));
+        RaiseViewModeDerivedChanged();
         OnPropertyChanged(nameof(DisplayModeLabel));
         PlayEntranceAnimation = true;
         SaveLibrarySettings();
+    }
+
+    /// <summary>Scroll-position preservation across a cover-fit flip (docs/superpowers/specs/
+    /// 2026-09-14-library-visual-redesign-design.md §2/§9) - <see cref="LibraryScreen"/>'s
+    /// code-behind captures the current scroll position on <see cref="GridCoverFitChanging"/>
+    /// (before the value/visible-container switch) and restores the equivalent position on
+    /// <see cref="GridCoverFitChanged"/> (after). Deliberately plain events, not routed through
+    /// <c>LibraryBrowseHistory</c> - see that field's own doc comment in <c>LibraryScreen.axaml.cs</c>
+    /// for why.</summary>
+    public event Action? GridCoverFitChanging;
+
+    public event Action? GridCoverFitChanged;
+
+    partial void OnGridCoverFitChanging(LibraryGridCoverFit oldValue, LibraryGridCoverFit newValue) =>
+        GridCoverFitChanging?.Invoke();
+
+    partial void OnGridCoverFitChanged(LibraryGridCoverFit value)
+    {
+        OnPropertyChanged(nameof(IsPosterGrid));
+        OnPropertyChanged(nameof(IsPanoramaGrid));
+        OnPropertyChanged(nameof(IsTilesView));
+        OnPropertyChanged(nameof(DisplayModeLabel));
+        SaveLibrarySettings();
+        GridCoverFitChanged?.Invoke();
+    }
+
+    /// <summary>Shared by <see cref="OnViewModeChanged"/> and <see cref="RaiseCollectionViewChanged"/>
+    /// - every boolean derived from <see cref="ViewMode"/> alone (not from <see cref="GridCoverFit"/>,
+    /// which has its own narrower raise above).</summary>
+    private void RaiseViewModeDerivedChanged()
+    {
+        OnPropertyChanged(nameof(IsGridView));
+        OnPropertyChanged(nameof(IsGridDogEarScope));
+        OnPropertyChanged(nameof(IsPosterGrid));
+        OnPropertyChanged(nameof(IsPanoramaGrid));
+        OnPropertyChanged(nameof(IsTilesView));
+        OnPropertyChanged(nameof(IsListView));
+        OnPropertyChanged(nameof(IsDetailsTableView));
+        OnPropertyChanged(nameof(ShowPreviewPanelColumn));
     }
 
     /// <summary>Raised wherever <see cref="_activeCollectionHasNonSeriesMembers"/> is recomputed (every <see cref="RebuildView"/>) - the view-mode grids above all depend on it via <see cref="IsCollectionView"/>.</summary>
     private void RaiseCollectionViewChanged()
     {
         OnPropertyChanged(nameof(IsCollectionView));
-        OnPropertyChanged(nameof(IsPosterGrid));
-        OnPropertyChanged(nameof(IsPanoramaGrid));
-        OnPropertyChanged(nameof(IsListView));
-        OnPropertyChanged(nameof(IsDetailsView));
-        OnPropertyChanged(nameof(IsTilesView));
+        RaiseViewModeDerivedChanged();
     }
 
     /// <summary>Every Display mode now renders the exact same <see cref="IssueList"/> rows/groups
@@ -3276,15 +3379,146 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
     [RelayCommand]
     private void SetViewMode(LibraryViewMode mode) => ViewMode = mode;
 
+    [RelayCommand]
+    private void SetGridCoverFit(LibraryGridCoverFit fit) => GridCoverFit = fit;
+
+    /// <summary>The toolbar's Grid-family Display-mode buttons (Poster/Panorama/Tiles) each set
+    /// <see cref="ViewMode"/> and <see cref="GridCoverFit"/> together (docs/superpowers/specs/
+    /// 2026-09-14-library-visual-redesign-design.md §2) - a single <see cref="SetViewModeCommand"/>
+    /// parameter can no longer express "Grid, but specifically Panorama" now that those aren't
+    /// separate <see cref="LibraryViewMode"/> values. The List/Details buttons need no equivalent -
+    /// <see cref="SetViewModeCommand"/> alone is enough for them.</summary>
+    [RelayCommand]
+    private void SelectPosterGrid()
+    {
+        ViewMode = LibraryViewMode.PosterGrid;
+        GridCoverFit = LibraryGridCoverFit.Poster;
+    }
+
+    [RelayCommand]
+    private void SelectPanoramaGrid()
+    {
+        ViewMode = LibraryViewMode.PosterGrid;
+        GridCoverFit = LibraryGridCoverFit.Panorama;
+    }
+
+    [RelayCommand]
+    private void SelectTilesGrid()
+    {
+        ViewMode = LibraryViewMode.PosterGrid;
+        GridCoverFit = LibraryGridCoverFit.Tiles;
+    }
+
     public string DisplayModeLabel => ViewMode switch
     {
-        LibraryViewMode.PosterGrid => "Poster grid",
-        LibraryViewMode.PanoramaGrid => "Panorama grid",
+        LibraryViewMode.PosterGrid => GridCoverFit switch
+        {
+            LibraryGridCoverFit.Panorama => "Panorama grid",
+            LibraryGridCoverFit.Tiles => "Tiles",
+            _ => "Poster grid",
+        },
         LibraryViewMode.List => "List",
-        LibraryViewMode.Details => "Details",
-        LibraryViewMode.Tiles => "Tiles",
+        LibraryViewMode.DetailsTable => "Details",
         _ => "Display",
     };
+
+    /// <summary>Manual collapse for the live preview panel (docs/superpowers/specs/2026-09-14-
+    /// library-visual-redesign-design.md §4) - toolbar toggle + Ctrl+B, independent of
+    /// <see cref="IsDetailsTableView"/>'s own unconditional hide (see <see cref="ShowPreviewPanelColumn"/>).</summary>
+    [ObservableProperty]
+    private bool _isLibraryPreviewPanelVisible = true;
+
+    partial void OnIsLibraryPreviewPanelVisibleChanged(bool value)
+    {
+        OnPropertyChanged(nameof(ShowPreviewPanelColumn));
+        SaveLibrarySettings();
+    }
+
+    [RelayCommand]
+    private void ToggleLibraryPreviewPanel() => IsLibraryPreviewPanelVisible = !IsLibraryPreviewPanelVisible;
+
+    /// <summary><c>GridSplitter</c>-adjusted width of the live preview panel, persisted across
+    /// restarts (docs/superpowers/specs/2026-09-14-library-visual-redesign-design.md §4).</summary>
+    [ObservableProperty]
+    private double _libraryPreviewPanelWidth = 320;
+
+    partial void OnLibraryPreviewPanelWidthChanged(double value) => SaveLibrarySettings();
+
+    /// <summary>
+    /// Live preview panel content (docs/superpowers/specs/2026-09-14-library-visual-redesign-
+    /// design.md §4) - set from <see cref="LibraryScreen.axaml.cs"/>'s shared card-focus handler,
+    /// which every grid/list template's <c>Button.card</c> already routes through (List/Details
+    /// reuse the exact same mechanism - their <c>ListBoxItem</c> is deliberately non-focusable so
+    /// the inner <c>Button.card</c> stays the one real focus target, per that file's own doc
+    /// comment). Not driven by <see cref="Selection"/>/<see cref="SeriesSelection"/> - those are
+    /// pure multi-select sets with no "last/primary" concept (see the design doc's implementation-
+    /// time correction) - so focus is the independent signal for "what to preview," matching
+    /// keyboard arrow-key navigation for free since that also moves focus between cards.
+    /// </summary>
+    [ObservableProperty]
+    private IssueListRow? _previewIssue;
+
+    [ObservableProperty]
+    private SeriesCardSample? _previewSeries;
+
+    public bool ShowSeriesPreview => IsSeriesGranularity && PreviewSeries is not null;
+    public bool ShowIssuePreview => IsIssueGranularity && PreviewIssue is not null;
+
+    /// <summary>Reuses the grid's own empty-state signal rather than re-deriving "zero results"
+    /// independently - if the grid has nothing to show (any reason: search, filters, or a genuinely
+    /// empty library), the panel shouldn't claim something is selectable.</summary>
+    public bool ShowNoResultsPreview => ShowEmptyState;
+
+    public bool ShowIdlePreview => !ShowSeriesPreview && !ShowIssuePreview && !ShowNoResultsPreview;
+
+    partial void OnPreviewIssueChanged(IssueListRow? value)
+    {
+        OnPropertyChanged(nameof(ShowIssuePreview));
+        OnPropertyChanged(nameof(ShowIdlePreview));
+    }
+
+    partial void OnPreviewSeriesChanged(SeriesCardSample? value)
+    {
+        OnPropertyChanged(nameof(ShowSeriesPreview));
+        OnPropertyChanged(nameof(ShowIdlePreview));
+
+        PreviewSeriesIssueRail.Clear();
+        if (value is not null)
+        {
+            // IssueList.Rows already carries every issue in the library (populated from
+            // _allSeries.SelectMany(s => s.Issues) regardless of the active granularity/view mode -
+            // Series granularity just displays Covers/Groups instead, the row data is still there),
+            // with covers already resolved - filtering it is a plain in-memory operation, no fresh
+            // DB round-trip or cover-resolution work needed for the rail.
+            foreach (var row in IssueList.Rows
+                .Where(r => r.SeriesId == value.SeriesId)
+                .OrderBy(r => r.NumberSortKey ?? float.MaxValue))
+            {
+                PreviewSeriesIssueRail.Add(new PosterRailItem
+                {
+                    Id = row.Id,
+                    Name = row.Number is { Length: > 0 } number ? $"#{number}" : row.Title,
+                    CoverBrush = row.CoverBrush,
+                    Payload = row,
+                });
+            }
+        }
+    }
+
+    /// <summary>Backs the series-preview state's issue rail (docs/superpowers/specs/2026-09-14-
+    /// library-visual-redesign-design.md §4) - populated in <see cref="OnPreviewSeriesChanged"/>.</summary>
+    public ObservableCollection<PosterRailItem> PreviewSeriesIssueRail { get; } = new();
+
+    /// <summary>Called from <see cref="Granularity"/>'s own changed-hook so the panel re-derives
+    /// which of <see cref="PreviewIssue"/>/<see cref="PreviewSeries"/> applies without needing a
+    /// fresh focus event - matches how every other granularity-dependent grid binding here already
+    /// behaves (see <see cref="RaiseCollectionViewChanged"/>'s sibling raises).</summary>
+    private void RaisePreviewGranularityChanged()
+    {
+        OnPropertyChanged(nameof(ShowSeriesPreview));
+        OnPropertyChanged(nameof(ShowIssuePreview));
+        OnPropertyChanged(nameof(ShowIdlePreview));
+    }
 
     private double _gridDensity = 1.0;
 
@@ -3407,6 +3641,47 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
     private bool _showContinueReadingButton;
 
     partial void OnShowContinueReadingButtonChanged(bool value) => SaveLibrarySettings();
+
+    // Cosmetic Preferences micro-toggles (docs/superpowers/specs/2026-09-13-preferences-cosmetic-
+    // toggles-design.md) - same View & Sort popup "Overlay" group as the 4 badge toggles above.
+    // Each also pushes into CosmeticThumbnailSettings so AsyncCoverImage/the dog-ear peek/the hover
+    // tooltip (all static, no ViewModel reference) see the change immediately, not just on restart.
+
+    [ObservableProperty]
+    private bool _fadeInThumbnails = true;
+
+    partial void OnFadeInThumbnailsChanged(bool value)
+    {
+        CosmeticThumbnailSettings.FadeInThumbnails = value;
+        SaveLibrarySettings();
+    }
+
+    [ObservableProperty]
+    private bool _dogEarThumbnails = true;
+
+    partial void OnDogEarThumbnailsChanged(bool value)
+    {
+        CosmeticThumbnailSettings.DogEarThumbnails = value;
+        SaveLibrarySettings();
+    }
+
+    [ObservableProperty]
+    private bool _showToolTips;
+
+    partial void OnShowToolTipsChanged(bool value)
+    {
+        CosmeticThumbnailSettings.ShowToolTips = value;
+        SaveLibrarySettings();
+    }
+
+    [ObservableProperty]
+    private bool _numericRatingThumbnails = true;
+
+    partial void OnNumericRatingThumbnailsChanged(bool value)
+    {
+        CosmeticThumbnailSettings.NumericRatingThumbnails = value;
+        SaveLibrarySettings();
+    }
 
     [RelayCommand]
     private void ContinueReading(SeriesCardSample? card)

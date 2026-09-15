@@ -2,6 +2,8 @@ using System;
 using System.Collections.Concurrent;
 using System.Threading.Tasks;
 using Avalonia;
+using Avalonia.Animation;
+using Avalonia.Animation.Easings;
 using Avalonia.Controls;
 using Avalonia.Media.Imaging;
 using Avalonia.Threading;
@@ -76,6 +78,11 @@ public sealed class AsyncCoverImage
 
         if (CoverImageCache.TryGetCached(stem, out var cached))
         {
+            // A cache hit is always instant - no fade, matching CE (FadeInThumbnails only gates a
+            // genuine new load, below). Clear any transition a prior fade attached to this recycled
+            // Image so this Opacity assignment doesn't itself animate.
+            image.Transitions = null;
+            image.Opacity = 1;
             image.Source = cached;
             if (cached is not null && CoverFingerprint.TryGetId(stem, out int cachedId))
             {
@@ -99,6 +106,17 @@ public sealed class AsyncCoverImage
             TaskScheduler.Default);
     }
 
+    /// <summary>One-shot 0→1 opacity fade (docs/superpowers/specs/2026-09-13-preferences-cosmetic-
+    /// toggles-design.md) - CE's <c>FadeInThumbnails</c>, ~120ms matching this codebase's existing
+    /// <c>CheckBox.tileSelect</c> hover-fade idiom (<c>LibraryScreen.axaml</c>). Shared instance since
+    /// <see cref="Transitions"/> only needs its property/duration/easing set once per <see cref="Image"/>.</summary>
+    private static readonly TimeSpan FadeDuration = TimeSpan.FromMilliseconds(120);
+
+    private static Transitions BuildFadeTransitions() => new()
+    {
+        new DoubleTransition { Property = Visual.OpacityProperty, Duration = FadeDuration, Easing = new CubicEaseOut() },
+    };
+
     /// <summary>Paints <paramref name="decoded"/> onto <paramref name="image"/> unless its container
     /// has since been recycled to a different issue (<paramref name="generation"/> stale) or the
     /// decode came back empty. Internal for direct testing of the generation guard.</summary>
@@ -109,7 +127,24 @@ public sealed class AsyncCoverImage
             return;
         }
 
-        image.Source = CoverImageCache.StoreIfAbsent(stem, decoded);
+        var source = CoverImageCache.StoreIfAbsent(stem, decoded);
+
+        // CE only fades a genuine first load, never a cache-hit repaint (OnSourceIdChanged's own
+        // cache-hit branch above never calls this method). Attach the transition once, before the
+        // 0->1 flip, so the transition system actually animates the change rather than snapping.
+        if (CosmeticThumbnailSettings.FadeInThumbnails)
+        {
+            image.Transitions ??= BuildFadeTransitions();
+            image.Opacity = 0;
+            image.Source = source;
+            image.Opacity = 1;
+        }
+        else
+        {
+            image.Source = source;
+            image.Opacity = 1;
+        }
+
         if (CoverFingerprint.TryGetId(stem, out int decodedId))
         {
             CoverAspectRatioStore.Report(decodedId, decoded.PixelSize.Width, decoded.PixelSize.Height);

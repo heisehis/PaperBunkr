@@ -5,32 +5,21 @@ ComicRack-inspired comic/manga library and reader, Avalonia/.NET 8. Full design 
 
 ## Roadmap status — check this first in a new session
 
-The project is past Alpha and Beta now, into what's called **Pre-release**. "Alpha" is a closed
-historical milestone (declared done 2026-08-07, tagged `v0.1.0-alpha`/`v0.1.1-alpha`) — not the
-current stage, so don't describe ongoing/current work as "alpha."
-
-- **Source of truth for what's currently open:** [docs/pre-release-todo.md](docs/pre-release-todo.md)
-  — undone items and a session log, going forward from Pre-release.
-- **Historical record (closed, don't edit):** [docs/alpha-todo.md](docs/alpha-todo.md) — the
-  P0–P7 Alpha release-prep checklist and known gaps as of the Alpha milestone. The Beta backlog
-  itself was always tracked separately in
-  [docs/Paperbunkr-Roadmap.md](docs/Paperbunkr-Roadmap.md), not in `alpha-todo.md`.
-- **Live dashboard (lighter view):**
+- **Source of truth:** [docs/alpha-todo.md](docs/alpha-todo.md) — P0–P7 alpha checklist plus the
+  unsequenced Beta backlog, with commit refs and rationale for every status.
+- **Live dashboard (lighter view, same data):**
   https://claude.ai/code/artifact/0ca86894-977e-45e2-951b-476e1150a5ee
 - **Kept in sync by:** a scheduled cloud routine (`paperbunkr-alpha-tracker-sync`, every 6h,
   read-only) that diffs `git log` against the dashboard's own embedded `HEAD` marker and
-  republishes only verified status changes. It never edits any doc or commits anything — manage/
-  inspect it at https://claude.ai/code/routines. As of 2026-09-14 it still diffs against
-  `alpha-todo.md`'s (closed) P0–P7 section rather than `pre-release-todo.md` — re-pointing it is a
-  routine-config change outside a repo session's reach; flag it to the user rather than trying to
-  edit the routine's stored prompt directly.
-- **If you land roadmap-relevant work in a session:** update `docs/pre-release-todo.md` by hand
-  (status, commit ref, what you verified — not just what the commit message claims). The dashboard's
-  own 6-hourly check will pick up the underlying commits regardless, but the written doc is what a
+  republishes only verified status changes. It never edits `docs/alpha-todo.md` or commits
+  anything — manage/inspect it at https://claude.ai/code/routines.
+- **If you land roadmap-relevant work in a session:** update `docs/alpha-todo.md` by hand (status,
+  commit ref, what you verified — not just what the commit message claims). The dashboard's own
+  6-hourly check will pick up the underlying commits regardless, but the written doc is what a
   human actually reads for the "why."
-- Docs have drifted out of sync with the repo before (see `alpha-todo.md`'s "Live tracker" section
-  for the original incident) — don't assume any doc or the dashboard is current without checking
-  `git log` against the `HEAD` hash each one records.
+- The doc drifted out of sync with the repo once already (see its "Live tracker" section) —
+  don't assume either the doc or the dashboard is current without checking `git log` against the
+  `HEAD` hash each one records.
 
 ## Standing rule
 

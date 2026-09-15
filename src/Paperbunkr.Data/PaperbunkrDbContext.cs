@@ -895,11 +895,28 @@ public class PaperbunkrDbContext : DbContext
             builder.Property(a => a.CheckForUpdatesOnStartup).HasDefaultValue(true);
 
             // PosterGrid (0) is both the CLR default and the desired default here (Phase 4a
-            // collapsed Compact/Comfortable/CoverOnly into it) - same coincide-and-still-set-it-for-
-            // consistency case as LibraryIssueListGroupField.None / PageTransitionStyle.None above.
+            // collapsed Compact/Comfortable/CoverOnly into it; Master-Detail redesign, docs/
+            // superpowers/specs/2026-09-14-library-visual-redesign-design.md §2, further folded
+            // Panorama/Tiles into it too, deliberately keeping the name unchanged - see
+            // LibraryViewMode.cs's doc comment for why renaming this specific member is a trap) -
+            // same coincide-and-still-set-it-for-consistency case as LibraryIssueListGroupField.None
+            // / PageTransitionStyle.None above.
             builder.Property(a => a.LibraryViewMode).HasConversion<string>().HasMaxLength(32)
                 .HasDefaultValue(LibraryViewMode.PosterGrid)
                 .HasSentinel(LibraryViewMode.PosterGrid);
+            // Poster (0) is both the CLR default and the desired default here - see LibraryViewMode above.
+            builder.Property(a => a.LibraryGridCoverFit).HasConversion<string>().HasMaxLength(32)
+                .HasDefaultValue(LibraryGridCoverFit.Poster)
+                .HasSentinel(LibraryGridCoverFit.Poster);
+            // Desired default (true) diverges from the CLR/SQLite implicit zero-value (false) - same
+            // explicit-DB-default requirement as CheckForUpdatesOnStartup above, or an existing
+            // singleton row's backfill on this ALTER TABLE lands on false instead of true.
+            builder.Property(a => a.IsLibraryPreviewPanelVisible).HasDefaultValue(true);
+            // Desired default (320) diverges from the CLR/SQLite implicit zero-value (0.0) - same
+            // explicit-DB-default requirement as the bool above; a property initializer alone isn't
+            // reflected into migration metadata (confirmed the hard way on the first scaffold of
+            // this same migration - it generated defaultValue: 0.0 for this column).
+            builder.Property(a => a.LibraryPreviewPanelWidth).HasDefaultValue(320.0);
             // Same treatment - Number (0) is the CLR default, desired default is Added.
             builder.Property(a => a.LibraryIssueListSortField).HasConversion<string>().HasMaxLength(32)
                 .HasDefaultValue(IssueListSortField.Added)

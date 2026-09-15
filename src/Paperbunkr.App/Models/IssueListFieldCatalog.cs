@@ -201,8 +201,10 @@ public static class IssueListFieldCatalog
 
     private static string? Date(DateTime? value) => value?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
 
-    /// <summary>Human-readable byte size for the File Size column; null passes through.</summary>
-    private static string? FormatFileSize(long? bytes)
+    /// <summary>Human-readable byte size for the File Size column; null passes through. Public since
+    /// the hover tooltip (docs/superpowers/specs/2026-09-13-preferences-cosmetic-toggles-design.md)
+    /// reuses it rather than duplicating the same formatting logic.</summary>
+    public static string? FormatFileSize(long? bytes)
     {
         if (bytes is not { } b || b < 0)
         {

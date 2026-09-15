@@ -175,6 +175,44 @@ public class ReadingListTests : IDisposable
         }
     }
 
+    /// <summary>docs/superpowers/specs/2026-09-13-preferences-cosmetic-toggles-design.md -
+    /// AppSettings.ExportedListsContainFilenames (CE: Settings.ExportedListsContainFilenames,
+    /// default false) gates whether ComicReadingListItem.FileName is populated on export.</summary>
+    [Fact]
+    public void Cbl_Export_PopulatesFileName_OnlyWhenExportedListsContainFilenamesIsOn()
+    {
+        var issueWithPath = _context.Issues.First(i => i.Id == _issue1Id);
+        issueWithPath.FilePath = @"C:\Comics\Kilo Station\Kilo Station 001.cbz";
+        _context.SaveChanges();
+
+        var list = new ReadingList { Name = "Signal War" };
+        list.Items.Add(new ReadingListItem { IssueId = _issue1Id, SortOrder = 0 });
+        _context.ReadingLists.Add(list);
+        _context.SaveChanges();
+
+        string cblPathOff = Path.Combine(Path.GetTempPath(), $"paperbunkr_test_{Guid.NewGuid():N}.cbl");
+        string cblPathOn = Path.Combine(Path.GetTempPath(), $"paperbunkr_test_{Guid.NewGuid():N}.cbl");
+        try
+        {
+            // Off (default) - no FileName.
+            CblReadingListIO.Export(_context, list.Id, cblPathOff);
+            var containerOff = ComicReadingListContainer.Deserialize(cblPathOff);
+            Assert.Equal(string.Empty, containerOff.Items[0].FileName);
+
+            // On - FileName populated from Issue.FilePath.
+            _context.GetOrCreateAppSettings().ExportedListsContainFilenames = true;
+            _context.SaveChanges();
+            CblReadingListIO.Export(_context, list.Id, cblPathOn);
+            var containerOn = ComicReadingListContainer.Deserialize(cblPathOn);
+            Assert.Equal(issueWithPath.FilePath, containerOn.Items[0].FileName);
+        }
+        finally
+        {
+            if (File.Exists(cblPathOff)) File.Delete(cblPathOff);
+            if (File.Exists(cblPathOn)) File.Delete(cblPathOn);
+        }
+    }
+
     [Fact]
     public void Cbl_Import_CreatesPlaceholderForUnmatchedEntry()
     {

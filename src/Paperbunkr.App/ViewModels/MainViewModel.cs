@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -2167,6 +2168,49 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
                 GoLibraryWithCollection(target.Id);
                 break;
         }
+    }
+
+    /// <summary>Bare file-path CLI launch (docs/superpowers/specs/2026-09-13-open-file-on-launch-
+    /// design.md) - called once from <c>App.axaml.cs</c> at startup when
+    /// <see cref="NavigationCliArgs.TryParseFilePathArg"/> found a supported comic file on the
+    /// command line (the shape Windows' own file-association launch produces). Mirrors CE's
+    /// <c>Storage.FindItemByFile</c> short-circuit: a path already in the library just opens; a new
+    /// one is always imported first - a deliberate deviation from CE's own <c>AddToLibraryOnOpen</c>
+    /// default of "false" (design doc §1/§4), since no transient/non-persisted reading mode exists
+    /// here to fall back to. Kept separate from <see cref="OpenDeepLink"/> since this needs a DB
+    /// round-trip that method doesn't.</summary>
+    public void OpenFilePath(string path)
+    {
+        using var context = PaperbunkrDb.CreateContext();
+        var existing = context.Issues.FirstOrDefault(i => i.FilePath == path);
+        if (existing is not null)
+        {
+            _navigationHistory.ResetRoot("library");
+            GoReaderForIssue(existing.Id);
+            return;
+        }
+
+        try
+        {
+            var result = new LibraryFolderScanner()
+                .ImportNewFilesAsync(new[] { path }, new Progress<(int Done, int Total)>(), CancellationToken.None)
+                .GetAwaiter().GetResult();
+
+            if (result.AddedIssueIds.Count == 1)
+            {
+                _navigationHistory.ResetRoot("library");
+                GoReaderForIssue(result.AddedIssueIds[0]);
+                return;
+            }
+        }
+        catch
+        {
+            // Import failed (corrupt archive, I/O error) - fall through to the toast + restore
+            // below rather than crashing startup over one bad file.
+        }
+
+        RestoreLastScreen();
+        ShowToast("Couldn't open file", "That file couldn't be added to your library.");
     }
 
     /// <summary>Restore-on-launch - called once from <c>App.axaml.cs</c> at startup when no CLI deep

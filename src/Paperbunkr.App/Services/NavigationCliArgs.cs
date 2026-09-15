@@ -1,4 +1,6 @@
+using System.IO;
 using System.Linq;
+using cYo.Projects.ComicRack.Engine.IO.Provider;
 
 namespace Paperbunkr.App.Services;
 
@@ -48,5 +50,33 @@ public static class NavigationCliArgs
         }
 
         return false;
+    }
+
+    /// <summary>Looks for a single bare file-path argument (the shape Windows' own file-association
+    /// launch command line produces: <c>"...\Paperbunkr.exe" "%1"</c>) - docs/superpowers/specs/
+    /// 2026-09-13-open-file-on-launch-design.md. Returns <see langword="true"/> only when
+    /// <paramref name="args"/> has exactly one element, it isn't the <c>--open</c> flag itself, the
+    /// path exists on disk, and its extension is one <see cref="Providers.Readers"/> supports - same
+    /// extension check <see cref="LibraryFolderScanner"/>/<see cref="DragImportService"/> already
+    /// gate imports on. A <c>--open kind:id</c> invocation is always two arguments so the length
+    /// check alone already excludes it.</summary>
+    public static bool TryParseFilePathArg(string[] args, out string? path)
+    {
+        path = null;
+
+        if (args.Length != 1 || args[0] == "--open" || !File.Exists(args[0]))
+        {
+            return false;
+        }
+
+        var supportedExtensions = Providers.Readers.GetFileExtensions();
+        string extension = Path.GetExtension(args[0]);
+        if (!supportedExtensions.Any(e => string.Equals(e, extension, System.StringComparison.OrdinalIgnoreCase)))
+        {
+            return false;
+        }
+
+        path = args[0];
+        return true;
     }
 }

@@ -164,6 +164,22 @@ today.
 string.Empty` on each `ComicReadingListItem`. New Preferences → Advanced checkbox, next to the
 file-metadata-writeback group.
 
+### Post-ship addendum (2026-09-13): Series Granularity was missed entirely
+
+The first implementation pass only wired DogEar/ShowToolTips/NumericRatingThumbnails into the
+Issue-granularity templates (`PosterGridIssueTemplate`/`PanoramaGridItemTemplate`). Found via the
+user's own on-screen test: Library's default/common view is **Series Granularity**
+(`PosterGridSeriesTemplate`/`SeriesPanoramaGridItemTemplate`, one card per series) — none of the 3
+hover features existed there at all, so toggling them produced no visible change for a user browsing
+that way. `SeriesCardSample.RepresentativeRow` already carries a full `IssueListRow` for the card's
+cover-issue (the same issue `CoverKey` is keyed to), so the fix reuses every existing
+`IssueListRow`-based property (`DogEarEligible`, `HasRating`, `Rating`, tooltip content) via
+`RepresentativeRow.*` bindings rather than a second series-shaped implementation. Code-behind
+(`OnCoverPointerEntered`/hover handlers) gained `ResolvePeekRow(object? dataContext)` to extract the
+effective `IssueListRow` from either an `IssueListRow` or a `SeriesCardSample` DataContext. Series
+corner badge uses `HasSeriesSelection` (the series-granularity selection flag) in place of
+`HasSelection`.
+
 ## 4. Explicitly out of scope
 
 - `CoverThumbnailsSameSize` as a real toggle — already covered by PosterGrid/Panorama, no new

@@ -253,14 +253,14 @@ public class MainViewModelTests : IDisposable
     // directly - leaving an empty/stale Detail page instead of returning where the user actually
     // came from) ---
 
-    private (int SeriesId, int IssueId) SeedSeriesWithIssue(string seriesName)
+    private (int SeriesId, int IssueId) SeedSeriesWithIssue(string seriesName, string? filePath = null)
     {
         var options = new DbContextOptionsBuilder<PaperbunkrDbContext>().UseSqlite($"Data Source={_dbPath}").Options;
         using var context = new PaperbunkrDbContext(options);
         var series = new Paperbunkr.Data.Entities.Series { Name = seriesName };
         context.Series.Add(series);
         context.SaveChanges();
-        var issue = new Paperbunkr.Data.Entities.Issue { SeriesId = series.Id, Number = "1" };
+        var issue = new Paperbunkr.Data.Entities.Issue { SeriesId = series.Id, Number = "1", FilePath = filePath };
         context.Issues.Add(issue);
         context.SaveChanges();
         return (series.Id, issue.Id);
@@ -607,6 +607,78 @@ public class MainViewModelTests : IDisposable
         vm.OpenDeepLink(new Paperbunkr.App.Services.NavigationCliTarget("collection", collectionId));
 
         Assert.True(vm.IsLibrary);
+    }
+
+    /// <summary>docs/superpowers/specs/2026-09-13-open-file-on-launch-design.md - a path already in
+    /// the library just opens the existing Issue (mirrors CE's Storage.FindItemByFile short-circuit);
+    /// no import runs, so the Issue count stays exactly what was seeded.</summary>
+    [Fact]
+    public void OpenFilePath_AlreadyInLibrary_OpensExistingIssue_WithoutImporting()
+    {
+        string filePath = Path.Combine(Path.GetTempPath(), $"paperbunkr_openfilepath_existing_{Guid.NewGuid():N}.cbz");
+        SeedSeriesWithIssue("Open File Existing Series", filePath);
+        var vm = new MainViewModel();
+
+        vm.OpenFilePath(filePath);
+
+        Assert.True(vm.IsReader);
+
+        var options = new DbContextOptionsBuilder<PaperbunkrDbContext>().UseSqlite($"Data Source={_dbPath}").Options;
+        using var context = new PaperbunkrDbContext(options);
+        Assert.Equal(1, context.Issues.Count());
+    }
+
+    /// <summary>A path not already in the library is always imported first (design doc §1/§4 -
+    /// deliberate deviation from CE's own AddToLibraryOnOpen default, no transient reading mode to
+    /// gate here), then opened.</summary>
+    [Fact]
+    public void OpenFilePath_NewSupportedFile_ImportsAndOpens()
+    {
+        string root = Path.Combine(Path.GetTempPath(), $"paperbunkr_openfilepath_new_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        string file = CbzFixture.Create(Path.Combine(root, "Kilo Station 001 (2020).cbz"), pageCount: 1);
+        var vm = new MainViewModel();
+
+        try
+        {
+            vm.OpenFilePath(file);
+
+            Assert.True(vm.IsReader);
+
+            var options = new DbContextOptionsBuilder<PaperbunkrDbContext>().UseSqlite($"Data Source={_dbPath}").Options;
+            using var context = new PaperbunkrDbContext(options);
+            Assert.True(context.Issues.Any(i => i.FilePath == file));
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch (IOException) { }
+        }
+    }
+
+    /// <summary>A path the scanner's own supported-extension gate rejects (design doc §3 step 2's
+    /// "second gate", NavigationCliArgs.TryParseFilePathArg already excludes this in the real startup
+    /// path, but OpenFilePath itself must not crash if ever called with one) falls back to
+    /// <see cref="MainViewModel.RestoreLastScreen"/> rather than opening anything.</summary>
+    [Fact]
+    public void OpenFilePath_UnsupportedExtension_FallsBackWithoutCrashing()
+    {
+        string root = Path.Combine(Path.GetTempPath(), $"paperbunkr_openfilepath_unsupported_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        string file = Path.Combine(root, "notes.txt");
+        File.WriteAllText(file, "not a comic");
+        var vm = new MainViewModel();
+
+        try
+        {
+            var exception = Record.Exception(() => vm.OpenFilePath(file));
+
+            Assert.Null(exception);
+            Assert.True(vm.IsHome, $"CurrentScreen={vm.CurrentScreen}");
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch (IOException) { }
+        }
     }
 
     [Fact]

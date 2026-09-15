@@ -37,7 +37,11 @@ public sealed record LibraryWorkspaceState(
     bool FilterUnreadOnly = false,
     bool FilterMissingIssues = false,
     bool FilterTrackedOnly = false,
-    string? DetailsColumns = null);
+    string? DetailsColumns = null,
+    // Sub-toggle of ViewMode added by the Master-Detail redesign (docs/superpowers/specs/
+    // 2026-09-14-library-visual-redesign-design.md §2) - appended at the end, defaulted, so an old
+    // StateJson blob written before this existed still deserializes cleanly.
+    LibraryGridCoverFit GridCoverFit = LibraryGridCoverFit.Poster);
 
 /// <summary>
 /// The Books screen's persisted sort/group state - its whole three-field slice of

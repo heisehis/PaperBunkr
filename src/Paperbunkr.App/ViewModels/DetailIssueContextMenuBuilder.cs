@@ -1,4 +1,6 @@
 using System.Collections.Generic;
+using System.Linq;
+using FluentIcons.Common;
 using Paperbunkr.App.ContextMenus;
 using Paperbunkr.App.Models;
 
@@ -26,7 +28,7 @@ public sealed class DetailIssueContextMenuBuilder
 
     public IReadOnlyList<ContextMenuEntry>? Build(object? target) => target switch
     {
-        IssueCardSample issue => new[]
+        IssueCardSample issue => ContextMenuEntry.Compact(new ContextMenuEntry?[]
         {
             ContextMenuEntry.Item("Edit Properties", _vm.EditIssuePropertiesCommand, issue),
             ContextMenuEntry.Item("Open in Reader", _vm.OpenIssueInReaderCommand, issue),
@@ -38,7 +40,18 @@ public sealed class DetailIssueContextMenuBuilder
             ContextMenuEntry.Separator,
             ContextMenuEntry.Item("Set Cover…", _vm.ChangeIssueCoverCommand, issue),
             ContextMenuEntry.Item("Reset Cover", _vm.ResetIssueCoverCommand, issue),
-        },
+            ContextMenuEntry.Separator,
+            ContextMenuEntry.SubMenu(
+                "Plugins",
+                LibraryPluginChildren(issue),
+                Symbol.Apps,
+                isVisible: _vm.HasLibraryPluginCommands),
+        }),
         _ => null,
     };
+
+    /// <summary>One row per enabled Library-hook plugin command - mirrors
+    /// <c>LibraryContextMenuBuilder.LibraryPluginChildren</c>'s own shape (same hook, same host).</summary>
+    private IEnumerable<ContextMenuEntry?> LibraryPluginChildren(IssueCardSample issue) =>
+        _vm.LibraryPluginCommands.Select(c => ContextMenuEntry.Item(c.Name, _vm.RunLibraryPluginCommand, (issue, c)));
 }

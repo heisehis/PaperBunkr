@@ -6,6 +6,7 @@
              xmlns:controls="using:Paperbunkr.App.Controls"
              xmlns:models="using:Paperbunkr.App.Models"
              xmlns:entities="using:Paperbunkr.Data.Entities"
+             xmlns:plugins="using:Paperbunkr.Plugins"
              xmlns:conv="using:Avalonia.Data.Converters"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
@@ -147,7 +148,7 @@
         <!-- ============ Row 1: two-zone bar ============ -->
         <Border Padding="24,12" Background="{DynamicResource PbSurface1Brush}"
                 BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,0,0,1">
-            <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto,Auto,Auto" ColumnSpacing="10">
+            <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto,Auto,Auto,Auto" ColumnSpacing="10">
                 <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="2" VerticalAlignment="Center">
                     <Button Classes="browseBtn" Command="{Binding BrowsePreviousCommand}" IsEnabled="{Binding CanBrowsePrevious}"
                             ToolTip.Tip="Back" AutomationProperties.AutomationId="LibraryBrowsePreviousButton">
@@ -207,14 +208,26 @@
                     </StackPanel>
                 </Button>
 
-                <Button Grid.Column="5" Classes="browseBtn" Command="{Binding ResyncSeriesFromFileCommand}"
+                <!-- Live preview panel toggle (docs/superpowers/specs/2026-09-14-library-visual-
+                     redesign-design.md §4) - Ctrl+B does the same thing (MainWindow.axaml.cs).
+                     Hidden in DetailsTable mode: that mode already hides the panel unconditionally
+                     (§2), so a toggle for it there would be misleading. -->
+                <Button Grid.Column="5" Classes="browseBtn"
+                        Command="{Binding ToggleLibraryPreviewPanelCommand}" VerticalAlignment="Center"
+                        IsVisible="{Binding !IsDetailsTableView}"
+                        ToolTip.Tip="Show or hide the preview panel (Ctrl+B)"
+                        AutomationProperties.AutomationId="LibraryTogglePreviewPanelButton" AutomationProperties.Name="Toggle preview panel">
+                    <fi:SymbolIcon Symbol="PanelRight" />
+                </Button>
+
+                <Button Grid.Column="6" Classes="browseBtn" Command="{Binding ResyncSeriesFromFileCommand}"
                         IsEnabled="{Binding !IsResyncingSeries}" VerticalAlignment="Center"
                         ToolTip.Tip="Resync each issue's series from its file's embedded metadata"
                         AutomationProperties.AutomationId="LibraryResyncSeriesButton" AutomationProperties.Name="Resync series from file">
                     <fi:SymbolIcon Symbol="ArrowClockwise" />
                 </Button>
 
-                <Button Grid.Column="6" Classes="addBtn" Command="{Binding OpenAddIssueCommand}" VerticalAlignment="Center"
+                <Button Grid.Column="7" Classes="addBtn" Command="{Binding OpenAddIssueCommand}" VerticalAlignment="Center"
                         ToolTip.Tip="Add issue to library" AutomationProperties.AutomationId="LibraryAddIssueButton" AutomationProperties.Name="Add issue">
                     <fi:SymbolIcon Symbol="Add" />
                 </Button>
@@ -270,8 +283,9 @@
                     <TextBlock Text="{Binding SelectionCount, StringFormat='{}{0} selected'}" FontSize="13" FontWeight="SemiBold"
                                Foreground="{DynamicResource PbTextBrush}" VerticalAlignment="Center" />
                     <Button Classes="selAction" Command="{Binding BulkEditSelectionCommand}" Content="Bulk Edit" />
-                    <Button Classes="selAction" Command="{Binding RunLibraryPluginsOnSelectionCommand}" Content="Find Duplicates"
-                            IsVisible="{Binding HasPluginHost}" />
+                    <Button x:Name="LibraryPluginsButton" Classes="selAction" Classes.open="{Binding IsLibraryPluginMenuOpen}"
+                            Command="{Binding ToggleLibraryPluginMenuCommand}" Content="Plugins ▾"
+                            IsVisible="{Binding HasLibraryPluginCommands}" />
                     <Button Classes="selAction" Command="{Binding MarkSelectionReadCommand}" Content="Mark Read" />
                     <Button Classes="selAction" Command="{Binding MarkSelectionUnreadCommand}" Content="Mark Unread" />
                     <Button x:Name="AddToListButton" Classes="selAction" Classes.open="{Binding IsAddToListOpen}"
@@ -398,15 +412,15 @@
                         <StackPanel Spacing="1" IsVisible="{Binding IsViewTabActive}">
                             <TextBlock Classes="dropdownRow" Text="Display mode" Foreground="{DynamicResource PbTextBrush}" Margin="0,0,0,4" />
                             <Button Classes="modeOption" Classes.active="{Binding IsPosterGrid}" Content="Poster grid"
-                                    Command="{Binding SetViewModeCommand}" CommandParameter="{x:Static entities:LibraryViewMode.PosterGrid}" AutomationProperties.AutomationId="LibraryViewModeOption_PosterGrid" />
+                                    Command="{Binding SelectPosterGridCommand}" AutomationProperties.AutomationId="LibraryViewModeOption_PosterGrid" />
                             <Button Classes="modeOption" Classes.active="{Binding IsPanoramaGrid}" Content="Panorama grid"
-                                    Command="{Binding SetViewModeCommand}" CommandParameter="{x:Static entities:LibraryViewMode.PanoramaGrid}" AutomationProperties.AutomationId="LibraryViewModeOption_PanoramaGrid" />
+                                    Command="{Binding SelectPanoramaGridCommand}" AutomationProperties.AutomationId="LibraryViewModeOption_PanoramaGrid" />
+                            <Button Classes="modeOption" Classes.active="{Binding IsTilesView}" Content="Tiles"
+                                    Command="{Binding SelectTilesGridCommand}" AutomationProperties.AutomationId="LibraryViewModeOption_Tiles" />
                             <Button Classes="modeOption" Classes.active="{Binding IsListView}" Content="List"
                                     Command="{Binding SetViewModeCommand}" CommandParameter="{x:Static entities:LibraryViewMode.List}" AutomationProperties.AutomationId="LibraryViewModeOption_List" />
-                            <Button Classes="modeOption" Classes.active="{Binding IsDetailsView}" Content="Details"
-                                    Command="{Binding SetViewModeCommand}" CommandParameter="{x:Static entities:LibraryViewMode.Details}" AutomationProperties.AutomationId="LibraryViewModeOption_Details" />
-                            <Button Classes="modeOption" Classes.active="{Binding IsTilesView}" Content="Tiles"
-                                    Command="{Binding SetViewModeCommand}" CommandParameter="{x:Static entities:LibraryViewMode.Tiles}" AutomationProperties.AutomationId="LibraryViewModeOption_Tiles" />
+                            <Button Classes="modeOption" Classes.active="{Binding IsDetailsTableView}" Content="Details"
+                                    Command="{Binding SetViewModeCommand}" CommandParameter="{x:Static entities:LibraryViewMode.DetailsTable}" AutomationProperties.AutomationId="LibraryViewModeOption_Details" />
                             <!-- "Comic List" (LibraryViewMode.IssueList) fully removed 2026-09-03 - it
                                  duplicated the Details view. The enum value, IssueListScreen and the
                                  series-only LibrarySortField/GroupField columns are all gone; migrations
@@ -442,6 +456,12 @@
                                 <TextBlock Grid.Column="0" Text="Publisher badge" FontSize="12.5" VerticalAlignment="Center" Foreground="{DynamicResource PbTextBrush}" />
                                 <CheckBox Grid.Column="1" IsChecked="{Binding ShowPublisherBadge}" />
                             </Grid>
+                            <!-- "Language badge" here now only controls List/Tiles' own inline
+                                 language icon (docs/superpowers/specs/2026-09-14-library-visual-
+                                 redesign-design.md §5 removed the CORNER version from Poster/Panorama
+                                 tiles specifically - List/Tiles' inline display next to the publisher
+                                 mark was never part of that corner-contention problem, so it's
+                                 untouched and this toggle still does real work for it). -->
                             <Grid ColumnDefinitions="*,Auto">
                                 <TextBlock Grid.Column="0" Text="Language badge" FontSize="12.5" VerticalAlignment="Center" Foreground="{DynamicResource PbTextBrush}" />
                                 <CheckBox Grid.Column="1" IsChecked="{Binding ShowLanguageBadge}" />
@@ -453,6 +473,26 @@
                             <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding IsSeriesGranularity}">
                                 <TextBlock Grid.Column="0" Text="Continue reading button" FontSize="12.5" VerticalAlignment="Center" Foreground="{DynamicResource PbTextBrush}" />
                                 <CheckBox Grid.Column="1" IsChecked="{Binding ShowContinueReadingButton}" />
+                            </Grid>
+
+                            <!-- Cosmetic Preferences micro-toggles (docs/superpowers/specs/2026-09-13-
+                                 preferences-cosmetic-toggles-design.md) - same Overlay group as the 4
+                                 badge toggles above. -->
+                            <Grid ColumnDefinitions="*,Auto">
+                                <TextBlock Grid.Column="0" Text="Fade in thumbnails" FontSize="12.5" VerticalAlignment="Center" Foreground="{DynamicResource PbTextBrush}" />
+                                <CheckBox Grid.Column="1" IsChecked="{Binding FadeInThumbnails}" />
+                            </Grid>
+                            <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding IsGridDogEarScope}">
+                                <TextBlock Grid.Column="0" Text="Dog-ear preview" FontSize="12.5" VerticalAlignment="Center" Foreground="{DynamicResource PbTextBrush}" />
+                                <CheckBox Grid.Column="1" IsChecked="{Binding DogEarThumbnails}" />
+                            </Grid>
+                            <Grid ColumnDefinitions="*,Auto">
+                                <TextBlock Grid.Column="0" Text="Tooltips" FontSize="12.5" VerticalAlignment="Center" Foreground="{DynamicResource PbTextBrush}" />
+                                <CheckBox Grid.Column="1" IsChecked="{Binding ShowToolTips}" />
+                            </Grid>
+                            <Grid ColumnDefinitions="*,Auto">
+                                <TextBlock Grid.Column="0" Text="Numeric rating badge" FontSize="12.5" VerticalAlignment="Center" Foreground="{DynamicResource PbTextBrush}" />
+                                <CheckBox Grid.Column="1" IsChecked="{Binding NumericRatingThumbnails}" />
                             </Grid>
                         </StackPanel>
 
@@ -548,6 +588,24 @@
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
                 </StackPanel>
+            </Border>
+        </Popup>
+
+        <!-- One row per enabled Library-hook plugin command (docs: PluginHostService.GetLibraryCommands's
+             own doc comment) - replaces the earlier single hardcoded "Find Duplicates" button that ran
+             every enabled command at once. -->
+        <Popup PlacementTarget="{Binding #LibraryPluginsButton}" Placement="BottomEdgeAlignedLeft" VerticalOffset="6"
+               IsOpen="{Binding IsLibraryPluginMenuOpen}" IsLightDismissEnabled="True">
+            <Border Classes="dropdown" MinWidth="200">
+                <ItemsControl ItemsSource="{Binding LibraryPluginCommands}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="plugins:Command">
+                            <Button Classes="modeOption" Content="{Binding Name}"
+                                    Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).RunLibraryPluginOnSelectionCommand}"
+                                    CommandParameter="{Binding}" />
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
             </Border>
         </Popup>
 

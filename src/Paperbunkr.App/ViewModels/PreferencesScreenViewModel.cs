@@ -791,6 +791,7 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         WriteNativeSidecar = settings.WriteNativeSidecar;
         AutoRemoveMissingOnScan = settings.AutoRemoveMissingOnScan;
         DontReimportRemovedFiles = settings.DontReimportRemovedFiles;
+        ExportedListsContainFilenames = settings.ExportedListsContainFilenames;
         LibraryHealthConfirmedMissingThreshold = settings.LibraryHealthConfirmedMissingThreshold;
         _suppressBehaviorApply = false;
 
@@ -1182,6 +1183,13 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     partial void OnWriteMetadataAutomaticallyChanged(bool value) => PersistBehaviorSetting(s => s.WriteMetadataAutomatically = value);
 
     partial void OnWriteNativeSidecarChanged(bool value) => PersistBehaviorSetting(s => s.WriteNativeSidecar = value);
+
+    /// <summary>docs/superpowers/specs/2026-09-13-preferences-cosmetic-toggles-design.md - CE:
+    /// Settings.ExportedListsContainFilenames, default false, .cbl export only.</summary>
+    [ObservableProperty]
+    private bool _exportedListsContainFilenames;
+
+    partial void OnExportedListsContainFilenamesChanged(bool value) => PersistBehaviorSetting(s => s.ExportedListsContainFilenames = value);
 
     /// <summary>
     /// CE's <c>MainForm.UpdateComics()</c> - queue a write for every filed issue in the library,

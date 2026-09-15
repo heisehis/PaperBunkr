@@ -241,10 +241,17 @@ public partial class App : Application
         // restore yet, so RestoreLastScreen's own "no usable last screen" fallback to Home
         // covers that case too, no separate branch needed here. RestoreLastScreen itself honours
         // AppSettings.RestoreSessionOnStartup (docs/superpowers/specs/2026-09-04-behavior-
-        // settings-batch2-design.md §3.1) - off means it just goes Home. Yield first so the
+        // settings-batch2-design.md §3.1) - off means it just goes Home. A bare file-path argument
+        // (Windows' own file-association launch command line, docs/superpowers/specs/2026-09-13-
+        // open-file-on-launch-design.md) takes priority over both - it's a mutually exclusive CLI
+        // shape from --open, checked first only to keep this diff smallest. Yield first so the
         // main window paints at least one frame before the load blocks the UI thread.
         await Task.Yield();
-        if (NavigationCliArgs.TryParseOpenArg(desktop.Args ?? Array.Empty<string>(), out var deepLinkTarget) && deepLinkTarget is not null)
+        if (NavigationCliArgs.TryParseFilePathArg(desktop.Args ?? Array.Empty<string>(), out var filePath) && filePath is not null)
+        {
+            mainViewModel.OpenFilePath(filePath);
+        }
+        else if (NavigationCliArgs.TryParseOpenArg(desktop.Args ?? Array.Empty<string>(), out var deepLinkTarget) && deepLinkTarget is not null)
         {
             mainViewModel.OpenDeepLink(deepLinkTarget);
         }

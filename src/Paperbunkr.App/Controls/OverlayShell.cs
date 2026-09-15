@@ -165,7 +165,35 @@ public class OverlayShell : ContentControl
         }
     }
 
-    private void OnScrimPointerPressed(object? sender, PointerPressedEventArgs e) => RequestCloseFromScrim();
+    /// <summary>
+    /// Only a click that actually originates on the scrim itself dismisses - not any unhandled click
+    /// that bubbles up to it from somewhere inside the card's own content. <c>PART_Scrim</c> is the
+    /// scrim/card template's outer <see cref="Border"/> (Styles/Overlays.axaml) and the card content
+    /// is laid out as ITS visual child, so <see cref="RoutedEventArgs.Source"/> - the element the
+    /// event actually started on, which survives the bubble - is the scrim only when nothing inside
+    /// the card was hit first (i.e. the click landed in the backdrop margin around the card).
+    ///
+    /// Before this check, ANY unhandled click anywhere inside a card (a plain, non-interactive
+    /// `Border`/`TextBlock` with no click handling of its own - a `Button`/`TextBox`/etc. already
+    /// marks its own press handled and never reached here) bubbled all the way to this handler and
+    /// closed the whole overlay. Confirmed live (docs/superpowers/specs/2026-09-13-cluster-scraper-
+    /// ui-redesign-design.md's redesigned scraper dialog): two purely decorative label pills with no
+    /// command at all closed the dialog on click. Latent in every overlay using this shell - just
+    /// never exposed before, since no existing overlay had prominent, genuinely non-interactive
+    /// content sitting in an area a user would naturally click.
+    /// </summary>
+    private void OnScrimPointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (ShouldCloseFromScrimClick(e.Source, _scrim))
+        {
+            RequestCloseFromScrim();
+        }
+    }
+
+    /// <summary>Pure policy check, factored out for the same reason <see cref="RequestCloseFromScrim"/>
+    /// is: testable without a real Avalonia <see cref="PointerPressedEventArgs"/>/template pass.</summary>
+    internal static bool ShouldCloseFromScrimClick(object? eventSource, Border? scrim) =>
+        scrim is not null && ReferenceEquals(eventSource, scrim);
 
     /// <summary>The scrim-click policy, factored out of the real pointer-event handler so tests can
     /// exercise it directly without simulating an Avalonia <see cref="PointerPressedEventArgs"/>.</summary>

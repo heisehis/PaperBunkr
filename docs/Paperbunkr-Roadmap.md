@@ -1670,20 +1670,92 @@ Second Behavior batch (`RestoreSessionOnStartup`, `ScanFoldersOnStartup`, `Promp
 (Startup / Reading / Library groups). That spec's §5 leaves these CE `Settings` checkboxes still
 deferred:
 
-- **`AddToLibraryOnOpen`** ("Opened Files are added to the Library") — *blocked on a prerequisite*.
-  Paperbunkr has no shell-open-a-loose-file path: `ShellRegister.RegisterFileOpen` writes
-  `"…\Paperbunkr.exe" "%1"` but `App.axaml.cs` only parses `--open <kind>:<id>` and ignores a bare
-  file-path arg (startup falls through to restore-on-launch). Needs: handle a path arg → open it in
-  the Reader (import-on-demand or transient book), *then* an add-to-library toggle has something to
-  gate. Own small feature + brainstorm.
+- **`AddToLibraryOnOpen`** ("Opened Files are added to the Library") — **prerequisite shipped
+  2026-09-13** (`docs/superpowers/specs/2026-09-13-open-file-on-launch-{design,plan}.md`):
+  `App.axaml.cs` now recognizes a bare file-path CLI arg and `MainViewModel.OpenFilePath` opens an
+  already-in-library file directly or imports-then-opens a new one. The toggle itself is still not
+  built, deliberately — opening a file always imports it now (a disclosed deviation from CE's own
+  `false` default), and a real transient/non-persisted reading mode (what an OFF setting would
+  actually need to do) was decided out of scope, disproportionate to this gap-filler. Build the
+  toggle + transient mode only if a user asks for genuine CE parity here.
 - **`HideCursorFullScreen` / `AutoMinimalGui`** — Paperbunkr already auto-hides chrome *and* cursor
   after ~3s idle in every reading mode (`ReaderScreenViewModel.ShowChrome` + `NotifyCursorActivity`,
   no `IsFullscreen` gate). A toggle would only re-expose the pre-unification "cursor always visible
   in windowed mode" split — build only if a user asks for it.
-- **Cosmetic browser micro-toggles** — `FadeInThumbnails`, `CoverThumbnailsSameSize` (mostly
-  already the PosterGrid-vs-Panorama view-mode choice), `DogEarThumbnails`, `ShowToolTips` (library
-  tile tooltips aren't built), `NumericRatingThumbnails`, `ExportedListsContainFilenames`. Low
-  value; revisit only on request.
+- **Cosmetic browser micro-toggles — shipped 2026-09-13** (design + plan: `docs/superpowers/specs/
+  2026-09-13-preferences-cosmetic-toggles-{design,plan}.md`). CE facts changed the original one-line
+  gloss: `DogEarThumbnails`/`ShowToolTips`/`NumericRatingThumbnails` turned out to each be a real
+  rendering feature, not a plain checkbox. `FadeInThumbnails` (opacity fade on genuine decode, not
+  cache-hit repaints, via `AsyncCoverImage`) and `ExportedListsContainFilenames` (`CblReadingListIO`
+  now populates `ComicReadingListItem.FileName` from `Issue.FilePath` when on) were the cheap ones.
+  `DogEarThumbnails` is a real hover/selected second-page peek (`PageDecodeCore.DecodeSinglePage` -
+  not `ReaderImagePipeline`, which would've meant standing up a full reader session per tile-hover, a
+  real architecture correction found during planning). `ShowToolTips` is a genuinely custom `Popup`
+  (mirrors the Activity Center peek-popover's own entrance pattern) showing thumbnail/title/writer+
+  penciller/summary excerpt/file size/format. `NumericRatingThumbnails` is a hover-reveal badge
+  sharing the tile's bottom-right corner with the selection checkbox ("selection mode owns the
+  corner" - hidden outright once any issue is selected). `CoverThumbnailsSameSize` got no code -
+  confirmed already fully expressed by the existing PosterGrid (fixed size) vs Panorama (real aspect
+  ratio) view-mode split. The 4 real toggles live in the Library toolbar's View & Sort popup next to
+  the existing badge toggles; `ExportedListsContainFilenames` lives in Preferences → Advanced.
+  Verified: migration round-trip (real `DropColumn` on `Down()`), `AsyncCoverImage`/`CblReadingListIO`
+  /`LibraryScreenViewModel`/`DogEarEligibility`/`DogEarThumbnailCache`/hover-tooltip-content targeted
+  tests all green (~35 new/extended cases), no regressions (one known pre-existing `TwoStepConfirm`
+  delete-bug failure, unrelated, reproduced again). **Not done: on-screen verification** of all 4
+  visual behaviors (fade timing, dog-ear peek placement/legibility, tooltip popover positioning/
+  dismiss, rating-badge hover/selection interplay) — standing no-computer-use caveat, carries more
+  weight than usual here since this batch is unusually visual/interactive.
+
+### Cosmetics pitch (unscoped, pitched 2026-09-14)
+Not started — needs its own brainstorm → design spec before implementation. Captured here so the
+ideas aren't lost, not because scope/approach is settled.
+
+1. **Series binding spine texture** — subtle spine/binding shadow on Panorama/Poster grid tiles,
+   toggleable per skin.
+2. **Read-progress ring on poster hover** — small arc overlay reusing the Insights dashboard's
+   existing donut-chart code, replacing/augmenting the plain unread-count badge.
+3. **Skin-aware accent glow tiers** — the shipped poster glow (see Poster glow transition bug fix)
+   is binary on/off; add subtle/normal/vivid intensity tiers as a Preferences → Appearance slider.
+4. **Continuity/Event timeline connector art** — vertical connector line + node dots between
+   chronological entries in the Events timeline view (currently plain list rows). CE has no
+   equivalent — deliberate deviation, flag as such in the design doc per the CE-parity standing
+   rule.
+5. **Library Health traffic-light chip reskin** — colored dot + FluentIcons icon per severity
+   instead of the current text-based severity chip.
+6. **Splash/startup ambient motion** — very subtle idle motion (e.g. dust-mote drift) on the
+   existing splash/welcome screens, gated behind the reduced-motion preference already shipped
+   with Chrome & Content Motion Polish.
+7. **Reading-list CBL card cover collage** — 4-cover mosaic thumbnail for reading lists instead of
+   a single cover.
+
+*Not duplicated here: dog-ear unread-page fold + cosmetic thumbnail toggles — already in progress
+as of 2026-09-13/14 (`CosmeticThumbnailSettings`, `DogEarEligibility`, `DogEarThumbnailCache`,
+uncommitted), see the Library browsing extras batch above.*
+
+### Smart features pitch (unscoped, pitched 2026-09-14)
+Not started — needs its own brainstorm → design spec before implementation. Captured here so the
+ideas aren't lost, not because scope/approach is settled.
+
+1. **Smart Lists v2 template gallery** — the SmartList Engine v2 (nested AND/OR + regex, shipped
+   2026-08-29) already supports this; expose a curated preset picker (Unread manga, Recently added
+   ongoing, Needs-review flagged) instead of requiring hand-written rules.
+2. **Continuity auto-suggest via shared characters/crossover metadata** — MediaRelation data
+   (Metadata Model Phase 3) already tracks cross-series relations; surface a "this series appears
+   in N other continuities" nudge when adding series to a continuity.
+3. **Reading-order conflict detector** — cross-check a Reading List's manual CBL order against
+   StoryEvent chronology (Metadata Model Phase 4 data) and flag contradictions.
+4. **Auto-match missing files against Library Health scan** — Library Health already flags missing
+   files; add a one-click "search other library folders for a likely match" using the existing
+   series-identity scan matcher (already handles TPB-folding, Warhammer-40-style naming).
+5. **Scheduled cover-refresh triggered by tracker sync** — wire tracker status changes (e.g. a
+   series marked completed via the MangaBaka/AniList adapters) to auto-requeue a cover/metadata
+   refresh via the existing 7-task Scheduled Tasks scheduler, instead of requiring a full rescan.
+6. **Insights-driven smart list surfacing** — the ReadingEvent log (Insights dashboard) already
+   captures read velocity; auto-generate a "behind on ongoing series X" smart list without the user
+   writing a rule.
+7. **Plugin API v3 hook: on-continuity-complete** — extend the existing 8-hook Plugin API v2/v3 hook
+   set so plugins (CBL export, notifications) can react when a continuity/event reaches completion
+   state.
 
 ### Deferred / dropped (no action needed)
 - **News reader** (`Help > News` RSS) — deferred, live idea to repurpose the feed mechanism for

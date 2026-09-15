@@ -79,9 +79,11 @@ public sealed class LibraryContextMenuBuilder
             _vm.CanWriteMetadataToFiles
                 ? ContextMenuEntry.Item(multi ? $"Write metadata to {n} files" : "Write metadata to file", _vm.WriteIssueMetadataToFilesCommand, row.Id, Symbol.Save, isEnabled: row.HasFile)
                 : null,
-            _vm.HasPluginHost
-                ? ContextMenuEntry.Item("Find Duplicates", _vm.RunLibraryPluginsCommand, row.Id, Symbol.DocumentSearch)
-                : null,
+            ContextMenuEntry.SubMenu(
+                "Plugins",
+                LibraryPluginChildren(row.Id),
+                Symbol.Apps,
+                isVisible: _vm.HasLibraryPluginCommands),
             ContextMenuEntry.Separator,
             ContextMenuEntry.Item("Select All", _vm.SelectAllVisibleIssuesCommand, icon: Symbol.SelectAllOn),
             ContextMenuEntry.Item("Clear Selection", _vm.ClearSelectionCommand, icon: Symbol.SelectAllOff, isEnabled: _vm.HasSelection),
@@ -96,7 +98,7 @@ public sealed class LibraryContextMenuBuilder
                 isDanger: true),
         };
 
-        return Compact(entries);
+        return ContextMenuEntry.Compact(entries);
     }
 
     private IReadOnlyList<ContextMenuEntry> BuildSeriesMenu(SeriesCardSample card)
@@ -135,7 +137,7 @@ public sealed class LibraryContextMenuBuilder
                 isDanger: true),
         };
 
-        return Compact(entries);
+        return ContextMenuEntry.Compact(entries);
     }
 
     private IReadOnlyList<ContextMenuEntry>? BuildEmptyMenu()
@@ -145,6 +147,13 @@ public sealed class LibraryContextMenuBuilder
             : ContextMenuEntry.Item("Select All", _vm.SelectAllVisibleIssuesCommand, icon: Symbol.SelectAllOn);
         return new[] { entry };
     }
+
+    /// <summary>One row per enabled Library-hook plugin command (design note: see
+    /// <c>PluginHostService.GetLibraryCommands</c>'s own doc comment for why this replaced a single
+    /// hardcoded "Find Duplicates" entry) - each command carries the right-clicked row's id alongside
+    /// itself since <see cref="ContextMenuEntry"/> only has one <c>CommandParameter</c> slot.</summary>
+    private IEnumerable<ContextMenuEntry?> LibraryPluginChildren(int issueId) =>
+        _vm.LibraryPluginCommands.Select(c => ContextMenuEntry.Item(c.Name, _vm.RunLibraryPluginCommand, (issueId, c)));
 
     private IEnumerable<ContextMenuEntry?> ReadingListChildren(int issueId)
     {
@@ -217,28 +226,4 @@ public sealed class LibraryContextMenuBuilder
         string header, string enumName, string? current, System.Windows.Input.ICommand command, int seriesId) =>
         ContextMenuEntry.Item(header, command, seriesId, isChecked: string.Equals(current, enumName, System.StringComparison.Ordinal));
 
-    private static IReadOnlyList<ContextMenuEntry> Compact(IEnumerable<ContextMenuEntry?> entries)
-    {
-        var list = entries.Where(e => e is not null).Select(e => e!).ToList();
-
-        // Drop leading/trailing separators and any run of consecutive separators left behind by
-        // omitted entries (no plugin host, empty reading-list set, etc.).
-        var result = new List<ContextMenuEntry>(list.Count);
-        foreach (var entry in list)
-        {
-            if (entry.IsSeparator && (result.Count == 0 || result[^1].IsSeparator))
-            {
-                continue;
-            }
-
-            result.Add(entry);
-        }
-
-        while (result.Count > 0 && result[^1].IsSeparator)
-        {
-            result.RemoveAt(result.Count - 1);
-        }
-
-        return result;
-    }
 }

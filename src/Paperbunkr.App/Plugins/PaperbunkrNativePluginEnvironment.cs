@@ -45,6 +45,8 @@ public sealed class PaperbunkrNativePluginEnvironment : INativePluginUiEnvironme
     public Task<TResult> ShowModalAsync<TResult>(Func<Action<TResult>, Control> contentFactory) =>
         _modalHost.ShowAsync(contentFactory);
 
+    public IDisposable BeginModalBatch(Control header) => _modalHost.BeginBatch(header);
+
     public IPluginHostWindow MainWindow => _inner.MainWindow;
     public IApplication App => _inner.App;
     public IOpenBooksManager OpenBooks => _inner.OpenBooks;

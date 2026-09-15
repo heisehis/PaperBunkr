@@ -1171,6 +1171,14 @@ public class PreferencesScreenViewModelTests : IDisposable
         ReplaceBinding(left, left.AvailableKeyOptions.Single(o => o.Gesture == new KeyGesture(Key.J)));
         ReplaceBinding(right, right.AvailableKeyOptions.Single(o => o.Gesture == new KeyGesture(Key.J)));
 
+        // RemoveKeyCommand (inside ReplaceBinding) defers BoundKeys.Remove() via
+        // Dispatcher.UIThread.Post (see its own doc comment). This test chains a second
+        // ReplaceBinding onto `right` below, which needs right.BoundKeys back down to one entry
+        // first - pump the queue here rather than in the shared helper, since most other
+        // ReplaceBinding call sites don't chain and pumping there destabilized them (drains
+        // unrelated pending jobs too).
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
         Assert.True(vm.HasKeyBindingConflictError);
         Assert.True(left.IsConflicted);
         Assert.True(right.IsConflicted);
@@ -2266,6 +2274,12 @@ public class PreferencesScreenViewModelTests : IDisposable
 
         row.DismissCommand.Execute(null);
 
+        // DismissMissingFile defers RefreshLibraryHealth() via Dispatcher.UIThread.Post (see its own
+        // doc comment - avoids detaching this same button mid-route). Headless tests have no running
+        // dispatcher loop, so the queued job needs an explicit pump (same idiom already used
+        // elsewhere in this test project, e.g. PluginScreenViewModelTests).
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
         Assert.Empty(vm.MissingFileItems);
         using var context = new PaperbunkrDbContext(_dbOptions);
         Assert.True(context.Issues.Single().MissingAcknowledged);
@@ -2281,6 +2295,11 @@ public class PreferencesScreenViewModelTests : IDisposable
 
         row.DeleteConfirm.TriggerCommand.Execute(null);
         row.DeleteConfirm.TriggerCommand.Execute(null);
+
+        // RemoveMissingFile defers RefreshLibraryHealth() via Dispatcher.UIThread.Post (see its own
+        // doc comment - avoids detaching this same button mid-route). Headless tests have no running
+        // dispatcher loop, so the queued job needs an explicit pump.
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
 
         Assert.Empty(vm.MissingFileItems);
         using var context = new PaperbunkrDbContext(_dbOptions);
@@ -2414,9 +2433,17 @@ public class PreferencesScreenViewModelTests : IDisposable
         var row = Assert.Single(vm.MissingFileItems);
         row.DeleteConfirm.TriggerCommand.Execute(null);
         row.DeleteConfirm.TriggerCommand.Execute(null);
+
+        // RemoveMissingFile defers RefreshLibraryHealth() via Dispatcher.UIThread.Post - see the
+        // matching comment in RemoveMissingFile_WritesRemovedLibraryEntry_ThenDeletesIssue above.
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
         var removedRow = Assert.Single(vm.RecentlyRemovedItems);
 
         removedRow.RestoreCommand.Execute(null);
+
+        // RestoreRemovedEntry defers RefreshLibraryHealth() the same way.
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
 
         Assert.Empty(vm.RecentlyRemovedItems);
         Assert.Single(vm.MissingFileItems);

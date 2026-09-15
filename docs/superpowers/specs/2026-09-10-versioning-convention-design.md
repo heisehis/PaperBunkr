@@ -177,6 +177,27 @@ against is more risk than value. One focused change at 1.0 prep.
 - The Q6 items are explicitly **not** tested now — they're a future change with their own plan.
 - Everything else here is documentation; there is no other code to test.
 
+## Addendum 2026-09-13: per-commit PATCH auto-bump
+
+User request: bump the version on every commit to `master`, enforced via a local git hook
+(`.githooks/pre-commit`, `core.hooksPath` set to `.githooks`). The hook increments the PATCH
+segment of `<Version>` in `Paperbunkr.App.csproj` and stages the file before every commit that
+lands directly on `master`; the meaningless 4th (revision) segment is untouched.
+
+This **supersedes the PATCH row of the Q1 table** above: PATCH no longer means "hotfix to an
+already-released version" — it now increments on every commit, feature or fix alike. MINOR still
+means what it did (a release that earns an Added/substantive-Changed changelog entry) and is still
+bumped by hand; per standard SemVer, bumping MINOR should reset PATCH to `0`.
+
+Release checklist step 2 changes: don't hand-edit `<Version>` for a routine commit — the hook
+already did it. Only hand-edit when cutting a MINOR release (bump `0.X.0`, reset PATCH to `0`) or
+when deliberately overriding the auto-bumped PATCH for a release tag.
+
+Caveat: this hook is **local-only** (`core.hooksPath` is a per-clone git config, not tracked by
+git itself) — every clone/worktree must run `git config core.hooksPath .githooks` once, or commits
+made there won't bump. Not automated further per user's explicit pick of "local hook" over a CI
+write-back step.
+
 ## Self-review
 
 - **YAGNI check:** the only code this doc authorizes is Q5 (build metadata, ~1 csproj property +

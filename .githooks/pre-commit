@@ -1,0 +1,39 @@
+#!/bin/sh
+# Auto-bump PATCH in Paperbunkr.App.csproj on every commit to master.
+# Design: docs/superpowers/specs/2026-09-10-versioning-convention-design.md
+# (extended 2026-09-13 — see docs/superpowers/specs/2026-09-13-per-commit-patch-bump-design.md)
+#
+# Only fires on master. Bumps the 3rd (PATCH) segment of <Version>X.Y.Z.W</Version>,
+# leaves the meaningless 4th (revision) segment alone, and stages the file so the
+# bump rides in the same commit.
+
+branch=$(git symbolic-ref --short HEAD 2>/dev/null)
+if [ "$branch" != "master" ]; then
+    exit 0
+fi
+
+csproj="src/Paperbunkr.App/Paperbunkr.App.csproj"
+
+if [ ! -f "$csproj" ]; then
+    exit 0
+fi
+
+current=$(grep -oE '<Version>[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+</Version>' "$csproj" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+')
+
+if [ -z "$current" ]; then
+    echo "pre-commit: could not find <Version>X.Y.Z.W</Version> in $csproj, skipping bump" >&2
+    exit 0
+fi
+
+major=$(echo "$current" | cut -d. -f1)
+minor=$(echo "$current" | cut -d. -f2)
+patch=$(echo "$current" | cut -d. -f3)
+rev=$(echo "$current" | cut -d. -f4)
+
+new_patch=$((patch + 1))
+new="$major.$minor.$new_patch.$rev"
+
+sed -i "s/<Version>$current<\/Version>/<Version>$new<\/Version>/" "$csproj"
+git add "$csproj"
+
+echo "pre-commit: bumped Version $current -> $new"

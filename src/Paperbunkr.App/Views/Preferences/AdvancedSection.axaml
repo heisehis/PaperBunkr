@@ -106,6 +106,18 @@
             </pref:SettingsRow>
         </StackPanel>
 
+        <!-- Cosmetic Preferences micro-toggles (docs/superpowers/specs/2026-09-13-preferences-
+             cosmetic-toggles-design.md) - CE's "Import & Export" category. -->
+        <StackPanel Tag="advanced.readingListExport">
+            <TextBlock Classes="settingsGroupCaption" Text="IMPORT &amp; EXPORT" />
+            <pref:SettingsRow Icon="DocumentArrowRight" Title="Exported reading lists contain filenames"
+                               Description="When on, a .cbl reading-list export also embeds each issue's file path, alongside its series/number/volume/year/format. Off (default): only the metadata identifiers are exported.">
+                <pref:SettingsRow.SettingsContent>
+                    <ToggleSwitch IsChecked="{Binding ExportedListsContainFilenames}" OnContent="{x:Null}" OffContent="{x:Null}" />
+                </pref:SettingsRow.SettingsContent>
+            </pref:SettingsRow>
+        </StackPanel>
+
         <!-- Backup Manager (docs/superpowers/specs/2026-09-08-advanced-backup-file-association-
              redesign-design.md) - the 5 fixed fields below are each a small, known-at-authoring-time
              row (the same dividing line Phase 1 itself drew), so they became real SettingsRows; only

@@ -8,6 +8,7 @@ using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 
 namespace Paperbunkr.App.Controls;
 
@@ -295,26 +296,34 @@ public class SuggestBox : TemplatedControl
 
     private void Commit(string picked)
     {
-        string next = IsMultiValue ? SpliceMultiValue(Text, picked) : picked;
-
-        _syncingText = true;
-        SetCurrentValue(TextProperty, next);
-        if (_textBox is not null)
-        {
-            _textBox.Text = next;
-            _textBox.CaretIndex = next.Length;
-        }
-
-        _syncingText = false;
-
-        // Don't close the popup synchronously here: this runs *inside* the PointerReleased/KeyDown
-        // handler that the list item itself raised, and closing detaches the popup's whole content
-        // tree - including the ListBox still mid-route for that very event. Avalonia's detach walk
-        // (OnDetachedFromVisualTreeCore -> SetVisualParent -> AvaloniaList<T>.Remove) isn't
-        // reentrant-safe against being torn down mid-event, and throws ArgumentOutOfRangeException.
-        // Defer the close to the next dispatcher cycle so the event finishes routing first.
+        // Do none of this synchronously: we're called *inside* the PointerReleased/KeyDown handler
+        // that the list item itself raised. Setting Text here is TwoWay-bound to the VM, whose
+        // setter can synchronously repopulate the bound Suggestions collection - which (see
+        // OnPropertyChanged below) calls Repopulate() and mutates the ListBox's own items while
+        // that same ListBoxItem's click is still routing through it. That reentrant mutation, plus
+        // the later Popup close it leaves in an inconsistent state, both throw
+        // ArgumentOutOfRangeException out of Avalonia's detach walk
+        // (OnDetachedFromVisualTreeCore -> SetVisualParent -> AvaloniaList<T>.Remove). Defer the
+        // whole commit to the next dispatcher cycle so the click finishes routing first.
         Dispatcher.UIThread.Post(() =>
         {
+            if (!this.IsAttachedToVisualTree())
+            {
+                return;
+            }
+
+            string next = IsMultiValue ? SpliceMultiValue(Text, picked) : picked;
+
+            _syncingText = true;
+            SetCurrentValue(TextProperty, next);
+            if (_textBox is not null)
+            {
+                _textBox.Text = next;
+                _textBox.CaretIndex = next.Length;
+            }
+
+            _syncingText = false;
+
             SetCurrentValue(IsDropDownOpenProperty, false);
             _textBox?.Focus();
         });

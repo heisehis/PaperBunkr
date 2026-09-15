@@ -1,13 +1,16 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
+using Avalonia.Threading;
 using Avalonia.VisualTree;
 using Paperbunkr.App.Models;
+using Paperbunkr.App.Services;
 using Paperbunkr.App.ViewModels;
 using Paperbunkr.Data.Entities;
 
@@ -43,6 +46,55 @@ public partial class LibraryScreen : UserControl
         if (DataContext is LibraryScreenViewModel vm)
         {
             vm.ScrollToIndexRequested += index => ScrollToIndex(index, vm);
+
+            // Live preview panel width (docs/superpowers/specs/2026-09-14-library-visual-redesign-
+            // design.md §4) - a GridLength can't bind directly to a double VM property, so the
+            // column's initial width is set here once and persisted back on every drag. No debounce:
+            // matches this ViewModel's own no-debounce philosophy for other immediate-write settings.
+            // The column is a fixed pixel width, not Auto, specifically so GridSplitter can resize
+            // it - but that means IsVisible="False" on the panel's own content does NOT shrink the
+            // column (ColumnDefinition has no IsVisible at all); the column has to be collapsed to
+            // GridLength(0) explicitly whenever ShowPreviewPanelColumn goes false, and restored to
+            // the real width when it goes true, or hiding the panel leaves dead reserved space
+            // (real bug caught on-screen, not just in review).
+            var previewColumn = RootGrid.ColumnDefinitions[2];
+            const double previewColumnMinWidth = 260;
+
+            void SyncPreviewColumnWidth()
+            {
+                // MinWidth is a hard layout constraint independent of Width - leaving it at 260
+                // while setting Width to 0 still renders the column at 260px (the real bug behind
+                // the "hiding the panel leaves dead space" report: Width alone doesn't override it).
+                // Zero it out too when hiding, restore it when showing.
+                previewColumn.MinWidth = vm.ShowPreviewPanelColumn ? previewColumnMinWidth : 0;
+                previewColumn.Width = vm.ShowPreviewPanelColumn
+                    ? new GridLength(vm.LibraryPreviewPanelWidth)
+                    : new GridLength(0);
+            }
+
+            SyncPreviewColumnWidth();
+            vm.PropertyChanged += (_, args) =>
+            {
+                if (args.PropertyName == nameof(vm.ShowPreviewPanelColumn))
+                {
+                    SyncPreviewColumnWidth();
+                }
+            };
+            previewColumn.PropertyChanged += (_, args) =>
+            {
+                if (args.Property == ColumnDefinition.WidthProperty && previewColumn.Width.Value > 0)
+                {
+                    vm.LibraryPreviewPanelWidth = previewColumn.Width.Value;
+                }
+            };
+
+            // Scroll-position preservation across a GridCoverFit flip (docs/superpowers/specs/
+            // 2026-09-14-library-visual-redesign-design.md §2/§9) - Changing fires while the OLD
+            // cover fit's ScrollViewer is still the visible one; Changed fires after the switch, once
+            // the NEW one is visible (deferred a tick so its layout pass has actually run before
+            // setting Offset against it).
+            vm.GridCoverFitChanging += () => CaptureGridScrollPosition(vm.GridCoverFit, vm);
+            vm.GridCoverFitChanged += () => Dispatcher.UIThread.Post(() => RestoreGridScrollPosition(vm.GridCoverFit, vm));
         }
     }
 
@@ -274,6 +326,33 @@ public partial class LibraryScreen : UserControl
     }
 
     /// <summary>
+    /// Live preview panel content source (docs/superpowers/specs/2026-09-14-library-visual-redesign-
+    /// design.md §4) - every card, across every view mode including List/Details (whose
+    /// <c>ListBoxItem</c> is deliberately non-focusable, per this file's <c>Styles</c> comment, so the
+    /// inner <c>Button.card</c> stays the one real focus target), routes through this one handler.
+    /// Fires on a plain click's own <see cref="OnTilePointerPressed"/>/<see cref="OnSeriesTilePointerPressed"/>
+    /// <c>Focus()</c> call and on arrow-key-driven focus movement alike - both are "the user is
+    /// looking at this card now," which is exactly what the panel should reflect.
+    /// </summary>
+    private void OnCardGotFocus(object? sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { DataContext: { } item } || DataContext is not LibraryScreenViewModel vm)
+        {
+            return;
+        }
+
+        switch (item)
+        {
+            case IssueListRow row:
+                vm.PreviewIssue = row;
+                break;
+            case SeriesCardSample card:
+                vm.PreviewSeries = card;
+                break;
+        }
+    }
+
+    /// <summary>
     /// Ctrl/shift-click multi-selection (docs/superpowers/specs/2026-08-24-library-multiselect-
     /// slice1-design.md §3), plus explicit <c>Focus()</c> on every plain click - real user
     /// direction: single click used to also navigate (the tile's own bound <c>Command</c>), which
@@ -302,6 +381,163 @@ public partial class LibraryScreen : UserControl
         viewModel.ToggleIssueSelection(row, e.KeyModifiers.HasFlag(KeyModifiers.Shift));
         e.Handled = true;
     }
+
+    /// <summary>
+    /// <c>DogEarThumbnails</c> hover peek (docs/superpowers/specs/2026-09-13-preferences-cosmetic-
+    /// toggles-design.md) - mirrors CE's own hover-only real-page-2 fetch. Not a binding: the decode
+    /// is lazy (only when actually hovered) and needs a staleness guard against container recycling
+    /// during the async decode, the same concern <see cref="Views.AsyncCoverImage"/> solves with a
+    /// generation token - here the simpler "is this Border still showing the same row, and is the
+    /// pointer still over it" recheck is enough since there's no eager binding to race against.
+    /// </summary>
+    /// <summary>~500ms hover delay for <see cref="ShowToolTips"/> (matches Avalonia's own native
+    /// <c>ToolTip.ShowDelay</c> default - no existing bespoke hover-tooltip timing precedent in this
+    /// codebase to match instead). One shared timer: only one tile can be mid-hover-delay at a time,
+    /// since a pointer leaving one tile always fires PointerExited before entering another.</summary>
+    private DispatcherTimer? _tooltipDelayTimer;
+
+    private void OnCoverPointerEntered(object? sender, PointerEventArgs e)
+    {
+        if (sender is not Border coverBorder || ResolvePeekRow(coverBorder.DataContext) is not { } row)
+        {
+            return;
+        }
+
+        // Corner-slot precedence (docs/superpowers/specs/2026-09-14-library-visual-redesign-
+        // design.md §3): Selection > Dog-ear, checked against the tile's own selection state, not
+        // the representative row's (a series card's RepresentativeRow.IsSelected is a per-issue
+        // selection flag - a different concept from SeriesCardSample.IsSelected, the actual tile
+        // selection for a series-granularity card).
+        bool isSelected = coverBorder.DataContext switch
+        {
+            IssueListRow r => r.IsSelected,
+            SeriesCardSample c => c.IsSelected,
+            _ => false,
+        };
+
+        if (!isSelected)
+        {
+            TryShowDogEarPeek(coverBorder, row);
+        }
+
+        ArmHoverTooltip(coverBorder, row);
+    }
+
+    /// <summary>Series-granularity cards (<see cref="SeriesCardSample"/>) carry a full
+    /// <see cref="IssueListRow"/> for their cover-representative issue - the same issue
+    /// <c>CoverKey</c> is keyed to - so DogEar/tooltip/rating reuse it as-is rather than needing a
+    /// second, series-shaped implementation.</summary>
+    private static IssueListRow? ResolvePeekRow(object? dataContext) => dataContext switch
+    {
+        IssueListRow row => row,
+        SeriesCardSample card => card.RepresentativeRow,
+        _ => null,
+    };
+
+    private void TryShowDogEarPeek(Border coverBorder, IssueListRow row)
+    {
+        if (!CosmeticThumbnailSettings.DogEarThumbnails || !row.DogEarEligible)
+        {
+            return;
+        }
+
+        var peekImage = FindDogEarPeekImage(coverBorder);
+        if (peekImage is null)
+        {
+            return;
+        }
+
+        string stem = row.CoverKey;
+        string filePath = row.FilePath!; // DogEarEligible requires HasFile
+
+        var cached = DogEarThumbnailCache.TryGetCached(stem);
+        if (cached is not null)
+        {
+            peekImage.Source = cached;
+            peekImage.IsVisible = true;
+            return;
+        }
+
+        Task.Run(() => DogEarThumbnailCache.Get(stem, filePath)).ContinueWith(
+            t =>
+            {
+                var decoded = t.IsCompletedSuccessfully ? t.Result : null;
+                if (decoded is null)
+                {
+                    return;
+                }
+
+                Dispatcher.UIThread.Post(() =>
+                {
+                    if (ResolvePeekRow(coverBorder.DataContext) is { } currentRow && currentRow.CoverKey == stem && coverBorder.IsPointerOver)
+                    {
+                        peekImage.Source = decoded;
+                        peekImage.IsVisible = true;
+                    }
+                });
+            },
+            TaskScheduler.Default);
+    }
+
+    /// <summary>docs/superpowers/specs/2026-09-13-preferences-cosmetic-toggles-design.md - excludes
+    /// Tiles view (CE's own <c>ItemViewMode.Tile</c> exclusion); the tooltip only makes sense on the
+    /// grid/list templates this handler is wired to anyway (Tiles uses a different template with no
+    /// PointerEntered wired to it).</summary>
+    private void ArmHoverTooltip(Border coverBorder, IssueListRow row)
+    {
+        _tooltipDelayTimer?.Stop();
+
+        if (!CosmeticThumbnailSettings.ShowToolTips)
+        {
+            return;
+        }
+
+        var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
+        timer.Tick += (_, _) =>
+        {
+            timer.Stop();
+            if (ResolvePeekRow(coverBorder.DataContext) == row && coverBorder.IsPointerOver)
+            {
+                ShowHoverTooltip(coverBorder, row);
+            }
+        };
+        _tooltipDelayTimer = timer;
+        timer.Start();
+    }
+
+    private void ShowHoverTooltip(Border coverBorder, IssueListRow row)
+    {
+        ComicHoverTooltipCard.DataContext = row;
+        ComicHoverTooltipPopup.PlacementTarget = coverBorder;
+        ComicHoverTooltipPopup.IsOpen = true;
+        // Popup unmounts its content on close, so the entrance Transition never gets a chance to
+        // replay on a re-open unless the "open" class is re-added after each open - same reasoning
+        // StatusBar.axaml.cs documents for its own peek popover.
+        ComicHoverTooltipCard.Classes.Remove("open");
+        ComicHoverTooltipCard.Classes.Add("open");
+    }
+
+    private void OnCoverPointerExited(object? sender, PointerEventArgs e)
+    {
+        _tooltipDelayTimer?.Stop();
+        ComicHoverTooltipPopup.IsOpen = false;
+
+        if (sender is not Border coverBorder)
+        {
+            return;
+        }
+
+        var peekImage = FindDogEarPeekImage(coverBorder);
+        if (peekImage is not null)
+        {
+            peekImage.IsVisible = false;
+        }
+    }
+
+    private static Image? FindDogEarPeekImage(Border coverBorder) =>
+        (coverBorder.Child as Grid)?.Children.OfType<Image>()
+            .FirstOrDefault(i => i.Name is "PanoramaDogEarImage" or "PosterDogEarImage"
+                or "SeriesPanoramaDogEarImage" or "PosterSeriesDogEarImage");
 
     /// <summary>Series-granularity counterpart to <see cref="OnTilePointerPressed"/> (docs/superpowers/
     /// specs/2026-08-24-library-multiselect-slice3-design.md) - same explicit-focus-on-click and
@@ -355,39 +591,84 @@ public partial class LibraryScreen : UserControl
 
     /// <summary>The view-mode-aware scroll dispatch shared by <see cref="OnAlphabetIndexLetterClick"/>
     /// and the back-trip cover-morph realization wired in <see cref="OnDataContextChanged"/> (docs/
-    /// superpowers/specs/2026-09-04-navigation-transition-system-design.md) - List/Details get a real
-    /// <see cref="ListBox.ScrollIntoView(int)"/>; the wrapping grid modes (Poster/Panorama/Tiles)
+    /// superpowers/specs/2026-09-04-navigation-transition-system-design.md) - List/DetailsTable get a
+    /// real <see cref="ListBox.ScrollIntoView(int)"/>; the wrapping grid modes (Poster/Panorama/Tiles)
     /// estimate a scroll offset from items-per-row against the active ScrollViewer's width. Assumes
     /// <paramref name="index"/> is already into the ungrouped, matching-granularity flat collection -
     /// same assumption <see cref="OnAlphabetIndexLetterClick"/> already made.</summary>
     private void ScrollToIndex(int index, LibraryScreenViewModel vm)
     {
-        if (vm.ViewMode is LibraryViewMode.List or LibraryViewMode.Details)
+        if (vm.ViewMode is LibraryViewMode.List or LibraryViewMode.DetailsTable)
         {
             var box = (vm.ViewMode, vm.IsSeriesGranularity) switch
             {
                 (LibraryViewMode.List, false) => ListModeIssueBox,
                 (LibraryViewMode.List, true) => ListModeSeriesBox,
-                (LibraryViewMode.Details, false) => DetailsModeIssueBox,
-                (LibraryViewMode.Details, true) => DetailsModeSeriesBox,
+                (LibraryViewMode.DetailsTable, false) => DetailsModeIssueBox,
+                (LibraryViewMode.DetailsTable, true) => DetailsModeSeriesBox,
                 _ => null,
             };
             box?.ScrollIntoView(index);
             return;
         }
 
-        var (scrollViewer, cardWidth, cardHeight, margin) = vm.ViewMode switch
-        {
-            LibraryViewMode.PanoramaGrid => (PanoramaScrollViewer, vm.PanoramaTileWidth, vm.PanoramaGridItemHeight, 20.0),
-            LibraryViewMode.Tiles => (TilesScrollViewer, vm.TilesCardWidth, vm.TilesCardHeight, 14.0),
-            _ => (PosterGridScrollViewer, vm.PosterCardWidth, vm.PosterCardHeight, 20.0),
-        };
+        ScrollToIndexInGrid(vm.GridCoverFit, index, vm);
+    }
 
+    /// <summary>Cover-fit-parameterized geometry lookup, factored out of <see cref="ScrollToIndex"/>
+    /// so <see cref="CaptureGridScrollPosition"/>/<see cref="RestoreGridScrollPosition"/> (docs/
+    /// superpowers/specs/2026-09-14-library-visual-redesign-design.md §2/§9) can query it for an
+    /// explicit old/new cover fit, not just <c>vm.GridCoverFit</c>'s current value.</summary>
+    private (ScrollViewer ScrollViewer, double CardWidth, double CardHeight, double Margin) GetGridScrollGeometry(
+        LibraryGridCoverFit coverFit, LibraryScreenViewModel vm) => coverFit switch
+    {
+        LibraryGridCoverFit.Panorama => (PanoramaScrollViewer, vm.PanoramaTileWidth, vm.PanoramaGridItemHeight, 20.0),
+        LibraryGridCoverFit.Tiles => (TilesScrollViewer, vm.TilesCardWidth, vm.TilesCardHeight, 14.0),
+        _ => (PosterGridScrollViewer, vm.PosterCardWidth, vm.PosterCardHeight, 20.0),
+    };
+
+    private void ScrollToIndexInGrid(LibraryGridCoverFit coverFit, int index, LibraryScreenViewModel vm)
+    {
+        var (scrollViewer, cardWidth, cardHeight, margin) = GetGridScrollGeometry(coverFit, vm);
         int itemsPerRow = Math.Max(1, (int)(scrollViewer.Bounds.Width / (cardWidth + margin)));
         int targetRow = index / itemsPerRow;
         double offsetY = targetRow * (cardHeight + margin);
 
         scrollViewer.Offset = new Vector(scrollViewer.Offset.X, offsetY);
+    }
+
+    /// <summary>Holds the approximate item index scrolled-to just before a
+    /// <see cref="LibraryGridCoverFit"/> flip rebuilds the grid with different tile dimensions
+    /// (docs/superpowers/specs/2026-09-14-library-visual-redesign-design.md §2/§9) - a transient
+    /// field, deliberately not routed through <c>LibraryBrowseHistory</c>/<c>LibraryBrowseState</c>
+    /// (<c>LibraryScreenViewModel.cs</c>'s own <c>_browseHistory</c>), which only ever tracks
+    /// navigation targets (content type/collection/search), not display settings - folding a
+    /// cosmetic toggle's scroll offset in there would make Back/Forward start undoing display
+    /// toggles instead of navigating.</summary>
+    private int? _pendingGridScrollIndex;
+
+    private void CaptureGridScrollPosition(LibraryGridCoverFit oldCoverFit, LibraryScreenViewModel vm)
+    {
+        if (vm.ViewMode != LibraryViewMode.PosterGrid)
+        {
+            return;
+        }
+
+        var (scrollViewer, cardWidth, cardHeight, margin) = GetGridScrollGeometry(oldCoverFit, vm);
+        int itemsPerRow = Math.Max(1, (int)(scrollViewer.Bounds.Width / (cardWidth + margin)));
+        int topRow = (int)(scrollViewer.Offset.Y / (cardHeight + margin));
+        _pendingGridScrollIndex = topRow * itemsPerRow;
+    }
+
+    private void RestoreGridScrollPosition(LibraryGridCoverFit newCoverFit, LibraryScreenViewModel vm)
+    {
+        if (_pendingGridScrollIndex is not { } index)
+        {
+            return;
+        }
+
+        _pendingGridScrollIndex = null;
+        ScrollToIndexInGrid(newCoverFit, index, vm);
     }
 
     // --- Drag-and-drop import (docs/superpowers/specs/2026-08-31-drag-and-drop-import-design.md) ---

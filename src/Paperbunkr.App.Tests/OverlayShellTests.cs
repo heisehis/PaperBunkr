@@ -1,4 +1,5 @@
 using System.Windows.Input;
+using Avalonia.Controls;
 using Avalonia.Layout;
 using Paperbunkr.App.Controls;
 
@@ -98,6 +99,34 @@ public class OverlayShellTests
 
         shell.ContentVerticalAlignment = VerticalAlignment.Stretch;
         Assert.Equal(VerticalAlignment.Stretch, shell.ContentVerticalAlignment);
+    }
+
+    /// <summary>
+    /// Regression test for a real bug found live (docs/superpowers/specs/2026-09-13-cluster-scraper-
+    /// ui-redesign-design.md's redesigned scraper dialog): a click on plain, non-interactive content
+    /// INSIDE the card (no Button/TextBox/etc. of its own to mark the press handled) used to bubble
+    /// all the way to the scrim's own PointerPressed handler and close the whole overlay, since the
+    /// card content is a visual CHILD of PART_Scrim in the shared template (Styles/Overlays.axaml).
+    /// <see cref="OverlayShell.ShouldCloseFromScrimClick"/> is the fix: only close when the routed
+    /// event's ORIGINATING element (<c>PointerPressedEventArgs.Source</c>, which survives the bubble)
+    /// is the scrim itself - i.e. the click genuinely landed on the backdrop, not on/inside the card.
+    /// </summary>
+    [Fact]
+    public void ShouldCloseFromScrimClick_true_only_when_the_click_originated_on_the_scrim_itself()
+    {
+        var scrim = new Border();
+        var cardContent = new Border(); // stands in for e.g. a plain non-interactive label inside the card
+
+        Assert.True(OverlayShell.ShouldCloseFromScrimClick(scrim, scrim));
+        Assert.False(OverlayShell.ShouldCloseFromScrimClick(cardContent, scrim));
+    }
+
+    [Fact]
+    public void ShouldCloseFromScrimClick_false_when_the_scrim_reference_is_not_yet_set()
+    {
+        // The shell's own template hasn't applied yet (or never will, in a headless test host with
+        // no App.axaml styles loaded) - must not throw or accidentally match on two nulls.
+        Assert.False(OverlayShell.ShouldCloseFromScrimClick(null, null));
     }
 
     [Fact]

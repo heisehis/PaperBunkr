@@ -44,4 +44,4 @@ associated; **Unlink event** breaks it.
 ## External tracker import
 
 Importing lists straight from AniList / MyAnimeList is shown in the UI but **deferred** —
-not wired up yet.
+not wired up yet in the alpha.

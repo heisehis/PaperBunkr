@@ -176,6 +176,40 @@
             <Setter Property="Opacity" Value="1" />
         </Style>
 
+        <!-- NumericRatingThumbnails hover-reveal badge (docs/superpowers/specs/2026-09-13-
+             preferences-cosmetic-toggles-design.md) - shares the tile's bottom-right corner with
+             CheckBox.tileSelect above; "selection mode owns the corner" (hidden via the row's own
+             ShowRatingBadge, computed from !HasSelection, not a style selector here) means the two
+             are never actually visible at once, so no z-order conflict despite occupying the same
+             spot. -->
+        <!-- Persistent, not hover-gated, since the Master-Detail redesign moved this badge to
+             bottom-left where nothing else competes for the corner (docs/superpowers/specs/
+             2026-09-14-library-visual-redesign-design.md §3) - it used to share bottom-right with
+             the selection checkbox and needed to fade in/out to avoid flickering against it. -->
+        <Style Selector="Border.ratingBadge">
+            <Setter Property="Opacity" Value="1" />
+        </Style>
+
+        <!-- ShowToolTips hover-tooltip entrance (docs/superpowers/specs/2026-09-13-preferences-
+             cosmetic-toggles-design.md) - mirrors StatusBar.axaml's Activity peek-popover shape
+             (Popup + Border + open-class + Transitions); re-added on every AttachedToVisualTree
+             (LibraryScreen.axaml.cs), same reason that file documents (a Popup unmounts its content
+             on close, so an exit Transition never gets a chance to play). -->
+        <Style Selector="Border.comicHoverTooltip">
+            <Setter Property="Opacity" Value="0" />
+            <Setter Property="RenderTransform" Value="translateY(6px)" />
+            <Setter Property="Transitions">
+                <Transitions>
+                    <DoubleTransition Property="Opacity" Duration="0:0:0.15" />
+                    <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.15" />
+                </Transitions>
+            </Setter>
+        </Style>
+        <Style Selector="Border.comicHoverTooltip.open">
+            <Setter Property="Opacity" Value="1" />
+            <Setter Property="RenderTransform" Value="none" />
+        </Style>
+
         <!-- Virtualized row list (docs/superpowers/specs — Library issue view-mode virtualization,
              2026-09-03). List / Details modes are a single ListBox over a flat FlatRows/FlatCovers
              collection so one VirtualizingStackPanel virtualizes header + row alike. The ListBox is
@@ -227,8 +261,8 @@
     <UserControl.Resources>
         <DataTemplate x:Key="PanoramaGridItemTemplate" x:DataType="models:IssueListRow">
             <Button Classes="card" Margin="0" Width="{Binding PanoramaWidth}"
-                    Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).IssueList.OpenIssueCommand}"
-                    CommandParameter="{Binding}" KeyDown="OnCardKeyDown" PointerPressed="OnTilePointerPressed">
+                    KeyDown="OnCardKeyDown" PointerPressed="OnTilePointerPressed"
+                    GotFocus="OnCardGotFocus" DoubleTapped="OnCardDoubleTapped">
                 <StackPanel>
                     <!-- Shared-element cover flight (docs/superpowers/specs/2026-09-04-navigation-
                          transition-system-design.md) - "issue-cover:{Id}", same scheme as the Poster
@@ -236,11 +270,27 @@
                     <Border Classes="cover" Background="{Binding CoverBrush}"
                             Height="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PanoramaCardHeight}"
                             controls:SharedElement.Key="{Binding Id, StringFormat='issue-cover:{0}'}"
-                            controls:SharedElement.ImageSource="{Binding #PanoramaIssueCoverImage.Source}">
+                            controls:SharedElement.ImageSource="{Binding #PanoramaIssueCoverImage.Source}"
+                            PointerEntered="OnCoverPointerEntered" PointerExited="OnCoverPointerExited">
                         <Grid>
                             <!-- Uniform (not UniformToFill) - the box is already sized to this cover's own
                                  aspect ratio, so nothing gets cropped; only extreme clamped outliers letterbox. -->
                             <Image x:Name="PanoramaIssueCoverImage" views:AsyncCoverImage.SourceId="{Binding CoverKey}" Stretch="Uniform" />
+                            <!-- DogEarThumbnails hover peek (docs/superpowers/specs/2026-09-13-
+                                 preferences-cosmetic-toggles-design.md) - CE's real 2nd-page peek,
+                                 clipped to a triangular fold in the bottom-right corner (revised
+                                 after on-screen feedback that a full-height edge strip read as
+                                 broken layout, not a page peeking out). Populated/shown from
+                                 code-behind on hover, not a binding - the decode is lazy and needs a
+                                 staleness guard. Painted before (behind) the selection checkbox/
+                                 rating badge below, which still render on top at their own spot. -->
+                            <Image x:Name="PanoramaDogEarImage" Width="34" Height="34"
+                                   HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                                   Stretch="UniformToFill" IsVisible="False">
+                                <Image.Clip>
+                                    <PathGeometry Figures="M 34,0 L 34,34 L 0,34 Z" />
+                                </Image.Clip>
+                            </Image>
                             <Border Classes="posterScrim" />
                             <Border IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowUnreadBadge}">
                                 <Border Classes="countPill" IsVisible="{Binding !IsRead}"
@@ -249,24 +299,36 @@
                                 </Border>
                             </Border>
                             <Border IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowPublisherBadge}">
-                                <Border IsVisible="{Binding HasPublisher}" Background="#B814161B" CornerRadius="999" Padding="5,2"
+                                <!-- Was a hardcoded #B814161B near-black scrim - fixed to the real
+                                     skin tokens (docs/superpowers/specs/2026-09-14-library-visual-
+                                     redesign-design.md §6): non-skin-reactive before, now reacts to
+                                     the active skin like every other Pb*Brush-driven element. -->
+                                <Border IsVisible="{Binding HasPublisher}" Background="{DynamicResource PbBadgeBrush}" CornerRadius="999" Padding="5,2"
                                         HorizontalAlignment="Left" VerticalAlignment="Top" Margin="7">
                                     <controls:BrandMark Family="Publisher" Value="{Binding Publisher}" ShowText="False"
-                                                        MarkSize="12" Foreground="White" />
+                                                        MarkSize="12" Foreground="{DynamicResource PbBadgeTextBrush}" />
                                 </Border>
                             </Border>
-                            <Border IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowLanguageBadge}">
-                                <Border IsVisible="{Binding HasLanguage}" Background="#B814161B" CornerRadius="999" Padding="5,2"
-                                        HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="7">
-                                    <Panel>
-                                        <TextBlock Text="{Binding LanguageIso}" FontSize="9" FontWeight="Bold" Foreground="White"
-                                                   IsVisible="{Binding !$parent[UserControl].((vm:LibraryScreenViewModel)DataContext).UseLanguageIcon}" />
-                                        <controls:BrandMark Family="Language" Value="{Binding LanguageIso}" ShowText="False" MarkSize="11"
-                                                            Foreground="White"
-                                                            IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).UseLanguageIcon}" />
-                                    </Panel>
+                            <!-- Rating moved bottom-left (was language - now shown in the preview panel
+                                 + hover tooltip instead, docs/superpowers/specs/2026-09-14-library-
+                                 visual-redesign-design.md §3/§5). No selection-exclusion needed here
+                                 any more - nothing else competes for bottom-left. -->
+                            <Border HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="7">
+                                <Border.IsVisible>
+                                    <MultiBinding Converter="{x:Static conv:BoolConverters.And}">
+                                        <Binding Path="$parent[UserControl].((vm:LibraryScreenViewModel)DataContext).NumericRatingThumbnails" />
+                                        <Binding Path="HasRating" />
+                                    </MultiBinding>
+                                </Border.IsVisible>
+                                <Border Classes="ratingBadge countPill">
+                                    <TextBlock Text="{Binding Rating, StringFormat='{}{0:0.0}'}" />
                                 </Border>
                             </Border>
+                            <!-- Bottom-right is Selection > Dog-ear only now (§3) - the checkbox is
+                                 the only element declared here; the dog-ear peek image is a sibling
+                                 populated by code-behind (TryShowDogEarPeek), gated at hover time
+                                 against !row.IsSelected so it never fights the checkbox for the
+                                 corner. -->
                             <CheckBox Classes="tileSelect" Classes.forceVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).HasSelection}"
                                       IsChecked="{Binding IsSelected, Mode=OneWay}"
                                       Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ToggleIssueSelectionCheckboxCommand}"
@@ -284,8 +346,8 @@
 
         <DataTemplate x:Key="ListItemTemplate" x:DataType="models:IssueListRow">
             <Button Classes="card" HorizontalAlignment="Stretch" Margin="0,0,0,8"
-                    Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).IssueList.OpenIssueCommand}"
-                    CommandParameter="{Binding}" PointerPressed="OnTilePointerPressed">
+                    KeyDown="OnCardKeyDown" PointerPressed="OnTilePointerPressed"
+                    GotFocus="OnCardGotFocus" DoubleTapped="OnCardDoubleTapped">
                 <Border Classes="libRow" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1" CornerRadius="{DynamicResource PbRadius}" Padding="10">
                     <Grid ColumnDefinitions="44,*,Auto">
                         <Panel Grid.Column="0">
@@ -333,8 +395,8 @@
 
         <DataTemplate x:Key="DetailsItemTemplate" x:DataType="models:IssueListRow">
             <Button Classes="card" HorizontalAlignment="Stretch" Margin="0,0,0,4"
-                    Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).IssueList.OpenIssueCommand}"
-                    CommandParameter="{Binding}" PointerPressed="OnTilePointerPressed">
+                    KeyDown="OnCardKeyDown" PointerPressed="OnTilePointerPressed"
+                    GotFocus="OnCardGotFocus" DoubleTapped="OnCardDoubleTapped">
                 <Grid ColumnDefinitions="52,*" Margin="0,6">
                     <Panel Grid.Column="0">
                         <!-- Shared-element cover flight (docs/superpowers/specs/2026-09-04-
@@ -377,8 +439,8 @@
         <DataTemplate x:Key="TilesItemTemplate" x:DataType="models:IssueListRow">
             <Button Classes="card" Margin="0"
                     Width="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).TilesCardWidth}"
-                    Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).IssueList.OpenIssueCommand}"
-                    CommandParameter="{Binding}" PointerPressed="OnTilePointerPressed">
+                    KeyDown="OnCardKeyDown" PointerPressed="OnTilePointerPressed"
+                    GotFocus="OnCardGotFocus" DoubleTapped="OnCardDoubleTapped">
                 <Border Classes="libRow" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1" CornerRadius="{DynamicResource PbRadius}" Padding="8">
                     <Grid ColumnDefinitions="Auto,*,Auto">
                         <Panel Grid.Column="0">
@@ -433,8 +495,8 @@
              PosterGridSeriesTemplate lives further down with its issue counterpart. -->
         <DataTemplate x:Key="SeriesPanoramaGridItemTemplate" x:DataType="models:SeriesCardSample">
             <Button Classes="card" Margin="0" Width="{Binding PanoramaWidth}"
-                    Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SelectCardCommand}"
-                    CommandParameter="{Binding}" KeyDown="OnCardKeyDown" PointerPressed="OnSeriesTilePointerPressed">
+                    KeyDown="OnCardKeyDown" PointerPressed="OnSeriesTilePointerPressed"
+                    GotFocus="OnCardGotFocus" DoubleTapped="OnCardDoubleTapped">
                 <StackPanel>
                     <!-- Shared-element cover flight (docs/superpowers/specs/2026-09-04-navigation-
                          transition-system-design.md) - "series-cover:{SeriesId}", same scheme as the
@@ -442,11 +504,24 @@
                     <Border Classes="cover" Background="{Binding CoverBrush}"
                             Height="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PanoramaCardHeight}"
                             controls:SharedElement.Key="{Binding SeriesId, StringFormat='series-cover:{0}'}"
-                            controls:SharedElement.ImageSource="{Binding #SeriesPanoramaCoverImage.Source}">
+                            controls:SharedElement.ImageSource="{Binding #SeriesPanoramaCoverImage.Source}"
+                            PointerEntered="OnCoverPointerEntered" PointerExited="OnCoverPointerExited">
                         <Grid>
                             <!-- Uniform (not UniformToFill) - the box is already sized to this cover's own
                                  aspect ratio, so nothing gets cropped; only extreme clamped outliers letterbox. -->
                             <Image x:Name="SeriesPanoramaCoverImage" views:AsyncCoverImage.SourceId="{Binding CoverKey}" Stretch="Uniform" />
+                            <!-- DogEarThumbnails hover peek (docs/superpowers/specs/2026-09-13-
+                                 preferences-cosmetic-toggles-design.md) - sourced from
+                                 RepresentativeRow (the same issue CoverKey above is keyed to);
+                                 triangular bottom-right fold, see the issue templates' own copy for
+                                 the full rationale. -->
+                            <Image x:Name="SeriesPanoramaDogEarImage" Width="34" Height="34"
+                                   HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                                   Stretch="UniformToFill" IsVisible="False">
+                                <Image.Clip>
+                                    <PathGeometry Figures="M 34,0 L 34,34 L 0,34 Z" />
+                                </Image.Clip>
+                            </Image>
                             <Border Classes="posterScrim" />
                             <Border IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowUnreadBadge}">
                                 <Border Classes="countPill" IsVisible="{Binding HasUnread}"
@@ -461,18 +536,6 @@
                                                         MarkSize="12" Foreground="White" />
                                 </Border>
                             </Border>
-                            <Border IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowLanguageBadge}">
-                                <Border IsVisible="{Binding HasLanguage}" Background="#B814161B" CornerRadius="999" Padding="5,2"
-                                        HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="7">
-                                    <Panel>
-                                        <TextBlock Text="{Binding LanguageIso}" FontSize="9" FontWeight="Bold" Foreground="White"
-                                                   IsVisible="{Binding !$parent[UserControl].((vm:LibraryScreenViewModel)DataContext).UseLanguageIcon}" />
-                                        <controls:BrandMark Family="Language" Value="{Binding LanguageIso}" ShowText="False" MarkSize="11"
-                                                            Foreground="White"
-                                                            IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).UseLanguageIcon}" />
-                                    </Panel>
-                                </Border>
-                            </Border>
                             <Border IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowContinueReadingButton}">
                                 <Button Classes="continueReading" IsVisible="{Binding HasContinueReading}"
                                         Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ContinueReadingCommand}"
@@ -481,6 +544,22 @@
                                     <fi:SymbolIcon Symbol="Play" />
                                 </Button>
                             </Border>
+                            <!-- Rating moved bottom-left (was language - now shown in the preview
+                                 panel + hover tooltip instead, docs/superpowers/specs/2026-09-14-
+                                 library-visual-redesign-design.md §3/§5); no selection-exclusion
+                                 needed any more. -->
+                            <Border HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="5">
+                                <Border.IsVisible>
+                                    <MultiBinding Converter="{x:Static conv:BoolConverters.And}">
+                                        <Binding Path="$parent[UserControl].((vm:LibraryScreenViewModel)DataContext).NumericRatingThumbnails" />
+                                        <Binding Path="RepresentativeRow.HasRating" />
+                                    </MultiBinding>
+                                </Border.IsVisible>
+                                <Border Classes="ratingBadge countPill">
+                                    <TextBlock Text="{Binding RepresentativeRow.Rating, StringFormat='{}{0:0.0}'}" />
+                                </Border>
+                            </Border>
+                            <!-- Bottom-right is Selection > Dog-ear only now (§3). -->
                             <CheckBox Classes="tileSelect" Classes.forceVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).HasSeriesSelection}"
                                       IsChecked="{Binding IsSelected, Mode=OneWay}"
                                       Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ToggleSeriesSelectionCheckboxCommand}"
@@ -498,8 +577,8 @@
 
         <DataTemplate x:Key="SeriesListItemTemplate" x:DataType="models:SeriesCardSample">
             <Button Classes="card" HorizontalAlignment="Stretch" Margin="0,0,0,8"
-                    Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SelectCardCommand}"
-                    CommandParameter="{Binding}" PointerPressed="OnSeriesTilePointerPressed">
+                    KeyDown="OnCardKeyDown" PointerPressed="OnSeriesTilePointerPressed"
+                    GotFocus="OnCardGotFocus" DoubleTapped="OnCardDoubleTapped">
                 <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1" CornerRadius="6" Padding="10">
                     <Grid ColumnDefinitions="44,*,Auto">
                         <!-- Shared-element cover flight (docs/superpowers/specs/2026-09-04-
@@ -550,8 +629,8 @@
 
         <DataTemplate x:Key="SeriesDetailsItemTemplate" x:DataType="models:SeriesCardSample">
             <Button Classes="card" HorizontalAlignment="Stretch" Margin="0,0,0,4"
-                    Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SelectCardCommand}"
-                    CommandParameter="{Binding}" PointerPressed="OnSeriesTilePointerPressed">
+                    KeyDown="OnCardKeyDown" PointerPressed="OnSeriesTilePointerPressed"
+                    GotFocus="OnCardGotFocus" DoubleTapped="OnCardDoubleTapped">
                 <Grid ColumnDefinitions="52,*,110,70,70,140" Margin="0,6">
                     <!-- Shared-element cover flight (docs/superpowers/specs/2026-09-04-navigation-
                          transition-system-design.md) - "series-cover:{SeriesId}". -->
@@ -583,8 +662,8 @@
         <DataTemplate x:Key="SeriesTilesItemTemplate" x:DataType="models:SeriesCardSample">
             <Button Classes="card" Margin="0"
                     Width="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).TilesCardWidth}"
-                    Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).SelectCardCommand}"
-                    CommandParameter="{Binding}" PointerPressed="OnSeriesTilePointerPressed">
+                    KeyDown="OnCardKeyDown" PointerPressed="OnSeriesTilePointerPressed"
+                    GotFocus="OnCardGotFocus" DoubleTapped="OnCardDoubleTapped">
                 <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1" CornerRadius="6" Padding="8">
                     <Grid ColumnDefinitions="Auto,*,Auto">
                         <!-- Shared-element cover flight (docs/superpowers/specs/2026-09-04-
@@ -654,7 +733,8 @@
         <DataTemplate x:Key="PosterGridIssueTemplate" x:DataType="models:IssueListRow">
             <Button Classes="card" Margin="0"
                     Width="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PosterCardWidth}"
-                    KeyDown="OnCardKeyDown" PointerPressed="OnTilePointerPressed" DoubleTapped="OnCardDoubleTapped">
+                    KeyDown="OnCardKeyDown" PointerPressed="OnTilePointerPressed" DoubleTapped="OnCardDoubleTapped"
+                    GotFocus="OnCardGotFocus">
                 <Grid RowDefinitions="*,Auto">
                     <!-- Shared-element cover flight source/destination (docs/superpowers/specs/
                          2026-09-04-navigation-transition-system-design.md) - key matches
@@ -665,9 +745,20 @@
                     <Border Grid.Row="0" Classes="cover posterCover" Background="{Binding CoverBrush}"
                             Height="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PosterCoverHeight}"
                             controls:SharedElement.Key="{Binding Id, StringFormat='issue-cover:{0}'}"
-                            controls:SharedElement.ImageSource="{Binding #PosterIssueCoverImage.Source}">
+                            controls:SharedElement.ImageSource="{Binding #PosterIssueCoverImage.Source}"
+                            PointerEntered="OnCoverPointerEntered" PointerExited="OnCoverPointerExited">
                         <Grid>
                             <Image x:Name="PosterIssueCoverImage" views:AsyncCoverImage.SourceId="{Binding CoverKey}" Stretch="UniformToFill" />
+                            <!-- DogEarThumbnails hover peek (docs/superpowers/specs/2026-09-13-
+                                 preferences-cosmetic-toggles-design.md) - see the Panorama template's
+                                 own copy of this element for the full rationale. -->
+                            <Image x:Name="PosterDogEarImage" Width="34" Height="34"
+                                   HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                                   Stretch="UniformToFill" IsVisible="False">
+                                <Image.Clip>
+                                    <PathGeometry Figures="M 34,0 L 34,34 L 0,34 Z" />
+                                </Image.Clip>
+                            </Image>
                             <!-- Plugin API v2 DrawThumbnailOverlay hook (docs/superpowers/specs/
                                  2026-09-05-plugin-api-v2-remaining-hooks-plan.md §12) - stays empty
                                  (no visible change) when no plugin implements this hook. Keyed by
@@ -685,18 +776,6 @@
                                 <controls:BrandMark Family="Publisher" Value="{Binding Publisher}" ShowText="True"
                                                     MarkSize="12" Foreground="{DynamicResource PbBadgeBrush}" />
                             </Border>
-                            <Border IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowLanguageBadge}">
-                                <Border IsVisible="{Binding HasLanguage}" Background="#B814161B" CornerRadius="999" Padding="5,2"
-                                        HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="6">
-                                    <Panel>
-                                        <TextBlock Text="{Binding LanguageIso}" FontSize="9" FontWeight="Bold" Foreground="White"
-                                                   IsVisible="{Binding !$parent[UserControl].((vm:LibraryScreenViewModel)DataContext).UseLanguageIcon}" />
-                                        <controls:BrandMark Family="Language" Value="{Binding LanguageIso}" ShowText="False" MarkSize="11"
-                                                            Foreground="White"
-                                                            IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).UseLanguageIcon}" />
-                                    </Panel>
-                                </Border>
-                            </Border>
                             <Ellipse Width="9" Height="9" Fill="{DynamicResource PbAccentTextBrush}" Stroke="Black" StrokeThickness="1.5"
                                      HorizontalAlignment="Right" VerticalAlignment="Top" Margin="7">
                                 <Ellipse.IsVisible>
@@ -706,6 +785,22 @@
                                     </MultiBinding>
                                 </Ellipse.IsVisible>
                             </Ellipse>
+                            <!-- Rating moved bottom-left (was language - now shown in the preview
+                                 panel + hover tooltip instead, docs/superpowers/specs/2026-09-14-
+                                 library-visual-redesign-design.md §3/§5); no selection-exclusion
+                                 needed any more. -->
+                            <Border HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="6">
+                                <Border.IsVisible>
+                                    <MultiBinding Converter="{x:Static conv:BoolConverters.And}">
+                                        <Binding Path="$parent[UserControl].((vm:LibraryScreenViewModel)DataContext).NumericRatingThumbnails" />
+                                        <Binding Path="HasRating" />
+                                    </MultiBinding>
+                                </Border.IsVisible>
+                                <Border Classes="ratingBadge countPill">
+                                    <TextBlock Text="{Binding Rating, StringFormat='{}{0:0.0}'}" />
+                                </Border>
+                            </Border>
+                            <!-- Bottom-right is Selection > Dog-ear only now (§3). -->
                             <CheckBox Classes="tileSelect" Classes.forceVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).HasSelection}"
                                       IsChecked="{Binding IsSelected, Mode=OneWay}"
                                       Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ToggleIssueSelectionCheckboxCommand}"
@@ -726,7 +821,8 @@
         <DataTemplate x:Key="PosterGridSeriesTemplate" x:DataType="models:SeriesCardSample">
             <Button Classes="card" Margin="0"
                     Width="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PosterCardWidth}"
-                    KeyDown="OnCardKeyDown" PointerPressed="OnSeriesTilePointerPressed" DoubleTapped="OnCardDoubleTapped">
+                    KeyDown="OnCardKeyDown" PointerPressed="OnSeriesTilePointerPressed" DoubleTapped="OnCardDoubleTapped"
+                    GotFocus="OnCardGotFocus">
                 <Grid RowDefinitions="*,Auto">
                     <!-- Shared-element cover flight source/destination (docs/superpowers/specs/
                          2026-09-04-navigation-transition-system-design.md) - key matches
@@ -737,9 +833,20 @@
                     <Border Grid.Row="0" Classes="cover posterCover" Background="{Binding CoverBrush}"
                             Height="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PosterCoverHeight}"
                             controls:SharedElement.Key="{Binding SeriesId, StringFormat='series-cover:{0}'}"
-                            controls:SharedElement.ImageSource="{Binding #PosterSeriesCoverImage.Source}">
+                            controls:SharedElement.ImageSource="{Binding #PosterSeriesCoverImage.Source}"
+                            PointerEntered="OnCoverPointerEntered" PointerExited="OnCoverPointerExited">
                         <Grid>
                             <Image x:Name="PosterSeriesCoverImage" views:AsyncCoverImage.SourceId="{Binding CoverKey}" Stretch="UniformToFill" />
+                            <!-- DogEarThumbnails hover peek (docs/superpowers/specs/2026-09-13-
+                                 preferences-cosmetic-toggles-design.md) - see the issue templates'
+                                 own copy of this element for the full rationale. -->
+                            <Image x:Name="PosterSeriesDogEarImage" Width="34" Height="34"
+                                   HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                                   Stretch="UniformToFill" IsVisible="False">
+                                <Image.Clip>
+                                    <PathGeometry Figures="M 34,0 L 34,34 L 0,34 Z" />
+                                </Image.Clip>
+                            </Image>
                             <Border Classes="posterScrim" />
                             <Border Classes="pbChip" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="6">
                                 <Border.IsVisible>
@@ -750,18 +857,6 @@
                                 </Border.IsVisible>
                                 <controls:BrandMark Family="Publisher" Value="{Binding Publisher}" ShowText="True"
                                                     MarkSize="12" Foreground="{DynamicResource PbBadgeBrush}" />
-                            </Border>
-                            <Border IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowLanguageBadge}">
-                                <Border IsVisible="{Binding HasLanguage}" Background="#B814161B" CornerRadius="999" Padding="5,2"
-                                        HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="6">
-                                    <Panel>
-                                        <TextBlock Text="{Binding LanguageIso}" FontSize="9" FontWeight="Bold" Foreground="White"
-                                                   IsVisible="{Binding !$parent[UserControl].((vm:LibraryScreenViewModel)DataContext).UseLanguageIcon}" />
-                                        <controls:BrandMark Family="Language" Value="{Binding LanguageIso}" ShowText="False" MarkSize="11"
-                                                            Foreground="White"
-                                                            IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).UseLanguageIcon}" />
-                                    </Panel>
-                                </Border>
                             </Border>
                             <Border Classes="countPill" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="6">
                                 <Border.IsVisible>
@@ -783,6 +878,22 @@
                                 </Button.IsVisible>
                                 <fi:SymbolIcon Symbol="Play" />
                             </Button>
+                            <!-- Rating moved bottom-left (was language - now shown in the preview
+                                 panel + hover tooltip instead, docs/superpowers/specs/2026-09-14-
+                                 library-visual-redesign-design.md §3/§5); no selection-exclusion
+                                 needed any more. -->
+                            <Border HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="6">
+                                <Border.IsVisible>
+                                    <MultiBinding Converter="{x:Static conv:BoolConverters.And}">
+                                        <Binding Path="$parent[UserControl].((vm:LibraryScreenViewModel)DataContext).NumericRatingThumbnails" />
+                                        <Binding Path="RepresentativeRow.HasRating" />
+                                    </MultiBinding>
+                                </Border.IsVisible>
+                                <Border Classes="ratingBadge countPill">
+                                    <TextBlock Text="{Binding RepresentativeRow.Rating, StringFormat='{}{0:0.0}'}" />
+                                </Border>
+                            </Border>
+                            <!-- Bottom-right is Selection > Dog-ear only now (§3). -->
                             <CheckBox Classes="tileSelect" Classes.forceVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).HasSeriesSelection}"
                                       IsChecked="{Binding IsSelected, Mode=OneWay}"
                                       Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ToggleSeriesSelectionCheckboxCommand}"
@@ -840,11 +951,26 @@
     <!-- DragDrop.AllowDrop on the screen root so a file/folder drop anywhere on the Library screen
          imports it (docs/superpowers/specs/2026-08-31-drag-and-drop-import-design.md) - matches CE's
          "drop anywhere on the list" behavior. No drag-over affordance, same as CE. -->
-    <Grid RowDefinitions="Auto,*"
+    <!-- Master-Detail redesign (docs/superpowers/specs/2026-09-14-library-visual-redesign-
+         design.md §1): row 1 gains 3 columns - list (existing content, unchanged, implicit
+         Grid.Column="0") | GridSplitter | live preview panel. The Collections/Reading Lists/Smart
+         Lists sidebar lives in MainWindow.axaml (shell chrome), not here - it was never a column of
+         this Grid, see the design doc's implementation-time correction. -->
+    <Grid x:Name="RootGrid" RowDefinitions="Auto,*"
           DragDrop.AllowDrop="True" DragDrop.DragOver="OnDragOver" DragDrop.Drop="OnDrop">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="Auto" />
+            <!-- Real pixel width, not Auto - GridSplitter can only resize a column with a literal
+                 size. Initialized from LibraryPreviewPanelWidth and persisted back to it in
+                 LibraryScreen.axaml.cs (a GridLength can't bind directly to a double VM property).
+                 ColumnDefinition doesn't get an auto-generated code-behind field for x:Name the way
+                 Controls do, so it's accessed via RootGrid.ColumnDefinitions[2] instead. -->
+            <ColumnDefinition Width="320" MinWidth="260" MaxWidth="480" />
+        </Grid.ColumnDefinitions>
 
         <!-- ============ Toolbar (extracted to Views/LibraryToolbar.axaml, 4b §1) ============ -->
-        <views:LibraryToolbar x:Name="Toolbar" Grid.Row="0" />
+        <views:LibraryToolbar x:Name="Toolbar" Grid.Row="0" Grid.ColumnSpan="3" />
 
         <!-- ============ Poster grid (UI rework Phase 4a) - one grid replacing Compact/
              Comfortable/Cover-only. Same 4-way inner split (Issue/Series x grouped/ungrouped);
@@ -1011,7 +1137,7 @@
         </Panel>
 
         <!-- ============ Details ============ -->
-        <DockPanel Grid.Row="1" IsVisible="{Binding IsDetailsView}" Margin="24,18,24,0">
+        <DockPanel Grid.Row="1" IsVisible="{Binding IsDetailsTableView}" Margin="24,18,24,0">
             <!-- Configurable, click-to-sort header (4b §8) - same DetailsColumns source + fixed
                  widths as each data row, so hiding a column keeps both aligned. Right-click for the
                  column picker. -->
@@ -1184,11 +1310,23 @@
                     AutomationProperties.AutomationId="LibraryEmptyStateAction" />
         </StackPanel>
 
+        <!-- ============ Live preview panel (docs/superpowers/specs/2026-09-14-library-visual-
+             redesign-design.md §1/§4) - GridSplitter and panel share one visibility switch
+             (ShowPreviewPanelColumn) so a hidden panel leaves no stranded splitter and no dead
+             Auto-width column; the list column's * genuinely reclaims that space. ============ -->
+        <GridSplitter Grid.Row="1" Grid.Column="1" Width="6" ResizeDirection="Columns"
+                      Background="{DynamicResource PbBorderBrush}"
+                      IsVisible="{Binding ShowPreviewPanelColumn}" />
+        <Border Grid.Row="1" Grid.Column="2" IsVisible="{Binding ShowPreviewPanelColumn}"
+                BorderThickness="1,0,0,0" BorderBrush="{DynamicResource PbBorderBrush}">
+            <views:LibraryPreviewPanel />
+        </Border>
+
         <!-- ============ Add-issue overlay (4b §6) - centered FloatingPanel over the grid, state on
              LibraryScreenViewModel (no MainViewModel extraction). Escape / backdrop click close. ============ -->
-        <Border Grid.Row="0" Grid.RowSpan="2" IsVisible="{Binding IsAddIssueOpen}" Background="#B0000000"
+        <Border Grid.Row="0" Grid.RowSpan="2" Grid.ColumnSpan="3" IsVisible="{Binding IsAddIssueOpen}" Background="#B0000000"
                 PointerPressed="OnAddIssueBackdropPressed" />
-        <Border Grid.Row="0" Grid.RowSpan="2" IsVisible="{Binding IsAddIssueOpen}" Classes="floatingPanel"
+        <Border Grid.Row="0" Grid.RowSpan="2" Grid.ColumnSpan="3" IsVisible="{Binding IsAddIssueOpen}" Classes="floatingPanel"
                 Width="380" Padding="22" HorizontalAlignment="Center" VerticalAlignment="Center">
             <StackPanel Spacing="12">
                 <TextBlock Text="Add issue to library" Classes="pbTextHeading" />
@@ -1242,6 +1380,45 @@
                 </StackPanel>
             </StackPanel>
         </Border>
+
+        <!-- ShowToolTips hover tooltip (docs/superpowers/specs/2026-09-13-preferences-cosmetic-
+             toggles-design.md) - one shared Popup, repositioned per hovered tile from code-behind
+             (LibraryScreen.axaml.cs), rather than one Popup per realized tile. DataContext is set to
+             the hovered IssueListRow in code-behind too. -->
+        <Popup x:Name="ComicHoverTooltipPopup" Placement="Bottom" VerticalOffset="6" IsLightDismissEnabled="False">
+            <Border x:Name="ComicHoverTooltipCard" Classes="comicHoverTooltip" Width="280"
+                    Background="{DynamicResource PbSurface2Brush}" BorderBrush="{DynamicResource PbBorderBrush}"
+                    BorderThickness="1" CornerRadius="{DynamicResource PbRadius}" BoxShadow="0 8 30 0 #80000000"
+                    Padding="12">
+                <StackPanel Spacing="6" x:DataType="models:IssueListRow">
+                    <StackPanel Orientation="Horizontal" Spacing="10">
+                        <Border Width="40" Height="60" CornerRadius="{DynamicResource PbRadiusSm}"
+                                Background="{Binding CoverBrush}" ClipToBounds="True">
+                            <Image views:AsyncCoverImage.SourceId="{Binding CoverKey}" Stretch="UniformToFill" />
+                        </Border>
+                        <StackPanel VerticalAlignment="Center" Spacing="2">
+                            <TextBlock Text="{Binding Title}" FontWeight="SemiBold" FontSize="12.5"
+                                       Foreground="{DynamicResource PbTextBrush}" TextWrapping="Wrap" MaxLines="2" />
+                            <TextBlock Text="{Binding WriterAndPenciller}" FontSize="11" IsVisible="{Binding HasWriterAndPenciller}"
+                                       Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" />
+                        </StackPanel>
+                    </StackPanel>
+                    <TextBlock Text="{Binding SummaryExcerpt}" FontSize="11" IsVisible="{Binding HasSummaryExcerpt}"
+                               Foreground="{DynamicResource PbTextMutedBrush}" TextWrapping="Wrap" />
+                    <StackPanel Orientation="Horizontal" Spacing="10">
+                        <TextBlock Text="{Binding FileSizeDisplay}" FontSize="10.5" IsVisible="{Binding HasFileSizeDisplay}"
+                                   Foreground="{DynamicResource PbTextFaintBrush}" />
+                        <TextBlock Text="{Binding Format}" FontSize="10.5" IsVisible="{Binding HasFormat}"
+                                   Foreground="{DynamicResource PbTextFaintBrush}" />
+                        <!-- Language moved here from the tile corner (docs/superpowers/specs/
+                             2026-09-14-library-visual-redesign-design.md §5) - already a field on
+                             IssueListRow, no new model property needed. -->
+                        <TextBlock Text="{Binding LanguageIso}" FontSize="10.5" IsVisible="{Binding HasLanguage}"
+                                   Foreground="{DynamicResource PbTextFaintBrush}" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+        </Popup>
 
     </Grid>
 </UserControl>

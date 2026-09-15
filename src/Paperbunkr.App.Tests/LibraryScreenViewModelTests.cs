@@ -28,6 +28,10 @@ public class LibraryScreenViewModelTests : IDisposable
 {
     private readonly string? _originalDbPathOverride;
     private readonly string _dbPath;
+    private readonly bool _originalFadeInThumbnails;
+    private readonly bool _originalDogEarThumbnails;
+    private readonly bool _originalShowToolTips;
+    private readonly bool _originalNumericRatingThumbnails;
 
     public LibraryScreenViewModelTests()
     {
@@ -37,11 +41,23 @@ public class LibraryScreenViewModelTests : IDisposable
 
         using var context = PaperbunkrDb.CreateContext();
         context.Database.EnsureCreated();
+
+        // CosmeticThumbnailSettings is a static push-cache (docs/superpowers/specs/2026-09-13-
+        // preferences-cosmetic-toggles-design.md) - save/restore so a test that mutates it can't
+        // leak into another test in this collection.
+        _originalFadeInThumbnails = CosmeticThumbnailSettings.FadeInThumbnails;
+        _originalDogEarThumbnails = CosmeticThumbnailSettings.DogEarThumbnails;
+        _originalShowToolTips = CosmeticThumbnailSettings.ShowToolTips;
+        _originalNumericRatingThumbnails = CosmeticThumbnailSettings.NumericRatingThumbnails;
     }
 
     public void Dispose()
     {
         PaperbunkrDbContext.DatabasePathOverride = _originalDbPathOverride;
+        CosmeticThumbnailSettings.FadeInThumbnails = _originalFadeInThumbnails;
+        CosmeticThumbnailSettings.DogEarThumbnails = _originalDogEarThumbnails;
+        CosmeticThumbnailSettings.ShowToolTips = _originalShowToolTips;
+        CosmeticThumbnailSettings.NumericRatingThumbnails = _originalNumericRatingThumbnails;
         Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
         try
         {
@@ -366,6 +382,11 @@ public class LibraryScreenViewModelTests : IDisposable
         Assert.True(row.DeleteConfirm.IsArmed);
         row.DeleteConfirm.TriggerCommand.Execute(null);
 
+        // The collection-remove command defers its refresh via Dispatcher.UIThread.Post (avoids
+        // detaching this same row's Delete button mid-route - see Paperbunkr.App.Controls.
+        // SuggestBox.Commit for the fully diagnosed case). Headless tests need an explicit pump.
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
         Assert.Empty(vm.Collections);
         Assert.True(vm.IsAllSeriesActive);
     }
@@ -644,13 +665,13 @@ public class LibraryScreenViewModelTests : IDisposable
     {
         var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { }, goToNewIssueProperties: (_, _, _) => { });
 
-        vm.SetViewModeCommand.Execute(LibraryViewMode.Tiles);
+        vm.SelectTilesGridCommand.Execute(null);
 
         Assert.True(vm.IsTilesView);
         Assert.False(vm.IsPosterGrid);
         Assert.False(vm.IsPanoramaGrid);
         Assert.False(vm.IsListView);
-        Assert.False(vm.IsDetailsView);
+        Assert.False(vm.IsDetailsTableView);
         Assert.Equal("Tiles", vm.DisplayModeLabel);
     }
 
@@ -697,10 +718,10 @@ public class LibraryScreenViewModelTests : IDisposable
 
         Assert.Equal(2, vm.IssueList.Rows.Count);
 
-        vm.SetViewModeCommand.Execute(LibraryViewMode.Tiles);
+        vm.SelectTilesGridCommand.Execute(null);
         Assert.Equal(2, vm.IssueList.Rows.Count);
 
-        vm.SetViewModeCommand.Execute(LibraryViewMode.Details);
+        vm.SetViewModeCommand.Execute(LibraryViewMode.DetailsTable);
         Assert.Equal(2, vm.IssueList.Rows.Count);
     }
 
@@ -1543,11 +1564,12 @@ public class LibraryScreenViewModelTests : IDisposable
     {
         var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { }, goToNewIssueProperties: (_, _, _) => { });
 
-        vm.SetViewModeCommand.Execute(LibraryViewMode.Tiles);
+        vm.SelectTilesGridCommand.Execute(null);
         vm.GridDensity = 0.8;
 
         var settings = ReadAppSettings();
-        Assert.Equal(LibraryViewMode.Tiles, settings.LibraryViewMode);
+        Assert.Equal(LibraryViewMode.PosterGrid, settings.LibraryViewMode);
+        Assert.Equal(LibraryGridCoverFit.Tiles, settings.LibraryGridCoverFit);
         Assert.Equal(0.8, settings.LibraryGridDensity);
     }
 
@@ -1624,6 +1646,54 @@ public class LibraryScreenViewModelTests : IDisposable
         Assert.True(settings.LibraryShowPublisherBadge);
         Assert.True(settings.LibraryShowLanguageBadge);
         Assert.True(settings.LibraryUseLanguageIcon);
+    }
+
+    /// <summary>docs/superpowers/specs/2026-09-13-preferences-cosmetic-toggles-design.md - same
+    /// load-reflects/write-back contract as <see cref="Construct_ReflectsNonDefaultAppSettingsImmediately"/>/
+    /// <see cref="OverlayBadgeToggles_Changed_PersistToAppSettings"/>, plus the
+    /// <see cref="CosmeticThumbnailSettings"/> static push these 4 toggles additionally drive.</summary>
+    [Fact]
+    public void CosmeticThumbnailToggles_Construct_ReflectsAppSettings()
+    {
+        SeedAppSettings(settings =>
+        {
+            settings.FadeInThumbnails = false;
+            settings.DogEarThumbnails = false;
+            settings.ShowToolTips = true;
+            settings.NumericRatingThumbnails = false;
+        });
+
+        var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { }, goToNewIssueProperties: (_, _, _) => { });
+
+        Assert.False(vm.FadeInThumbnails);
+        Assert.False(vm.DogEarThumbnails);
+        Assert.True(vm.ShowToolTips);
+        Assert.False(vm.NumericRatingThumbnails);
+        Assert.False(CosmeticThumbnailSettings.FadeInThumbnails);
+        Assert.False(CosmeticThumbnailSettings.DogEarThumbnails);
+        Assert.True(CosmeticThumbnailSettings.ShowToolTips);
+        Assert.False(CosmeticThumbnailSettings.NumericRatingThumbnails);
+    }
+
+    [Fact]
+    public void CosmeticThumbnailToggles_Changed_PersistToAppSettings_AndPushToStaticCache()
+    {
+        var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { }, goToNewIssueProperties: (_, _, _) => { });
+
+        vm.FadeInThumbnails = false;
+        vm.DogEarThumbnails = false;
+        vm.ShowToolTips = true;
+        vm.NumericRatingThumbnails = false;
+
+        var settings = ReadAppSettings();
+        Assert.False(settings.FadeInThumbnails);
+        Assert.False(settings.DogEarThumbnails);
+        Assert.True(settings.ShowToolTips);
+        Assert.False(settings.NumericRatingThumbnails);
+        Assert.False(CosmeticThumbnailSettings.FadeInThumbnails);
+        Assert.False(CosmeticThumbnailSettings.DogEarThumbnails);
+        Assert.True(CosmeticThumbnailSettings.ShowToolTips);
+        Assert.False(CosmeticThumbnailSettings.NumericRatingThumbnails);
     }
 
     [Fact]

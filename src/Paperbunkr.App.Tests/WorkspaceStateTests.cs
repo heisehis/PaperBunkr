@@ -18,7 +18,7 @@ public class WorkspaceStateTests
             IssueListSortField: IssueListSortField.Opened,
             IssueListSortDirection: SortDirection.Ascending,
             IssueListGroupField: IssueListGroupField.Series,
-            ViewMode: LibraryViewMode.Details,
+            ViewMode: LibraryViewMode.DetailsTable,
             GridDensity: 1.35,
             ShowTileTitles: false,
             ShowUnreadBadge: false,
@@ -33,7 +33,8 @@ public class WorkspaceStateTests
             FilterUnreadOnly: true,
             FilterMissingIssues: true,
             FilterTrackedOnly: true,
-            DetailsColumns: "Title,Series,Number");
+            DetailsColumns: "Title,Series,Number",
+            GridCoverFit: LibraryGridCoverFit.Panorama);
 
         var restored = WorkspaceStateJson.DeserializeLibrary(WorkspaceStateJson.Serialize(original));
 
@@ -59,9 +60,10 @@ public class WorkspaceStateTests
     public void MissingKey_FallsBackToAppDefault_ForThatFieldOnly()
     {
         // Only ViewMode present - every other field must land on its default.
-        var state = WorkspaceStateJson.DeserializeLibrary("{\"ViewMode\":\"Tiles\"}");
+        var state = WorkspaceStateJson.DeserializeLibrary("{\"ViewMode\":\"DetailsTable\"}");
 
-        Assert.Equal(LibraryViewMode.Tiles, state.ViewMode);
+        Assert.Equal(LibraryViewMode.DetailsTable, state.ViewMode);
+        Assert.Equal(LibraryGridCoverFit.Poster, state.GridCoverFit);
         Assert.Equal(LibraryContentGranularity.Issue, state.Granularity);
         Assert.Equal(IssueListSortField.Added, state.IssueListSortField);
         Assert.Equal(SearchMode.All, state.SearchMode);

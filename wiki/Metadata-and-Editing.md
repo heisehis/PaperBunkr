@@ -69,6 +69,5 @@ provider-sourced synopsis.
 ## Getting edits back into your files
 
 **Preferences → Libraries → Sync Metadata** re-reads files into the database. Writing the
-database back out to `ComicInfo.xml` (**Preferences → Advanced → Comic File Metadata**) is
-supported for `.cbz` libraries only — `.cbr`/`.cb7`/`.cbt`/`.pdf` aren't supported yet. Keep
-external backups if your `ComicInfo.xml` files matter to you.
+database back out to `ComicInfo.xml` is limited in the current alpha — keep external
+backups if your `ComicInfo.xml` files matter to you.

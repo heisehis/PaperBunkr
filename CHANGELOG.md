@@ -3,6 +3,42 @@
 All notable changes to Paperbunkr are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.6.0-beta] - 2026-09-15
+
+### Added
+
+- **Library screen master-detail redesign.** Library moves from a single grid+sidebar layout to a
+  3-pane view — sidebar, list, and a live preview panel that shows details for the selected series
+  or issue without leaving the list. View modes consolidate from 5 down to 3 (Grid, List,
+  Details/Table); Grid absorbs the old Poster/Panorama split as a cover-fit toggle, List absorbs
+  Tiles as a density toggle. Tile overlays (publisher/language chips, unread dot, rating badge,
+  dog-ear peek, selection checkbox) now follow a single priority-ordered corner system instead of
+  stacking ad-hoc, and the toolbar/tiles spend more of the app's existing skin palette instead of a
+  hardcoded color.
+- **Cosmetic thumbnail toggles** (Preferences → Library → View & Sort): fade-in on genuine cover
+  decode, a hover/selected dog-ear peek at a comic's real second page, hover tooltips with a small
+  thumbnail plus title/writer/penciller/summary/file info, and a numeric rating badge. Preferences →
+  Advanced gained "Exported reading lists contain filenames" for `.cbl` export.
+- **Open a comic/manga file on launch.** Double-clicking a supported file (or an OS file-association
+  launch) now opens it directly — importing it into the library first if it isn't there already —
+  instead of just restoring the last screen.
+- **Plugin context menu.** Library and Detail right-click menus now show a "Plugins" submenu listing
+  every enabled Library-hook plugin command, replacing a single hardcoded "Find Duplicates" entry.
+- **Native plugin API:** `BeginModalBatch` keeps a persistent progress header mounted across a
+  sequence of modal calls (e.g. a scrape batch), instead of the dialog shell tearing down between
+  each item.
+
+### Fixed
+
+- Book reader could fail to open with an "Access is denied" error on a per-machine (Program Files)
+  install — the embedded browser's data folder now lives under the user's own AppData instead of
+  next to the installed EXE.
+- A downloaded update installer could vanish before "Restart" was clicked — it's now saved to
+  `%AppData%\Paperbunkr\updates` instead of the OS's temp folder, which can be swept at any time.
+- Clicking non-interactive content inside a dialog (e.g. a decorative label) could unintentionally
+  close the whole dialog — only a genuine click on the dialog's own backdrop dismisses it now.
+- Picking a suggestion from a search/autocomplete field could occasionally crash the app.
+
 ## [0.5.0-beta] - 2026-09-14
 
 ### Added

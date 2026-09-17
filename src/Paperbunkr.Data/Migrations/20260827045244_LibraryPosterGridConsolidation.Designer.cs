@@ -772,7 +772,10 @@ namespace Paperbunkr.Data.Migrations
                     b.Property<string>("Inker")
                         .HasColumnType("TEXT");
 
-                    b.Property<bool>("IsFinalIssue")
+                    // Patched to bool? (was bool/NOT NULL): 20260912051746_LibrarySortGroupAxesAndFinalIssueTriState
+                    // widened this column to nullable with a deliberate no-op Down(); a stale NOT NULL
+                    // snapshot here makes migration-rollback tests insert real NULLs and throw SqliteException 19.
+                    b.Property<bool?>("IsFinalIssue")
                         .HasColumnType("INTEGER");
 
                     b.Property<bool>("IsPlaceholder")

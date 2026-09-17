@@ -22,6 +22,44 @@ this file itself already did once (see the note below).
 
 ## What's left (as of 2026-08-12, HEAD `85fb681`)
 
+> **Manual session note (2026-09-17, IsFinalIssue migration-rollback bug actually fixed):**
+> Closes the task spawned 2026-09-12 (`Fix migration rollback: IsFinalIssue NOT NULL bug`, noted
+> further down this file). P0–P7 unchanged; this is `Paperbunkr.Data.Tests` infrastructure, not a
+> feature. Unrelated to the theme-system work in progress on this branch — no theme/skin files
+> touched.
+> `Paperbunkr.Data.Tests` had 7 failing migration tests (`AddFb2MobiBookFormat`, `AddWorkspaces`,
+> `AddCoverAspectRatio`, `AddBookReaderErgonomicsAndAnnotations`, `AddLastContentTypeSweepUtc`,
+> `AddBooksBrowseState`, `LibraryDetailsColumns`), all `SqliteException 19: NOT NULL constraint
+> failed: ef_temp_Issues.IsFinalIssue` — the same root cause as the 2026-09-12 note below, but this
+> time across **7 distinct stale Designer.cs snapshots**, not just one. **Correction:** the fix that
+> session's note describes was never actually committed (`git log --all` on
+> `UnifyLibrarySortGroupFields.Designer.cs` showed only its original scaffold commit) — it must have
+> been made in an uncommitted worktree and lost. Patched `IsFinalIssue` from `bool` to `bool?` (with
+> an inline comment) in all 7 target snapshots, found by reading each failing test's own
+> `PriorMigration` constant rather than assuming.
+> That fix alone took 7 failures down to 6 different ones — `SqliteException 1: no such column:
+> "LibraryGroupField"`, the exact failure mode this file's own 2026-09-06 note below already
+> diagnosed and (thought it had) closed. Root cause this time: `AddCosmeticThumbnailToggles`
+> (2026-09-13, see that session's note above) and `AddConfirmBeforeClose` (2026-09-14) both used a
+> real per-column `DropColumn` on `Down()`, which — like every prior instance of this bug — silently
+> drops the orphaned `LibraryGroupField`/`LibrarySortField`/`LibrarySortDirection` columns via
+> SQLite's full-table-rebuild, breaking any earlier `Down()` step in the same rollback whose target
+> snapshot predates `UnifyLibrarySortGroupFields`. The 2026-09-13 note's claim that real `DropColumn`
+> was "the current convention" was the mistake — `AddNavRailHoverExpandEnabled`'s no-op is. Fixed by
+> making both migrations' `Down()` no-ops (matching that established convention) and updating
+> `AddCosmeticThumbnailTogglesMigrationTests` (the only test exercising it) to assert the 5 columns
+> persist as orphans instead of asserting they're dropped. `AddConfirmBeforeClose` has no dedicated
+> migration test.
+> **Verified:** full `Paperbunkr.Data.Tests` suite 951/951 green (was 944/951, 7 failing, before this
+> session). One unrelated flake (`ReworkBookPositionAnchorMigrationTests`, `FOREIGN KEY constraint
+> failed`) surfaced once under full-suite parallel execution but passed cleanly in isolation —
+> pre-existing order-dependent flake, not caused by this fix. **Standing implication recorded in
+> memory:** any future migration doing a real (non-no-op) `DropColumn`/`AlterColumn` on `AppSettings`
+> or `Issues` reintroduces one of these two bug classes for whatever migration test happens to roll
+> back across it once HEAD moves further ahead — the no-op-`Down()` convention on those two tables
+> is load-bearing, not stylistic. Uncommitted at session end (10 files: 7 Designer.cs patches, 2
+> migration `Down()` fixes, 1 test update) — worktree `pensive-einstein-c920fb`.
+
 > **Manual session note (2026-09-13, cosmetic Preferences micro-toggles shipped):** Beta-backlog
 > work, P0–P7 unchanged. Design + plan: `docs/superpowers/specs/2026-09-13-preferences-cosmetic-
 > toggles-{design,plan}.md`. Closes the last item in "Preferences: Behavior / CE-parity toggle

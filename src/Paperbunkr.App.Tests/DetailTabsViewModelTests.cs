@@ -1282,14 +1282,19 @@ public class DetailTabsViewModelTests : IDisposable
         var link = Assert.Single(vm.ExternalLinks);
         Assert.Equal("30013", link.ExternalId);
 
-        // Asserted before IsSearchingMetadata below - that reset is deliberately deferred via
-        // Dispatcher.UIThread.Post (see LinkMetadataAsync's own comment), which a headless test
-        // never pumps, so it's a known pre-existing failure unrelated to this activity-log check.
         using (var context = new PaperbunkrDbContext(_dbOptions))
         {
             var activity = Assert.Single(context.SeriesActivityEvents);
             Assert.Equal(SeriesActivityEventKind.MetadataLinked, activity.Kind);
             Assert.Equal(_seriesId, activity.SeriesId);
+        }
+
+        // IsSearchingMetadata's reset is deliberately deferred via Dispatcher.UIThread.Post (see
+        // LinkMetadataAsync's own comment) - pump it before asserting, same idiom as
+        // ReaderScreenViewModelTests.LoadIssue_GeneratesThumbnailsForEveryPage_NoneLeftNull.
+        if (Avalonia.Threading.Dispatcher.UIThread.CheckAccess())
+        {
+            Avalonia.Threading.Dispatcher.UIThread.RunJobs();
         }
 
         Assert.False(vm.IsSearchingMetadata);

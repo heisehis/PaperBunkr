@@ -21,9 +21,14 @@ namespace Paperbunkr.Data.Migrations
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropColumn(
-                name: "ConfirmBeforeClose",
-                table: "AppSettings");
+            // Changed from a real DropColumn to a no-op 2026-09-17: see
+            // AddCosmeticThumbnailToggles's Down() for the full explanation - a DropColumn on
+            // AppSettings triggers SQLite's full-table-rebuild path, which silently drops the
+            // LibraryGroupField/LibrarySortField/LibrarySortDirection orphans (unmapped since
+            // UnifyLibrarySortGroupFields, still physically present) and breaks any earlier Down()
+            // step whose rebuild target is a pre-Unify snapshot. Left in place as an orphan on
+            // down-migrate instead, the same established pattern as AddNavRailHoverExpandEnabled/
+            // AddMetadataWriteBackSettings/etc.
         }
     }
 }

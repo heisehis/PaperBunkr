@@ -47,6 +47,26 @@ public static class VirtualizingWrapGridMath
         return new RealizedRange(firstIndex, lastIndex);
     }
 
+    /// <summary>
+    /// How many extra rows to keep realized on each side of the viewport (docs/superpowers/specs/
+    /// 2026-09-19-library-scroll-smoothness-design.md §5): at least <see cref="MinBufferRows"/>, and half a screen
+    /// of rows on a tall viewport, so a fast fling finds containers already realized instead of realizing a whole
+    /// screen inside one frame.
+    /// </summary>
+    public static int ComputeBufferRows(double viewportHeight, double itemHeight, double lineSpacing)
+    {
+        double rowStride = itemHeight + lineSpacing;
+        if (rowStride <= 0 || viewportHeight <= 0 || double.IsInfinity(viewportHeight))
+        {
+            return MinBufferRows;
+        }
+
+        int visibleRows = (int)Math.Ceiling(viewportHeight / rowStride);
+        return Math.Max(MinBufferRows, (int)Math.Ceiling(visibleRows * 0.5));
+    }
+
+    public const int MinBufferRows = 2;
+
     public static (int Row, int Column) IndexToRowColumn(int index, int itemsPerRow) =>
         (index / itemsPerRow, index % itemsPerRow);
 }

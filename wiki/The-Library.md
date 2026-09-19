@@ -33,6 +33,12 @@ text matches against:
 | **File** | file name / path on disk |
 | **Catalog** | publisher, imprint, and catalog-style fields |
 
+The search runs a moment (about 150 ms) after you stop typing, so a large library
+stays responsive while you type, and clearing the box brings everything back instantly. Your search
+text is remembered across restarts. When the Library shows **per-issue tiles**, a field search such
+as `writer:miller` lists only the comics that match; searching a series name still lists all of that
+series' comics.
+
 ### Sort
 
 Choose a **sort field** — *Name, Date Added, Last Read, Publisher, Issue Count,
@@ -53,6 +59,17 @@ Date Added**, or **None**.
 ### Filters
 
 Toggle quick filters such as **Unread only**, **Missing issues**, and **Tracked series**.
+
+## Scrolling
+
+Scrolling through thousands of covers stays smooth: covers are cached at the size they're shown and
+loaded a couple of screens ahead of where you are, so they no longer pop in as you scroll.
+
+The toolbar's **View & Sort** popup has a **Smooth scrolling** switch, in the same group as the
+other display toggles (on by default). With it on, each
+mouse-wheel notch glides to its place instead of jumping. It only affects a mouse wheel — a
+touchpad, the scrollbar, keyboard and touch scroll exactly as before — and it stays off if Windows
+is set to reduce motion. Turn it off if you prefer the instant, stepped feel.
 
 ## Saved list layouts
 

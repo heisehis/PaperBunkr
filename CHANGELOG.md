@@ -3,6 +3,71 @@
 All notable changes to Paperbunkr are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [0.6.4-beta] - 2026-09-19
+
+### Added
+
+- **Themes** (Preferences → Appearance). Skins are now Themes, each with a Light or Dark variant.
+  New built-in themes: Daylight, Overcast, Matrix, Maximum Contrast, and a colour-blind-safe theme.
+  Theme options: **True black** for OLED screens (suspended automatically while you read),
+  **Auto switch** (follow the system Light/Dark setting, or switch on a schedule you set),
+  an **accent color override**, a **font family** picker, and a **Matrix rain** toggle for the
+  Matrix theme's falling-glyph background (also throttled on battery and under Reduced Motion).
+- **Smooth scrolling** toggle in the Library view popup (default on): mouse-wheel notches ease to
+  their target instead of jumping. Touchpads, the scrollbar, keyboard and touch are unaffected, and
+  it stays off when Windows asks for reduced motion.
+- **Suggested Story Events and Continuities.** Paperbunkr now proposes Story Events (issues that
+  share a Story Arc, optionally checked against ComicVine/Metron) and shared-universe Continuities
+  (matched through Wikidata and your series' recurring characters). Nothing is created until you
+  click Accept, and anything you Dismiss stays dismissed. Suggestions refresh on a schedule, and
+  there is a **Check Wikidata** button in the Story Events sidebar, a per-issue look-up button in
+  Issue Properties, and **Look up on Wikidata** on a series' Continuities tab.
+- **Tracker improvements.** MangaDex joins the supported trackers, each tracker link now shows
+  its own score and finish date, and Preferences → Connections → **Tracking behavior** has five
+  toggles for automatic progress updates (progress after reading, on mark-as-read, auto-pull from
+  trackers, and more). Every automatic update reports through the Activity Center. Setup steps for
+  all eight trackers are on the wiki's Trackers page.
+- **External metadata does more.** A linked external record can now bring in its related titles,
+  tags and a series rating, not only the basic fields.
+- **Reader options** (Preferences → Reader): **Auto-hide toolbar when idle**, and a **Chrome reveal
+  style** that chooses between each corner control popping in as you hover over it and the whole
+  toolbar appearing on any mouse movement. **Save Page As** in the page right-click menu saves the
+  current page as PNG or JPEG, and **Change Cover** on a series can pick a cover from another
+  comic in the series or from a reading list, not only from a file.
+- **Book file associations** now include EPUB, FB2 and MOBI in the installer and in
+  Preferences → Advanced → File Association.
+
+### Changed
+
+- **Library search and scrolling were rebuilt for large libraries** (see Fixed). Searching by a
+  field in the per-comic grid (e.g. `writer:miller`) now lists only the comics that match, as
+  ComicRack does, instead of every comic in any series that had one match; searching a series name
+  still lists all of that series' comics.
+- Search and filter changes no longer replay the staggered card fade-in (it still plays on opening
+  the library, changing view mode, and changing sort/group), and a new search result set starts
+  scrolled to the top.
+- Hover and focus rings now also appear on Panorama covers and on List, Tiles and Details rows.
+  Poster-grid publisher badges show the logo only.
+
+### Fixed
+
+- **Library search no longer lags while you type.** Results now update ~150 ms after you pause
+  (instantly when you clear the box), computed off the UI thread from a cached snapshot instead of
+  rebuilding every card and row on every keystroke, and swapped in with a single refresh. Typing in
+  a 3,000-comic library dropped from roughly 0.7–1.9 s per keystroke to a few milliseconds of
+  UI-thread work. Search text is still remembered across restarts.
+- **Library scrolling is smoother.** The staggered card fade-in now plays only when a screen opens
+  or its view/sort/group changes, not on every scroll. Poster and Tiles cards build their optional
+  parts (dog-ear peek, selection box, plugin overlay, rating badge) only when needed, the grid stops
+  re-measuring on every scroll step, and covers come from a display-size cache (about 300 MB budget)
+  with a newest-first decode queue that prefetches about two screens ahead, so covers no longer pop
+  in while you scroll.
+- Opening a comic or book by double-clicking it (or through a file association) could hang the app
+  on launch.
+- Book reader drawers (contents, bookmarks, highlights, search, font and theme) showed only their
+  header, with the rest hidden behind the page.
+- Panorama grid covers no longer leave gaps: the minimum card width now fits a standard cover.
+
 ## [0.6.0-beta] - 2026-09-15
 
 ### Added

@@ -43,6 +43,14 @@ public sealed class AsyncPluginOverlayImage
     /// <summary>Set once from <c>App.axaml.cs</c> after <see cref="PluginHostService.Initialize"/> - this is a static attached-property helper class, not a ViewModel, so there's no natural <c>AttachHost</c> point (same reasoning as <see cref="Services.LibraryFolderScanner.PluginHost"/>).</summary>
     public static PluginHostService? PluginHost { get; set; }
 
+    /// <summary>
+    /// True when at least one enabled plugin implements the DrawThumbnailOverlay hook. Read once per data load by the
+    /// Library view-model so a poster card only builds its overlay <see cref="Image"/> when there is something to
+    /// draw (docs/superpowers/specs/2026-09-19-library-scroll-smoothness-design.md §4).
+    /// </summary>
+    public static bool HasOverlayCommands =>
+        PluginHost is { } host && host.Engine.GetCommands(PluginHooks.DrawThumbnailOverlay).Any();
+
     public static readonly AttachedProperty<int?> SourceIdProperty =
         AvaloniaProperty.RegisterAttached<AsyncPluginOverlayImage, Image, int?>("SourceId");
 

@@ -29,7 +29,7 @@ namespace Paperbunkr.App.Models;
 /// wipe the visible selection.
 /// </para>
 /// </summary>
-public sealed partial class IssueListRow : ObservableObject, ISelectableCard, IVariableWidthTile
+public sealed partial class IssueListRow : ObservableObject, ISelectableCard, IVariableWidthTile, ICoverKeyProvider
 {
     /// <summary>Panorama's variable-width virtualizing panel packs rows against this - the same
     /// value the tile's DataTemplate binds its own <c>Width</c> to.</summary>

@@ -1,32 +1,67 @@
+using System.Diagnostics;
 using Paperbunkr.App.Controls;
 
 namespace Paperbunkr.App.Tests;
 
 /// <summary>
-/// Exercises <see cref="EntranceAnimation.ComputeDelayMs"/> - the pure delay math extracted from
-/// <c>Prepare</c> (docs/superpowers/specs/2026-09-12-entrance-animation-v2-design.md §4) so the
-/// stagger-tail cap is unit-testable without a real <c>DispatcherTimer</c>/container.
+/// The one-shot entrance window (docs/superpowers/specs/2026-09-19-library-scroll-smoothness-design.md §2):
+/// armed by a genuine trigger, opened by the first container preparation after it, and closed 500 ms
+/// later - so containers a panel recycles while scrolling are never animated.
 /// </summary>
 public class EntranceAnimationTests
 {
+    private static long Ms(double milliseconds) => (long)(milliseconds * Stopwatch.Frequency / 1000.0);
+
     [Fact]
-    public void ComputeDelayMs_ClampsAboveMaxStaggerIndex()
+    public void NeverArmed_IsClosed()
     {
-        Assert.Equal(EntranceAnimation.ComputeDelayMs(20, reducedMotion: false), EntranceAnimation.ComputeDelayMs(25, reducedMotion: false));
+        var window = new EntranceAnimation.EntranceWindow();
+
+        Assert.False(window.IsOpen(Ms(0)));
+        Assert.False(window.IsOpen(Ms(10_000)));
     }
 
     [Fact]
-    public void ComputeDelayMs_BelowCap_ScalesLinearly()
+    public void Armed_OpensAtTheFirstQuery_AndStaysOpenForTheDuration()
     {
-        Assert.True(EntranceAnimation.ComputeDelayMs(5, reducedMotion: false) < EntranceAnimation.ComputeDelayMs(10, reducedMotion: false));
-        Assert.NotEqual(EntranceAnimation.ComputeDelayMs(5, reducedMotion: false), EntranceAnimation.ComputeDelayMs(20, reducedMotion: false));
+        var window = new EntranceAnimation.EntranceWindow();
+        window.Arm();
+
+        Assert.True(window.IsOpen(Ms(1_000)));    // first preparation opens it
+        Assert.True(window.IsOpen(Ms(1_499)));    // still inside 500 ms
+        Assert.False(window.IsOpen(Ms(1_501)));   // a container recycled by scrolling afterwards: closed
+        Assert.False(window.IsOpen(Ms(60_000)));
     }
 
     [Fact]
-    public void ComputeDelayMs_ReducedMotion_AlwaysZero()
+    public void ASlowFirstLayout_CannotExpireTheWindow()
     {
-        Assert.Equal(0, EntranceAnimation.ComputeDelayMs(0, reducedMotion: true));
-        Assert.Equal(0, EntranceAnimation.ComputeDelayMs(5, reducedMotion: true));
-        Assert.Equal(0, EntranceAnimation.ComputeDelayMs(25, reducedMotion: true));
+        var window = new EntranceAnimation.EntranceWindow();
+        window.Arm();
+
+        // The window is measured from the first preparation, not from the trigger.
+        Assert.True(window.IsOpen(Ms(30_000)));
+        Assert.True(window.IsOpen(Ms(30_400)));
+    }
+
+    [Fact]
+    public void ArmingAgain_ReopensAtTheNextQuery()
+    {
+        var window = new EntranceAnimation.EntranceWindow();
+        window.Arm();
+        Assert.True(window.IsOpen(Ms(0)));
+        Assert.False(window.IsOpen(Ms(2_000)));
+
+        window.Arm();
+
+        Assert.True(window.IsOpen(Ms(5_000)));
+        Assert.True(window.IsOpen(Ms(5_300)));
+        Assert.False(window.IsOpen(Ms(5_600)));
+    }
+
+    [Fact]
+    public void Duration_IsHalfASecond()
+    {
+        Assert.Equal(TimeSpan.FromMilliseconds(500), EntranceAnimation.EntranceWindow.Duration);
     }
 }

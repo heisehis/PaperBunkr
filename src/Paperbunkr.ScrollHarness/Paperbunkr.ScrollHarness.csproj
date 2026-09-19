@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Dev-only console harness for docs/superpowers/specs/2026-09-19-library-scroll-smoothness-design.md
+       (Step 0). NOT part of the solution's shipped output: it is not in Paperbunkr.sln, not built by
+       CI or the installer, and never runs in the normal test suite. Build and run it by hand:
+         dotnet run with the project path src/Paperbunkr.ScrollHarness (then optional arguments: issues N, series N, label NAME,
+         each written as a double-dash flag)
+       It has its own main-thread Avalonia headless bootstrap (real Skia raster, no window on screen)
+       because the xunit headless bootstrap cannot render reliably here: dispatcher/compositor
+       thread ownership differs from the test thread, which is why MatrixRainOverlayRenderTests and
+       several RunJobs() tests already fail on HEAD. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <IsPublishable>false</IsPublishable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia.Headless" Version="12.1.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Paperbunkr.App\Paperbunkr.App.csproj" />
+  </ItemGroup>
+
+</Project>

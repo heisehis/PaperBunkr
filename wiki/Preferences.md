@@ -5,14 +5,35 @@ Seven tabs.
 
 ## Appearance
 
-- **Skins** — pick the active skin. `windows_11` is the reference skin; `default` is the
-  built-in look.
-- **Install Skin** — add a `.crpck` skin package (a ZIP of `theme.json` + icons). It's
-  extracted on install. Skins change **colors, fonts, corner radius, spacing, and icons** —
-  not window layout or control shapes.
-- **Font** — override the app's UI font family.
-- **Motion** — animation intensity for navigation transitions.
-- **Developer / Future** — diagnostic toggles and placeholders.
+**Themes**
+
+- Pick the active theme from the list. Each theme is either **Light** or **Dark** and sets the
+  colors, corner radius, spacing and icons. Built in: the default look, `windows_11`, **Daylight**,
+  **Overcast**, **Matrix**, **Maximum Contrast** and a **colour-blind-safe** theme.
+- **Install…** adds a `.crpck` theme package (a ZIP of `theme.json` + icons). It's extracted on
+  install. Themes change **colors, fonts, corner radius, spacing, and icons** — not window layout
+  or control shapes.
+
+**Theme options**
+
+- **True black** — forces pure black backgrounds on dark themes; saves battery on OLED screens.
+  It is suspended automatically while you're reading.
+- **Matrix rain** — the falling-glyph background of the Matrix theme. Turn it off for a static
+  Matrix look; this also saves GPU and battery.
+- **Auto switch** — follow the system Light/Dark preference, or switch on a schedule with
+  **Switch to dark at** and **Switch to light at** (local hour, 0–23).
+- **Auto-enable true black at** — a local hour (0–23) at which true black turns on by itself;
+  leave blank to toggle it manually.
+- **Accent color override** — a hex color such as `#FF8800`; blank uses the theme's own accent.
+
+**Font**
+
+- **Font family** — override the app's UI font, with a live preview line.
+
+**Interface**
+
+- **Reduce motion** — shortens UI transitions to effectively instant.
+- **Expand nav rail on hover** — when off, the rail only expands while pinned open.
 
 ## General
 
@@ -50,6 +71,10 @@ Seven tabs.
 ## Reader
 
 - **Right to Left** — *Reverse left/right page-turn direction for right-to-left books*.
+- **Auto-hide toolbar when idle** — fades the floating toolbar after a few seconds without pointer
+  movement. Off keeps it always visible.
+- **Chrome reveal style** — *PerCluster*: each corner control pops in only when you hover it.
+  *Ambient*: any pointer movement reveals the whole toolbar at once.
 - **Display** — default fit mode, double-page spread default, **auto-rotate landscape
   pages**, **high quality page display** (smoother scaling, more CPU), **page transition**
   style, whether jumping animates.
@@ -69,7 +94,7 @@ Seven tabs.
   Also **Prefer native OpenGL over ANGLE** (only if the GPU renderer misbehaves — ANGLE /
   Direct3D is the better Windows default). *Changes take effect after restart.*
 - **File Association** — register PaperBunkr as the handler for `.cbz` / `.cbr` / `.pdf` /
-  `.epub` (tick each type).
+  `.epub` / `.fb2` / `.mobi` (tick each type).
 - **Backup Manager** — **Backup Location**, **Backups to Keep**, **Backup Now**. Backups
   are copies of `paperbunkr.db`; see [Troubleshooting](Troubleshooting) for restoring.
 - **Reading List Sources** — configure the online arc-lookup sources for

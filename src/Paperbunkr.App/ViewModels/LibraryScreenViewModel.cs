@@ -15,6 +15,7 @@ using Paperbunkr.App.ContextMenus;
 using Paperbunkr.App.Models;
 using Paperbunkr.App.Plugins;
 using Paperbunkr.App.Services;
+using Paperbunkr.App.Services.LibrarySearch;
 using Paperbunkr.Data;
 using Paperbunkr.Data.Collections;
 using Paperbunkr.Data.Entities;
@@ -108,12 +109,33 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
     private List<Series> _allSeries = new();
     private List<Collection> _allCollections = new();
 
+    /// <summary>How view rebuilds are scheduled. Inline (synchronous, no debounce) by default so
+    /// construction, nav-in loads and every existing test behave as before; <c>MainViewModel</c>
+    /// installs <see cref="BackgroundLibraryViewScheduler"/> right after construction (docs/superpowers/
+    /// specs/2026-09-19-library-search-perf-design.md §1).</summary>
+    internal ILibraryViewScheduler ViewScheduler { get; set; } = InlineLibraryViewScheduler.Instance;
+
+    /// <summary>Cached per-series cards, per-issue rows and search index for the current
+    /// <see cref="_allSeries"/> snapshot. Null until built (lazily, by the first view computation after a
+    /// load) and after an aspect-ratio update; replaced - never mutated - on an in-place series change.</summary>
+    private LibraryProjection? _projection;
+
+    /// <summary>Bumped by every <see cref="LoadFromDatabase"/>; a projection built for an older load is never adopted.</summary>
+    private long _dataVersion;
+
+    /// <summary>Raised after a view swap that should start at the top (a new search result set). The view
+    /// scrolls its active scroll host; sort/group/filter swaps keep the scroll offset (design doc §5).</summary>
+    public event Action? ScrollToTopRequested;
+
+    private static readonly TimeSpan SearchTextDebounce = TimeSpan.FromMilliseconds(150);
+    private static readonly TimeSpan SearchSettingsSaveDebounce = TimeSpan.FromMilliseconds(500);
+
     /// <summary>Distinct value pool for search-suggestion "Value matches" (docs/superpowers/specs/
     /// 2026-08-31-library-search-suggestions-design.md), keyed by <see cref="SearchMode"/>. Rebuilt
     /// only in <see cref="LoadFromDatabase"/> alongside <see cref="_allSeries"/> - never per
     /// keystroke, same constraint as everything else fed by that snapshot. No <see cref="SearchMode.File"/>
     /// entry - Value suggestions are skipped entirely for that mode (no sensible file-path autocomplete).</summary>
-    private Dictionary<SearchMode, List<string>> _suggestionIndex = new();
+    private Dictionary<SearchMode, SuggestionCandidateList> _suggestionIndex = new();
 
     /// <summary>In-memory mirror of <see cref="Paperbunkr.Data.Entities.AppSettings.LibraryRecentSearches"/>,
     /// most-recent-first. Loaded once in <see cref="LoadLibrarySettings"/>, mutated (and persisted) only
@@ -202,17 +224,21 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         _promptForName = promptForName ?? ((_, _) => { });
         _workspaceService = workspaceService ?? new WorkspaceService();
         Workspaces = new ObservableCollection<WorkspaceRow>();
-        Covers = new ObservableCollection<SeriesCardSample>();
-        Groups = new ObservableCollection<SeriesCardGroup>();
-        FlatCovers = new ObservableCollection<object>();
-        ContentTypes = new ObservableCollection<ContentTypeSummary>();
-        Collections = new ObservableCollection<CollectionSummary>();
-        CollectionTiles = new ObservableCollection<LibraryTile>();
-        ExistingSeriesNames = new ObservableCollection<string>();
+        Covers = new BulkObservableCollection<SeriesCardSample>();
+        Groups = new BulkObservableCollection<SeriesCardGroup>();
+        FlatCovers = new BulkObservableCollection<object>();
+        ContentTypes = new BulkObservableCollection<ContentTypeSummary>();
+        Collections = new BulkObservableCollection<CollectionSummary>();
+        CollectionTiles = new BulkObservableCollection<LibraryTile>();
+        ExistingSeriesNames = new BulkObservableCollection<string>();
         ReadingLists = new ObservableCollection<ReadingListOption>();
         DetailsColumns = new ObservableCollection<DetailsColumn>();
-        SearchSuggestions = new ObservableCollection<SearchSuggestion>();
+        SearchSuggestions = new BulkObservableCollection<SearchSuggestion>();
         IssueList = new IssueListScreenViewModel(goReaderForIssue, isSelected: Selection.IsSelected);
+        // Library computes rows on a worker from its cached projection and publishes them through
+        // IssueList.ApplyPrecomputed - a second synchronous render per sort/group change would only
+        // repeat that work on the UI thread (docs/superpowers/specs/2026-09-19-library-search-perf-design.md).
+        IssueList.AutoRender = false;
         // Two independent axes now (docs/superpowers/specs/2026-08-18-library-book-centric-
         // redesign-design.md Slice 3, then the same-session follow-up that brought series-cards
         // back as a real option instead of a full replacement): LibraryViewMode is the layout
@@ -268,7 +294,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
                 if (_constructed)
                 {
                     SaveLibrarySettings();
-                    RebuildView();
+                    RebuildView(ViewTrigger.SortGroup);
                 }
             }
         };
@@ -307,7 +333,10 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
             _panoramaReflowTimer!.Stop();
             if (IsPanoramaGrid)
             {
-                RebuildView();
+                // Cached rows/cards carry PanoramaWidth from the ratio store as of when they were
+                // built - drop the projection so the re-pack sees the newly learned ratios.
+                _projection = null;
+                RebuildView(ViewTrigger.Panorama);
             }
         };
         CoverAspectRatioStore.RatiosLearned += (_, _) =>
@@ -458,12 +487,14 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         _detailsColumnsSetting = settings.LibraryDetailsColumns;
         _activeWorkspaceId = settings.LibraryActiveWorkspaceId;
         _fadeInThumbnails = settings.FadeInThumbnails;
+        _smoothScrolling = settings.SmoothScrolling;
         _dogEarThumbnails = settings.DogEarThumbnails;
         _showToolTips = settings.ShowToolTips;
         _numericRatingThumbnails = settings.NumericRatingThumbnails;
 #pragma warning restore MVVMTK0034
 
         CosmeticThumbnailSettings.RefreshFrom(settings);
+        SmoothScrollSettings.Apply(settings);
 
         _recentSearches = DeserializeRecentSearches(settings.LibraryRecentSearches);
 
@@ -494,13 +525,16 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         IssueList.GroupVirtualTagId = settings.LibraryGroupVirtualTagId;
     }
 
-    /// <summary>Immediate write-back for every field <see cref="LoadLibrarySettings"/> seeds, called from each field's own change hook - no debounce, matching this ViewModel's existing no-debounce philosophy (see <see cref="SearchQuery"/>'s doc comment) and <see cref="Paperbunkr.App.ViewModels.ReaderScreenViewModel"/>'s equivalent immediate-write precedent for <c>AppSettings</c>.</summary>
-    private void SaveLibrarySettings()
+    /// <summary>
+    /// One-shot workspace model (docs/superpowers/specs/2026-09-03-library-saved-workspaces-
+    /// design.md): any governed-field change that is not itself an apply drops the toolbar label
+    /// back to the neutral "Workspace" text. Suppressed during construction-seeding and during
+    /// an apply (both go through <see cref="SaveLibrarySettings"/> via the IssueList relay). UI-thread
+    /// state only - split out so the search-text path can do this immediately while its database
+    /// write is debounced (<see cref="PersistSearchStateDebounced"/>).
+    /// </summary>
+    private void DropActiveWorkspaceLabel()
     {
-        // One-shot workspace model (docs/superpowers/specs/2026-09-03-library-saved-workspaces-
-        // design.md): any governed-field change that isn't itself an apply drops the toolbar label
-        // back to the neutral "Workspace" text. Suppressed during construction-seeding and during
-        // an apply (both go through this method via the IssueList relay).
         if (!_suppressWorkspaceTracking && _activeWorkspaceId is not null)
         {
             _activeWorkspaceId = null;
@@ -513,6 +547,35 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
                 }
             }
         }
+    }
+
+    /// <summary>
+    /// Persists just the search text and scope for a typing burst: debounced (~500 ms) and, in
+    /// production, executed off the UI thread - it used to be a full-settings <c>SaveChanges</c> on the
+    /// UI thread per keystroke. The persisted search text still survives a restart (it is written 500 ms
+    /// after the last keystroke, or at once under the inline scheduler tests use). Any other
+    /// <see cref="SaveLibrarySettings"/> call writes the current query too.
+    /// </summary>
+    private void PersistSearchStateDebounced()
+    {
+        string? query = string.IsNullOrEmpty(SearchQuery) ? null : SearchQuery;
+        var mode = SearchMode;
+        ViewScheduler.Debounce("library-search-save", SearchSettingsSaveDebounce, () => WriteSearchSettings(query, mode));
+    }
+
+    private static void WriteSearchSettings(string? query, SearchMode mode)
+    {
+        using var context = PaperbunkrDb.CreateContext();
+        var settings = context.GetOrCreateAppSettings();
+        settings.LibrarySearchQuery = query;
+        settings.LibrarySearchMode = mode;
+        context.SaveChanges();
+    }
+
+    /// <summary>Immediate write-back for every field <see cref="LoadLibrarySettings"/> seeds, called from each field's own change hook - no debounce, matching this ViewModel's existing no-debounce philosophy (see <see cref="SearchQuery"/>'s doc comment) and <see cref="Paperbunkr.App.ViewModels.ReaderScreenViewModel"/>'s equivalent immediate-write precedent for <c>AppSettings</c>.</summary>
+    private void SaveLibrarySettings()
+    {
+        DropActiveWorkspaceLabel();
 
         using var context = PaperbunkrDb.CreateContext();
         var settings = context.GetOrCreateAppSettings();
@@ -536,6 +599,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         settings.LibraryUseLanguageIcon = UseLanguageIcon;
         settings.LibraryShowContinueReadingButton = ShowContinueReadingButton;
         settings.FadeInThumbnails = FadeInThumbnails;
+        settings.SmoothScrolling = SmoothScrolling;
         settings.DogEarThumbnails = DogEarThumbnails;
         settings.ShowToolTips = ShowToolTips;
         settings.NumericRatingThumbnails = NumericRatingThumbnails;
@@ -699,7 +763,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
     }
 
     /// <summary>Typeahead source for the "Add a physical book" flyout (docs/superpowers/specs/2026-08-16-reveal-in-explorer-and-fileless-entries-design.md §2).</summary>
-    public ObservableCollection<string> ExistingSeriesNames { get; }
+    public BulkObservableCollection<string> ExistingSeriesNames { get; }
 
     /// <summary>Backs the action bar's "Add to Reading List" flyout (docs/superpowers/specs/
     /// 2026-08-24-library-multiselect-slice2-design.md §2) - refreshed on every <see cref="LoadFromDatabase"/>.</summary>
@@ -738,17 +802,17 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         Enumerable.Range('A', 26).Select(c => ((char)c).ToString()).Append("#").ToList();
 
     /// <summary>Every <see cref="ContentType"/> with at least one series, real counts, sidebar filter (docs/superpowers/specs/2026-08-09-library-sidebar-categorization-design.md).</summary>
-    public ObservableCollection<ContentTypeSummary> ContentTypes { get; }
+    public BulkObservableCollection<ContentTypeSummary> ContentTypes { get; }
 
     /// <summary>Real <c>Collection</c> rows (docs/superpowers/specs/2026-08-27-collections-design.md) -
     /// create/rename/reorder/delete via the sidebar, appearance/members via <see cref="MainViewModel.CollectionProperties"/>.</summary>
-    public ObservableCollection<CollectionSummary> Collections { get; }
+    public BulkObservableCollection<CollectionSummary> Collections { get; }
 
     /// <summary>The active collection's members as kind-agnostic tiles, populated only when
     /// <see cref="IsCollectionView"/> is true (a series-only collection keeps using the normal
     /// series-card grid, which already has full sort/group support this mixed grid doesn't try to
     /// duplicate).</summary>
-    public ObservableCollection<LibraryTile> CollectionTiles { get; }
+    public BulkObservableCollection<LibraryTile> CollectionTiles { get; }
 
     /// <summary>True when the active collection has at least one Issue/Book member, so the mixed
     /// grid (<see cref="CollectionTiles"/>) replaces every normal view-mode grid instead of the
@@ -765,7 +829,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
     /// <summary>One aggregated card per series - populated whenever <see cref="Granularity"/> is
     /// <see cref="LibraryContentGranularity.Series"/>. See <see cref="IssueList"/> for the
     /// per-issue equivalent.</summary>
-    public ObservableCollection<SeriesCardSample> Covers { get; }
+    public BulkObservableCollection<SeriesCardSample> Covers { get; }
 
     /// <summary>The view's own scroll dispatch (<c>LibraryScreen.axaml.cs</c>'s
     /// <c>OnAlphabetIndexLetterClick</c>-shared logic) should scroll to this ungrouped-collection
@@ -828,7 +892,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
     }
 
     /// <summary>Populated instead of <see cref="Covers"/> when <see cref="IsGrouped"/>.</summary>
-    public ObservableCollection<SeriesCardGroup> Groups { get; }
+    public BulkObservableCollection<SeriesCardGroup> Groups { get; }
 
     /// <summary>
     /// Flattened view adapter over <see cref="Covers"/> / <see cref="Groups"/> for the virtualized
@@ -837,7 +901,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
     /// <see cref="SeriesCardSample"/>s. Series-granularity counterpart of
     /// <see cref="IssueListScreenViewModel.FlatRows"/>; rebuilt every <see cref="RebuildView"/>.
     /// </summary>
-    public ObservableCollection<object> FlatCovers { get; }
+    public BulkObservableCollection<object> FlatCovers { get; }
 
     /// <summary>
     /// Library has a <b>single</b> sort/group field pool since 2026-09-03 - <see cref="IssueList"/>
@@ -882,6 +946,11 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
 
     public string ActiveGroupLabel => IssueList.GroupFieldLabel;
 
+    /// <summary>Whether any enabled plugin draws thumbnail overlays. Refreshed on every <see cref="LoadFromDatabase"/> (nav into
+    /// Library), which is when the plugin set can have changed; cards build their overlay image only while this is true.</summary>
+    [ObservableProperty]
+    private bool _hasThumbnailOverlayPlugin;
+
     /// <summary>
     /// Re-reads the library into the <see cref="_allSeries"/>/<see cref="_allCollections"/> snapshot
     /// (plus <see cref="ReadingLists"/>), then hands off to <see cref="RebuildView"/> for all the
@@ -892,6 +961,13 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
     /// </summary>
     public void LoadFromDatabase()
     {
+        HasThumbnailOverlayPlugin = Paperbunkr.App.Views.AsyncPluginOverlayImage.HasOverlayCommands;
+
+        // A new snapshot: any projection built for the previous one is stale. The next view
+        // computation (synchronous, below) builds and adopts a fresh one.
+        _dataVersion++;
+        _projection = null;
+
         using var context = PaperbunkrDb.CreateContext();
         // Include(Tags) - MatchesSearch and IssueListRow both read Issue.JoinedGenre()/JoinedTags()
         // (docs/superpowers/specs/2026-08-23-weighted-categorized-tags-design.md); without it every
@@ -963,6 +1039,10 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         }
 
         RebuildView();
+
+        // Once per data load, not per rebuild: it used to hang off RebuildView, so every search
+        // keystroke re-checked the cover cache (docs/superpowers/specs/2026-09-19-library-search-perf-design.md section 6).
+        KickCoverReconcile();
     }
 
     /// <summary>
@@ -974,7 +1054,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
     /// <paramref name="allSeries"/>'s own Include chain); <see cref="IssueTag"/> values are derived
     /// in-memory from the Tags already included on each Issue - no extra query needed for those.
     /// </summary>
-    private static Dictionary<SearchMode, List<string>> BuildSuggestionIndex(PaperbunkrDbContext context, List<Series> allSeries)
+    private static Dictionary<SearchMode, SuggestionCandidateList> BuildSuggestionIndex(PaperbunkrDbContext context, List<Series> allSeries)
     {
         var allIssues = allSeries.SelectMany(s => s.Issues).ToList();
 
@@ -1011,55 +1091,83 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
 
         var allValues = DistinctValues(seriesValues.Concat(writerValues).Concat(artistValues).Concat(descriptiveValues).Concat(catalogValues));
 
-        return new Dictionary<SearchMode, List<string>>
+        // Sorted once with a normalized twin array so ranking a keystroke is a binary-search prefix
+        // range plus an early-exit scan (docs/superpowers/specs/2026-09-19-library-search-perf-design.md §1).
+        return new Dictionary<SearchMode, SuggestionCandidateList>
         {
-            [SearchMode.Series] = seriesValues,
-            [SearchMode.Writer] = writerValues,
-            [SearchMode.Artists] = artistValues,
-            [SearchMode.Descriptive] = descriptiveValues,
-            [SearchMode.Catalog] = catalogValues,
-            [SearchMode.All] = allValues,
+            [SearchMode.Series] = new SuggestionCandidateList(seriesValues),
+            [SearchMode.Writer] = new SuggestionCandidateList(writerValues),
+            [SearchMode.Artists] = new SuggestionCandidateList(artistValues),
+            [SearchMode.Descriptive] = new SuggestionCandidateList(descriptiveValues),
+            [SearchMode.Catalog] = new SuggestionCandidateList(catalogValues),
+            [SearchMode.All] = new SuggestionCandidateList(allValues),
         };
     }
 
     /// <summary>
-    /// Rebuilds every derived collection - sidebar <see cref="ContentTypes"/>/<see cref="Collections"/>
-    /// summaries, the filtered/sorted/grouped <see cref="Covers"/>/<see cref="Groups"/>, and
-    /// <see cref="IssueList"/>'s rows - from the in-memory <see cref="_allSeries"/>/
-    /// <see cref="_allCollections"/> snapshot, with no database round-trip. Search / sort / group /
-    /// filter / sidebar-selection changes call this; only an actual data change (nav into Library, a
-    /// mutation command, a folder scan) re-runs <see cref="LoadFromDatabase"/>. Both granularities
-    /// are still always computed regardless of which is displayed (see the constructor's doc comment).
+    /// Why a view rebuild was requested. Decides scheduling, scroll and animation policy (docs/
+    /// superpowers/specs/2026-09-19-library-search-perf-design.md §1/§5/§6).
     /// </summary>
-    private void RebuildView()
+    private enum ViewTrigger
+    {
+        /// <summary>Data load, sidebar selection, browse-history apply: rebuilds the sidebar and swaps <b>synchronously</b> (callers such as <c>RequestScrollIntoView</c> read the result right after).</summary>
+        Full,
+
+        /// <summary>Search text changed: debounced, scrolls to top, no entrance animation.</summary>
+        SearchText,
+
+        /// <summary>Search scope changed: immediate, scrolls to top, no entrance animation.</summary>
+        SearchMode,
+
+        /// <summary>Unread / Missing / Tracked toggles: immediate, keeps scroll, no entrance animation.</summary>
+        Filter,
+
+        /// <summary>Sort or group field changed: immediate, keeps scroll, plays the entrance animation.</summary>
+        SortGroup,
+
+        /// <summary>Panorama re-pack after cover aspect ratios were learned: immediate, no animation.</summary>
+        Panorama,
+
+        /// <summary>An in-place series change patched the projection: immediate, no animation.</summary>
+        Invalidate,
+    }
+
+    /// <summary>Everything one view computation and its swap need, captured on the UI thread.</summary>
+    private sealed record ViewRequest(
+        LibraryViewInputs Inputs,
+        LibraryProjection? Projection,
+        IReadOnlyList<Series> Series,
+        IReadOnlyList<VirtualTagDefinition> VirtualTags,
+        long DataVersion,
+        bool ScrollToTop,
+        bool PlayEntrance);
+
+    /// <summary>
+    /// Rebuilds the sidebar-side collections - <see cref="ContentTypes"/>/<see cref="Collections"/>
+    /// summaries, <see cref="CollectionTiles"/>, <see cref="ExistingSeriesNames"/> - from the in-memory
+    /// snapshot. None of them depends on the search text, sort, group or filters, so this runs only on a
+    /// data load or a sidebar selection change (<see cref="ViewTrigger.Full"/>), not per keystroke.
+    /// </summary>
+    private void RebuildSidebar()
     {
         var series = _allSeries;
 
         AllSeriesCount = series.Count;
 
-        ExistingSeriesNames.Clear();
-        foreach (string name in series.Select(s => s.Name).Distinct().OrderBy(n => n))
-        {
-            ExistingSeriesNames.Add(name);
-        }
+        ExistingSeriesNames.ReplaceAll(series.Select(s => s.Name).Distinct().OrderBy(n => n).ToList());
 
-        ContentTypes.Clear();
-        foreach (var group in series.GroupBy(s => s.ContentType).OrderBy(g => g.Key))
+        ContentTypes.ReplaceAll(series.GroupBy(s => s.ContentType).OrderBy(g => g.Key).Select(group => new ContentTypeSummary
         {
-            ContentTypes.Add(new ContentTypeSummary
-            {
-                ContentType = group.Key,
-                Name = group.Key.ToString(),
-                Count = group.Count(),
-                IsActive = _activeContentType == group.Key,
-            });
-        }
+            ContentType = group.Key,
+            Name = group.Key.ToString(),
+            Count = group.Count(),
+            IsActive = _activeContentType == group.Key,
+        }).ToList());
 
-        Collections.Clear();
-        foreach (var collection in _allCollections)
+        Collections.ReplaceAll(_allCollections.Select(collection =>
         {
             int cid = collection.Id;
-            Collections.Add(new CollectionSummary
+            return new CollectionSummary
             {
                 Id = collection.Id,
                 Name = collection.Name,
@@ -1068,8 +1176,8 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
                 IsActive = _activeCollectionId == collection.Id,
                 IsSmart = collection.IsSmart,
                 DeleteConfirm = new TwoStepConfirm(() => DeleteCollection(cid), idleLabel: "Delete", armedLabel: "Confirm delete?"),
-            });
-        }
+            };
+        }).ToList());
 
         bool wasCollectionView = IsCollectionView;
         // Reads the already-resolved manual+rule-matched union (_activeCollectionMembers), not raw
@@ -1083,7 +1191,6 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
             RaiseCollectionViewChanged();
         }
 
-        CollectionTiles.Clear();
         if (IsCollectionView)
         {
             // Manual members keep their curated CollectionItem.SortOrder-derived order (unchanged);
@@ -1095,124 +1202,239 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
                 .Where(m => m.CollectionItemId is null)
                 .OrderBy(m => m.Kind)
                 .ThenBy(m => m.DisplayTitle, StringComparer.OrdinalIgnoreCase);
-            foreach (var member in manual.Concat(ruleMatched))
-            {
-                CollectionTiles.Add(LibraryTile.FromMember(member));
-            }
-        }
-
-        IEnumerable<Series> filtered = series;
-        if (_activeContentType is ContentType contentType)
-        {
-            filtered = filtered.Where(s => s.ContentType == contentType);
-        }
-        else if (_activeCollectionId is int collectionId)
-        {
-            // Series-only membership check - the normal series-card grid this feeds is suppressed
-            // entirely while IsCollectionView is true (the mixed grid above takes over instead), so
-            // this only matters for a series-only collection. Reads _activeCollectionMembers (the
-            // manual+rule-matched union) rather than raw CollectionItem rows, so a collection whose
-            // Series membership comes from a SeriesSmartListId rule filters correctly too.
-            var memberSeriesIds = _activeCollectionMembers
-                .Where(m => m.Kind == CollectionMemberKind.Series)
-                .Select(m => m.TargetId)
-                .ToHashSet();
-            filtered = filtered.Where(s => memberSeriesIds.Contains(s.Id));
-        }
-
-        if (!string.IsNullOrWhiteSpace(SearchQuery))
-        {
-            // Strip a recognized "<mode>:" prefix (already reflected in SearchMode by
-            // OnSearchQueryChanged) before matching - SearchQuery itself keeps showing the user what
-            // they typed. A prefix with nothing after it (e.g. "writer:") yields an empty effective
-            // query, meaning "mode-only scoping, no text filter" rather than matching nothing.
-            var (_, effective) = ParseFieldPrefix(SearchQuery.Trim());
-            if (!string.IsNullOrWhiteSpace(effective))
-            {
-                string query = effective.Trim();
-                filtered = filtered.Where(s => MatchesSearch(s, query));
-            }
-        }
-
-        if (FilterTrackedOnly)
-        {
-            filtered = filtered.Where(s => s.TrackingLinks.Count > 0);
-        }
-
-        // Series granularity: Unread/Missing apply at the series level ("series containing at
-        // least one such issue") - a card represents the whole series, so that's the only filter
-        // semantics that makes sense for it. This is CE's original per-series filter behavior,
-        // predating Slice 3.
-        IEnumerable<Series> seriesForCards = filtered;
-        if (FilterUnreadOnly)
-        {
-            seriesForCards = seriesForCards.Where(s => s.Issues.Any(i => i.LastPageRead is null or 0));
-        }
-
-        if (FilterMissingIssues)
-        {
-            seriesForCards = seriesForCards.Where(s => s.Issues.Any(i => i.FileIsMissing));
-        }
-
-        var cards = SortCards(seriesForCards.Select(SeriesCardSample.FromSeries).ToList());
-        Covers.Clear();
-        Groups.Clear();
-        FlatCovers.Clear();
-        if (IsGrouped)
-        {
-            foreach (var group in GroupCards(cards))
-            {
-                Groups.Add(group);
-                FlatCovers.Add(new GridSectionHeader(group.Header, group.Items.Count));
-                foreach (var card in group.Items)
-                {
-                    FlatCovers.Add(card);
-                }
-            }
+            CollectionTiles.ReplaceAll(manual.Concat(ruleMatched).Select(LibraryTile.FromMember).ToList());
         }
         else
         {
-            foreach (var card in cards)
-            {
-                Covers.Add(card);
-                FlatCovers.Add(card);
-            }
+            CollectionTiles.ReplaceAll(Array.Empty<LibraryTile>());
         }
-
-        // Issue granularity (docs/superpowers/specs/2026-08-18-library-book-centric-redesign-
-        // design.md Slice 3): Library's other data pipeline, feeding IssueList's own sort/group/
-        // rows. Unread/Missing apply to individual issues here, not "series containing at least
-        // one", matching CE's real per-book filter semantics - deliberately different from the
-        // series-card filtering just above.
-        IEnumerable<Issue> issues = filtered.SelectMany(s => s.Issues);
-        if (FilterUnreadOnly)
-        {
-            issues = issues.Where(i => i.LastPageRead is null or 0);
-        }
-
-        if (FilterMissingIssues)
-        {
-            issues = issues.Where(i => i.FileIsMissing);
-        }
-
-        IssueList.SetRows(issues);
 
         OnPropertyChanged(nameof(IsAllSeriesActive));
         OnPropertyChanged(nameof(HasCollections));
+    }
+
+    /// <summary>
+    /// Refreshes the visible cards and rows from the in-memory <see cref="_allSeries"/> snapshot, with no
+    /// database round-trip: filters, sorts and groups <b>both</b> granularities through
+    /// <see cref="LibraryViewPipeline"/> against the cached <see cref="LibraryProjection"/>, then swaps the
+    /// result in with one <c>Reset</c> per collection. Only an actual data change (nav into Library, a
+    /// mutation command, a folder scan) re-runs <see cref="LoadFromDatabase"/>.
+    /// <see cref="ViewTrigger.Full"/> also rebuilds the sidebar and runs synchronously; every other trigger
+    /// goes through <see cref="ViewScheduler"/> (debounced and off the UI thread in production).
+    /// </summary>
+    private void RebuildView(ViewTrigger trigger = ViewTrigger.Full)
+    {
+        if (trigger == ViewTrigger.Full)
+        {
+            RebuildSidebar();
+        }
+
+        var request = CaptureViewRequest(trigger);
+        if (trigger == ViewTrigger.Full)
+        {
+            ViewScheduler.RunNow(ct => ComputeView(request, ct), result => ApplyView(result, request));
+            return;
+        }
+
+        // A cleared box (or a "mode:" prefix with no text) should feel instant, like every other trigger.
+        var debounce = trigger == ViewTrigger.SearchText && request.Inputs.EffectiveQuery.Length > 0
+            ? SearchTextDebounce
+            : TimeSpan.Zero;
+        ViewScheduler.Schedule(debounce, ct => ComputeView(request, ct), result => ApplyView(result, request));
+    }
+
+    private ViewRequest CaptureViewRequest(ViewTrigger trigger)
+    {
+        // Strip a recognized "<mode>:" prefix (already reflected in SearchMode by
+        // OnSearchQueryChanged) before matching - SearchQuery itself keeps showing the user what
+        // they typed. A prefix with nothing after it (e.g. "writer:") yields an empty effective
+        // query, meaning "mode-only scoping, no text filter" rather than matching nothing.
+        string effectiveQuery = string.Empty;
+        if (!string.IsNullOrWhiteSpace(SearchQuery))
+        {
+            var (_, effective) = ParseFieldPrefix(SearchQuery.Trim());
+            if (!string.IsNullOrWhiteSpace(effective))
+            {
+                effectiveQuery = effective.Trim();
+            }
+        }
+
+        // Series-only membership check - the normal series-card grid this feeds is suppressed
+        // entirely while IsCollectionView is true (the mixed grid takes over instead), so this only
+        // matters for a series-only collection. Reads _activeCollectionMembers (the manual+rule-
+        // matched union) rather than raw CollectionItem rows, so a collection whose Series membership
+        // comes from a SeriesSmartListId rule filters correctly too. A content-type filter wins.
+        IReadOnlySet<int>? collectionSeriesIds = _activeContentType is null && _activeCollectionId is not null
+            ? _activeCollectionMembers.Where(m => m.Kind == CollectionMemberKind.Series).Select(m => m.TargetId).ToHashSet()
+            : null;
+
+        var inputs = new LibraryViewInputs(
+            _activeContentType,
+            collectionSeriesIds,
+            effectiveQuery,
+            SearchMode,
+            FilterTrackedOnly,
+            FilterUnreadOnly,
+            FilterMissingIssues,
+            IssueList.CaptureSortGroupSpec());
+
+        return new ViewRequest(
+            inputs,
+            _projection,
+            _allSeries,
+            IssueList.VirtualTagDefinitions,
+            _dataVersion,
+            ScrollToTop: trigger is ViewTrigger.SearchText or ViewTrigger.SearchMode || (trigger == ViewTrigger.Full && _isNavigatingHistory),
+            // Staggered entrance (docs/superpowers/specs/2026-09-07-chrome-content-motion-polish-
+            // design.md item 1): a real reload / sort / group. Not for search, filters, panorama re-pack.
+            PlayEntrance: trigger is ViewTrigger.Full or ViewTrigger.SortGroup);
+    }
+
+    /// <summary>Worker-thread half: builds the projection if none is cached, then runs the pipeline. Touches only the immutable request.</summary>
+    private static LibraryViewResult ComputeView(ViewRequest request, CancellationToken cancellationToken)
+    {
+        var projection = request.Projection;
+        LibraryProjection? built = null;
+        if (projection is null)
+        {
+            built = projection = LibraryProjection.Build(request.Series, request.VirtualTags, request.DataVersion, cancellationToken);
+        }
+
+        return LibraryViewPipeline.Compute(request.Inputs, projection, built, cancellationToken);
+    }
+
+    /// <summary>
+    /// UI-thread half. Order matters (design doc §5): adopt a freshly built projection, sync selection
+    /// onto the result's rows/cards <b>before</b> any collection is touched (cached rows can be stale -
+    /// <c>Selection.Toggle/Clear</c> only update displayed rows), then one <c>Reset</c> per collection,
+    /// then the derived notifications and the optional scroll request.
+    /// </summary>
+    private void ApplyView(LibraryViewResult result, ViewRequest request)
+    {
+        if (result.BuiltProjection is { } built && _projection is null && built.DataVersion == _dataVersion)
+        {
+            _projection = built;
+        }
+
+        SyncSelection(result);
+
+        if (result.IsGrouped)
+        {
+            var groups = new List<SeriesCardGroup>(result.CardGroups.Count);
+            var flat = new List<object>();
+            foreach (var group in result.CardGroups)
+            {
+                groups.Add(new SeriesCardGroup { Header = group.Header, Items = new ObservableCollection<SeriesCardSample>(group.Items) });
+                flat.Add(new GridSectionHeader(group.Header, group.Items.Count));
+                foreach (var card in group.Items)
+                {
+                    flat.Add(card);
+                }
+            }
+
+            Covers.ReplaceAll(Array.Empty<SeriesCardSample>());
+            Groups.ReplaceAll(groups);
+            FlatCovers.ReplaceAll(flat);
+        }
+        else
+        {
+            Covers.ReplaceAll(result.Cards);
+            Groups.ReplaceAll(Array.Empty<SeriesCardGroup>());
+            FlatCovers.ReplaceAll(result.Cards);
+        }
+
+        IssueList.ApplyPrecomputed(result.Rows, result.RowGroups, result.IsGrouped);
+
         OnPropertyChanged(nameof(HasAnyResults));
         OnPropertyChanged(nameof(ShowEmptyState));
         OnPropertyChanged(nameof(EmptyStateMessage));
         OnPropertyChanged(nameof(EmptyStateActionLabel));
         OnPropertyChanged(nameof(EmptyStateActionCommand));
 
-        // Staggered entrance (docs/superpowers/specs/2026-09-07-chrome-content-motion-polish-
-        // design.md item 1) - RebuildView is the one path every real trigger (nav-in reload via
-        // LoadFromDatabase, search/sort/group/filter) funnels through, per this method's own doc
-        // comment. Consumers (LibraryScreen.axaml.cs's ContainerPrepared handlers) read this once
-        // per container preparation, not as a live binding - see EntranceAnimation.Prepare.
-        PlayEntranceAnimation = true;
+        // One-shot entrance (docs/superpowers/specs/2026-09-19-library-scroll-smoothness-design.md §2): the
+        // flag is pulsed false -> true so EntranceAnimation sees a real change and opens its window; for a
+        // swap that must not animate (search, filter, panorama) it is simply left false.
+        PlayEntranceAnimation = false;
+        if (request.PlayEntrance)
+        {
+            PlayEntranceAnimation = true;
+        }
 
-        KickCoverReconcile();
+        if (request.ScrollToTop)
+        {
+            ScrollToTopRequested?.Invoke();
+        }
+    }
+
+    /// <summary>Diff-only sync of <c>IsSelected</c> from the authoritative selection sets. UI thread only:
+    /// the rows/cards are <c>ObservableObject</c>s bound to checkboxes, so a write raises
+    /// <c>PropertyChanged</c>. Writes nothing on the common path.</summary>
+    private void SyncSelection(LibraryViewResult result)
+    {
+        foreach (var row in result.Rows)
+        {
+            SyncRow(row);
+        }
+
+        foreach (var group in result.RowGroups)
+        {
+            foreach (var row in group.Items)
+            {
+                SyncRow(row);
+            }
+        }
+
+        foreach (var card in result.Cards)
+        {
+            SyncCard(card);
+        }
+
+        foreach (var group in result.CardGroups)
+        {
+            foreach (var card in group.Items)
+            {
+                SyncCard(card);
+            }
+        }
+
+        void SyncRow(IssueListRow row)
+        {
+            bool selected = Selection.IsSelected(row.Id);
+            if (row.IsSelected != selected)
+            {
+                row.IsSelected = selected;
+            }
+        }
+
+        void SyncCard(SeriesCardSample card)
+        {
+            bool selected = SeriesSelection.IsSelected(card.SeriesId);
+            if (card.IsSelected != selected)
+            {
+                card.IsSelected = selected;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Item-level cache invalidation for an in-place series change that does <b>not</b> reload
+    /// (design doc §4): patches the in-memory <see cref="Series"/>, publishes a new projection version
+    /// with that series' card and rows rebuilt (the search index is shared - none of these fields is
+    /// searchable), and triggers a zero-debounce swap. Like every trigger it cancels any in-flight job
+    /// and bumps the generation, so a stale job can never overwrite the patched state. Any new in-place
+    /// mutation of something a card or row displays must call this or reload.
+    /// </summary>
+    private void InvalidateSeriesProjection(int seriesId, Action<Series> patch)
+    {
+        var series = _allSeries.FirstOrDefault(s => s.Id == seriesId);
+        if (series is null)
+        {
+            return;
+        }
+
+        patch(series);
+        _projection = _projection?.WithSeriesRebuilt(series, IssueList.VirtualTagDefinitions);
+        RebuildView(ViewTrigger.Invalidate);
     }
 
     // 0 = idle, 1 = a reconcile pass is running. Static: one library-wide cover cache, and
@@ -1529,8 +1751,9 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         }
 
         RaiseChipAndEmptyState();
-        SaveLibrarySettings();
-        RebuildView();
+        DropActiveWorkspaceLabel();
+        PersistSearchStateDebounced();
+        RebuildView(ViewTrigger.SearchText);
         RecomputeSuggestions();
 
         // History-push is debounced (~800ms pause in typing) - the reload above is not, and stays
@@ -1602,7 +1825,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         OnPropertyChanged(nameof(SearchModeLabel));
         RaiseChipAndEmptyState();
         SaveLibrarySettings();
-        RebuildView();
+        RebuildView(ViewTrigger.SearchMode);
         RecomputeSuggestions();
     }
 
@@ -1640,7 +1863,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
 
     /// <summary>Suggestion rows for the popup, in fixed priority order (FieldHint, Recent, Value,
     /// SavedSearch) capped at <see cref="MaxTotalSuggestions"/> total - see <see cref="RecomputeSuggestions"/>.</summary>
-    public ObservableCollection<SearchSuggestion> SearchSuggestions { get; }
+    public BulkObservableCollection<SearchSuggestion> SearchSuggestions { get; }
 
     /// <summary>Drives the "Clear recent searches" link's visibility - only shown when the Recent section is non-empty (design doc §"Recording a completed search").</summary>
     public bool HasRecentSuggestion => SearchSuggestions.Any(s => s.Kind == SearchSuggestionKind.Recent);
@@ -1786,12 +2009,9 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         if (scopedMode != SearchMode.File && trimmedEffective.Length > 0 && _suggestionIndex.TryGetValue(scopedMode, out var candidates))
         {
             string prefixText = hasRecognizedPrefix ? raw.Substring(0, raw.Length - effectiveQuery.Length) : string.Empty;
-            var ranked = candidates
-                .Where(v => v.Contains(trimmedEffective, StringComparison.OrdinalIgnoreCase))
-                .OrderByDescending(v => v.StartsWith(trimmedEffective, StringComparison.OrdinalIgnoreCase))
-                .ThenBy(v => v, StringComparer.OrdinalIgnoreCase)
-                .Take(MaxValueSuggestions);
-            foreach (string v in ranked)
+            // Prefix matches first, then substring matches, each alphabetical - same order as before, but
+            // a binary-search prefix range plus an early-exit scan instead of a full scan and sort.
+            foreach (string v in candidates.Rank(trimmedEffective, MaxValueSuggestions))
             {
                 results.Add(new SearchSuggestion { Kind = SearchSuggestionKind.Value, DisplayText = v, InsertText = prefixText + v });
             }
@@ -1813,11 +2033,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
             results.RemoveRange(MaxTotalSuggestions, results.Count - MaxTotalSuggestions);
         }
 
-        SearchSuggestions.Clear();
-        foreach (var suggestion in results)
-        {
-            SearchSuggestions.Add(suggestion);
-        }
+        SearchSuggestions.ReplaceAll(results);
 
         OnPropertyChanged(nameof(HasRecentSuggestion));
         SelectedSuggestionIndex = -1;
@@ -1831,7 +2047,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
     {
         RaiseChipAndEmptyState();
         SaveLibrarySettings();
-        RebuildView();
+        RebuildView(ViewTrigger.Filter);
     }
 
     [ObservableProperty]
@@ -1841,7 +2057,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
     {
         RaiseChipAndEmptyState();
         SaveLibrarySettings();
-        RebuildView();
+        RebuildView(ViewTrigger.Filter);
     }
 
     [ObservableProperty]
@@ -1851,7 +2067,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
     {
         RaiseChipAndEmptyState();
         SaveLibrarySettings();
-        RebuildView();
+        RebuildView(ViewTrigger.Filter);
     }
 
     /// <summary>A-Z indexer only means something against an alphabetically-ordered, ungrouped flat
@@ -3176,6 +3392,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         {
             series.Status = status;
             context.SaveChanges();
+            InvalidateSeriesProjection(seriesId, s => s.Status = status);
         }
     }
 
@@ -3200,6 +3417,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         {
             series.ReadingStatus = status;
             context.SaveChanges();
+            InvalidateSeriesProjection(seriesId, s => s.ReadingStatus = status);
         }
     }
 
@@ -3219,6 +3437,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         {
             series.ReadingMode = mode;
             context.SaveChanges();
+            InvalidateSeriesProjection(seriesId, s => s.ReadingMode = mode);
         }
     }
 
@@ -3333,6 +3552,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
     {
         RaiseViewModeDerivedChanged();
         OnPropertyChanged(nameof(DisplayModeLabel));
+        PlayEntranceAnimation = false; // pulse: EntranceAnimation's one-shot window opens on a real false -> true change
         PlayEntranceAnimation = true;
         SaveLibrarySettings();
     }
@@ -3670,6 +3890,16 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
     partial void OnFadeInThumbnailsChanged(bool value)
     {
         CosmeticThumbnailSettings.FadeInThumbnails = value;
+        SaveLibrarySettings();
+    }
+
+    /// <summary>"Smooth scrolling" (docs/superpowers/specs/2026-09-19-library-scroll-smoothness-design.md §6): eased mouse-wheel scrolling. Pushes into <see cref="SmoothScrollSettings"/> like the toggles above.</summary>
+    [ObservableProperty]
+    private bool _smoothScrolling = true;
+
+    partial void OnSmoothScrollingChanged(bool value)
+    {
+        SmoothScrollSettings.Enabled = value;
         SaveLibrarySettings();
     }
 

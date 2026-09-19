@@ -43,13 +43,13 @@ public partial class IssueListScreenViewModel : ViewModelBase
     {
         _goReaderForIssue = goReaderForIssue;
         _isSelected = isSelected ?? (_ => false);
-        Rows = new ObservableCollection<IssueListRow>();
-        Groups = new ObservableCollection<IssueListRowGroup>();
-        FlatRows = new ObservableCollection<object>();
+        Rows = new BulkObservableCollection<IssueListRow>();
+        Groups = new BulkObservableCollection<IssueListRowGroup>();
+        FlatRows = new BulkObservableCollection<object>();
     }
 
-    public ObservableCollection<IssueListRow> Rows { get; }
-    public ObservableCollection<IssueListRowGroup> Groups { get; }
+    public BulkObservableCollection<IssueListRow> Rows { get; }
+    public BulkObservableCollection<IssueListRowGroup> Groups { get; }
 
     /// <summary>
     /// Flattened view adapter over <see cref="Rows"/> / <see cref="Groups"/> for the virtualized
@@ -59,7 +59,17 @@ public partial class IssueListScreenViewModel : ViewModelBase
     /// <see cref="Render"/>; holds the same row instances as <see cref="Rows"/>/<see cref="Groups"/>
     /// so selection re-stamping already applies.
     /// </summary>
-    public ObservableCollection<object> FlatRows { get; }
+    public BulkObservableCollection<object> FlatRows { get; }
+
+    /// <summary>
+    /// When false, <see cref="Render"/> (and therefore every sort/group/virtual-tag change and
+    /// <see cref="SetRows"/>) does nothing: the owner drives this view model through
+    /// <see cref="ApplyPrecomputed"/> instead. <c>LibraryScreenViewModel</c> turns it off because it
+    /// computes rows on a worker thread from its cached projection (docs/superpowers/specs/
+    /// 2026-09-19-library-search-perf-design.md), and a second synchronous render per sort click
+    /// would only repeat that work on the UI thread. Standalone use (tests) keeps the default.
+    /// </summary>
+    public bool AutoRender { get; set; } = true;
 
     public static IReadOnlyList<IssueListSortFieldDescriptor> SortFieldOptions => IssueListFieldCatalog.SortFields.Values.ToList();
     public static IReadOnlyList<IssueListGroupFieldDescriptor> GroupFieldOptions => IssueListFieldCatalog.GroupFields.Values.ToList();
@@ -73,6 +83,10 @@ public partial class IssueListScreenViewModel : ViewModelBase
     /// <summary>Gates the toolbar's Virtual Tag sort/group sections - hidden entirely for a library
     /// with none enabled, rather than showing an empty section.</summary>
     public bool HasVirtualTags => _availableVirtualTagDefinitions.Count > 0;
+
+    /// <summary>The enabled Virtual Tag definitions themselves (not just their toolbar options), for the
+    /// owner's projection cache: every cached row carries values evaluated from these.</summary>
+    internal IReadOnlyList<VirtualTagDefinition> VirtualTagDefinitions => _availableVirtualTagDefinitions;
 
     [ObservableProperty]
     private IssueListSortField _sortField = IssueListSortField.Added;
@@ -175,38 +189,85 @@ public partial class IssueListScreenViewModel : ViewModelBase
 
     private void Render()
     {
-        if (_suppressRender)
+        if (_suppressRender || !AutoRender)
         {
             return;
         }
 
-        var rows = SortRows(_sourceIssues.Select(ToRow).ToList());
-
-        Rows.Clear();
-        Groups.Clear();
-        FlatRows.Clear();
-        if (IsGrouped)
+        var spec = CaptureSortGroupSpec();
+        var rows = spec.SortRows(_sourceIssues.Select(ToRow).ToList());
+        if (spec.IsGrouped)
         {
-            foreach (var group in GroupRows(rows))
-            {
-                Groups.Add(group);
-                FlatRows.Add(new GridSectionHeader(group.Header, group.Items.Count));
-                foreach (var row in group.Items)
-                {
-                    FlatRows.Add(row);
-                }
-            }
+            ApplyPrecomputed(Array.Empty<IssueListRow>(), spec.GroupRows(rows), isGrouped: true);
         }
         else
         {
+            ApplyPrecomputed(rows, Array.Empty<ViewGroup<IssueListRow>>(), isGrouped: false);
+        }
+    }
+
+    /// <summary>
+    /// Publishes already-sorted (and, when <paramref name="isGrouped"/>, already-grouped) rows: one
+    /// <c>Reset</c> per collection instead of Clear + N Adds. Must run on the UI thread. Exactly the
+    /// shape <see cref="Render"/> always produced: ungrouped fills <see cref="Rows"/>; grouped fills
+    /// <see cref="Groups"/> and leaves <see cref="Rows"/> empty; <see cref="FlatRows"/> is the flat
+    /// list, or headers interleaved with each group's rows.
+    /// </summary>
+    public void ApplyPrecomputed(IReadOnlyList<IssueListRow> rows, IReadOnlyList<ViewGroup<IssueListRow>> groups, bool isGrouped)
+    {
+        var flat = new List<object>();
+        if (isGrouped)
+        {
+            var models = new List<IssueListRowGroup>(groups.Count);
+            foreach (var group in groups)
+            {
+                models.Add(new IssueListRowGroup { Header = group.Header, Items = new ObservableCollection<IssueListRow>(group.Items) });
+                flat.Add(new GridSectionHeader(group.Header, group.Items.Count));
+                foreach (var row in group.Items)
+                {
+                    flat.Add(row);
+                }
+            }
+
+            Rows.ReplaceAll(Array.Empty<IssueListRow>());
+            Groups.ReplaceAll(models);
+        }
+        else
+        {
+            flat.Capacity = rows.Count;
             foreach (var row in rows)
             {
-                Rows.Add(row);
-                FlatRows.Add(row);
+                flat.Add(row);
             }
+
+            Rows.ReplaceAll(rows);
+            Groups.ReplaceAll(Array.Empty<IssueListRowGroup>());
         }
 
+        FlatRows.ReplaceAll(flat);
         OnPropertyChanged(nameof(HasAnyResults));
+    }
+
+    /// <summary>
+    /// Snapshot of the current sort/group state with every descriptor resolved, for
+    /// <c>LibraryViewPipeline</c> to apply off the UI thread. Rows resolve virtual-tag descriptors;
+    /// series cards use the static catalog only, with the pre-existing fall-backs (unknown sort field
+    /// -> Series, unknown group field -> no groups).
+    /// </summary>
+    public IssueListSortGroupSpec CaptureSortGroupSpec()
+    {
+        var cardSort = IssueListFieldCatalog.SortFields.TryGetValue(SortField, out var found)
+            ? found
+            : IssueListFieldCatalog.SortFields[IssueListSortField.Series];
+        IssueListFieldCatalog.GroupFields.TryGetValue(GroupField, out var cardGroup);
+
+        return new IssueListSortGroupSpec(
+            ResolveSortDescriptor(),
+            ResolveGroupDescriptor(),
+            cardSort,
+            cardGroup,
+            SortDirection,
+            IsGrouped);
     }
 
     // Cover is resolved lazily via CoverImageConverter, keyed on Id, only when this row's container
@@ -247,34 +308,6 @@ public partial class IssueListScreenViewModel : ViewModelBase
         }
 
         return IssueListFieldCatalog.GroupFields.TryGetValue(GroupField, out var descriptor) ? descriptor : null;
-    }
-
-    private List<IssueListRow> SortRows(List<IssueListRow> rows)
-    {
-        var descriptor = ResolveSortDescriptor();
-
-        var result = rows.ToList();
-        result.Sort(descriptor.Compare);
-        if (SortDirection == SortDirection.Descending)
-        {
-            result.Reverse();
-        }
-
-        return result;
-    }
-
-    private IEnumerable<IssueListRowGroup> GroupRows(List<IssueListRow> rows)
-    {
-        var descriptor = ResolveGroupDescriptor();
-        if (descriptor is null)
-        {
-            return Enumerable.Empty<IssueListRowGroup>();
-        }
-
-        return rows
-            .GroupBy(descriptor.GroupKey)
-            .OrderBy(g => g.Key, Comparer<string>.Create(descriptor.GroupOrder))
-            .Select(g => new IssueListRowGroup { Header = g.Key, Items = new ObservableCollection<IssueListRow>(g) });
     }
 
     partial void OnSortFieldChanged(IssueListSortField value)

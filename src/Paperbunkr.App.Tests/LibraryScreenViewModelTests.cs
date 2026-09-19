@@ -241,14 +241,41 @@ public class LibraryScreenViewModelTests : IDisposable
         Assert.True(vm.PlayEntranceAnimation);
     }
 
+    // docs/superpowers/specs/2026-09-19-library-search-perf-design.md §6: search and filter swaps no
+    // longer stagger-fade every card in (it replayed on every keystroke); nav-in, view-mode change and
+    // sort/group still do.
     [Fact]
-    public void FilterChange_ResetsPlayEntranceAnimation()
+    public void FilterChange_DoesNotPlayEntranceAnimation()
+    {
+        CreateSeriesWithIssue("Series A", contentType: ContentType.Comic);
+        var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { }, goToNewIssueProperties: (_, _, _) => { });
+        vm.PlayEntranceAnimation = true;
+
+        vm.FilterUnreadOnly = true;
+
+        Assert.False(vm.PlayEntranceAnimation);
+    }
+
+    [Fact]
+    public void SearchQueryChange_DoesNotPlayEntranceAnimation()
+    {
+        CreateSeriesWithIssue("Series A", contentType: ContentType.Comic);
+        var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { }, goToNewIssueProperties: (_, _, _) => { });
+        vm.PlayEntranceAnimation = true;
+
+        vm.SearchQuery = "series";
+
+        Assert.False(vm.PlayEntranceAnimation);
+    }
+
+    [Fact]
+    public void SortOrGroupChange_PlaysEntranceAnimation()
     {
         CreateSeriesWithIssue("Series A", contentType: ContentType.Comic);
         var vm = new LibraryScreenViewModel(goDetail: _ => { }, goReaderForIssue: _ => { }, goToNewIssueProperties: (_, _, _) => { });
         vm.PlayEntranceAnimation = false;
 
-        vm.FilterUnreadOnly = true;
+        vm.IssueList.GroupField = IssueListGroupField.Publisher;
 
         Assert.True(vm.PlayEntranceAnimation);
     }

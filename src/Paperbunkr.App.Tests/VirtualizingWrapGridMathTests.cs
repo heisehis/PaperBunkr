@@ -122,6 +122,58 @@ public class VirtualizingWrapGridMathTests
         Assert.True(range.IsEmpty);
     }
 
+    // --- ComputeBufferRows / range stability (docs/superpowers/specs/2026-09-19-library-scroll-smoothness-design.md §5) ---
+
+    [Theory]
+    [InlineData(0, 236, 20, 2)]          // no viewport yet
+    [InlineData(300, 236, 20, 2)]        // a bit over one row -> floor of 2
+    [InlineData(941, 236, 20, 2)]        // typical desktop viewport (4 visible rows): half = 2
+    [InlineData(2560, 236, 20, 6)]       // tall viewport (10 rows): half a screen = 5? ceil(10*0.5)=5 -> at least 2, here 5
+    public void ComputeBufferRows_IsHalfAScreenWithAFloorOfTwo(double viewportHeight, double itemHeight, double lineSpacing, int expectedAtLeast)
+    {
+        int rows = VirtualizingWrapGridMath.ComputeBufferRows(viewportHeight, itemHeight, lineSpacing);
+
+        Assert.True(rows >= VirtualizingWrapGridMath.MinBufferRows);
+        Assert.True(rows >= Math.Min(expectedAtLeast, 5), $"got {rows}");
+    }
+
+    [Fact]
+    public void ComputeBufferRows_InfiniteOrZeroViewport_UsesTheFloor()
+    {
+        Assert.Equal(2, VirtualizingWrapGridMath.ComputeBufferRows(double.PositiveInfinity, 236, 20));
+        Assert.Equal(2, VirtualizingWrapGridMath.ComputeBufferRows(0, 236, 20));
+        Assert.Equal(2, VirtualizingWrapGridMath.ComputeBufferRows(800, 0, 0));
+    }
+
+    [Fact]
+    public void RealizedRange_IsUnchanged_ForAScrollThatStaysInsideOneRow()
+    {
+        // 40 items, 4 per row, row stride 110. Viewport 0..500 then scrolled 1..50 px: the wanted range must not move,
+        // which is exactly what lets the panel skip InvalidateMeasure for every pixel inside a row.
+        var layout = new WrapGridLayout(ItemsPerRow: 4, TotalRows: 10, TotalHeight: 1090);
+        var at0 = VirtualizingWrapGridMath.ComputeRealizedRange(40, layout, 0, 500, 100, 10, 2);
+
+        for (int offset = 1; offset < 110; offset += 7)
+        {
+            var scrolled = VirtualizingWrapGridMath.ComputeRealizedRange(40, layout, offset, 500 + offset, 100, 10, 2);
+            Assert.True(at0 == scrolled || offset + 500 >= 110 * 5 /* bottom crossed into the next buffered row */,
+                $"offset {offset}: {at0} vs {scrolled}");
+        }
+    }
+
+    [Fact]
+    public void RealizedRange_ChangesExactlyWhenARowBoundaryIsCrossed()
+    {
+        var layout = new WrapGridLayout(ItemsPerRow: 4, TotalRows: 100, TotalHeight: 10990);
+
+        var before = VirtualizingWrapGridMath.ComputeRealizedRange(400, layout, 1099, 1500, 100, 10, 2);
+        var same = VirtualizingWrapGridMath.ComputeRealizedRange(400, layout, 1105, 1506, 100, 10, 2);
+        var after = VirtualizingWrapGridMath.ComputeRealizedRange(400, layout, 1110, 1511, 100, 10, 2);
+
+        Assert.Equal(before.LastIndex, same.LastIndex);
+        Assert.NotEqual(before, after); // top crossed row 10 (1100): the first buffered row moves
+    }
+
     // --- IndexToRowColumn ---
 
     [Theory]

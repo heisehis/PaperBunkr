@@ -49,6 +49,8 @@
          decode-design.md §6/§8) needs ReaderImagePipeline.BandHeight/DecodedBandBytes, the same
          internal test seams Paperbunkr.App.Tests already gets. -->
     <InternalsVisibleTo Include="Paperbunkr.Benchmarks" />
+    <!-- Dev-only scroll measurement harness (docs/superpowers/specs/2026-09-19-library-scroll-smoothness-design.md, Step 0). -->
+    <InternalsVisibleTo Include="Paperbunkr.ScrollHarness" />
   </ItemGroup>
 
   <ItemGroup>

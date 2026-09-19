@@ -490,6 +490,11 @@
                                 <TextBlock Grid.Column="0" Text="Tooltips" FontSize="12.5" VerticalAlignment="Center" Foreground="{DynamicResource PbTextBrush}" />
                                 <CheckBox Grid.Column="1" IsChecked="{Binding ShowToolTips}" />
                             </Grid>
+                            <!-- Eased mouse-wheel scrolling (docs/superpowers/specs/2026-09-19-library-scroll-smoothness-design.md §6). -->
+                            <Grid ColumnDefinitions="*,Auto">
+                                <TextBlock Grid.Column="0" Text="Smooth scrolling" FontSize="12.5" VerticalAlignment="Center" Foreground="{DynamicResource PbTextBrush}" />
+                                <CheckBox Grid.Column="1" IsChecked="{Binding SmoothScrolling}" />
+                            </Grid>
                             <Grid ColumnDefinitions="*,Auto">
                                 <TextBlock Grid.Column="0" Text="Numeric rating badge" FontSize="12.5" VerticalAlignment="Center" Foreground="{DynamicResource PbTextBrush}" />
                                 <CheckBox Grid.Column="1" IsChecked="{Binding NumericRatingThumbnails}" />

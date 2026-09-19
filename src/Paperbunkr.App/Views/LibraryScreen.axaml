@@ -16,6 +16,27 @@
              controls:ContextMenuHost.Provider="{Binding}">
 
     <UserControl.Styles>
+        <!-- Poster-card gradient scrim. Same look as the shared Border.posterScrim (Styles/Primitives.axaml), minus its
+             Opacity Transitions: that style only animates under Border.posterTile:pointerover/:focus-visible, and no
+             Library card carries posterTile, so the opacity never changes here. The scroll harness measured the
+             Transitions setter at ~1.3 ms per card to instantiate (docs/superpowers/specs/
+             2026-09-19-library-scroll-smoothness-design.md §4), i.e. a quarter of a card's realization cost. -->
+        <Style Selector="Border.libScrim">
+            <Setter Property="IsHitTestVisible" Value="False" />
+            <Setter Property="Opacity" Value="0.55" />
+            <Setter Property="Background">
+                <LinearGradientBrush StartPoint="0%,0%" EndPoint="0%,100%">
+                    <GradientStop Offset="0.45" Color="#00000000" />
+                    <GradientStop Offset="1.0" Color="#B3000000" />
+                </LinearGradientBrush>
+            </Setter>
+        </Style>
+        <!-- One-shot entrance (docs/superpowers/specs/2026-09-19-library-scroll-smoothness-design.md §2):
+             every grid/list ItemsControl on this screen animates only containers prepared inside the window
+             a genuine trigger (load, sort/group, view mode) opens - not the ones a panel recycles while scrolling. -->
+        <Style Selector="ItemsControl">
+            <Setter Property="controls:EntranceAnimation.OneShot" Value="True" />
+        </Style>
         <!-- Toolbar-only styles (Button.toolbarPill / Border.dropdown / TextBlock.dropdownRow /
              Button.modeOption) moved to Views/LibraryToolbar.axaml alongside the toolbar markup
              (docs/superpowers/specs/2026-08-27-library-browsing-4b-toolbar-rework-design.md §1). -->
@@ -325,7 +346,7 @@
                                     <PathGeometry Figures="M 34,0 L 34,34 L 0,34 Z" />
                                 </Image.Clip>
                             </Image>
-                            <Border Classes="posterScrim" />
+                            <Border Classes="libScrim" />
                             <Border IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowUnreadBadge}">
                                 <Border Classes="countPill" IsVisible="{Binding !IsRead}"
                                         HorizontalAlignment="Right" VerticalAlignment="Top" Margin="7">
@@ -488,7 +509,7 @@
                                     Background="{Binding CoverBrush}" ClipToBounds="True"
                                     controls:SharedElement.Key="{Binding Id, StringFormat='issue-cover:{0}'}"
                                     controls:SharedElement.ImageSource="{Binding #TilesIssueCoverImage.Source}">
-                                <Image x:Name="TilesIssueCoverImage" views:AsyncCoverImage.SourceId="{Binding CoverKey}" Stretch="UniformToFill" />
+                                <Image x:Name="TilesIssueCoverImage" views:AsyncCoverImage.GridMode="True" views:AsyncCoverImage.DecodeWidth="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).TilesThumbWidth}" views:AsyncCoverImage.SourceId="{Binding CoverKey}" Stretch="UniformToFill" />
                             </Border>
                             <CheckBox IsChecked="{Binding IsSelected, Mode=OneWay}"
                                       Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ToggleIssueSelectionCheckboxCommand}"
@@ -501,23 +522,53 @@
                                        Margin="0,2,0,0" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding SeriesName}" />
                         </StackPanel>
                         <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center" Margin="8,0,0,0">
-                            <Border IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowPublisherBadge}">
-                                <controls:BrandMark IsVisible="{Binding HasPublisher}" Family="Publisher" Value="{Binding Publisher}"
-                                                    ShowText="False" MarkSize="14" />
+                            <controls:LazyPart>
+                                <controls:LazyPart.IsActive>
+                                    <MultiBinding Converter="{x:Static conv:BoolConverters.And}">
+                                        <Binding Path="$parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowPublisherBadge" />
+                                        <Binding Path="HasPublisher" />
+                                    </MultiBinding>
+                                </controls:LazyPart.IsActive>
+                                <controls:LazyPart.ContentTemplate>
+                                    <DataTemplate x:DataType="models:IssueListRow">
+                            <controls:BrandMark Family="Publisher" Value="{Binding Publisher}"
+                                                ShowText="False" MarkSize="14" />
+                                    </DataTemplate>
+                                </controls:LazyPart.ContentTemplate>
+                            </controls:LazyPart>
+                            <controls:LazyPart>
+                                <controls:LazyPart.IsActive>
+                                    <MultiBinding Converter="{x:Static conv:BoolConverters.And}">
+                                        <Binding Path="$parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowLanguageBadge" />
+                                        <Binding Path="HasLanguage" />
+                                    </MultiBinding>
+                                </controls:LazyPart.IsActive>
+                                <controls:LazyPart.ContentTemplate>
+                                    <DataTemplate x:DataType="models:IssueListRow">
+                            <Panel>
+                                <TextBlock Text="{Binding LanguageIso}" FontSize="10.5" FontWeight="Bold" Foreground="{DynamicResource PbTextMutedBrush}"
+                                           IsVisible="{Binding !$parent[UserControl].((vm:LibraryScreenViewModel)DataContext).UseLanguageIcon}" />
+                                <controls:BrandMark Family="Language" Value="{Binding LanguageIso}" ShowText="False" MarkSize="14"
+                                                    IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).UseLanguageIcon}" />
+                            </Panel>
+                                    </DataTemplate>
+                                </controls:LazyPart.ContentTemplate>
+                            </controls:LazyPart>
+                            <controls:LazyPart>
+                                <controls:LazyPart.IsActive>
+                                    <MultiBinding Converter="{x:Static conv:BoolConverters.And}">
+                                        <Binding Path="$parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowUnreadBadge" />
+                                        <Binding Path="!IsRead" />
+                                    </MultiBinding>
+                                </controls:LazyPart.IsActive>
+                                <controls:LazyPart.ContentTemplate>
+                                    <DataTemplate x:DataType="models:IssueListRow">
+                            <Border Classes="countPill">
+                                <TextBlock Text="●" FontFamily="Consolas,monospace" />
                             </Border>
-                            <Border IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowLanguageBadge}">
-                                <Panel IsVisible="{Binding HasLanguage}">
-                                    <TextBlock Text="{Binding LanguageIso}" FontSize="10.5" FontWeight="Bold" Foreground="{DynamicResource PbTextMutedBrush}"
-                                               IsVisible="{Binding !$parent[UserControl].((vm:LibraryScreenViewModel)DataContext).UseLanguageIcon}" />
-                                    <controls:BrandMark Family="Language" Value="{Binding LanguageIso}" ShowText="False" MarkSize="14"
-                                                        IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).UseLanguageIcon}" />
-                                </Panel>
-                            </Border>
-                            <Border IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowUnreadBadge}">
-                                <Border Classes="countPill" IsVisible="{Binding !IsRead}">
-                                    <TextBlock Text="●" FontFamily="Consolas,monospace" />
-                                </Border>
-                            </Border>
+                                    </DataTemplate>
+                                </controls:LazyPart.ContentTemplate>
+                            </controls:LazyPart>
                         </StackPanel>
                     </Grid>
                 </Border>
@@ -557,7 +608,7 @@
                                     <PathGeometry Figures="M 34,0 L 34,34 L 0,34 Z" />
                                 </Image.Clip>
                             </Image>
-                            <Border Classes="posterScrim" />
+                            <Border Classes="libScrim" />
                             <Border IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowUnreadBadge}">
                                 <Border Classes="countPill" IsVisible="{Binding HasUnread}"
                                         HorizontalAlignment="Right" VerticalAlignment="Top" Margin="7">
@@ -712,7 +763,7 @@
                                 controls:SharedElement.Key="{Binding SeriesId, StringFormat='series-cover:{0}'}"
                                 controls:SharedElement.ImageSource="{Binding #SeriesTilesCoverImage.Source}">
                             <Grid>
-                                <Image x:Name="SeriesTilesCoverImage" views:AsyncCoverImage.SourceId="{Binding CoverKey}" Stretch="UniformToFill" />
+                                <Image x:Name="SeriesTilesCoverImage" views:AsyncCoverImage.GridMode="True" views:AsyncCoverImage.DecodeWidth="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).TilesThumbWidth}" views:AsyncCoverImage.SourceId="{Binding CoverKey}" Stretch="UniformToFill" />
                                 <CheckBox Classes="tileSelect forceVisible"
                                           IsChecked="{Binding IsSelected, Mode=OneWay}"
                                           Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ToggleSeriesSelectionCheckboxCommand}"
@@ -726,34 +777,70 @@
                                        Margin="0,2,0,0" TextTrimming="CharacterEllipsis" />
                         </StackPanel>
                         <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center" Margin="8,0,0,0">
-                            <Border IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowPublisherBadge}">
-                                <controls:BrandMark IsVisible="{Binding HasPublisher}" Family="Publisher" Value="{Binding Publisher}"
-                                                    ShowText="False" MarkSize="14" />
+                            <controls:LazyPart>
+                                <controls:LazyPart.IsActive>
+                                    <MultiBinding Converter="{x:Static conv:BoolConverters.And}">
+                                        <Binding Path="$parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowPublisherBadge" />
+                                        <Binding Path="HasPublisher" />
+                                    </MultiBinding>
+                                </controls:LazyPart.IsActive>
+                                <controls:LazyPart.ContentTemplate>
+                                    <DataTemplate x:DataType="models:SeriesCardSample">
+                            <controls:BrandMark Family="Publisher" Value="{Binding Publisher}"
+                                                ShowText="False" MarkSize="14" />
+                                    </DataTemplate>
+                                </controls:LazyPart.ContentTemplate>
+                            </controls:LazyPart>
+                            <controls:LazyPart>
+                                <controls:LazyPart.IsActive>
+                                    <MultiBinding Converter="{x:Static conv:BoolConverters.And}">
+                                        <Binding Path="$parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowLanguageBadge" />
+                                        <Binding Path="HasLanguage" />
+                                    </MultiBinding>
+                                </controls:LazyPart.IsActive>
+                                <controls:LazyPart.ContentTemplate>
+                                    <DataTemplate x:DataType="models:SeriesCardSample">
+                            <Panel>
+                                <TextBlock Text="{Binding LanguageIso}" FontSize="10.5" FontWeight="Bold" Foreground="{DynamicResource PbTextMutedBrush}"
+                                           IsVisible="{Binding !$parent[UserControl].((vm:LibraryScreenViewModel)DataContext).UseLanguageIcon}" />
+                                <controls:BrandMark Family="Language" Value="{Binding LanguageIso}" ShowText="False" MarkSize="14"
+                                                    IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).UseLanguageIcon}" />
+                            </Panel>
+                                    </DataTemplate>
+                                </controls:LazyPart.ContentTemplate>
+                            </controls:LazyPart>
+                            <controls:LazyPart>
+                                <controls:LazyPart.IsActive>
+                                    <MultiBinding Converter="{x:Static conv:BoolConverters.And}">
+                                        <Binding Path="$parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowUnreadBadge" />
+                                        <Binding Path="HasUnread" />
+                                    </MultiBinding>
+                                </controls:LazyPart.IsActive>
+                                <controls:LazyPart.ContentTemplate>
+                                    <DataTemplate x:DataType="models:SeriesCardSample">
+                            <Border Classes="countPill">
+                                <TextBlock Text="{Binding UnreadCount}" FontFamily="Consolas,monospace" />
                             </Border>
-                            <Border IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowLanguageBadge}">
-                                <Panel IsVisible="{Binding HasLanguage}">
-                                    <TextBlock Text="{Binding LanguageIso}" FontSize="10.5" FontWeight="Bold" Foreground="{DynamicResource PbTextMutedBrush}"
-                                               IsVisible="{Binding !$parent[UserControl].((vm:LibraryScreenViewModel)DataContext).UseLanguageIcon}" />
-                                    <controls:BrandMark Family="Language" Value="{Binding LanguageIso}" ShowText="False" MarkSize="14"
-                                                        IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).UseLanguageIcon}" />
-                                </Panel>
-                            </Border>
-                            <Border IsVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowUnreadBadge}">
-                                <Border Classes="countPill" IsVisible="{Binding HasUnread}">
-                                    <TextBlock Text="{Binding UnreadCount}" FontFamily="Consolas,monospace" />
-                                </Border>
-                            </Border>
-                            <Button Classes="continueReading" Width="22" Height="22"
-                                    Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ContinueReadingCommand}"
-                                    CommandParameter="{Binding}">
-                                <Button.IsVisible>
+                                    </DataTemplate>
+                                </controls:LazyPart.ContentTemplate>
+                            </controls:LazyPart>
+                            <controls:LazyPart>
+                                <controls:LazyPart.IsActive>
                                     <MultiBinding Converter="{x:Static conv:BoolConverters.And}">
                                         <Binding Path="HasContinueReading" />
                                         <Binding Path="$parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowContinueReadingButton" />
                                     </MultiBinding>
-                                </Button.IsVisible>
+                                </controls:LazyPart.IsActive>
+                                <controls:LazyPart.ContentTemplate>
+                                    <DataTemplate x:DataType="models:SeriesCardSample">
+                            <Button Classes="continueReading" Width="22" Height="22"
+                                    Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ContinueReadingCommand}"
+                                    CommandParameter="{Binding}">
                                 <fi:SymbolIcon Symbol="Play" FontSize="12" />
                             </Button>
+                                    </DataTemplate>
+                                </controls:LazyPart.ContentTemplate>
+                            </controls:LazyPart>
                         </StackPanel>
                     </Grid>
                 </Border>
@@ -779,69 +866,124 @@
                          ImageSource reads the sibling Image's own Source (set asynchronously by
                          AsyncCoverImage once decoded) rather than a separate eager bind - a cache
                          miss just means no flight plays (edge case already handled), not a crash. -->
-                    <Border Grid.Row="0" Classes="cover posterCover" Background="{Binding CoverBrush}"
+                    <Border x:Name="PosterIssueCoverBorder" Grid.Row="0" Classes="cover posterCover" Background="{Binding CoverBrush}"
                             Height="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PosterCoverHeight}"
                             controls:SharedElement.Key="{Binding Id, StringFormat='issue-cover:{0}'}"
                             controls:SharedElement.ImageSource="{Binding #PosterIssueCoverImage.Source}"
                             PointerEntered="OnCoverPointerEntered" PointerExited="OnCoverPointerExited">
                         <Grid>
-                            <Image x:Name="PosterIssueCoverImage" views:AsyncCoverImage.SourceId="{Binding CoverKey}" Stretch="UniformToFill" />
+                            <Image x:Name="PosterIssueCoverImage" views:AsyncCoverImage.GridMode="True" views:AsyncCoverImage.DecodeWidth="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PosterCardWidth}" views:AsyncCoverImage.SourceId="{Binding CoverKey}" Stretch="UniformToFill" />
+                            <!-- Optional overlay parts are LazyParts (docs/superpowers/specs/2026-09-19-library-scroll-
+                                 smoothness-design.md §4): Avalonia builds every control in a template even inside an
+                                 IsVisible="False" parent, and the scroll harness priced these parts at ~85 % of a card's
+                                 realization cost. Each one is built only while its IsActive binding is true, in the same
+                                 Grid slot (same z-order) the eager element occupied. -->
                             <!-- DogEarThumbnails hover peek (docs/superpowers/specs/2026-09-13-
                                  preferences-cosmetic-toggles-design.md) - see the Panorama template's
-                                 own copy of this element for the full rationale. -->
-                            <Image x:Name="PosterDogEarImage" Width="34" Height="34"
-                                   HorizontalAlignment="Right" VerticalAlignment="Bottom"
-                                   Stretch="UniformToFill" IsVisible="False">
-                                <Image.Clip>
-                                    <PathGeometry Figures="M 34,0 L 34,34 L 0,34 Z" />
-                                </Image.Clip>
-                            </Image>
+                                 own copy of this element for the full rationale. Only exists while the
+                                 pointer is over the cover AND the setting is on; the hover handler finds it by name
+                                 (IsPointerOver is already true when PointerEntered runs, so it is built by then). -->
+                            <controls:LazyPart>
+                                <controls:LazyPart.IsActive>
+                                    <MultiBinding Converter="{x:Static conv:BoolConverters.And}">
+                                        <Binding Path="#PosterIssueCoverBorder.IsPointerOver" />
+                                        <Binding Path="$parent[UserControl].((vm:LibraryScreenViewModel)DataContext).DogEarThumbnails" />
+                                    </MultiBinding>
+                                </controls:LazyPart.IsActive>
+                                <controls:LazyPart.ContentTemplate>
+                                    <DataTemplate x:DataType="models:IssueListRow">
+                                        <Image x:Name="PosterDogEarImage" Width="34" Height="34"
+                                               HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                                               Stretch="UniformToFill" IsVisible="False">
+                                            <Image.Clip>
+                                                <PathGeometry Figures="M 34,0 L 34,34 L 0,34 Z" />
+                                            </Image.Clip>
+                                        </Image>
+                                    </DataTemplate>
+                                </controls:LazyPart.ContentTemplate>
+                            </controls:LazyPart>
                             <!-- Plugin API v2 DrawThumbnailOverlay hook (docs/superpowers/specs/
-                                 2026-09-05-plugin-api-v2-remaining-hooks-plan.md §12) - stays empty
-                                 (no visible change) when no plugin implements this hook. Keyed by
+                                 2026-09-05-plugin-api-v2-remaining-hooks-plan.md §12) - built only when a plugin
+                                 implements this hook (stays absent, no visible change, otherwise). Keyed by
                                  the raw issue id (not CoverKey above) - this hook looks up the real
                                  Issue entity to run the plugin against, not a cover-file fingerprint. -->
-                            <Image views:AsyncPluginOverlayImage.SourceId="{Binding Id}" Stretch="UniformToFill" />
-                            <Border Classes="posterScrim" />
-                            <Border Classes="pbChip" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="6">
-                                <Border.IsVisible>
+                            <controls:LazyPart IsActive="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).HasThumbnailOverlayPlugin}">
+                                <controls:LazyPart.ContentTemplate>
+                                    <DataTemplate x:DataType="models:IssueListRow">
+                                        <Image views:AsyncPluginOverlayImage.SourceId="{Binding Id}" Stretch="UniformToFill" />
+                                    </DataTemplate>
+                                </controls:LazyPart.ContentTemplate>
+                            </controls:LazyPart>
+                            <Border Classes="libScrim" />
+                            <controls:LazyPart>
+                                <controls:LazyPart.IsActive>
                                     <MultiBinding Converter="{x:Static conv:BoolConverters.And}">
                                         <Binding Path="HasPublisher" />
                                         <Binding Path="$parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowPublisherBadge" />
                                     </MultiBinding>
-                                </Border.IsVisible>
-                                <controls:BrandMark Family="Publisher" Value="{Binding Publisher}" ShowText="False"
-                                                    MarkSize="12" Foreground="{DynamicResource PbBadgeBrush}" />
-                            </Border>
-                            <Ellipse Width="9" Height="9" Fill="{DynamicResource PbAccentTextBrush}" Stroke="Black" StrokeThickness="1.5"
-                                     HorizontalAlignment="Right" VerticalAlignment="Top" Margin="7">
-                                <Ellipse.IsVisible>
+                                </controls:LazyPart.IsActive>
+                                <controls:LazyPart.ContentTemplate>
+                                    <DataTemplate x:DataType="models:IssueListRow">
+                                        <Border Classes="pbChip" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="6">
+                                            <controls:BrandMark Family="Publisher" Value="{Binding Publisher}" ShowText="False"
+                                                                MarkSize="12" Foreground="{DynamicResource PbBadgeBrush}" />
+                                        </Border>
+                                    </DataTemplate>
+                                </controls:LazyPart.ContentTemplate>
+                            </controls:LazyPart>
+                            <controls:LazyPart>
+                                <controls:LazyPart.IsActive>
                                     <MultiBinding Converter="{x:Static conv:BoolConverters.And}">
                                         <Binding Path="!IsRead" />
                                         <Binding Path="$parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowUnreadBadge" />
                                     </MultiBinding>
-                                </Ellipse.IsVisible>
-                            </Ellipse>
+                                </controls:LazyPart.IsActive>
+                                <controls:LazyPart.ContentTemplate>
+                                    <DataTemplate x:DataType="models:IssueListRow">
+                                        <Ellipse Width="9" Height="9" Fill="{DynamicResource PbAccentTextBrush}" Stroke="Black" StrokeThickness="1.5"
+                                                 HorizontalAlignment="Right" VerticalAlignment="Top" Margin="7" />
+                                    </DataTemplate>
+                                </controls:LazyPart.ContentTemplate>
+                            </controls:LazyPart>
                             <!-- Rating moved bottom-left (was language - now shown in the preview
                                  panel + hover tooltip instead, docs/superpowers/specs/2026-09-14-
                                  library-visual-redesign-design.md §3/§5); no selection-exclusion
                                  needed any more. -->
-                            <Border HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="6">
-                                <Border.IsVisible>
+                            <controls:LazyPart>
+                                <controls:LazyPart.IsActive>
                                     <MultiBinding Converter="{x:Static conv:BoolConverters.And}">
                                         <Binding Path="$parent[UserControl].((vm:LibraryScreenViewModel)DataContext).NumericRatingThumbnails" />
                                         <Binding Path="HasRating" />
                                     </MultiBinding>
-                                </Border.IsVisible>
-                                <Border Classes="ratingBadge countPill">
-                                    <TextBlock Text="{Binding Rating, StringFormat='{}{0:0.0}'}" />
-                                </Border>
-                            </Border>
-                            <!-- Bottom-right is Selection > Dog-ear only now (§3). -->
-                            <CheckBox Classes="tileSelect" Classes.forceVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).HasSelection}"
-                                      IsChecked="{Binding IsSelected, Mode=OneWay}"
-                                      Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ToggleIssueSelectionCheckboxCommand}"
-                                      CommandParameter="{Binding}" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="6" />
+                                </controls:LazyPart.IsActive>
+                                <controls:LazyPart.ContentTemplate>
+                                    <DataTemplate x:DataType="models:IssueListRow">
+                                        <Border HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="6">
+                                            <Border Classes="ratingBadge countPill">
+                                                <TextBlock Text="{Binding Rating, StringFormat='{}{0:0.0}'}" />
+                                            </Border>
+                                        </Border>
+                                    </DataTemplate>
+                                </controls:LazyPart.ContentTemplate>
+                            </controls:LazyPart>
+                            <!-- Bottom-right is Selection > Dog-ear only now (§3). The checkbox is invisible (opacity 0)
+                                 unless the pointer is over the cover or a selection is active, so it is built only then. -->
+                            <controls:LazyPart>
+                                <controls:LazyPart.IsActive>
+                                    <MultiBinding Converter="{x:Static conv:BoolConverters.Or}">
+                                        <Binding Path="#PosterIssueCoverBorder.IsPointerOver" />
+                                        <Binding Path="$parent[UserControl].((vm:LibraryScreenViewModel)DataContext).HasSelection" />
+                                    </MultiBinding>
+                                </controls:LazyPart.IsActive>
+                                <controls:LazyPart.ContentTemplate>
+                                    <DataTemplate x:DataType="models:IssueListRow">
+                                        <CheckBox Classes="tileSelect" Classes.forceVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).HasSelection}"
+                                                  IsChecked="{Binding IsSelected, Mode=OneWay}"
+                                                  Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ToggleIssueSelectionCheckboxCommand}"
+                                                  CommandParameter="{Binding}" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="6" />
+                                    </DataTemplate>
+                                </controls:LazyPart.ContentTemplate>
+                            </controls:LazyPart>
                         </Grid>
                     </Border>
                     <StackPanel Grid.Row="1" Margin="0,8,0,0" Spacing="1"
@@ -867,74 +1009,125 @@
                          (keyed on the SERIES id, not CoverIssueId - sidesteps ever needing to agree
                          on which issue is "the cover" across screens; both ends resolve their own
                          cover art independently for the same series id). -->
-                    <Border Grid.Row="0" Classes="cover posterCover" Background="{Binding CoverBrush}"
+                    <Border x:Name="PosterSeriesCoverBorder" Grid.Row="0" Classes="cover posterCover" Background="{Binding CoverBrush}"
                             Height="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PosterCoverHeight}"
                             controls:SharedElement.Key="{Binding SeriesId, StringFormat='series-cover:{0}'}"
                             controls:SharedElement.ImageSource="{Binding #PosterSeriesCoverImage.Source}"
                             PointerEntered="OnCoverPointerEntered" PointerExited="OnCoverPointerExited">
                         <Grid>
-                            <Image x:Name="PosterSeriesCoverImage" views:AsyncCoverImage.SourceId="{Binding CoverKey}" Stretch="UniformToFill" />
+                            <Image x:Name="PosterSeriesCoverImage" views:AsyncCoverImage.GridMode="True" views:AsyncCoverImage.DecodeWidth="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PosterCardWidth}" views:AsyncCoverImage.SourceId="{Binding CoverKey}" Stretch="UniformToFill" />
                             <!-- DogEarThumbnails hover peek (docs/superpowers/specs/2026-09-13-
                                  preferences-cosmetic-toggles-design.md) - see the issue templates'
-                                 own copy of this element for the full rationale. -->
-                            <Image x:Name="PosterSeriesDogEarImage" Width="34" Height="34"
-                                   HorizontalAlignment="Right" VerticalAlignment="Bottom"
-                                   Stretch="UniformToFill" IsVisible="False">
-                                <Image.Clip>
-                                    <PathGeometry Figures="M 34,0 L 34,34 L 0,34 Z" />
-                                </Image.Clip>
-                            </Image>
-                            <Border Classes="posterScrim" />
-                            <Border Classes="pbChip" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="6">
-                                <Border.IsVisible>
+                                 own copy of this element for the full rationale. Optional overlay parts are
+                                 LazyParts (docs/superpowers/specs/2026-09-19-library-scroll-smoothness-design.md §4):
+                                 built only while their IsActive binding is true, in the same Grid slot as before. -->
+                            <controls:LazyPart>
+                                <controls:LazyPart.IsActive>
+                                    <MultiBinding Converter="{x:Static conv:BoolConverters.And}">
+                                        <Binding Path="#PosterSeriesCoverBorder.IsPointerOver" />
+                                        <Binding Path="$parent[UserControl].((vm:LibraryScreenViewModel)DataContext).DogEarThumbnails" />
+                                    </MultiBinding>
+                                </controls:LazyPart.IsActive>
+                                <controls:LazyPart.ContentTemplate>
+                                    <DataTemplate x:DataType="models:SeriesCardSample">
+                                        <Image x:Name="PosterSeriesDogEarImage" Width="34" Height="34"
+                                               HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                                               Stretch="UniformToFill" IsVisible="False">
+                                            <Image.Clip>
+                                                <PathGeometry Figures="M 34,0 L 34,34 L 0,34 Z" />
+                                            </Image.Clip>
+                                        </Image>
+                                    </DataTemplate>
+                                </controls:LazyPart.ContentTemplate>
+                            </controls:LazyPart>
+                            <Border Classes="libScrim" />
+                            <controls:LazyPart>
+                                <controls:LazyPart.IsActive>
                                     <MultiBinding Converter="{x:Static conv:BoolConverters.And}">
                                         <Binding Path="HasPublisher" />
                                         <Binding Path="$parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowPublisherBadge" />
                                     </MultiBinding>
-                                </Border.IsVisible>
-                                <controls:BrandMark Family="Publisher" Value="{Binding Publisher}" ShowText="False"
-                                                    MarkSize="12" Foreground="{DynamicResource PbBadgeBrush}" />
-                            </Border>
-                            <Border Classes="countPill" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="6">
-                                <Border.IsVisible>
+                                </controls:LazyPart.IsActive>
+                                <controls:LazyPart.ContentTemplate>
+                                    <DataTemplate x:DataType="models:SeriesCardSample">
+                                        <Border Classes="pbChip" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="6">
+                                            <controls:BrandMark Family="Publisher" Value="{Binding Publisher}" ShowText="False"
+                                                                MarkSize="12" Foreground="{DynamicResource PbBadgeBrush}" />
+                                        </Border>
+                                    </DataTemplate>
+                                </controls:LazyPart.ContentTemplate>
+                            </controls:LazyPart>
+                            <controls:LazyPart>
+                                <controls:LazyPart.IsActive>
                                     <MultiBinding Converter="{x:Static conv:BoolConverters.And}">
                                         <Binding Path="HasUnread" />
                                         <Binding Path="$parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowUnreadBadge" />
                                     </MultiBinding>
-                                </Border.IsVisible>
-                                <TextBlock Text="{Binding UnreadCount}" FontFamily="Consolas,monospace" />
-                            </Border>
-                            <Button Classes="continueReading" Width="26" Height="26"
-                                    Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ContinueReadingCommand}"
-                                    CommandParameter="{Binding}" HorizontalAlignment="Center" VerticalAlignment="Center">
-                                <Button.IsVisible>
+                                </controls:LazyPart.IsActive>
+                                <controls:LazyPart.ContentTemplate>
+                                    <DataTemplate x:DataType="models:SeriesCardSample">
+                                        <Border Classes="countPill" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="6">
+                                            <TextBlock Text="{Binding UnreadCount}" FontFamily="Consolas,monospace" />
+                                        </Border>
+                                    </DataTemplate>
+                                </controls:LazyPart.ContentTemplate>
+                            </controls:LazyPart>
+                            <controls:LazyPart>
+                                <controls:LazyPart.IsActive>
                                     <MultiBinding Converter="{x:Static conv:BoolConverters.And}">
                                         <Binding Path="HasContinueReading" />
                                         <Binding Path="$parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowContinueReadingButton" />
                                     </MultiBinding>
-                                </Button.IsVisible>
-                                <fi:SymbolIcon Symbol="Play" />
-                            </Button>
+                                </controls:LazyPart.IsActive>
+                                <controls:LazyPart.ContentTemplate>
+                                    <DataTemplate x:DataType="models:SeriesCardSample">
+                                        <Button Classes="continueReading" Width="26" Height="26"
+                                                Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ContinueReadingCommand}"
+                                                CommandParameter="{Binding}" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                            <fi:SymbolIcon Symbol="Play" />
+                                        </Button>
+                                    </DataTemplate>
+                                </controls:LazyPart.ContentTemplate>
+                            </controls:LazyPart>
                             <!-- Rating moved bottom-left (was language - now shown in the preview
                                  panel + hover tooltip instead, docs/superpowers/specs/2026-09-14-
                                  library-visual-redesign-design.md §3/§5); no selection-exclusion
                                  needed any more. -->
-                            <Border HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="6">
-                                <Border.IsVisible>
+                            <controls:LazyPart>
+                                <controls:LazyPart.IsActive>
                                     <MultiBinding Converter="{x:Static conv:BoolConverters.And}">
                                         <Binding Path="$parent[UserControl].((vm:LibraryScreenViewModel)DataContext).NumericRatingThumbnails" />
                                         <Binding Path="RepresentativeRow.HasRating" />
                                     </MultiBinding>
-                                </Border.IsVisible>
-                                <Border Classes="ratingBadge countPill">
-                                    <TextBlock Text="{Binding RepresentativeRow.Rating, StringFormat='{}{0:0.0}'}" />
-                                </Border>
-                            </Border>
-                            <!-- Bottom-right is Selection > Dog-ear only now (§3). -->
-                            <CheckBox Classes="tileSelect" Classes.forceVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).HasSeriesSelection}"
-                                      IsChecked="{Binding IsSelected, Mode=OneWay}"
-                                      Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ToggleSeriesSelectionCheckboxCommand}"
-                                      CommandParameter="{Binding}" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="6" />
+                                </controls:LazyPart.IsActive>
+                                <controls:LazyPart.ContentTemplate>
+                                    <DataTemplate x:DataType="models:SeriesCardSample">
+                                        <Border HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="6">
+                                            <Border Classes="ratingBadge countPill">
+                                                <TextBlock Text="{Binding RepresentativeRow.Rating, StringFormat='{}{0:0.0}'}" />
+                                            </Border>
+                                        </Border>
+                                    </DataTemplate>
+                                </controls:LazyPart.ContentTemplate>
+                            </controls:LazyPart>
+                            <!-- Bottom-right is Selection > Dog-ear only now (§3). Invisible (opacity 0) unless the pointer
+                                 is over the cover or a selection is active, so it is built only then. -->
+                            <controls:LazyPart>
+                                <controls:LazyPart.IsActive>
+                                    <MultiBinding Converter="{x:Static conv:BoolConverters.Or}">
+                                        <Binding Path="#PosterSeriesCoverBorder.IsPointerOver" />
+                                        <Binding Path="$parent[UserControl].((vm:LibraryScreenViewModel)DataContext).HasSeriesSelection" />
+                                    </MultiBinding>
+                                </controls:LazyPart.IsActive>
+                                <controls:LazyPart.ContentTemplate>
+                                    <DataTemplate x:DataType="models:SeriesCardSample">
+                                        <CheckBox Classes="tileSelect" Classes.forceVisible="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).HasSeriesSelection}"
+                                                  IsChecked="{Binding IsSelected, Mode=OneWay}"
+                                                  Command="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ToggleSeriesSelectionCheckboxCommand}"
+                                                  CommandParameter="{Binding}" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="6" />
+                                    </DataTemplate>
+                                </controls:LazyPart.ContentTemplate>
+                            </controls:LazyPart>
                         </Grid>
                     </Border>
                     <StackPanel Grid.Row="1" Margin="0,8,0,0" Spacing="1"
@@ -971,7 +1164,7 @@
                         <Grid>
                             <Image x:Name="CollectionTileCoverImage" views:AsyncCoverImage.SourceId="{Binding CoverKey}" Stretch="UniformToFill" />
                             <Image Source="{Binding CoverImage}" Stretch="UniformToFill" />
-                            <Border Classes="posterScrim" />
+                            <Border Classes="libScrim" />
                         </Grid>
                     </Border>
                     <StackPanel Grid.Row="1" Margin="0,8,0,0" Spacing="1">
@@ -1013,14 +1206,14 @@
              Comfortable/Cover-only. Same 4-way inner split (Issue/Series x grouped/ungrouped);
              PosterCardWidth/Height (density slider) size the wrap panel, EffectiveShowTileTitles
              gates each tile's own text row. ============ -->
-        <ScrollViewer x:Name="PosterGridScrollViewer" Grid.Row="1" IsVisible="{Binding IsPosterGrid}">
+        <controls:SmoothScrollViewer x:Name="PosterGridScrollViewer" Grid.Row="1" IsVisible="{Binding IsPosterGrid}">
             <Grid>
                 <Panel IsVisible="{Binding IsIssueGranularity}">
                     <ItemsControl IsVisible="{Binding !IssueList.IsGrouped}" ItemsSource="{Binding IssueList.Rows}"
                                   controls:EntranceAnimation.Enabled="{Binding PlayEntranceAnimation}"
                                   ItemTemplate="{StaticResource PosterGridIssueTemplate}" Margin="24,22,24,40">
                         <ItemsControl.ItemsPanel>
-                            <ItemsPanelTemplate><controls:VirtualizingWrapPanel ItemWidth="{Binding PosterCardWidth}" ItemHeight="{Binding PosterCardHeight}" ItemSpacing="20" LineSpacing="20" /></ItemsPanelTemplate>
+                            <ItemsPanelTemplate><controls:VirtualizingWrapPanel PrefetchDecodeWidth="{Binding PosterCardWidth}" ItemWidth="{Binding PosterCardWidth}" ItemHeight="{Binding PosterCardHeight}" ItemSpacing="20" LineSpacing="20" /></ItemsPanelTemplate>
                         </ItemsControl.ItemsPanel>
                     </ItemsControl>
                     <ItemsControl IsVisible="{Binding IssueList.IsGrouped}" ItemsSource="{Binding IssueList.Groups}" Margin="24,22,24,40">
@@ -1038,7 +1231,7 @@
                                     <ItemsControl ItemsSource="{Binding Items}" ItemTemplate="{StaticResource PosterGridIssueTemplate}"
                                                   controls:EntranceAnimation.Enabled="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PlayEntranceAnimation}">
                                         <ItemsControl.ItemsPanel>
-                                            <ItemsPanelTemplate><controls:VirtualizingWrapPanel ItemWidth="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PosterCardWidth}" ItemHeight="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PosterCardHeight}" ItemSpacing="20" LineSpacing="20" /></ItemsPanelTemplate>
+                                            <ItemsPanelTemplate><controls:VirtualizingWrapPanel PrefetchDecodeWidth="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PosterCardWidth}" ItemWidth="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PosterCardWidth}" ItemHeight="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PosterCardHeight}" ItemSpacing="20" LineSpacing="20" /></ItemsPanelTemplate>
                                         </ItemsControl.ItemsPanel>
                                     </ItemsControl>
                                 </StackPanel>
@@ -1051,7 +1244,7 @@
                                   controls:EntranceAnimation.Enabled="{Binding PlayEntranceAnimation}"
                                   ItemTemplate="{StaticResource PosterGridSeriesTemplate}" Margin="24,22,24,40">
                         <ItemsControl.ItemsPanel>
-                            <ItemsPanelTemplate><controls:VirtualizingWrapPanel ItemWidth="{Binding PosterCardWidth}" ItemHeight="{Binding PosterCardHeight}" ItemSpacing="20" LineSpacing="20" /></ItemsPanelTemplate>
+                            <ItemsPanelTemplate><controls:VirtualizingWrapPanel PrefetchDecodeWidth="{Binding PosterCardWidth}" ItemWidth="{Binding PosterCardWidth}" ItemHeight="{Binding PosterCardHeight}" ItemSpacing="20" LineSpacing="20" /></ItemsPanelTemplate>
                         </ItemsControl.ItemsPanel>
                     </ItemsControl>
                     <ItemsControl IsVisible="{Binding IsGrouped}" ItemsSource="{Binding Groups}" Margin="24,22,24,40">
@@ -1069,7 +1262,7 @@
                                     <ItemsControl ItemsSource="{Binding Items}" ItemTemplate="{StaticResource PosterGridSeriesTemplate}"
                                                   controls:EntranceAnimation.Enabled="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PlayEntranceAnimation}">
                                         <ItemsControl.ItemsPanel>
-                                            <ItemsPanelTemplate><controls:VirtualizingWrapPanel ItemWidth="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PosterCardWidth}" ItemHeight="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PosterCardHeight}" ItemSpacing="20" LineSpacing="20" /></ItemsPanelTemplate>
+                                            <ItemsPanelTemplate><controls:VirtualizingWrapPanel PrefetchDecodeWidth="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PosterCardWidth}" ItemWidth="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PosterCardWidth}" ItemHeight="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PosterCardHeight}" ItemSpacing="20" LineSpacing="20" /></ItemsPanelTemplate>
                                         </ItemsControl.ItemsPanel>
                                     </ItemsControl>
                                 </StackPanel>
@@ -1078,7 +1271,7 @@
                     </ItemsControl>
                 </Panel>
             </Grid>
-        </ScrollViewer>
+        </controls:SmoothScrollViewer>
 
         <!-- ============ Panorama comfortable grid ============ -->
         <!-- Variable per-cover tile width (each card binds its own IssueListRow/SeriesCardSample
@@ -1086,7 +1279,7 @@
              packs rows from those widths without decoding every cover - VirtualizingVariableWrapPanel,
              not the uniform-cell VirtualizingWrapPanel the other grids ride. Landscape covers wide,
              portrait covers narrow, side by side - the reason Panorama exists. -->
-        <ScrollViewer x:Name="PanoramaScrollViewer" Grid.Row="1" IsVisible="{Binding IsPanoramaGrid}">
+        <controls:SmoothScrollViewer x:Name="PanoramaScrollViewer" Grid.Row="1" IsVisible="{Binding IsPanoramaGrid}">
             <Grid>
                 <Panel IsVisible="{Binding IsIssueGranularity}">
                     <ItemsControl IsVisible="{Binding !IssueList.IsGrouped}" ItemsSource="{Binding IssueList.Rows}"
@@ -1143,7 +1336,7 @@
                     </ItemsControl>
                 </Panel>
             </Grid>
-        </ScrollViewer>
+        </controls:SmoothScrollViewer>
 
         <!-- ============ List ============ -->
         <!-- One virtualized ListBox per granularity over the flat FlatRows/FlatCovers projection
@@ -1243,14 +1436,14 @@
         </DockPanel>
 
         <!-- ============ Tiles ============ -->
-        <ScrollViewer x:Name="TilesScrollViewer" Grid.Row="1" IsVisible="{Binding IsTilesView}">
+        <controls:SmoothScrollViewer x:Name="TilesScrollViewer" Grid.Row="1" IsVisible="{Binding IsTilesView}">
             <Grid>
                 <Panel IsVisible="{Binding IsIssueGranularity}">
                     <ItemsControl IsVisible="{Binding !IssueList.IsGrouped}" ItemsSource="{Binding IssueList.Rows}"
                                   controls:EntranceAnimation.Enabled="{Binding PlayEntranceAnimation}"
                                   ItemTemplate="{StaticResource TilesItemTemplate}" Margin="24,18,24,40">
                         <ItemsControl.ItemsPanel>
-                            <ItemsPanelTemplate><controls:VirtualizingWrapPanel ItemWidth="{Binding TilesCardWidth}" ItemHeight="{Binding TilesCardHeight}" ItemSpacing="6" LineSpacing="2" /></ItemsPanelTemplate>
+                            <ItemsPanelTemplate><controls:VirtualizingWrapPanel PrefetchDecodeWidth="{Binding TilesThumbWidth}" ItemWidth="{Binding TilesCardWidth}" ItemHeight="{Binding TilesCardHeight}" ItemSpacing="6" LineSpacing="2" /></ItemsPanelTemplate>
                         </ItemsControl.ItemsPanel>
                     </ItemsControl>
                     <ItemsControl IsVisible="{Binding IssueList.IsGrouped}" ItemsSource="{Binding IssueList.Groups}" Margin="24,18,24,40">
@@ -1264,7 +1457,7 @@
                                     <ItemsControl ItemsSource="{Binding Items}" ItemTemplate="{StaticResource TilesItemTemplate}"
                                                   controls:EntranceAnimation.Enabled="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PlayEntranceAnimation}">
                                         <ItemsControl.ItemsPanel>
-                                            <ItemsPanelTemplate><controls:VirtualizingWrapPanel ItemWidth="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).TilesCardWidth}" ItemHeight="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).TilesCardHeight}" ItemSpacing="6" LineSpacing="2" /></ItemsPanelTemplate>
+                                            <ItemsPanelTemplate><controls:VirtualizingWrapPanel PrefetchDecodeWidth="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).TilesThumbWidth}" ItemWidth="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).TilesCardWidth}" ItemHeight="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).TilesCardHeight}" ItemSpacing="6" LineSpacing="2" /></ItemsPanelTemplate>
                                         </ItemsControl.ItemsPanel>
                                     </ItemsControl>
                                 </StackPanel>
@@ -1277,7 +1470,7 @@
                                   controls:EntranceAnimation.Enabled="{Binding PlayEntranceAnimation}"
                                   ItemTemplate="{StaticResource SeriesTilesItemTemplate}" Margin="24,18,24,40">
                         <ItemsControl.ItemsPanel>
-                            <ItemsPanelTemplate><controls:VirtualizingWrapPanel ItemWidth="{Binding TilesCardWidth}" ItemHeight="{Binding TilesCardHeight}" ItemSpacing="6" LineSpacing="2" /></ItemsPanelTemplate>
+                            <ItemsPanelTemplate><controls:VirtualizingWrapPanel PrefetchDecodeWidth="{Binding TilesThumbWidth}" ItemWidth="{Binding TilesCardWidth}" ItemHeight="{Binding TilesCardHeight}" ItemSpacing="6" LineSpacing="2" /></ItemsPanelTemplate>
                         </ItemsControl.ItemsPanel>
                     </ItemsControl>
                     <ItemsControl IsVisible="{Binding IsGrouped}" ItemsSource="{Binding Groups}" Margin="24,18,24,40">
@@ -1291,7 +1484,7 @@
                                     <ItemsControl ItemsSource="{Binding Items}" ItemTemplate="{StaticResource SeriesTilesItemTemplate}"
                                                   controls:EntranceAnimation.Enabled="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PlayEntranceAnimation}">
                                         <ItemsControl.ItemsPanel>
-                                            <ItemsPanelTemplate><controls:VirtualizingWrapPanel ItemWidth="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).TilesCardWidth}" ItemHeight="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).TilesCardHeight}" ItemSpacing="6" LineSpacing="2" /></ItemsPanelTemplate>
+                                            <ItemsPanelTemplate><controls:VirtualizingWrapPanel PrefetchDecodeWidth="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).TilesThumbWidth}" ItemWidth="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).TilesCardWidth}" ItemHeight="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).TilesCardHeight}" ItemSpacing="6" LineSpacing="2" /></ItemsPanelTemplate>
                                         </ItemsControl.ItemsPanel>
                                     </ItemsControl>
                                 </StackPanel>
@@ -1300,19 +1493,19 @@
                     </ItemsControl>
                 </Panel>
             </Grid>
-        </ScrollViewer>
+        </controls:SmoothScrollViewer>
 
         <!-- ============ Mixed-membership Collection grid (Step 9) - only shown for a collection
              with at least one Issue/Book member; a series-only collection keeps using whichever
              normal view-mode grid above is active (full sort/group support, no need to duplicate
              it here). ============ -->
-        <ScrollViewer x:Name="CollectionGridScrollViewer" Grid.Row="1" IsVisible="{Binding IsCollectionView}">
+        <controls:SmoothScrollViewer x:Name="CollectionGridScrollViewer" Grid.Row="1" IsVisible="{Binding IsCollectionView}">
             <ItemsControl ItemsSource="{Binding CollectionTiles}" ItemTemplate="{StaticResource CollectionTileTemplate}" Margin="24,22,24,40">
                 <ItemsControl.ItemsPanel>
-                    <ItemsPanelTemplate><controls:VirtualizingWrapPanel ItemWidth="{Binding PosterCardWidth}" ItemHeight="{Binding PosterCardHeight}" ItemSpacing="20" LineSpacing="20" /></ItemsPanelTemplate>
+                    <ItemsPanelTemplate><controls:VirtualizingWrapPanel PrefetchDecodeWidth="{Binding PosterCardWidth}" ItemWidth="{Binding PosterCardWidth}" ItemHeight="{Binding PosterCardHeight}" ItemSpacing="20" LineSpacing="20" /></ItemsPanelTemplate>
                 </ItemsControl.ItemsPanel>
             </ItemsControl>
-        </ScrollViewer>
+        </controls:SmoothScrollViewer>
 
         <!-- ============ A-Z jump indexer ============ -->
         <!-- Approximate scroll-to-letter (docs/superpowers/specs/2026-08-09-library-toolbar-design.md

@@ -11,7 +11,7 @@ finished files into the library. Story-arc gaps in reading lists feed the same w
 Behavior is modeled on Mylar3 by studying what it does; **no Mylar3 code is copied** (it is GPL-3).
 The UI pattern for per-series "Missing Issues" is modeled on Omnibus (hankscafe/omnibus).
 
-**Target stack (user's own):** Prowlarr (Torznab) + qBittorrent. Paperbunkr ships **no** indexers,
+**Target stack (user's own):** Prowlarr + qBittorrent. Paperbunkr ships **no** indexers,
 tracker lists or defaults; the user supplies their own Prowlarr.
 
 **Out of scope (deferred):** SABnzbd, direct Newznab/Torznab clients, Deluge/NZBGet, owned-trade
@@ -26,7 +26,7 @@ Slack; Activity Center covers in-app notification, so this is backlog).
 |---|---|---|
 | LiteDB | EF Core + SQLite in the existing DB and migrations | The repo has no LiteDB; `Paperbunkr.Data` is EF Core 10 / SQLite |
 | `Core` / `Daemon` / `UI` projects | One new `Paperbunkr.Daemon` project; contracts live in it | Repo already has `Common`, `Data`, `Engine`, `App`; a separate `Core` is YAGNI until a headless host exists |
-| Torznab + Newznab clients | Prowlarr Torznab endpoint only, behind `IIndexerClient` | User runs Prowlarr; it handles indexer auth and limits |
+| Torznab + Newznab clients | Prowlarr's **native JSON search** (`GET /api/v1/search`) only, behind `IIndexerClient` | User runs Prowlarr and it handles indexer auth and limits. Prowlarr has **no combined Torznab feed** (its `/{id}/api` endpoints each hit one tracker), so its native search is the only single call across all indexers |
 | qBittorrent + SABnzbd | qBittorrent only, behind `IDownloadClient` | User's stack |
 | Status machine `Wanted…Ignored` | Kept as `Wanted, Snatched, Downloading, Imported, Failed, Ignored` | Matches brief; "Upcoming" is a future-dated `Wanted` row, not a status |
 
@@ -228,8 +228,7 @@ All changes happen on a copy.
 
 ## 11. Open items to verify during planning
 
-- Exact ComicVine fields for issue store dates and volume issue lists (new client; check the API, not
-  memory).
+- ~~Exact ComicVine fields~~ **Resolved** against ComicVine's published API docs (`store_date`, `cover_date`, `issue_number`, `image`, `volume`; 100 per page). Live behavior is only fixture-tested, not exercised against a real key.
 - Mylar behaviors marked unverified in research (Skipped/Archived/Ignored statuses, pull-list
   refresh, arc match keys) were not relied on.
-- Whether the `Series`/`Issue` schema needs a ComicVine issue id column for owned-matching.
+- ~~Whether `Series`/`Issue` need a ComicVine id column~~ **Resolved:** neither carries one and `ExternalMetadataProvider` has no ComicVine member, so `WatchedSeries.SeriesId` is the link (a series with no `WatchedSeries` shows a "Track this series" action that searches ComicVine volumes). Owned-matching is by `WatchedSeries.SeriesId` + issue number, and by `WantedIssue.IssueId` once imported.

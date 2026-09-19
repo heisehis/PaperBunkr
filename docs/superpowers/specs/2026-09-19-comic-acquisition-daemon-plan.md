@@ -64,7 +64,7 @@ implementing (do not rely on memory).
 150 while High proceeds; High served before queued Low; 429/107 pauses both; existing
 `ComicVineSource` tests still pass.
 
-## Step 3: Daemon project scaffold and contracts
+## Step 3: Daemon project scaffold and contracts  — DONE (feat(daemon) scaffold commit)
 **Files:** `src/Paperbunkr.Daemon/Paperbunkr.Daemon.csproj` (new, net10.0, refs `Data`+`Common`,
 `Microsoft.Extensions.Hosting.Abstractions`, **no Avalonia**), `Contracts/IIndexerClient.cs`,
 `IComicVineClient.cs`, `IEventPublisher.cs`, `Events/DaemonEvent.cs`,
@@ -76,7 +76,7 @@ and a `Channel<DaemonEvent>` publisher.
 **Verify:** solution builds; a Daemon.Tests test asserts `Paperbunkr.Daemon` references no
 `Avalonia*` assembly; publisher delivers events in order.
 
-## Step 4: Entities and hand-written migration
+## Step 4: Entities and migration  — DONE (270f72c; EF-scaffolded then verified additive: 5 tables, 9 indexes, snapshot diff was insert-only, so no hand-writing was needed on this base)
 **Files:** `src/Paperbunkr.Data/Entities/WatchedSeries.cs`, `WantedIssue.cs`, `WantedIssueStatus.cs`,
 `ReleaseCandidate.cs`, `AcquisitionSettings.cs` (all new), `PaperbunkrDbContext.cs` (edit: DbSets +
 config), `Migrations/<timestamp>_AddAcquisition.cs` + `.Designer.cs` (hand-written, additive) and
@@ -89,7 +89,7 @@ Designer/snapshot in sync without dropping the drifted tracker columns.
 existing migration tests can run (memory notes some `Migrate()` tests already fail at base; do not
 add to the failure set, and record baseline pass/fail counts before and after).
 
-## Step 5: ComicVine client (volumes, issues, store dates)
+## Step 5: ComicVine client (volumes, issues, store dates)  — DONE
 **Files:** `src/Paperbunkr.Data/ComicVine/ComicVineClient.cs`, `ComicVineModels.cs` (new),
 `Data.Tests/ComicVine/ComicVineClientTests.cs` (new, fake handler with JSON fixtures)
 **What:** search volumes, get volume, page a volume's issues (100/page). Verify field names
@@ -98,9 +98,9 @@ handler; daemon callers pass Low.
 **Depends on:** Step 2
 **Verify:** fixture-based parsing tests; pagination; error mapping.
 
-## Step 6: Prowlarr client, query cascade, release filter/scoring
-**Files:** `src/Paperbunkr.Daemon/Indexers/ProwlarrTorznabClient.cs`, `QueryBuilder.cs`,
-`ReleaseScorer.cs`, `PackDetector.cs` (new); tests in `Daemon.Tests/Indexers/`
+## Step 6: Prowlarr client, query cascade, release filter/scoring  — DONE (native JSON search, not Torznab - see spec section 2)
+**Files:** `src/Paperbunkr.Daemon/Indexers/ProwlarrSearchClient.cs`, `QueryBuilder.cs`,
+`ReleaseEvaluator.cs`, `ReleaseSearcher.cs`, `PackDetector.cs` (new); tests in `Daemon.Tests/Indexers/`
 **What:** Torznab XML parse; strict-then-sanitized query cascade with number variants
 (`5`,`05`,`005`, volume, year); scoring (seeders, size limits, release group, small CBZ bonus/CBR
 penalty, configurable weights); title/issue/year verification; range/pack flagging. No blocklist yet.

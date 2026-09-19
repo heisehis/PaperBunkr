@@ -59,4 +59,16 @@ public class StoryEventResolverTests : IDisposable
 
         Assert.Equal(first.Id, second.Id);
     }
+
+    /// <summary>docs/superpowers/specs/2026-09-17-series-name-matching-and-empty-row-cleanup-design.md - a punctuation-only difference reuses the existing row instead of creating a near-duplicate.</summary>
+    [Fact]
+    public void GetOrCreate_PunctuationVariant_ReturnsExistingRow()
+    {
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        var first = StoryEventResolver.GetOrCreate(context, "Cataclysm: The Ultimates");
+        var second = StoryEventResolver.GetOrCreate(context, "Cataclysm - The Ultimates");
+
+        Assert.Equal(first.Id, second.Id);
+        Assert.Single(context.StoryEvents);
+    }
 }

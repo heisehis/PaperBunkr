@@ -18,7 +18,12 @@ internal static class StoryEventResolver
     public static StoryEvent GetOrCreate(PaperbunkrDbContext context, string name)
     {
         string trimmed = name.Trim();
-        var existing = context.StoryEvents.FirstOrDefault(e => e.Name.ToLower() == trimmed.ToLower());
+        var events = context.StoryEvents.ToList();
+        var existing = events.FirstOrDefault(e => string.Equals(e.Name, trimmed, StringComparison.OrdinalIgnoreCase))
+            // Punctuation-variant fold (docs/superpowers/specs/2026-09-17-series-name-matching-and-
+            // empty-row-cleanup-design.md) - "Cataclysm: The Ultimates" vs "Cataclysm - The
+            // Ultimates" shouldn't spawn a second StoryEvent for the same crossover.
+            ?? events.FirstOrDefault(e => TitleNormalizer.NamesMatch(e.Name, trimmed, ignoreVolume: false));
         if (existing is not null)
         {
             return existing;

@@ -275,7 +275,7 @@ public class IssuePropertiesScreenViewModelTests : IDisposable
     }
 
     /// <summary>
-    /// P6 follow-up (docs/alpha-todo.md): <see cref="MainViewModel.TryLeaveCurrentEditor"/> queries
+    /// P6 follow-up (docs/paperbunkr-todo.md): <see cref="MainViewModel.TryLeaveCurrentEditor"/> queries
     /// this to decide whether to prompt before navigating away from an in-progress edit.
     /// </summary>
     [Fact]

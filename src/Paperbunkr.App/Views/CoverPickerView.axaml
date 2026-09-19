@@ -1,0 +1,142 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:fi="using:FluentIcons.Avalonia"
+             xmlns:vm="using:Paperbunkr.App.ViewModels"
+             xmlns:views="using:Paperbunkr.App.Views"
+             xmlns:metadata="using:Paperbunkr.Data.Metadata"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="280" d:DesignHeight="320"
+             x:Class="Paperbunkr.App.Views.CoverPickerView"
+             x:DataType="vm:CoverPickerViewModel"
+             x:Name="Root">
+
+    <!--
+        Cover picker flyout content (docs/superpowers/specs/2026-09-17-reader-save-page-and-cover-
+        picker-design.md) - embedded inside a Button.Flyout at each of the 3 "Change/Set Cover…"
+        entry points. 3 tabs: Browse File (today's only option, unchanged), From Series, From
+        Reading List. Tab-active state is 3 plain bools (IsXxxTabActive), same shape as
+        LibrarySection's own Folders/Maintenance 2-tab toggle - no converter class needed.
+    -->
+    <UserControl.Styles>
+        <Style Selector="Button.coverPickerTab">
+            <Setter Property="Padding" Value="10,5" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextFaintBrush}" />
+            <Setter Property="FontSize" Value="11.5" />
+            <Setter Property="CornerRadius" Value="6" />
+        </Style>
+        <Style Selector="Button.coverPickerTab.active">
+            <Setter Property="Background" Value="{DynamicResource PbSurface3Brush}" />
+            <Setter Property="Foreground" Value="{DynamicResource PbTextBrush}" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+        </Style>
+        <Style Selector="Button.coverCandidate">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
+            <Setter Property="CornerRadius" Value="6" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="Cursor" Value="Hand" />
+        </Style>
+        <Style Selector="Button.coverCandidate:pointerover">
+            <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
+        </Style>
+    </UserControl.Styles>
+
+    <Border Width="460" Padding="10" Background="{DynamicResource PbSurface2Brush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1" CornerRadius="8">
+        <StackPanel Spacing="10">
+            <StackPanel Orientation="Horizontal" Spacing="2">
+                <Button Classes="coverPickerTab" Classes.active="{Binding IsBrowseFileTabActive}"
+                        Content="Browse File" Command="{Binding ShowBrowseFileTabCommand}" />
+                <Button Classes="coverPickerTab" Classes.active="{Binding IsSeriesTabActive}"
+                        Content="From Series" Command="{Binding ShowSeriesTabCommand}" />
+                <Button Classes="coverPickerTab" Classes.active="{Binding IsReadingListTabActive}"
+                        Content="Reading List" Command="{Binding ShowReadingListTabCommand}" />
+                <Button Classes="coverPickerTab" Classes.active="{Binding IsExternalProviderTabActive}"
+                        Content="External" Command="{Binding ShowExternalProviderTabCommand}"
+                        IsVisible="{Binding HasExternalProviderTab}" />
+            </StackPanel>
+
+            <!-- Browse File -->
+            <StackPanel Spacing="8" IsVisible="{Binding IsBrowseFileTabActive}">
+                <TextBlock Text="Choose an image file from disk." FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" />
+                <Button Classes="headerAction primary" Content="Browse…" Command="{Binding BrowseFileCommand}" HorizontalAlignment="Left" />
+            </StackPanel>
+
+            <!-- From Series -->
+            <StackPanel Spacing="8" IsVisible="{Binding IsSeriesTabActive}">
+                <TextBlock Text="No other issues in this series have a cover yet." FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap"
+                           IsVisible="{Binding !HasSeriesCandidates}" />
+                <ScrollViewer MaxHeight="380" IsVisible="{Binding HasSeriesCandidates}">
+                    <ItemsControl ItemsSource="{Binding SeriesCandidates}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <WrapPanel />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:CoverPickerCandidate">
+                                <Button Classes="coverCandidate" Width="64" Height="94" Margin="3"
+                                        Command="{Binding #Root.((vm:CoverPickerViewModel)DataContext).SelectCandidateCommand}"
+                                        CommandParameter="{Binding}" ToolTip.Tip="{Binding Label}">
+                                    <Image views:AsyncCoverImage.SourceId="{Binding SourceKey}" Stretch="UniformToFill" />
+                                </Button>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+            </StackPanel>
+
+            <!-- From Reading List -->
+            <StackPanel Spacing="8" IsVisible="{Binding IsReadingListTabActive}">
+                <TextBlock Text="No other issues in a shared reading list have a cover yet." FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap"
+                           IsVisible="{Binding !HasReadingListCandidates}" />
+                <ScrollViewer MaxHeight="380" IsVisible="{Binding HasReadingListCandidates}">
+                    <ItemsControl ItemsSource="{Binding ReadingListCandidates}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <WrapPanel />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:CoverPickerCandidate">
+                                <Button Classes="coverCandidate" Width="64" Height="94" Margin="3"
+                                        Command="{Binding #Root.((vm:CoverPickerViewModel)DataContext).SelectCandidateCommand}"
+                                        CommandParameter="{Binding}" ToolTip.Tip="{Binding Label}">
+                                    <Image views:AsyncCoverImage.SourceId="{Binding SourceKey}" Stretch="UniformToFill" />
+                                </Button>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+            </StackPanel>
+
+            <!-- From External Provider (MangaBaka's multi-cover archive) -->
+            <StackPanel Spacing="8" IsVisible="{Binding IsExternalProviderTabActive}">
+                <TextBlock Text="Loading covers…" FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}"
+                           IsVisible="{Binding IsLoadingExternalProviderCandidates}" />
+                <TextBlock Text="No covers found." FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}"
+                           IsVisible="{Binding ShowNoExternalProviderCandidatesMessage}" />
+                <ScrollViewer MaxHeight="380" IsVisible="{Binding HasExternalProviderCandidates}">
+                    <ItemsControl ItemsSource="{Binding ExternalProviderCandidates}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <WrapPanel />
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="metadata:CoverCandidate">
+                                <Button Classes="coverCandidate" Width="64" Height="94" Margin="3"
+                                        Command="{Binding #Root.((vm:CoverPickerViewModel)DataContext).SelectExternalCandidateCommand}"
+                                        CommandParameter="{Binding}" ToolTip.Tip="{Binding Source}">
+                                    <Image views:RemoteThumbnailImage.SourceUrl="{Binding ThumbnailUrl}" Stretch="UniformToFill" />
+                                </Button>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+            </StackPanel>
+        </StackPanel>
+    </Border>
+</UserControl>

@@ -48,9 +48,38 @@
              4px buffer - an under-reservation here would let the WebView's own airspace claim a
              sliver of the button's own clickable area, which is exactly the kind of thing that reads
              as "the button doesn't work" without an obvious visual cue why. The TOC/Bookmarks/
-             Highlights/Search/font-sheet overlays now use the same fix as the highlight color-picker
-             popup (Popup + ShouldUseOverlayLayer="False") instead of a reserved margin, since they
-             need to cover more of the screen than a thin strip. -->
+             Highlights/Search/font-sheet overlays were built on the assumption that Popup +
+             ShouldUseOverlayLayer="False" (meant to force a real separate top-level OS window,
+             which - unlike a plain in-tree overlay - can win the airspace fight against a native
+             child HWND) would keep them above the WebView, the same way it was assumed to for the
+             small highlight color-picker popup below. Real on-screen testing (2026-09-16 user
+             report) showed it does NOT hold for these: every one of them rendered with only its
+             first sliver (e.g. just a drawer/sheet header) visible, the rest covered by the WebView.
+             Root cause, confirmed via Avalonia's own docs, not guessed: Program.cs's
+             Win32PlatformOptions.OverlayPopups = true (added 2026-09-10 for an unrelated ComboBox-
+             dropdown freeze fix) makes Avalonia embed EVERY popup into the window's own surface
+             regardless of that popup's own ShouldUseOverlayLayer value - a platform-wide override,
+             not a per-popup opt-out ("OverlayPopups: Embeds popups to the window when set to true").
+             So every overlay in this file has actually been in-process/overlay-layer-rendered since
+             2026-09-10, contrary to what ShouldUseOverlayLayer="False" implies - which loses to the
+             WebView's native child HWND the same as a plain in-tree overlay would, unlike the
+             chrome-bar margin above, which sidesteps the whole problem by never overlapping at all.
+
+             First attempt (same day) hid this WebView entirely (IsVisible bound to !IsAnyDrawerOpen)
+             whenever a drawer/sheet was open - functionally correct (no more blocked drawers) but
+             lost the original, better behavior: right after this reader was first built, opening a
+             drawer showed it above the still-visible (if dimmed-by-scrim) page, not a fully blank
+             one. Superseded the same day, once the user pointed that out: TOC/Bookmarks/Highlights/
+             Search (ReaderListDrawer.axaml) and the font sheet (ReaderSettingsSheet.axaml) are now
+             each hosted in a real, separately-owned Window (OverlayWindowController) instead of a
+             Popup - a Window is NOT subject to OverlayPopups, so it reliably renders above this
+             WebView the way the original Popup-based approach was always assumed to, restoring the
+             original look. This WebView no longer needs to hide itself at all.
+
+             The highlight color/note popup below still relies on the broken Popup assumption and
+             has not been verified or fixed - it likely has the same bug; not converted to a Window
+             here since it's small and anchored next to a selection/highlight the user needs to keep
+             seeing behind it, a different design question than the full-screen drawers. -->
         <NativeWebView x:Name="ReaderWebView" Margin="0,56,0,56"
                        NavigationCompleted="OnReaderNavigationCompleted" WebMessageReceived="OnReaderWebMessageReceived"
                        AutomationProperties.AutomationId="BookReaderWebView" />
@@ -220,11 +249,16 @@
         </views:ReaderListDrawer>
 
         <!-- Highlight color/note popup - anchored to the just-completed selection or tapped highlight.
-             ShouldUseOverlayLayer="False" forces a real separate OS popup window rather than
-             Avalonia's in-process overlay layer, which - like every other in-tree overlay in this
-             file - would render beneath the native WebView (see the airspace note above the
-             NativeWebView element). Explicit, not relying on whatever the platform default happens
-             to resolve to. -->
+             ShouldUseOverlayLayer="False" was meant to force a real separate OS popup window rather
+             than Avalonia's in-process overlay layer, to stay above the native WebView (see the
+             airspace note above the NativeWebView element) - but per that same note, Program.cs's
+             Win32PlatformOptions.OverlayPopups = true overrides this app-wide, so this popup is
+             actually in-process/overlay-layer-rendered like every other overlay in this file, and
+             likely has the SAME "covered by the WebView" bug the drawers had (2026-09-16) - NOT
+             verified or fixed. Unlike the drawers, hiding the whole WebView while this is open isn't
+             a clean fix here (it's a small, position-anchored popup meant to sit next to the still-
+             visible selection/highlight it's about), so this needs its own design decision, not a
+             copy of the drawer fix. -->
         <Popup IsOpen="{Binding IsHighlightPopupOpen}" PlacementTarget="{Binding #RootGrid}"
                Placement="AnchorAndGravity" PlacementAnchor="Bottom" PlacementGravity="Bottom"
                PlacementRect="{Binding HighlightPopupAnchorRect}" IsLightDismissEnabled="True"

@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Net;
 using System.Net.Http;
 using System.Net.Http.Json;
 using System.Text.Json;
@@ -22,7 +24,7 @@ namespace Paperbunkr.Data.Tracking.Adapters;
 /// Search is not duplicated here - <see cref="Metadata.MangaBakaMetadataProvider"/> already
 /// implements <see cref="ITrackerSearchProvider"/> for that half.
 /// </summary>
-public sealed class MangaBakaTrackerAdapter : ITrackerAdapter
+public sealed class MangaBakaTrackerAdapter : ITrackerAdapter, ITrackerDetailedPush
 {
     private const string ApiBase = "https://api.mangabaka.org/v1";
 
@@ -35,24 +37,71 @@ public sealed class MangaBakaTrackerAdapter : ITrackerAdapter
 
     public TrackingService Service => TrackingService.MangaBaka;
 
+    /// <summary>Sanitized first (<see cref="TrackerCredentialSanitizer.SanitizeToken"/>) - same
+    /// "no exchange call to catch a bad paste early" reasoning as <see cref="BangumiTrackerAdapter.CompleteConnect"/>.</summary>
     public static void CompleteConnect(PaperbunkrDbContext context, string personalAccessToken) =>
-        CredentialStore.Set(context, nameof(TrackingService.MangaBaka), CredentialKind.ApiKey, personalAccessToken);
+        CredentialStore.Set(context, nameof(TrackingService.MangaBaka), CredentialKind.ApiKey, TrackerCredentialSanitizer.SanitizeToken(personalAccessToken));
 
-    public async Task<bool> PushEntryAsync(PaperbunkrDbContext context, TrackingLink link, TrackerPushPayload payload, CancellationToken cancellationToken)
+    public async Task<bool> PushEntryAsync(PaperbunkrDbContext context, TrackingLink link, TrackerPushPayload payload, CancellationToken cancellationToken) =>
+        (await PushEntryDetailedAsync(context, link, payload, cancellationToken).ConfigureAwait(false)).Success;
+
+    /// <summary>Same as <see cref="PushEntryAsync"/> but returns MangaBaka's real error body
+    /// instead of collapsing every failure into a bare <see langword="false"/> - added after a live
+    /// "sync failed" report gave no way to tell an invalid/unscoped PAT apart from a malformed
+    /// request or a server-side rejection.</summary>
+    public async Task<(bool Success, string? ErrorDetail)> PushEntryDetailedAsync(PaperbunkrDbContext context, TrackingLink link, TrackerPushPayload payload, CancellationToken cancellationToken)
     {
         string? token = CredentialStore.Get(context, nameof(TrackingService.MangaBaka), CredentialKind.ApiKey);
         if (string.IsNullOrEmpty(token))
         {
-            return false;
+            return (false, "Not connected - no PAT saved.");
         }
 
-        var body = new
+        // Dictionary, not an anonymous object - an omitted key leaves that field untouched on
+        // MangaBaka's side, so an ordinary status/progress-only sync (UpdateScore/UpdateFinishDate
+        // both default false) never sends rating/finish_date as null and clobbers a value the user
+        // set independently there.
+        var body = new Dictionary<string, object?>
         {
-            state = MangaBakaLibraryStateMapper.ToState(payload.Status),
-            progress_chapter = payload.ChapterProgress,
+            ["state"] = MangaBakaLibraryStateMapper.ToState(payload.Status),
+            ["progress_chapter"] = payload.ChapterProgress,
         };
+        if (payload.UpdateScore)
+        {
+            body["rating"] = payload.Score is decimal localScore and > 0 ? (int?)Math.Round((double)localScore * 20) : null;
+        }
 
-        var request = new HttpRequestMessage(HttpMethod.Put, $"{ApiBase}/my/library/{link.ExternalId}")
+        if (payload.UpdateFinishDate)
+        {
+            body["finish_date"] = payload.FinishDate?.ToString("yyyy-MM-dd");
+        }
+
+        var (ok, statusCode, rawBody) = await SendLibraryRequestAsync(HttpMethod.Put, link.ExternalId, token, body, cancellationToken).ConfigureAwait(false);
+        if (ok)
+        {
+            return (true, null);
+        }
+
+        // PUT only updates an existing library entry - confirmed live 2026-09-18 (a real PAT got a
+        // real 404 NOT_FOUND for a series never added to that account's MangaBaka library before,
+        // not the 401 a bad/unscoped PAT would give). POST creates it; retry with that once, same
+        // "create-then-update" two-step MangaUpdatesTrackerAdapter already uses for its own list-
+        // entry endpoint.
+        if (statusCode == HttpStatusCode.NotFound)
+        {
+            (ok, statusCode, rawBody) = await SendLibraryRequestAsync(HttpMethod.Post, link.ExternalId, token, body, cancellationToken).ConfigureAwait(false);
+            if (ok)
+            {
+                return (true, null);
+            }
+        }
+
+        return (false, statusCode is { } code ? $"{(int)code}: {rawBody}" : rawBody);
+    }
+
+    private async Task<(bool Success, HttpStatusCode? StatusCode, string Body)> SendLibraryRequestAsync(HttpMethod method, string externalId, string token, object body, CancellationToken cancellationToken)
+    {
+        var request = new HttpRequestMessage(method, $"{ApiBase}/my/library/{externalId}")
         {
             Content = JsonContent.Create(body),
         };
@@ -63,18 +112,20 @@ public sealed class MangaBakaTrackerAdapter : ITrackerAdapter
         {
             response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
         }
-        catch (HttpRequestException)
+        catch (HttpRequestException ex)
         {
-            return false;
-        }
-        catch (TaskCanceledException) when (!cancellationToken.IsCancellationRequested)
-        {
-            return false;
+            return (false, null, $"Network error: {ex.Message}");
         }
 
         using (response)
         {
-            return response.IsSuccessStatusCode;
+            if (response.IsSuccessStatusCode)
+            {
+                return (true, response.StatusCode, string.Empty);
+            }
+
+            string rawBody = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+            return (false, response.StatusCode, rawBody.Length > 300 ? rawBody[..300] + "..." : rawBody);
         }
     }
 
@@ -133,7 +184,9 @@ public sealed class MangaBakaTrackerAdapter : ITrackerAdapter
                 return null;
             }
 
-            return new TrackerRemoteEntry(MangaBakaLibraryStateMapper.FromState(entry.State), entry.ProgressChapter);
+            decimal? score = entry.Rating is int rating and > 0 ? rating / 20m : null;
+            DateOnly? finishDate = DateOnly.TryParse(entry.FinishDate, out var parsedDate) ? parsedDate : null;
+            return new TrackerRemoteEntry(MangaBakaLibraryStateMapper.FromState(entry.State), entry.ProgressChapter, score, finishDate);
         }
     }
 }
@@ -185,4 +238,10 @@ internal sealed class MangaBakaLibraryEntryDto
 
     [JsonPropertyName("progress_chapter")]
     public int? ProgressChapter { get; set; }
+
+    [JsonPropertyName("rating")]
+    public int? Rating { get; set; }
+
+    [JsonPropertyName("finish_date")]
+    public string? FinishDate { get; set; }
 }

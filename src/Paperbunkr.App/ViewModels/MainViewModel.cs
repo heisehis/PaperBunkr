@@ -105,6 +105,11 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         // presentation VMs and the link resolver.
         Activity = new ActivityService();
 
+        // Automatic tracker push/pull (docs/superpowers/specs/2026-09-18-tracker-behavior-settings-design.md).
+        // Toasts marshal onto the UI thread (DispatcherToastHost); every screen VM that hooks a tracker
+        // event receives this one instance.
+        TrackerAutoSync = new TrackerAutoSyncService(Activity, new DispatcherToastHost(ShowToast, CloseToast));
+
         // Shared confirm dialog (docs/superpowers/specs/2026-09-06-feedback-notification-system-
         // design.md §2) - constructed early since PaperbunkrApplication.AskQuestion (wired later,
         // in PluginHostService) needs Dialogs available via this VM's reference.
@@ -146,7 +151,7 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         OnThemeAppliedForMatrixRain(); // initialize from whatever ApplyPersistedSettings already applied at startup, before this subscription existed
         OnMatrixRainEnabledChanged();
         Home = new HomeScreenViewModel(GoDetailForSeries, GoReaderForIssue, GoLibraryWithSearch, GoReaderForIssueInReadingList, GoBookReaderForBook, GoLibraryWithCollection, themeService, loadOnConstruction: false);
-        Library = new LibraryScreenViewModel(GoDetailForSeries, GoReaderForIssue, GoNewIssuePropertiesForPlaceholder, OpenQuickRateOverlay, GoIssuePropertiesForIssue, GoBulkIssuePropertiesForIssues, ShowToast, GoBulkSeriesPropertiesForSeries, GoLibraryFoldersPreferences, OpenCollectionPropertiesOverlay, GoBookDetailForBook, promptForName: PromptWorkspaceName, enqueueMetadataWriteBack: EnqueueMetadataWriteBack, activity: Activity, loadOnConstruction: false);
+        Library = new LibraryScreenViewModel(GoDetailForSeries, GoReaderForIssue, GoNewIssuePropertiesForPlaceholder, OpenQuickRateOverlay, GoIssuePropertiesForIssue, GoBulkIssuePropertiesForIssues, ShowToast, GoBulkSeriesPropertiesForSeries, GoLibraryFoldersPreferences, OpenCollectionPropertiesOverlay, GoBookDetailForBook, promptForName: PromptWorkspaceName, enqueueMetadataWriteBack: EnqueueMetadataWriteBack, activity: Activity, loadOnConstruction: false, trackerAutoSync: TrackerAutoSync);
         Books = new BooksScreenViewModel(GoBookDetailForBook, GoBookSeriesDetailForSeries, GoBookPropertiesForBook, GoBulkBookPropertiesForBooks, GoBookSeriesPropertiesForSeries, GoLibraryFoldersPreferences, ShowToast, promptForName: PromptWorkspaceName);
         BookDetail = new BookDetailScreenViewModel(NavigateBack, GoBookReaderForBook, GoBookPropertiesForBook, GoBulkBookPropertiesForBooks, GoBookSeriesPropertiesForSeries);
         BookProperties = new BookPropertiesScreenViewModel(CloseBookPropertiesOverlay, ShowToast);
@@ -154,10 +159,10 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         BookSeriesProperties = new BookSeriesPropertiesScreenViewModel(CloseBookSeriesPropertiesOverlay, ShowToast);
         BookReader = new BookReaderScreenViewModel(NavigateBack, ReadingEvents);
         PdfReader = new PdfPageReaderScreenViewModel(NavigateBack, ReadingEvents);
-        Detail = new DetailScreenViewModel(NavigateBack, GoReaderForIssue, GoIssuePropertiesForIssue, GoBulkIssuePropertiesForIssues, GoDetailForSeries, GoLibraryWithSearch, OpenQuickRateOverlay, GoLibraryWithCollection, id => EnqueueMetadataWriteBack(id));
-        MangaDetail = new MangaDetailScreenViewModel(NavigateBack, GoReaderForIssue, GoIssuePropertiesForIssue, GoBulkIssuePropertiesForIssues, GoDetailForSeries, GoLibraryWithSearch, GoLibraryWithCollection, id => EnqueueMetadataWriteBack(id));
+        Detail = new DetailScreenViewModel(NavigateBack, GoReaderForIssue, GoIssuePropertiesForIssue, GoBulkIssuePropertiesForIssues, GoDetailForSeries, GoLibraryWithSearch, OpenQuickRateOverlay, GoLibraryWithCollection, id => EnqueueMetadataWriteBack(id), TrackerAutoSync);
+        MangaDetail = new MangaDetailScreenViewModel(NavigateBack, GoReaderForIssue, GoIssuePropertiesForIssue, GoBulkIssuePropertiesForIssues, GoDetailForSeries, GoLibraryWithSearch, GoLibraryWithCollection, id => EnqueueMetadataWriteBack(id), TrackerAutoSync);
         var keyBindingService = new KeyBindingService();
-        Reader = new ReaderScreenViewModel(NavigateBack, keyBindingService, ReadingEvents);
+        Reader = new ReaderScreenViewModel(NavigateBack, keyBindingService, ReadingEvents, TrackerAutoSync);
         // "Ask me to rate a comic when I finish it" (docs/superpowers/specs/2026-09-04-behavior-
         // settings-batch2-design.md §3.3) - the reader raises this at the true end of a book when
         // AppSettings.PromptReviewOnFinish is on; reuse the same Quick Rate overlay the Library /
@@ -167,7 +172,7 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         BulkIssueProperties = new BulkIssuePropertiesScreenViewModel(CloseBulkIssuePropertiesOverlayAndReload, ShowToast, enqueueMetadataWriteBack: id => EnqueueMetadataWriteBack(id));
         BulkSeriesProperties = new BulkSeriesPropertiesScreenViewModel(CloseBulkSeriesPropertiesOverlayAndReload, id => EnqueueMetadataWriteBack(id));
         Smart = new SmartScreenViewModel(GoDetailForSeries, GoBookDetailForBook, loadOnConstruction: false);
-        Reading = new ReadingScreenViewModel(new FilePickerService(), GoReaderForIssueInReadingList, OpenReadingListPropertiesOverlay, activity: Activity, loadOnConstruction: false);
+        Reading = new ReadingScreenViewModel(new FilePickerService(), GoReaderForIssueInReadingList, OpenReadingListPropertiesOverlay, activity: Activity, loadOnConstruction: false, trackerAutoSync: TrackerAutoSync);
         Events = new EventsScreenViewModel(GoDetailForSeries, GoReaderForIssue, GoReadingWithList, ShowToast, activity: Activity, loadOnConstruction: false);
         Insights = new InsightsScreenViewModel(GoReaderForIssue, GoDetailForSeries, GoLibraryWithSearch, ReadingEvents);
         Plugin = new PluginScreenViewModel(new FilePickerService(), Dialogs);
@@ -455,6 +460,9 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
 
     /// <summary>App-wide background-job registry (docs/superpowers/specs/2026-09-03-activity-center-design.md).</summary>
     public IActivityService Activity { get; }
+
+    /// <summary>The one automatic tracker push/pull service handed to every screen VM that hooks a tracker event.</summary>
+    public ITrackerAutoSyncService TrackerAutoSync { get; }
 
     /// <summary>Reading-event log recorder (docs/superpowers/specs/2026-09-05-insights-dashboard-design.md §5).</summary>
     public IReadingEventRecorder ReadingEvents { get; }
@@ -1456,7 +1464,7 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
 
     /// <summary>
     /// Guards the seven rail-nav destinations against silently discarding an in-progress Issue
-    /// Properties/Bulk Editing edit (P6 follow-up, docs/alpha-todo.md) - CE's equivalent
+    /// Properties/Bulk Editing edit (P6 follow-up, docs/paperbunkr-todo.md) - CE's equivalent
     /// (<c>ComicBookDialog</c>) is a true modal Windows dialog that blocks all other interaction by
     /// construction, but these screens are just screen-swaps within one window, so without this the
     /// rail nav stays fully clickable mid-edit with no warning. Stashes <paramref name="navigate"/>
@@ -2324,6 +2332,46 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         ShowToast("Couldn't open file", "That file couldn't be added to your library.");
     }
 
+    /// <summary>Books-side counterpart to <see cref="OpenFilePath"/> (docs/superpowers/specs/
+    /// 2026-09-16-book-file-associations-design.md) - called from <c>App.axaml.cs</c> at startup when
+    /// <see cref="NavigationCliArgs.TryParseBookFilePathArg"/> found a supported Book file on the
+    /// command line. Same already-in-library-just-opens / new-file-always-imports-first shape as
+    /// <see cref="OpenFilePath"/>, against the independent Book schema and
+    /// <see cref="BookFolderScanService"/> instead.</summary>
+    public void OpenBookFilePath(string path, BookFormat format)
+    {
+        using var context = PaperbunkrDb.CreateContext();
+        var existing = context.Books.FirstOrDefault(b => b.FilePath == path);
+        if (existing is not null)
+        {
+            _navigationHistory.ResetRoot("books");
+            GoBookReaderForBook(existing.Id, existing.Format);
+            return;
+        }
+
+        try
+        {
+            var result = new BookFolderScanService()
+                .ImportNewFilesAsync(new[] { path }, new Progress<(int Done, int Total)>(), CancellationToken.None)
+                .GetAwaiter().GetResult();
+
+            if (result.AddedBookIds.Count == 1)
+            {
+                _navigationHistory.ResetRoot("books");
+                GoBookReaderForBook(result.AddedBookIds[0], format);
+                return;
+            }
+        }
+        catch
+        {
+            // Import failed (corrupt file, I/O error) - fall through to the toast + restore below
+            // rather than crashing startup over one bad file.
+        }
+
+        RestoreLastScreen();
+        ShowToast("Couldn't open file", "That file couldn't be added to your library.");
+    }
+
     /// <summary>Restore-on-launch - called once from <c>App.axaml.cs</c> at startup when no CLI deep
     /// link was present. Only the last screen is restored, not the full history stack (which starts
     /// empty each launch, per the design doc's explicit call). Falls back to Home, logged rather than
@@ -2587,12 +2635,12 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
                 }
 
                 break;
-            case ActivityLinkKind.StoryEventsScreen:
-                GoEventsCommand.Execute(null);
-                break;
             case ActivityLinkKind.PluginGroupedReview:
                 GoSmartCommand.Execute(null);
                 _ = Smart.OpenPluginListByKey(link.Payload);
+                break;
+            case ActivityLinkKind.StoryEventsScreen:
+                GoEventsCommand.Execute(null);
                 break;
             case ActivityLinkKind.RestartApp:
                 App.RelaunchAndExit();

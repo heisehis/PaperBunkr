@@ -186,6 +186,69 @@ public class ArcReadingListBuilderTests : IDisposable
         Assert.Equal(2, _context.ReadingListItems.Count(i => i.ReadingListId == list.Id));
     }
 
+    /// <summary>docs/superpowers/specs/2026-09-17-series-name-matching-and-empty-row-cleanup-design.md's cascade fold means two differently-punctuated arc entries can now resolve to the same local Issue - must collapse to one ReadingListItem, not crash or duplicate.</summary>
+    [Fact]
+    public async Task RefreshAsync_TwoArcEntriesResolvingToSameIssue_CollapseToOneItem_NoCrash()
+    {
+        var series = new Series { Name = "Cataclysm: The Ultimates" };
+        _context.Series.Add(series);
+        _context.SaveChanges();
+        var issue = new Issue { SeriesId = series.Id, Number = "1", Year = 2023 };
+        _context.Issues.Add(issue);
+        _context.SaveChanges();
+
+        var list = new ReadingList
+        {
+            Name = "Cataclysm", Source = "FakeSource", ArcId = "arc-1", ArcName = "Cataclysm",
+            CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow,
+        };
+        _context.ReadingLists.Add(list);
+        _context.SaveChanges();
+
+        // The arc's own issue list carries the same real issue under two punctuation variants of
+        // its series name - both fold to the same local Issue via ReadingListMatcher's cascade.
+        var source = new FakeReadingListSource("FakeSource", new[]
+        {
+            new ArcIssue("Cataclysm: The Ultimates", "1", 2023, null),
+            new ArcIssue("Cataclysm - The Ultimates", "1", 2023, null),
+        }, null);
+
+        var result = await ArcReadingListBuilder.RefreshAsync(_context, list.Id, CancellationToken.None, source);
+
+        Assert.Equal(1, result.AddedCount);
+        var item = Assert.Single(_context.ReadingListItems.Where(i => i.ReadingListId == list.Id));
+        Assert.Equal(issue.Id, item.IssueId);
+    }
+
+    /// <summary>Root-cause-independent safety net: pre-existing duplicate rows (however they got there) must self-heal, not crash the next Refresh.</summary>
+    [Fact]
+    public async Task RefreshAsync_PreExistingDuplicateItemsForSameIssue_SelfHeals_NoCrash()
+    {
+        var series = new Series { Name = "Kilo Station" };
+        _context.Series.Add(series);
+        _context.SaveChanges();
+        var issue = new Issue { SeriesId = series.Id, Number = "1", Year = 2020 };
+        _context.Issues.Add(issue);
+        _context.SaveChanges();
+
+        var list = new ReadingList
+        {
+            Name = "Signal War", Source = "FakeSource", ArcId = "arc-1", ArcName = "Signal War",
+            CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow,
+        };
+        list.Items.Add(new ReadingListItem { IssueId = issue.Id, SortOrder = 0 });
+        list.Items.Add(new ReadingListItem { IssueId = issue.Id, SortOrder = 1 }); // duplicate row, simulating already-corrupted data
+        _context.ReadingLists.Add(list);
+        _context.SaveChanges();
+
+        var source = new FakeReadingListSource("FakeSource", new[] { new ArcIssue("Kilo Station", "1", 2020, null) }, null);
+
+        var result = await ArcReadingListBuilder.RefreshAsync(_context, list.Id, CancellationToken.None, source);
+
+        Assert.Equal(0, result.AddedCount);
+        Assert.Single(_context.ReadingListItems.Where(i => i.ReadingListId == list.Id));
+    }
+
     [Fact]
     public async Task RefreshAsync_ThrowsWhenListIsNotArcLinked()
     {

@@ -86,24 +86,27 @@ internal static class StoryArcGroupingResolver
     /// </summary>
     public static IReadOnlyList<StoryEventCandidate> GetCandidates(PaperbunkrDbContext context)
     {
+        // Grouping/dismissal/existing-membership keys all fold through TitleNormalizer.StripDown
+        // (docs/superpowers/specs/2026-09-17-series-name-matching-and-empty-row-cleanup-design.md) -
+        // a raw arcKey.ToLowerInvariant() would otherwise split "Cataclysm: The Ultimates" and
+        // "Cataclysm - The Ultimates" into two candidates for the same real crossover, and a
+        // dismissal/existing-membership recorded under one spelling wouldn't suppress the other.
         var dismissed = context.StoryEventCandidateDismissals
             .Select(d => new { d.ArcName, d.Publisher })
             .AsEnumerable()
-            .Select(d => (ArcName: d.ArcName.ToLowerInvariant(), Publisher: d.Publisher.ToLowerInvariant()))
+            .Select(d => (ArcKey: TitleNormalizer.StripDown(d.ArcName).ToLowerInvariant(), Publisher: d.Publisher.ToLowerInvariant()))
             .ToHashSet();
 
-        // Existing StoryEvents by lowercased name -> the issue ids already members, so an issue
-        // that's already tracked under this arc name isn't proposed again. Grouped rather than
-        // ToDictionary'd: two StoryEvents can legitimately share a name (the Story Events screen's
-        // own "New" button creates repeated "New Story Event" rows), and ToDictionary would throw on
-        // the duplicate key and take the whole scan down with it.
-        var existingMemberIssueIdsByName = context.StoryEvents
+        // Existing StoryEvents by StripDown'd name -> the issue ids already members, so an issue
+        // that's already tracked under this arc name (any punctuation variant of it) isn't proposed
+        // again.
+        var existingMemberIssueIdsByArcKey = context.StoryEvents
             .Select(e => new { e.Name, MemberIssueIds = e.Members.Select(m => m.IssueId).ToList() })
             .AsEnumerable()
-            .GroupBy(e => e.Name.ToLowerInvariant())
+            .GroupBy(e => TitleNormalizer.StripDown(e.Name).ToLowerInvariant())
             .ToDictionary(g => g.Key, g => (IReadOnlySet<int>)g.SelectMany(e => e.MemberIssueIds).ToHashSet());
 
-        var groups = new Dictionary<(string ArcKey, string PublisherKey), (string ArcName, string Publisher, List<StoryEventCandidateMember> Members)>();
+        var groups = new Dictionary<(string ArcKey, string PublisherKey), (string Publisher, List<(string RawArcName, StoryEventCandidateMember Member)> Entries)>();
 
         var issuesWithArc = context.Issues.Where(i => i.StoryArc != null && i.StoryArc != string.Empty).AsEnumerable();
         foreach (var issue in issuesWithArc)
@@ -111,7 +114,7 @@ internal static class StoryArcGroupingResolver
             string publisher = NormalizePublisher(issue.Publisher);
             foreach (var (arcName, position) in SplitArcs(issue.StoryArc, issue.StoryArcNumber))
             {
-                string arcKey = arcName.ToLowerInvariant();
+                string arcKey = TitleNormalizer.StripDown(arcName).ToLowerInvariant();
                 string publisherKey = publisher.ToLowerInvariant();
 
                 if (dismissed.Contains((arcKey, publisherKey)))
@@ -119,7 +122,7 @@ internal static class StoryArcGroupingResolver
                     continue;
                 }
 
-                if (existingMemberIssueIdsByName.TryGetValue(arcKey, out var memberIds) && memberIds.Contains(issue.Id))
+                if (existingMemberIssueIdsByArcKey.TryGetValue(arcKey, out var memberIds) && memberIds.Contains(issue.Id))
                 {
                     continue;
                 }
@@ -127,22 +130,40 @@ internal static class StoryArcGroupingResolver
                 var key = (arcKey, publisherKey);
                 if (!groups.TryGetValue(key, out var group))
                 {
-                    group = (arcName, publisher, new List<StoryEventCandidateMember>());
+                    group = (publisher, new List<(string, StoryEventCandidateMember)>());
                     groups[key] = group;
                 }
 
-                group.Members.Add(new StoryEventCandidateMember(issue, position));
+                group.Entries.Add((arcName, new StoryEventCandidateMember(issue, position)));
             }
         }
 
         return groups.Values
-            .Where(g => g.Members.Count >= 2)
-            .Select(g => new StoryEventCandidate(
-                g.ArcName,
-                g.Publisher,
-                g.Members.OrderBy(m => m.Position ?? int.MaxValue).ThenBy(m => m.Issue.Year ?? int.MaxValue).ToList(),
-                FormatSignalStrength.Weak,
-                $"{g.Members.Count} issues tagged with Story Arc \"{g.ArcName}\""))
+            .Where(g => g.Entries.Count >= 2)
+            .Select(g =>
+            {
+                // Display name: the raw spelling carried by the most member issues, ties broken by
+                // earliest year - "the spelling most of your actual files use," not an arbitrary
+                // first-seen pick.
+                string displayArcName = g.Entries
+                    .GroupBy(e => e.RawArcName, StringComparer.OrdinalIgnoreCase)
+                    .Select(spelling => (spelling.Key, Count: spelling.Count(), EarliestYear: spelling.Min(e => e.Member.Issue.Year ?? int.MaxValue)))
+                    .OrderByDescending(s => s.Count)
+                    .ThenBy(s => s.EarliestYear)
+                    .First().Key;
+
+                var members = g.Entries.Select(e => e.Member)
+                    .OrderBy(m => m.Position ?? int.MaxValue)
+                    .ThenBy(m => m.Issue.Year ?? int.MaxValue)
+                    .ToList();
+
+                return new StoryEventCandidate(
+                    displayArcName,
+                    g.Publisher,
+                    members,
+                    FormatSignalStrength.Weak,
+                    $"{members.Count} issues tagged with Story Arc \"{displayArcName}\"");
+            })
             .OrderByDescending(c => c.Members.Count)
             .ThenBy(c => c.ArcName)
             .ToList();

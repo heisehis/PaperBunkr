@@ -33,6 +33,19 @@
                     <ToggleSwitch IsChecked="{Binding HighQualityPageDisplay}" OnContent="{x:Null}" OffContent="{x:Null}" />
                 </pref:SettingsRow.SettingsContent>
             </pref:SettingsRow>
+            <pref:SettingsRow Icon="EyeOff" Title="Auto-hide toolbar when idle"
+                               Description="Fades the floating toolbar/clusters after a few seconds of no pointer movement while reading. Off keeps them always visible.">
+                <pref:SettingsRow.SettingsContent>
+                    <ToggleSwitch IsChecked="{Binding ReaderAutoHideChrome}" OnContent="{x:Null}" OffContent="{x:Null}" />
+                </pref:SettingsRow.SettingsContent>
+            </pref:SettingsRow>
+            <pref:SettingsRow Icon="CursorHover" Title="Chrome reveal style"
+                               Description="PerCluster: each corner control pops in only when you hover over it. Ambient: any pointer movement reveals the whole toolbar at once (the original behavior).">
+                <pref:SettingsRow.SettingsContent>
+                    <controls:SuggestBox IsStrict="True" Text="{Binding ReaderChromeHoverModeText}"
+                                         Suggestions="{Binding ReaderChromeHoverModeNames}" Width="150" />
+                </pref:SettingsRow.SettingsContent>
+            </pref:SettingsRow>
             <pref:SettingsRow Icon="ArrowFit" Title="Default fit mode"
                                Description="Used for any book that hasn't been set to a different fit mode from the reader itself.">
                 <pref:SettingsRow.SettingsContent>

@@ -31,12 +31,23 @@ public interface ITrackerAdapter
     Task<TrackerRemoteEntry?> GetEntryAsync(PaperbunkrDbContext context, TrackingLink link, CancellationToken cancellationToken);
 }
 
-/// <summary>What one <see cref="ITrackerAdapter.PushEntryAsync"/> call pushes. Chapter progress only,
-/// no volume progress, this pass.</summary>
-public sealed record TrackerPushPayload(ReadingStatus Status, int? ChapterProgress);
+/// <summary>What one <see cref="ITrackerAdapter.PushEntryAsync"/> call pushes. Chapter progress
+/// only, no volume progress, this pass. <see cref="Score"/>/<see cref="FinishDate"/>
+/// (docs/superpowers/specs/2026-09-18-per-tracker-score-and-finish-date-design.md) are optional -
+/// an adapter for a tracker without one of these fields simply never sets it; not every service
+/// supports both (see that design doc's own verified capability table).
+///
+/// <para><see cref="UpdateScore"/>/<see cref="UpdateFinishDate"/> default <see langword="false"/>
+/// deliberately - the shared "Sync with Trackers" button only ever knows Status/Progress, and a
+/// tracker whose score lives on a separate endpoint (MangaDex, MangaUpdates) would otherwise issue
+/// a real <c>DELETE</c> on every ordinary sync just because <see cref="Score"/> happened to be
+/// null, silently wiping a rating the user set independently on that service. Only the per-tracker
+/// panel's own explicit field edit sets these <see langword="true"/>, scoped to the one field the
+/// user actually touched.</para></summary>
+public sealed record TrackerPushPayload(ReadingStatus Status, int? ChapterProgress, decimal? Score = null, DateOnly? FinishDate = null, bool UpdateScore = false, bool UpdateFinishDate = false);
 
 /// <summary>What one <see cref="ITrackerAdapter.GetEntryAsync"/> call reads back. Same
 /// <see cref="ReadingStatus"/>/chapter-progress shape as <see cref="TrackerPushPayload"/> -
 /// deliberately not the same type, since a future field could apply to only one direction (e.g. a
 /// remote-only "last synced at" timestamp would never belong on the push payload).</summary>
-public sealed record TrackerRemoteEntry(ReadingStatus Status, int? ChapterProgress);
+public sealed record TrackerRemoteEntry(ReadingStatus Status, int? ChapterProgress, decimal? Score = null, DateOnly? FinishDate = null);

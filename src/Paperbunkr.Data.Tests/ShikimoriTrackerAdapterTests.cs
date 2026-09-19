@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http;
 using System.Text;
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Paperbunkr.Data.Credentials;
 using Paperbunkr.Data.Entities;
@@ -115,6 +116,64 @@ public class ShikimoriTrackerAdapterTests : IDisposable
         bool result = await adapter.PushEntryAsync(context, new TrackingLink { ExternalId = "30013" }, new TrackerPushPayload(ReadingStatus.Completed, 100), CancellationToken.None);
 
         Assert.True(result);
+    }
+
+    [Fact]
+    public async Task PushEntryAsync_UpdateScoreFalse_OmitsScoreFromBody()
+    {
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        CredentialStore.Set(context, nameof(TrackingService.Shikimori), CredentialKind.OAuthAccessToken, "token-abc");
+        string? capturedBody = null;
+
+        var adapter = new ShikimoriTrackerAdapter(new HttpClient(new StubHandler((req, _) =>
+        {
+            if (req.RequestUri!.AbsolutePath.EndsWith("/users/whoami"))
+            {
+                return JsonResponse(HttpStatusCode.OK, """{ "id": 7 }""");
+            }
+            if (req.RequestUri.AbsolutePath.EndsWith("/v2/user_rates") && req.Method == HttpMethod.Get)
+            {
+                return JsonResponse(HttpStatusCode.OK, "[]");
+            }
+
+            capturedBody = req.Content!.ReadAsStringAsync().Result;
+            return JsonResponse(HttpStatusCode.OK, """{ "id": 99 }""");
+        })));
+
+        var payload = new TrackerPushPayload(ReadingStatus.Reading, 5, Score: 4.5m);
+        await adapter.PushEntryAsync(context, new TrackingLink { ExternalId = "30013" }, payload, CancellationToken.None);
+
+        using var doc = JsonDocument.Parse(capturedBody!);
+        Assert.False(doc.RootElement.GetProperty("user_rate").TryGetProperty("score", out _));
+    }
+
+    [Fact]
+    public async Task PushEntryAsync_UpdateScoreTrue_SendsConvertedScore()
+    {
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        CredentialStore.Set(context, nameof(TrackingService.Shikimori), CredentialKind.OAuthAccessToken, "token-abc");
+        string? capturedBody = null;
+
+        var adapter = new ShikimoriTrackerAdapter(new HttpClient(new StubHandler((req, _) =>
+        {
+            if (req.RequestUri!.AbsolutePath.EndsWith("/users/whoami"))
+            {
+                return JsonResponse(HttpStatusCode.OK, """{ "id": 7 }""");
+            }
+            if (req.RequestUri.AbsolutePath.EndsWith("/v2/user_rates") && req.Method == HttpMethod.Get)
+            {
+                return JsonResponse(HttpStatusCode.OK, "[]");
+            }
+
+            capturedBody = req.Content!.ReadAsStringAsync().Result;
+            return JsonResponse(HttpStatusCode.OK, """{ "id": 99 }""");
+        })));
+
+        var payload = new TrackerPushPayload(ReadingStatus.Reading, 5, Score: 4.5m, UpdateScore: true);
+        await adapter.PushEntryAsync(context, new TrackingLink { ExternalId = "30013" }, payload, CancellationToken.None);
+
+        using var doc = JsonDocument.Parse(capturedBody!);
+        Assert.Equal(9, doc.RootElement.GetProperty("user_rate").GetProperty("score").GetInt32()); // 4.5 * 2
     }
 
     [Fact]

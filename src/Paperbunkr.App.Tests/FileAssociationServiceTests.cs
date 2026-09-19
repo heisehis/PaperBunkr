@@ -164,6 +164,108 @@ public class FileAssociationServiceTests
         Assert.DoesNotContain(".cb7", fake.RegisteredExtensions);
     }
 
+    // --- Book-format scoping (docs/superpowers/specs/2026-09-16-book-file-associations-design.md) ---
+
+    [Fact]
+    public void BookAssociationExtensions_CoversEpubFb2ZipMobiAzwAzw3_NotPdf()
+    {
+        Assert.Equal(
+            new[] { ".epub", ".fb2", ".zip", ".mobi", ".azw", ".azw3" }.OrderBy(x => x),
+            FileAssociationService.BookAssociationExtensions.OrderBy(x => x));
+        Assert.DoesNotContain(".pdf", FileAssociationService.BookAssociationExtensions);
+    }
+
+    [Fact]
+    public void GetAvailableFormats_IncludesBookFormats()
+    {
+        var fake = new FakeShellFileAssociation();
+        var service = new FileAssociationService(fake);
+
+        var formats = service.GetAvailableFormats();
+
+        Assert.Contains(formats, f => f.Name == "EPUB" && f.ExtensionList == ".epub");
+        Assert.Contains(formats, f => f.Name == "FB2" && f.ExtensionList == ".fb2, .zip");
+        Assert.Contains(formats, f => f.Name == "Kindle / MOBI" && f.ExtensionList == ".mobi, .azw, .azw3");
+    }
+
+    [Fact]
+    public void SetAssociated_BookFormatName_RegistersItsExtensions()
+    {
+        var fake = new FakeShellFileAssociation();
+        var service = new FileAssociationService(fake);
+
+        service.SetAssociated("EPUB", true);
+
+        Assert.Contains(".epub", fake.RegisteredExtensions);
+        var refreshed = service.GetAvailableFormats().First(f => f.Name == "EPUB");
+        Assert.True(refreshed.IsAssociated);
+    }
+
+    [Fact]
+    public void SetBookAssociationsFor_Epub_RegistersOnlyEpub()
+    {
+        var fake = new FakeShellFileAssociation();
+        var service = new FileAssociationService(fake);
+
+        service.SetBookAssociationsFor(new[] { ".epub" }, true);
+
+        Assert.Contains(".epub", fake.RegisteredExtensions);
+        Assert.DoesNotContain(".fb2", fake.RegisteredExtensions);
+        Assert.DoesNotContain(".mobi", fake.RegisteredExtensions);
+        Assert.True(fake.RefreshCalled);
+    }
+
+    [Fact]
+    public void SetBookAssociationsFor_Fb2_RegistersBothFb2AndZip()
+    {
+        var fake = new FakeShellFileAssociation();
+        var service = new FileAssociationService(fake);
+
+        service.SetBookAssociationsFor(new[] { ".fb2" }, true);
+
+        // A single "FB2" task covers both extensions - toggling it registers .zip too (a deliberate,
+        // documented tradeoff: Windows can't key an association off the compound ".fb2.zip").
+        Assert.Contains(".fb2", fake.RegisteredExtensions);
+        Assert.Contains(".zip", fake.RegisteredExtensions);
+    }
+
+    [Fact]
+    public void SetBookAssociationsFor_Mobi_RegistersMobiAzwAndAzw3Together()
+    {
+        var fake = new FakeShellFileAssociation();
+        var service = new FileAssociationService(fake);
+
+        service.SetBookAssociationsFor(new[] { ".mobi" }, true);
+
+        Assert.Contains(".mobi", fake.RegisteredExtensions);
+        Assert.Contains(".azw", fake.RegisteredExtensions);
+        Assert.Contains(".azw3", fake.RegisteredExtensions);
+    }
+
+    [Fact]
+    public void SetBookAssociationsFor_ComicExtension_RegistersNothing()
+    {
+        var fake = new FakeShellFileAssociation();
+        var service = new FileAssociationService(fake);
+
+        service.SetBookAssociationsFor(new[] { ".cbz", ".pdf" }, true);
+
+        Assert.Empty(fake.RegisteredExtensions);
+        Assert.False(fake.RefreshCalled);
+    }
+
+    [Fact]
+    public void SetComicAssociationsFor_BookExtension_RegistersNothing()
+    {
+        var fake = new FakeShellFileAssociation();
+        var service = new FileAssociationService(fake);
+
+        service.SetComicAssociationsFor(new[] { ".epub", ".mobi" }, true);
+
+        Assert.Empty(fake.RegisteredExtensions);
+        Assert.False(fake.RefreshCalled);
+    }
+
     private sealed class FakeShellFileAssociation : IShellFileAssociation
     {
         private readonly HashSet<(string TypeId, string Extension)> _registered = new();

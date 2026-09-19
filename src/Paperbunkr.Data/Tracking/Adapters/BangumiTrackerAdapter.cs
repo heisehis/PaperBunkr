@@ -23,7 +23,7 @@ namespace Paperbunkr.Data.Tracking.Adapters;
 /// endpoint and the unconfirmed unknowns entirely. Stored as a plain <see cref="CredentialKind.ApiKey"/>,
 /// not an OAuth token kind.
 /// </summary>
-public sealed class BangumiTrackerAdapter : ITrackerSearchProvider, ITrackerAdapter
+public sealed class BangumiTrackerAdapter : ITrackerSearchProvider, ITrackerAdapter, ITrackerDetailedPush
 {
     private const string ApiBase = "https://api.bgm.tv/v0";
 
@@ -39,8 +39,11 @@ public sealed class BangumiTrackerAdapter : ITrackerSearchProvider, ITrackerAdap
 
     public TrackingService Service => TrackingService.Bangumi;
 
+    /// <summary>Sanitized first (<see cref="TrackerCredentialSanitizer.SanitizeToken"/>) - no
+    /// exchange call for a pasted PAT to catch a stray "Bearer " prefix or trailing whitespace
+    /// early, so it would otherwise fail silently at push time instead.</summary>
     public static void CompleteConnect(PaperbunkrDbContext context, string personalAccessToken) =>
-        CredentialStore.Set(context, nameof(TrackingService.Bangumi), CredentialKind.ApiKey, personalAccessToken);
+        CredentialStore.Set(context, nameof(TrackingService.Bangumi), CredentialKind.ApiKey, TrackerCredentialSanitizer.SanitizeToken(personalAccessToken));
 
     public async Task<IReadOnlyList<MetadataSearchResult>> SearchAsync(string query, CancellationToken cancellationToken)
     {
@@ -93,12 +96,22 @@ public sealed class BangumiTrackerAdapter : ITrackerSearchProvider, ITrackerAdap
         }
     }
 
-    public async Task<bool> PushEntryAsync(PaperbunkrDbContext context, TrackingLink link, TrackerPushPayload payload, CancellationToken cancellationToken)
+    public async Task<bool> PushEntryAsync(PaperbunkrDbContext context, TrackingLink link, TrackerPushPayload payload, CancellationToken cancellationToken) =>
+        (await PushEntryDetailedAsync(context, link, payload, cancellationToken).ConfigureAwait(false)).Success;
+
+    /// <summary>Same as <see cref="PushEntryAsync"/> but returns Bangumi's real error body instead
+    /// of collapsing every failure into a bare <see langword="false"/> - extends the detailed-error
+    /// pattern already shipped this session for MangaBaka/MangaDex to this adapter. <c>rate</c>
+    /// rides the same collection-update call as status/progress - confirmed live via the real
+    /// fetched Bangumi OpenAPI v0 spec (docs/superpowers/specs/2026-09-18-per-tracker-score-and-
+    /// finish-date-design.md); no finish-date field exists on this service at all, confirmed absent
+    /// from that same spec.</summary>
+    public async Task<(bool Success, string? ErrorDetail)> PushEntryDetailedAsync(PaperbunkrDbContext context, TrackingLink link, TrackerPushPayload payload, CancellationToken cancellationToken)
     {
         string? token = CredentialStore.Get(context, nameof(TrackingService.Bangumi), CredentialKind.ApiKey);
         if (string.IsNullOrEmpty(token))
         {
-            return false;
+            return (false, "Not connected - no PAT saved.");
         }
 
         var body = new Dictionary<string, object>
@@ -110,17 +123,22 @@ public sealed class BangumiTrackerAdapter : ITrackerSearchProvider, ITrackerAdap
             body["ep_status"] = chapters;
         }
 
-        bool succeeded = await SendCollectionRequestAsync(HttpMethod.Post, token, link.ExternalId, body, cancellationToken).ConfigureAwait(false);
+        if (payload.UpdateScore)
+        {
+            body["rate"] = payload.Score is decimal localScore and > 0 ? Math.Clamp((int)Math.Round((double)localScore * 2), 0, 10) : 0;
+        }
+
+        var (succeeded, error) = await SendCollectionRequestDetailedAsync(HttpMethod.Post, token, link.ExternalId, body, cancellationToken).ConfigureAwait(false);
         if (!succeeded)
         {
             // Bangumi's own community-reported flakiness isn't limited to token exchange (which this
             // adapter avoids entirely via PAT) - one retry-with-backoff on the actual collection call
             // before surfacing failure, per the design spec's error-handling section.
             await Task.Delay(TimeSpan.FromSeconds(1), cancellationToken).ConfigureAwait(false);
-            succeeded = await SendCollectionRequestAsync(HttpMethod.Patch, token, link.ExternalId, body, cancellationToken).ConfigureAwait(false);
+            (succeeded, error) = await SendCollectionRequestDetailedAsync(HttpMethod.Patch, token, link.ExternalId, body, cancellationToken).ConfigureAwait(false);
         }
 
-        return succeeded;
+        return (succeeded, succeeded ? null : error);
     }
 
     /// <summary>Uses the same <c>-</c> self-alias as <see cref="PushEntryAsync"/>'s own collection
@@ -177,11 +195,12 @@ public sealed class BangumiTrackerAdapter : ITrackerSearchProvider, ITrackerAdap
                 return null;
             }
 
-            return new TrackerRemoteEntry(BangumiCollectionTypeMapper.FromCollectionType(type), parsed.EpStatus);
+            decimal? score = parsed.Rate is int rate and > 0 ? rate / 2m : null;
+            return new TrackerRemoteEntry(BangumiCollectionTypeMapper.FromCollectionType(type), parsed.EpStatus, score);
         }
     }
 
-    private async Task<bool> SendCollectionRequestAsync(HttpMethod method, string token, string subjectId, Dictionary<string, object> body, CancellationToken cancellationToken)
+    private async Task<(bool Success, string? ErrorDetail)> SendCollectionRequestDetailedAsync(HttpMethod method, string token, string subjectId, Dictionary<string, object> body, CancellationToken cancellationToken)
     {
         var request = new HttpRequestMessage(method, $"{ApiBase}/users/-/collections/{subjectId}")
         {
@@ -195,18 +214,24 @@ public sealed class BangumiTrackerAdapter : ITrackerSearchProvider, ITrackerAdap
         {
             response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
         }
-        catch (HttpRequestException)
+        catch (HttpRequestException ex)
         {
-            return false;
+            return (false, $"Network error: {ex.Message}");
         }
         catch (TaskCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
-            return false;
+            return (false, "Request timed out.");
         }
 
         using (response)
         {
-            return response.IsSuccessStatusCode;
+            if (response.IsSuccessStatusCode)
+            {
+                return (true, null);
+            }
+
+            string rawBody = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+            return (false, $"{(int)response.StatusCode}: {rawBody}");
         }
     }
 }
@@ -250,6 +275,9 @@ internal sealed class BangumiCollectionResponseDto
 
     [JsonPropertyName("ep_status")]
     public int? EpStatus { get; set; }
+
+    [JsonPropertyName("rate")]
+    public int? Rate { get; set; }
 }
 
 internal sealed class BangumiSearchResponse

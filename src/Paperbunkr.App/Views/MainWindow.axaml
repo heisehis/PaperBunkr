@@ -1210,7 +1210,7 @@
         </controls:OverlayShell.ContentTemplate>
     </controls:OverlayShell>
 
-    <!-- ============ Unsaved-changes discard confirm (P6 follow-up, docs/alpha-todo.md) - guards
+    <!-- ============ Unsaved-changes discard confirm (P6 follow-up, docs/paperbunkr-todo.md) - guards
          the rail nav against silently abandoning an in-progress Issue Properties/Bulk Editing edit,
          see MainViewModel.TryLeaveCurrentEditor ============ -->
     <!-- Fade+scale (docs/superpowers/specs/2026-09-07-chrome-content-motion-polish-design.md item 4)

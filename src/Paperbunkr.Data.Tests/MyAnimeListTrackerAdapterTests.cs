@@ -99,6 +99,46 @@ public class MyAnimeListTrackerAdapterTests : IDisposable
     }
 
     [Fact]
+    public async Task PushEntryAsync_UpdateScoreAndFinishDateFalse_OmitsBothFormFields()
+    {
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        CredentialStore.Set(context, nameof(TrackingService.MyAnimeList), CredentialKind.OAuthAccessToken, "token-xyz");
+
+        string? capturedBody = null;
+        var adapter = new MyAnimeListTrackerAdapter(new HttpClient(new StubHandler((req, _) =>
+        {
+            capturedBody = req.Content!.ReadAsStringAsync().Result;
+            return JsonResponse(HttpStatusCode.OK, "{}");
+        })), clientId: null);
+
+        var payload = new TrackerPushPayload(ReadingStatus.Reading, 5, Score: 4.5m, FinishDate: new DateOnly(2026, 9, 18));
+        await adapter.PushEntryAsync(context, new TrackingLink { ExternalId = "13" }, payload, CancellationToken.None);
+
+        Assert.DoesNotContain("score=", capturedBody);
+        Assert.DoesNotContain("finish_date=", capturedBody);
+    }
+
+    [Fact]
+    public async Task PushEntryAsync_UpdateScoreAndFinishDateTrue_SendsConvertedScoreAndDate()
+    {
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        CredentialStore.Set(context, nameof(TrackingService.MyAnimeList), CredentialKind.OAuthAccessToken, "token-xyz");
+
+        string? capturedBody = null;
+        var adapter = new MyAnimeListTrackerAdapter(new HttpClient(new StubHandler((req, _) =>
+        {
+            capturedBody = req.Content!.ReadAsStringAsync().Result;
+            return JsonResponse(HttpStatusCode.OK, "{}");
+        })), clientId: null);
+
+        var payload = new TrackerPushPayload(ReadingStatus.Reading, 5, Score: 4.5m, FinishDate: new DateOnly(2026, 9, 18), UpdateScore: true, UpdateFinishDate: true);
+        await adapter.PushEntryAsync(context, new TrackingLink { ExternalId = "13" }, payload, CancellationToken.None);
+
+        Assert.Contains("score=9", capturedBody); // 4.5 * 2
+        Assert.Contains("finish_date=2026-09-18", capturedBody);
+    }
+
+    [Fact]
     public async Task GetEntryAsync_NoStoredAccessToken_ReturnsNull_WithoutSendingRequest()
     {
         using var context = new PaperbunkrDbContext(_dbOptions);

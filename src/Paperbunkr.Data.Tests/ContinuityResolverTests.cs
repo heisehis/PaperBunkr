@@ -67,6 +67,19 @@ public class ContinuityResolverTests : IDisposable
         Assert.Single(context.Continuities);
     }
 
+    /// <summary>docs/superpowers/specs/2026-09-17-series-name-matching-and-empty-row-cleanup-design.md - same defect shape as StoryEventResolver.</summary>
+    [Fact]
+    public void GetOrCreate_PunctuationVariant_ReturnsExistingRow_DoesNotDuplicate()
+    {
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        var first = ContinuityResolver.GetOrCreate(context, "Cataclysm: The Ultimates");
+
+        var second = ContinuityResolver.GetOrCreate(context, "Cataclysm - The Ultimates");
+
+        Assert.Equal(first.Id, second.Id);
+        Assert.Single(context.Continuities);
+    }
+
     [Fact]
     public void AddSeriesToContinuity_NewPairing_Succeeds()
     {

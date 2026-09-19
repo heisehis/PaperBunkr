@@ -162,6 +162,94 @@ public class LibraryHealthServiceTests : IDisposable
         Assert.False(context.Issues.Find(otherId)!.FileIsMissing);
     }
 
+    // ===================== Empty Rows: content-empty probe (docs/superpowers/specs/2026-09-17-
+    // series-name-matching-and-empty-row-cleanup-design.md) - piggybacks on this same sweep rather
+    // than a second full-library pass. =====================
+
+    [Fact]
+    public async Task Verify_FlagsContentEmpty_ForUnopenableFile()
+    {
+        // Plain text, not a real archive - PageDecodeCore.TryOpenProvider can't open it at all.
+        int issueId = AddIssue("corrupt.cbz");
+
+        var result = await CreateService().VerifyAsync(new Progress<(int, int)>());
+
+        Assert.Equal(1, result.ContentEmptyNow);
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        Assert.True(context.Issues.Find(issueId)!.IsContentEmpty);
+        Assert.False(context.Issues.Find(issueId)!.FileIsMissing); // present, just unreadable
+    }
+
+    [Fact]
+    public async Task Verify_FlagsContentEmpty_ForZeroPageArchive()
+    {
+        string path = Path.Combine(_root, "zero-pages.cbz");
+        CbzFixture.Create(path, pageCount: 0);
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            var series = new Series { Name = "Test Series" };
+            context.Series.Add(series);
+            context.Issues.Add(new Issue { Series = series, Number = "1", FilePath = path });
+            context.SaveChanges();
+        }
+
+        var result = await CreateService().VerifyAsync(new Progress<(int, int)>());
+
+        Assert.Equal(1, result.ContentEmptyNow);
+    }
+
+    [Fact]
+    public async Task Verify_DoesNotFlagContentEmpty_ForHealthyArchive()
+    {
+        string path = Path.Combine(_root, "healthy.cbz");
+        CbzFixture.Create(path, pageCount: 1);
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            var series = new Series { Name = "Test Series" };
+            context.Series.Add(series);
+            context.Issues.Add(new Issue { Series = series, Number = "1", FilePath = path });
+            context.SaveChanges();
+        }
+
+        var result = await CreateService().VerifyAsync(new Progress<(int, int)>());
+
+        Assert.Equal(0, result.ContentEmptyNow);
+    }
+
+    [Fact]
+    public async Task Verify_DoesNotFlagContentEmpty_ForMissingFile()
+    {
+        // A missing file has nothing to probe - that case belongs to Missing Files, not Empty Rows.
+        int issueId = AddIssue("gone.cbz", createFile: false);
+
+        var result = await CreateService().VerifyAsync(new Progress<(int, int)>());
+
+        Assert.Equal(0, result.ContentEmptyNow);
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        Assert.False(context.Issues.Find(issueId)!.IsContentEmpty);
+    }
+
+    [Fact]
+    public async Task Verify_ClearsContentEmpty_WhenFileBecomesReadable()
+    {
+        int issueId = AddIssue("was-corrupt.cbz"); // garbage text, unopenable
+        await CreateService().VerifyAsync(new Progress<(int, int)>());
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            Assert.True(context.Issues.Find(issueId)!.IsContentEmpty);
+        }
+
+        // Same path, now a real readable archive.
+        string path = Path.Combine(_root, "was-corrupt.cbz");
+        File.Delete(path);
+        CbzFixture.Create(path, pageCount: 1);
+
+        await CreateService().VerifyAsync(new Progress<(int, int)>());
+
+        using var verify = new PaperbunkrDbContext(_dbOptions);
+        Assert.False(verify.Issues.Find(issueId)!.IsContentEmpty);
+    }
+
     // ===================== Scanning: missing-file handling (docs/superpowers/specs/2026-09-06-
     // scan-missing-file-handling-design.md) - the drive-reachability guard the unattended auto-
     // remove-on-scan path needs and the manual "Remove All Confirmed Missing" button doesn't. =====================

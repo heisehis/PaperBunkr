@@ -159,7 +159,7 @@ public class MainViewModelTests : IDisposable
     }
 
     /// <summary>
-    /// P6 follow-up (docs/alpha-todo.md): unlike CE's <c>ComicBookDialog</c> (a true modal that
+    /// P6 follow-up (docs/paperbunkr-todo.md): unlike CE's <c>ComicBookDialog</c> (a true modal that
     /// blocks all other interaction by construction), Issue Properties/Bulk Editing here are just
     /// an overlay within one window, so the rail nav stayed fully clickable mid-edit with no
     /// warning until <see cref="MainViewModel.TryLeaveCurrentEditor"/> was added.
@@ -679,6 +679,99 @@ public class MainViewModelTests : IDisposable
         {
             try { Directory.Delete(root, recursive: true); } catch (IOException) { }
         }
+    }
+
+    /// <summary>docs/superpowers/specs/2026-09-16-book-file-associations-design.md - Books-side
+    /// counterpart to <see cref="OpenFilePath_AlreadyInLibrary_OpensExistingIssue_WithoutImporting"/>:
+    /// a path already in the library just opens the existing Book, no import runs.</summary>
+    [Fact]
+    public void OpenBookFilePath_AlreadyInLibrary_OpensExistingBook_WithoutImporting()
+    {
+        string root = Path.Combine(Path.GetTempPath(), $"paperbunkr_openbookfilepath_existing_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        string filePath = Path.Combine(root, "novel.epub");
+        // A real, readable epub - GoBookReaderForBook -> BookReaderScreenViewModel.LoadBook opens the
+        // file for real content (unlike the comic reader path, which doesn't need real page bytes
+        // for this same "already in library" shape), so a bare seeded FilePath with no matching file
+        // on disk would throw here.
+        EpubFixture.Create(filePath, title: "Open Book File Existing");
+        SeedBook("Open Book File Existing", filePath, Paperbunkr.Data.Entities.BookFormat.Epub);
+        var vm = new MainViewModel();
+
+        try
+        {
+            vm.OpenBookFilePath(filePath, Paperbunkr.Data.Entities.BookFormat.Epub);
+
+            Assert.True(vm.IsBookReader);
+
+            var options = new DbContextOptionsBuilder<PaperbunkrDbContext>().UseSqlite($"Data Source={_dbPath}").Options;
+            using var context = new PaperbunkrDbContext(options);
+            Assert.Equal(1, context.Books.Count());
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch (IOException) { }
+        }
+    }
+
+    /// <summary>A path not already in the library is always imported first, then opened - mirrors
+    /// <see cref="OpenFilePath_NewSupportedFile_ImportsAndOpens"/> for the Books schema.</summary>
+    [Fact]
+    public void OpenBookFilePath_NewSupportedFile_ImportsAndOpens()
+    {
+        string root = Path.Combine(Path.GetTempPath(), $"paperbunkr_openbookfilepath_new_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        string file = Path.Combine(root, "novel.epub");
+        EpubFixture.Create(file, title: "Open On Launch Novel");
+        var vm = new MainViewModel();
+
+        try
+        {
+            vm.OpenBookFilePath(file, Paperbunkr.Data.Entities.BookFormat.Epub);
+
+            Assert.True(vm.IsBookReader);
+
+            var options = new DbContextOptionsBuilder<PaperbunkrDbContext>().UseSqlite($"Data Source={_dbPath}").Options;
+            using var context = new PaperbunkrDbContext(options);
+            Assert.True(context.Books.Any(b => b.FilePath == file));
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch (IOException) { }
+        }
+    }
+
+    /// <summary>A file the importer can't actually parse (corrupt/not a real book despite the right
+    /// extension) falls back to <see cref="MainViewModel.RestoreLastScreen"/> rather than crashing -
+    /// mirrors <see cref="OpenFilePath_UnsupportedExtension_FallsBackWithoutCrashing"/>.</summary>
+    [Fact]
+    public void OpenBookFilePath_UnparsableFile_FallsBackWithoutCrashing()
+    {
+        string root = Path.Combine(Path.GetTempPath(), $"paperbunkr_openbookfilepath_bad_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(root);
+        string file = Path.Combine(root, "notes.epub");
+        File.WriteAllText(file, "not a real epub");
+        var vm = new MainViewModel();
+
+        try
+        {
+            var exception = Record.Exception(() => vm.OpenBookFilePath(file, Paperbunkr.Data.Entities.BookFormat.Epub));
+
+            Assert.Null(exception);
+            Assert.True(vm.IsHome, $"CurrentScreen={vm.CurrentScreen}");
+        }
+        finally
+        {
+            try { Directory.Delete(root, recursive: true); } catch (IOException) { }
+        }
+    }
+
+    private void SeedBook(string title, string filePath, Paperbunkr.Data.Entities.BookFormat format)
+    {
+        var options = new DbContextOptionsBuilder<PaperbunkrDbContext>().UseSqlite($"Data Source={_dbPath}").Options;
+        using var context = new PaperbunkrDbContext(options);
+        context.Books.Add(new Paperbunkr.Data.Entities.Book { Title = title, FilePath = filePath, Format = format, AddedTime = DateTime.UtcNow });
+        context.SaveChanges();
     }
 
     [Fact]

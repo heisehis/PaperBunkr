@@ -103,6 +103,9 @@ public static class PreferenceIndex
         new(PreferencesSection.Connections, "Trackers", "Trackers",
             new[] { "tracker", "anilist", "myanimelist", "mal", "shikimori", "bangumi", "mangabaka", "connect", "token" },
             "connections.trackers"),
+        new(PreferencesSection.Connections, "Tracking behavior", "Tracking behavior",
+            new[] { "tracker", "tracking", "auto sync", "update progress", "mark as read", "after reading", "source metadata", "link panel", "komikku" },
+            "connections.trackingBehavior"),
 
         new(PreferencesSection.Advanced, "Rendering", "Rendering",
             new[] { "graphics backend", "gpu", "software renderer", "opengl", "angle", "hardware acceleration" },

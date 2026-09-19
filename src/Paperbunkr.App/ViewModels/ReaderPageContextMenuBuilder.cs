@@ -22,7 +22,19 @@ public sealed class ReaderPageContextMenuBuilder
     public IReadOnlyList<ContextMenuEntry>? Build(object? target) => target switch
     {
         ReaderThumbnailSample thumbnail => BuildForThumbnail(thumbnail),
-        _ => null,
+        _ => BuildForMainPage(),
+    };
+
+    /// <summary>
+    /// "Save Page As" (docs/superpowers/specs/2026-09-17-reader-save-page-and-cover-picker-design.md)
+    /// - the fallback for every right-click that isn't a thumbnail (i.e. the main displayed page).
+    /// Two menu items instead of one multi-format dialog - see the design doc's "approaches
+    /// considered" for why.
+    /// </summary>
+    private IReadOnlyList<ContextMenuEntry> BuildForMainPage() => new[]
+    {
+        ContextMenuEntry.Item("Save Page as PNG…", _vm.SavePageAsPngCommand),
+        ContextMenuEntry.Item("Save Page as JPEG…", _vm.SavePageAsJpegCommand),
     };
 
     /// <summary>

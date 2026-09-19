@@ -486,7 +486,7 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
-    /// Toast host (P6 follow-up, docs/alpha-todo.md) - <see cref="WindowNotificationManager"/> needs
+    /// Toast host (P6 follow-up, docs/paperbunkr-todo.md) - <see cref="WindowNotificationManager"/> needs
     /// a real attached <c>Window</c>, which doesn't exist yet when <see cref="MainViewModel"/> is
     /// constructed (App.axaml.cs builds the ViewModel before the Window). Wired here once
     /// <c>DataContext</c> is actually set, same pattern <see cref="ReaderScreen"/> already uses for

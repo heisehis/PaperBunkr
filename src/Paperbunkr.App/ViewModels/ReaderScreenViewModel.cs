@@ -139,18 +139,21 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
     /// <see cref="KeyBindingService"/> being injected here) that don't care about shortcut hints -
     /// constructs a real service against whatever database is currently active, same as every other
     /// screen's own direct-instantiation precedent elsewhere in this codebase.</summary>
+    private readonly ITrackerAutoSyncService _trackerAutoSync;
+
     public ReaderScreenViewModel(Action goBack) : this(goBack, new KeyBindingService())
     {
     }
 
-    public ReaderScreenViewModel(Action goBack, KeyBindingService keyBindingService, IReadingEventRecorder? readingEventRecorder = null)
-        : this(goBack, keyBindingService, new BatteryStatusService(), readingEventRecorder)
+    public ReaderScreenViewModel(Action goBack, KeyBindingService keyBindingService, IReadingEventRecorder? readingEventRecorder = null, ITrackerAutoSyncService? trackerAutoSync = null)
+        : this(goBack, keyBindingService, new BatteryStatusService(), readingEventRecorder, trackerAutoSync)
     {
     }
 
     /// <summary>Test seam for <see cref="IBatteryStatusService"/> (docs/superpowers/specs/2026-09-05-reader-polish-backlog-finish-design.md §2), same rationale as the <see cref="KeyBindingService"/> overload above - lets a test substitute a fake reading without touching the real Win32 API.</summary>
-    public ReaderScreenViewModel(Action goBack, KeyBindingService keyBindingService, IBatteryStatusService batteryStatusService, IReadingEventRecorder? readingEventRecorder = null)
+    public ReaderScreenViewModel(Action goBack, KeyBindingService keyBindingService, IBatteryStatusService batteryStatusService, IReadingEventRecorder? readingEventRecorder = null, ITrackerAutoSyncService? trackerAutoSync = null)
     {
+        _trackerAutoSync = trackerAutoSync ?? NoOpTrackerAutoSyncService.Instance;
         _goBack = goBack;
         _keyBindingService = keyBindingService;
         _batteryStatusService = batteryStatusService;
@@ -190,7 +193,11 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
     public string PreviousBookmarkHint => GetShortcutHint(KeyboardCommandRegistry.ReaderPreviousBookmark);
     public string NextBookmarkHint => GetShortcutHint(KeyboardCommandRegistry.ReaderNextBookmark);
 
-    private void RefreshShortcutHints()
+    /// <summary>Public since 2026-09-16: <c>ReaderScreen.axaml.cs</c>'s root-canvas PointerMoved now
+    /// calls this directly (instead of the wider <see cref="NotifyCursorActivity"/>, which also
+    /// showed every chrome cluster on ANY movement - removed per direct user request) purely to keep
+    /// hint tooltips fresh after a Preferences remap, with no chrome-visibility side effect.</summary>
+    public void RefreshShortcutHints()
     {
         OnPropertyChanged(nameof(RotateClockwiseHint));
         OnPropertyChanged(nameof(RotateCounterClockwiseHint));
@@ -502,6 +509,43 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
 
     /// <summary>Read-only view of <see cref="_currentPageIndex"/> for <c>Paperbunkr.Plugins.Automation.IComicDisplay</c>.</summary>
     public int CurrentPageIndex => _currentPageIndex;
+
+    // ===================== Save Page As (docs/superpowers/specs/2026-09-17-reader-save-page-and-
+    // cover-picker-design.md) - CE parity for "Save Page as" (MainForm.cs ExportImage/
+    // ExportCurrentImage), trimmed to PNG/JPEG as two separate commands rather than one dialog with
+    // a multi-format filter (IFilePickerService only takes one fixed extension per call). Exports
+    // the current page's own decoded image, not a screenshot of the on-screen zoom/pan/rotation -
+    // same "real page content" intent as CE's export with RealisticPages disabled. Spread mode
+    // exports only the current single page for now, not a stitched two-page composite. =====================
+
+    [RelayCommand]
+    private Task SavePageAsPngAsync() => SavePageAsAsync(PageExportFormat.Png, "png", "PNG Image");
+
+    [RelayCommand]
+    private Task SavePageAsJpegAsync() => SavePageAsAsync(PageExportFormat.Jpeg, "jpg", "JPEG Image");
+
+    private async Task SavePageAsAsync(PageExportFormat format, string extension, string extensionLabel)
+    {
+        if (LoadedIssue is not { FilePath: { Length: > 0 } filePath } issue)
+        {
+            return;
+        }
+
+        using var page = PageDecodeCore.DecodeSinglePage(filePath, _currentPageIndex);
+        if (page is null)
+        {
+            return;
+        }
+
+        string suggestedName = $"{issue.Series?.Name ?? issue.Title ?? "Comic"} - Page {_currentPageIndex + 1}";
+        string? path = await new FilePickerService().PickSaveFileAsync("Save Page As", suggestedName, extension, extensionLabel);
+        if (path is null)
+        {
+            return;
+        }
+
+        PageExportService.TryExport(page, path, format);
+    }
 
     partial void OnCurrentContinuousPageIndexChanged(int value)
     {
@@ -1014,6 +1058,21 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
         HighQualityPageDisplay = appSettings.HighQualityPageDisplay;
         MouseWheelSpeed = appSettings.MouseWheelSpeed;
         _resetZoomOnPageChange = appSettings.ResetZoomOnPageChange;
+        _autoHideChromeEnabled = appSettings.ReaderAutoHideChrome;
+        ChromeHoverMode = appSettings.ReaderChromeHoverMode;
+
+        // The actual root cause of 4 straight "still doesn't hide" reports today (2026-09-16), found
+        // only after 3 separate wrong guesses at the per-cluster hover mechanism itself: ShowChrome
+        // defaults true at construction, and the ONLY thing that used to reset it to false - the
+        // ambient OnReaderPointerMoved -> NotifyCursorActivity() call - was removed when the per-
+        // cluster hover reveal replaced the old ambient-reveal-everything behavior. Nothing else on
+        // a normal reading session ever set it false again (only ToggleFullscreen/ToggleChrome/the
+        // idle timer do, none of which fire from ordinary reading), so IsXClusterVisible = ShowChrome
+        // || IsXClusterHovered was permanently true regardless of hover state - every hover-mechanism
+        // fix so far was chasing a symptom that could never have worked while this stayed true.
+        // Matches BookReaderScreenViewModel.LoadBook's own explicit "IsChromeVisible = false" reset
+        // for the same reason - a fresh reading session should start with chrome hidden by default.
+        ShowChrome = false;
         PageTurnLeftKey = _keyBindings.GetKeys(context, KeyboardCommandRegistry.ReaderPageTurnLeft);
         PageTurnRightKey = _keyBindings.GetKeys(context, KeyboardCommandRegistry.ReaderPageTurnRight);
         PanLeftKey = _keyBindings.GetKeys(context, KeyboardCommandRegistry.ReaderPanLeft);
@@ -1207,7 +1266,7 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
     }
 
     /// <summary>
-    /// P6 fix (docs/alpha-todo.md) - this pill was previously non-interactive, styled identically to
+    /// P6 fix (docs/paperbunkr-todo.md) - this pill was previously non-interactive, styled identically to
     /// the working toggle in <see cref="DetailTabsViewModel"/> (which this mirrors: a binary
     /// LTR/RTL flip, not a full mode picker - <see cref="ReadingMode.VerticalContinuous"/>/
     /// <see cref="ReadingMode.HorizontalContinuous"/> collapse to <see cref="ReadingMode.RightToLeft"/>
@@ -1420,15 +1479,48 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
     private bool _isFullscreen;
 
     /// <summary>
-    /// Drives every floating chrome cluster/drawer trigger's visibility (docs/superpowers/specs/
-    /// 2026-08-25-reader-chrome-design.md) - shown on any cursor activity, then auto-hidden after
-    /// <see cref="OverlayAutoHideDelay"/> of inactivity, matching CE's <c>AutoHideCursor</c> UX
-    /// pattern. Originally fullscreen-only (named <c>ShowFullscreenOverlays</c>); this phase applies
-    /// the exact same mechanism to windowed mode too, retiring the old two-different-chrome-systems
-    /// split - <see cref="NotifyCursorActivity"/> no longer gates on <see cref="IsFullscreen"/>.
+    /// Explicit "show every cluster" override (docs/superpowers/specs/2026-08-25-reader-chrome-
+    /// design.md) - set via <see cref="ToggleChromeCommand"/> (center-tap/keyboard), not by ambient
+    /// pointer movement over the reading canvas any more. That ambient-reveal behavior was removed
+    /// 2026-09-16 per direct user request ("more reactive... only when I hover above each item") -
+    /// each corner cluster now shows independently on its own hover instead (see
+    /// <see cref="IsNavigateClusterVisible"/> and its 3 siblings), which is strictly more targeted.
+    /// <see cref="ShowChrome"/> still exists as the touch/keyboard fallback that can't hover at all -
+    /// toggling it on still auto-hides again after <see cref="OverlayAutoHideDelay"/> if the auto-
+    /// hide preference is on, exactly as before.
     /// </summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsNavigateClusterVisible), nameof(IsActionsClusterVisible), nameof(IsViewClusterVisible), nameof(IsPageTurnClusterVisible))]
     private bool _showChrome = true;
+
+    /// <summary>Per-corner hover state (2026-09-16, direct user request) - each cluster now pops in
+    /// only while the pointer is over its own dedicated hotspot (<c>ReaderScreen.axaml</c>'s
+    /// NavigateClusterHotspot/etc., wired in code-behind since a hidden, non-hit-testable cluster
+    /// can never receive its own PointerEntered to un-hide itself), OR while <see cref="ShowChrome"/>
+    /// is explicitly on. Named per cluster (docs/superpowers/specs/2026-08-25-reader-chrome-
+    /// design.md's own corner names), not a single "which cluster" enum - only 4, unlikely to grow,
+    /// and each corner has genuinely different content, so parallel bools read clearer here than a
+    /// generic lookup.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsNavigateClusterVisible))]
+    private bool _isNavigateClusterHovered;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsActionsClusterVisible))]
+    private bool _isActionsClusterHovered;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsViewClusterVisible))]
+    private bool _isViewClusterHovered;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsPageTurnClusterVisible))]
+    private bool _isPageTurnClusterHovered;
+
+    public bool IsNavigateClusterVisible => ShowChrome || IsNavigateClusterHovered;
+    public bool IsActionsClusterVisible => ShowChrome || IsActionsClusterHovered;
+    public bool IsViewClusterVisible => ShowChrome || IsViewClusterHovered;
+    public bool IsPageTurnClusterVisible => ShowChrome || IsPageTurnClusterHovered;
 
     /// <summary>Whether the Actions cluster's drawer is open (docs/superpowers/specs/2026-08-25-reader-chrome-design.md) - independent of <see cref="ShowChrome"/>: the drawer represents deliberate intent to see it, so it does not idle-fade.</summary>
     [ObservableProperty]
@@ -1474,6 +1566,23 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
 
     private static readonly TimeSpan OverlayAutoHideDelay = TimeSpan.FromSeconds(3);
     private DispatcherTimer? _overlayAutoHideTimer;
+
+    /// <summary>Preferences > Reader > "Auto-hide toolbar when idle" (AppSettings.ReaderAutoHideChrome,
+    /// read in <see cref="Load"/>). False means chrome stays visible once shown - <see cref="NotifyCursorActivity"/>
+    /// still sets <see cref="ShowChrome"/> true and refreshes shortcut hints on activity, it just never
+    /// arms the timer that would hide it again.</summary>
+    private bool _autoHideChromeEnabled = true;
+
+    /// <summary>Preferences > Reader > "Chrome reveal style" (AppSettings.ReaderChromeHoverMode,
+    /// read in <see cref="Load"/>). <see cref="Views.ReaderScreen"/>'s code-behind reads this
+    /// directly to decide what <c>OnReaderPointerMoved</c> does on each pointer move - per-cluster
+    /// position math (current default) or the original ambient <see cref="NotifyCursorActivity"/>
+    /// call restored per direct user request 2026-09-16 ("add the old method... and make them
+    /// swappable"). This ViewModel doesn't otherwise branch on it: both styles reuse the exact same
+    /// <see cref="ShowChrome"/>/<see cref="IsNavigateClusterHovered"/> etc. plumbing that already
+    /// existed for each.</summary>
+    [ObservableProperty]
+    private ReaderChromeHoverMode _chromeHoverMode = ReaderChromeHoverMode.PerCluster;
 
     /// <summary>Matches App.axaml's PbMotionFast value (150ms) - can't bind a C# DispatcherTimer to the XAML resource directly, so the value is duplicated here rather than reading Application.Current.Resources for a single timer interval.</summary>
     private static readonly TimeSpan PbGlowPulseDuration = TimeSpan.FromMilliseconds(150);
@@ -1835,7 +1944,11 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
         }
     }
 
-    /// <summary>Called by <see cref="Views.ReaderScreen"/> on pointer movement over the Reader - applies in both windowed and fullscreen now (docs/superpowers/specs/2026-08-25-reader-chrome-design.md), unlike the fullscreen-only guard this replaced.</summary>
+    /// <summary>Explicit "show everything" - called from <see cref="ToggleChromeCommand"/>'s show
+    /// branch (center-tap/keyboard/touch), not from ambient pointer movement over the reading canvas
+    /// any more (removed 2026-09-16 - see <see cref="ShowChrome"/>'s own doc comment for why). Starts
+    /// the same auto-hide countdown a per-cluster hover reveal never needs (hovering a corner off is
+    /// itself the "hide" signal for that cluster, no timer required there).</summary>
     public void NotifyCursorActivity()
     {
         ShowChrome = true;
@@ -1875,6 +1988,14 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
 
     private void RestartOverlayAutoHideTimer()
     {
+        if (!_autoHideChromeEnabled)
+        {
+            // Setting off: never arm the hide timer. Stop (don't just skip starting) so flipping the
+            // toggle off mid-session cancels a countdown that's already running, not just future ones.
+            _overlayAutoHideTimer?.Stop();
+            return;
+        }
+
         if (_overlayAutoHideTimer is null)
         {
             _overlayAutoHideTimer = new DispatcherTimer { Interval = OverlayAutoHideDelay };
@@ -2165,6 +2286,16 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
         _readingEventRecorder?.RecordFinished(
             ReadingItemType.Comic, issueId, _sessionSeriesId, _sessionPublisher, _sessionPrimaryGenre,
             pages > 0 ? pages : null);
+
+        // "Update progress after reading" (docs/superpowers/specs/2026-09-18-tracker-behavior-
+        // settings-design.md §3.2): this once-per-session finish crossing is the trigger. The page
+        // position is already persisted (GoToPage/FlushPendingPositionSave save before calling
+        // TrackSessionProgress), so the service reads current progress from the DB. Fire-and-forget;
+        // the service reads its own setting and never throws.
+        if (_sessionSeriesId is int seriesId)
+        {
+            _ = _trackerAutoSync.OnIssueFinishedInReaderAsync(seriesId);
+        }
     }
 
     /// <summary>Fills the open session's page delta onto its <c>Opened</c> log row (design §5). Called
@@ -2256,7 +2387,7 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
     }
 
     /// <summary>
-    /// P6 fix (docs/alpha-todo.md) - the thumbnail rail rendered <c>Border.thumb.selected</c>
+    /// P6 fix (docs/paperbunkr-todo.md) - the thumbnail rail rendered <c>Border.thumb.selected</c>
     /// styling implying click-to-jump, but nothing wired a click to <see cref="GoToPage"/>.
     /// <see cref="Thumbnails"/>' index already *is* the page index (populated by a straight
     /// <c>for</c> loop in <see cref="Load"/>), so this just needs the clicked sample's position.

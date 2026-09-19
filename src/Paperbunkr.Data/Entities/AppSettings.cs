@@ -99,6 +99,31 @@ public class AppSettings
     public bool HighQualityPageDisplay { get; set; } = true;
 
     /// <summary>
+    /// Whether the comic reader's floating chrome clusters (<c>ReaderScreenViewModel.ShowChrome</c>)
+    /// fade out after <c>OverlayAutoHideDelay</c> of pointer inactivity, or stay permanently visible.
+    /// Default true, matching the hardcoded-always-on behavior this setting replaces - real user
+    /// report 2026-09-16: the idle-fade is sensitive to any pointer movement at all (every
+    /// <c>PointerMoved</c> over the reading canvas restarts the timer unconditionally), which reads
+    /// as "never hides" for anyone whose hand naturally rests near the mouse while reading; this
+    /// gives them a way to turn it off entirely instead. No direct CE equivalent - checked
+    /// <c>ExtendedSettings.AutoHideCursorDuration</c> (a numeric OS-cursor-hide delay, not a chrome/
+    /// toolbar toggle, and not exposed as an on/off checkbox in CE's own Settings UI either) and
+    /// found it's a different feature, not a parity gap to port.
+    /// </summary>
+    public bool ReaderAutoHideChrome { get; set; } = true;
+
+    /// <summary>
+    /// Which mechanism reveals the comic reader's chrome clusters - swappable per direct user
+    /// request (2026-09-16), after the per-cluster hover reveal replaced the original ambient-
+    /// reveal-on-any-movement behavior outright and the user asked for both back as options rather
+    /// than losing the old one. Default <see cref="ReaderChromeHoverMode.PerCluster"/>, matching
+    /// today's shipped behavior; <see cref="ReaderChromeHoverMode.Ambient"/> restores the original
+    /// "any pointer movement shows everything, then idle-fades" behavior. See
+    /// <see cref="ReaderChromeHoverMode"/>'s own doc comment for what each value does.
+    /// </summary>
+    public ReaderChromeHoverMode ReaderChromeHoverMode { get; set; } = ReaderChromeHoverMode.PerCluster;
+
+    /// <summary>
     /// Whether zoom resets to 1.0 on every page turn within a session, or persists across pages
     /// until the issue is closed/reopened (Paperbunkr's existing behavior). CE:
     /// <c>Settings.ResetZoomOnPageChange</c>, default false - both this and Paperbunkr's own
@@ -600,6 +625,25 @@ public class AppSettings
     /// reader-load session.
     /// </summary>
     public bool PromptReviewOnFinish { get; set; }
+
+    // --- Tracker behavior (docs/superpowers/specs/2026-09-18-tracker-behavior-settings-design.md) ---
+
+    /// <summary>Open the tracker link panel automatically the first time a source-linked manga
+    /// series is opened while a tracker account is connected. Default on.</summary>
+    public bool TrackerAutoOpenLinkPanel { get; set; } = true;
+
+    /// <summary>Push progress to linked trackers when the comic reader finishes an issue. Default on.</summary>
+    public bool TrackerUpdateAfterReading { get; set; } = true;
+
+    /// <summary>What a manual mark-as-read does for linked trackers. Default Always.</summary>
+    public TrackerAutoUpdateMode TrackerUpdateOnMarkRead { get; set; } = TrackerAutoUpdateMode.Always;
+
+    /// <summary>Pull remote progress when a linked series' detail screen opens. Default OFF - a pull
+    /// rewrites local read state, unlike a forward-only push.</summary>
+    public bool TrackerAutoSyncFromTrackers { get; set; }
+
+    /// <summary>Pin a series' already-linked metadata source as the first tracker-link candidate. Default on.</summary>
+    public bool TrackerUseSourceMetadata { get; set; } = true;
 
     /// <summary>
     /// Whether files/folders/.cbl can be imported by dragging them onto the Library or Reading List

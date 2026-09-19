@@ -129,7 +129,11 @@ internal static class ContinuityResolver
     public static Continuity GetOrCreate(PaperbunkrDbContext context, string name)
     {
         string trimmed = name.Trim();
-        var existing = context.Continuities.FirstOrDefault(c => c.Name.ToLower() == trimmed.ToLower());
+        var continuities = context.Continuities.ToList();
+        var existing = continuities.FirstOrDefault(c => string.Equals(c.Name, trimmed, StringComparison.OrdinalIgnoreCase))
+            // Punctuation-variant fold (docs/superpowers/specs/2026-09-17-series-name-matching-and-
+            // empty-row-cleanup-design.md) - same defect shape as StoryEventResolver.GetOrCreate.
+            ?? continuities.FirstOrDefault(c => TitleNormalizer.NamesMatch(c.Name, trimmed, ignoreVolume: false));
         if (existing is not null)
         {
             return existing;

@@ -12,6 +12,7 @@ using Avalonia.Threading;
 using Avalonia.VisualTree;
 using Paperbunkr.App.Models;
 using Paperbunkr.App.ViewModels;
+using Paperbunkr.Data.Entities;
 
 namespace Paperbunkr.App.Views;
 
@@ -155,8 +156,64 @@ public partial class ReaderScreen : UserControl
         }
     }
 
-    /// <summary>Feeds <see cref="ReaderScreenViewModel.NotifyCursorActivity"/> - applies in both windowed and fullscreen now (docs/superpowers/specs/2026-08-25-reader-chrome-design.md), unlike the fullscreen-only guard this replaced.</summary>
-    private void OnReaderPointerMoved(object? sender, PointerEventArgs e) => _viewModel?.NotifyCursorActivity();
+    /// <summary>
+    /// Two swappable chrome-reveal styles (docs/paperbunkr-todo.md 2026-09-16 - user asked for the
+    /// original ambient behavior back alongside the newer per-cluster one, not as a replacement),
+    /// picked per <see cref="ReaderScreenViewModel.ChromeHoverMode"/> (Preferences > Reader):
+    ///
+    /// <see cref="ReaderChromeHoverMode.PerCluster"/> - each corner cluster reveals only while the
+    /// pointer is over its own zone, computed directly from pointer position on every real move
+    /// rather than per-element PointerEntered/Exited - two separate attempts at the latter
+    /// (2026-09-16) both left a cluster stuck visible forever once shown, and a live on-screen
+    /// retest of the second (wiring Entered/Exited on the real cluster Border too, not just a
+    /// separate hotspot underneath) showed literally zero change, ruling out the specific occlusion
+    /// theory that second attempt was built on - this switches to computing "is the pointer near
+    /// this corner" directly from the exact same event that was already reliably firing all session
+    /// for the (unrelated) shortcut-hint refresh below, sidestepping Avalonia's Enter/Exit-on-
+    /// dynamically-hit-testable-elements behavior entirely - no hotspots, no Entered/Exited
+    /// handlers, just arithmetic against the Grid's own real-time Bounds. Zone sizes are the same
+    /// rough dimensions the retired hotspots used, not pixel-exact to each cluster's real content -
+    /// a real tuning target if a corner feels off, not a sign of a deeper bug.
+    ///
+    /// <see cref="ReaderChromeHoverMode.Ambient"/> - the original behavior this replaced: any
+    /// pointer movement over the reading canvas reveals every cluster at once
+    /// (<see cref="ReaderScreenViewModel.NotifyCursorActivity"/>, which also arms the idle-fade
+    /// timer), no per-corner zones at all.
+    /// </summary>
+    private const double NavigateZoneWidth = 300, NavigateZoneHeight = 60;
+    private const double ActionsZoneWidth = 220, ActionsZoneHeight = 60;
+    private const double ViewZoneWidth = 300, ViewZoneHeight = 80;
+    private const double PageTurnZoneWidth = 340, PageTurnZoneHeight = 70;
+
+    private void OnReaderPointerMoved(object? sender, PointerEventArgs e)
+    {
+        if (_viewModel is null || sender is not Visual rootVisual)
+        {
+            return;
+        }
+
+        if (_viewModel.ChromeHoverMode == ReaderChromeHoverMode.Ambient)
+        {
+            _viewModel.NotifyCursorActivity();
+            return;
+        }
+
+        Point pos = e.GetPosition(rootVisual);
+        Size bounds = ((Control)rootVisual).Bounds.Size;
+
+        _viewModel.IsNavigateClusterHovered = pos.X < NavigateZoneWidth && pos.Y < NavigateZoneHeight;
+        _viewModel.IsActionsClusterHovered = pos.X > bounds.Width - ActionsZoneWidth && pos.Y < ActionsZoneHeight;
+        _viewModel.IsViewClusterHovered = pos.X < ViewZoneWidth && pos.Y > bounds.Height - ViewZoneHeight;
+        double pageTurnCenter = bounds.Width / 2;
+        _viewModel.IsPageTurnClusterHovered = pos.Y > bounds.Height - PageTurnZoneHeight
+            && pos.X > pageTurnCenter - (PageTurnZoneWidth / 2) && pos.X < pageTurnCenter + (PageTurnZoneWidth / 2);
+
+        // Unrelated pre-existing side effect (keeps keyboard-shortcut tooltips fresh after a
+        // Preferences remap) that piggybacked on this same event purely as a convenient "something
+        // happened" trigger - kept independent of the chrome-reveal logic above it. Ambient mode's
+        // branch above gets this for free too, since NotifyCursorActivity already calls it.
+        _viewModel.RefreshShortcutHints();
+    }
 
     /// <summary>Drives IsViewClusterCollapsed (docs/superpowers/specs/2026-08-25-reader-chrome-design.md) - the ~720px threshold below which the View cluster's fit-mode/zoom controls would start crowding the Page-turn cluster, derived from the two clusters' real content widths during that phase's brainstorm.</summary>
     private void OnReaderSizeChanged(object? sender, SizeChangedEventArgs e)
@@ -168,7 +225,7 @@ public partial class ReaderScreen : UserControl
         }
     }
 
-    /// <summary>P6 fix (docs/alpha-todo.md) - click-to-jump on the thumbnail rail.</summary>
+    /// <summary>P6 fix (docs/paperbunkr-todo.md) - click-to-jump on the thumbnail rail.</summary>
     private void OnThumbnailPointerPressed(object? sender, PointerPressedEventArgs e)
     {
         if (sender is Border { DataContext: ReaderThumbnailSample thumbnail } && DataContext is ReaderScreenViewModel viewModel)

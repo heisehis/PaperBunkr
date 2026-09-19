@@ -30,7 +30,7 @@ namespace Paperbunkr.App.ViewModels;
 /// </summary>
 public partial class DetailScreenViewModel : ViewModelBase, IDetailHeaderSource
 {
-    public DetailScreenViewModel(Action goBack, Action<int> goToReader, Action<int> goToProperties, Action<IReadOnlyList<int>> goToBulkProperties, Action<int>? goDetailForSeries = null, Action<string>? goLibraryWithSearch = null, Action<int>? onQuickRate = null, Action<int>? goLibraryWithCollection = null, Action<int>? enqueueMetadataWriteBack = null)
+    public DetailScreenViewModel(Action goBack, Action<int> goToReader, Action<int> goToProperties, Action<IReadOnlyList<int>> goToBulkProperties, Action<int>? goDetailForSeries = null, Action<string>? goLibraryWithSearch = null, Action<int>? onQuickRate = null, Action<int>? goLibraryWithCollection = null, Action<int>? enqueueMetadataWriteBack = null, ITrackerAutoSyncService? trackerAutoSync = null)
     {
         _goBack = goBack;
         _goToReader = goToReader;
@@ -39,7 +39,7 @@ public partial class DetailScreenViewModel : ViewModelBase, IDetailHeaderSource
         _goDetailForSeries = goDetailForSeries ?? (_ => { });
         _enqueueMetadataWriteBack = enqueueMetadataWriteBack;
         CoverBrush = SeriesCardSample.Gradient("#442a1c", "#c9803f");
-        Tabs = new DetailTabsViewModel(goToProperties, goToBulkProperties, RefreshForSelection, onQuickRate, _goDetailForSeries, goToReader, goLibraryWithCollection, goLibraryWithSearch);
+        Tabs = new DetailTabsViewModel(goToProperties, goToBulkProperties, RefreshForSelection, onQuickRate, _goDetailForSeries, goToReader, goLibraryWithCollection, goLibraryWithSearch, trackerAutoSync);
         Band = new DetailBandViewModel(goLibraryWithSearch, () => Tabs.GoDetailsCommand.Execute(null), ReweightTag);
     }
 
@@ -157,8 +157,38 @@ public partial class DetailScreenViewModel : ViewModelBase, IDetailHeaderSource
             ? new DetailHeroAction(_focusedIssueLabel, ReadFocusedIssueCommand, IsPrimary: true, IsEnabled: true, Icon: Symbol.Play)
             : new DetailHeroAction(ContinueLabel, ContinueCommand, IsPrimary: true, IsEnabled: _continueIssueId is not null, Icon: Symbol.Play),
         new DetailHeroAction(EditButtonLabel, EditCommand, IsEnabled: CanEdit, Icon: Symbol.Edit),
-        new DetailHeroAction("Change Cover", ChangeSeriesCoverCommand, Icon: Symbol.Image),
+        new DetailHeroAction("Change Cover", Command: null, Icon: Symbol.Image, FlyoutContext: BuildCoverPickerViewModel()),
     };
+
+    /// <summary>
+    /// New instance per <see cref="Actions"/> read (docs/superpowers/specs/2026-09-17-reader-save-
+    /// page-and-cover-picker-design.md) - simplest correct option for a header action rebuilt on
+    /// real state changes only (issue load, edit-mode toggle), not per-frame. Null when there's no
+    /// cover-bearing issue yet to target.
+    /// </summary>
+    private CoverPickerViewModel? BuildCoverPickerViewModel() =>
+        _coverIssueId is int issueId ? new CoverPickerViewModel(issueId, _seriesId, ReloadCurrentSeries, FindMangaBakaCoverContext()) : null;
+
+    /// <summary>
+    /// Surfaces the picker's "From External Provider" tab automatically whenever this series is
+    /// already linked to MangaBaka (docs/superpowers/specs/2026-09-18-external-metadata-full-
+    /// extraction-design.md §2) - reuses the existing "Change Cover" entry point rather than adding
+    /// a second one on the External Metadata tab, since AniList/MangaDex's single-cover case is
+    /// handled by a direct one-click apply there instead (no picker needed for those two).
+    /// </summary>
+    private (ExternalMetadataProvider Provider, string ExternalId)? FindMangaBakaCoverContext()
+    {
+        if (_seriesId is not int seriesId)
+        {
+            return null;
+        }
+
+        using var context = PaperbunkrDb.CreateContext();
+        var link = ExternalMetadataResolver.GetExternalIds(context, seriesId)
+            .FirstOrDefault(e => e.Provider == ExternalMetadataProvider.MangaBaka);
+
+        return link is null ? null : (link.Provider, link.ExternalId);
+    }
 
     /// <summary>
     /// docs/superpowers/specs/2026-08-06-migration-ux-design.md §A: a plain manual picker, real

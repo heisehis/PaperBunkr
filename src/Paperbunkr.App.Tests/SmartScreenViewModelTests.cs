@@ -169,7 +169,7 @@ public class SmartScreenViewModelTests : IDisposable
     }
 
     /// <summary>
-    /// P6 follow-up (docs/alpha-todo.md): the sidebar "▾ Maintenance" caret in MainWindow.axaml
+    /// P6 follow-up (docs/paperbunkr-todo.md): the sidebar "▾ Maintenance" caret in MainWindow.axaml
     /// used to be a plain unbound TextBlock that looked like a collapse toggle but did nothing.
     /// </summary>
     [Fact]

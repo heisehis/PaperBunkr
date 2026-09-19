@@ -68,6 +68,30 @@ public class MangaBakaTrackerAdapterTests : IDisposable
         using var doc = JsonDocument.Parse(capturedBody!);
         Assert.Equal("reading", doc.RootElement.GetProperty("state").GetString());
         Assert.Equal(5, doc.RootElement.GetProperty("progress_chapter").GetInt32());
+        Assert.False(doc.RootElement.TryGetProperty("rating", out _));
+        Assert.False(doc.RootElement.TryGetProperty("finish_date", out _));
+    }
+
+    [Fact]
+    public async Task PushEntryAsync_UpdateScoreAndFinishDateTrue_SendsConvertedRatingAndDate()
+    {
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        MangaBakaTrackerAdapter.CompleteConnect(context, "mb-test-token");
+
+        string? capturedBody = null;
+        var adapter = new MangaBakaTrackerAdapter(new HttpClient(new StubHandler((req, _) =>
+        {
+            capturedBody = req.Content!.ReadAsStringAsync().Result;
+            return JsonResponse(HttpStatusCode.OK, "{}");
+        })));
+
+        var payload = new TrackerPushPayload(ReadingStatus.Reading, 5, Score: 4.5m, FinishDate: new DateOnly(2026, 9, 18), UpdateScore: true, UpdateFinishDate: true);
+        bool result = await adapter.PushEntryAsync(context, new TrackingLink { ExternalId = "708" }, payload, CancellationToken.None);
+
+        Assert.True(result);
+        using var doc = JsonDocument.Parse(capturedBody!);
+        Assert.Equal(90, doc.RootElement.GetProperty("rating").GetInt32()); // 4.5 * 20
+        Assert.Equal("2026-09-18", doc.RootElement.GetProperty("finish_date").GetString());
     }
 
     [Fact]
@@ -80,6 +104,63 @@ public class MangaBakaTrackerAdapterTests : IDisposable
         bool result = await adapter.PushEntryAsync(context, new TrackingLink { ExternalId = "708" }, new TrackerPushPayload(ReadingStatus.Reading, 5), CancellationToken.None);
 
         Assert.False(result);
+    }
+
+    [Fact]
+    public async Task PushEntryDetailedAsync_PutReturns404_RetriesWithPost_AndSucceeds()
+    {
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        MangaBakaTrackerAdapter.CompleteConnect(context, "mb-test-token");
+        var methodsSeen = new List<HttpMethod>();
+        var adapter = new MangaBakaTrackerAdapter(new HttpClient(new StubHandler((req, _) =>
+        {
+            methodsSeen.Add(req.Method);
+            return req.Method == HttpMethod.Put
+                ? new HttpResponseMessage(HttpStatusCode.NotFound) { Content = new StringContent("""{"status":404,"message":"NOT_FOUND"}""") }
+                : JsonResponse(HttpStatusCode.OK, "{}");
+        })));
+
+        var (success, error) = await adapter.PushEntryDetailedAsync(context, new TrackingLink { ExternalId = "708" }, new TrackerPushPayload(ReadingStatus.Reading, 5), CancellationToken.None);
+
+        Assert.True(success);
+        Assert.Null(error);
+        Assert.Equal(new[] { HttpMethod.Put, HttpMethod.Post }, methodsSeen);
+    }
+
+    [Fact]
+    public async Task PushEntryDetailedAsync_PutReturns404_PostAlsoFails_ReturnsRealError()
+    {
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        MangaBakaTrackerAdapter.CompleteConnect(context, "mb-test-token");
+        var adapter = new MangaBakaTrackerAdapter(new HttpClient(new StubHandler((req, _) =>
+            req.Method == HttpMethod.Put
+                ? new HttpResponseMessage(HttpStatusCode.NotFound) { Content = new StringContent("""{"status":404,"message":"NOT_FOUND"}""") }
+                : new HttpResponseMessage(HttpStatusCode.BadRequest) { Content = new StringContent("""{"status":400,"message":"BAD_REQUEST"}""") })));
+
+        var (success, error) = await adapter.PushEntryDetailedAsync(context, new TrackingLink { ExternalId = "708" }, new TrackerPushPayload(ReadingStatus.Reading, 5), CancellationToken.None);
+
+        Assert.False(success);
+        Assert.Contains("400", error);
+        Assert.Contains("BAD_REQUEST", error);
+    }
+
+    [Fact]
+    public async Task PushEntryDetailedAsync_Unauthorized_DoesNotRetryWithPost()
+    {
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        MangaBakaTrackerAdapter.CompleteConnect(context, "mb-test-token");
+        int callCount = 0;
+        var adapter = new MangaBakaTrackerAdapter(new HttpClient(new StubHandler((_, _) =>
+        {
+            callCount++;
+            return new HttpResponseMessage(HttpStatusCode.Unauthorized) { Content = new StringContent("""{"status":401,"message":"INVALID_API_KEY"}""") };
+        })));
+
+        var (success, error) = await adapter.PushEntryDetailedAsync(context, new TrackingLink { ExternalId = "708" }, new TrackerPushPayload(ReadingStatus.Reading, 5), CancellationToken.None);
+
+        Assert.False(success);
+        Assert.Contains("401", error);
+        Assert.Equal(1, callCount); // 401 is a real auth failure, not "entry doesn't exist yet" - no fallback retry
     }
 
     [Fact]

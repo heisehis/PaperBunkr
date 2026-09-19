@@ -21,9 +21,35 @@ namespace Paperbunkr.App.Views;
 /// </summary>
 public partial class ReaderSettingsSheet : UserControl
 {
+    private readonly OverlayWindowController _overlayController;
+
     public ReaderSettingsSheet()
     {
         InitializeComponent();
+
+        // OverlayRoot (the scrim+panel Grid declared in XAML) is only nominally this control's own
+        // Content - detach it immediately so it never renders inline, then let the controller
+        // re-parent it into/out of a real owned Window as IsOpen changes (see OverlayHostWindow's
+        // own doc comment for why a real Window instead of a Popup).
+        _overlayController = new OverlayWindowController(OverlayRoot, () => OverlayReference);
+        Content = null;
+    }
+
+    protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
+    {
+        base.OnPropertyChanged(change);
+
+        if (change.Property == IsOpenProperty)
+        {
+            _overlayController.SetOpen(change.GetNewValue<bool>());
+        }
+    }
+
+    /// <summary>Belt-and-braces: see ReaderListDrawer's identical override for why.</summary>
+    protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        base.OnDetachedFromVisualTree(e);
+        _overlayController.SetOpen(false);
     }
 
     /// <summary>EPUB's full theme set, for binding <see cref="ThemeOptions"/> via <c>{x:Static}</c> - Avalonia's XAML compiler doesn't resolve a plain <c>x:Array</c> the way WPF's does, so a static field is simpler than fighting that markup extension. Declared as <see cref="IEnumerable{T}"/> (not <c>BookTheme[]</c>) to match <see cref="ThemeOptionsProperty"/>'s exact type - the compiled-bindings XAML compiler didn't accept the array-to-interface conversion implicitly.</summary>

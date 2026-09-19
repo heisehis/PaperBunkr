@@ -532,6 +532,12 @@ namespace Paperbunkr.Data.Migrations
                         .HasColumnType("INTEGER")
                         .HasDefaultValue(false);
 
+                    b.Property<bool>("ReaderAutoHideChrome")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("ReaderChromeHoverMode")
+                        .HasColumnType("INTEGER");
+
                     b.Property<int?>("ReaderMemoryLimitMb")
                         .HasColumnType("INTEGER");
 
@@ -596,6 +602,33 @@ namespace Paperbunkr.Data.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER")
                         .HasDefaultValue(7);
+
+                    b.Property<bool>("TrackerAutoOpenLinkPanel")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasDefaultValue(true);
+
+                    b.Property<bool>("TrackerAutoSyncFromTrackers")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasDefaultValue(false);
+
+                    b.Property<bool>("TrackerUpdateAfterReading")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasDefaultValue(true);
+
+                    b.Property<string>("TrackerUpdateOnMarkRead")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(16)
+                        .HasColumnType("TEXT")
+                        .HasDefaultValue("Always");
+
+                    b.Property<bool>("TrackerUseSourceMetadata")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasDefaultValue(true);
 
                     b.Property<int?>("TrueBlackAutoHour")
                         .HasColumnType("INTEGER");
@@ -1331,6 +1364,48 @@ namespace Paperbunkr.Data.Migrations
                     b.ToTable("ExternalMediaIds");
                 });
 
+            modelBuilder.Entity("Paperbunkr.Data.Entities.ExternalMediaRelation", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Provider")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("RelationType")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("SourceSeriesId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("TargetExternalId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("TargetTitle")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("TargetUrl")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SourceSeriesId");
+
+                    b.HasIndex("Provider", "TargetExternalId");
+
+                    b.ToTable("ExternalMediaRelations");
+                });
+
             modelBuilder.Entity("Paperbunkr.Data.Entities.ExternalMetadataSnapshot", b =>
                 {
                     b.Property<int>("Id")
@@ -1494,6 +1569,9 @@ namespace Paperbunkr.Data.Migrations
                     b.Property<string>("Editor")
                         .HasColumnType("TEXT");
 
+                    b.Property<bool>("EmptyRowAcknowledged")
+                        .HasColumnType("INTEGER");
+
                     b.Property<DateTime?>("FileCreationTime")
                         .HasColumnType("TEXT");
 
@@ -1523,6 +1601,9 @@ namespace Paperbunkr.Data.Migrations
 
                     b.Property<string>("Inker")
                         .HasColumnType("TEXT");
+
+                    b.Property<bool>("IsContentEmpty")
+                        .HasColumnType("INTEGER");
 
                     b.Property<bool?>("IsFinalIssue")
                         .HasColumnType("INTEGER");
@@ -2270,6 +2351,12 @@ namespace Paperbunkr.Data.Migrations
                     b.Property<int?>("CoverIssueId")
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("Creator")
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("EmptyRowAcknowledged")
+                        .HasColumnType("INTEGER");
+
                     b.Property<string>("Genre")
                         .HasColumnType("TEXT");
 
@@ -2283,6 +2370,9 @@ namespace Paperbunkr.Data.Migrations
 
                     b.Property<string>("Publisher")
                         .HasColumnType("TEXT");
+
+                    b.Property<float?>("Rating")
+                        .HasColumnType("REAL");
 
                     b.Property<string>("ReadingMode")
                         .IsRequired()
@@ -2308,6 +2398,9 @@ namespace Paperbunkr.Data.Migrations
 
                     b.Property<string>("Summary")
                         .HasColumnType("TEXT");
+
+                    b.Property<bool>("TrackerPromptShown")
+                        .HasColumnType("INTEGER");
 
                     b.HasKey("Id");
 
@@ -3003,6 +3096,17 @@ namespace Paperbunkr.Data.Migrations
                         .IsRequired();
 
                     b.Navigation("Series");
+                });
+
+            modelBuilder.Entity("Paperbunkr.Data.Entities.ExternalMediaRelation", b =>
+                {
+                    b.HasOne("Paperbunkr.Data.Entities.Series", "SourceSeries")
+                        .WithMany()
+                        .HasForeignKey("SourceSeriesId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("SourceSeries");
                 });
 
             modelBuilder.Entity("Paperbunkr.Data.Entities.ExternalMetadataSnapshot", b =>

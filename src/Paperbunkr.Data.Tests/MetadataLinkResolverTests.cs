@@ -42,7 +42,7 @@ public class MetadataLinkResolverTests : IDisposable
         return series.Id;
     }
 
-    private sealed class FakeProvider : IMetadataProvider
+    private sealed class FakeProvider : IMetadataProvider, IRelationsProvider
     {
         public ExternalMetadataProvider ProviderKey => ExternalMetadataProvider.AniList;
 
@@ -50,11 +50,20 @@ public class MetadataLinkResolverTests : IDisposable
 
         public ExternalMediaMetadata? GetResult { get; set; }
 
+        /// <summary>Keyed by externalId, so <see cref="MetadataLinkResolver.RefreshRelationsAsync"/>
+        /// tests can control what a follow-up relation-target lookup returns without a second fake type.</summary>
+        public Dictionary<string, ExternalMediaMetadata> GetResultsById { get; } = new();
+
+        public List<ProviderRelation> Relations { get; } = new();
+
         public Task<IReadOnlyList<MetadataSearchResult>> SearchAsync(string query, CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlyList<MetadataSearchResult>>(SearchResults);
 
         public Task<ExternalMediaMetadata?> GetAsync(string externalId, CancellationToken cancellationToken) =>
-            Task.FromResult(GetResult);
+            Task.FromResult(GetResultsById.TryGetValue(externalId, out var byId) ? byId : GetResult);
+
+        public Task<IReadOnlyList<ProviderRelation>> GetRelationsAsync(string externalId, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<ProviderRelation>>(Relations);
     }
 
     // --- SearchAsync ---
@@ -300,5 +309,229 @@ public class MetadataLinkResolverTests : IDisposable
 
         Assert.Equal(SeriesStatus.Ongoing, context.Series.Find(seriesId)!.Status);
         Assert.Empty(context.MetadataProposals.Where(p => p.SeriesId == seriesId && p.Field == MetadataProposalField.Status));
+    }
+
+    // --- LinkAsync: Creator (docs/superpowers/specs/2026-09-18-external-metadata-full-extraction-
+    // design.md §3) ---
+
+    [Fact]
+    public async Task LinkAsync_CreatorProvided_WritesToSeriesCreator()
+    {
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        int seriesId = SeedSeries(context, "One Piece");
+        var provider = new FakeProvider
+        {
+            GetResult = new ExternalMediaMetadata("30013", "One Piece", null, null, null, null, null, Creator: "Eiichiro Oda"),
+        };
+
+        await MetadataLinkResolver.LinkAsync(provider, context, seriesId, "30013", CancellationToken.None);
+
+        Assert.Equal("Eiichiro Oda", context.Series.Find(seriesId)!.Creator);
+    }
+
+    [Fact]
+    public async Task LinkAsync_ProviderOmitsCreator_LeavesExistingCreatorUnchanged()
+    {
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        int seriesId = SeedSeries(context, "Kagurabachi");
+        context.Series.Find(seriesId)!.Creator = "Existing Creator";
+        context.SaveChanges();
+        var provider = new FakeProvider { GetResult = new ExternalMediaMetadata("708", "Kagurabachi", null, null, null, null, null) };
+
+        await MetadataLinkResolver.LinkAsync(provider, context, seriesId, "708", CancellationToken.None);
+
+        Assert.Equal("Existing Creator", context.Series.Find(seriesId)!.Creator);
+    }
+
+    // --- LinkAsync: tag import (docs/superpowers/specs/2026-09-18-external-metadata-full-
+    // extraction-design.md §4) ---
+
+    [Fact]
+    public async Task LinkAsync_TagsProvided_WritesToEveryIssueInTheSeries()
+    {
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        int seriesId = SeedSeries(context, "One Piece");
+        var issueA = new Issue { SeriesId = seriesId, Number = "1" };
+        var issueB = new Issue { SeriesId = seriesId, Number = "2" };
+        context.Issues.AddRange(issueA, issueB);
+        context.SaveChanges();
+
+        var provider = new FakeProvider
+        {
+            GetResult = new ExternalMediaMetadata("30013", "One Piece", null, null, null, null, null,
+                GenreTags: new[] { "Action", "Adventure" },
+                OtherTags: new[] { ("Pirates", "Setting") }),
+        };
+
+        await MetadataLinkResolver.LinkAsync(provider, context, seriesId, "30013", CancellationToken.None);
+
+        foreach (var issue in context.Issues.Include(i => i.Tags).Where(i => i.SeriesId == seriesId))
+        {
+            Assert.Contains(issue.Tags, t => t.Field == IssueTagField.Genre && t.Value == "Action");
+            Assert.Contains(issue.Tags, t => t.Field == IssueTagField.Genre && t.Value == "Adventure");
+            Assert.Contains(issue.Tags, t => t.Field == IssueTagField.Tags && t.Value == "Pirates" && t.Category == "Setting");
+            Assert.Equal(IssueTagWeight.Unset, Assert.Single(issue.Tags, t => t.Value == "Pirates").Weight);
+        }
+    }
+
+    [Fact]
+    public async Task LinkAsync_Relink_SurvivingTagValue_KeepsItsHandSetWeight()
+    {
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        int seriesId = SeedSeries(context, "One Piece");
+        var issue = new Issue { SeriesId = seriesId, Number = "1" };
+        context.Issues.Add(issue);
+        context.SaveChanges();
+        issue.Tags.Add(new IssueTag { IssueId = issue.Id, Field = IssueTagField.Tags, Value = "Pirates", Category = "Setting", Weight = IssueTagWeight.Core });
+        context.SaveChanges();
+
+        var provider = new FakeProvider
+        {
+            GetResult = new ExternalMediaMetadata("30013", "One Piece", null, null, null, null, null,
+                OtherTags: new[] { ("Pirates", "Setting") }),
+        };
+
+        await MetadataLinkResolver.LinkAsync(provider, context, seriesId, "30013", CancellationToken.None);
+
+        var tag = Assert.Single(context.Issues.Include(i => i.Tags).First(i => i.Id == issue.Id).Tags);
+        Assert.Equal(IssueTagWeight.Core, tag.Weight); // never re-inferred/overwritten on import
+    }
+
+    // --- LinkAsync: cross-reference auto-linking (docs/superpowers/specs/2026-09-18-external-
+    // metadata-full-extraction-design.md §8) ---
+
+    [Fact]
+    public async Task LinkAsync_CrossReferenceProvided_InsertsExternalMediaId_WhenNoneExists()
+    {
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        int seriesId = SeedSeries(context, "One Piece");
+        var provider = new FakeProvider
+        {
+            GetResult = new ExternalMediaMetadata("377", "One Piece", null, null, null, null, null,
+                CrossReferences: new[] { (ExternalMetadataProvider.Kitsu, "38") }),
+        };
+
+        await MetadataLinkResolver.LinkAsync(provider, context, seriesId, "377", CancellationToken.None);
+
+        var kitsuLink = context.ExternalMediaIds.Single(e => e.SeriesId == seriesId && e.Provider == ExternalMetadataProvider.Kitsu);
+        Assert.Equal("38", kitsuLink.ExternalId);
+        Assert.Null(kitsuLink.LastFetchedAt); // asserted, not yet independently fetched
+    }
+
+    [Fact]
+    public async Task LinkAsync_CrossReferenceProvided_NeverOverwritesAnExistingDifferingId()
+    {
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        int seriesId = SeedSeries(context, "One Piece");
+        context.ExternalMediaIds.Add(new ExternalMediaId { SeriesId = seriesId, Provider = ExternalMetadataProvider.Kitsu, ExternalId = "MANUALLY-LINKED-ID" });
+        context.SaveChanges();
+
+        var provider = new FakeProvider
+        {
+            GetResult = new ExternalMediaMetadata("377", "One Piece", null, null, null, null, null,
+                CrossReferences: new[] { (ExternalMetadataProvider.Kitsu, "38") }),
+        };
+
+        await MetadataLinkResolver.LinkAsync(provider, context, seriesId, "377", CancellationToken.None);
+
+        var kitsuLink = context.ExternalMediaIds.Single(e => e.SeriesId == seriesId && e.Provider == ExternalMetadataProvider.Kitsu);
+        Assert.Equal("MANUALLY-LINKED-ID", kitsuLink.ExternalId); // left untouched, a real identity conflict
+    }
+
+    // --- LinkAsync: relation auto-upgrade (docs/superpowers/specs/2026-09-18-external-metadata-
+    // full-extraction-design.md §5) ---
+
+    [Fact]
+    public async Task LinkAsync_MatchingPlaceholderExists_UpgradesToRealMediaRelation_AndDeletesPlaceholder()
+    {
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        int sourceSeriesId = SeedSeries(context, "Prequel Series");
+        int targetSeriesId = SeedSeries(context, "One Piece");
+        context.ExternalMediaRelations.Add(new ExternalMediaRelation
+        {
+            SourceSeriesId = sourceSeriesId,
+            Provider = ExternalMetadataProvider.AniList,
+            TargetExternalId = "377",
+            TargetTitle = "One Piece",
+            RelationType = RelationType.Sequel,
+        });
+        context.SaveChanges();
+
+        var provider = new FakeProvider { GetResult = new ExternalMediaMetadata("377", "One Piece", null, null, null, null, null) };
+
+        await MetadataLinkResolver.LinkAsync(provider, context, targetSeriesId, "377", CancellationToken.None);
+
+        Assert.Empty(context.ExternalMediaRelations);
+        var relation = Assert.Single(context.MediaRelations);
+        Assert.Equal(sourceSeriesId, relation.SourceSeriesId);
+        Assert.Equal(targetSeriesId, relation.TargetSeriesId);
+        Assert.Equal(RelationType.Sequel, relation.RelationType);
+    }
+
+    [Fact]
+    public async Task LinkAsync_NoMatchingPlaceholder_IsANoOp()
+    {
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        int seriesId = SeedSeries(context, "One Piece");
+        var provider = new FakeProvider { GetResult = new ExternalMediaMetadata("377", "One Piece", null, null, null, null, null) };
+
+        await MetadataLinkResolver.LinkAsync(provider, context, seriesId, "377", CancellationToken.None);
+
+        Assert.Empty(context.MediaRelations);
+    }
+
+    // --- RefreshRelationsAsync (docs/superpowers/specs/2026-09-18-external-metadata-full-
+    // extraction-design.md §5/§7) - lazy, called separately from LinkAsync ---
+
+    [Fact]
+    public async Task RefreshRelationsAsync_TargetNotLinkedLocally_CreatesPlaceholder()
+    {
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        int seriesId = SeedSeries(context, "One Piece");
+        var provider = new FakeProvider();
+        provider.Relations.Add(new ProviderRelation("40135", "Prequel Series", "https://anilist.co/manga/40135", RelationType.Prequel));
+
+        await MetadataLinkResolver.RefreshRelationsAsync(provider, context, seriesId, "377", CancellationToken.None);
+
+        var placeholder = Assert.Single(context.ExternalMediaRelations);
+        Assert.Equal(seriesId, placeholder.SourceSeriesId);
+        Assert.Equal("40135", placeholder.TargetExternalId);
+        Assert.Equal("Prequel Series", placeholder.TargetTitle);
+        Assert.Equal(RelationType.Prequel, placeholder.RelationType);
+        Assert.Empty(context.MediaRelations);
+    }
+
+    [Fact]
+    public async Task RefreshRelationsAsync_TargetAlreadyLinkedLocally_CreatesRealMediaRelation_NotAPlaceholder()
+    {
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        int sourceSeriesId = SeedSeries(context, "One Piece");
+        int targetSeriesId = SeedSeries(context, "Prequel Series");
+        context.ExternalMediaIds.Add(new ExternalMediaId { SeriesId = targetSeriesId, Provider = ExternalMetadataProvider.AniList, ExternalId = "40135" });
+        context.SaveChanges();
+
+        var provider = new FakeProvider();
+        provider.Relations.Add(new ProviderRelation("40135", "Prequel Series", null, RelationType.Prequel));
+
+        await MetadataLinkResolver.RefreshRelationsAsync(provider, context, sourceSeriesId, "377", CancellationToken.None);
+
+        Assert.Empty(context.ExternalMediaRelations);
+        var relation = Assert.Single(context.MediaRelations);
+        Assert.Equal(sourceSeriesId, relation.SourceSeriesId);
+        Assert.Equal(targetSeriesId, relation.TargetSeriesId);
+    }
+
+    [Fact]
+    public async Task RefreshRelationsAsync_CalledTwice_DoesNotDuplicate()
+    {
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        int seriesId = SeedSeries(context, "One Piece");
+        var provider = new FakeProvider();
+        provider.Relations.Add(new ProviderRelation("40135", "Prequel Series", null, RelationType.Prequel));
+
+        await MetadataLinkResolver.RefreshRelationsAsync(provider, context, seriesId, "377", CancellationToken.None);
+        await MetadataLinkResolver.RefreshRelationsAsync(provider, context, seriesId, "377", CancellationToken.None);
+
+        Assert.Single(context.ExternalMediaRelations);
     }
 }

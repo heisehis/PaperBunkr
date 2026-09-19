@@ -84,6 +84,8 @@ public class PaperbunkrDbContext : DbContext
 
     public DbSet<ExternalMediaId> ExternalMediaIds => Set<ExternalMediaId>();
 
+    public DbSet<ExternalMediaRelation> ExternalMediaRelations => Set<ExternalMediaRelation>();
+
     public DbSet<ExternalMetadataSnapshot> ExternalMetadataSnapshots => Set<ExternalMetadataSnapshot>();
 
     public DbSet<ExternalRating> ExternalRatings => Set<ExternalRating>();
@@ -854,6 +856,23 @@ public class PaperbunkrDbContext : DbContext
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
+        // Brand-new table (like MediaRelation above) - no existing rows to backfill.
+        modelBuilder.Entity<ExternalMediaRelation>(builder =>
+        {
+            builder.HasKey(e => e.Id);
+            builder.Property(e => e.Provider).HasConversion<string>().HasMaxLength(32);
+            builder.Property(e => e.RelationType).HasConversion<string>().HasMaxLength(32);
+            builder.Property(e => e.TargetExternalId).IsRequired();
+            builder.Property(e => e.TargetTitle).IsRequired();
+            builder.HasIndex(e => e.SourceSeriesId);
+            builder.HasIndex(e => new { e.Provider, e.TargetExternalId }); // the auto-upgrade lookup key
+
+            builder.HasOne(e => e.SourceSeries)
+                .WithMany()
+                .HasForeignKey(e => e.SourceSeriesId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
         modelBuilder.Entity<ExternalMetadataSnapshot>(builder =>
         {
             builder.HasKey(e => e.Id);
@@ -1079,6 +1098,15 @@ public class PaperbunkrDbContext : DbContext
             // here too so the whole block stays uniform.
             builder.Property(a => a.RestoreSessionOnStartup).HasDefaultValue(true);
             builder.Property(a => a.PromptReviewOnFinish).HasDefaultValue(false);
+            builder.Property(a => a.TrackerAutoOpenLinkPanel).HasDefaultValue(true);
+            builder.Property(a => a.TrackerUpdateAfterReading).HasDefaultValue(true);
+            builder.Property(a => a.TrackerAutoSyncFromTrackers).HasDefaultValue(false);
+            builder.Property(a => a.TrackerUseSourceMetadata).HasDefaultValue(true);
+            // Enum-as-string, same HasSentinel treatment as PageTransitionStyle/DefaultPageLayoutMode
+            // above (Always is both the CLR default and the desired default).
+            builder.Property(a => a.TrackerUpdateOnMarkRead).HasConversion<string>().HasMaxLength(16)
+                .HasDefaultValue(TrackerAutoUpdateMode.Always)
+                .HasSentinel(TrackerAutoUpdateMode.Always);
             builder.Property(a => a.EnableDragDropImport).HasDefaultValue(true);
             builder.Property(a => a.NavRailHoverExpandEnabled).HasDefaultValue(true);
 

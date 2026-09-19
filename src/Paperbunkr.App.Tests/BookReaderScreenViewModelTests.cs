@@ -249,6 +249,12 @@ public class BookReaderScreenViewModelTests : IDisposable
 
         vm.ToggleBookmarkCommand.Execute(null);
 
+        // Second toggle takes the DeleteBookmark path, which defers Bookmarks.Remove via
+        // Dispatcher.UIThread.Post (see its own doc comment - a Button.Click still routing through
+        // the Bookmarks ItemsControl can't remove its own row synchronously). Pump the dispatcher
+        // before asserting, same pattern as PreferencesScreenViewModelTests' own missing-file tests.
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
         Assert.False(vm.IsCurrentPositionBookmarked);
         Assert.Empty(vm.Bookmarks);
     }
@@ -277,6 +283,10 @@ public class BookReaderScreenViewModelTests : IDisposable
 
         vm.GoToBookmarkCommand.Execute(vm.Bookmarks[0]);
 
+        // GoToBookmark defers IsBookmarksOpen = false via Dispatcher.UIThread.Post (see its own doc
+        // comment - a row Button.Click still routing through the Bookmarks drawer's Popup content).
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
         Assert.Equal("The End", vm.ChapterTitle);
         Assert.False(vm.IsBookmarksOpen);
     }
@@ -290,6 +300,10 @@ public class BookReaderScreenViewModelTests : IDisposable
         var bookmark = vm.Bookmarks[0];
 
         vm.DeleteBookmarkCommand.Execute(bookmark);
+
+        // DeleteBookmark defers Bookmarks.Remove via Dispatcher.UIThread.Post (see its own doc
+        // comment - a row Button.Click still routing through the Bookmarks ItemsControl).
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
 
         Assert.Empty(vm.Bookmarks);
         Assert.False(vm.IsCurrentPositionBookmarked);
@@ -546,6 +560,11 @@ public class BookReaderScreenViewModelTests : IDisposable
         vm.OnWebViewSelectionCompleted("pb-p1", 0, 5, "Hello", new Avalonia.Rect(0, 0, 40, 20));
         vm.PickHighlightColorCommand.Execute(BookHighlightColor.Green);
 
+        // PickHighlightColor defers IsHighlightPopupOpen = false via Dispatcher.UIThread.Post (see
+        // its own doc comment - a swatch Button.Click still routing through the highlight-color
+        // Popup's own content). The Highlights insert itself is synchronous, unaffected.
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
         Assert.Single(vm.Highlights);
         Assert.Equal(BookHighlightColor.Green, vm.Highlights[0].Color);
         Assert.False(vm.IsHighlightPopupOpen);
@@ -568,6 +587,10 @@ public class BookReaderScreenViewModelTests : IDisposable
         var highlight = vm.Highlights[0];
 
         vm.DeleteHighlightCommand.Execute(highlight);
+
+        // DeleteHighlight defers Highlights.Remove via Dispatcher.UIThread.Post (see its own doc
+        // comment - a row Button.Click still routing through the Highlights ItemsControl).
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
 
         Assert.Empty(vm.Highlights);
         using var context = new PaperbunkrDbContext(_dbOptions);

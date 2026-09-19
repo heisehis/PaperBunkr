@@ -15,6 +15,7 @@
 - [Reading Lists](Reading-Lists)
 - [Home Dashboard & Recommendations](Home-Dashboard-and-Recommendations)
 - [Story Events & Relations](Story-Events-and-Relations)
+- [Trackers](Trackers)
 
 **Customize**
 - [Metadata & Editing](Metadata-and-Editing)

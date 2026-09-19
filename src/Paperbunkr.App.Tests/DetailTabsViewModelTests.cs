@@ -51,8 +51,26 @@ public class DetailTabsViewModelTests : IDisposable
         }
     }
 
-    private DetailTabsViewModel CreateViewModel(Action<int>? goToProperties = null, Action<IReadOnlyList<int>>? goToBulkProperties = null, Action? onSelectionChanged = null, IMetadataProvider? metadataProvider = null, Action<int>? navigateToCollection = null, Action<int>? openInReader = null, Action<string>? goLibraryWithSearch = null) =>
-        new(goToProperties ?? (_ => { }), goToBulkProperties ?? (_ => { }), onSelectionChanged, () => new PaperbunkrDbContext(_dbOptions), metadataProvider, onQuickRate: null, navigateToSeries: null, openInReader: openInReader, navigateToCollection: navigateToCollection, goLibraryWithSearch: goLibraryWithSearch);
+    private DetailTabsViewModel CreateViewModel(Action<int>? goToProperties = null, Action<IReadOnlyList<int>>? goToBulkProperties = null, Action? onSelectionChanged = null, IMetadataProvider? metadataProvider = null, Action<int>? navigateToCollection = null, Action<int>? openInReader = null, Action<string>? goLibraryWithSearch = null, Paperbunkr.App.Services.ITrackerAutoSyncService? trackerAutoSync = null, bool isMangaHost = false) =>
+        new(goToProperties ?? (_ => { }), goToBulkProperties ?? (_ => { }), onSelectionChanged, () => new PaperbunkrDbContext(_dbOptions), metadataProvider ?? new FakeMetadataProvider(), onQuickRate: null, navigateToSeries: null, openInReader: openInReader, navigateToCollection: navigateToCollection, goLibraryWithSearch: goLibraryWithSearch, trackerAutoSync: trackerAutoSync) { IsMangaDetailHost = isMangaHost };
+
+    private sealed class RecordingTrackerAutoSync : Paperbunkr.App.Services.ITrackerAutoSyncService
+    {
+        public List<IReadOnlyCollection<int>> MarkedRead { get; } = new();
+        public List<int> Finished { get; } = new();
+        public List<int> Pulled { get; } = new();
+        public IReadOnlyList<int> PullResultIds { get; set; } = Array.Empty<int>();
+
+        public Task OnIssueFinishedInReaderAsync(int seriesId) { Finished.Add(seriesId); return Task.CompletedTask; }
+
+        public Task OnIssuesMarkedReadAsync(IReadOnlyCollection<int> seriesIds) { MarkedRead.Add(seriesIds); return Task.CompletedTask; }
+
+        public Task<Paperbunkr.App.Services.TrackerPullResult> PullSeriesAsync(int seriesId)
+        {
+            Pulled.Add(seriesId);
+            return Task.FromResult(new Paperbunkr.App.Services.TrackerPullResult(PullResultIds));
+        }
+    }
 
     /// <summary>No-network stand-in for <see cref="AniListMetadataProvider"/> - see docs/superpowers/specs/2026-08-19-metadata-model-anilist-search-and-link-design.md.</summary>
     private sealed class FakeMetadataProvider : IMetadataProvider
@@ -1347,6 +1365,11 @@ public class DetailTabsViewModelTests : IDisposable
 
         vm.UnlinkTrackerCommand.Execute(link);
 
+        // UnlinkTracker defers TrackerLinks.Clear() via Dispatcher.UIThread.Post (see its own doc
+        // comment - the "✕" Button's Click is still routing through a chip in that same
+        // ItemsControl), which a headless test never pumps on its own.
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
         Assert.Empty(vm.TrackerLinks);
         using var verifyContext = new PaperbunkrDbContext(_dbOptions);
         var activity = Assert.Single(verifyContext.SeriesActivityEvents);
@@ -1372,6 +1395,268 @@ public class DetailTabsViewModelTests : IDisposable
         Assert.Equal("No connected trackers linked to this series.", vm.TrackerSyncStatus);
         using var verifyContext = new PaperbunkrDbContext(_dbOptions);
         Assert.Empty(verifyContext.SeriesActivityEvents);
+    }
+
+    // --- Expand-on-click per-tracker Score/Finish-date panel (docs/superpowers/specs/2026-09-18-
+    // per-tracker-score-and-finish-date-design.md) - every adapter's no-stored-credentials guard
+    // returns without a real network call (confirmed by each *TrackerAdapterTests.cs' own
+    // "_NoStoredAccessToken_ReturnsFalse/Null_WithoutSendingRequest" test), so these exercise the
+    // real ViewModel wiring offline, same "no seam to inject a fake tracker adapter" constraint this
+    // file's own SyncToTrackersAsync tests already work within (see that method's doc comment). ---
+
+    [Fact]
+    public async Task ToggleTrackerLinkDetailsAsync_SelectsLink_FallsBackToSeriesRatingWhenNoRemoteScore()
+    {
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            context.TrackingLinks.Add(new TrackingLink { SeriesId = _seriesId, Service = TrackingService.AniList, ExternalId = "30013" });
+            var series = context.Series.Find(_seriesId)!;
+            series.Rating = 3.5f;
+            context.SaveChanges();
+        }
+
+        var vm = CreateViewModel();
+        vm.LoadSeries(LoadSeriesEntity());
+        var link = Assert.Single(vm.TrackerLinks);
+
+        await vm.ToggleTrackerLinkDetailsCommand.ExecuteAsync(link);
+
+        Assert.Same(link, vm.SelectedTrackerLink);
+        Assert.Equal(3.5m, link.Score); // no CredentialStore entry -> remote fetch returns null -> falls back to Series.Rating
+        Assert.False(link.IsBusy);
+    }
+
+    [Fact]
+    public async Task ToggleTrackerLinkDetailsAsync_ReclickingSameLink_ClosesPanel()
+    {
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            context.TrackingLinks.Add(new TrackingLink { SeriesId = _seriesId, Service = TrackingService.AniList, ExternalId = "30013" });
+            context.SaveChanges();
+        }
+
+        var vm = CreateViewModel();
+        vm.LoadSeries(LoadSeriesEntity());
+        var link = Assert.Single(vm.TrackerLinks);
+
+        await vm.ToggleTrackerLinkDetailsCommand.ExecuteAsync(link);
+        Assert.Same(link, vm.SelectedTrackerLink);
+
+        await vm.ToggleTrackerLinkDetailsCommand.ExecuteAsync(link);
+
+        Assert.Null(vm.SelectedTrackerLink);
+    }
+
+    [Fact]
+    public async Task PushTrackerFieldAsync_NoStoredCredentials_SetsFailedPushStatus()
+    {
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            context.TrackingLinks.Add(new TrackingLink { SeriesId = _seriesId, Service = TrackingService.AniList, ExternalId = "30013" });
+            context.SaveChanges();
+        }
+
+        var vm = CreateViewModel();
+        vm.LoadSeries(LoadSeriesEntity());
+        var link = Assert.Single(vm.TrackerLinks);
+        link.Score = 4.5m;
+
+        await vm.PushTrackerFieldCommand.ExecuteAsync(link);
+
+        Assert.NotNull(link.PushStatus);
+        Assert.StartsWith("Failed:", link.PushStatus);
+        Assert.False(link.IsBusy);
+    }
+
+    [Fact]
+    public async Task UseTrackerScoreAsync_NoRemoteScore_SetsInformationalStatus_DoesNotTouchSeriesRating()
+    {
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            context.TrackingLinks.Add(new TrackingLink { SeriesId = _seriesId, Service = TrackingService.AniList, ExternalId = "30013" });
+            var series = context.Series.Find(_seriesId)!;
+            series.Rating = 2f;
+            context.SaveChanges();
+        }
+
+        var vm = CreateViewModel();
+        vm.LoadSeries(LoadSeriesEntity());
+        var link = Assert.Single(vm.TrackerLinks);
+
+        await vm.UseTrackerScoreCommand.ExecuteAsync(link);
+
+        Assert.Equal("This tracker has no score to use.", link.PushStatus);
+        using var verifyContext = new PaperbunkrDbContext(_dbOptions);
+        Assert.Equal(2f, verifyContext.Series.Find(_seriesId)!.Rating);
+    }
+
+    // --- Tracker behavior hooks (docs/superpowers/specs/2026-09-18-tracker-behavior-settings-design.md) ---
+
+    [Fact]
+    public void MarkIssueRead_NotifiesTheAutoSyncService_ButMarkUnreadDoesNot()
+    {
+        var sync = new RecordingTrackerAutoSync();
+        var vm = CreateViewModel(trackerAutoSync: sync);
+        vm.LoadSeries(LoadSeriesEntity());
+
+        vm.MarkIssueUnreadCommand.Execute(vm.Issues.First(i => i.Title == "#1"));
+        Assert.Empty(sync.MarkedRead);
+
+        vm.MarkIssueReadCommand.Execute(vm.Issues.First(i => i.Title == "#1"));
+
+        Assert.Equal(new[] { _seriesId }, Assert.Single(sync.MarkedRead));
+    }
+
+    [Fact]
+    public void LoadSeries_AsksTheAutoSyncServiceToPullThatSeries()
+    {
+        var sync = new RecordingTrackerAutoSync();
+        var vm = CreateViewModel(trackerAutoSync: sync);
+
+        vm.LoadSeries(LoadSeriesEntity());
+
+        Assert.Equal(new[] { _seriesId }, sync.Pulled);
+    }
+
+    [Fact]
+    public void LoadSeries_WhenThePullMarkedIssuesRead_RefreshesTheHostOnTheUiThread()
+    {
+        var sync = new RecordingTrackerAutoSync();
+        int selectionChanged = 0;
+        var vm = CreateViewModel(onSelectionChanged: () => selectionChanged++, trackerAutoSync: sync);
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            sync.PullResultIds = context.Issues.Where(i => i.SeriesId == _seriesId).Select(i => i.Id).Take(2).ToList();
+        }
+
+        vm.LoadSeries(LoadSeriesEntity());
+        int afterLoad = selectionChanged;
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
+        Assert.True(selectionChanged > afterLoad);
+    }
+
+    private void SeedAutoOpenScenario(bool connected = true, bool metadataLink = true, bool alreadyLinked = false)
+    {
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        if (metadataLink)
+        {
+            context.ExternalMediaIds.Add(new ExternalMediaId { SeriesId = _seriesId, Provider = ExternalMetadataProvider.AniList, ExternalId = "30013" });
+        }
+
+        if (alreadyLinked)
+        {
+            context.TrackingLinks.Add(new TrackingLink { SeriesId = _seriesId, Service = TrackingService.AniList, ExternalId = "30013" });
+        }
+
+        if (connected)
+        {
+            Paperbunkr.Data.Credentials.CredentialStore.Set(context, nameof(TrackingService.AniList), CredentialKind.OAuthAccessToken, "tok");
+        }
+
+        context.SaveChanges();
+    }
+
+    private bool PromptShown()
+    {
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        return context.Series.Find(_seriesId)!.TrackerPromptShown;
+    }
+
+    [Fact]
+    public void AutoOpen_MangaHostWithSourceLinkAndConnectedAccount_OpensLinkPanelOnce()
+    {
+        SeedAutoOpenScenario();
+        var vm = CreateViewModel(isMangaHost: true);
+
+        vm.LoadSeries(LoadSeriesEntity());
+
+        Assert.True(vm.IsLinkingTracker);
+        Assert.Equal("details", vm.ActiveTab);
+        Assert.Equal("linking", vm.ActiveDetailsSubTab);
+        Assert.Equal(TrackingService.AniList, vm.SelectedTrackerService);
+        Assert.True(PromptShown());
+
+        vm.IsLinkingTracker = false; // user closed it; a later load must not reopen it
+        vm.LoadSeries(LoadSeriesEntity());
+        Assert.False(vm.IsLinkingTracker);
+    }
+
+    [Fact]
+    public void AutoOpen_NeverForANonMangaHost()
+    {
+        SeedAutoOpenScenario();
+        var vm = CreateViewModel(isMangaHost: false);
+
+        vm.LoadSeries(LoadSeriesEntity());
+
+        Assert.False(vm.IsLinkingTracker);
+        Assert.False(PromptShown());
+    }
+
+    [Theory]
+    [InlineData(false, true, false, true)]   // no connected account
+    [InlineData(true, false, false, true)]   // no metadata source link
+    [InlineData(true, true, true, true)]     // already linked to that service
+    [InlineData(true, true, false, false)]   // setting off
+    public void AutoOpen_RequiresBothConditions_NotAlreadyLinked_AndTheSettingOn(bool connected, bool metadataLink, bool alreadyLinked, bool settingOn)
+    {
+        SeedAutoOpenScenario(connected, metadataLink, alreadyLinked);
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            context.GetOrCreateAppSettings().TrackerAutoOpenLinkPanel = settingOn;
+            context.SaveChanges();
+        }
+
+        var vm = CreateViewModel(isMangaHost: true);
+        vm.LoadSeries(LoadSeriesEntity());
+
+        Assert.False(vm.IsLinkingTracker);
+        Assert.False(PromptShown()); // a skipped open must never burn the one-shot flag
+    }
+
+    [Fact]
+    public void Pinning_LinkedMetadataSourceAppearsFirst_WithoutNetwork_AndStillNeedsConfirm()
+    {
+        SeedAutoOpenScenario(connected: false);
+        var vm = CreateViewModel();
+        vm.LoadSeries(LoadSeriesEntity());
+
+        vm.ToggleLinkTrackerCommand.Execute(null);
+
+        var pinned = Assert.Single(vm.TrackerSearchResults);
+        Assert.True(pinned.IsFromLinkedMetadata);
+        Assert.Equal("30013", pinned.ExternalId);
+        Assert.Equal("From linked metadata", pinned.TierLabel);
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        Assert.Empty(context.TrackingLinks); // pinned, not linked - the two-step confirm still gates the write
+    }
+
+    [Fact]
+    public void Pinning_SettingOff_OrAlreadyLinked_PinsNothing()
+    {
+        SeedAutoOpenScenario(connected: false);
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            context.GetOrCreateAppSettings().TrackerUseSourceMetadata = false;
+            context.SaveChanges();
+        }
+
+        var vm = CreateViewModel();
+        vm.LoadSeries(LoadSeriesEntity());
+        vm.ToggleLinkTrackerCommand.Execute(null);
+        Assert.Empty(vm.TrackerSearchResults);
+
+        using (var context = new PaperbunkrDbContext(_dbOptions))
+        {
+            context.GetOrCreateAppSettings().TrackerUseSourceMetadata = true;
+            context.TrackingLinks.Add(new TrackingLink { SeriesId = _seriesId, Service = TrackingService.AniList, ExternalId = "30013" });
+            context.SaveChanges();
+        }
+
+        vm.LoadSeries(LoadSeriesEntity());
+        vm.ToggleLinkTrackerCommand.Execute(null);
+        Assert.Empty(vm.TrackerSearchResults);
     }
 
     // --- SuggestBox string projections (docs/superpowers/specs/2026-09-10-suggestbox-migration-plan.md) ---

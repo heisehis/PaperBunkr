@@ -93,7 +93,7 @@ public partial class IssuePropertiesScreenViewModel : ViewModelBase
     };
 
     /// <summary>
-    /// Blanket dirty-tracking (P6 follow-up, docs/alpha-todo.md) rather than a per-field snapshot
+    /// Blanket dirty-tracking (P6 follow-up, docs/paperbunkr-todo.md) rather than a per-field snapshot
     /// diff - there are ~30 buffered fields here, and every one of them mutating is equally "the
     /// user made an edit" for the purposes of the unsaved-changes guard in
     /// <see cref="MainViewModel"/>, so a single PropertyChanged subscription covers all of them

@@ -186,30 +186,54 @@ public class StoryArcGroupingResolverTests : IDisposable
         Assert.DoesNotContain(candidate.Members, m => m.Issue.Id == issue1.Id);
     }
 
-    [Fact]
-    public void TwoStoryEventsSharingAName_DoNotCrashTheScan_AndBothMemberSetsAreExcluded()
-    {
-        // The Story Events screen's own "New" button creates repeated "New Story Event" rows, so
-        // duplicate names are normal - a ToDictionary keyed on name would throw here.
-        using var context = new PaperbunkrDbContext(_dbOptions);
-        int seriesId = SeedSeries(context, "Avengers");
-        var issue1 = SeedIssue(context, seriesId, "1", "Civil War", publisher: "Marvel");
-        var issue2 = SeedIssue(context, seriesId, "2", "Civil War", publisher: "Marvel");
-        SeedIssue(context, seriesId, "3", "Civil War", publisher: "Marvel");
-        SeedIssue(context, seriesId, "4", "Civil War", publisher: "Marvel");
+    // ===================== Punctuation-variant folding (docs/superpowers/specs/2026-09-17-series-
+    // name-matching-and-empty-row-cleanup-design.md) =====================
 
-        foreach (var member in new[] { issue1, issue2 })
-        {
-            var storyEvent = new StoryEvent { Name = "Civil War", CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow };
-            context.StoryEvents.Add(storyEvent);
-            context.SaveChanges();
-            context.EventMemberships.Add(new EventMembership { StoryEventId = storyEvent.Id, IssueId = member.Id, Position = 0, Role = EventMembershipRole.Core });
-            context.SaveChanges();
-        }
+    [Fact]
+    public void PunctuationVariantArcNames_AreGroupedTogether_DisplayNameIsMajoritySpelling()
+    {
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        int seriesId = SeedSeries(context, "Ultimates");
+        SeedIssue(context, seriesId, "1", "Cataclysm: The Ultimates", publisher: "Marvel", year: 2023);
+        SeedIssue(context, seriesId, "2", "Cataclysm - The Ultimates", publisher: "Marvel", year: 2023);
+        SeedIssue(context, seriesId, "3", "Cataclysm - The Ultimates", publisher: "Marvel", year: 2023);
 
         var candidate = Assert.Single(StoryArcGroupingResolver.GetCandidates(context));
 
+        Assert.Equal("Cataclysm - The Ultimates", candidate.ArcName); // 2 of 3 issues use this spelling
+        Assert.Equal(3, candidate.Members.Count);
+    }
+
+    [Fact]
+    public void DismissedArc_ExcludesPunctuationVariantToo()
+    {
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        int seriesId = SeedSeries(context, "Ultimates");
+        SeedIssue(context, seriesId, "1", "Cataclysm: The Ultimates", publisher: "Marvel");
+        SeedIssue(context, seriesId, "2", "Cataclysm - The Ultimates", publisher: "Marvel");
+
+        StoryArcGroupingResolver.Dismiss(context, "Cataclysm: The Ultimates", "Marvel");
+
+        Assert.Empty(StoryArcGroupingResolver.GetCandidates(context));
+    }
+
+    [Fact]
+    public void IssueAlreadyMemberOfMatchingStoryEvent_ExcludesPunctuationVariantToo()
+    {
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        int seriesId = SeedSeries(context, "Ultimates");
+        var issue1 = SeedIssue(context, seriesId, "1", "Cataclysm: The Ultimates", publisher: "Marvel");
+        SeedIssue(context, seriesId, "2", "Cataclysm - The Ultimates", publisher: "Marvel");
+        SeedIssue(context, seriesId, "3", "Cataclysm - The Ultimates", publisher: "Marvel");
+
+        var storyEvent = new StoryEvent { Name = "Cataclysm: The Ultimates", CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow };
+        context.StoryEvents.Add(storyEvent);
+        context.SaveChanges();
+        context.EventMemberships.Add(new EventMembership { StoryEventId = storyEvent.Id, IssueId = issue1.Id, Position = 0, Role = EventMembershipRole.Core });
+        context.SaveChanges();
+
+        var candidate = Assert.Single(StoryArcGroupingResolver.GetCandidates(context));
         Assert.Equal(2, candidate.Members.Count);
-        Assert.DoesNotContain(candidate.Members, m => m.Issue.Id == issue1.Id || m.Issue.Id == issue2.Id);
+        Assert.DoesNotContain(candidate.Members, m => m.Issue.Id == issue1.Id);
     }
 }

@@ -310,6 +310,23 @@ public class Issue
     public int MissingVerificationCount { get; set; }
 
     /// <summary>
+    /// True when <c>LibraryHealthService.VerifyAsync</c> (docs/superpowers/specs/2026-09-17-series-
+    /// name-matching-and-empty-row-cleanup-design.md) found the file present but unopenable, or
+    /// openable with zero pages - a corrupt/empty archive, distinct from <see cref="FileIsMissing"/>
+    /// (file not there at all). Only ever probed when the file exists; left <see langword="false"/>
+    /// for a missing file, since that case belongs to Missing Files, not Empty Rows.
+    /// </summary>
+    public bool IsContentEmpty { get; set; }
+
+    /// <summary>
+    /// True once the user has dismissed this issue's Empty Rows listing ("I know this one's
+    /// corrupt/empty, stop asking") without relinking or removing it - same review-queue-only
+    /// contract as <see cref="MissingAcknowledged"/>, kept as a separate flag since dismissing "this
+    /// file is corrupt" is a different judgment than dismissing "this file is gone."
+    /// </summary>
+    public bool EmptyRowAcknowledged { get; set; }
+
+    /// <summary>
     /// True once the user has dismissed this issue's duplicate-cluster state from the Needs Review
     /// "Duplicate Files" queue ("these aren't actually duplicates I want flagged") without deleting
     /// it (docs/superpowers/specs/2026-09-05-duplicate-files-review-design.md). Same review-queue-

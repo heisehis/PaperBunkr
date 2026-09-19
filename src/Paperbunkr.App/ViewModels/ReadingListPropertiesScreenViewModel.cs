@@ -10,6 +10,7 @@ using Microsoft.EntityFrameworkCore;
 using Paperbunkr.App.Services;
 using Paperbunkr.Data;
 using Paperbunkr.Data.Entities;
+using Paperbunkr.Data.Metadata;
 
 namespace Paperbunkr.App.ViewModels;
 
@@ -77,6 +78,17 @@ public partial class ReadingListPropertiesScreenViewModel : ViewModelBase
 
     public ObservableCollection<TagEditRowViewModel> TagRows { get; } = new();
 
+    /// <summary>
+    /// Covers already belonging to this list's own issues (docs/superpowers/specs/2026-09-17-
+    /// reader-save-page-and-cover-picker-design.md's ask extended to reading lists) - "use what's
+    /// already in the library" instead of only a file picker. Reuses <see cref="CoverPickerCandidate"/>
+    /// even though this dialog isn't the issue-scoped <see cref="CoverPickerViewModel"/> - same
+    /// shape (IssueId/Label/SourceKey), no need for a separate type.
+    /// </summary>
+    public ObservableCollection<CoverPickerCandidate> ListCoverCandidates { get; } = new();
+
+    public bool HasListCoverCandidates => ListCoverCandidates.Count > 0;
+
     public void Load(int readingListId)
     {
         _readingListId = readingListId;
@@ -105,6 +117,29 @@ public partial class ReadingListPropertiesScreenViewModel : ViewModelBase
         {
             TagRows.Add(new TagEditRowViewModel(tag.Value, tag.Category, tag.Weight));
         }
+
+        ListCoverCandidates.Clear();
+        var itemIssueIds = context.ReadingListItems
+            .Where(ri => ri.ReadingListId == readingListId)
+            .Select(ri => ri.IssueId)
+            .ToList();
+        foreach (int issueId in itemIssueIds)
+        {
+            if (CoverThumbnailService.GetEffectiveCoverPath(issueId) is null)
+            {
+                continue;
+            }
+
+            var issue = context.Issues.Include(i => i.Series).FirstOrDefault(i => i.Id == issueId);
+            if (issue is null)
+            {
+                continue;
+            }
+
+            ListCoverCandidates.Add(new CoverPickerCandidate(issueId, $"{issue.Series?.Name ?? "Unknown"} #{issue.EffectiveNumber()}"));
+        }
+
+        OnPropertyChanged(nameof(HasListCoverCandidates));
     }
 
     [RelayCommand]
@@ -114,6 +149,27 @@ public partial class ReadingListPropertiesScreenViewModel : ViewModelBase
         // FilePickerService (see its own doc comment), same call shape DetailScreenViewModel's
         // Issue-level "Change Cover" already uses.
         string? path = await new FilePickerService().PickImageFileAsync("Choose Cover Image");
+        if (path is null)
+        {
+            return;
+        }
+
+        try
+        {
+            _pendingCoverImagePath = path;
+            CoverPreview = new Bitmap(path);
+        }
+        catch
+        {
+            _pendingCoverImagePath = null;
+        }
+    }
+
+    /// <summary>Stages a list-issue's own cover the same way <see cref="ChangeCoverAsync"/> stages a file pick - nothing written to <see cref="ArcCoverImageCache"/> until Save.</summary>
+    [RelayCommand]
+    private void SelectListCover(CoverPickerCandidate candidate)
+    {
+        string? path = CoverThumbnailService.GetEffectiveCoverPath(candidate.IssueId);
         if (path is null)
         {
             return;

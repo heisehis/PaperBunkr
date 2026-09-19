@@ -274,6 +274,39 @@ public class ReaderScreenViewModelTests : IDisposable
         Assert.Contains(recorder.Calls, c => c.Kind == "Finished" && c.ItemId == _issue4Id);
     }
 
+    [Fact]
+    public void ReachingTheEnd_AsksTheTrackerAutoSyncService_OncePerSession_ForThatSeries()
+    {
+        var sync = new RecordingTrackerSync();
+        var vm = new ReaderScreenViewModel(() => { }, new KeyBindingService(), new RecordingReadingEventRecorder(), sync);
+
+        vm.LoadIssue(_issue4Id);
+        Assert.Empty(sync.Finished);
+
+        vm.NextPageCommand.Execute(null);
+        vm.NextPageCommand.Execute(null);
+
+        var seriesId = Assert.Single(sync.Finished);
+        using var context = PaperbunkrDb.CreateContext();
+        Assert.Equal(context.Issues.Find(_issue4Id)!.SeriesId, seriesId);
+    }
+
+    private sealed class RecordingTrackerSync : Paperbunkr.App.Services.ITrackerAutoSyncService
+    {
+        public readonly System.Collections.Generic.List<int> Finished = new();
+
+        public System.Threading.Tasks.Task OnIssueFinishedInReaderAsync(int seriesId)
+        {
+            Finished.Add(seriesId);
+            return System.Threading.Tasks.Task.CompletedTask;
+        }
+
+        public System.Threading.Tasks.Task OnIssuesMarkedReadAsync(System.Collections.Generic.IReadOnlyCollection<int> seriesIds) => System.Threading.Tasks.Task.CompletedTask;
+
+        public System.Threading.Tasks.Task<Paperbunkr.App.Services.TrackerPullResult> PullSeriesAsync(int seriesId) =>
+            System.Threading.Tasks.Task.FromResult(Paperbunkr.App.Services.TrackerPullResult.None);
+    }
+
     private sealed class RecordingReadingEventRecorder : IReadingEventRecorder
     {
         public readonly System.Collections.Generic.List<(string Kind, int ItemId)> Calls = new();
@@ -2486,11 +2519,18 @@ public class ReaderScreenViewModelTests : IDisposable
         Assert.Null(vm.BatteryStatusLabel);
     }
 
+    /// <summary>2026-09-16: LoadIssue now leaves ShowChrome false (chrome starts hidden - the
+    /// ambient reveal-on-any-movement behavior that used to make "true" the practical starting
+    /// state was removed in favor of per-cluster hover, see ShowChrome's own doc comment), so this
+    /// test now shows it first before exercising the actual "toggle hides it" behavior it's named
+    /// for - previously LoadIssue itself left it true, no extra toggle needed to reach that state.</summary>
     [Fact]
     public void ToggleChromeCommand_WhenChromeShown_HidesIt()
     {
         var vm = new ReaderScreenViewModel(goBack: () => { });
         vm.LoadIssue(_issue1Id);
+        Assert.False(vm.ShowChrome);
+        vm.ToggleChromeCommand.Execute(null);
         Assert.True(vm.ShowChrome);
 
         vm.ToggleChromeCommand.Execute(null);
@@ -2498,12 +2538,13 @@ public class ReaderScreenViewModelTests : IDisposable
         Assert.False(vm.ShowChrome);
     }
 
+    /// <summary>2026-09-16: LoadIssue now leaves ShowChrome false already - no extra toggle needed
+    /// to reach "hidden" first, unlike before. See the sibling test's identical note above.</summary>
     [Fact]
     public void ToggleChromeCommand_WhenChromeHidden_ShowsItAgain()
     {
         var vm = new ReaderScreenViewModel(goBack: () => { });
         vm.LoadIssue(_issue1Id);
-        vm.ToggleChromeCommand.Execute(null);
         Assert.False(vm.ShowChrome);
 
         vm.ToggleChromeCommand.Execute(null);

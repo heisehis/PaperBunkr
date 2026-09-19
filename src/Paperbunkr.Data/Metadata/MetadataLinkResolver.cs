@@ -101,6 +101,9 @@ public static class MetadataLinkResolver
             SchemaVersion = "1",
         });
 
+        UpgradeMatchingPlaceholderRelations(context, seriesId, provider.ProviderKey, metadata.ExternalId);
+        UpsertCrossReferences(context, seriesId, metadata.CrossReferences);
+
         AddTitleIfNew(series, metadata.TitleNative, SeriesTitleType.Native);
         AddTitleIfNew(series, metadata.TitleRomaji, SeriesTitleType.Romanized);
         AddTitleIfNew(series, metadata.TitleEnglish, SeriesTitleType.Localized);
@@ -108,6 +111,8 @@ public static class MetadataLinkResolver
         ProposeAndApply(context, series, MetadataProposalField.Summary, series.Summary, metadata.Description, provider.ProviderKey);
         ProposeAndApply(context, series, MetadataProposalField.Status, series.Status.ToString(), NormalizedStatusOrNull(metadata.Status), provider.ProviderKey);
         ProposeAndApply(context, series, MetadataProposalField.Genre, series.Genre, metadata.Genre, provider.ProviderKey);
+        ProposeAndApply(context, series, MetadataProposalField.Creator, series.Creator, metadata.Creator, provider.ProviderKey);
+        ExternalTagImportResolver.ApplyToSeries(context, series, metadata);
 
         context.SaveChanges();
         return true;
@@ -172,6 +177,9 @@ public static class MetadataLinkResolver
             case MetadataProposalField.Status:
                 series.Status = Enum.Parse<SeriesStatus>(providedValue);
                 break;
+            case MetadataProposalField.Creator:
+                series.Creator = providedValue;
+                break;
         }
     }
 
@@ -193,5 +201,123 @@ public static class MetadataLinkResolver
         }
 
         series.Titles.Add(new SeriesTitle { SeriesId = series.Id, Value = value, Type = type });
+    }
+
+    /// <summary>
+    /// Converts any <see cref="ExternalMediaRelation"/> placeholder that already points at
+    /// <paramref name="justLinkedExternalId"/> into a real <see cref="MediaRelation"/>, now that a
+    /// local <see cref="Series"/> exists for it (docs/superpowers/specs/2026-09-18-external-
+    /// metadata-full-extraction-design.md §5) - runs on every link, not just ones that fetch
+    /// relations themselves, since this only needs the just-established <see cref="ExternalMediaId"/>,
+    /// not a fresh relations fetch.
+    /// </summary>
+    private static void UpgradeMatchingPlaceholderRelations(PaperbunkrDbContext context, int seriesId, ExternalMetadataProvider provider, string justLinkedExternalId)
+    {
+        var placeholders = context.ExternalMediaRelations
+            .Where(r => r.Provider == provider && r.TargetExternalId == justLinkedExternalId)
+            .ToList();
+
+        foreach (var placeholder in placeholders)
+        {
+            context.MediaRelations.Add(new MediaRelation
+            {
+                SourceSeriesId = placeholder.SourceSeriesId,
+                TargetSeriesId = seriesId,
+                RelationType = placeholder.RelationType,
+            });
+            context.ExternalMediaRelations.Remove(placeholder);
+        }
+    }
+
+    /// <summary>
+    /// Upserts an <see cref="ExternalMediaId"/> for each provider-asserted cross-reference
+    /// (MangaDex's <c>links</c>, MangaBaka's <c>source</c> - docs/superpowers/specs/2026-09-18-
+    /// external-metadata-full-extraction-design.md §8) - only when no row exists yet for that
+    /// provider. An existing row with a <i>different</i> id is a genuine identity conflict, left
+    /// untouched rather than silently overwritten (surfaced through the existing Needs-Review
+    /// surfaces, not a new one here).
+    /// </summary>
+    private static void UpsertCrossReferences(PaperbunkrDbContext context, int seriesId, IReadOnlyList<(ExternalMetadataProvider Provider, string ExternalId)>? crossReferences)
+    {
+        if (crossReferences is null)
+        {
+            return;
+        }
+
+        foreach (var (crossProvider, crossExternalId) in crossReferences)
+        {
+            bool alreadyLinked = context.ExternalMediaIds.Any(e => e.SeriesId == seriesId && e.Provider == crossProvider);
+            if (alreadyLinked)
+            {
+                continue;
+            }
+
+            context.ExternalMediaIds.Add(new ExternalMediaId
+            {
+                SeriesId = seriesId,
+                Provider = crossProvider,
+                ExternalId = crossExternalId,
+                Url = null,
+                LastFetchedAt = null,
+            });
+        }
+    }
+
+    /// <summary>
+    /// Fetches <paramref name="provider"/>'s relations for <paramref name="externalId"/> and
+    /// persists each one not already known - as a real <see cref="MediaRelation"/> when the target
+    /// is already linked locally (via <see cref="UpgradeMatchingPlaceholderRelations"/>'s same
+    /// matching logic, run inline here since <paramref name="provider"/> already knows the target's
+    /// external id up front), otherwise as an <see cref="ExternalMediaRelation"/> placeholder.
+    /// Lazy - called only when a series' Related tab is opened, not part of <see cref="LinkAsync"/>
+    /// itself (docs/superpowers/specs/2026-09-18-external-metadata-full-extraction-design.md §7).
+    /// No-op when <paramref name="provider"/> doesn't implement <see cref="IRelationsProvider"/>.
+    /// </summary>
+    public static async Task RefreshRelationsAsync(
+        IMetadataProvider provider, PaperbunkrDbContext context, int seriesId, string externalId, CancellationToken cancellationToken)
+    {
+        if (provider is not IRelationsProvider relationsProvider)
+        {
+            return;
+        }
+
+        var relations = await relationsProvider.GetRelationsAsync(externalId, cancellationToken).ConfigureAwait(false);
+        foreach (var relation in relations)
+        {
+            var existingLink = context.ExternalMediaIds
+                .FirstOrDefault(e => e.Provider == provider.ProviderKey && e.ExternalId == relation.TargetExternalId);
+
+            bool alreadyKnown = existingLink is not null
+                ? context.MediaRelations.Any(m => m.SourceSeriesId == seriesId && m.TargetSeriesId == existingLink.SeriesId)
+                : context.ExternalMediaRelations.Any(r => r.SourceSeriesId == seriesId && r.Provider == provider.ProviderKey && r.TargetExternalId == relation.TargetExternalId);
+            if (alreadyKnown)
+            {
+                continue;
+            }
+
+            if (existingLink is not null)
+            {
+                context.MediaRelations.Add(new MediaRelation
+                {
+                    SourceSeriesId = seriesId,
+                    TargetSeriesId = existingLink.SeriesId,
+                    RelationType = relation.Type,
+                });
+            }
+            else
+            {
+                context.ExternalMediaRelations.Add(new ExternalMediaRelation
+                {
+                    SourceSeriesId = seriesId,
+                    Provider = provider.ProviderKey,
+                    TargetExternalId = relation.TargetExternalId,
+                    TargetTitle = relation.TargetTitle,
+                    TargetUrl = relation.TargetUrl,
+                    RelationType = relation.Type,
+                });
+            }
+        }
+
+        context.SaveChanges();
     }
 }

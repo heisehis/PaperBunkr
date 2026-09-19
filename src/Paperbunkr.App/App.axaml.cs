@@ -260,6 +260,14 @@ public partial class App : Application
         {
             mainViewModel.OpenFilePath(filePath);
         }
+        else if (NavigationCliArgs.TryParseBookFilePathArg(desktop.Args ?? Array.Empty<string>(), out var bookFilePath, out var bookFormat) && bookFilePath is not null)
+        {
+            // Checked after the comic path, not before: the two extension sets don't overlap (see
+            // TryParseBookFilePathArg's own doc comment on why ".zip"/".pdf" stay comic-routed), so
+            // order between these two doesn't change behavior for any single file - kept in the same
+            // order the comic path was added in to keep this diff minimal.
+            mainViewModel.OpenBookFilePath(bookFilePath, bookFormat);
+        }
         else if (NavigationCliArgs.TryParseOpenArg(desktop.Args ?? Array.Empty<string>(), out var deepLinkTarget) && deepLinkTarget is not null)
         {
             mainViewModel.OpenDeepLink(deepLinkTarget);

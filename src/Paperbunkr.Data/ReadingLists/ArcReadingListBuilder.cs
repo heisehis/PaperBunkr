@@ -67,6 +67,19 @@ public static class ArcReadingListBuilder
         var source = sourceOverride ?? ReadingListSourceRegistry.Get(context, list.Source)
             ?? throw new InvalidOperationException($"'{list.Source}' is unavailable - check its credentials in Preferences.");
 
+        // Defensive cleanup: a prior bug (or race) could have left more than one ReadingListItem
+        // pointing at the same Issue within this list, which crashes the ToDictionary below with
+        // "An item with the same key has already been added." Keep the oldest (lowest Id), remove
+        // the rest, before anything else reads list.Items.
+        foreach (var duplicateGroup in list.Items.GroupBy(i => i.IssueId).Where(g => g.Count() > 1).ToList())
+        {
+            foreach (var extra in duplicateGroup.OrderBy(i => i.Id).Skip(1).ToList())
+            {
+                context.ReadingListItems.Remove(extra);
+                list.Items.Remove(extra);
+            }
+        }
+
         var arcIssues = await source.GetArcIssuesInOrderAsync(list.ArcId, cancellationToken).ConfigureAwait(false);
         var overview = await TryGetOverviewAsync(source, list.ArcId, cancellationToken).ConfigureAwait(false);
 
@@ -78,7 +91,14 @@ public static class ArcReadingListBuilder
         foreach (var arcIssue in arcIssues)
         {
             var resolved = ResolveArcIssue(context, arcIssue);
-            keptIssueIds.Add(resolved.Id);
+            if (!keptIssueIds.Add(resolved.Id))
+            {
+                // Two arc entries resolved to the same local Issue (e.g. a punctuation-variant
+                // series name both folding to the same series via ReadingListMatcher's cascade) -
+                // already handled by the first occurrence this pass; adding/touching it again
+                // would create exactly the duplicate-key row this method just cleaned up above.
+                continue;
+            }
 
             if (oldByIssueId.TryGetValue(resolved.Id, out var existingItem))
             {

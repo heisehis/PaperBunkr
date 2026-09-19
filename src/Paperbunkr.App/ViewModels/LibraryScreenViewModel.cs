@@ -162,6 +162,8 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
 
     private readonly LibraryFolderScanner _libraryScanner;
 
+    private readonly ITrackerAutoSyncService _trackerAutoSync;
+
     public LibraryScreenViewModel(
         Action<int> goDetail,
         Action<int> goReaderForIssue,
@@ -179,8 +181,10 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
         WorkspaceService? workspaceService = null,
         Action<int, bool>? enqueueMetadataWriteBack = null,
         IActivityService? activity = null,
-        bool loadOnConstruction = true)
+        bool loadOnConstruction = true,
+        ITrackerAutoSyncService? trackerAutoSync = null)
     {
+        _trackerAutoSync = trackerAutoSync ?? NoOpTrackerAutoSyncService.Instance;
         _activity = activity ?? new ActivityService();
         _enqueueMetadataWriteBack = enqueueMetadataWriteBack ?? ((_, _) => { });
         _goDetail = goDetail;
@@ -867,7 +871,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
     [RelayCommand]
     private void SetGranularity(LibraryContentGranularity granularity) => Granularity = granularity;
 
-    /// <summary>P6 fix (docs/alpha-todo.md) - none of the display modes had a "no series match"
+    /// <summary>P6 fix (docs/paperbunkr-todo.md) - none of the display modes had a "no series match"
     /// empty state; delegates to whichever granularity is active.</summary>
     public bool HasAnyResults => IsCollectionView ? CollectionTiles.Count > 0 : IsSeriesGranularity ? (Covers.Count > 0 || Groups.Count > 0) : IssueList.HasAnyResults;
 
@@ -2569,6 +2573,7 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
     {
         using var context = PaperbunkrDb.CreateContext();
         int marked = 0;
+        var seriesIds = new HashSet<int>();
         foreach (int issueId in issueIds)
         {
             var issue = context.Issues.Find(issueId);
@@ -2578,11 +2583,16 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
             }
 
             IssueReadStateResolver.MarkAsRead(issue);
+            seriesIds.Add(issue.SeriesId);
             marked++;
         }
 
         context.SaveChanges();
         LoadFromDatabase();
+
+        // "Update progress when marked as read" (docs/superpowers/specs/2026-09-18-tracker-behavior-
+        // settings-design.md §3.3) - one call for the whole bulk action, so one job + one toast/prompt.
+        _ = _trackerAutoSync.OnIssuesMarkedReadAsync(seriesIds);
 
         if (marked > 1)
         {

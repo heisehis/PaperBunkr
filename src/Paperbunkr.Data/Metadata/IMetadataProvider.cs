@@ -28,6 +28,37 @@ public interface IMetadataProvider
 public sealed record MetadataSearchResult(string ExternalId, string Title, string? Url);
 
 /// <summary>
+/// Optional capability for a provider with a browsable multi-cover archive (MangaBaka's, per
+/// docs/superpowers/specs/2026-09-18-external-metadata-full-extraction-design.md §2) rather than
+/// a single canonical cover - AniList/MangaDex don't implement this, they use
+/// <see cref="ExternalMediaMetadata.CoverImageUrl"/> directly. Same additive-interface pattern as
+/// <c>ITrackerSearchProvider</c>.
+/// </summary>
+public interface IMultiCoverProvider
+{
+    Task<IReadOnlyList<CoverCandidate>> GetCoverCandidatesAsync(string externalId, CancellationToken cancellationToken);
+}
+
+/// <summary>One browsable cover option. <see cref="ThumbnailUrl"/> is a small variant for the
+/// picker grid; <see cref="FullUrl"/> is the full-resolution image actually applied on selection.</summary>
+public sealed record CoverCandidate(string ThumbnailUrl, string FullUrl, string Type, string? Source);
+
+/// <summary>
+/// Optional capability for a provider exposing typed relations to other media (AniList/MangaBaka,
+/// docs/superpowers/specs/2026-09-18-external-metadata-full-extraction-design.md §5) - MangaDex has
+/// no confirmed relations endpoint, so it doesn't implement this. Fetched lazily, only when a
+/// series' Related tab is opened, not as part of the default single-request Apply flow.
+/// </summary>
+public interface IRelationsProvider
+{
+    Task<IReadOnlyList<ProviderRelation>> GetRelationsAsync(string externalId, CancellationToken cancellationToken);
+}
+
+/// <summary>One typed relation to another series, as reported by an external provider - the target
+/// may or may not exist locally yet (see <c>ExternalMediaRelation</c>).</summary>
+public sealed record ProviderRelation(string TargetExternalId, string TargetTitle, string? TargetUrl, RelationType Type);
+
+/// <summary>
 /// Thrown by <see cref="IMetadataProvider.SearchAsync"/> when the underlying call itself failed
 /// (network error, rate limit, service outage, malformed response) - distinct from a genuinely
 /// empty result list, which means the call succeeded and found nothing. Collapsing both into "return
@@ -68,4 +99,12 @@ public sealed record ExternalMediaMetadata(
     string? TitleEnglish = null,
     string? TitleRomaji = null,
     string? TitleNative = null,
-    string? Genre = null);
+    string? Genre = null,
+    string? CoverImageUrl = null,
+    string? Creator = null,
+    int? PublicationYear = null,
+    string? PublicationFormat = null,
+    string? Demographic = null,
+    IReadOnlyList<(ExternalMetadataProvider Provider, string ExternalId)>? CrossReferences = null,
+    IReadOnlyList<string>? GenreTags = null,
+    IReadOnlyList<(string Value, string Category)>? OtherTags = null);

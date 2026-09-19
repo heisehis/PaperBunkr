@@ -154,6 +154,10 @@ public class PdfPageReaderScreenViewModelTests : IDisposable
 
         vm.DeleteCaptureCommand.Execute(vm.AnnotationImages[0]);
 
+        // DeleteCapture defers AnnotationImages.Remove via Dispatcher.UIThread.Post (see its own
+        // doc comment - a row's own X Button.Click still routing through the row's ItemsControl).
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+
         Assert.Empty(vm.AnnotationImages);
         Assert.False(File.Exists(savedPath));
         using var context = new PaperbunkrDbContext(_dbOptions);

@@ -21,13 +21,18 @@ public static class ReadingListMatcher
     public static Issue? FindExisting(
         PaperbunkrDbContext context, string seriesName, string number, string? volume = null, int? year = null, string? format = null)
     {
+        var series = FindSeriesByCascade(context, seriesName);
+        if (series is null)
+        {
+            return null;
+        }
+
         var candidates = context.Issues
             .Include(i => i.Series)
             .Include(i => i.MetadataProposals)
+            .Where(i => i.SeriesId == series.Id)
             .AsEnumerable()
-            .Where(i => i.Series is not null
-                && string.Equals(i.Series.Name, seriesName, StringComparison.OrdinalIgnoreCase)
-                && string.Equals(i.EffectiveNumber(), number, StringComparison.OrdinalIgnoreCase))
+            .Where(i => string.Equals(i.EffectiveNumber(), number, StringComparison.OrdinalIgnoreCase))
             .ToList();
 
         // Prefer a real Issue over a placeholder standing in for the same Series+Number - matters
@@ -53,7 +58,7 @@ public static class ReadingListMatcher
             return existing;
         }
 
-        var series = context.Series.FirstOrDefault(s => s.Name.ToLower() == seriesName.ToLower())
+        var series = FindSeriesByCascade(context, seriesName)
             ?? CreateSeries(context, seriesName);
 
         var placeholder = new Issue
@@ -91,6 +96,21 @@ public static class ReadingListMatcher
 
         wasCreated = true;
         return ResolveOrCreatePlaceholder(context, seriesName, number, volume, year, format);
+    }
+
+    /// <summary>
+    /// Exact case-insensitive match first; on a miss, retries every existing series name through
+    /// <see cref="TitleNormalizer.NamesMatch"/> (docs/superpowers/specs/2026-09-17-series-name-
+    /// matching-and-empty-row-cleanup-design.md) - in-memory, same "personal-library scale" choice
+    /// this file's own header comment already documents for <see cref="Narrow"/>. Prevents a CBL/CSV
+    /// import naming a punctuation-variant of an already-owned series (<c>"X: Y"</c> vs
+    /// <c>"X - Y"</c>) from silently spawning a duplicate placeholder series.
+    /// </summary>
+    private static Series? FindSeriesByCascade(PaperbunkrDbContext context, string seriesName)
+    {
+        var all = context.Series.ToList();
+        return all.FirstOrDefault(s => string.Equals(s.Name, seriesName, StringComparison.OrdinalIgnoreCase))
+            ?? all.FirstOrDefault(s => TitleNormalizer.NamesMatch(s.Name, seriesName));
     }
 
     private static Series CreateSeries(PaperbunkrDbContext context, string seriesName)

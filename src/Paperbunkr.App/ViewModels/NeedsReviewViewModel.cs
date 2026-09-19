@@ -245,7 +245,7 @@ public partial class NeedsReviewViewModel : ViewModelBase
 
         if (target is not null && source is not null && target.Id != source.Id)
         {
-            MergeSeriesInto(context, source, target);
+            SeriesMergeHelper.MergeInto(context, source, target);
         }
 
         conflict.Status = SeriesConflictStatus.Merged;
@@ -355,29 +355,4 @@ public partial class NeedsReviewViewModel : ViewModelBase
         context.SaveChanges();
     }
 
-    /// <summary>
-    /// Moves every issue from <paramref name="source"/> into <paramref name="target"/> - deduped
-    /// by (Number, Volume), the same rule <see cref="Paperbunkr.Data.CeMigration.CeLibraryMigrator"/>'s
-    /// idempotent commit path uses - and removes the now-empty source series.
-    /// </summary>
-    private static void MergeSeriesInto(PaperbunkrDbContext context, Series source, Series target)
-    {
-        var existingKeys = new HashSet<(string?, string?)>(target.Issues.Select(i => (i.EffectiveNumber(), i.EffectiveVolume())));
-
-        foreach (var issue in source.Issues.ToList())
-        {
-            if (existingKeys.Add((issue.EffectiveNumber(), issue.EffectiveVolume())))
-            {
-                issue.SeriesId = target.Id;
-                issue.Series = target;
-            }
-            else
-            {
-                context.Issues.Remove(issue);
-                CoverImageCache.Invalidate(issue.Id);
-            }
-        }
-
-        context.Series.Remove(source);
-    }
 }

@@ -135,6 +135,9 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         ScheduledTasks = new ObservableCollection<ScheduledTaskRow>();
         MissingFileItems = new ObservableCollection<MissingFileRowViewModel>();
         RecentlyRemovedItems = new ObservableCollection<RemovedLibraryEntryRowViewModel>();
+        SimilarSeriesCandidates = new ObservableCollection<SeriesConflictRowViewModel>();
+        EmptySeriesItems = new ObservableCollection<EmptySeriesRowViewModel>();
+        EmptyIssueItems = new ObservableCollection<MissingFileRowViewModel>();
 
         // Connections list+dialog (docs/superpowers/specs/2026-09-06-connections-tracker-dialog-
         // redesign-design.md) - fresh row instances per VM instance, never the shared static catalog
@@ -168,6 +171,8 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         MangaUpdatesRow.DisconnectCommand = DisconnectMangaUpdatesCommand;
         KitsuRow.PrimaryCommand = ConnectKitsuCommand;
         KitsuRow.DisconnectCommand = DisconnectKitsuCommand;
+        MangaDexRow.PrimaryCommand = ConnectMangaDexCommand;
+        MangaDexRow.DisconnectCommand = DisconnectMangaDexCommand;
 
         // Clear Cover Cache (docs/superpowers/specs/2026-08-30-cover-thumbnail-content-
         // verification-design.md) - manual escape hatch, independent of VerifyCovers' detection
@@ -492,6 +497,38 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     [ObservableProperty]
     private bool _promptReviewOnFinish;
 
+    // --- Tracker behavior (docs/superpowers/specs/2026-09-18-tracker-behavior-settings-design.md) ---
+
+    /// <summary>Open the tracker link panel automatically (first time, source-linked manga only).</summary>
+    [ObservableProperty]
+    private bool _trackerAutoOpenLinkPanel = true;
+
+    /// <summary>Push progress to linked trackers when the comic reader finishes an issue.</summary>
+    [ObservableProperty]
+    private bool _trackerUpdateAfterReading = true;
+
+    /// <summary>What a manual mark-as-read does for linked trackers (Always / Ask / Never).</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(TrackerUpdateOnMarkReadText))]
+    private TrackerAutoUpdateMode _trackerUpdateOnMarkRead = TrackerAutoUpdateMode.Always;
+
+    /// <summary>SuggestBox string view of <see cref="TrackerUpdateOnMarkRead"/> - strict, never a ComboBox.</summary>
+    public string TrackerUpdateOnMarkReadText
+    {
+        get => TrackerUpdateOnMarkRead.ToString();
+        set { if (Enum.TryParse<TrackerAutoUpdateMode>(value, out var parsed)) TrackerUpdateOnMarkRead = parsed; }
+    }
+
+    public string[] TrackerUpdateModeNames { get; } = Enum.GetNames<TrackerAutoUpdateMode>();
+
+    /// <summary>Pull remote progress when a linked series' detail screen opens. Off by default.</summary>
+    [ObservableProperty]
+    private bool _trackerAutoSyncFromTrackers;
+
+    /// <summary>Pin a series' linked metadata source as the first tracker-link candidate.</summary>
+    [ObservableProperty]
+    private bool _trackerUseSourceMetadata = true;
+
     /// <summary>CE <c>Settings.DisableDragDrop</c> (inverted) - gates the Library / Reading List drop handlers.</summary>
     [ObservableProperty]
     private bool _enableDragDropImport;
@@ -530,6 +567,33 @@ public partial class PreferencesScreenViewModel : ViewModelBase
 
     [ObservableProperty]
     private bool _highQualityPageDisplay;
+
+    /// <summary>2026-09-16, direct user request (no design doc - a single well-precedented toggle,
+    /// not a design decision): the comic reader's floating chrome clusters
+    /// (<c>ReaderScreenViewModel.ShowChrome</c>) were hardcoded to always idle-fade, no way to turn
+    /// it off, and the idle-fade itself is sensitive to any pointer movement at all (every
+    /// PointerMoved over the reading canvas restarts the timer), which reads as "never hides" for
+    /// anyone whose hand rests near the mouse while reading. No CE precedent - checked, CE's own
+    /// <c>AutoHideCursorDuration</c> is a different, narrower feature (OS cursor hiding, not the
+    /// toolbar), not a parity gap.</summary>
+    [ObservableProperty]
+    private bool _readerAutoHideChrome;
+
+    /// <summary>Which mechanism reveals the reader's chrome clusters - swappable per direct user
+    /// request (2026-09-16): per-corner hover (shipped default) or the original ambient
+    /// any-movement-reveals-everything behavior. See <see cref="ReaderChromeHoverMode"/>'s own doc
+    /// comment.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ReaderChromeHoverModeText))]
+    private ReaderChromeHoverMode _readerChromeHoverMode = ReaderChromeHoverMode.PerCluster;
+
+    public string ReaderChromeHoverModeText
+    {
+        get => ReaderChromeHoverMode.ToString();
+        set { if (Enum.TryParse<ReaderChromeHoverMode>(value, out var parsed)) ReaderChromeHoverMode = parsed; }
+    }
+
+    public string[] ReaderChromeHoverModeNames { get; } = Enum.GetNames<ReaderChromeHoverMode>();
 
     /// <summary>docs/superpowers/specs/2026-08-10-preferences-reader-tab-design.md - CE: <c>Settings.ResetZoomOnPageChange</c>, default false.</summary>
     [ObservableProperty]
@@ -774,12 +838,19 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         ReverseRtlNavigation = settings.ReverseRtlNavigation;
         RestoreSessionOnStartup = settings.RestoreSessionOnStartup;
         PromptReviewOnFinish = settings.PromptReviewOnFinish;
+        TrackerAutoOpenLinkPanel = settings.TrackerAutoOpenLinkPanel;
+        TrackerUpdateAfterReading = settings.TrackerUpdateAfterReading;
+        TrackerUpdateOnMarkRead = settings.TrackerUpdateOnMarkRead;
+        TrackerAutoSyncFromTrackers = settings.TrackerAutoSyncFromTrackers;
+        TrackerUseSourceMetadata = settings.TrackerUseSourceMetadata;
         EnableDragDropImport = settings.EnableDragDropImport;
         NavRailHoverExpandEnabled = settings.NavRailHoverExpandEnabled;
         CheckForUpdatesOnStartup = settings.CheckForUpdatesOnStartup;
         MinimizeToTray = settings.MinimizeToTray;
         ConfirmBeforeClose = settings.ConfirmBeforeClose;
         HighQualityPageDisplay = settings.HighQualityPageDisplay;
+        ReaderAutoHideChrome = settings.ReaderAutoHideChrome;
+        ReaderChromeHoverMode = settings.ReaderChromeHoverMode;
         ResetZoomOnPageChange = settings.ResetZoomOnPageChange;
         MouseWheelSpeed = settings.MouseWheelSpeed;
         DefaultPageFitMode = settings.DefaultPageFitMode;
@@ -1195,6 +1266,16 @@ public partial class PreferencesScreenViewModel : ViewModelBase
 
     partial void OnPromptReviewOnFinishChanged(bool value) => PersistBehaviorSetting(s => s.PromptReviewOnFinish = value);
 
+    partial void OnTrackerAutoOpenLinkPanelChanged(bool value) => PersistBehaviorSetting(s => s.TrackerAutoOpenLinkPanel = value);
+
+    partial void OnTrackerUpdateAfterReadingChanged(bool value) => PersistBehaviorSetting(s => s.TrackerUpdateAfterReading = value);
+
+    partial void OnTrackerUpdateOnMarkReadChanged(TrackerAutoUpdateMode value) => PersistBehaviorSetting(s => s.TrackerUpdateOnMarkRead = value);
+
+    partial void OnTrackerAutoSyncFromTrackersChanged(bool value) => PersistBehaviorSetting(s => s.TrackerAutoSyncFromTrackers = value);
+
+    partial void OnTrackerUseSourceMetadataChanged(bool value) => PersistBehaviorSetting(s => s.TrackerUseSourceMetadata = value);
+
     partial void OnEnableDragDropImportChanged(bool value) => PersistBehaviorSetting(s => s.EnableDragDropImport = value);
 
     partial void OnNavRailHoverExpandEnabledChanged(bool value) => PersistBehaviorSetting(s => s.NavRailHoverExpandEnabled = value);
@@ -1206,6 +1287,10 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     partial void OnConfirmBeforeCloseChanged(bool value) => PersistBehaviorSetting(s => s.ConfirmBeforeClose = value);
 
     partial void OnHighQualityPageDisplayChanged(bool value) => PersistBehaviorSetting(s => s.HighQualityPageDisplay = value);
+
+    partial void OnReaderAutoHideChromeChanged(bool value) => PersistBehaviorSetting(s => s.ReaderAutoHideChrome = value);
+
+    partial void OnReaderChromeHoverModeChanged(ReaderChromeHoverMode value) => PersistBehaviorSetting(s => s.ReaderChromeHoverMode = value);
 
     partial void OnResetZoomOnPageChangeChanged(bool value) => PersistBehaviorSetting(s => s.ResetZoomOnPageChange = value);
 
@@ -2556,6 +2641,7 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     [ObservableProperty] private bool _isMangaBakaConnected;
     [ObservableProperty] private bool _isMangaUpdatesConnected;
     [ObservableProperty] private bool _isKitsuConnected;
+    [ObservableProperty] private bool _isMangaDexConnected;
 
     /// <summary>Row list backing the Connections screen's "Trackers" section (docs/superpowers/specs/2026-09-06-connections-tracker-dialog-redesign-design.md).</summary>
     public ObservableCollection<ConnectionProviderRow> TrackerProviderRows { get; }
@@ -2567,6 +2653,7 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     private ConnectionProviderRow MangaBakaRow => TrackerProviderRows.Single(r => r.Id == nameof(TrackingService.MangaBaka));
     private ConnectionProviderRow MangaUpdatesRow => TrackerProviderRows.Single(r => r.Id == nameof(TrackingService.MangaUpdates));
     private ConnectionProviderRow KitsuRow => TrackerProviderRows.Single(r => r.Id == nameof(TrackingService.Kitsu));
+    private ConnectionProviderRow MangaDexRow => TrackerProviderRows.Single(r => r.Id == nameof(TrackingService.MangaDex));
 
     // ===================== Connections list+dialog (docs/superpowers/specs/2026-09-06-connections-
     // tracker-dialog-redesign-design.md) - the row-list/dialog state shared by both the Reading List
@@ -2629,11 +2716,14 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         IsMangaBakaConnected = CredentialStore.HasCredentials(context, nameof(TrackingService.MangaBaka), CredentialKind.ApiKey);
         IsMangaUpdatesConnected = CredentialStore.HasCredentials(context, nameof(TrackingService.MangaUpdates), CredentialKind.OAuthAccessToken);
         IsKitsuConnected = CredentialStore.HasCredentials(context, nameof(TrackingService.Kitsu), CredentialKind.OAuthAccessToken);
+        IsMangaDexConnected = CredentialStore.HasCredentials(context, nameof(TrackingService.MangaDex), CredentialKind.OAuthAccessToken);
 
         AniListRow.ClientId = CredentialStore.Get(context, nameof(TrackingService.AniList), CredentialKind.OAuthClientId) ?? string.Empty;
         MyAnimeListRow.ClientId = CredentialStore.Get(context, nameof(TrackingService.MyAnimeList), CredentialKind.OAuthClientId) ?? string.Empty;
         ShikimoriRow.ClientId = CredentialStore.Get(context, nameof(TrackingService.Shikimori), CredentialKind.OAuthClientId) ?? string.Empty;
         ShikimoriRow.ClientSecret = CredentialStore.Get(context, nameof(TrackingService.Shikimori), CredentialKind.OAuthClientSecret) ?? string.Empty;
+        MangaDexRow.ClientId = CredentialStore.Get(context, nameof(TrackingService.MangaDex), CredentialKind.OAuthClientId) ?? string.Empty;
+        MangaDexRow.ClientSecret = CredentialStore.Get(context, nameof(TrackingService.MangaDex), CredentialKind.OAuthClientSecret) ?? string.Empty;
 
         SyncProviderRowConnectedState(TrackerProviderRows, nameof(TrackingService.AniList), IsAniListConnected);
         SyncProviderRowConnectedState(TrackerProviderRows, nameof(TrackingService.MyAnimeList), IsMyAnimeListConnected);
@@ -2642,6 +2732,7 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         SyncProviderRowConnectedState(TrackerProviderRows, nameof(TrackingService.MangaBaka), IsMangaBakaConnected);
         SyncProviderRowConnectedState(TrackerProviderRows, nameof(TrackingService.MangaUpdates), IsMangaUpdatesConnected);
         SyncProviderRowConnectedState(TrackerProviderRows, nameof(TrackingService.Kitsu), IsKitsuConnected);
+        SyncProviderRowConnectedState(TrackerProviderRows, nameof(TrackingService.MangaDex), IsMangaDexConnected);
     }
 
     [RelayCommand]
@@ -2762,6 +2853,24 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         ConnectionDialogStatus = connected ? "Kitsu connected." : "Couldn't connect to Kitsu. Check your username/password and try again.";
     }
 
+    [RelayCommand]
+    private async Task ConnectMangaDexAsync()
+    {
+        using var context = _contextFactory();
+        // Persisted regardless of outcome, same "worth keeping for a retry" precedent as
+        // Shikimori's own Client ID/Secret - registering a Personal Client is the annoying part,
+        // no reason to make the user redo it after a mistyped password.
+        CredentialStore.Set(context, nameof(TrackingService.MangaDex), CredentialKind.OAuthClientId, MangaDexRow.ClientId);
+        CredentialStore.Set(context, nameof(TrackingService.MangaDex), CredentialKind.OAuthClientSecret, MangaDexRow.ClientSecret);
+
+        var adapter = new MangaDexTrackerAdapter(TrackerHttpClients.MangaDex);
+        var (connected, errorDetail) = await adapter.CompleteConnectDetailedAsync(context, MangaDexRow.ClientId, MangaDexRow.ClientSecret, MangaDexRow.Username, MangaDexRow.Password, default);
+
+        MangaDexRow.Password = string.Empty;
+        RefreshTrackerConnectionState(context);
+        ConnectionDialogStatus = connected ? "MangaDex connected." : $"Couldn't connect to MangaDex: {errorDetail}";
+    }
+
     // ===================== Disconnect commands (docs/superpowers/specs/2026-09-06-connections-
     // tracker-dialog-redesign-design.md) - new, didn't exist before this spec (there was previously
     // no UI way to clear a saved credential). OAuth providers clear only the access/refresh token(s),
@@ -2838,6 +2947,20 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         KitsuRow.Password = string.Empty;
         RefreshTrackerConnectionState(context);
         ConnectionDialogStatus = "Kitsu disconnected.";
+    }
+
+    /// <summary>Clears only the access/refresh token(s), same as every OAuth-family disconnect in
+    /// this class - Client ID/Secret stay (re-registering a Personal Client is the annoying part).</summary>
+    [RelayCommand]
+    private void DisconnectMangaDex()
+    {
+        using var context = _contextFactory();
+        CredentialStore.Delete(context, nameof(TrackingService.MangaDex), CredentialKind.OAuthAccessToken);
+        CredentialStore.Delete(context, nameof(TrackingService.MangaDex), CredentialKind.OAuthRefreshToken);
+        MangaDexRow.Username = string.Empty;
+        MangaDexRow.Password = string.Empty;
+        RefreshTrackerConnectionState(context);
+        ConnectionDialogStatus = "MangaDex disconnected.";
     }
 
     // ===================== Automation tab (docs/superpowers/specs/2026-09-06-scheduled-tasks-and-
@@ -3044,9 +3167,27 @@ public partial class PreferencesScreenViewModel : ViewModelBase
 
     public ObservableCollection<RemovedLibraryEntryRowViewModel> RecentlyRemovedItems { get; }
 
+    /// <summary>
+    /// "Find Similar Series" candidates (docs/superpowers/specs/2026-09-17-series-name-matching-
+    /// and-empty-row-cleanup-design.md) - on-demand only, populated by <see cref="FindSimilarSeries"/>,
+    /// never by <see cref="RefreshLibraryHealth"/>'s automatic reload. Reuses the existing
+    /// <see cref="SeriesConflictRowViewModel"/> row type - same "deliberately unaware of its data
+    /// source" contract it already documents.
+    /// </summary>
+    public ObservableCollection<SeriesConflictRowViewModel> SimilarSeriesCandidates { get; }
+
+    public ObservableCollection<EmptySeriesRowViewModel> EmptySeriesItems { get; }
+
+    /// <summary>Reuses <see cref="MissingFileRowViewModel"/> as-is - it doesn't care why a row is being shown, only Issue id/label/Relink-Remove-Dismiss.</summary>
+    public ObservableCollection<MissingFileRowViewModel> EmptyIssueItems { get; }
+
     public bool HasMissingFileItems => MissingFileItems.Count > 0;
 
     public bool HasRecentlyRemovedItems => RecentlyRemovedItems.Count > 0;
+
+    public bool HasSimilarSeriesCandidates => SimilarSeriesCandidates.Count > 0;
+
+    public bool HasEmptyRowItems => EmptySeriesItems.Count > 0 || EmptyIssueItems.Count > 0;
 
     /// <summary>Recently Removed is collapsed by default (docs/superpowers/specs/2026-09-07-
     /// library-health-redesign-design.md §6) - it's an audit trail, not an actionable list like
@@ -3134,6 +3275,33 @@ public partial class PreferencesScreenViewModel : ViewModelBase
             RecentlyRemovedItems.Add(new RemovedLibraryEntryRowViewModel(entryId, label, entry.FilePath, entry.RemovedAtUtc, RestoreRemovedEntry));
         }
 
+        // Empty Rows (docs/superpowers/specs/2026-09-17-series-name-matching-and-empty-row-cleanup-
+        // design.md) - general hygiene sweep, independent of Missing Files. Zero-Issue series and
+        // content-empty issues are both pure queries over already-verified state, so (unlike Find
+        // Similar Series) this runs on every refresh, not just on-demand.
+        EmptySeriesItems.Clear();
+        foreach (var series in context.Series.Where(s => !s.EmptyRowAcknowledged && !s.Issues.Any()).OrderBy(s => s.Name).ToList())
+        {
+            int seriesId = series.Id;
+            EmptySeriesItems.Add(new EmptySeriesRowViewModel(
+                seriesId,
+                series.Name,
+                onRemove: () => RemoveEmptySeries(seriesId),
+                onDismiss: () => DismissEmptySeries(seriesId)));
+        }
+
+        EmptyIssueItems.Clear();
+        foreach (var issue in trackedIssues.Where(i => i.IsContentEmpty && !i.EmptyRowAcknowledged).Include(i => i.Series).OrderBy(i => i.Series!.Name).ToList())
+        {
+            int issueId = issue.Id;
+            EmptyIssueItems.Add(new MissingFileRowViewModel(
+                issueId,
+                $"{issue.Series?.Name ?? "Unknown"} #{issue.EffectiveNumber()} · unreadable",
+                onRelink: RelinkEmptyIssue,
+                onRemove: _ => RemoveEmptyIssue(issueId),
+                onDismiss: _ => DismissEmptyIssue(issueId)));
+        }
+
         NotifyLibraryHealthCountsChanged();
     }
 
@@ -3141,6 +3309,8 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     {
         OnPropertyChanged(nameof(HasMissingFileItems));
         OnPropertyChanged(nameof(HasRecentlyRemovedItems));
+        OnPropertyChanged(nameof(HasSimilarSeriesCandidates));
+        OnPropertyChanged(nameof(HasEmptyRowItems));
         OnPropertyChanged(nameof(HasConfirmedMissingItems));
     }
 
@@ -3169,9 +3339,9 @@ public partial class PreferencesScreenViewModel : ViewModelBase
                 context.SaveChanges();
             }
 
-            string summary = result.MissingNow == 0
-                ? $"Checked {result.Checked} issues - all files present."
-                : $"Checked {result.Checked} issues - {result.MissingNow} missing ({result.ConfirmedMissingCount} confirmed).";
+            string summary = result.MissingNow == 0 && result.ContentEmptyNow == 0
+                ? $"Checked {result.Checked} issues - all files present and readable."
+                : $"Checked {result.Checked} issues - {result.MissingNow} missing ({result.ConfirmedMissingCount} confirmed), {result.ContentEmptyNow} unreadable.";
             job.Succeed(summary, itemsProcessed: result.Checked);
         }
         catch (OperationCanceledException)
@@ -3256,6 +3426,170 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         // Deferred: same reason as RemoveMissingFile above - this command runs from a single click
         // on the row's own "Dismiss" Button still routing through the MissingFileItems row's own
         // ItemsControl.
+        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+        {
+            using var refreshContext = _contextFactory();
+            RefreshLibraryHealth(refreshContext);
+        });
+    }
+
+    // ===================== Find Similar Series (docs/superpowers/specs/2026-09-17-series-name-
+    // matching-and-empty-row-cleanup-design.md) - on-demand only, backward remediation for series
+    // already split by a punctuation-variant name. Reuses SeriesConflictRowViewModel + SeriesMergeHelper. =====================
+
+    /// <summary>
+    /// Groups every <see cref="Series"/> by <see cref="TitleNormalizer.StripDown"/> and surfaces one
+    /// candidate row per extra member in a group beyond the one with the most issues (the "target").
+    /// On-demand only (never part of <see cref="RefreshLibraryHealth"/>'s automatic reload) - this
+    /// needs human judgment every time, not a queue that silently repopulates after every scan.
+    /// </summary>
+    [RelayCommand]
+    private void FindSimilarSeries()
+    {
+        SimilarSeriesCandidates.Clear();
+
+        using var context = _contextFactory();
+        var groups = context.Series
+            .Select(s => new { s.Id, s.Name, IssueCount = s.Issues.Count })
+            .AsEnumerable()
+            .GroupBy(s => TitleNormalizer.StripDown(s.Name).ToLowerInvariant())
+            .Where(g => g.Count() > 1);
+
+        foreach (var group in groups)
+        {
+            var ordered = group.OrderByDescending(s => s.IssueCount).ThenBy(s => s.Id).ToList();
+            var target = ordered[0];
+            foreach (var source in ordered.Skip(1))
+            {
+                int targetId = target.Id;
+                int sourceId = source.Id;
+                SimilarSeriesCandidates.Add(new SeriesConflictRowViewModel(
+                    source.Name,
+                    target.Name,
+                    similarity: 1.0,
+                    onMerge: row => MergeSimilarSeries(sourceId, targetId, row),
+                    onKeepSeparate: row => Avalonia.Threading.Dispatcher.UIThread.Post(() => SimilarSeriesCandidates.Remove(row))));
+            }
+        }
+
+        OnPropertyChanged(nameof(HasSimilarSeriesCandidates));
+    }
+
+    private void MergeSimilarSeries(int sourceId, int targetId, SeriesConflictRowViewModel row)
+    {
+        using (var context = _contextFactory())
+        {
+            var source = context.Series.Include(s => s.Issues).FirstOrDefault(s => s.Id == sourceId);
+            var target = context.Series.Include(s => s.Issues).FirstOrDefault(s => s.Id == targetId);
+            if (source is not null && target is not null)
+            {
+                SeriesMergeHelper.MergeInto(context, source, target);
+                context.SaveChanges();
+            }
+        }
+
+        // Deferred: same reason as RemoveMissingFile below - this runs from the row's own Merge
+        // Button.Click still routing through the SimilarSeriesCandidates row's own ItemsControl.
+        Avalonia.Threading.Dispatcher.UIThread.Post(() => SimilarSeriesCandidates.Remove(row));
+    }
+
+    // ===================== Empty Rows (docs/superpowers/specs/2026-09-17-series-name-matching-and-
+    // empty-row-cleanup-design.md) - general hygiene sweep, manual only, no auto-delete. =====================
+
+    private void RemoveEmptySeries(int seriesId)
+    {
+        using (var context = _contextFactory())
+        {
+            var series = context.Series.Include(s => s.Issues).FirstOrDefault(s => s.Id == seriesId);
+            if (series is not null && !series.Issues.Any())
+            {
+                context.Series.Remove(series);
+                context.SaveChanges();
+            }
+        }
+
+        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+        {
+            using var refreshContext = _contextFactory();
+            RefreshLibraryHealth(refreshContext);
+        });
+    }
+
+    private void DismissEmptySeries(int seriesId)
+    {
+        using (var context = _contextFactory())
+        {
+            var series = context.Series.Find(seriesId);
+            if (series is not null)
+            {
+                series.EmptyRowAcknowledged = true;
+                context.SaveChanges();
+            }
+        }
+
+        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+        {
+            using var refreshContext = _contextFactory();
+            RefreshLibraryHealth(refreshContext);
+        });
+    }
+
+    private async Task RelinkEmptyIssue(MissingFileRowViewModel row)
+    {
+        string? path = await _filePicker.PickOpenFileAsync("Locate the file", "cbz", "Comic Archive");
+        if (path is null)
+        {
+            return;
+        }
+
+        using (var context = _contextFactory())
+        {
+            var issue = context.Issues.Find(row.IssueId);
+            if (issue is not null)
+            {
+                issue.FilePath = path;
+                issue.IsContentEmpty = false;
+                issue.EmptyRowAcknowledged = false;
+                context.SaveChanges();
+            }
+        }
+
+        using var refreshContext = _contextFactory();
+        RefreshLibraryHealth(refreshContext);
+    }
+
+    private void RemoveEmptyIssue(int issueId)
+    {
+        using (var context = _contextFactory())
+        {
+            var issue = context.Issues.Include(i => i.Series).FirstOrDefault(i => i.Id == issueId);
+            if (issue is not null)
+            {
+                RecordRemoval(context, issue);
+                LibraryDeletionHelper.RemoveIssue(context, issue);
+                context.SaveChanges();
+            }
+        }
+
+        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+        {
+            using var refreshContext = _contextFactory();
+            RefreshLibraryHealth(refreshContext);
+        });
+    }
+
+    private void DismissEmptyIssue(int issueId)
+    {
+        using (var context = _contextFactory())
+        {
+            var issue = context.Issues.Find(issueId);
+            if (issue is not null)
+            {
+                issue.EmptyRowAcknowledged = true;
+                context.SaveChanges();
+            }
+        }
+
         Avalonia.Threading.Dispatcher.UIThread.Post(() =>
         {
             using var refreshContext = _contextFactory();

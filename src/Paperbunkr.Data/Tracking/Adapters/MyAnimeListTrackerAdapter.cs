@@ -21,7 +21,7 @@ namespace Paperbunkr.Data.Tracking.Adapters;
 /// PKCE is mandatory for MAL and only supports the <c>plain</c> challenge method (no SHA256), so the
 /// challenge sent to the authorize URL is the verifier itself, unlike a typical S256 PKCE flow.
 /// </summary>
-public sealed class MyAnimeListTrackerAdapter : ITrackerSearchProvider, ITrackerAdapter
+public sealed class MyAnimeListTrackerAdapter : ITrackerSearchProvider, ITrackerAdapter, ITrackerDetailedPush
 {
     private const string ApiBase = "https://api.myanimelist.net/v2";
     private const string AuthorizeEndpoint = "https://myanimelist.net/v1/oauth2/authorize";
@@ -168,12 +168,19 @@ public sealed class MyAnimeListTrackerAdapter : ITrackerSearchProvider, ITracker
         }
     }
 
-    public async Task<bool> PushEntryAsync(PaperbunkrDbContext context, TrackingLink link, TrackerPushPayload payload, CancellationToken cancellationToken)
+    public async Task<bool> PushEntryAsync(PaperbunkrDbContext context, TrackingLink link, TrackerPushPayload payload, CancellationToken cancellationToken) =>
+        (await PushEntryDetailedAsync(context, link, payload, cancellationToken).ConfigureAwait(false)).Success;
+
+    /// <summary>Same as <see cref="PushEntryAsync"/> but returns MyAnimeList's real error body
+    /// instead of collapsing every failure into a bare <see langword="false"/> - extends the
+    /// detailed-error pattern already shipped this session for MangaBaka/MangaDex to this adapter
+    /// (docs/superpowers/specs/2026-09-18-per-tracker-score-and-finish-date-design.md).</summary>
+    public async Task<(bool Success, string? ErrorDetail)> PushEntryDetailedAsync(PaperbunkrDbContext context, TrackingLink link, TrackerPushPayload payload, CancellationToken cancellationToken)
     {
         string? accessToken = CredentialStore.Get(context, nameof(TrackingService.MyAnimeList), CredentialKind.OAuthAccessToken);
         if (string.IsNullOrEmpty(accessToken))
         {
-            return false;
+            return (false, "Not connected - no access token saved.");
         }
 
         var (status, isRereading) = MyAnimeListStatusMapper.ToListStatus(payload.Status);
@@ -181,6 +188,21 @@ public sealed class MyAnimeListTrackerAdapter : ITrackerSearchProvider, ITracker
         if (payload.ChapterProgress is int chapters)
         {
             form["num_chapters_read"] = chapters.ToString();
+        }
+
+        // Gated on UpdateScore/UpdateFinishDate, not merely on Score/FinishDate having a value -
+        // an ordinary status/progress-only sync (both flags default false) must never touch these
+        // fields at all, matching TrackerPushPayload's own doc comment. 0 = "unscored" on MAL's own
+        // scale - clearing sends "0", MAL's documented way to unscore an entry.
+        if (payload.UpdateScore)
+        {
+            int malScore = payload.Score is decimal localScore and > 0 ? Math.Clamp((int)Math.Round((double)localScore * 2), 1, 10) : 0;
+            form["score"] = malScore.ToString();
+        }
+
+        if (payload.UpdateFinishDate && payload.FinishDate is DateOnly date)
+        {
+            form["finish_date"] = date.ToString("yyyy-MM-dd");
         }
 
         var request = new HttpRequestMessage(HttpMethod.Put, $"{ApiBase}/manga/{link.ExternalId}/my_list_status")
@@ -194,18 +216,20 @@ public sealed class MyAnimeListTrackerAdapter : ITrackerSearchProvider, ITracker
         {
             response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
         }
-        catch (HttpRequestException)
+        catch (HttpRequestException ex)
         {
-            return false;
-        }
-        catch (TaskCanceledException) when (!cancellationToken.IsCancellationRequested)
-        {
-            return false;
+            return (false, $"Network error: {ex.Message}");
         }
 
         using (response)
         {
-            return response.IsSuccessStatusCode;
+            if (response.IsSuccessStatusCode)
+            {
+                return (true, null);
+            }
+
+            string rawBody = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+            return (false, $"{(int)response.StatusCode}: {rawBody}");
         }
     }
 
@@ -222,7 +246,7 @@ public sealed class MyAnimeListTrackerAdapter : ITrackerSearchProvider, ITracker
         }
 
         var request = new HttpRequestMessage(HttpMethod.Get,
-            $"{ApiBase}/manga/{link.ExternalId}?fields=my_list_status{{status,num_chapters_read,is_rereading}}");
+            $"{ApiBase}/manga/{link.ExternalId}?fields=my_list_status{{status,num_chapters_read,is_rereading,score,finish_date}}");
         request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", accessToken);
 
         HttpResponseMessage response;
@@ -263,7 +287,9 @@ public sealed class MyAnimeListTrackerAdapter : ITrackerSearchProvider, ITracker
             }
 
             var readingStatus = status.IsRereading ? ReadingStatus.ReReading : MyAnimeListStatusMapper.FromListStatus(status.Status);
-            return new TrackerRemoteEntry(readingStatus, (int?)status.NumChaptersRead);
+            decimal? score = status.Score is int malScore and > 0 ? malScore / 2m : null;
+            DateOnly? finishDate = DateOnly.TryParse(status.FinishDate, out var parsedDate) ? parsedDate : null;
+            return new TrackerRemoteEntry(readingStatus, (int?)status.NumChaptersRead, score, finishDate);
         }
     }
 }
@@ -324,6 +350,12 @@ internal sealed class MalListItemStatusDto
 
     [JsonPropertyName("is_rereading")]
     public bool IsRereading { get; set; }
+
+    [JsonPropertyName("score")]
+    public int? Score { get; set; }
+
+    [JsonPropertyName("finish_date")]
+    public string? FinishDate { get; set; }
 }
 
 internal sealed class MalSearchResponse

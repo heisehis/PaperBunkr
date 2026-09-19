@@ -82,7 +82,7 @@ public partial class BulkIssuePropertiesScreenViewModel : ViewModelBase
     /// Reuses the existing per-field <see cref="BulkFieldViewModel.IsStaged"/> flag (already the
     /// signal <see cref="Save"/> itself uses to decide what to write) rather than adding a second,
     /// parallel dirty-tracking mechanism - unsaved-changes guard for <see cref="MainViewModel"/>
-    /// (P6 follow-up, docs/alpha-todo.md).
+    /// (P6 follow-up, docs/paperbunkr-todo.md).
     /// </summary>
     public bool HasUnsavedChanges() => AllFields.Any(f => f.IsStaged);
 
@@ -359,7 +359,7 @@ public partial class BulkIssuePropertiesScreenViewModel : ViewModelBase
             }
         }
 
-        // Matches IssuePropertiesScreenViewModel's _isDirty reset (P6 follow-up, docs/alpha-todo.md) -
+        // Matches IssuePropertiesScreenViewModel's _isDirty reset (P6 follow-up, docs/paperbunkr-todo.md) -
         // without this, HasUnsavedChanges() would still report true immediately post-Save, until the
         // next Load() rebuilds the field list from scratch.
         foreach (var field in stagedFields)

@@ -7,6 +7,12 @@ using Paperbunkr.App.Models;
 
 namespace Paperbunkr.App.Services;
 
+/// <summary>One Book-side (Novels) association group - not backed by <c>Providers.Readers</c> the
+/// way comic formats are, since Books is a fully independent schema/reader (docs/superpowers/specs/
+/// 2026-09-16-book-file-associations-design.md), mirroring <see cref="BookFolderScanService"/>'s own
+/// hardcoded extension classification (kept in sync by hand, same as that service already is).</summary>
+internal sealed record BookAssociationFormat(string Name, string[] Extensions);
+
 /// <summary>
 /// File-association management (docs/superpowers/specs/2026-08-07-preferences-advanced-tab-design.md
 /// §2) over the same registered format list <see cref="PageImageDecoder"/>/<see cref="LibraryFolderScanner"/>
@@ -40,6 +46,33 @@ public class FileAssociationService
         ".pdf", ".cbz", ".cbr", ".cb7", ".cbt", ".cbw", ".djvu",
     };
 
+    /// <summary>
+    /// The Books (Novels) formats offered for association, structurally parallel to
+    /// <see cref="ComicAssociationExtensions"/> but for the independent Book/BookSeries schema -
+    /// docs/superpowers/specs/2026-09-16-book-file-associations-design.md. Deliberately excludes
+    /// <c>.pdf</c>: comics already own a "Portable Document Format" association row (opens via the
+    /// comic reader) and a second row claiming the same extension would fight it for the same
+    /// registry key - PDF stays comic-only for association purposes, same as before this feature.
+    /// FB2's <c>.zip</c> entry is a deliberate, explicit exception to that same "don't hijack a
+    /// generic archive extension" caution the comic side applies elsewhere (".fb2.zip" is a common
+    /// FB2 distribution convention, and Windows' shell association model has no way to key off a
+    /// compound extension - claiming ".fb2.zip" files this way means claiming bare ".zip" too,
+    /// which will contend with the comic engine's own "ZIP Archive" association row for the same
+    /// extension key if both are ever toggled on).
+    /// </summary>
+    private static readonly IReadOnlyList<BookAssociationFormat> BookFormats = new[]
+    {
+        new BookAssociationFormat("EPUB", new[] { ".epub" }),
+        new BookAssociationFormat("FB2", new[] { ".fb2", ".zip" }),
+        new BookAssociationFormat("Kindle / MOBI", new[] { ".mobi", ".azw", ".azw3" }),
+    };
+
+    /// <summary>Every extension any <see cref="BookFormats"/> entry can touch - the Books-side
+    /// counterpart to <see cref="ComicAssociationExtensions"/>, used to clamp the installer/CLI
+    /// path the same way.</summary>
+    public static readonly IReadOnlyList<string> BookAssociationExtensions =
+        BookFormats.SelectMany(f => f.Extensions).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+
     private readonly IShellFileAssociation _shell;
 
     public FileAssociationService()
@@ -55,22 +88,28 @@ public class FileAssociationService
 
     public IReadOnlyList<FileAssociationSummary> GetAvailableFormats()
     {
-        return Providers.Readers.GetSourceFormats()
+        var comicRows = Providers.Readers.GetSourceFormats()
             .GroupBy(f => f.Name)
             .OrderBy(g => g.Key, StringComparer.OrdinalIgnoreCase)
-            .Select(g =>
-            {
-                var extensions = g.SelectMany(f => f.Extensions).Distinct().ToList();
-                string typeId = TypeIdFor(g.Key);
-                bool associated = extensions.Count > 0 && extensions.All(ext => _shell.IsRegistered(typeId, ext));
-                return new FileAssociationSummary
-                {
-                    Name = g.Key,
-                    ExtensionList = string.Join(", ", extensions),
-                    IsAssociated = associated,
-                };
-            })
-            .ToList();
+            .Select(g => ToSummary(g.Key, g.SelectMany(f => f.Extensions).Distinct().ToList()));
+
+        var bookRows = BookFormats
+            .OrderBy(f => f.Name, StringComparer.OrdinalIgnoreCase)
+            .Select(f => ToSummary(f.Name, f.Extensions));
+
+        return comicRows.Concat(bookRows).ToList();
+    }
+
+    private FileAssociationSummary ToSummary(string formatName, IReadOnlyList<string> extensions)
+    {
+        string typeId = TypeIdFor(formatName);
+        bool associated = extensions.Count > 0 && extensions.All(ext => _shell.IsRegistered(typeId, ext));
+        return new FileAssociationSummary
+        {
+            Name = formatName,
+            ExtensionList = string.Join(", ", extensions),
+            IsAssociated = associated,
+        };
     }
 
     /// <summary>
@@ -113,16 +152,51 @@ public class FileAssociationService
         }
     }
 
+    /// <summary>
+    /// Books-side counterpart to <see cref="SetComicAssociationsFor"/> - registers/unregisters the
+    /// requested Book extensions only, scoped by <see cref="BookAssociationExtensions"/>. Drives the
+    /// installer's per-format Book <c>[Tasks]</c> and the same <see cref="Program"/> CLI path (the
+    /// CLI passes its requested extensions to both this and <see cref="SetComicAssociationsFor"/> -
+    /// each ignores whatever it doesn't own, so one shared extension list works for both).
+    /// </summary>
+    public void SetBookAssociationsFor(IEnumerable<string> extensions, bool associated)
+    {
+        var requested = extensions
+            .Select(NormalizeExtension)
+            .Where(ext => BookAssociationExtensions.Contains(ext, StringComparer.OrdinalIgnoreCase))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        if (requested.Count == 0)
+        {
+            return;
+        }
+
+        var formatNames = BookFormats
+            .Where(f => f.Extensions.Any(ext => requested.Contains(ext)))
+            .Select(f => f.Name)
+            .ToList();
+
+        foreach (string formatName in formatNames)
+        {
+            SetAssociated(formatName, associated);
+        }
+    }
+
     private static string NormalizeExtension(string ext)
     {
         ext = ext.Trim();
         return ext.StartsWith('.') ? ext : "." + ext;
     }
 
+    /// <summary>Looks up <paramref name="formatName"/> against comic formats first (unchanged
+    /// lookup/behavior), then <see cref="BookFormats"/> - the two name sets don't collide today, but
+    /// comic wins on any future clash since it was the original, established owner of this method.</summary>
     public void SetAssociated(string formatName, bool associated)
     {
-        var format = Providers.Readers.GetSourceFormats().FirstOrDefault(f => f.Name == formatName);
-        if (format is null)
+        var comicFormat = Providers.Readers.GetSourceFormats().FirstOrDefault(f => f.Name == formatName);
+        IEnumerable<string>? extensions = comicFormat?.Extensions
+            ?? BookFormats.FirstOrDefault(f => f.Name == formatName)?.Extensions;
+        if (extensions is null)
         {
             return;
         }
@@ -130,7 +204,7 @@ public class FileAssociationService
         string typeId = TypeIdFor(formatName);
         string appPath = Environment.ProcessPath ?? string.Empty;
 
-        foreach (string ext in format.Extensions)
+        foreach (string ext in extensions)
         {
             if (associated)
             {

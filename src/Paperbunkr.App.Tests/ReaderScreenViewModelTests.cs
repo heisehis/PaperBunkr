@@ -1520,14 +1520,9 @@ public class ReaderScreenViewModelTests : IDisposable
     /// permanently null.
     ///
     /// Verifying this needs Dispatcher.UIThread.RunJobs() to drain the queued closures (headless
-    /// tests have no running dispatcher loop), which only works called from the exact OS thread
-    /// that bootstrapped the platform (TestAppBuilder.EnsureInitialized) - true and reliable when
-    /// this file's tests run in isolation, but xUnit doesn't guarantee that same thread when the
-    /// full assembly runs (CheckAccess() comes back false; the documented Invoke() fallback hangs,
-    /// since headless mode has nothing looping to service a cross-thread marshal). Rather than
-    /// block the whole suite on that unrelated xUnit/Avalonia-headless scheduling gap, this no-ops
-    /// when it can't get real access instead of hanging or spuriously failing - it still runs for
-    /// real (and did catch this exact bug pre-fix) via `dotnet test --filter Name=<this test>`.
+    /// tests have no running dispatcher loop), which only works from the thread that bootstrapped
+    /// Avalonia. PinnedThreadTestFramework guarantees that, so this used to silently skip itself
+    /// when off-thread and no longer does (a skipped pump here would make the test vacuous).
     /// </summary>
     // Fit mode / auto-rotate persistence (docs/superpowers/specs/2026-08-10-reader-polish-core-
     // viewing-controls-design.md §3) - global default + per-Issue override, mirroring
@@ -2227,11 +2222,6 @@ public class ReaderScreenViewModelTests : IDisposable
         var vm = new ReaderScreenViewModel(goBack: () => { });
         vm.LoadIssue(_issue1Id);
         Assert.Equal(3, vm.Thumbnails.Count);
-
-        if (!Avalonia.Threading.Dispatcher.UIThread.CheckAccess())
-        {
-            return;
-        }
 
         var deadline = DateTime.UtcNow.AddSeconds(5);
         while (vm.Thumbnails.Any(t => t.CoverImage is null) && DateTime.UtcNow < deadline)

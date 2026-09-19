@@ -185,7 +185,10 @@ public class SmartScreenViewModelTests : IDisposable
         Assert.True(vm.IsMaintenanceExpanded);
     }
 
-    private static Color FirstStopColor(IBrush brush) => Assert.IsType<LinearGradientBrush>(brush).GradientStops[0].Color;
+    // SeriesCardSample.CoverBrushFor hands out shared *Immutable* gradient brushes on purpose (perf
+    // PR #90; a mutable brush built off the UI thread crashes the compositor), so match the
+    // IGradientBrush contract that both LinearGradientBrush and ImmutableLinearGradientBrush satisfy.
+    private static Color FirstStopColor(IBrush brush) => Assert.IsAssignableFrom<IGradientBrush>(brush).GradientStops[0].Color;
 
     // --- SmartList Engine v2 (docs/superpowers/specs/2026-08-28-smartlist-engine-v2-design.md) ---
 
@@ -316,6 +319,7 @@ public class SmartScreenViewModelTests : IDisposable
         Assert.Single(vm.CustomLists); // still armed, not yet deleted
 
         summary.DeleteConfirm.TriggerCommand.Execute(null);
+        TestDispatcher.Drain(); // the sidebar refresh is deferred one dispatcher tick, see SmartScreenViewModel
         Assert.Empty(vm.CustomLists);
 
         using var context = PaperbunkrDb.CreateContext();
@@ -332,6 +336,7 @@ public class SmartScreenViewModelTests : IDisposable
 
         summary.DeleteConfirm!.TriggerCommand.Execute(null);
         summary.DeleteConfirm.TriggerCommand.Execute(null);
+        TestDispatcher.Drain(); // the sidebar refresh is deferred one dispatcher tick, see SmartScreenViewModel
 
         Assert.Empty(vm.CustomLists);
         Assert.Equal("All Series", vm.ListName); // fell back to the built-in list, not a blank screen

@@ -1310,10 +1310,7 @@ public class DetailTabsViewModelTests : IDisposable
         // IsSearchingMetadata's reset is deliberately deferred via Dispatcher.UIThread.Post (see
         // LinkMetadataAsync's own comment) - pump it before asserting, same idiom as
         // ReaderScreenViewModelTests.LoadIssue_GeneratesThumbnailsForEveryPage_NoneLeftNull.
-        if (Avalonia.Threading.Dispatcher.UIThread.CheckAccess())
-        {
-            Avalonia.Threading.Dispatcher.UIThread.RunJobs();
-        }
+        TestDispatcher.Drain();
 
         Assert.False(vm.IsSearchingMetadata);
     }
@@ -1373,7 +1370,7 @@ public class DetailTabsViewModelTests : IDisposable
         // UnlinkTracker defers TrackerLinks.Clear() via Dispatcher.UIThread.Post (see its own doc
         // comment - the "✕" Button's Click is still routing through a chip in that same
         // ItemsControl), which a headless test never pumps on its own.
-        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+        TestDispatcher.Drain();
 
         Assert.Empty(vm.TrackerLinks);
         using var verifyContext = new PaperbunkrDbContext(_dbOptions);
@@ -1536,7 +1533,7 @@ public class DetailTabsViewModelTests : IDisposable
 
         vm.LoadSeries(LoadSeriesEntity());
         int afterLoad = selectionChanged;
-        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+        TestDispatcher.Drain();
 
         Assert.True(selectionChanged > afterLoad);
     }

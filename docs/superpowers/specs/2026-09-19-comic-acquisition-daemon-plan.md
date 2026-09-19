@@ -181,6 +181,10 @@ notes from the survey)
   (8 + 3), all identical on `master`. `ReadingScreenViewModelTests` adds 2 more pre-existing failures
   (`Delete_OfTheLastRemainingList_ClearsTheScreen`, `Delete_OfTheActiveList_FallsBackToAnotherList`), so **13** in total
   across the classes I run; each set was re-run on an untouched `master` checkout and is identical there.
+- **The full `App.Tests` run does not complete, on `master` and this branch**: the host crashes ("The calling thread cannot
+  access this object because a different thread owns it") after ~1000 tests. Failing set before the crash: 16 on both,
+  identical. Excluding the four crashing classes still crashes (at 910). So the App-test evidence is per-class runs, not one
+  full-suite pass. `Data.Tests` (1164 pass / same 6 fail) and `Daemon.Tests` (72/72) complete normally.
 - Step 2 deviation from the spec: spacing is **1.1 s**, not 1 s (ComicVine's velocity limit returns HTTP
   420 / `status_code` 107 and community guidance is >= ~1.1 s); the handler enforces the request timeout
   itself so queue time never counts against `HttpClient.Timeout`.

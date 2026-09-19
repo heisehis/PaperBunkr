@@ -39,8 +39,11 @@ this file itself already did once (see the note below).
 > each new view, which proves the compiled XAML was woven. **Not verified:** nothing has been run against a real
 > Prowlarr, a real ComicVine key, or on screen — ComicVine/Prowlarr behavior is fixture-tested against their
 > published API shapes only, and the UI has had no on-screen check (the review checklist was applied by reading,
-> not by looking at it). There are 13 pre-existing failing tests in classes this work touched (all identical on an
-> untouched `master`; listed in the plan's "Progress and baselines").
+> not by looking at it). **The full `App.Tests` suite cannot complete on `master` or on this branch**: the test host
+> crashes ("different thread owns this object", an Avalonia dispatcher-affinity problem) after ~1000 tests, so a
+> full-suite pass/fail count is not available for either. Before the crash, `master` and the branch fail the identical
+> 16 tests (none new). The new App tests were verified by running their classes (and the classes they touch) on
+> their own; they were not part of the truncated full run.
 > **Still to do:** slice 2 (qBittorrent grab + progress, blocklist), slice 3 (import: copy-modify-move, per-file
 > mapping of multi-issue packs, placeholder relink), slice 4 (auto-grab toggle, "Follow arc"), owned-trade
 > coverage, cover thumbnails on the Wanted screen, virtualization of long lists, and a library

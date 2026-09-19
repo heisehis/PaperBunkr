@@ -54,8 +54,22 @@ public class VirtualizingWrapPanel : VirtualizingPanel
     public static readonly StyledProperty<double> LineSpacingProperty =
         AvaloniaProperty.Register<VirtualizingWrapPanel, double>(nameof(LineSpacing));
 
-    /// <summary>How many extra rows beyond the visible viewport stay realized on each side - a small buffer avoids a visible pop-in flash and container churn during smooth scrolling.</summary>
-    private const int BufferRows = 2;
+    /// <summary>
+    /// Card-cover width (device-independent pixels) the panel prefetches covers at (docs/superpowers/specs/2026-09-19-library-
+    /// scroll-smoothness-design.md §3.3). 0 (default) disables prefetch. Must match the <c>AsyncCoverImage.DecodeWidth</c> the cards
+    /// use, so the prefetched bitmaps land in the bucket the cards will look up.
+    /// </summary>
+    public static readonly StyledProperty<double> PrefetchDecodeWidthProperty =
+        AvaloniaProperty.Register<VirtualizingWrapPanel, double>(nameof(PrefetchDecodeWidth));
+
+    public double PrefetchDecodeWidth
+    {
+        get => GetValue(PrefetchDecodeWidthProperty);
+        set => SetValue(PrefetchDecodeWidthProperty, value);
+    }
+
+    private int _previousFirstIndex = -1;
+    private int _previousDirection;
 
     private static readonly AttachedProperty<object?> RecycleKeyProperty =
         AvaloniaProperty.RegisterAttached<VirtualizingWrapPanel, Control, object?>("RecycleKey");
@@ -65,9 +79,18 @@ public class VirtualizingWrapPanel : VirtualizingPanel
 
     private readonly Dictionary<int, Control> _realizedByIndex = new();
     private readonly Dictionary<object, Stack<Control>> _recyclePool = new();
+    private readonly List<int> _staleScratch = new();
     private Rect _viewport;
     private int _itemsPerRow = 1;
     private int _totalRows;
+
+    // Layout and realized range as of the last MeasureOverride, so a viewport move can tell - without
+    // measuring - whether it changes anything (docs/superpowers/specs/2026-09-19-library-scroll-
+    // smoothness-design.md §5). Children keep absolute positions inside this panel while the realized
+    // range is the same, so a scroll that stays inside it needs no measure and no arrange.
+    private WrapGridLayout _layout;
+    private int _layoutItemCount = -1;
+    private RealizedRange _realizedRange = new(-1, -1);
 
     static VirtualizingWrapPanel()
     {
@@ -105,6 +128,7 @@ public class VirtualizingWrapPanel : VirtualizingPanel
 
     protected override Size MeasureOverride(Size availableSize)
     {
+        Paperbunkr.App.Services.CoverPipelineStats.PanelMeasured();
         double itemWidth = ItemWidth;
         double itemHeight = ItemHeight;
         double spacing = ItemSpacing;
@@ -114,6 +138,8 @@ public class VirtualizingWrapPanel : VirtualizingPanel
         var layout = VirtualizingWrapGridMath.ComputeLayout(count, availableSize.Width, itemWidth, itemHeight, spacing, lineSpacing);
         _itemsPerRow = layout.ItemsPerRow;
         _totalRows = layout.TotalRows;
+        _layout = layout;
+        _layoutItemCount = count;
 
         if (layout.TotalRows == 0)
         {
@@ -300,16 +326,31 @@ public class VirtualizingWrapPanel : VirtualizingPanel
 
         if (!MathUtilitiesAreClose(oldViewport.Top, _viewport.Top) || !MathUtilitiesAreClose(oldViewport.Bottom, _viewport.Bottom))
         {
+            // Only a change of the wanted realized range needs a layout pass. Before this check every scrolled
+            // pixel ran MeasureOverride (realize scan + measuring every realized card) and ArrangeOverride.
+            if (_layoutItemCount >= 0 && WantedRangeEqualsRealized())
+            {
+                return;
+            }
+
             InvalidateMeasure();
         }
     }
+
+    /// <summary>True when the current viewport wants exactly the range the last measure realized (nothing to realize or recycle).</summary>
+    private bool WantedRangeEqualsRealized() =>
+        ComputeWantedRange(_layoutItemCount, _layout, ItemHeight, LineSpacing) == _realizedRange;
+
+    private RealizedRange ComputeWantedRange(int count, WrapGridLayout layout, double itemHeight, double lineSpacing) =>
+        VirtualizingWrapGridMath.ComputeRealizedRange(
+            count, layout, _viewport.Top, _viewport.Bottom, itemHeight, lineSpacing,
+            VirtualizingWrapGridMath.ComputeBufferRows(_viewport.Height, itemHeight, lineSpacing));
 
     private static bool MathUtilitiesAreClose(double a, double b) => Math.Abs(a - b) < 0.5;
 
     private void RealizeViewportRange(int count, WrapGridLayout layout, double itemHeight, double lineSpacing)
     {
-        var range = VirtualizingWrapGridMath.ComputeRealizedRange(
-            count, layout, _viewport.Top, _viewport.Bottom, itemHeight, lineSpacing, BufferRows);
+        var range = ComputeWantedRange(count, layout, itemHeight, lineSpacing);
 
         if (range.IsEmpty)
         {
@@ -317,13 +358,27 @@ public class VirtualizingWrapPanel : VirtualizingPanel
             return;
         }
 
+        _realizedRange = range;
         var items = Items;
 
-        // Derealize anything now outside the wanted range.
-        foreach (int staleIndex in _realizedByIndex.Keys.Where(i => i < range.FirstIndex || i > range.LastIndex).ToList())
+        bool changed = false;
+
+        // Derealize anything now outside the wanted range. Reuses one scratch list: this runs on every
+        // realized-range change while scrolling, and the LINQ Where().ToList() it replaces allocated each time.
+        _staleScratch.Clear();
+        foreach (int realizedIndex in _realizedByIndex.Keys)
+        {
+            if (realizedIndex < range.FirstIndex || realizedIndex > range.LastIndex)
+            {
+                _staleScratch.Add(realizedIndex);
+            }
+        }
+
+        foreach (int staleIndex in _staleScratch)
         {
             RecycleElement(_realizedByIndex[staleIndex], staleIndex);
             _realizedByIndex.Remove(staleIndex);
+            changed = true;
         }
 
         // Realize anything newly in range.
@@ -332,18 +387,59 @@ public class VirtualizingWrapPanel : VirtualizingPanel
             if (!_realizedByIndex.ContainsKey(i))
             {
                 _realizedByIndex[i] = GetOrCreateElement(items, i);
+                changed = true;
             }
         }
+
+        if (changed)
+        {
+            Paperbunkr.App.Services.CoverPipelineStats.PanelRealizeChanged();
+            PrefetchBeyond(range);
+        }
+    }
+
+    /// <summary>Asks the cover pipeline to warm the next ~2 viewports of covers beyond <paramref name="range"/>, in the scroll direction.</summary>
+    private void PrefetchBeyond(RealizedRange range)
+    {
+        double decodeWidth = PrefetchDecodeWidth;
+        if (decodeWidth <= 0)
+        {
+            return;
+        }
+
+        int direction = _previousFirstIndex < 0 ? 0 : Math.Sign(range.FirstIndex - _previousFirstIndex);
+        if (Paperbunkr.App.Services.CoverPrefetcher.ShouldDropPending(
+                _previousDirection, direction, _previousFirstIndex, range.FirstIndex, range.LastIndex - range.FirstIndex + 1))
+        {
+            Paperbunkr.App.Services.CoverDecodeQueue.Shared.ClearPrefetch();
+        }
+
+        double rowStride = ItemHeight + LineSpacing;
+        int visibleRows = rowStride > 0 ? Math.Max(1, (int)Math.Ceiling(_viewport.Height / rowStride)) : 1;
+        var items = Items;
+        var indexes = Paperbunkr.App.Services.CoverPrefetcher.ComputeIndexes(
+            items.Count, range.FirstIndex, range.LastIndex, direction, _itemsPerRow, visibleRows);
+        Paperbunkr.App.Services.CoverPrefetcher.Prefetch(items, indexes, decodeWidth, TopLevel.GetTopLevel(this)?.RenderScaling ?? 1.0);
+
+        if (direction != 0)
+        {
+            _previousDirection = direction;
+        }
+
+        _previousFirstIndex = range.FirstIndex;
     }
 
     private void DerealizeAll()
     {
+        _previousFirstIndex = -1;
+        _previousDirection = 0;
         foreach (var (index, element) in _realizedByIndex.ToList())
         {
             RecycleElement(element, index);
         }
 
         _realizedByIndex.Clear();
+        _realizedRange = new RealizedRange(-1, -1);
     }
 
     private Control GetOrCreateElement(IReadOnlyList<object?> items, int index)

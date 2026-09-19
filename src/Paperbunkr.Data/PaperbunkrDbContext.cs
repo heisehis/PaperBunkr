@@ -1123,6 +1123,7 @@ public class PaperbunkrDbContext : DbContext
             // Cosmetic Preferences micro-toggles (docs/superpowers/specs/2026-09-13-preferences-
             // cosmetic-toggles-design.md) - defaults match CE exactly.
             builder.Property(a => a.FadeInThumbnails).HasDefaultValue(true);
+            builder.Property(a => a.SmoothScrolling).HasDefaultValue(true);
             builder.Property(a => a.DogEarThumbnails).HasDefaultValue(true);
             builder.Property(a => a.ShowToolTips).HasDefaultValue(false);
             builder.Property(a => a.NumericRatingThumbnails).HasDefaultValue(true);

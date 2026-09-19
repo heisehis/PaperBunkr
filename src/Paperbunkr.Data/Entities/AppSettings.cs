@@ -722,6 +722,13 @@ public class AppSettings
     public bool FadeInThumbnails { get; set; } = true;
 
     /// <summary>
+    /// Eased mouse-wheel scrolling in the Library grids (docs/superpowers/specs/2026-09-19-library-scroll-smoothness-design.md §6):
+    /// each wheel notch animates to its target instead of jumping. A deliberate Paperbunkr addition - ComicRack has no such setting.
+    /// Default true; Reduced Motion turns it off regardless. Additive column, so an older build sharing this database ignores it.
+    /// </summary>
+    public bool SmoothScrolling { get; set; } = true;
+
+    /// <summary>
     /// Whether hovering or selecting a Poster/Panorama tile peeks the comic's real second page from
     /// behind its cover - CE's own "preview the next page" affordance, not a status badge. CE:
     /// <c>Settings.DogEarThumbnails</c>, default true. Gated on the issue having no custom cover

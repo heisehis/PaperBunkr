@@ -47,6 +47,8 @@ full editor.
 On a detail page, right-click the cover (or use the tab menu):
 
 - **Set Cover…** — pick any image file, or choose a different page from the issue.
+- **Change Cover** (on a series' detail page) — besides picking a file, choose **From Series** to use
+  the cover of another comic in the series, or **From Reading List** to use one from a reading list.
 - **Reset Cover** — back to the default (first page).
 
 ## Online metadata lookups

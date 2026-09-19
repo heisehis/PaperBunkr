@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using Avalonia;
 using Avalonia.Controls;
@@ -27,11 +28,30 @@ namespace Paperbunkr.App.Controls;
 /// "entered" classes this adds to each container - so Reduced Motion is honored for free via the
 /// existing PbMotionStandard token zeroing, and a container this never enables for is left
 /// untagged, therefore always fully visible regardless of animation state elsewhere.
+///
+/// <para>
+/// <b>One-shot mode</b> (<see cref="OneShotProperty"/>, docs/superpowers/specs/2026-09-19-library-
+/// scroll-smoothness-design.md §2): the always-on behavior above also arms a timer, two class changes and two
+/// transitions for every container a virtualizing panel recycles while the user scrolls, because a
+/// flag that stays <c>true</c> never stops being read. With <c>OneShot</c> on, <see cref="EnabledProperty"/>
+/// turning <c>true</c> only <i>arms</i> an <see cref="EntranceWindow"/>; the window opens at the next container
+/// preparation and lasts <see cref="EntranceWindow.Duration"/>, and only containers prepared inside it animate.
+/// Owners pulse the flag (false then true) on the triggers that should animate. Screens that do not set
+/// <c>OneShot</c> (Books, Home, Reading, Smart) keep the original behavior unchanged.
+/// </para>
 /// </summary>
 public static class EntranceAnimation
 {
     private const int PerItemDelayMs = 24;
     private const int MaxStaggerIndex = 20;
+
+    public static readonly AttachedProperty<bool> OneShotProperty =
+        AvaloniaProperty.RegisterAttached<ItemsControl, bool>("OneShot", typeof(EntranceAnimation));
+
+    public static bool GetOneShot(ItemsControl itemsControl) => itemsControl.GetValue(OneShotProperty);
+    public static void SetOneShot(ItemsControl itemsControl, bool value) => itemsControl.SetValue(OneShotProperty, value);
+
+    private static readonly ConditionalWeakTable<ItemsControl, EntranceWindow> Windows = new();
 
     public static readonly AttachedProperty<bool> EnabledProperty =
         AvaloniaProperty.RegisterAttached<ItemsControl, bool>("Enabled", typeof(EntranceAnimation));
@@ -48,7 +68,14 @@ public static class EntranceAnimation
 
     static EntranceAnimation()
     {
-        EnabledProperty.Changed.AddClassHandler<ItemsControl>((itemsControl, _) => EnsureWired(itemsControl));
+        EnabledProperty.Changed.AddClassHandler<ItemsControl>((itemsControl, e) =>
+        {
+            EnsureWired(itemsControl);
+            if (e.GetNewValue<bool>())
+            {
+                Windows.GetOrCreateValue(itemsControl).Arm();
+            }
+        });
     }
 
     private static void EnsureWired(ItemsControl itemsControl)
@@ -64,7 +91,14 @@ public static class EntranceAnimation
         {
             if (e.Container is StyledElement container)
             {
-                Prepare(container, e.Index, GetEnabled(itemsControl));
+                bool enabled = GetEnabled(itemsControl);
+                if (enabled && GetOneShot(itemsControl))
+                {
+                    // One-shot: animate only inside the window a recent Enabled false->true opened.
+                    enabled = Windows.GetOrCreateValue(itemsControl).IsOpen(Stopwatch.GetTimestamp());
+                }
+
+                Prepare(container, e.Index, enabled);
             }
         };
     }
@@ -90,6 +124,7 @@ public static class EntranceAnimation
 
         container.Classes.Add("entranceReady");
 
+        Paperbunkr.App.Services.CoverPipelineStats.EntranceTimerArmed();
         var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(ComputeDelayMs(index, MotionTokens.IsReducedMotion())) };
         timer.Tick += (_, _) =>
         {
@@ -114,4 +149,42 @@ public static class EntranceAnimation
     /// </summary>
     internal static int ComputeDelayMs(int index, bool reducedMotion) =>
         reducedMotion ? 0 : Math.Min(index, MaxStaggerIndex) * PerItemDelayMs;
+
+    /// <summary>
+    /// The one-shot entrance window (see the class remarks). <see cref="Arm"/> is called when the owner's flag turns
+    /// <c>true</c>; the window then <b>opens at the first <see cref="IsOpen"/> query</b> (the first container
+    /// preparation after the trigger, not the trigger itself, so a slow first layout cannot expire it) and stays
+    /// open for <see cref="Duration"/>. Never armed, or armed and already expired, means closed.
+    /// </summary>
+    internal sealed class EntranceWindow
+    {
+        public static readonly TimeSpan Duration = TimeSpan.FromMilliseconds(500);
+
+        private bool _armed;
+        private bool _opened;
+        private long _openedAt;
+
+        public void Arm()
+        {
+            _armed = true;
+            _opened = false;
+        }
+
+        public bool IsOpen(long nowTimestamp)
+        {
+            if (!_armed)
+            {
+                return false;
+            }
+
+            if (!_opened)
+            {
+                _opened = true;
+                _openedAt = nowTimestamp;
+                return true;
+            }
+
+            return Stopwatch.GetElapsedTime(_openedAt, nowTimestamp) < Duration;
+        }
+    }
 }

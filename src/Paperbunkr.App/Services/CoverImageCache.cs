@@ -62,6 +62,11 @@ public static class CoverImageCache
     /// </summary>
     public static Bitmap? DecodeFromDisk(string idKey)
     {
+        if (CoverPipelineStats.SimulatedDecodeDelayMs > 0)
+        {
+            System.Threading.Thread.Sleep(CoverPipelineStats.SimulatedDecodeDelayMs);
+        }
+
         string path = ResolveFile(idKey);
         if (path.Length == 0)
         {
@@ -77,6 +82,9 @@ public static class CoverImageCache
             return null;
         }
     }
+
+    /// <summary>Path of the cover file to decode for <paramref name="idKey"/> (a user-picked custom cover wins over the generated one), or empty when there is none. Shared with <see cref="GridCoverDecoder"/>.</summary>
+    internal static string ResolveCoverFile(string idKey) => ResolveFile(idKey);
 
     private static string ResolveFile(string idKey)
     {
@@ -113,14 +121,26 @@ public static class CoverImageCache
     {
         string key = issueId.ToString(CultureInfo.InvariantCulture);
         _cache.Remove(key);
+        GridCoverCache.Shared.Remove(key);
         CoverThumbnailPaths.DeleteCachedThumbnail(issueId);
         CustomCoverPaths.Delete(issueId);
     }
 
     /// <summary>Drops every in-memory entry - after a library-rebuild purge, so stale bitmaps for reused ids aren't served.</summary>
-    public static void Clear() => _cache.Clear();
+    public static void Clear()
+    {
+        _cache.Clear();
+        GridCoverCache.Shared.Clear();
+    }
+
+    /// <summary>Number of decoded full-size bitmaps held (harness/tests).</summary>
+    internal static int CachedCount => _cache.Count;
 
     /// <summary>Drops only the in-memory entry for one key, leaving the on-disk file alone - for a
     /// caller that just wrote fresh content to that path itself (custom covers).</summary>
-    public static void InvalidateMemoryOnly(string idKey) => _cache.Remove(idKey);
+    public static void InvalidateMemoryOnly(string idKey)
+    {
+        _cache.Remove(idKey);
+        GridCoverCache.Shared.Remove(idKey);
+    }
 }

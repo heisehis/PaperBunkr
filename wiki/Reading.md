@@ -11,7 +11,10 @@ The reader is mostly full-bleed page. Move the mouse (or tap) to reveal the **ch
   **Reader Tools** button.
 - **Bottom bar** — page scrubber, previous/next page, **previous/next chapter**, and the
   fit / zoom / fullscreen controls.
-- The chrome auto-hides after a moment of no input. Press **F** for true fullscreen.
+- The chrome auto-hides after a moment of no input (turn that off, or change how it reveals, under
+  **Preferences → Reader**). Press **F** for true fullscreen.
+- **Save Page As** — right-click the page and choose **Save Page as PNG…** or **Save Page as JPEG…**
+  to save the page you're looking at as an image file.
 
 ## Turning pages
 

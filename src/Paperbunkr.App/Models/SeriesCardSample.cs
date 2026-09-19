@@ -17,7 +17,7 @@ namespace Paperbunkr.App.Models;
 /// multiselect-slice3-design.md) - same "was a plain init-only POCO, converted for live-notifying
 /// IsSelected" treatment <see cref="IssueListRow"/> got in Slice 1.
 /// </summary>
-public sealed partial class SeriesCardSample : ObservableObject, ISelectableCard, IVariableWidthTile
+public sealed partial class SeriesCardSample : ObservableObject, ISelectableCard, IVariableWidthTile, ICoverKeyProvider
 {
     /// <summary>Panorama's variable-width virtualizing panel packs rows against this - the same
     /// value the card's DataTemplate binds its own <c>Width</c> to.</summary>
@@ -210,10 +210,24 @@ public sealed partial class SeriesCardSample : ObservableObject, ISelectableCard
 
     /// <summary>The same deterministic per-series-name cover gradient <see cref="FromSeries"/> uses,
     /// exposed standalone for screens (e.g. Reader) that need just the color, not a full card.</summary>
-    public static IBrush CoverBrushFor(string seriesName)
+    public static IBrush CoverBrushFor(string seriesName) =>
+        s_paletteBrushes[StableHash(seriesName) % (uint)s_paletteBrushes.Length];
+
+    // One shared immutable brush per palette entry, built once (docs/superpowers/specs/
+    // 2026-09-19-library-search-perf-design.md §4). CoverBrushFor used to allocate a temporary mutable
+    // brush + stops + an immutable copy for every card and every issue row on every rebuild. Must stay
+    // an Immutable* type: a mutable brush built off the UI thread crashes the compositor (see Gradient).
+    private static readonly IBrush[] s_paletteBrushes = BuildPaletteBrushes();
+
+    private static IBrush[] BuildPaletteBrushes()
     {
-        var (from, to) = s_palette[StableHash(seriesName) % (uint)s_palette.Length];
-        return Gradient(from, to);
+        var brushes = new IBrush[s_palette.Length];
+        for (int i = 0; i < brushes.Length; i++)
+        {
+            brushes[i] = Gradient(s_palette[i].From, s_palette[i].To);
+        }
+
+        return brushes;
     }
 
     /// <summary>

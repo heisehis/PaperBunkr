@@ -586,6 +586,11 @@ namespace Paperbunkr.Data.Migrations
                         .HasColumnType("INTEGER")
                         .HasDefaultValue(false);
 
+                    b.Property<bool>("SmoothScrolling")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasDefaultValue(true);
+
                     b.Property<string>("ThemeAutoMode")
                         .IsRequired()
                         .ValueGeneratedOnAdd()

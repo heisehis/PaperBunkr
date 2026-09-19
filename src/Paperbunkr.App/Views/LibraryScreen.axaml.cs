@@ -35,6 +35,13 @@ public partial class LibraryScreen : UserControl
         DataContextChanged += OnDataContextChanged;
     }
 
+    /// <summary>Tells the grid cover pipeline this window's render scaling, so a card bound before it is attached still picks the right decode-size bucket (docs/superpowers/specs/2026-09-19-library-scroll-smoothness-design.md §3.1).</summary>
+    protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        base.OnAttachedToVisualTree(e);
+        AsyncCoverImage.NoteRenderScaling(TopLevel.GetTopLevel(this)?.RenderScaling);
+    }
+
     /// <summary>Wires <see cref="LibraryScreenViewModel.ScrollToIndexRequested"/> (docs/superpowers/
     /// specs/2026-09-04-navigation-transition-system-design.md's back-trip realization) to the same
     /// view-mode-aware scroll dispatch <see cref="OnAlphabetIndexLetterClick"/> already uses. No
@@ -46,6 +53,12 @@ public partial class LibraryScreen : UserControl
         if (DataContext is LibraryScreenViewModel vm)
         {
             vm.ScrollToIndexRequested += index => ScrollToIndex(index, vm);
+
+            // A new search result set starts at its first row (docs/superpowers/specs/2026-09-19-
+            // library-search-perf-design.md §5). Index 0 through the same view-mode-aware dispatch:
+            // ScrollIntoView(0) for the List/Details boxes, Offset.Y = 0 for the wrapping grids.
+            // Sort/group/filter swaps never raise this, so they keep their scroll offset.
+            vm.ScrollToTopRequested += () => ScrollToIndex(0, vm);
 
             // Live preview panel width (docs/superpowers/specs/2026-09-14-library-visual-redesign-
             // design.md §4) - a GridLength can't bind directly to a double VM property, so the

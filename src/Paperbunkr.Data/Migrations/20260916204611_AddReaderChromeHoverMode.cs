@@ -21,9 +21,12 @@ namespace Paperbunkr.Data.Migrations
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropColumn(
-                name: "ReaderChromeHoverMode",
-                table: "AppSettings");
+            // Deliberately a no-op (2026-09-19) - columns are left in place as orphans on down-migrate.
+            // EF's SQLite DropColumn rebuilds the whole AppSettings table from the previous migration's model
+            // snapshot, which silently drops the orphaned LibraryGroupField/LibrarySortField/
+            // LibrarySortDirection columns and breaks any earlier Down() step in the same rollback
+            // ("no such column: LibraryGroupField"). Same convention as AddCosmeticThumbnailToggles /
+            // AddTrackerBehaviorSettings / AddNavRailHoverExpandEnabled.
         }
     }
 }

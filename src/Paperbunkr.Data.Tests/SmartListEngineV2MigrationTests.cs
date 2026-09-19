@@ -49,14 +49,13 @@ public class SmartListEngineV2MigrationTests : IDisposable
             var migrator = context.GetService<IMigrator>();
             migrator.Migrate(PriorMigration);
 
-            // Series is unchanged between the prior migration and v2, so EF can insert it against
-            // the current model. Issues has gained nullable columns since (e.g. CoverAspectRatio),
-            // so those go in via raw SQL at the pre-v2 schema - as SmartLists/SmartListConditions
-            // already do because their shape changes in v2 (SmartListConditions carries SmartListId
-            // directly pre-v2).
-            var series = new Entities.Series { Id = 1, Name = "Alpha", ContentType = Entities.ContentType.Comic, Status = Entities.SeriesStatus.Completed };
-            context.Series.Add(series);
-            context.SaveChanges();
+            // Series and Issues have both gained columns since the prior migration (Series: Creator,
+            // Rating, EmptyRowAcknowledged; Issues: CoverAspectRatio, ...), so EF can't insert either
+            // against the current model at this schema - everything goes in via raw SQL, as
+            // SmartLists/SmartListConditions already do because their shape changes in v2
+            // (SmartListConditions carries SmartListId directly pre-v2).
+            context.Database.ExecuteSqlRaw(
+                "INSERT INTO Series (Id, Name, ContentType, Status) VALUES (1, 'Alpha', 'Comic', 'Completed');");
 
             context.Database.ExecuteSqlRaw(
                 "INSERT INTO Issues (Id, SeriesId, Number, Publisher, ColorMode, FileIsMissing, Checked, IsPlaceholder, MissingAcknowledged, OpenCount, IsFinalIssue) " +

@@ -98,7 +98,11 @@ public class AddReaderAutoHideChromeMigrationTests : IDisposable
                 .SqlQueryRaw<string>(
                     "SELECT name FROM pragma_table_info('AppSettings') WHERE name = 'ReaderAutoHideChrome';")
                 .ToList();
-            Assert.Empty(columns);
+            // Down() is a deliberate no-op (see the migration's own comment): a real DropColumn on
+            // AppSettings rebuilds the table from the prior snapshot and orphan-drops LibraryGroupField
+            // etc., breaking older rollbacks. So the column stays behind as an orphan; the rollback
+            // itself succeeding is what this asserts.
+            Assert.Single(columns);
         }
     }
 }

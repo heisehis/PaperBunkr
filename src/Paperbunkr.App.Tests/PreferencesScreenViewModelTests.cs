@@ -1396,6 +1396,7 @@ public class PreferencesScreenViewModelTests : IDisposable
 
         // Resolving it clears the error and both rows' flags again.
         ReplaceBinding(right, right.AvailableKeyOptions.Single(o => o.Gesture == new KeyGesture(Key.K)));
+        TestDispatcher.Drain(); // ReplaceBinding's RemoveKey is deferred one tick, same as the pump above
         Assert.False(vm.HasKeyBindingConflictError);
         Assert.False(left.IsConflicted);
         Assert.False(right.IsConflicted);

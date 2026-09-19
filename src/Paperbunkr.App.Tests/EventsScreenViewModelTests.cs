@@ -50,19 +50,9 @@ public class EventsScreenViewModelTests : IDisposable
     /// <summary>
     /// Drains queued <c>Dispatcher.UIThread.Post</c> continuations (e.g. <c>DeleteEvent</c>'s /
     /// <c>DeleteContinuity</c>'s deferred sidebar refresh - see EventsScreenViewModel.cs's own
-    /// comment on why that refresh can't run synchronously). Same guarded idiom as
-    /// ReaderScreenViewModelTests.LoadIssue_GeneratesThumbnailsForEveryPage_NoneLeftNull: no-ops
-    /// when not on the thread that bootstrapped TestAppBuilder rather than risking a hang.
+    /// comment on why that refresh can't run synchronously).
     /// </summary>
-    private static void PumpDispatcher()
-    {
-        if (!Avalonia.Threading.Dispatcher.UIThread.CheckAccess())
-        {
-            return;
-        }
-
-        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
-    }
+    private static void PumpDispatcher() => TestDispatcher.Drain();
 
     private static int SeedIssue(string seriesName, string number)
     {

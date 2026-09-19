@@ -1212,7 +1212,11 @@ namespace Paperbunkr.Data.Migrations
                     b.Property<string>("Inker")
                         .HasColumnType("TEXT");
 
-                    b.Property<bool>("IsFinalIssue")
+                    // Patched to bool? (was bool/NOT NULL): 20260912051746_LibrarySortGroupAxesAndFinalIssueTriState
+                    // widened this column to nullable in the live schema with a deliberate no-op Down().
+                    // Migration tests that roll back through this snapshot insert real NULLs, so a NOT NULL
+                    // snapshot here throws SqliteException 19 during SQLite's table-rebuild INSERT...SELECT.
+                    b.Property<bool?>("IsFinalIssue")
                         .HasColumnType("INTEGER");
 
                     b.Property<bool>("IsPlaceholder")

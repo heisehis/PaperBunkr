@@ -47,6 +47,23 @@ public class EventsScreenViewModelTests : IDisposable
         }
     }
 
+    /// <summary>
+    /// Drains queued <c>Dispatcher.UIThread.Post</c> continuations (e.g. <c>DeleteEvent</c>'s /
+    /// <c>DeleteContinuity</c>'s deferred sidebar refresh - see EventsScreenViewModel.cs's own
+    /// comment on why that refresh can't run synchronously). Same guarded idiom as
+    /// ReaderScreenViewModelTests.LoadIssue_GeneratesThumbnailsForEveryPage_NoneLeftNull: no-ops
+    /// when not on the thread that bootstrapped TestAppBuilder rather than risking a hang.
+    /// </summary>
+    private static void PumpDispatcher()
+    {
+        if (!Avalonia.Threading.Dispatcher.UIThread.CheckAccess())
+        {
+            return;
+        }
+
+        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+    }
+
     private static int SeedIssue(string seriesName, string number)
     {
         using var context = PaperbunkrDb.CreateContext();
@@ -206,6 +223,7 @@ public class EventsScreenViewModelTests : IDisposable
         Assert.Single(vm.Events);
 
         summary.DeleteConfirm.TriggerCommand.Execute(null);
+        PumpDispatcher();
         Assert.Empty(vm.Events);
     }
 
@@ -218,6 +236,7 @@ public class EventsScreenViewModelTests : IDisposable
 
         summary.DeleteConfirm.TriggerCommand.Execute(null);
         summary.DeleteConfirm.TriggerCommand.Execute(null);
+        PumpDispatcher();
 
         Assert.True(vm.HasNoEvents);
         Assert.Equal(string.Empty, vm.EventName);
@@ -761,6 +780,7 @@ public class EventsScreenViewModelTests : IDisposable
         Assert.True(vm.IsContinuitySelected);
 
         vm.DeleteActiveContinuityCommand.Execute(null);
+        PumpDispatcher();
 
         using var context = PaperbunkrDb.CreateContext();
         Assert.Null(context.Continuities.Find(dropId));

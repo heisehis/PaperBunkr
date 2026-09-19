@@ -751,6 +751,51 @@ public partial class DetailTabsViewModel : ViewModelBase, IContextMenuProvider
         RefreshContinuity(context, currentSeriesId);
     }
 
+    /// <summary>Inline feedback for <see cref="LookUpContinuity"/> - this VM has no toast/notify callback of its own, so the result shows next to the button instead.</summary>
+    [ObservableProperty]
+    private string? _continuityLookupResult;
+
+    /// <summary>
+    /// On-demand Phase 2 trigger (docs/superpowers/specs/2026-09-17-storyevent-continuity-
+    /// autopopulate-design.md) - scoped Wikidata check for just this series via
+    /// <see cref="ContinuityWikidataMatchResolver.GetSuggestionsAsync"/>'s <c>onlySeriesId</c>
+    /// parameter. Links immediately on a match rather than opening a review queue, since this is
+    /// already an explicit single-series action.
+    /// </summary>
+    [RelayCommand]
+    private async Task LookUpContinuity()
+    {
+        if (_seriesId is not int currentSeriesId)
+        {
+            return;
+        }
+
+        ContinuityLookupResult = "Checking Wikidata…";
+        using var context = _contextFactory();
+        using var httpClient = WikidataClient.CreateClient();
+        var client = new WikidataClient(httpClient);
+        var suggestions = await ContinuityWikidataMatchResolver.GetSuggestionsAsync(context, client, CancellationToken.None, onlySeriesId: currentSeriesId);
+
+        var suggestion = suggestions.FirstOrDefault();
+        if (suggestion is null)
+        {
+            ContinuityLookupResult = "No shared-universe match found on Wikidata for this series.";
+            return;
+        }
+
+        var continuity = ContinuityResolver.GetOrCreate(context, suggestion.UniverseLabel);
+        continuity.WikidataId ??= suggestion.WikidataQid;
+        continuity.FandomKey ??= suggestion.FandomKey;
+        continuity.Description ??= suggestion.UniverseDescription;
+        context.SaveChanges();
+        ContinuityResolver.AddSeriesToContinuity(context, currentSeriesId, continuity.Id);
+        continuity.Publisher ??= ContinuityResolver.InferPublisher(context, continuity.Id);
+        context.SaveChanges();
+
+        ContinuityLookupResult = $"Added to \"{continuity.Name}\".";
+        RefreshContinuity(context, currentSeriesId);
+    }
+
     // --- Related tab: Collection membership (docs/superpowers/specs/2026-08-27-collections-
     // design.md, step 10) - byte-for-byte the Continuity picker above, series membership only. ---
 

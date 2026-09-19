@@ -2,8 +2,11 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using Paperbunkr.App.Models;
 using Paperbunkr.App.Services.Covers;
+using Paperbunkr.Data;
 using Paperbunkr.Data.Entities;
+using Paperbunkr.Data.Metadata;
 
 namespace Paperbunkr.App.Services.Scheduling;
 
@@ -22,6 +25,8 @@ public static class ScheduledTaskCatalog
     public const string ContentTypeSweep = "content-type-sweep";
     public const string VerifyCovers = "verify-covers";
     public const string GenerateCovers = "generate-covers";
+    public const string StoryEventAutodetect = "story-event-autodetect";
+    public const string ContinuityWikidataAutodetect = "continuity-wikidata-autodetect";
 
     public static IReadOnlyList<ScheduledTaskDescriptor> All { get; } = Build();
 
@@ -112,6 +117,64 @@ public static class ScheduledTaskCatalog
             {
                 await new CoverThumbnailService().GenerateAllAsync(Adapt(handle, "issues"), ct);
                 return "Covers generated";
+            }),
+
+        new ScheduledTaskDescriptor(
+            StoryEventAutodetect, "Find story-event suggestions",
+            "Groups already-tagged Story Arc issues into story-event suggestions, optionally " +
+            "verified against ComicVine/Metron if configured in Preferences > Libraries.",
+            ActivityJobKind.SyncMetadata, Priority: 8, SchedulerResourceClass.Network,
+            TimeSpan.FromDays(7), DefaultEnabled: true, ScheduleMode.Interval,
+            static async (handle, ct) =>
+            {
+                handle.Report("Grouping story arcs…");
+                using var context = PaperbunkrDb.CreateContext();
+                var candidates = StoryArcGroupingResolver.GetCandidates(context);
+                handle.Report("Verifying against ComicVine/Metron…");
+                var verified = await ArcExternalVerificationService.VerifyAsync(context, candidates, ct);
+
+                string summary = verified.Count == 0
+                    ? "No new story-event suggestions found"
+                    : $"{verified.Count} new story-event suggestion{Plural(verified.Count)} found";
+
+                // ScheduledTaskDescriptor.RunAsync has no IActivityService of its own (no DI
+                // container in this app - see IActivityService's own doc comment), so a deep-linked
+                // completion is raised here via the job handle's own Succeed(summary, link) rather
+                // than IActivityService.RaiseAlert. SchedulerService calls handle.Succeed(summary)
+                // again after this returns; ActivityService.JobHandle.Succeed is idempotent
+                // (Interlocked-guarded), so that second call is a safe no-op.
+                var link = verified.Count > 0 ? new ActivityLink(ActivityLinkKind.StoryEventsScreen) : null;
+                handle.Succeed(summary, link);
+                return summary;
+            }),
+
+        new ScheduledTaskDescriptor(
+            ContinuityWikidataAutodetect, "Find shared-universe suggestions",
+            "Matches series against Wikidata via their most recurring characters to suggest " +
+            "shared-universe continuities (20 series/run). No credentials needed - Wikidata's " +
+            "search API is open.",
+            ActivityJobKind.SyncMetadata, Priority: 9, SchedulerResourceClass.Network,
+            // Daily, not weekly - at 20 series/run this is how a large library (400+ series) gets
+            // fully covered in a reasonable number of days without the user manually re-clicking
+            // "Check Wikidata" repeatedly (real complaint this was built to address). The manual
+            // button itself now runs uncapped instead of relying on this cadence at all.
+            TimeSpan.FromDays(1), DefaultEnabled: true, ScheduleMode.Interval,
+            static async (handle, ct) =>
+            {
+                handle.Report("Matching series against Wikidata…");
+                using var context = PaperbunkrDb.CreateContext();
+                using var httpClient = WikidataClient.CreateClient();
+                var client = new WikidataClient(httpClient);
+                var suggestions = await ContinuityWikidataMatchResolver.GetSuggestionsAsync(context, client, ct, progress: Adapt(handle, "series"));
+
+                string summary = suggestions.Count == 0
+                    ? "No new shared-universe suggestions found"
+                    : $"{suggestions.Count} new shared-universe suggestion{Plural(suggestions.Count)} found";
+
+                // Same idempotent-Succeed reasoning as StoryEventAutodetect above.
+                var link = suggestions.Count > 0 ? new ActivityLink(ActivityLinkKind.StoryEventsScreen) : null;
+                handle.Succeed(summary, link);
+                return summary;
             }),
     };
 

@@ -266,4 +266,57 @@ public class ContinuityResolverTests : IDisposable
         Assert.NotNull(context.Continuities.Find(continuity.Id));
         Assert.Empty(ContinuityResolver.GetSeriesInContinuity(context, continuity.Id));
     }
+
+    // --- InferPublisher: Wikidata smart-suggestion follow-up (docs/superpowers/specs/2026-09-17-
+    // storyevent-continuity-autopopulate-design.md) - Wikidata carries no publisher claim on
+    // shared-universe items, so the Continuity Publisher field's suggestion comes from local
+    // per-issue data instead. ---
+
+    private static void SeedIssue(PaperbunkrDbContext context, int seriesId, string number, string? publisher)
+    {
+        context.Issues.Add(new Issue { SeriesId = seriesId, Number = number, Publisher = publisher });
+        context.SaveChanges();
+    }
+
+    [Fact]
+    public void InferPublisher_MajorityAcrossMemberSeries_Wins()
+    {
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        var continuity = ContinuityResolver.GetOrCreate(context, "Earth-616");
+        int series1 = SeedSeries(context, "Amazing Spider-Man");
+        int series2 = SeedSeries(context, "Avengers");
+        ContinuityResolver.AddSeriesToContinuity(context, series1, continuity.Id);
+        ContinuityResolver.AddSeriesToContinuity(context, series2, continuity.Id);
+
+        SeedIssue(context, series1, "1", "Marvel");
+        SeedIssue(context, series1, "2", "Marvel Comics"); // alias - should collapse with "Marvel"
+        SeedIssue(context, series2, "1", "DC Comics"); // minority, from an unrelated stray issue
+
+        Assert.Equal("Marvel", ContinuityResolver.InferPublisher(context, continuity.Id));
+    }
+
+    [Fact]
+    public void InferPublisher_ExactTie_ReturnsNull()
+    {
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        var continuity = ContinuityResolver.GetOrCreate(context, "Multiversity");
+        int seriesId = SeedSeries(context, "Crisis Crossover");
+        ContinuityResolver.AddSeriesToContinuity(context, seriesId, continuity.Id);
+
+        SeedIssue(context, seriesId, "1", "Marvel");
+        SeedIssue(context, seriesId, "2", "DC");
+
+        Assert.Null(ContinuityResolver.InferPublisher(context, continuity.Id));
+    }
+
+    [Fact]
+    public void InferPublisher_NoIssueData_ReturnsNull()
+    {
+        using var context = new PaperbunkrDbContext(_dbOptions);
+        var continuity = ContinuityResolver.GetOrCreate(context, "Earth-616");
+        int seriesId = SeedSeries(context, "Amazing Spider-Man");
+        ContinuityResolver.AddSeriesToContinuity(context, seriesId, continuity.Id);
+
+        Assert.Null(ContinuityResolver.InferPublisher(context, continuity.Id));
+    }
 }

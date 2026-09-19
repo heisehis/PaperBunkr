@@ -172,6 +172,47 @@ internal static class ContinuityResolver
         return true;
     }
 
+    /// <summary>
+    /// Best-effort "smart suggestion" for a Continuity's Publisher field - the majority normalized
+    /// <see cref="Issue.Publisher"/> value across every member series' issues. Added specifically
+    /// because Wikidata itself carries no publisher claim on shared-universe items (confirmed on
+    /// Earth-616/Earth-1610/Prime Earth - none have a P123 claim), so the Wikidata accept flow needs
+    /// a different source for this field; local per-issue Publisher data is ground truth, unlike a
+    /// guess. Reuses <see cref="StoryArcGroupingResolver.NormalizePublisher"/> so "Marvel"/"Marvel
+    /// Comics" don't split the vote. Returns null when there's no issue data yet, or the top two
+    /// publishers are exactly tied - an ambiguous tie is left for the user to fill in rather than
+    /// guessed at.
+    /// </summary>
+    public static string? InferPublisher(PaperbunkrDbContext context, int continuityId)
+    {
+        var seriesIds = context.ContinuityMemberships
+            .Where(m => m.ContinuityId == continuityId)
+            .Select(m => m.SeriesId)
+            .ToList();
+        if (seriesIds.Count == 0)
+        {
+            return null;
+        }
+
+        var ranked = context.Issues
+            .Where(i => seriesIds.Contains(i.SeriesId) && i.Publisher != null && i.Publisher != "")
+            .Select(i => i.Publisher!)
+            .AsEnumerable()
+            .Select(StoryArcGroupingResolver.NormalizePublisher)
+            .Where(p => p.Length > 0)
+            .GroupBy(p => p, StringComparer.OrdinalIgnoreCase)
+            .Select(g => new { Publisher = g.Key, Count = g.Count() })
+            .OrderByDescending(x => x.Count)
+            .ToList();
+
+        if (ranked.Count == 0 || (ranked.Count > 1 && ranked[0].Count == ranked[1].Count))
+        {
+            return null;
+        }
+
+        return ranked[0].Publisher;
+    }
+
     public static void RemoveSeriesFromContinuity(PaperbunkrDbContext context, int seriesId, int continuityId)
     {
         var membership = context.ContinuityMemberships

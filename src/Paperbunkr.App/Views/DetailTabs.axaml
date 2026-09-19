@@ -375,7 +375,17 @@
                                 <TextBlock Text="Add to Continuity" VerticalAlignment="Center" />
                             </StackPanel>
                         </Button>
+                        <!-- docs/superpowers/specs/2026-09-17-storyevent-continuity-autopopulate-design.md -
+                             per-series manual Wikidata trigger, no credentials needed. -->
+                        <Button Classes="railAdd" Command="{Binding LookUpContinuityCommand}" ToolTip.Tip="Check Wikidata for a shared-universe match via this series' recurring characters">
+                            <StackPanel Orientation="Horizontal" Spacing="5">
+                                <fi:SymbolIcon Symbol="Search" FontSize="{StaticResource PbIconSizeXs}" VerticalAlignment="Center" />
+                                <TextBlock Text="Look up on Wikidata" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
                     </StackPanel>
+                    <TextBlock Text="{Binding ContinuityLookupResult}" FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}"
+                               Margin="0,0,0,6" IsVisible="{Binding ContinuityLookupResult, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
                     <Border IsVisible="{Binding IsAddingContinuity}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1"
                             CornerRadius="6" Padding="12" Margin="0,0,0,8">
                         <StackPanel Spacing="8">

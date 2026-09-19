@@ -99,6 +99,31 @@ public static class CharacterResolver
             .OrderBy(c => c.Name)
             .ToList();
 
+    /// <summary>
+    /// A series' most-recurring characters, ranked by appearance count (docs/superpowers/specs/
+    /// 2026-09-17-storyevent-continuity-autopopulate-design.md, Phase 2) - the seed for
+    /// <see cref="ContinuityWikidataMatchResolver"/>, since a series' own Wikidata item essentially
+    /// never carries a "from narrative universe" property (verified during design), while its
+    /// flagship characters often do. Ties broken by <see cref="Character.Id"/> for determinism.
+    /// </summary>
+    public static IReadOnlyList<Character> GetTopCharactersForSeries(PaperbunkrDbContext context, int seriesId, int take = 5)
+    {
+        var rankedIds = context.CharacterAppearances
+            .Where(a => a.Issue != null && a.Issue.SeriesId == seriesId)
+            .GroupBy(a => a.CharacterId)
+            .Select(g => new { CharacterId = g.Key, Count = g.Count() })
+            .OrderByDescending(x => x.Count)
+            .ThenBy(x => x.CharacterId)
+            .Take(take)
+            .ToList();
+
+        var charactersById = context.Characters
+            .Where(c => rankedIds.Select(r => r.CharacterId).Contains(c.Id))
+            .ToDictionary(c => c.Id);
+
+        return rankedIds.Select(r => charactersById[r.CharacterId]).ToList();
+    }
+
     public static IReadOnlyList<Series> GetSeriesForCharacter(PaperbunkrDbContext context, int characterId) =>
         context.CharacterAppearances
             .Include(a => a.Issue).ThenInclude(i => i!.Series)

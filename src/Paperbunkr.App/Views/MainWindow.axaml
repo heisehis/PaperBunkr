@@ -781,6 +781,71 @@
                         </ItemsControl>
                         <TextBlock Text="No continuities yet" FontSize="10.5" Foreground="{DynamicResource PbTextFaintBrush}" Margin="11,4"
                                    IsVisible="{Binding Events.HasNoContinuities}" />
+
+                        <!-- Story-event / shared-universe auto-population suggestions (docs/superpowers/specs/
+                             2026-09-17-storyevent-continuity-autopopulate-design.md) - "propose, don't assert":
+                             each row creates nothing until Accept, and Dismiss persists so it never resurfaces. -->
+                        <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="0,1,0,0" Margin="0,12,0,0" />
+                        <Grid ColumnDefinitions="*,Auto" Margin="8,10,6,4" IsVisible="{Binding !Events.HasNoNewStoryEventCandidates}">
+                            <TextBlock Grid.Column="0" Text="New story-event suggestions" FontSize="9" Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" />
+                            <Border Grid.Column="1" Classes="pbChip" Padding="5,1"><TextBlock Text="{Binding Events.NewStoryEventCandidates.Count}" FontSize="9.5" Foreground="{DynamicResource PbTextFaintBrush}" /></Border>
+                        </Grid>
+                        <ItemsControl ItemsSource="{Binding Events.NewStoryEventCandidates}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:StoryEventCandidateRowViewModel">
+                                    <Border Classes="ecRow" CornerRadius="6" Margin="0,1" Padding="11,7">
+                                        <StackPanel Spacing="4">
+                                            <TextBlock Text="{Binding ArcName}" FontSize="12.5" Foreground="{DynamicResource PbTextMutedBrush}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding ArcName}" />
+                                            <TextBlock Text="{Binding Reason}" FontSize="10" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" />
+                                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                                <Button Classes="headerAction ghost" Content="Accept" Command="{Binding AcceptCommand}" IsEnabled="{Binding !IsAccepting}" />
+                                                <Button Classes="headerAction ghost" Content="Dismiss" Command="{Binding DismissCommand}" IsEnabled="{Binding !IsAccepting}" />
+                                            </StackPanel>
+                                        </StackPanel>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                        <Grid ColumnDefinitions="*,Auto" Margin="8,12,6,4">
+                            <TextBlock Grid.Column="0" Text="Shared-universe suggestions" FontSize="9" Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" />
+                            <Button Grid.Column="1" Classes="headerAction ghost" Padding="6,2" FontSize="10"
+                                    Command="{Binding Events.CheckForWikidataSuggestionsCommand}" IsEnabled="{Binding !Events.IsCheckingWikidataSuggestions}">
+                                <StackPanel Orientation="Horizontal" Spacing="4">
+                                    <TextBlock Text="Checking…" IsVisible="{Binding Events.IsCheckingWikidataSuggestions}" />
+                                    <TextBlock Text="Check Wikidata" IsVisible="{Binding !Events.IsCheckingWikidataSuggestions}" />
+                                </StackPanel>
+                            </Button>
+                        </Grid>
+                        <TextBlock Text="{Binding Events.WikidataCheckResult}" FontSize="10" Foreground="{DynamicResource PbTextFaintBrush}"
+                                   Margin="8,0,6,4" TextWrapping="Wrap"
+                                   IsVisible="{Binding Events.WikidataCheckResult, Converter={x:Static conv:StringConverters.IsNotNullOrEmpty}}" />
+                        <ItemsControl ItemsSource="{Binding Events.NewContinuitySuggestions}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:ContinuitySuggestionRowViewModel">
+                                    <Border Classes="ecRow" CornerRadius="6" Margin="0,1" Padding="11,7">
+                                        <StackPanel Spacing="4">
+                                            <TextBlock FontSize="12.5" Foreground="{DynamicResource PbTextMutedBrush}" TextTrimming="CharacterEllipsis">
+                                                <Run Text="{Binding SeriesName}" /> <Run Text="→" /> <Run Text="{Binding UniverseLabel}" />
+                                            </TextBlock>
+                                            <TextBlock Text="{Binding Reason}" FontSize="10" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" />
+                                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                                <Button Classes="headerAction ghost" Content="Accept" Command="{Binding AcceptCommand}" />
+                                                <Button Classes="headerAction ghost" Content="Dismiss" Command="{Binding DismissCommand}" />
+                                            </StackPanel>
+                                        </StackPanel>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <TextBlock Text="No suggestions yet - click Check Wikidata" FontSize="10.5" Foreground="{DynamicResource PbTextFaintBrush}" Margin="11,4">
+                            <TextBlock.IsVisible>
+                                <MultiBinding Converter="{x:Static conv:BoolConverters.And}">
+                                    <Binding Path="Events.HasNoNewContinuitySuggestions" />
+                                    <Binding Path="Events.WikidataCheckResult" Converter="{x:Static conv:StringConverters.IsNullOrEmpty}" />
+                                </MultiBinding>
+                            </TextBlock.IsVisible>
+                        </TextBlock>
                     </StackPanel>
 
                 </StackPanel>

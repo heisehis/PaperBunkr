@@ -68,6 +68,16 @@ public class PaperbunkrDbContext : DbContext
 
     public DbSet<EventSuggestionDismissal> EventSuggestionDismissals => Set<EventSuggestionDismissal>();
 
+    public DbSet<StoryEventCandidateDismissal> StoryEventCandidateDismissals => Set<StoryEventCandidateDismissal>();
+
+    public DbSet<StoryEventVerificationNegativeCache> StoryEventVerificationNegativeCaches => Set<StoryEventVerificationNegativeCache>();
+
+    public DbSet<ContinuitySuggestionDismissal> ContinuitySuggestionDismissals => Set<ContinuitySuggestionDismissal>();
+
+    public DbSet<ContinuityFandomSuggestionDismissal> ContinuityFandomSuggestionDismissals => Set<ContinuityFandomSuggestionDismissal>();
+
+    public DbSet<ContinuityCharacterLookupNegativeCache> ContinuityCharacterLookupNegativeCaches => Set<ContinuityCharacterLookupNegativeCache>();
+
     public DbSet<Character> Characters => Set<Character>();
 
     public DbSet<CharacterAppearance> CharacterAppearances => Set<CharacterAppearance>();
@@ -748,6 +758,22 @@ public class PaperbunkrDbContext : DbContext
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
+        // Brand-new tables (docs/superpowers/specs/2026-09-17-storyevent-continuity-autopopulate-
+        // design.md). No FK to StoryEvent/Issue on either: a dismissal/negative-cache row exists for
+        // an (ArcName, Publisher) pair that may not have become a real StoryEvent yet.
+        modelBuilder.Entity<StoryEventCandidateDismissal>(builder =>
+        {
+            builder.HasKey(d => d.Id);
+            builder.HasIndex(d => new { d.ArcName, d.Publisher }).IsUnique();
+        });
+
+        modelBuilder.Entity<StoryEventVerificationNegativeCache>(builder =>
+        {
+            builder.HasKey(c => c.Id);
+            builder.Property(c => c.Source).HasConversion<string>().HasMaxLength(32);
+            builder.HasIndex(c => new { c.ArcName, c.Publisher, c.Source }).IsUnique();
+        });
+
         modelBuilder.Entity<Character>(builder =>
         {
             builder.HasKey(c => c.Id);
@@ -769,6 +795,44 @@ public class PaperbunkrDbContext : DbContext
             builder.HasOne(a => a.Issue)
                 .WithMany()
                 .HasForeignKey(a => a.IssueId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // Brand-new tables (docs/superpowers/specs/2026-09-17-storyevent-continuity-autopopulate-
+        // design.md), same nag-suppression-flag reasoning as EventSuggestionDismissal above.
+        modelBuilder.Entity<ContinuitySuggestionDismissal>(builder =>
+        {
+            builder.HasKey(d => d.Id);
+            builder.HasIndex(d => new { d.SeriesId, d.WikidataQid }).IsUnique();
+
+            builder.HasOne(d => d.Series)
+                .WithMany()
+                .HasForeignKey(d => d.SeriesId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // Genuinely separate table from ContinuitySuggestionDismissal above (not a shared column) -
+        // see Continuity.FandomKey's own doc comment for why WikidataQid never holds a non-Wikidata
+        // value.
+        modelBuilder.Entity<ContinuityFandomSuggestionDismissal>(builder =>
+        {
+            builder.HasKey(d => d.Id);
+            builder.HasIndex(d => new { d.SeriesId, d.FandomKey }).IsUnique();
+
+            builder.HasOne(d => d.Series)
+                .WithMany()
+                .HasForeignKey(d => d.SeriesId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<ContinuityCharacterLookupNegativeCache>(builder =>
+        {
+            builder.HasKey(c => c.Id);
+            builder.HasIndex(c => c.CharacterId).IsUnique();
+
+            builder.HasOne(c => c.Character)
+                .WithMany()
+                .HasForeignKey(c => c.CharacterId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
 

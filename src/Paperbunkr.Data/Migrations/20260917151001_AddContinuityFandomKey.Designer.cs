@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Paperbunkr.Data;
 
@@ -10,9 +11,11 @@ using Paperbunkr.Data;
 namespace Paperbunkr.Data.Migrations
 {
     [DbContext(typeof(PaperbunkrDbContext))]
-    partial class PaperbunkrDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260917151001_AddContinuityFandomKey")]
+    partial class AddContinuityFandomKey
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.11");
@@ -461,9 +464,6 @@ namespace Paperbunkr.Data.Migrations
                         .HasColumnType("REAL")
                         .HasDefaultValue(2.0);
 
-                    b.Property<bool>("MatrixRainEnabled")
-                        .HasColumnType("INTEGER");
-
                     b.Property<string>("MetadataResolutionPolicy")
                         .IsRequired()
                         .ValueGeneratedOnAdd()
@@ -531,6 +531,12 @@ namespace Paperbunkr.Data.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER")
                         .HasDefaultValue(false);
+
+                    b.Property<bool>("ReaderAutoHideChrome")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("ReaderChromeHoverMode")
+                        .HasColumnType("INTEGER");
 
                     b.Property<int?>("ReaderMemoryLimitMb")
                         .HasColumnType("INTEGER");

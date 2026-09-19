@@ -993,4 +993,73 @@ public class EventsScreenViewModelTests : IDisposable
         Assert.Equal(EventsScreenViewModel.RoleOptions.Select(o => o.Label), EventsScreenViewModel.RoleNames);
         Assert.Equal(EventsScreenViewModel.EventRelationTypeOptions.Select(o => o.Label), EventsScreenViewModel.EventRelationTypeNames);
     }
+
+    // --- Story-event auto-population suggestions (docs/superpowers/specs/2026-09-17-storyevent-
+    // continuity-autopopulate-design.md, Phase 1). No credentials configured in these tests, so
+    // ArcExternalVerificationService.VerifyAsync is a no-op and candidates stay local-only/Weak -
+    // real ComicVine/Metron interaction is covered at the resolver level (ArcExternalVerificationServiceTests),
+    // not here. ---
+
+    private static void SeedArcIssues(string arcName, string publisher, params (string SeriesName, string Number)[] issues)
+    {
+        using var context = PaperbunkrDb.CreateContext();
+        foreach (var (seriesName, number) in issues)
+        {
+            var series = new Series { Name = seriesName };
+            context.Series.Add(series);
+            context.SaveChanges();
+            context.Issues.Add(new Issue { SeriesId = series.Id, Number = number, StoryArc = arcName, Publisher = publisher });
+        }
+
+        context.SaveChanges();
+    }
+
+    [Fact]
+    public void RefreshStoryEventCandidates_PopulatesFromLocalStoryArcGrouping()
+    {
+        SeedArcIssues("Civil War", "Marvel", ("Avengers", "1"), ("Iron Man", "1"));
+        var vm = new EventsScreenViewModel();
+
+        vm.RefreshStoryEventCandidates();
+
+        var candidate = Assert.Single(vm.NewStoryEventCandidates);
+        Assert.Equal("Civil War", candidate.ArcName);
+        Assert.Equal(2, candidate.MemberCount);
+        Assert.False(vm.HasNoNewStoryEventCandidates);
+    }
+
+    [Fact]
+    public async Task AcceptStoryEventCandidate_CreatesStoryEventWithMembers_AndRemovesFromList()
+    {
+        SeedArcIssues("Civil War", "Marvel", ("Avengers", "1"), ("Iron Man", "1"));
+        var vm = new EventsScreenViewModel();
+        vm.RefreshStoryEventCandidates();
+        var candidate = Assert.Single(vm.NewStoryEventCandidates);
+
+        await candidate.AcceptCommand.ExecuteAsync(null);
+
+        Assert.Empty(vm.NewStoryEventCandidates);
+        using var context = PaperbunkrDb.CreateContext();
+        var storyEvent = Assert.Single(context.StoryEvents);
+        Assert.Equal("Civil War", storyEvent.Name);
+        Assert.Equal(2, context.EventMemberships.Count(m => m.StoryEventId == storyEvent.Id));
+    }
+
+    [Fact]
+    public void DismissStoryEventCandidate_PersistsAndExcludesFromNextRefresh()
+    {
+        SeedArcIssues("Civil War", "Marvel", ("Avengers", "1"), ("Iron Man", "1"));
+        var vm = new EventsScreenViewModel();
+        vm.RefreshStoryEventCandidates();
+        var candidate = Assert.Single(vm.NewStoryEventCandidates);
+
+        candidate.DismissCommand.Execute(null);
+        Assert.Empty(vm.NewStoryEventCandidates);
+
+        vm.RefreshStoryEventCandidates();
+        Assert.Empty(vm.NewStoryEventCandidates);
+
+        using var context = PaperbunkrDb.CreateContext();
+        Assert.Empty(context.StoryEvents);
+    }
 }

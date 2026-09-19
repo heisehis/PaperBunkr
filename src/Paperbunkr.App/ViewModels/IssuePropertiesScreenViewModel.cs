@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
@@ -219,6 +220,60 @@ public partial class IssuePropertiesScreenViewModel : ViewModelBase
     /// <summary>ComicRack CE's shipped <c>[Book Formats]</c> default list (docs/superpowers/specs/2026-08-27-metadata-model-phase4e-format-signal-suggestions-design.md) plus <see cref="SpecialFormatCatalog"/>'s Kavita-only additions (docs/superpowers/specs/2026-08-28-series-detail-specials-tab-design.md) - autocomplete for the free-text Format field.</summary>
     public static IReadOnlyList<string> FormatOptions { get; } =
         FormatSignalCatalog.CeDefaultFormats.Union(SpecialFormatCatalog.KavitaOnlyAdditions, StringComparer.OrdinalIgnoreCase).ToList();
+
+    /// <summary>
+    /// On-demand Phase 1 trigger (docs/superpowers/specs/2026-09-17-storyevent-continuity-
+    /// autopopulate-design.md) - groups this issue's already-*saved* Story Arc against the rest of
+    /// the library and, if a multi-issue group results, verifies it against ComicVine/Metron (if
+    /// configured) and links/creates the StoryEvent immediately. Reads the saved database value, not
+    /// the unsaved edit buffer - Save first if Story Arc was just changed.
+    /// </summary>
+    [RelayCommand]
+    private async Task LookUpStoryArc()
+    {
+        if (_issueId is not int issueId)
+        {
+            return;
+        }
+
+        using var context = _contextFactory();
+        var issue = context.Issues.FirstOrDefault(i => i.Id == issueId);
+        if (issue is null || string.IsNullOrWhiteSpace(issue.StoryArc))
+        {
+            _notify?.Invoke("No Story Arc set", "Set a Story Arc value and Save before looking it up.");
+            return;
+        }
+
+        var candidates = StoryArcGroupingResolver.GetCandidates(context)
+            .Where(c => c.Members.Any(m => m.Issue.Id == issueId))
+            .ToList();
+
+        if (candidates.Count == 0)
+        {
+            _notify?.Invoke("No story-event match", "No other issues in your library share this Story Arc yet.");
+            return;
+        }
+
+        var verified = await ArcExternalVerificationService.VerifyAsync(context, candidates, CancellationToken.None);
+
+        int linked = 0;
+        foreach (var candidate in verified)
+        {
+            var storyEvent = StoryEventResolver.GetOrCreate(context, candidate.ArcName);
+            storyEvent.ComicVineArcId ??= candidate.ComicVineArcId;
+            storyEvent.MetronArcId ??= candidate.MetronArcId;
+            context.SaveChanges();
+
+            foreach (var member in candidate.Members.OrderBy(m => m.Position ?? int.MaxValue).ThenBy(m => m.Issue.Year ?? int.MaxValue))
+            {
+                EventMembershipResolver.AddMember(context, storyEvent.Id, member.Issue.Id, EventMembershipRole.Core);
+            }
+
+            linked++;
+        }
+
+        _notify?.Invoke("Story event linked", linked == 1 ? "Linked to 1 story event." : $"Linked to {linked} story events.");
+    }
 
     // ===================== Autocomplete / dropdown vocabulary (docs/superpowers/specs/2026-09-05-metadata-editor-affordances-design.md) =====================
 

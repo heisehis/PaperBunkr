@@ -168,7 +168,7 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         BulkSeriesProperties = new BulkSeriesPropertiesScreenViewModel(CloseBulkSeriesPropertiesOverlayAndReload, id => EnqueueMetadataWriteBack(id));
         Smart = new SmartScreenViewModel(GoDetailForSeries, GoBookDetailForBook, loadOnConstruction: false);
         Reading = new ReadingScreenViewModel(new FilePickerService(), GoReaderForIssueInReadingList, OpenReadingListPropertiesOverlay, activity: Activity, loadOnConstruction: false);
-        Events = new EventsScreenViewModel(GoDetailForSeries, GoReaderForIssue, GoReadingWithList, ShowToast, loadOnConstruction: false);
+        Events = new EventsScreenViewModel(GoDetailForSeries, GoReaderForIssue, GoReadingWithList, ShowToast, activity: Activity, loadOnConstruction: false);
         Insights = new InsightsScreenViewModel(GoReaderForIssue, GoDetailForSeries, GoLibraryWithSearch, ReadingEvents);
         Plugin = new PluginScreenViewModel(new FilePickerService(), Dialogs);
         Migration = new MigrationOverlayViewModel(new FilePickerService(), OpenSeriesDetailFromReview, loadOnConstruction: false);
@@ -905,6 +905,7 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
     {
         Events.RefreshSidebar();
         Events.RefreshContinuitiesSidebar();
+        Events.RefreshStoryEventCandidates();
         Events.EnsureEventLoaded();
         CurrentScreen = "events";
         ResetHistoryRoot("events");
@@ -2585,6 +2586,9 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
                     Preferences.GoAdvancedCommand.Execute(null);
                 }
 
+                break;
+            case ActivityLinkKind.StoryEventsScreen:
+                GoEventsCommand.Execute(null);
                 break;
             case ActivityLinkKind.PluginGroupedReview:
                 GoSmartCommand.Execute(null);

@@ -336,9 +336,15 @@
                                     <StackPanel Classes="field"><StackPanel Orientation="Horizontal" Spacing="5"><fi:SymbolIcon Symbol="NumberSymbol" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextFaintBrush}" /><TextBlock Classes="fieldLabel" Text="ALTERNATE COUNT" Margin="0" /></StackPanel><NumericUpDown HorizontalAlignment="Stretch" Minimum="0" FormatString="0" Value="{Binding AlternateCountText, Converter={x:Static v:NullableDecimalStringConverter.Instance}}" /></StackPanel>
                                     <StackPanel Classes="field">
                                         <StackPanel Orientation="Horizontal" Spacing="5"><fi:SymbolIcon Symbol="BookOpen" FontSize="{StaticResource PbIconSizeXs}" Foreground="{DynamicResource PbTextFaintBrush}" /><TextBlock Classes="fieldLabel" Text="STORY ARC" Margin="0" /></StackPanel>
-                                        <Grid ColumnDefinitions="*,Auto">
+                                        <Grid ColumnDefinitions="*,Auto,Auto">
                                             <pbc:SuggestBox Grid.Column="0" Text="{Binding StoryArc}" Suggestions="{Binding StoryArcVocab}" />
-                                            <Button x:Name="StoryArcTokenButton" Grid.Column="1" Classes="toolbarPill" Content="{}{ }" Margin="4,0,0,0" ToolTip.Tip="Insert a token">
+                                            <!-- docs/superpowers/specs/2026-09-17-storyevent-continuity-autopopulate-design.md -
+                                                 per-issue manual trigger; operates on the saved value, not this unsaved buffer. -->
+                                            <Button Grid.Column="1" Classes="toolbarPill" Margin="4,0,0,0" ToolTip.Tip="Group this issue's saved Story Arc with the rest of your library and link/create a story event"
+                                                    Command="{Binding LookUpStoryArcCommand}">
+                                                <fi:SymbolIcon Symbol="Search" FontSize="{StaticResource PbIconSizeXs}" />
+                                            </Button>
+                                            <Button x:Name="StoryArcTokenButton" Grid.Column="2" Classes="toolbarPill" Content="{}{ }" Margin="4,0,0,0" ToolTip.Tip="Insert a token">
                                                 <Button.Flyout>
                                                     <Flyout Placement="Bottom">
                                                         <StackPanel Width="120">

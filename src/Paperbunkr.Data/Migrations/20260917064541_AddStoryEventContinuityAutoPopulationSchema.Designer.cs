@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Paperbunkr.Data;
 
@@ -10,9 +11,11 @@ using Paperbunkr.Data;
 namespace Paperbunkr.Data.Migrations
 {
     [DbContext(typeof(PaperbunkrDbContext))]
-    partial class PaperbunkrDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260917064541_AddStoryEventContinuityAutoPopulationSchema")]
+    partial class AddStoryEventContinuityAutoPopulationSchema
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.11");
@@ -461,9 +464,6 @@ namespace Paperbunkr.Data.Migrations
                         .HasColumnType("REAL")
                         .HasDefaultValue(2.0);
 
-                    b.Property<bool>("MatrixRainEnabled")
-                        .HasColumnType("INTEGER");
-
                     b.Property<string>("MetadataResolutionPolicy")
                         .IsRequired()
                         .ValueGeneratedOnAdd()
@@ -531,6 +531,12 @@ namespace Paperbunkr.Data.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER")
                         .HasDefaultValue(false);
+
+                    b.Property<bool>("ReaderAutoHideChrome")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("ReaderChromeHoverMode")
+                        .HasColumnType("INTEGER");
 
                     b.Property<int?>("ReaderMemoryLimitMb")
                         .HasColumnType("INTEGER");
@@ -1062,9 +1068,6 @@ namespace Paperbunkr.Data.Migrations
                     b.Property<string>("Description")
                         .HasColumnType("TEXT");
 
-                    b.Property<string>("FandomKey")
-                        .HasColumnType("TEXT");
-
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasColumnType("TEXT");
@@ -1103,30 +1106,6 @@ namespace Paperbunkr.Data.Migrations
                         .IsUnique();
 
                     b.ToTable("ContinuityCharacterLookupNegativeCaches");
-                });
-
-            modelBuilder.Entity("Paperbunkr.Data.Entities.ContinuityFandomSuggestionDismissal", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
-
-                    b.Property<DateTime>("DismissedAt")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("FandomKey")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<int>("SeriesId")
-                        .HasColumnType("INTEGER");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("SeriesId", "FandomKey")
-                        .IsUnique();
-
-                    b.ToTable("ContinuityFandomSuggestionDismissals");
                 });
 
             modelBuilder.Entity("Paperbunkr.Data.Entities.ContinuityMembership", b =>
@@ -2883,17 +2862,6 @@ namespace Paperbunkr.Data.Migrations
                         .IsRequired();
 
                     b.Navigation("Character");
-                });
-
-            modelBuilder.Entity("Paperbunkr.Data.Entities.ContinuityFandomSuggestionDismissal", b =>
-                {
-                    b.HasOne("Paperbunkr.Data.Entities.Series", "Series")
-                        .WithMany()
-                        .HasForeignKey("SeriesId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Series");
                 });
 
             modelBuilder.Entity("Paperbunkr.Data.Entities.ContinuityMembership", b =>

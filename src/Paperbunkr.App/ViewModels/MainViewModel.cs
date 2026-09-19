@@ -2653,6 +2653,10 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
                 {
                     Preferences.GoLibraryHealthCommand.Execute(null);
                 }
+                else if (link.Payload == "Acquisition")
+                {
+                    Preferences.GoAcquisitionCommand.Execute(null);
+                }
                 else if (link.Payload == "Advanced")
                 {
                     Preferences.GoAdvancedCommand.Execute(null);

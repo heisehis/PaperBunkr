@@ -107,6 +107,16 @@ public static class PreferenceIndex
             new[] { "tracker", "tracking", "auto sync", "update progress", "mark as read", "after reading", "source metadata", "link panel", "komikku" },
             "connections.trackingBehavior"),
 
+        new(PreferencesSection.Acquisition, "Prowlarr", "Prowlarr",
+            new[] { "prowlarr", "indexer", "api key", "torrent", "acquisition", "download", "mylar", "test connection", "address" },
+            "acquisition.prowlarr"),
+        new(PreferencesSection.Acquisition, "ComicVine", "ComicVine key",
+            new[] { "comicvine", "api key", "acquisition", "track series", "missing issues" },
+            "acquisition.comicvine"),
+        new(PreferencesSection.Acquisition, "Searching", "Searching",
+            new[] { "search interval", "check every", "poll", "release size", "minimum size", "maximum size", "release group", "ignored words", "cbz", "cbr", "prefer cbz", "wanted" },
+            "acquisition.search"),
+
         new(PreferencesSection.Advanced, "Rendering", "Rendering",
             new[] { "graphics backend", "gpu", "software renderer", "opengl", "angle", "hardware acceleration" },
             "advanced.rendering"),

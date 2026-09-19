@@ -17,6 +17,7 @@ public enum PreferencesSection
     Reader,
     KeyboardShortcuts,
     Connections,
+    Acquisition,
     Plugins,
     Advanced,
     About,

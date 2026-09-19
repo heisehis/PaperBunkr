@@ -1,0 +1,140 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:fi="using:FluentIcons.Avalonia"
+             xmlns:vm="using:Paperbunkr.App.ViewModels"
+             xmlns:pref="using:Paperbunkr.App.Views.Preferences"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d" d:DesignWidth="680" d:DesignHeight="720"
+             x:Class="Paperbunkr.App.Views.Preferences.AcquisitionSection"
+             x:DataType="vm:AcquisitionSettingsViewModel">
+
+    <!-- Preferences -> Acquisition (docs/superpowers/specs/2026-09-19-comic-acquisition-daemon-design.md 7). Same section
+         shell as Automation: one ScrollViewer, SettingsRow rows, Pb* tokens only (no hardcoded colors). Slice 1 shows only what
+         slice 1 uses; qBittorrent and destination-folder controls arrive with the slices that use them. -->
+    <ScrollViewer>
+        <StackPanel Margin="28,20,28,40" Spacing="20">
+            <TextBlock Classes="pbTextHeading" Text="Acquisition" />
+
+            <TextBlock Text="Find missing and upcoming comics through your own Prowlarr, and review what it finds before anything is downloaded. Paperbunkr ships with no indexers — you bring your own Prowlarr."
+                       FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" MaxWidth="640" HorizontalAlignment="Left" />
+
+            <pref:SettingsRow Icon="Search" Title="Look for comics automatically"
+                               Description="While Paperbunkr is open, check your wanted issues on the interval below. Every check shows in the Activity Center. Off by default.">
+                <pref:SettingsRow.SettingsContent>
+                    <ToggleSwitch IsChecked="{Binding Enabled}" OnContent="{x:Null}" OffContent="{x:Null}"
+                                  AutomationProperties.Name="Look for comics automatically"
+                                  AutomationProperties.AutomationId="AcquisitionEnabledToggle" />
+                </pref:SettingsRow.SettingsContent>
+            </pref:SettingsRow>
+
+            <StackPanel Tag="acquisition.prowlarr" Spacing="10">
+                <TextBlock Classes="settingsGroupCaption" Text="PROWLARR" />
+
+                <StackPanel Spacing="4">
+                    <TextBlock Text="Address" FontSize="12" Foreground="{DynamicResource PbTextBrush}" />
+                    <TextBox Text="{Binding ProwlarrUrl}" Watermark="http://localhost:9696" MaxWidth="520" HorizontalAlignment="Left" Width="520"
+                             AutomationProperties.Name="Prowlarr address" AutomationProperties.AutomationId="AcquisitionProwlarrUrl" />
+                </StackPanel>
+
+                <StackPanel Spacing="4">
+                    <TextBlock Text="API key" FontSize="12" Foreground="{DynamicResource PbTextBrush}" />
+                    <TextBox Text="{Binding ProwlarrApiKey}" Watermark="{Binding ApiKeyWatermark}" PasswordChar="•" MaxWidth="520" HorizontalAlignment="Left" Width="520"
+                             AutomationProperties.Name="Prowlarr API key" AutomationProperties.AutomationId="AcquisitionProwlarrKey" />
+                    <TextBlock Text="Find it in Prowlarr under Settings → General. It is stored encrypted and never shown again."
+                               FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" TextWrapping="Wrap" MaxWidth="520" HorizontalAlignment="Left" />
+                </StackPanel>
+
+                <StackPanel Orientation="Horizontal" Spacing="10">
+                    <Button Classes="headerAction primary" Command="{Binding SaveCommand}"
+                            AutomationProperties.AutomationId="AcquisitionSaveButton">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <fi:SymbolIcon Symbol="Save" FontSize="{StaticResource PbIconSizeXs}" />
+                            <TextBlock Text="Save" />
+                        </StackPanel>
+                    </Button>
+                    <Button Classes="headerAction ghost" Command="{Binding TestProwlarrCommand}"
+                            AutomationProperties.AutomationId="AcquisitionTestButton">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <fi:SymbolIcon Symbol="Link" FontSize="{StaticResource PbIconSizeXs}" />
+                            <TextBlock Text="Test connection" />
+                        </StackPanel>
+                    </Button>
+                </StackPanel>
+
+                <!-- Live region so a screen reader announces the result of Save / Test. -->
+                <TextBlock Text="{Binding StatusMessage}" IsVisible="{Binding HasErrorStatus}" FontSize="12" TextWrapping="Wrap" MaxWidth="520" HorizontalAlignment="Left"
+                           Foreground="{DynamicResource PbDangerBrush}" AutomationProperties.LiveSetting="Polite" />
+                <TextBlock Text="{Binding StatusMessage}" IsVisible="{Binding HasInfoStatus}" FontSize="12" TextWrapping="Wrap" MaxWidth="520" HorizontalAlignment="Left"
+                           Foreground="{DynamicResource PbSuccessBrush}" AutomationProperties.LiveSetting="Polite" />
+            </StackPanel>
+
+            <StackPanel Tag="acquisition.comicvine">
+                <TextBlock Classes="settingsGroupCaption" Text="COMICVINE" />
+                <pref:SettingsRow Icon="Link" Title="ComicVine API key"
+                                   Description="Tracking a series and finding its missing issues use ComicVine. The key is managed under Connections.">
+                    <pref:SettingsRow.SettingsContent>
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <TextBlock Text="Connected" VerticalAlignment="Center" FontSize="12" IsVisible="{Binding HasComicVineKey}"
+                                       Foreground="{DynamicResource PbSuccessBrush}" />
+                            <TextBlock Text="Not set" VerticalAlignment="Center" FontSize="12" IsVisible="{Binding !HasComicVineKey}"
+                                       Foreground="{DynamicResource PbTextMutedBrush}" />
+                            <Button Classes="headerAction ghost" Content="Open Connections" Command="{Binding OpenConnectionsCommand}"
+                                    AutomationProperties.AutomationId="AcquisitionOpenConnectionsButton" />
+                        </StackPanel>
+                    </pref:SettingsRow.SettingsContent>
+                </pref:SettingsRow>
+            </StackPanel>
+
+            <StackPanel Tag="acquisition.search">
+                <TextBlock Classes="settingsGroupCaption" Text="SEARCHING" />
+
+                <pref:SettingsRow Icon="Clock" Title="Check every (minutes)"
+                                   Description="How often wanted issues are searched again. At least 15. If Prowlarr can't be reached, Paperbunkr waits longer between tries.">
+                    <pref:SettingsRow.SettingsContent>
+                        <NumericUpDown Value="{Binding PollIntervalMinutes}" Minimum="15" Maximum="1440" Width="120"
+                                       AutomationProperties.Name="Check interval in minutes" />
+                    </pref:SettingsRow.SettingsContent>
+                </pref:SettingsRow>
+
+                <pref:SettingsRow Icon="ArrowDownload" Title="Smallest release (MB)"
+                                   Description="Ignore anything smaller than this. 0 means no minimum.">
+                    <pref:SettingsRow.SettingsContent>
+                        <NumericUpDown Value="{Binding MinSizeMb}" Minimum="0" Maximum="100000" Width="120"
+                                       AutomationProperties.Name="Smallest release in megabytes" />
+                    </pref:SettingsRow.SettingsContent>
+                </pref:SettingsRow>
+
+                <pref:SettingsRow Icon="ArrowDownload" Title="Largest single issue (MB)"
+                                   Description="Ignore single issues larger than this. Multi-issue packs are exempt but are never picked automatically. 0 means no limit.">
+                    <pref:SettingsRow.SettingsContent>
+                        <NumericUpDown Value="{Binding MaxSizeMb}" Minimum="0" Maximum="100000" Width="120"
+                                       AutomationProperties.Name="Largest single issue in megabytes" />
+                    </pref:SettingsRow.SettingsContent>
+                </pref:SettingsRow>
+
+                <pref:SettingsRow Icon="Book" Title="Prefer CBZ"
+                                   Description="Rank .cbz slightly above .cbr. Paperbunkr reads both.">
+                    <pref:SettingsRow.SettingsContent>
+                        <ToggleSwitch IsChecked="{Binding PreferCbz}" OnContent="{x:Null}" OffContent="{x:Null}"
+                                      AutomationProperties.Name="Prefer CBZ" />
+                    </pref:SettingsRow.SettingsContent>
+                </pref:SettingsRow>
+
+                <StackPanel Spacing="4" Margin="0,4,0,10">
+                    <TextBlock Text="Preferred release groups" FontSize="12" Foreground="{DynamicResource PbTextBrush}" />
+                    <TextBox Text="{Binding PreferredReleaseGroups}" Watermark="Comma-separated, e.g. Zone-Empire, Minutemen" Width="520" MaxWidth="520" HorizontalAlignment="Left"
+                             AutomationProperties.Name="Preferred release groups" />
+                </StackPanel>
+
+                <StackPanel Spacing="4" Margin="0,0,0,10">
+                    <TextBlock Text="Ignored words" FontSize="12" Foreground="{DynamicResource PbTextBrush}" />
+                    <TextBox Text="{Binding IgnoredWords}" Watermark="Comma-separated; a release whose title has any of them is skipped" Width="520" MaxWidth="520" HorizontalAlignment="Left"
+                             AutomationProperties.Name="Ignored words" />
+                </StackPanel>
+
+                <TextBlock Text="Changes apply when you press Save above." FontSize="11.5" Foreground="{DynamicResource PbTextFaintBrush}" />
+            </StackPanel>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

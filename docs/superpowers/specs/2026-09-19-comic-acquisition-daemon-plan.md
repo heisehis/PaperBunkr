@@ -108,7 +108,7 @@ penalty, configurable weights); title/issue/year verification; range/pack flaggi
 **Verify:** unit tests incl. "X-Men"/"+Anima" strict query first, fallback only on zero results,
 pack titles flagged; fake HTTP server for the client.
 
-## Step 7: Wanted domain service (missing, request, watch, owned-check, arc request)
+## Step 7: Wanted domain service (missing, request, watch, owned-check, arc request)  — DONE
 **Files:** `src/Paperbunkr.Data/Acquisition/WantedService.cs`, `OwnedIssueMatcher.cs`,
 `ArcRequestService.cs` (new); tests in `Data.Tests/Acquisition/`
 **What:** compute Missing (ComicVine volume issues minus owned by ComicVine id, then
@@ -119,7 +119,7 @@ missing" incl. creating the local `Series` (via `FindSeriesByCascade`) and a `Wa
 **Verify:** temp-DB tests: owned issues never requested; arc request on unknown series creates
 `Series` + non-following `WatchedSeries`; duplicate requests are idempotent.
 
-## Step 8: AcquisitionService loop (slice-1 form) and App wiring
+## Step 8: AcquisitionService loop (slice-1 form) and App wiring  — DONE
 **Files:** `src/Paperbunkr.Daemon/Services/AcquisitionService.cs` (new),
 `src/Paperbunkr.App/ViewModels/MainViewModel.cs` (edit: construct, `AttachEvents`),
 `src/Paperbunkr.App/App.axaml.cs` (edit: start/stop like `Scheduler`),
@@ -132,7 +132,7 @@ with an Activity Center alert and backoff when Prowlarr is unreachable. Own `DbC
 **Verify:** loop tests with fake indexer/ComicVine and a manual tick method (no real timers);
 bridge test using `PumpDispatcher()`.
 
-## Step 9: Preferences "Acquisition" section
+## Step 9: Preferences "Acquisition" section  — DONE (slice-1 controls only: Prowlarr, interval, size/format/groups; qBittorrent + destination-folder controls ship with slices 2/3 instead of as dead UI)
 **Files:** `Models/PreferencesSection.cs` (edit), `ViewModels/PreferencesScreenViewModel.cs` (edit),
 `Views/PreferencesScreen.axaml` (edit), `Views/Preferences/AcquisitionSection.axaml` **+ `.axaml.cs`
 in the same step** (new; see CLAUDE.md AVLN2000 gotcha), tests in `App.Tests`
@@ -175,6 +175,10 @@ notes from the survey)
   failures on an untouched `master` checkout, order-sensitive/flaky).
 - **After Steps 1-2:** `Data.Tests` 1115 pass / the same 6 fail (+14 new tests, 0 new failures);
   `App.Tests` (same two classes) 249 pass / the same 8 fail.
+- **Extra baseline (found later):** `ActivityCenterViewModelTests` has 3 pre-existing failures on untouched `master`
+  (`Alerts_AreWrapped_AndDismissRoutesToService`, `OpeningPeekOrDrawer_SetsPanelIsOpen_OnService`,
+  `FollowLinkCommand_InvokesResolver_AndCloses`), so the App-side baseline for the classes I run is **11 failing**
+  (8 + 3), all identical on `master`.
 - Step 2 deviation from the spec: spacing is **1.1 s**, not 1 s (ComicVine's velocity limit returns HTTP
   420 / `status_code` 107 and community guidance is >= ~1.1 s); the handler enforces the request timeout
   itself so queue time never counts against `HttpClient.Timeout`.

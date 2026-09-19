@@ -3,6 +3,27 @@
 All notable changes to Paperbunkr are documented here. Format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Added
+
+- **Comic acquisition (early, search-only).** A Mylar-style want-list built on your own Prowlarr.
+  Preferences → **Acquisition** connects Prowlarr (the API key is stored encrypted) and sets how often
+  to check and how to rank results. The new **Wanted** screen tracks ComicVine series, lists what you're
+  missing and what's coming, follows a series so new issues are requested automatically, and shows the
+  releases Prowlarr found so you can copy a link into your download client. A series' page gains a
+  **Missing Issues** section with per-issue Request, and reading lists built from a story arc gain
+  **Request missing issues**. Automatic checking is off until you turn it on, and nothing is
+  downloaded by Paperbunkr itself yet.
+
+### Changed
+
+- API keys and passwords saved in Preferences → Connections are now encrypted on disk (Windows DPAPI).
+  Existing keys are upgraded the first time they are read. A database copied to another Windows account
+  or machine will ask for them again.
+- All ComicVine requests now share one rate limit (about one per 1.1 s, 200 an hour), with room held back so
+  a background search can never starve what you're doing in the app.
+
 ## [0.6.4-beta] - 2026-09-19
 
 ### Added

@@ -1,6 +1,6 @@
 # Comic Acquisition Daemon (Mylar-style want-list + acquisition) — Design
 
-Date: 2026-09-19 · Status: draft for user review
+Date: 2026-09-19 · Status: approved; **slice 1 implemented on branch `feat/comic-acquisition-daemon`** (see the plan for per-step status and baselines)
 
 ## 1. Goal and scope
 
@@ -226,7 +226,14 @@ All changes happen on a copy.
   a per-class `PumpDispatcher()` (`Dispatcher.UIThread.RunJobs()`).
 - Safety: no bundled indexers/trackers; manual approve by default; secrets follow `CredentialStore`.
 
-## 11. Open items to verify during planning
+## 11. What implementation changed (slice 1)
+
+- Prowlarr is searched through its native JSON API, not Torznab (section 2). `IIndexerClient` is a plain text-query transport; the cascade lives in `ReleaseSearcher`.
+- Arc sources return no ComicVine ids, so arc "Request missing" matches each series to a ComicVine volume itself (exact name, arc year to disambiguate, ambiguous entries reported, never guessed). Placeholders already have a local `Series`, so none is created.
+- "Request all" confirms inline (a second click) instead of via a dialog. Slice 1's Preferences section omits the qBittorrent and destination-folder controls (they arrive with slices 2/3). The Wanted screen has no cover thumbnails yet.
+- The shared ComicVine handler/client live in `Paperbunkr.Data`, not `Daemon`, so `ComicVineSource` can use the same rate limiter.
+
+## 12. Open items to verify during planning
 
 - ~~Exact ComicVine fields~~ **Resolved** against ComicVine's published API docs (`store_date`, `cover_date`, `issue_number`, `image`, `volume`; 100 per page). Live behavior is only fixture-tested, not exercised against a real key.
 - Mylar behaviors marked unverified in research (Skipped/Archived/Ignored statuses, pull-list

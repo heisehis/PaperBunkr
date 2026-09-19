@@ -153,7 +153,7 @@ styling and Pb* tokens (no hardcoded hex). Any remove/close button inside a row 
 **Verify:** view-model tests; build; review checklist; **on-screen check is the user's** (no UI
 automation without permission).
 
-## Step 11: Series Detail "Missing Issues" and arc "Request missing"
+## Step 11: Series Detail "Missing Issues" and arc "Request missing"  — DONE (Detail: own SeriesMissingIssuesViewModel, inline two-step confirm instead of a dialog; Reading list: bulk "Request missing issues" menu item on arc-linked lists as an Activity Center job, per-item Request on placeholder rows of any list)
 **Files:** `ViewModels/DetailTabsViewModel.cs` and its view (edit), reading-list screen view model
 and view (edit), tests in `App.Tests`
 **What:** "Missing Issues (n)" section with per-issue Request, Watch toggle, confirmed "Request all
@@ -178,7 +178,9 @@ notes from the survey)
 - **Extra baseline (found later):** `ActivityCenterViewModelTests` has 3 pre-existing failures on untouched `master`
   (`Alerts_AreWrapped_AndDismissRoutesToService`, `OpeningPeekOrDrawer_SetsPanelIsOpen_OnService`,
   `FollowLinkCommand_InvokesResolver_AndCloses`), so the App-side baseline for the classes I run is **11 failing**
-  (8 + 3), all identical on `master`.
+  (8 + 3), all identical on `master`. `ReadingScreenViewModelTests` adds 2 more pre-existing failures
+  (`Delete_OfTheLastRemainingList_ClearsTheScreen`, `Delete_OfTheActiveList_FallsBackToAnotherList`), so **13** in total
+  across the classes I run; each set was re-run on an untouched `master` checkout and is identical there.
 - Step 2 deviation from the spec: spacing is **1.1 s**, not 1 s (ComicVine's velocity limit returns HTTP
   420 / `status_code` 107 and community guidance is >= ~1.1 s); the handler enforces the request timeout
   itself so queue time never counts against `HttpClient.Timeout`.

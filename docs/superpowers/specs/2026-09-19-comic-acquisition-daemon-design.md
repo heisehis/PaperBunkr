@@ -65,7 +65,10 @@ Slack; Activity Center covers in-app notification, so this is backlog).
 - **`ReleaseBlocklist`** (review fix): release name and/or torrent hash, reason (`Corrupt`,
   `PasswordProtected`, `Unreadable`, `UserRejected`), timestamp. Checked in step 4 of the loop so a
   known-bad release is never fetched twice. Written when import fails or the user rejects a candidate.
-- **`AcquisitionSettings`:** Prowlarr URL/key; qBittorrent URL, credentials, category, save path.
+- **`AcquisitionSettings`:** Prowlarr URL/key; qBittorrent URL, credentials, category (default
+  `paperbunkr-comics`, see section 5), save path; and a **destination library folder** (which
+  existing library folder imports and new series go into, since imports can create series folders
+  from the rename template).
   Secrets go through `CredentialStore`.
 - **`CredentialStore` upgrade (review fix):** qBittorrent WebUI credentials must not be plain text.
   `CredentialStore` (the single choke point for provider secrets) encrypts values at rest with
@@ -82,8 +85,12 @@ Slack; Activity Center covers in-app notification, so this is backlog).
 
 1. Refresh watched volumes from ComicVine within the shared budget.
 2. Promote `Wanted` rows whose store date has arrived out of "Upcoming".
-3. For each `Wanted` issue, query Prowlarr with number variants: unpadded (`5`), `05`, `005`, plus
-   volume and year forms; strip punctuation/stopwords in the series name (behavior mirrors Mylar).
+3. For each `Wanted` issue, query Prowlarr with a **cascading strategy (review fix)**: first the
+   **strict, exact series name** (punctuation intact, so "X-Men", "Spider-Man", "+Anima" survive)
+   crossed with the number variants — unpadded (`5`), `05`, `005`, plus volume and year forms. Only if
+   the strict pass yields **zero accepted results** does it fall back to a **sanitized alias** query
+   (punctuation/stopwords stripped, behavior mirroring Mylar) across the same variants. The first
+   accepted hit stops the search. Prowlarr is local, so the extra calls are cheap.
 4. Filter and score results: seeders, size limits, release group, preferred format. CBZ gets a small
    bonus and CBR a small penalty only (Paperbunkr reads CBR and repacks to CBZ on import). Weights are
    configurable; Omnibus's numbers are not copied. Verify that title, issue number and year actually
@@ -101,9 +108,25 @@ on disk.
 **Manual drop-in (review suggestion, scoped down):** the app already has `LiveFolderWatchService` /
 `LibraryFolderScanner`, so a `.cbz` the user drops into a library folder is already ingested. The
 daemon hooks into that: when a scanned issue matches a `Wanted`/`Snatched` row by the owned-check
-rules, the row is closed as `Imported`, its candidates are discarded, and any queued qBittorrent
-download for it is left alone. This covers "found it on Discord" without qBittorrent. A separate
-blackhole folder that also repacks and injects metadata is deferred until there's a real need.
+rules, the row is closed as `Imported` and its candidates are discarded. This covers "found it on
+Discord" without qBittorrent. A separate blackhole folder that also repacks and injects metadata is
+deferred until there's a real need.
+
+**Cancelling the redundant torrent (review fix, refined):** closing a row by drop-in must not leave a
+torrent that later finishes, maps to nothing and errors. The daemon asks `IDownloadClient` to handle
+the torrent, restricted to the Paperbunkr category (below):
+- **Still downloading:** remove the torrent and delete its partial files, but only if it maps to that
+  one issue. A pack that still maps to other open `Wanted` rows is kept.
+- **Already completed/seeding:** leave it seeding (removing it early hurts private-tracker ratio and
+  the payload is not "dead"). The import engine treats "row already `Imported`" as a quiet no-op, not
+  an Activity Center error.
+This is the one place the daemon deletes files in qBittorrent, so it is limited to incomplete
+torrents in the Paperbunkr category that it added itself (hash recorded in `WantedIssue`).
+
+**qBittorrent category lock (review fix):** every torrent the daemon adds is put in the category from
+`AcquisitionSettings` (default `paperbunkr-comics`). The polling loop, hash matching, cancel and
+cleanup operate **only** on torrents in that category **and** whose hash is recorded by Paperbunkr;
+all other torrents in the client are ignored and never touched.
 
 ## 6. Import (slice 3)
 
@@ -159,7 +182,18 @@ All changes happen on a copy.
 - **"Request missing"** on arc-linked lists converts placeholders to `WantedIssue` rows using the
   ComicVine issue ids the arc source already returns, with a confirmation for bulk. Non-arc lists
   (hand-made, `.cbl`) get only a per-item Request on their placeholders.
-- Downloads land in the normal series folder; the relink replaces the placeholder in list order.
+- **Unknown parent series (review fix):** an arc can include an issue from a series the user doesn't
+  track. Before converting a placeholder to a `WantedIssue`, "Request missing" resolves the issue's
+  ComicVine volume. If no local `Series`/`WatchedSeries` exists for it, it fetches the volume
+  metadata (through the priority handler), creates the local `Series` and a `WatchedSeries` row with
+  **`WatchFutureReleases = false`** (tracked for naming/folder purposes, **not** followed), and only
+  then queues the `WantedIssue`. Requesting one crossover issue must never silently subscribe the
+  user to the whole series. The series folder itself is created at import time from the rename
+  template inside the destination library folder (section 4), not up front.
+- Downloads land in the series folder; the relink replaces the placeholder in list order.
+- **To verify while planning:** how `ReadingListMatcher` assigns a `Series` to a placeholder `Issue`
+  today (existing placeholder series vs. none), so the new `Series` is linked or reused rather than
+  duplicated.
 - **"Follow arc"** (slice 4): off by default; an 8th scheduled task that re-runs Refresh and
   requests new gaps within the shared ComicVine budget.
 - Fulfills the earlier deferred "arc gap detection" note from the story-event auto-population design.
@@ -174,6 +208,14 @@ All changes happen on a copy.
 3. **Slice 3:** import (payload inspection and per-file mapping, copy-modify-move, `ComicInfo.xml`,
    placeholder relink, drop-in close-out, failure -> blocklist).
 4. **Slice 4:** auto-grab toggle and "Follow arc".
+
+### Backlog (from review, not in slices 1-4)
+
+- Library right-click **"Repack & Inject Metadata"** to push a raw `.zip`/`.cbr` through the import
+  pipeline manually (the scanner reads files but doesn't inject `ComicInfo.xml`).
+- **Release upgrade path:** a cutoff-quality setting (e.g. prefer CBZ) that keeps an issue monitored
+  after a lower-quality import and replaces it if a better release appears.
+- Blackhole watch folder with repack/metadata injection; external webhooks.
 
 ## 10. Errors, testing, safety
 

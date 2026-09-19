@@ -16,8 +16,9 @@ tracker lists or defaults; the user supplies their own Prowlarr.
 
 **Out of scope (deferred):** SABnzbd, direct Newznab/Torznab clients, Deluge/NZBGet, owned-trade
 coverage ("covered by" collected editions), per-issue snooze, pull-list scraping, Mylar's tablet
-device sync, Mylar-style arc folders and reading-order filename prefixes, encryption of stored keys
-(follows existing `CredentialStore`).
+device sync, Mylar-style arc folders and reading-order filename prefixes, a dedicated "blackhole"
+watch folder with its own metadata injection (see section 6), and external webhooks (Discord/ntfy/
+Slack; Activity Center covers in-app notification, so this is backlog).
 
 ## 2. Deviations from the original brief (Gemini spec) and why
 
@@ -46,7 +47,11 @@ device sync, Mylar-style arc folders and reading-order filename prefixes, encryp
   (~200 req/h, the documented ComicVine limit), ban/429 detection that pauses all ComicVine calls.
   The handler is also applied to the existing `ComicVineSource` (whose per-instance `ThrottleAsync`
   has no hourly cap or ban handling). Other sources are left alone.
-  Mylar's floor is 2 s between requests; 1 s is kept per the original brief and the current code, with
+- **Priority (review fix):** requests carry a priority. **Foreground** (manual scraping, UI browsing)
+  is High and jumps the queue; **background** (daemon polling) is Low and yields. The hourly budget
+  also reserves a slice (~25%, i.e. ~50 of 200/h) that only High-priority calls can use, so a large
+  background scan can never starve the UI. Ban/429 pauses both classes.
+- Mylar's floor is 2 s between requests; 1 s is kept per the original brief and the current code, with
   the hourly budget as the real guard.
 
 ## 4. Data model (EF Core, new migration)
@@ -57,9 +62,19 @@ device sync, Mylar-style arc folders and reading-order filename prefixes, encryp
   (once snatched), optional `IssueId` (once imported), last-searched timestamp.
 - **`ReleaseCandidate`:** title, size, seeders, indexer, score, magnet or `.torrent` reference,
   `WantedIssueId`.
+- **`ReleaseBlocklist`** (review fix): release name and/or torrent hash, reason (`Corrupt`,
+  `PasswordProtected`, `Unreadable`, `UserRejected`), timestamp. Checked in step 4 of the loop so a
+  known-bad release is never fetched twice. Written when import fails or the user rejects a candidate.
 - **`AcquisitionSettings`:** Prowlarr URL/key; qBittorrent URL, credentials, category, save path.
-  Keys go in `CredentialStore` like the ComicVine key (plain text in SQLite today; stated, not fixed
-  here).
+  Secrets go through `CredentialStore`.
+- **`CredentialStore` upgrade (review fix):** qBittorrent WebUI credentials must not be plain text.
+  `CredentialStore` (the single choke point for provider secrets) encrypts values at rest with
+  Windows DPAPI (`ProtectedData`, `CurrentUser` scope). The app targets Windows only (Win32 PDFium,
+  win-x64 LibHeif), so `Microsoft.AspNetCore.DataProtection` is unnecessary. Existing rows
+  (ComicVine, tracker keys) are encrypted by a one-time migration on first read/write; values that
+  don't decrypt are treated as legacy plain text and re-saved encrypted. Known consequence: a copied
+  DB on another Windows account or machine loses its secrets and the user re-enters them. Shared
+  per-user dev DBs across worktrees keep working (same user).
 - The new migration must follow the repo's migration conventions (no up-down-up test antipattern; keep
   the Designer snapshot in sync).
 
@@ -72,7 +87,9 @@ device sync, Mylar-style arc folders and reading-order filename prefixes, encryp
 4. Filter and score results: seeders, size limits, release group, preferred format. CBZ gets a small
    bonus and CBR a small penalty only (Paperbunkr reads CBR and repacks to CBZ on import). Weights are
    configurable; Omnibus's numbers are not copied. Verify that title, issue number and year actually
-   match before a result is accepted.
+   match before a result is accepted. Skip anything on the `ReleaseBlocklist`. **Range/pack titles**
+   (e.g. "v1-6", "#1-12", "Complete") are flagged as packs and not auto-accepted for a single-issue
+   want; the user can still approve one manually (see import, multi-issue).
 5. Store `ReleaseCandidate`s. **Manual approve is the default**; auto-grab is a later toggle.
 6. Approving pushes the magnet/`.torrent` to qBittorrent → `Snatched`, store the hash.
 7. Poll by hash for progress → `Downloading` events; on completion → import.
@@ -81,14 +98,34 @@ device sync, Mylar-style arc folders and reading-order filename prefixes, encryp
 series + number; manual "I have this / ignore" action sets `Ignored`. Never request an issue already
 on disk.
 
+**Manual drop-in (review suggestion, scoped down):** the app already has `LiveFolderWatchService` /
+`LibraryFolderScanner`, so a `.cbz` the user drops into a library folder is already ingested. The
+daemon hooks into that: when a scanned issue matches a `Wanted`/`Snatched` row by the owned-check
+rules, the row is closed as `Imported`, its candidates are discarded, and any queued qBittorrent
+download for it is left alone. This covers "found it on Discord" without qBittorrent. A separate
+blackhole folder that also repacks and injects metadata is deferred until there's a real need.
+
 ## 6. Import (slice 3)
 
-- Match the finished download to its `WantedIssue` **by torrent hash**; filename parsing only as a
-  fallback for multi-issue packs.
-- **Hardlink** into the library, falling back to **copy** across drives; **move** only if the user
-  asks. This keeps seeding working (Mylar moves by default, which breaks private-tracker seeding).
-- Repack `.zip`/`.rar` folders to `.cbz`; write `ComicInfo.xml` via the existing engine code
-  (`Paperbunkr.Engine.ComicInfo`); rename by template.
+**The torrent's payload in qBittorrent's download folder is never modified** (seeding depends on it).
+All changes happen on a copy.
+
+- **Hash maps to the download, not to one issue (review fix).** The torrent hash identifies the
+  `ReleaseCandidate`/download. On completion the import engine **inspects the payload** and maps each
+  file to a `WantedIssue` individually: first by the queued issue (single-file case), otherwise by
+  parsing filenames (reusing CE's `ComicNameInfo`) and embedded `ComicInfo.xml`. A multi-issue pack
+  therefore imports every matching file to its own row; files that match no wanted row are left
+  unimported and reported in Activity Center (no silent mapping of a whole folder to one issue).
+- **Copy, modify, move (review fix; replaces "hardlink first").** Repacking and writing
+  `ComicInfo.xml` change the file's bytes, so a hardlink would corrupt the seeded payload. Flow:
+  copy the source file to a temp directory -> repack `.zip`/`.rar` folders to `.cbz` -> write
+  `ComicInfo.xml` via the existing engine code (`Paperbunkr.Engine.ComicInfo`) -> rename by template
+  -> move the result into the library. **Hardlink is used only when no modification is needed**
+  (already a `.cbz` and the user has disabled metadata write-back for acquisitions); otherwise it is
+  always copy-modify-move. Users can opt into moving the original (which ends seeding).
+- **Failures feed the blocklist (review fix).** A corrupt, password-protected or unreadable archive
+  sets the issue `Failed` and adds the release to `ReleaseBlocklist`; the loop then searches again
+  and skips it.
 - **Rename template:** CE-style `{token}` with `[optional group]`, default
   `{publisher}/{series} ({year})/{series} #{number}.cbz`.
   **CE parity note (verified in `_reference/ComicRackCE`):** CE's `ComicBook.FormatTitle` supports
@@ -130,9 +167,12 @@ on disk.
 ## 9. Slices
 
 1. **Slice 1:** watchlist, Missing/Upcoming lists, Wanted screen, series Missing Issues section, arc
-   "Request missing", Prowlarr search → candidates review. **No downloads.**
-2. **Slice 2:** qBittorrent grab + progress tracking.
-3. **Slice 3:** import (hardlink/copy, CBZ repack, rename, `ComicInfo.xml`, placeholder relink).
+   "Request missing", Prowlarr search -> candidates review. **No downloads.** Includes the prerequisites
+   that new secrets and ComicVine traffic need: the **`CredentialStore` DPAPI upgrade** (Prowlarr key
+   lands here) and the **prioritized shared ComicVine handler**.
+2. **Slice 2:** qBittorrent grab + progress tracking; `ReleaseBlocklist` (manual reject).
+3. **Slice 3:** import (payload inspection and per-file mapping, copy-modify-move, `ComicInfo.xml`,
+   placeholder relink, drop-in close-out, failure -> blocklist).
 4. **Slice 4:** auto-grab toggle and "Follow arc".
 
 ## 10. Errors, testing, safety

@@ -93,6 +93,11 @@ public class PaperbunkrDbContext : DbContext
     public DbSet<AppSettings> AppSettings => Set<AppSettings>();
 
     public DbSet<ProviderCredential> ProviderCredentials => Set<ProviderCredential>();
+    public DbSet<WatchedSeries> WatchedSeries => Set<WatchedSeries>();
+    public DbSet<CatalogIssue> CatalogIssues => Set<CatalogIssue>();
+    public DbSet<WantedIssue> WantedIssues => Set<WantedIssue>();
+    public DbSet<ReleaseCandidate> ReleaseCandidates => Set<ReleaseCandidate>();
+    public DbSet<AcquisitionSettings> AcquisitionSettings => Set<AcquisitionSettings>();
 
     public DbSet<VirtualTagDefinition> VirtualTagDefinitions => Set<VirtualTagDefinition>();
 
@@ -171,6 +176,20 @@ public class PaperbunkrDbContext : DbContext
     public static bool IsTransientLockError(DbUpdateException ex) =>
         ex.InnerException is SqliteException { SqliteErrorCode: 5 or 6 };
 
+    /// <summary>Returns the singleton <see cref="Entities.AcquisitionSettings"/> row (<c>Id</c> always 1), creating it on first access.</summary>
+    public AcquisitionSettings GetOrCreateAcquisitionSettings()
+    {
+        var settings = AcquisitionSettings.FirstOrDefault(a => a.Id == 1);
+        if (settings is null)
+        {
+            settings = new AcquisitionSettings();
+            AcquisitionSettings.Add(settings);
+            SaveChanges();
+        }
+
+        return settings;
+    }
+
     /// <summary>
     /// Returns the singleton <see cref="Entities.AppSettings"/> row (<c>Id</c> always 1), creating
     /// it on first access - mirrors how <c>PaperbunkrDb.EnsureCreated</c> seeds the system smart
@@ -199,6 +218,54 @@ public class PaperbunkrDbContext : DbContext
         // member reordering (an int-backed enum silently corrupts existing rows if a value is
         // ever inserted/reordered rather than appended; a string-backed one just needs a rename
         // migration, which is visible and deliberate). Applied consistently to every enum below.
+        // Comic acquisition (docs/superpowers/specs/2026-09-19-comic-acquisition-daemon-design.md §4).
+        // One-way FKs into Series/Issue (no inverse navigations) so those existing entities and their
+        // model-snapshot blocks stay untouched.
+        modelBuilder.Entity<WatchedSeries>(builder =>
+        {
+            builder.HasKey(w => w.Id);
+            builder.Property(w => w.Name).IsRequired().HasMaxLength(256);
+            builder.Property(w => w.Publisher).HasMaxLength(256);
+            builder.HasIndex(w => w.ComicVineVolumeId).IsUnique();
+            builder.HasOne(w => w.Series).WithMany().HasForeignKey(w => w.SeriesId).OnDelete(DeleteBehavior.SetNull);
+            builder.HasMany(w => w.Catalog).WithOne(c => c.WatchedSeries).HasForeignKey(c => c.WatchedSeriesId).OnDelete(DeleteBehavior.Cascade);
+            builder.HasMany(w => w.WantedIssues).WithOne(i => i.WatchedSeries).HasForeignKey(i => i.WatchedSeriesId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<CatalogIssue>(builder =>
+        {
+            builder.HasKey(c => c.Id);
+            builder.Property(c => c.IssueNumber).IsRequired().HasMaxLength(64);
+            builder.HasIndex(c => c.ComicVineIssueId).IsUnique();
+            builder.HasIndex(c => c.WatchedSeriesId);
+        });
+
+        modelBuilder.Entity<WantedIssue>(builder =>
+        {
+            builder.HasKey(i => i.Id);
+            builder.Property(i => i.IssueNumber).IsRequired().HasMaxLength(64);
+            builder.Property(i => i.Status).HasConversion<string>().HasMaxLength(32);
+            builder.Property(i => i.TorrentHash).HasMaxLength(64);
+            builder.HasIndex(i => i.ComicVineIssueId).IsUnique();
+            builder.HasIndex(i => i.Status);
+            builder.HasOne(i => i.Issue).WithMany().HasForeignKey(i => i.IssueId).OnDelete(DeleteBehavior.SetNull);
+            builder.HasMany(i => i.Candidates).WithOne(c => c.WantedIssue).HasForeignKey(c => c.WantedIssueId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<ReleaseCandidate>(builder =>
+        {
+            builder.HasKey(c => c.Id);
+            builder.Property(c => c.Title).IsRequired();
+            builder.Property(c => c.DownloadUrl).IsRequired();
+            builder.HasIndex(c => c.WantedIssueId);
+        });
+
+        modelBuilder.Entity<AcquisitionSettings>(builder =>
+        {
+            builder.HasKey(a => a.Id);
+            builder.Property(a => a.Id).ValueGeneratedNever();
+        });
+
         modelBuilder.Entity<Series>(builder =>
         {
             builder.HasKey(s => s.Id);

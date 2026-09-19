@@ -127,6 +127,19 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         Scheduler = new Services.Scheduling.SchedulerService(Activity);
 
         ActivityCenter = new ActivityCenterViewModel(Activity, ResolveActivityLink, Scheduler);
+
+        // Comic acquisition daemon (docs/superpowers/specs/2026-09-19-comic-acquisition-daemon-design.md). Built here, started in
+        // App.OnFrameworkInitializationCompleted next to the scheduler. The daemon only publishes events; the bridge is the one
+        // place they become Activity Center jobs and alerts.
+        AcquisitionEvents = new Paperbunkr.Daemon.Events.ChannelEventPublisher();
+        Acquisition = new Paperbunkr.Daemon.Services.AcquisitionService(
+            new Paperbunkr.Daemon.Services.AcquisitionCycle(
+                Services.PaperbunkrDb.CreateContext,
+                (url, key) => new Paperbunkr.Daemon.Indexers.ProwlarrSearchClient(url, key),
+                key => new Paperbunkr.Data.ComicVine.ComicVineClient(key, Paperbunkr.Data.ComicVine.ComicVineRequestPriority.Low),
+                AcquisitionEvents),
+            Services.PaperbunkrDb.CreateContext);
+        AcquisitionBridge = new Services.AcquisitionActivityBridge(Activity, AcquisitionEvents.Reader);
         StatusBar = new StatusBarViewModel(Activity, QueryLibraryStats, () => ActivityCenter.TogglePeekCommand.Execute(null));
         Activity.CompletionToastRequested += ShowToast;
 
@@ -473,6 +486,13 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
 
     /// <summary>Maintenance-task scheduler (docs/superpowers/specs/2026-09-06-scheduled-tasks-and-cover-durability-design.md, Part 1).</summary>
     public Services.Scheduling.ISchedulerService Scheduler { get; }
+
+    /// <summary>The comic acquisition daemon's timer; <c>RunNow()</c> is "Search now".</summary>
+    public Paperbunkr.Daemon.Services.AcquisitionService Acquisition { get; }
+
+    public Paperbunkr.Daemon.Events.ChannelEventPublisher AcquisitionEvents { get; }
+
+    public Services.AcquisitionActivityBridge AcquisitionBridge { get; }
 
     /// <summary>Backs the persistent bottom status bar.</summary>
     public StatusBarViewModel StatusBar { get; }

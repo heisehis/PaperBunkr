@@ -77,6 +77,7 @@ public sealed class ActivityKindIconConverter : IValueConverter
         ActivityJobKind.Update => Symbol.CloudArrowUp,
         ActivityJobKind.Migration => Symbol.Layer,
         ActivityJobKind.Upkeep => Symbol.Settings,
+        ActivityJobKind.Acquisition => Symbol.Search,
         _ => Symbol.Info,
     };
 

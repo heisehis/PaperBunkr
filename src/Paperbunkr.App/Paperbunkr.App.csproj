@@ -127,6 +127,7 @@
     <ProjectReference Include="..\Paperbunkr.Common\Paperbunkr.Common.csproj" />
     <ProjectReference Include="..\Paperbunkr.Engine\Paperbunkr.Engine.csproj" />
     <ProjectReference Include="..\Paperbunkr.Data\Paperbunkr.Data.csproj" />
+    <ProjectReference Include="..\Paperbunkr.Daemon\Paperbunkr.Daemon.csproj" />
     <ProjectReference Include="..\Paperbunkr.Plugins\Paperbunkr.Plugins.csproj" />
     <!-- Needed for the real INativePluginUiEnvironment implementation (docs/superpowers/specs/
          2026-09-11-plugin-api-v4-native-tier-design.md §3) - Paperbunkr.Plugins itself doesn't

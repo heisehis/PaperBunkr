@@ -3571,15 +3571,22 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
     /// <c>VirtualizingWrapPanel</c>'s <c>ItemHeight</c> binds so it reserves the right space.</summary>
     public double PosterCardHeight => PosterCoverHeight + (EffectiveShowTileTitles ? PosterTitleRowHeight : 0);
 
+    /// <summary>Permanent 4px-per-side gutter the Tiles/List/Details row Borders carry inside their
+    /// Button (LibraryScreen.axaml, Border.libRow Margin="4") so the 4px hover/focus ring is drawn
+    /// within the card's own bounds instead of being clipped to a thin shadow. Added to the Tiles
+    /// cell size here (and taken back out of the panel's ItemSpacing/LineSpacing) so the card itself
+    /// keeps its original size.</summary>
+    private const double TilesRingGutterTotal = 8;
+
     public double TilesThumbWidth => 48 * GridDensity;
     public double TilesThumbHeight => 68 * GridDensity;
-    public double TilesCardWidth => 260 * GridDensity;
+    public double TilesCardWidth => (260 * GridDensity) + TilesRingGutterTotal;
 
     /// <summary>Fixed Tiles card height for the <c>VirtualizingWrapPanel</c>'s <c>ItemHeight</c>.
     /// The card is <c>Border.libRow</c> (padding 8 + 1px border, both sides) wrapped around a row
     /// whose height is driven by the thumbnail (always taller than the 2-line text block at every
     /// density) - so thumb + 18 covers it.</summary>
-    public double TilesCardHeight => TilesThumbHeight + 18;
+    public double TilesCardHeight => TilesThumbHeight + 18 + TilesRingGutterTotal;
 
     /// <summary>Phase 4a: poster tile title row on/off. Persisted via
     /// <c>AppSettings.LibraryShowTileTitles</c>; see <see cref="EffectiveShowTileTitles"/> for the
@@ -3603,12 +3610,12 @@ public partial class LibraryScreenViewModel : ViewModelBase, IContextMenuProvide
     /// each tile's own <see cref="SeriesCardSample.PanoramaWidth"/> (real per-cover aspect ratio),
     /// so this is only used by the A-Z jump indexer as a rough items-per-row estimate for a scroll
     /// offset. A default-portrait cover's clamped width.</summary>
-    public double PanoramaTileWidth => SeriesCardSample.ComputePanoramaWidth(SeriesCardSample.DefaultCoverAspectRatio);
+    public double PanoramaTileWidth => SeriesCardSample.ComputePanoramaWidth(SeriesCardSample.DefaultCoverAspectRatio) + (2 * SeriesCardSample.PanoramaRingGutter);
 
     /// <summary>Panorama tile's full height for the <c>VirtualizingWrapPanel</c>'s <c>ItemHeight</c>
     /// - the <see cref="PanoramaCardHeight"/> cover box plus the series-name + number text lines
     /// the tile stacks below it.</summary>
-    public double PanoramaGridItemHeight => PanoramaCardHeight + 42;
+    public double PanoramaGridItemHeight => PanoramaCardHeight + 42 + (2 * SeriesCardSample.PanoramaRingGutter);
 
     /// <summary>Overlay toggles (docs/superpowers/specs/2026-08-09-library-toolbar-design.md Phase D), persisted per docs/superpowers/specs/2026-08-17-library-saved-list-layouts-design.md.
     /// See <see cref="ShowContinueReadingButton"/> below for why that one toggle is scoped to

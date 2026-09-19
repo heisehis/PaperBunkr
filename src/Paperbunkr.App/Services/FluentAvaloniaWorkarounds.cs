@@ -34,10 +34,18 @@ internal static class FluentAvaloniaWorkarounds
     ///     forever. UI thread pegged, never recovers; <c>FreezeWatchdog</c> re-fires every 10s.</item>
     /// </list>
     ///
-    /// <para><b>Why removing the handler is safe here:</b> Paperbunkr commits to a single fixed
-    /// visual identity - <c>RequestedThemeVariant="Dark"</c>, <c>PreferSystemTheme="False"</c>,
-    /// <c>PreferUserAccentColor="False"</c>, explicit <c>CustomAccentColor</c> (App.axaml). The
-    /// handler's only observable effect for this app is the harmful HighContrast rewrite.</para>
+    /// <para><b>Why removing the handler is safe here:</b> the freeze's cause is specifically this
+    /// handler's own unconditional <c>HighContrast</c> resource-dictionary rewrite firing mid-
+    /// <c>Popup.Open()</c> - not the <c>ColorValuesChanged</c> event itself, and not tied to
+    /// whether <c>RequestedThemeVariant</c> is fixed or (as of
+    /// docs/superpowers/specs/2026-09-16-theme-system-design.md) switched dynamically per active
+    /// theme. Verified before that dynamic-variant work shipped: this detach is unconditional and
+    /// never re-subscribes on a variant change, so a runtime theme switch can't reintroduce the
+    /// freeze. <c>PreferSystemTheme="False"</c>/<c>PreferUserAccentColor="False"</c>/explicit
+    /// <c>CustomAccentColor</c> (App.axaml) are unrelated, unchanged. The handler's only observable
+    /// effect for this app is the harmful HighContrast rewrite - a second, different subscriber to
+    /// the same event (e.g. the theme system's own "Auto" OS-follow mode) is fine, as long as it
+    /// doesn't repeat that same "mutate shared resources synchronously mid-popup-open" shape.</para>
     ///
     /// <para>Reflection because FA exposes no opt-out. Idempotent, best-effort, and it now also
     /// nulls the whole <c>ColorValuesChanged</c> backing delegate as a fallback if the precise

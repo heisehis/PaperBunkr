@@ -99,7 +99,7 @@
             </Setter>
         </Style>
         <Style Selector="Border.bandChip:pointerover">
-            <Setter Property="BoxShadow" Value="{StaticResource PbGlowRing}" />
+            <Setter Property="BoxShadow" Value="{DynamicResource PbGlowRing}" />
         </Style>
     </UserControl.Styles>
 

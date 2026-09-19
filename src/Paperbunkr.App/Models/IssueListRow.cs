@@ -33,7 +33,7 @@ public sealed partial class IssueListRow : ObservableObject, ISelectableCard, IV
 {
     /// <summary>Panorama's variable-width virtualizing panel packs rows against this - the same
     /// value the tile's DataTemplate binds its own <c>Width</c> to.</summary>
-    double IVariableWidthTile.PreferredWidth => PanoramaWidth;
+    double IVariableWidthTile.PreferredWidth => PanoramaCellWidth;
 
     public int Id { get; init; }
     public int SeriesId { get; init; }
@@ -169,6 +169,9 @@ public sealed partial class IssueListRow : ObservableObject, ISelectableCard, IV
     /// math as the old series-card version - just fed by this issue's own cover instead of a
     /// series' chosen "cover issue".</summary>
     public double PanoramaWidth { get; init; }
+
+    /// <summary>Full cell width - cover plus the ring gutter each side (see <see cref="SeriesCardSample.PanoramaRingGutter"/>).</summary>
+    public double PanoramaCellWidth => PanoramaWidth + (2 * SeriesCardSample.PanoramaRingGutter);
 
     // --- Series-level aggregates (2026-09-03 sort/group pool unification) - the issue's own
     // series' totals, so IssueListSortField.SeriesIssueCount / SeriesUnreadCount resolve on a

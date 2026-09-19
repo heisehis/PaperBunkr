@@ -10,8 +10,54 @@ public class AppSettings
 {
     public int Id { get; set; } = 1;
 
-    /// <summary>Key of the currently active skin - "default" (the built-in theme) or an installed .crpck's key.</summary>
-    public string ActiveSkinKey { get; set; } = "default";
+    /// <summary>
+    /// Key of the currently active theme - "default" (the built-in theme) or an installed .crpck's
+    /// key. Renamed from <c>ActiveSkinKey</c> (EF <c>RenameColumn</c>, data preserved) by
+    /// docs/superpowers/specs/2026-09-16-theme-system-design.md.
+    /// </summary>
+    public string ActiveThemeKey { get; set; } = "default";
+
+    // --- Theme system extensions (docs/superpowers/specs/2026-09-16-theme-system-design.md).
+
+    /// <summary>
+    /// OLED "true black" override - when on and the active theme's <c>mode</c> is Dark, live
+    /// PbBg/PbChrome/PbSurface0-3 resources are overwritten to #000000. Default false. Auto-
+    /// suspended (live resources only, this setting untouched) while a Reader screen is active - see
+    /// <see cref="MainViewModel"/>'s <c>OnCurrentScreenChanged</c>.
+    /// </summary>
+    public bool TrueBlackDark { get; set; }
+
+    /// <summary>
+    /// Whether the Matrix theme's animated code-rain background plays. Default true. Only consulted
+    /// while the Matrix theme is active (the Appearance toggle row is hidden under every other
+    /// theme), but persisted globally so it survives switching away from Matrix and back.
+    /// </summary>
+    public bool MatrixRainEnabled { get; set; } = true;
+
+    /// <summary>Whether/how the active theme auto-switches - see <see cref="Entities.ThemeAutoMode"/>. Default Off.</summary>
+    public ThemeAutoMode ThemeAutoMode { get; set; } = ThemeAutoMode.Off;
+
+    /// <summary>The Light-mode theme Auto mode switches to - updated automatically on every manual apply of a Light theme, not just when Auto is on.</summary>
+    public string? LastLightThemeKey { get; set; }
+
+    /// <summary>See <see cref="LastLightThemeKey"/>, Dark-mode counterpart.</summary>
+    public string? LastDarkThemeKey { get; set; }
+
+    /// <summary>Local hour (0-23) <see cref="Entities.ThemeAutoMode.Scheduled"/> switches to the dark theme. Default 20 (8pm).</summary>
+    public int ThemeScheduledDarkHour { get; set; } = 20;
+
+    /// <summary>Local hour (0-23) <see cref="Entities.ThemeAutoMode.Scheduled"/> switches to the light theme. Default 7 (7am).</summary>
+    public int ThemeScheduledLightHour { get; set; } = 7;
+
+    /// <summary>Local hour (0-23) <see cref="TrueBlackDark"/> auto-enables, null = no schedule (manual toggle only). Reuses the same periodic time-check as <see cref="Entities.ThemeAutoMode.Scheduled"/>.</summary>
+    public int? TrueBlackAutoHour { get; set; }
+
+    /// <summary>
+    /// User-picked accent override hex, global (not per-theme) - null means no override, use the
+    /// active theme's own accent. When set, derived accentText/accentSoft/glow are computed
+    /// bg-luminance-aware against whichever theme is active (never a fixed darken-only rule).
+    /// </summary>
+    public string? AccentOverrideHex { get; set; }
 
     /// <summary>Selected font family name, or null for the app default (no override).</summary>
     public string? SelectedFontFamily { get; set; }

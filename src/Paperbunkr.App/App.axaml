@@ -6,8 +6,13 @@
              xmlns:sty="using:FluentAvalonia.Styling"
              xmlns:dialogHost="clr-namespace:DialogHostAvalonia;assembly=DialogHost.Avalonia"
              RequestedThemeVariant="Dark">
-             <!-- Paperbunkr commits to a single dark identity (near-black + amber accent) rather than
-                  following the OS light/dark preference - see docs/wireframe_prototype_prompt.md. -->
+             <!-- Dark here is only the design-time/pre-startup fallback (XAML previewer, the brief
+                  window before ThemeService.ApplyPersistedSettings runs) - NOT a fixed identity
+                  anymore. docs/superpowers/specs/2026-09-16-theme-system-design.md replaced the
+                  single-dark-identity approach this comment used to describe (see
+                  docs/wireframe_prototype_prompt.md for that history): ThemeService.ApplyTheme now
+                  sets this live from each theme's own Light/Dark `mode`, overriding this value on
+                  every real startup well before the main window shows. -->
 
     <Application.Resources>
         <!-- Design tokens from the Claude Design "Paperbunkr App" wireframe (project 43c40b25).
@@ -29,7 +34,7 @@
         <Color x:Key="PbBadgeTextColor">#241505</Color>
         <Color x:Key="PbSuccessColor">#5FA889</Color>
         <!-- Categorical chart colors (docs/superpowers/specs/2026-09-08-stats-v2-mangabaka-design.md
-             §8) - live-updated by SkinService.ApplySkinResources like the accent/badge/success colors
+             §8) - live-updated by ThemeService.ApplySkinResources like the accent/badge/success colors
              above; these static values are only the pre-first-ApplyPersistedSettings fallback. -->
         <Color x:Key="PbChartBlueColor">#5B8DBE</Color>
         <Color x:Key="PbChartVioletColor">#9B7EBD</Color>
@@ -106,7 +111,7 @@
              design.md §1) - based on the avalonia-pro-max/icons-imagery steps, then bumped one
              stop up (2026-09-04, user direction: glyphs read too small). fi:SymbolIcon is sized
              by FontSize; reference a token, never a literal. Plain x:Double, not skinned by
-             SkinService (same as PbFontSize* above). Every glyph in the app scales from here. -->
+             ThemeService (same as PbFontSize* above). Every glyph in the app scales from here. -->
         <x:Double x:Key="PbIconSizeXs">14</x:Double>
         <x:Double x:Key="PbIconSizeSm">16</x:Double>
         <x:Double x:Key="PbIconSizeMd">18</x:Double>
@@ -117,14 +122,14 @@
              resolution does NOT run the CornerRadius TypeConverter the way a plain XAML attribute
              does (confirmed the hard way: System.InvalidCastException, "Unable to cast object of
              type 'System.Double' to type 'Avalonia.CornerRadius'", thrown from
-             Avalonia.PropertyStore.EffectiveValue`1.GetValue during Style application). SkinService
+             Avalonia.PropertyStore.EffectiveValue`1.GetValue during Style application). ThemeService
              must assign real CornerRadius values here too, not doubles - see its ApplySkinResources. -->
         <CornerRadius x:Key="PbRadius">7</CornerRadius>
         <CornerRadius x:Key="PbRadiusSm">5</CornerRadius>
         <CornerRadius x:Key="PbRadiusLg">14</CornerRadius>
 
         <!-- Motion tokens (design doc, "snappy & responsive") - PbMotionFast is overwritten to
-             TimeSpan.Zero live by SkinService.ApplyReducedMotion when the user enables the
+             TimeSpan.Zero live by ThemeService.ApplyReducedMotion when the user enables the
              Preferences > Appearance > Reduced Motion toggle, so consumers just bind to it rather
              than checking a flag themselves. -->
         <x:TimeSpan x:Key="PbMotionFast">0:0:0.15</x:TimeSpan>
@@ -133,12 +138,12 @@
         <!-- Slower, dedicated duration for content crossfades (docs/superpowers/specs/2026-08-24-
              home-screen-design.md's dynamic/reactive follow-up) - distinct from PbMotionFast's
              150ms interaction speed, matching the hero's own auto-rotation feel rather than a
-             button-hover feel. Also zeroed by SkinService.ApplyReducedMotion, same as PbMotionFast. -->
+             button-hover feel. Also zeroed by ThemeService.ApplyReducedMotion, same as PbMotionFast. -->
         <x:TimeSpan x:Key="PbMotionSlow">0:0:0.7</x:TimeSpan>
 
         <!-- docs/superpowers/specs/2026-09-04-navigation-transition-system-design.md - two more
              durations alongside PbMotionFast/PbMotionSlow above, both zeroed the same way by
-             SkinService.ApplyReducedMotion/ApplyPersistedSettings:
+             ThemeService.ApplyReducedMotion/ApplyPersistedSettings:
              - PbMotionStandard: drill-down screen cross-fade (push/pop), sidebar, breadcrumb.
              - PbMotionLarge: the shared-element cover flight (NavigationTransitionCoordinator).
              The shared-element flight's own reduced-motion handling doesn't depend on this
@@ -190,7 +195,7 @@
         <!-- Bundled fonts (design doc's Typography section). PbDisplayFontFamily (Bebas Neue) is
              for hero/heading text only, referenced directly via StaticResource in Styles/Typography.axaml
              - it never goes through the Preferences font-override mechanism. PbDefaultFontFamily
-             (Source Serif 4) is NOT referenced here as PbFontFamily's value - SkinService.
+             (Source Serif 4) is NOT referenced here as PbFontFamily's value - ThemeService.
              ApplyFontResource sets that live (it's what "no override" now resolves to; see that
              file's DefaultFontFamily field for why it's set in code, not XAML). -->
         <FontFamily x:Key="PbDisplayFontFamily">avares://Paperbunkr.App/Assets/Fonts/#Bebas Neue</FontFamily>
@@ -211,7 +216,7 @@
              custom-styles itself. CustomAccentColor seeds SystemAccentColor + its 6 tonal variants
              from our amber. PbAccentColor is a plain XAML value here (StaticResource), so this
              captures the *default* skin's accent; a live skin switch updates it via
-             SkinService.ApplyAccentColor (FluentAvaloniaTheme.CustomAccentColor, set in code). -->
+             ThemeService.ApplyAccentColor (FluentAvaloniaTheme.CustomAccentColor, set in code). -->
         <sty:FluentAvaloniaTheme CustomAccentColor="{StaticResource PbAccentColor}"
                                  PreferSystemTheme="False"
                                  PreferUserAccentColor="False" />
@@ -243,7 +248,7 @@
         <!-- Preferences > Appearance > Font override (docs/superpowers/specs/
              2026-08-07-preferences-skin-system-design.md §3) - a genuine global override via
              DynamicResource, not just the title bar. PbFontFamily is absent by default (no
-             override); SkinService.ApplyFont sets/removes it live. -->
+             override); ThemeService.ApplyFont sets/removes it live. -->
         <Style Selector="TextBlock">
             <Setter Property="FontFamily" Value="{DynamicResource PbFontFamily}" />
         </Style>

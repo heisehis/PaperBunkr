@@ -9,7 +9,7 @@ namespace Paperbunkr.App.Controls;
 /// App-owned toast host logic (docs/superpowers/specs/2026-09-07-chrome-content-motion-polish-
 /// design.md item 5), replacing Avalonia's stock <c>WindowNotificationManager</c> so entrance/exit
 /// is <c>PbMotion*</c>-token-wired and Reduced-Motion-respecting - the stock control's own animation
-/// was confirmed entirely outside app control and untouched by <c>SkinService.ApplyReducedMotion</c>.
+/// was confirmed entirely outside app control and untouched by <c>ThemeService.ApplyReducedMotion</c>.
 ///
 /// Deliberately a plain class operating on an existing <see cref="AnimatedStackPanel"/> (declared
 /// in <c>MainWindow.axaml</c> as <c>ToastStack</c>), not a custom <see cref="Control"/> subclass of

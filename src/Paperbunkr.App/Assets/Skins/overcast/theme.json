@@ -1,0 +1,32 @@
+{
+  "name": "Overcast",
+  "mode": "Light",
+  "colors": {
+    "bg": "#EEF0F3",
+    "chrome": "#F7F8FA",
+    "border": "#D7DBE0",
+    "text": "#22262C",
+    "textMuted": "#5A6169",
+    "textFaint": "#70777F",
+    "accent": "#3469A6",
+    "accentText": "#2E5D96",
+    "accentSoft": "#293469A6",
+    "badge": "#3FAFC2",
+    "badgeText": "#0A2226",
+    "success": "#2E7A5E",
+    "chartBlue": "#4E9DE8",
+    "chartViolet": "#8C6FBE",
+    "surface0": "#DEE2E7",
+    "surface1": "#EEF0F3",
+    "surface2": "#F7F8FA",
+    "surface3": "#FFFFFF",
+    "glow": "#662E5D96",
+    "heroGradientStart": "#00EEF0F3",
+    "heroGradientEnd": "#FFEEF0F3"
+  },
+  "spacingUnit": 4,
+  "radius": 7,
+  "radiusSm": 5,
+  "radiusLg": 14,
+  "icons": {}
+}

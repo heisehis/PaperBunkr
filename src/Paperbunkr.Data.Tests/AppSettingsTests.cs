@@ -39,7 +39,7 @@ public class AppSettingsTests : IDisposable
         var settings = _context.GetOrCreateAppSettings();
 
         Assert.Equal(1, settings.Id);
-        Assert.Equal("default", settings.ActiveSkinKey);
+        Assert.Equal("default", settings.ActiveThemeKey);
         Assert.Null(settings.SelectedFontFamily);
         Assert.True(settings.OpenLastPage);
         Assert.True(settings.AutoNavigateComics);
@@ -230,13 +230,13 @@ public class AppSettingsTests : IDisposable
     public void GetOrCreateAppSettings_IsIdempotent_DoesNotDuplicateRow()
     {
         var first = _context.GetOrCreateAppSettings();
-        first.ActiveSkinKey = "windows_11";
+        first.ActiveThemeKey = "windows_11";
         _context.SaveChanges();
 
         var second = _context.GetOrCreateAppSettings();
 
         Assert.Equal(first.Id, second.Id);
-        Assert.Equal("windows_11", second.ActiveSkinKey);
+        Assert.Equal("windows_11", second.ActiveThemeKey);
         Assert.Single(_context.AppSettings);
     }
 }

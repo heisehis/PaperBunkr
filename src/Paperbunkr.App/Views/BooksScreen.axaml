@@ -37,10 +37,10 @@
             </Setter>
         </Style>
         <Style Selector="Button.card:pointerover Border.bookCover">
-            <Setter Property="BoxShadow" Value="{StaticResource PbGlowRing}" />
+            <Setter Property="BoxShadow" Value="{DynamicResource PbGlowRing}" />
         </Style>
         <Style Selector="Button.card:focus-within Border.bookCover">
-            <Setter Property="BoxShadow" Value="{StaticResource PbGlowRing}" />
+            <Setter Property="BoxShadow" Value="{DynamicResource PbGlowRing}" />
         </Style>
 
         <!-- Chrome pills / popups - own copy of the Library toolbar's classes (same per-UserControl

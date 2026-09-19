@@ -14,7 +14,7 @@ namespace Paperbunkr.App.Tests;
 /// Exercises <see cref="ReaderScreenViewModel"/>'s <c>OpenLastPage</c>/<c>AutoNavigateComics</c>
 /// behavior (docs/superpowers/specs/2026-08-07-preferences-behavior-tab-design.md §3). Redirects
 /// <see cref="PaperbunkrDbContext.DatabasePathOverride"/> to a temp SQLite file for the whole test
-/// - unlike <see cref="SkinService"/>/<c>CoverThumbnailService</c>, none of the App-side
+/// - unlike <see cref="ThemeService"/>/<c>CoverThumbnailService</c>, none of the App-side
 /// ViewModels have an injected context-factory seam, so this is the smallest way to keep
 /// <c>PaperbunkrDb.CreateContext()</c> off the real per-user database. Runs under
 /// <see cref="AvaloniaTestCollection"/> since page decode needs a real Skia platform.

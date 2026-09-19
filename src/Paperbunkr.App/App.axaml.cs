@@ -3,6 +3,7 @@ using System.IO;
 using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Animation.Easings;
+using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 using Paperbunkr.App.Models;
@@ -164,10 +165,11 @@ public partial class App : Application
         // design.md) - same fire-and-forget, self-swallowing shape as the two triggers above.
         System.Threading.Tasks.Task.Run(ActivityHistoryStore.PruneOnStartup);
 
-        DiagnosticsService.LogMilestone("Database ready. Applying skin/theme...");
+        DiagnosticsService.LogMilestone("Database ready. Applying theme...");
         splashViewModel.ReportPhase(2, TotalPhases, "Loading appearance…");
-        var skinService = new SkinService();
-        skinService.ApplyPersistedSettings();
+        var themeService = new ThemeService();
+        themeService.ApplyPersistedSettings();
+        themeService.InitializeAutoMode();
 
         // Reconcile the pre-UI graphics.json cache to the now-readable AppSettings source of
         // truth (docs/superpowers/specs/2026-08-27-hardware-accelerated-rendering-design.md
@@ -199,7 +201,7 @@ public partial class App : Application
         // runtime resource change (skin reload) is picked up.
         var transitionCoordinator = new NavigationTransitionCoordinator(
             SharedElementTransitionService.Shared,
-            isReducedMotion: skinService.GetReducedMotion,
+            isReducedMotion: themeService.GetReducedMotion,
             flightDuration: () => (TimeSpan)(Application.Current!.Resources["PbMotionLarge"] ?? TimeSpan.FromMilliseconds(320)),
             easing: new CubicEaseOut());
         DiagnosticsService.LogMilestone($"  [t+{buildStopwatch.ElapsedMilliseconds}ms] transition coordinator ready; constructing MainViewModel...");
@@ -211,6 +213,13 @@ public partial class App : Application
         };
         DiagnosticsService.LogMilestone($"  [t+{buildStopwatch.ElapsedMilliseconds}ms] MainWindow constructed.");
         desktop.MainWindow = mainWindow;
+
+        // Mica/Acrylic backdrop (docs/superpowers/specs/2026-09-16-theme-system-design.md §
+        // Extended scope) - applied once now for whatever theme ApplyPersistedSettings already
+        // loaded (that ran before MainWindow existed, so ThemeService.WindowBackdropRequested had
+        // no subscriber yet), then live thereafter for any theme switch during this session.
+        ApplyWindowBackdrop(mainWindow, themeService.LoadTheme(themeService.GetActiveThemeKey()).WindowBackdrop);
+        themeService.WindowBackdropRequested += backdrop => ApplyWindowBackdrop(mainWindow, backdrop);
 
         // Show the main window (its shell chrome renders against the empty default "home" screen),
         // hold the splash to its MinimumVisible floor, then fade it out - all BEFORE the initial
@@ -228,7 +237,7 @@ public partial class App : Application
         // thread so the hand-off doesn't cut straight from the construction freeze into the fade
         // (skipped under reduced motion). Only then fade out.
         await splashViewModel.EnforceMinimumVisibleAsync(splashShownAtUtc);
-        if (!skinService.GetReducedMotion())
+        if (!themeService.GetReducedMotion())
         {
             await Task.Delay(TimeSpan.FromMilliseconds(1100));
         }
@@ -431,5 +440,23 @@ public partial class App : Application
                 File.Move(path, $"{path}.corrupt-{suffix}");
             }
         }
+    }
+
+    /// <summary>
+    /// Maps a theme's <c>windowBackdrop</c> string (docs/superpowers/specs/2026-09-16-theme-system-
+    /// design.md § Extended scope) onto <c>Window.TransparencyLevelHint</c> - same real, already-
+    /// shipped API this codebase uses in <c>OverlayHostWindow.cs</c>/<c>SplashWindow.axaml</c>, just
+    /// driven by the active theme instead of a fixed value. A fallback chain, not a single value -
+    /// <c>None</c> at the end means an unsupported OS/compositor degrades to the ordinary opaque
+    /// background silently, per Avalonia's own documented behavior for this hint.
+    /// </summary>
+    private static void ApplyWindowBackdrop(Window window, string backdrop)
+    {
+        window.TransparencyLevelHint = backdrop switch
+        {
+            "Mica" => new[] { WindowTransparencyLevel.Mica, WindowTransparencyLevel.None },
+            "Acrylic" => new[] { WindowTransparencyLevel.AcrylicBlur, WindowTransparencyLevel.None },
+            _ => new[] { WindowTransparencyLevel.None },
+        };
     }
 }

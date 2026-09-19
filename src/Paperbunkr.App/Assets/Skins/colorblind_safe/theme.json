@@ -1,0 +1,33 @@
+{
+  "name": "Color-Blind Safe",
+  "mode": "Dark",
+  "category": "accessibility",
+  "colors": {
+    "bg": "#0A0B0D",
+    "chrome": "#131519",
+    "border": "#2A2E37",
+    "text": "#ECE7DB",
+    "textMuted": "#B3ADA0",
+    "textFaint": "#77726A",
+    "accent": "#4FA3D9",
+    "accentText": "#6FB8E0",
+    "accentSoft": "#294FA3D9",
+    "badge": "#E6A93D",
+    "badgeText": "#241505",
+    "success": "#3BC49A",
+    "chartBlue": "#56B4E9",
+    "chartViolet": "#CC79A7",
+    "surface0": "#000000",
+    "surface1": "#0A0B0D",
+    "surface2": "#131519",
+    "surface3": "#1B1E24",
+    "glow": "#666FB8E0",
+    "heroGradientStart": "#00000000",
+    "heroGradientEnd": "#FF000000"
+  },
+  "spacingUnit": 4,
+  "radius": 7,
+  "radiusSm": 5,
+  "radiusLg": 14,
+  "icons": {}
+}

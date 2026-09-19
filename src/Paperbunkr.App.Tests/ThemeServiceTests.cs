@@ -193,6 +193,42 @@ public class ThemeServiceTests : IDisposable
     }
 
     [Fact]
+    public void MatrixRainEnabled_DefaultsTrue_PersistsAndRaisesChangedEvent()
+    {
+        var service = CreateService();
+        Assert.True(service.GetMatrixRainEnabled());
+
+        int raised = 0;
+        service.MatrixRainEnabledChanged += () => raised++;
+
+        service.SetMatrixRainEnabled(false);
+
+        Assert.False(service.GetMatrixRainEnabled());
+        Assert.Equal(1, raised);
+
+        service.SetMatrixRainEnabled(true);
+
+        Assert.True(service.GetMatrixRainEnabled());
+        Assert.Equal(2, raised);
+    }
+
+    /// <summary>The hover/focus ring (BoxShadows can't embed a DynamicResource) is rebuilt in code from the
+    /// active theme's glow color - regression for the ring staying hardcoded orange under every theme.</summary>
+    [Fact]
+    public void ApplyTheme_RebuildsGlowRing_FromThemeGlowColor()
+    {
+        var service = CreateService();
+
+        service.ApplyTheme("matrix");
+
+        var ring = Assert.IsType<Avalonia.Media.BoxShadows>(Avalonia.Application.Current!.Resources["PbGlowRing"]);
+        Assert.Equal(1, ring.Count);
+        Assert.Equal(4, ring[0].Spread);
+        var glow = Avalonia.Media.Color.Parse(service.LoadTheme("matrix").Colors.Glow);
+        Assert.Equal(Avalonia.Media.Color.FromArgb(0x99, glow.R, glow.G, glow.B), ring[0].Color);
+    }
+
+    [Fact]
     public void SetTrueBlackDark_On_OverwritesFiveSurfaceTokens_UnderDarkTheme()
     {
         var service = CreateService();

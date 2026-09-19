@@ -49,6 +49,14 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
     private readonly UpdateService _updateService = new();
 
     /// <summary>
+    /// Same shared instance passed to Home/Preferences (see the constructor body) - kept here too
+    /// so <see cref="IsMatrixThemeActive"/> (docs/superpowers/specs/2026-09-16-theme-system-design.md
+    /// § Matrix rain effect) and the Reader true-black auto-suspend (§ Reader auto-suspend) can read/
+    /// drive it without a second instance that would miss the shared <c>ThemeApplied</c> event.
+    /// </summary>
+    private readonly ThemeService _themeService = null!;
+
+    /// <summary>
     /// Rail position of each lateral top-level screen (docs/superpowers/specs/2026-08-24-
     /// navigation-shell-motion-system-design.md) - drives <see cref="IsTransitionReversed"/>.
     /// Screens not in this set (Reader/Detail/MangaDetail/BookReader/PdfReader - drill-down, not
@@ -127,11 +135,17 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
 
         // Shared with Preferences below (not a fresh instance there) - the Home masthead
         // (docs/superpowers/specs/2026-09-08-home-navrail-visual-v2-design.md §3) subscribes to
-        // this specific instance's SkinApplied to know when to re-render the cover-wall on a live
-        // skin switch; a second SkinService instance would never fire into that subscription since
+        // this specific instance's ThemeApplied to know when to re-render the cover-wall on a live
+        // theme switch; a second ThemeService instance would never fire into that subscription since
         // the event isn't static/process-wide.
-        var skinService = new SkinService();
-        Home = new HomeScreenViewModel(GoDetailForSeries, GoReaderForIssue, GoLibraryWithSearch, GoReaderForIssueInReadingList, GoBookReaderForBook, GoLibraryWithCollection, skinService, loadOnConstruction: false);
+        var themeService = new ThemeService();
+        _themeService = themeService;
+        _themeService.ThemeApplied += OnThemeAppliedForMatrixRain;
+        _themeService.ScheduledThemeCrossfadeRequested += OnScheduledThemeCrossfadeRequested;
+        _themeService.MatrixRainEnabledChanged += OnMatrixRainEnabledChanged;
+        OnThemeAppliedForMatrixRain(); // initialize from whatever ApplyPersistedSettings already applied at startup, before this subscription existed
+        OnMatrixRainEnabledChanged();
+        Home = new HomeScreenViewModel(GoDetailForSeries, GoReaderForIssue, GoLibraryWithSearch, GoReaderForIssueInReadingList, GoBookReaderForBook, GoLibraryWithCollection, themeService, loadOnConstruction: false);
         Library = new LibraryScreenViewModel(GoDetailForSeries, GoReaderForIssue, GoNewIssuePropertiesForPlaceholder, OpenQuickRateOverlay, GoIssuePropertiesForIssue, GoBulkIssuePropertiesForIssues, ShowToast, GoBulkSeriesPropertiesForSeries, GoLibraryFoldersPreferences, OpenCollectionPropertiesOverlay, GoBookDetailForBook, promptForName: PromptWorkspaceName, enqueueMetadataWriteBack: EnqueueMetadataWriteBack, activity: Activity, loadOnConstruction: false);
         Books = new BooksScreenViewModel(GoBookDetailForBook, GoBookSeriesDetailForSeries, GoBookPropertiesForBook, GoBulkBookPropertiesForBooks, GoBookSeriesPropertiesForSeries, GoLibraryFoldersPreferences, ShowToast, promptForName: PromptWorkspaceName);
         BookDetail = new BookDetailScreenViewModel(NavigateBack, GoBookReaderForBook, GoBookPropertiesForBook, GoBulkBookPropertiesForBooks, GoBookSeriesPropertiesForSeries);
@@ -247,7 +261,7 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         }
 
         Preferences = new PreferencesScreenViewModel(
-            skinService,
+            themeService,
             new FilePickerService(),
             new LibraryFolderScanner(),
             new FileAssociationService(),
@@ -672,8 +686,103 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
 
     public bool ShowContextualSidebar => IsLibrary || IsSmart || IsReading || IsEvents;
 
+    /// <summary>
+    /// Drives <c>MatrixRainOverlay</c>'s <c>IsVisible</c> binding in MainWindow.axaml (docs/
+    /// superpowers/specs/2026-09-16-theme-system-design.md § Matrix rain effect). Backed by a plain
+    /// field, not <c>[ObservableProperty]</c>, since it's driven by <see cref="ThemeService.ThemeApplied"/>
+    /// (an external event), not a local setter.
+    /// </summary>
+    public bool IsMatrixThemeActive
+    {
+        get => _isMatrixThemeActive;
+        private set
+        {
+            if (_isMatrixThemeActive != value)
+            {
+                _isMatrixThemeActive = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(IsMatrixRainVisible));
+            }
+        }
+    }
+
+    private bool _isMatrixThemeActive;
+
+    /// <summary>
+    /// What <c>MatrixRainOverlay.IsVisible</c> actually binds to in MainWindow.axaml -
+    /// <see cref="IsMatrixThemeActive"/> alone isn't enough, since the overlay is mounted spanning
+    /// both the lateral and drill-down screen hosts and the drill-down group includes the three
+    /// reader screens (§ Matrix rain effect's "excluded from the reader canvas" requirement, folded
+    /// in here via the same <see cref="IsInReader"/> this file already computes for the nav-chrome
+    /// hide, rather than a second exclusion mechanism).
+    /// </summary>
+    public bool IsMatrixRainVisible => IsMatrixThemeActive && MatrixRainEnabled && !IsInReader;
+
+    /// <summary>
+    /// The user's persisted "Matrix rain" preference (Preferences → Appearance, only shown while the
+    /// Matrix theme is active). Mirrors <c>AppSettings.MatrixRainEnabled</c>, refreshed through
+    /// <see cref="ThemeService.MatrixRainEnabledChanged"/>.
+    /// </summary>
+    public bool MatrixRainEnabled
+    {
+        get => _matrixRainEnabled;
+        private set
+        {
+            if (_matrixRainEnabled != value)
+            {
+                _matrixRainEnabled = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(IsMatrixRainVisible));
+            }
+        }
+    }
+
+    private bool _matrixRainEnabled = true;
+
+    private void OnMatrixRainEnabledChanged() => MatrixRainEnabled = _themeService.GetMatrixRainEnabled();
+
+    /// <summary>
+    /// MainWindow.axaml's full-window crossfade overlay Border binds its Opacity here, with its own
+    /// XAML <c>DoubleTransition</c> doing the actual smooth fade (the same safe, established
+    /// Transition-driven pattern <c>avalonia-pro-max/motion</c> documents for sheet open/close, not
+    /// a XAML <c>&lt;Animation&gt;</c>/<c>&lt;KeyFrame&gt;</c>). Not a true two-layer crossfade -
+    /// Avalonia resource swaps are instant, there's nothing to interpolate between old and new theme
+    /// colors directly - this is an opacity dip (fade to the new theme's own background, swap
+    /// resources at the opaque peak, fade back) that visually masks the instant swap. Only
+    /// <see cref="Data.Entities.ThemeAutoMode.Scheduled"/> triggers this; manual picks stay instant.
+    /// </summary>
+    [ObservableProperty]
+    private double _themeCrossfadeOpacity;
+
+    private async void OnScheduledThemeCrossfadeRequested()
+    {
+        try
+        {
+            ThemeCrossfadeOpacity = 1;
+            await Task.Delay(300);
+            ThemeCrossfadeOpacity = 0;
+        }
+        catch (Exception ex)
+        {
+            DiagnosticsService.LogMilestone($"Theme crossfade failed ({ex.GetType().Name}) - snapping opacity back.");
+            ThemeCrossfadeOpacity = 0;
+        }
+    }
+
+    private void OnThemeAppliedForMatrixRain() =>
+        IsMatrixThemeActive = string.Equals(_themeService.GetActiveThemeKey(), "matrix", StringComparison.OrdinalIgnoreCase);
+
     partial void OnCurrentScreenChanged(string value)
     {
+        // Reader true-black auto-suspend (§ Reader auto-suspend) - live resources only, the
+        // persisted AppSettings.TrueBlackDark value is untouched either way. Runs on every
+        // navigation rather than diffing old-vs-new IsInReader - CommunityToolkit.Mvvm's generated
+        // setter already updates CurrentScreen (and therefore IsInReader) before this partial method
+        // runs, so "old" state isn't cheaply available here; re-applying live resources on a
+        // non-reader-to-non-reader navigation is a few redundant DynamicResource writes, not a
+        // correctness issue.
+        _themeService.SetTrueBlackReaderSuspend(value is "reader" or "bookReader" or "pdfReader");
+
         OnPropertyChanged(nameof(ActiveScreenContent));
         OnPropertyChanged(nameof(ActiveDrillDownContent));
         OnPropertyChanged(nameof(IsLateralScreen));
@@ -686,6 +795,7 @@ public partial class MainViewModel : ViewModelBase, IContextMenuProvider
         OnPropertyChanged(nameof(IsBookReader));
         OnPropertyChanged(nameof(IsPdfReader));
         OnPropertyChanged(nameof(IsInReader));
+        OnPropertyChanged(nameof(IsMatrixRainVisible));
         OnPropertyChanged(nameof(IsDetail));
         OnPropertyChanged(nameof(IsMangaDetail));
         OnPropertyChanged(nameof(IsSmart));

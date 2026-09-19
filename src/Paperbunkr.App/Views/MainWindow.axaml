@@ -807,6 +807,17 @@
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>
 
+            <!-- Matrix theme's code-rain background layer (docs/superpowers/specs/2026-09-16-theme-
+                 system-design.md § Matrix rain effect) - mounted first (bottom of z-order) so both
+                 TransitioningContentControls below paint over it normally; IsVisible gated to the
+                 Matrix theme specifically. Screens have no root Background of their own (the window's
+                 PbBg shows through), so the rain is visible wherever a screen leaves bare space -
+                 gutters, text rows, empty areas - and hidden behind opaque cards/panels by normal
+                 z-order. Do NOT mark these two hosts IsOpaqueBackplate: they span the whole content
+                 area, so doing so clips the entire rain out (the original bug - the rain never
+                 rendered anywhere). Reserve that attached property for genuinely opaque panels. -->
+            <views:MatrixRainOverlay Grid.Row="0" Grid.RowSpan="2" IsVisible="{Binding IsMatrixRainVisible}" />
+
             <!-- The 7 rail-ordered lateral screens (docs/superpowers/specs/2026-08-24-navigation-
                  shell-motion-system-design.md) share one TransitioningContentControl - direction
                  comes from MainViewModel.IsTransitionReversed (computed from rail-order comparison
@@ -1230,6 +1241,23 @@
     <Panel IsVisible="{Binding IsWelcomeTourOverlayOpen}">
         <views:WelcomeTourOverlay DataContext="{Binding WelcomeTour}" />
     </Panel>
+
+    <!-- ============ Scheduled theme-switch crossfade (docs/superpowers/specs/2026-09-16-theme-
+         system-design.md § Extended scope, "Graceful Auto-Theme Crossfades") - a brief opacity dip
+         to the new theme's own background masking the instant resource swap underneath, not a true
+         two-layer crossfade (Avalonia resource changes are instant, nothing to interpolate between).
+         Opacity driven from MainViewModel.ThemeCrossfadeOpacity; the actual smoothing is this
+         Border's own Transition, the same safe Transition-driven pattern used throughout this file,
+         never a XAML Animation/KeyFrame. IsHitTestVisible false - a 0-600ms dip should never eat a
+         click. Sits above all real screen content and the Matrix rain, below the toast host/welcome
+         tour so those stay usable through a switch. ============ -->
+    <Border Background="{DynamicResource PbBgBrush}" Opacity="{Binding ThemeCrossfadeOpacity}" IsHitTestVisible="False">
+        <Border.Transitions>
+            <Transitions>
+                <DoubleTransition Property="Opacity" Duration="0:0:0.3" Easing="CubicEaseOut" />
+            </Transitions>
+        </Border.Transitions>
+    </Border>
 
     <!-- ============ Toast host (docs/superpowers/specs/2026-09-07-chrome-content-motion-polish-
          design.md item 5) - app-owned replacement for WindowNotificationManager, wired up in

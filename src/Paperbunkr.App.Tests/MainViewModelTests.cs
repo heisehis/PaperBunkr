@@ -1088,4 +1088,67 @@ public class MainViewModelTests : IDisposable
         Assert.True(vm.IsPreferences);
         Assert.True(vm.Preferences.IsAdvancedSection);
     }
+
+    /// <summary>docs/superpowers/specs/2026-09-16-theme-system-design.md § Reader auto-suspend -
+    /// exercises the real ThemeService.SetTrueBlackReaderSuspend call this navigation hook makes
+    /// (against the temp DB this test class already redirects to), not a mock - the meaningful
+    /// regression guard is that navigating into/out of each of the 3 reader screens never throws.</summary>
+    [Theory]
+    [InlineData("reader")]
+    [InlineData("bookReader")]
+    [InlineData("pdfReader")]
+    public void CurrentScreenChanged_IntoAndOutOfReaderScreens_DoesNotThrow(string readerScreenKey)
+    {
+        var vm = new MainViewModel();
+
+        vm.CurrentScreen = readerScreenKey;
+        Assert.True(vm.IsInReader);
+
+        vm.CurrentScreen = "home";
+        Assert.False(vm.IsInReader);
+    }
+
+    /// <summary>§ Matrix rain effect - false by default (no test in this class applies the Matrix
+    /// theme), and specifically false while in a reader screen even if it somehow were true, per
+    /// IsMatrixRainVisible's own AND-with-!IsInReader formula.</summary>
+    [Fact]
+    public void IsMatrixRainVisible_FalseByDefault_AndWhileInReader()
+    {
+        var vm = new MainViewModel();
+
+        Assert.False(vm.IsMatrixRainVisible);
+
+        vm.CurrentScreen = "reader";
+
+        Assert.False(vm.IsMatrixRainVisible);
+    }
+
+    /// <summary>The user's "Matrix rain" preference gates the overlay: theme active + preference off
+    /// must not show it, and flipping the preference back on shows it again live.</summary>
+    [Fact]
+    public void IsMatrixRainVisible_FollowsMatrixRainEnabledPreference_WhileMatrixThemeActive()
+    {
+        var themeService = new Paperbunkr.App.Services.ThemeService();
+        string previousTheme = themeService.GetActiveThemeKey();
+        bool previousRain = themeService.GetMatrixRainEnabled();
+        try
+        {
+            themeService.ApplyTheme("matrix");
+            themeService.SetMatrixRainEnabled(true);
+            var vm = new MainViewModel();
+            Assert.True(vm.IsMatrixThemeActive);
+            Assert.True(vm.IsMatrixRainVisible);
+
+            vm.Preferences.MatrixRainEnabled = false;
+            Assert.False(vm.IsMatrixRainVisible);
+
+            vm.Preferences.MatrixRainEnabled = true;
+            Assert.True(vm.IsMatrixRainVisible);
+        }
+        finally
+        {
+            themeService.SetMatrixRainEnabled(previousRain);
+            themeService.ApplyTheme(previousTheme);
+        }
+    }
 }

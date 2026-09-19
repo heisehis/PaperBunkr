@@ -31,7 +31,7 @@
             <Setter Property="ClipToBounds" Value="True" />
         </Style>
         <Style Selector="Button.railCard:pointerover Border.railCover">
-            <Setter Property="BoxShadow" Value="{StaticResource PbGlowRing}" />
+            <Setter Property="BoxShadow" Value="{DynamicResource PbGlowRing}" />
         </Style>
         <Style Selector="Button.railRemove">
             <Setter Property="Width" Value="22" />

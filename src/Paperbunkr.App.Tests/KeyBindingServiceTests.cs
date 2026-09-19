@@ -11,7 +11,7 @@ namespace Paperbunkr.App.Tests;
 /// docs/superpowers/specs/2026-08-16-remappable-reader-shortcuts-design.md and
 /// docs/superpowers/specs/2026-09-07-keyboard-shortcuts-redesign-design.md's multi-binding support).
 /// Uses an injected in-memory-database context factory (same test-injection seam as
-/// <see cref="SkinService"/>) so tests never touch the real per-user database.
+/// <see cref="ThemeService"/>) so tests never touch the real per-user database.
 /// </summary>
 public class KeyBindingServiceTests : IDisposable
 {

@@ -205,15 +205,16 @@
     -->
     <Styles.Resources>
         <BoxShadows x:Key="PbElevationShadow">0 16 40 -8 #99000000</BoxShadows>
-        <!-- Literal color, not {DynamicResource PbGlowColor} - BoxShadows is parsed from a single
-             string and doesn't support markup extensions inside it, so this won't live-update on
-             skin switch (an accepted implementation-time limitation for this phase; alternate
-             skins beyond "default" aren't this phase's focus). Matches default skin's PbGlowColor. -->
-        <!-- Spread bumped 2->4px, alpha 0x66->0x99 - real user feedback: once ClipToBounds was fixed
-             so this actually rendered at all (see LibraryScreen.axaml's own doc comment - the
-             2px/0x66 version had been effectively invisible everywhere this resource is used, not
-             just Library), the ring was still too faint to read clearly against a card's own
-             drop shadow at typical viewing distance. -->
+        <!-- Design-time/pre-ThemeService-apply fallback only (matches default skin's PbGlowColor,
+             bumped to 0x99 alpha) - at runtime, ThemeService.ApplyGlowRing overwrites this same key
+             in Application.Resources on every theme apply (BoxShadows is parsed from a single string
+             and can't embed {DynamicResource PbGlowColor} inside it, so it's rebuilt in code instead
+             of bound in markup - see ApplyGlowRing's own doc comment). Every consumer below must use
+             {DynamicResource PbGlowRing}, not {StaticResource}, to pick up the runtime overwrite.
+             Spread is 4px, alpha 0x99 - bumped from an earlier 2px/0x66 pass once ClipToBounds was
+             fixed so this actually rendered at all (see LibraryScreen.axaml's own doc comment); the
+             fainter version read as invisible against a card's own drop shadow at typical viewing
+             distance. -->
         <BoxShadows x:Key="PbGlowRing">0 0 0 4 #99E0995A</BoxShadows>
     </Styles.Resources>
 

@@ -98,7 +98,7 @@ internal sealed class TestPluginEnvironment : IPluginEnvironment
 
     private sealed class FakeThemePlugin : IThemePlugin
     {
-        public string CurrentSkinKey => "default";
+        public string CurrentThemeKey => "default";
     }
 }
 

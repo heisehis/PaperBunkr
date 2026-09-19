@@ -1,5 +1,6 @@
 {
   "name": "Default",
+  "mode": "Dark",
   "colors": {
     "bg": "#0A0B0D",
     "chrome": "#131519",

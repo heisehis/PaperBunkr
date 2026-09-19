@@ -41,9 +41,9 @@ public partial class HomeScreenViewModel : ViewModelBase
     private readonly Action<int> _goLibraryWithCollection;
     private readonly Random _random = new();
     private readonly DispatcherTimer _spotlightTimer;
-    private readonly SkinService _skinService;
+    private readonly ThemeService _themeService;
 
-    public HomeScreenViewModel(Action<int> goDetailForSeries, Action<int> goReaderForIssue, Action<string> goLibraryWithSearch, Action<int, int> goReaderForIssueInReadingList, Action<int, BookFormat> goReaderForBook, Action<int>? goLibraryWithCollection = null, SkinService? skinService = null, bool loadOnConstruction = true)
+    public HomeScreenViewModel(Action<int> goDetailForSeries, Action<int> goReaderForIssue, Action<string> goLibraryWithSearch, Action<int, int> goReaderForIssueInReadingList, Action<int, BookFormat> goReaderForBook, Action<int>? goLibraryWithCollection = null, ThemeService? themeService = null, bool loadOnConstruction = true)
     {
         _goDetailForSeries = goDetailForSeries;
         _goReaderForIssue = goReaderForIssue;
@@ -53,10 +53,10 @@ public partial class HomeScreenViewModel : ViewModelBase
         _goLibraryWithCollection = goLibraryWithCollection ?? (_ => { });
         // Defaults to a standalone instance for callers that don't pass one (matches this
         // constructor's other optional-parameter defaults) - production always passes MainViewModel's
-        // shared instance so the masthead's SkinApplied subscription (see ctor body below) actually
-        // fires when the user switches skins via Preferences.
-        _skinService = skinService ?? new SkinService();
-        _skinService.SkinApplied += OnSkinApplied;
+        // shared instance so the masthead's ThemeApplied subscription (see ctor body below) actually
+        // fires when the user switches themes via Preferences.
+        _themeService = themeService ?? new ThemeService();
+        _themeService.ThemeApplied += OnThemeApplied;
         ContinueReading = new ObservableCollection<HomeContinueReadingCard>();
         ContinueReadingBooks = new ObservableCollection<HomeBookCard>();
         RecentlyAdded = new ObservableCollection<SeriesCardSample>();
@@ -245,7 +245,7 @@ public partial class HomeScreenViewModel : ViewModelBase
     /// queries and the 1600x460 cover-wall render run on the calling thread. Prefer
     /// <see cref="LoadFromDatabaseAsync"/> off any hot UI path (it's what the startup Home load
     /// uses - a synchronous load there visibly froze the just-shown shell for ~2.7s).</summary>
-    public void LoadFromDatabase() => ApplySnapshot(BuildSnapshot(GetSkinBaseColor()));
+    public void LoadFromDatabase() => ApplySnapshot(BuildSnapshot(GetThemeBaseColor()));
 
     /// <summary>Same as <see cref="LoadFromDatabase"/>, but the DB queries, sample mapping and the
     /// cover-wall render happen on a thread-pool thread; only the observable-collection
@@ -255,8 +255,8 @@ public partial class HomeScreenViewModel : ViewModelBase
     {
         try
         {
-            var skinBaseColor = GetSkinBaseColor(); // UI thread - reads Application.Current.Resources
-            var snapshot = await Task.Run(() => BuildSnapshot(skinBaseColor)).ConfigureAwait(true);
+            var themeBaseColor = GetThemeBaseColor(); // UI thread - reads Application.Current.Resources
+            var snapshot = await Task.Run(() => BuildSnapshot(themeBaseColor)).ConfigureAwait(true);
             ApplySnapshot(snapshot);
         }
         catch (Exception ex)
@@ -270,7 +270,7 @@ public partial class HomeScreenViewModel : ViewModelBase
     /// state is touched and there is no <c>Application.Current</c> access (the skin colour is
     /// passed in). <see cref="CoverImageCache"/> is internally locked, so the cover-wall render is
     /// safe here.</summary>
-    private HomeFeedSnapshot BuildSnapshot(SKColor skinBaseColor)
+    private HomeFeedSnapshot BuildSnapshot(SKColor themeBaseColor)
     {
         using var context = PaperbunkrDb.CreateContext();
 
@@ -332,7 +332,7 @@ public partial class HomeScreenViewModel : ViewModelBase
         var spotlight = HomeFeedResolver.GetSpotlightPicks(context, _random)
             .Select(SpotlightIssueSample.FromIssue).ToList();
 
-        var mastheadBackdrop = BuildMastheadBackdrop(recentlyAdded, becauseYouRead, continueReading, spotlight, skinBaseColor);
+        var mastheadBackdrop = BuildMastheadBackdrop(recentlyAdded, becauseYouRead, continueReading, spotlight, themeBaseColor);
 
         var accentColor = spotlight.Count > 0 && spotlight[0].CoverImage is { } firstCover
             ? SpotlightAccentSampler.Sample(firstCover)
@@ -406,22 +406,22 @@ public partial class HomeScreenViewModel : ViewModelBase
     partial void OnReadingListSpotlightChanged(ReadingListSpotlightSample? value) => OnPropertyChanged(nameof(HasReadingListSpotlight));
 
     /// <summary>
-    /// Re-renders the masthead cover-wall against the newly-active skin's colors, without a DB
+    /// Re-renders the masthead cover-wall against the newly-active theme's colors, without a DB
     /// requery - <see cref="BuildMastheadBackdrop"/> only reads already-loaded in-memory cover
     /// collections (docs/superpowers/specs/2026-09-08-home-navrail-visual-v2-design.md §3), so
-    /// switching skins while already on Home updates the masthead live instead of requiring a
+    /// switching themes while already on Home updates the masthead live instead of requiring a
     /// navigate-away/back.
     /// </summary>
-    private void OnSkinApplied() => MastheadBackdrop = BuildMastheadBackdrop(
-        RecentlyAdded, BecauseYouRead, ContinueReading, SpotlightItems, GetSkinBaseColor());
+    private void OnThemeApplied() => MastheadBackdrop = BuildMastheadBackdrop(
+        RecentlyAdded, BecauseYouRead, ContinueReading, SpotlightItems, GetThemeBaseColor());
 
-    /// <summary>The active skin's <c>surface0</c>, live-updated by <see cref="SkinService"/> into
+    /// <summary>The active theme's <c>surface0</c>, live-updated by <see cref="ThemeService"/> into
     /// <c>Application.Current.Resources</c> - read directly rather than adding a new
-    /// <see cref="SkinService"/> accessor (docs/superpowers/specs/2026-09-08-home-navrail-visual-v2-
+    /// <see cref="ThemeService"/> accessor (docs/superpowers/specs/2026-09-08-home-navrail-visual-v2-
     /// design.md §3's own open question). Falls back to <see cref="CoverWallRenderer.DefaultBaseColor"/>
     /// if the resource somehow isn't registered yet (e.g. a design-time/test host with no App.axaml
     /// resources loaded).</summary>
-    private static SKColor GetSkinBaseColor()
+    private static SKColor GetThemeBaseColor()
     {
         if (Application.Current is { } app && app.TryGetResource("PbSurface0Color", null, out var resource) && resource is Color color)
         {

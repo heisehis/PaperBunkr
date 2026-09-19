@@ -482,6 +482,32 @@ public class ThemeService
         return context.GetOrCreateAppSettings().TrueBlackDark;
     }
 
+    /// <summary>
+    /// Raised after <see cref="SetMatrixRainEnabled"/> persists a change - <c>MainViewModel</c>
+    /// subscribes to show/hide the Matrix rain overlay live. Separate from <see cref="ThemeApplied"/>
+    /// on purpose: nothing about the theme's resources changed, so consumers that re-render on a
+    /// theme apply (Home's cover wall, icon caches) shouldn't re-run for a rain toggle.
+    /// </summary>
+    public event Action? MatrixRainEnabledChanged;
+
+    public bool GetMatrixRainEnabled()
+    {
+        using var context = _contextFactory();
+        return context.GetOrCreateAppSettings().MatrixRainEnabled;
+    }
+
+    public void SetMatrixRainEnabled(bool enabled)
+    {
+        using (var context = _contextFactory())
+        {
+            var settings = context.GetOrCreateAppSettings();
+            settings.MatrixRainEnabled = enabled;
+            context.SaveChanges();
+        }
+
+        MatrixRainEnabledChanged?.Invoke();
+    }
+
     public string? GetAccentOverrideHex()
     {
         using var context = _contextFactory();

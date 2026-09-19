@@ -12,9 +12,9 @@ namespace Paperbunkr.App.Tests;
 
 /// <summary>
 /// Exercises <see cref="PreferencesScreenViewModel"/> (docs/superpowers/specs/2026-08-07-preferences-skin-system-design.md
-/// §5) against a real <see cref="SkinService"/> pointed at a temp skins folder + in-memory-database
-/// context factory, same isolation approach as <see cref="SkinServiceTests"/>. Joins
-/// <see cref="AvaloniaTestCollection"/> since skin selection touches Application resources.
+/// §5) against a real <see cref="ThemeService"/> pointed at a temp themes folder + in-memory-database
+/// context factory, same isolation approach as <see cref="ThemeServiceTests"/>. Joins
+/// <see cref="AvaloniaTestCollection"/> since theme selection touches Application resources.
 /// </summary>
 [Collection(nameof(AvaloniaTestCollection))]
 public class PreferencesScreenViewModelTests : IDisposable
@@ -34,8 +34,8 @@ public class PreferencesScreenViewModelTests : IDisposable
 
     public PreferencesScreenViewModelTests()
     {
-        _originalInstalledDirectory = SkinPaths.InstalledDirectory;
-        _originalExtractedDirectory = SkinPaths.ExtractedDirectory;
+        _originalInstalledDirectory = ThemePaths.InstalledDirectory;
+        _originalExtractedDirectory = ThemePaths.ExtractedDirectory;
         _originalThumbnailDirectory = CoverThumbnailPaths.ThumbnailDirectory;
         _originalBookThumbnailDirectory = BookCoverThumbnailPaths.ThumbnailDirectory;
         _originalCustomCoverDirectory = Paperbunkr.App.Services.Covers.CustomCoverPaths.Directory;
@@ -43,8 +43,8 @@ public class PreferencesScreenViewModelTests : IDisposable
         _originalCoverCacheStateFile = Paperbunkr.App.Services.Covers.CoverCacheState.FilePath;
 
         string root = Path.Combine(Path.GetTempPath(), $"paperbunkr_prefsvm_test_{Guid.NewGuid():N}");
-        SkinPaths.InstalledDirectory = Path.Combine(root, "skins");
-        SkinPaths.ExtractedDirectory = Path.Combine(root, "skins-extracted");
+        ThemePaths.InstalledDirectory = Path.Combine(root, "skins");
+        ThemePaths.ExtractedDirectory = Path.Combine(root, "skins-extracted");
         CoverThumbnailPaths.ThumbnailDirectory = Path.Combine(root, "thumbs");
         BookCoverThumbnailPaths.ThumbnailDirectory = Path.Combine(root, "book-thumbs");
         Paperbunkr.App.Services.Covers.CustomCoverPaths.Directory = Path.Combine(root, "custom-covers");
@@ -77,8 +77,8 @@ public class PreferencesScreenViewModelTests : IDisposable
 
     public void Dispose()
     {
-        SkinPaths.InstalledDirectory = _originalInstalledDirectory;
-        SkinPaths.ExtractedDirectory = _originalExtractedDirectory;
+        ThemePaths.InstalledDirectory = _originalInstalledDirectory;
+        ThemePaths.ExtractedDirectory = _originalExtractedDirectory;
         CoverThumbnailPaths.ThumbnailDirectory = _originalThumbnailDirectory;
         BookCoverThumbnailPaths.ThumbnailDirectory = _originalBookThumbnailDirectory;
         Paperbunkr.App.Services.Covers.CustomCoverPaths.Directory = _originalCustomCoverDirectory;
@@ -109,13 +109,13 @@ public class PreferencesScreenViewModelTests : IDisposable
         Action? reloadFolderWatch = null,
         Action<int, bool>? enqueueMetadataWriteBack = null)
     {
-        var skinService = new SkinService(() => new PaperbunkrDbContext(_dbOptions));
+        var themeService = new ThemeService(() => new PaperbunkrDbContext(_dbOptions));
         var scanner = new LibraryFolderScanner(() => new PaperbunkrDbContext(_dbOptions));
         var fileAssociationService = new FileAssociationService(shell ?? new FakeShellFileAssociation());
         var backupService = new BackupService(() => new PaperbunkrDbContext(_dbOptions));
         var keyBindingService = new KeyBindingService(() => new PaperbunkrDbContext(_dbOptions));
         return new PreferencesScreenViewModel(
-            skinService,
+            themeService,
             filePicker ?? new NoOpFilePicker(),
             scanner,
             fileAssociationService,
@@ -459,34 +459,103 @@ public class PreferencesScreenViewModelTests : IDisposable
     }
 
     [Fact]
-    public void EnsureLoaded_PopulatesSkinsAndFontsOnce()
+    public void EnsureLoaded_PopulatesThemesAndFontsOnce()
     {
         var vm = CreateViewModel();
 
         vm.EnsureLoaded();
-        int skinCountAfterFirstLoad = vm.Skins.Count;
+        int themeCountAfterFirstLoad = vm.Themes.Count;
         vm.EnsureLoaded();
 
-        // 5 built-ins now (docs/superpowers/specs/2026-09-07-preferences-tile-hub-redesign-
-        // design.md §3 - Default + Windows 11 + 3 new), not just Default - the "Once" in this
-        // test's name is about EnsureLoaded's own idempotency guard, asserted by the equality
-        // check below, not about the skin count itself.
-        Assert.Equal(5, vm.Skins.Count);
-        Assert.Equal(skinCountAfterFirstLoad, vm.Skins.Count);
+        // 10 built-ins now (docs/superpowers/specs/2026-09-16-theme-system-design.md's full catalog),
+        // not just Default - the "Once" in this test's name is about EnsureLoaded's own idempotency
+        // guard, asserted by the equality check below, not about the theme count itself.
+        Assert.Equal(10, vm.Themes.Count);
+        Assert.Equal(themeCountAfterFirstLoad, vm.Themes.Count);
         Assert.Contains("System Default", vm.FontFamilies);
         Assert.Equal("System Default", vm.SelectedFontFamily);
     }
 
     [Fact]
-    public void SelectSkin_AppliesSkin_AndRefreshesActiveFlag()
+    public void SelectTheme_AppliesTheme_AndRefreshesActiveFlag()
     {
         var vm = CreateViewModel();
         vm.EnsureLoaded();
-        var defaultSkin = vm.Skins[0];
+        var defaultTheme = vm.Themes[0];
 
-        vm.SelectSkinCommand.Execute(defaultSkin);
+        vm.SelectThemeCommand.Execute(defaultTheme);
 
-        Assert.True(vm.Skins[0].IsActive);
+        Assert.True(vm.Themes[0].IsActive);
+    }
+
+    // ===================== Theme options (docs/superpowers/specs/2026-09-16-theme-system-design.md
+    // § Extended scope) =====================
+
+    [Fact]
+    public void IsActiveThemeDarkMode_ReflectsActiveThemesMode()
+    {
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+        var windows11 = vm.Themes.Single(t => t.Key == "windows_11");
+        var defaultTheme = vm.Themes.Single(t => t.Key == "default");
+
+        vm.SelectThemeCommand.Execute(windows11);
+        Assert.False(vm.IsActiveThemeDarkMode);
+
+        vm.SelectThemeCommand.Execute(defaultTheme);
+        Assert.True(vm.IsActiveThemeDarkMode);
+    }
+
+    [Fact]
+    public void TrueBlackDark_Toggle_PersistsAndAppliesLive()
+    {
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+
+        vm.TrueBlackDark = true;
+
+        var resources = Avalonia.Application.Current!.Resources;
+        Assert.Equal(Avalonia.Media.Color.Parse("#000000"), resources["PbBgColor"]);
+    }
+
+    [Fact]
+    public void ThemeAutoModeText_RoundTrips_ThroughThemeService()
+    {
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+
+        vm.ThemeAutoModeText = "Follow System";
+
+        var vm2 = CreateViewModel();
+        vm2.EnsureLoaded();
+        Assert.Equal("Follow System", vm2.ThemeAutoModeText);
+    }
+
+    [Fact]
+    public void IsThemeScheduledMode_TracksThemeAutoModeText()
+    {
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+
+        Assert.False(vm.IsThemeScheduledMode);
+
+        vm.ThemeAutoModeText = "Scheduled";
+
+        Assert.True(vm.IsThemeScheduledMode);
+    }
+
+    [Fact]
+    public void AccentOverrideHexText_Empty_ClearsOverride()
+    {
+        var vm = CreateViewModel();
+        vm.EnsureLoaded();
+
+        vm.AccentOverrideHexText = "#123456";
+        vm.AccentOverrideHexText = "";
+
+        var vm2 = CreateViewModel();
+        vm2.EnsureLoaded();
+        Assert.Equal("", vm2.AccentOverrideHexText);
     }
 
     [Fact]

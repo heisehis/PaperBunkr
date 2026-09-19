@@ -26,12 +26,15 @@
         <StackPanel Margin="28,20,28,40" Spacing="20">
             <TextBlock Classes="pbTextHeading" Text="Appearance" />
 
-        <!-- Skins - grid of mini UI-mockup preview cards, real theme.json colors per skin
-             (docs/superpowers/specs/2026-09-07-appearance-redesign-design.md). Install Skin folded
-             in here (header actions) rather than its own separate group. -->
+        <!-- Themes - grid of mini UI-mockup preview cards, real theme.json colors per theme
+             (docs/superpowers/specs/2026-09-07-appearance-redesign-design.md, renamed from "Skins"
+             by docs/superpowers/specs/2026-09-16-theme-system-design.md). Install Skin folded
+             in here (header actions) rather than its own separate group - the .crpck install
+             mechanism itself keeps its "Skin" naming deliberately, per that design doc's own
+             decision to leave it untouched. -->
         <StackPanel Tag="appearance.skin" Spacing="10">
             <Grid ColumnDefinitions="*,Auto,Auto">
-                <TextBlock Grid.Column="0" Classes="settingsGroupCaption" Text="SKINS" VerticalAlignment="Center" Margin="0" />
+                <TextBlock Grid.Column="0" Classes="settingsGroupCaption" Text="THEMES" VerticalAlignment="Center" Margin="0" />
                 <Button Grid.Column="1" Classes="headerAction ghost" Content="Install…" Margin="0,0,8,0"
                         Command="{Binding BrowseForSkinCommand}" AutomationProperties.AutomationId="InstallSkinButton" />
                 <Button Grid.Column="2" Classes="headerAction ghost" Command="{Binding OpenSkinsFolderCommand}"
@@ -46,16 +49,16 @@
                 <TextBlock Text="{Binding InstallSkinError}" Foreground="{DynamicResource PbDangerBrush}" FontSize="12" TextWrapping="Wrap" />
             </StackPanel>
 
-            <ItemsControl x:Name="SkinsList" ItemsSource="{Binding Skins}">
+            <ItemsControl x:Name="ThemesList" ItemsSource="{Binding Themes}">
                 <ItemsControl.ItemsPanel>
                     <ItemsPanelTemplate>
                         <WrapPanel Orientation="Horizontal" />
                     </ItemsPanelTemplate>
                 </ItemsControl.ItemsPanel>
                 <ItemsControl.ItemTemplate>
-                    <DataTemplate x:DataType="models:SkinSummary">
+                    <DataTemplate x:DataType="models:ThemeSummary">
                         <Button Background="Transparent" BorderThickness="0" Padding="0" Margin="0,0,10,10" Cursor="Hand"
-                                Command="{Binding #SkinsList.((vm:PreferencesScreenViewModel)DataContext).SelectSkinCommand}"
+                                Command="{Binding #ThemesList.((vm:PreferencesScreenViewModel)DataContext).SelectThemeCommand}"
                                 CommandParameter="{Binding}">
                             <StackPanel Width="140">
                                 <Grid>
@@ -89,6 +92,59 @@
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
+        </StackPanel>
+
+        <!-- Theme options (docs/superpowers/specs/2026-09-16-theme-system-design.md § Extended
+             scope) - true black/Auto mode/accent override, all layered on top of the THEMES grid
+             above rather than being separate theme entries. -->
+        <StackPanel Tag="appearance.themeOptions">
+            <TextBlock Classes="settingsGroupCaption" Text="THEME OPTIONS" />
+            <pref:SettingsRow Icon="DarkTheme" Title="True black"
+                               Description="Forces pure black backgrounds on dark themes - saves battery on OLED screens. Automatically suspended while reading."
+                               IsVisible="{Binding IsActiveThemeDarkMode}">
+                <pref:SettingsRow.SettingsContent>
+                    <ToggleSwitch IsChecked="{Binding TrueBlackDark}" OnContent="{x:Null}" OffContent="{x:Null}" />
+                </pref:SettingsRow.SettingsContent>
+            </pref:SettingsRow>
+            <pref:SettingsRow Icon="Sparkle" Title="Matrix rain"
+                               Description="The falling-glyph background animation. Turn off for a static Matrix look (also saves GPU/battery)."
+                               IsVisible="{Binding IsActiveThemeMatrix}">
+                <pref:SettingsRow.SettingsContent>
+                    <ToggleSwitch IsChecked="{Binding MatrixRainEnabled}" OnContent="{x:Null}" OffContent="{x:Null}" />
+                </pref:SettingsRow.SettingsContent>
+            </pref:SettingsRow>
+            <pref:SettingsRow Icon="Clock" Title="Auto switch"
+                               Description="Follow the system Light/Dark preference, or switch on a schedule.">
+                <pref:SettingsRow.SettingsContent>
+                    <controls:SuggestBox IsStrict="True" Text="{Binding ThemeAutoModeText}" Suggestions="{Binding ThemeAutoModeOptionsList}" Width="160" />
+                </pref:SettingsRow.SettingsContent>
+            </pref:SettingsRow>
+            <pref:SettingsRow Icon="Clock" Title="Switch to dark at" IsVisible="{Binding IsThemeScheduledMode}">
+                <pref:SettingsRow.SettingsContent>
+                    <NumericUpDown Value="{Binding ThemeScheduledDarkHour}" Minimum="0" Maximum="23" Width="120" />
+                </pref:SettingsRow.SettingsContent>
+            </pref:SettingsRow>
+            <pref:SettingsRow Icon="Clock" Title="Switch to light at" IsVisible="{Binding IsThemeScheduledMode}">
+                <pref:SettingsRow.SettingsContent>
+                    <NumericUpDown Value="{Binding ThemeScheduledLightHour}" Minimum="0" Maximum="23" Width="120" />
+                </pref:SettingsRow.SettingsContent>
+            </pref:SettingsRow>
+            <pref:SettingsRow Icon="Clock" Title="Auto-enable true black at"
+                               Description="Local hour (0-23), blank = manual toggle only.">
+                <pref:SettingsRow.SettingsContent>
+                    <TextBox Text="{Binding TrueBlackAutoHourText}" Width="80" Watermark="e.g. 22" />
+                </pref:SettingsRow.SettingsContent>
+            </pref:SettingsRow>
+            <pref:SettingsRow Icon="Color" Title="Accent color override"
+                               Description="Hex color, blank = use the active theme's own accent.">
+                <pref:SettingsRow.SettingsContent>
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Border Width="24" Height="24" CornerRadius="{StaticResource PbRadiusSm}"
+                                Background="{DynamicResource PbAccentBrush}" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1" />
+                        <TextBox Text="{Binding AccentOverrideHexText}" Width="120" Watermark="#RRGGBB" />
+                    </StackPanel>
+                </pref:SettingsRow.SettingsContent>
+            </pref:SettingsRow>
         </StackPanel>
 
         <StackPanel Tag="appearance.font">

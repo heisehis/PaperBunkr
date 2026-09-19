@@ -77,7 +77,10 @@ namespace Paperbunkr.Data.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER");
 
-                    b.Property<string>("ActiveSkinKey")
+                    b.Property<string>("AccentOverrideHex")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ActiveThemeKey")
                         .IsRequired()
                         .ValueGeneratedOnAdd()
                         .HasColumnType("TEXT")
@@ -291,7 +294,13 @@ namespace Paperbunkr.Data.Migrations
                     b.Property<DateTime?>("LastCoverVerificationUtc")
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("LastDarkThemeKey")
+                        .HasColumnType("TEXT");
+
                     b.Property<DateTime?>("LastLibraryHealthVerifyUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("LastLightThemeKey")
                         .HasColumnType("TEXT");
 
                     b.Property<string>("LastRunVersion")
@@ -452,6 +461,9 @@ namespace Paperbunkr.Data.Migrations
                         .HasColumnType("REAL")
                         .HasDefaultValue(2.0);
 
+                    b.Property<bool>("MatrixRainEnabled")
+                        .HasColumnType("INTEGER");
+
                     b.Property<string>("MetadataResolutionPolicy")
                         .IsRequired()
                         .ValueGeneratedOnAdd()
@@ -564,6 +576,58 @@ namespace Paperbunkr.Data.Migrations
                         .HasDefaultValue(true);
 
                     b.Property<bool>("ShowToolTips")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasDefaultValue(false);
+
+                    b.Property<string>("ThemeAutoMode")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(16)
+                        .HasColumnType("TEXT")
+                        .HasDefaultValue("Off");
+
+                    b.Property<int>("ThemeScheduledDarkHour")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasDefaultValue(20);
+
+                    b.Property<int>("ThemeScheduledLightHour")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasDefaultValue(7);
+
+                    b.Property<bool>("TrackerAutoOpenLinkPanel")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasDefaultValue(true);
+
+                    b.Property<bool>("TrackerAutoSyncFromTrackers")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasDefaultValue(false);
+
+                    b.Property<bool>("TrackerUpdateAfterReading")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasDefaultValue(true);
+
+                    b.Property<string>("TrackerUpdateOnMarkRead")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(16)
+                        .HasColumnType("TEXT")
+                        .HasDefaultValue("Always");
+
+                    b.Property<bool>("TrackerUseSourceMetadata")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasDefaultValue(true);
+
+                    b.Property<int?>("TrueBlackAutoHour")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("TrueBlackDark")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER")
                         .HasDefaultValue(false);

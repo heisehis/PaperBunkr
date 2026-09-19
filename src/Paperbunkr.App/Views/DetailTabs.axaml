@@ -32,7 +32,7 @@
             <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
         </Style>
         <Style Selector="Border.issueTile.current">
-            <Setter Property="BoxShadow" Value="{StaticResource PbGlowRing}" />
+            <Setter Property="BoxShadow" Value="{DynamicResource PbGlowRing}" />
         </Style>
         <Style Selector="StackPanel.posterItem.read">
             <Setter Property="Opacity" Value="0.45" />

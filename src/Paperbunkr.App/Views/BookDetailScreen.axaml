@@ -61,7 +61,7 @@
             <Setter Property="ClipToBounds" Value="True" />
         </Style>
         <Style Selector="Button.card:pointerover Border.bookCover">
-            <Setter Property="BoxShadow" Value="{StaticResource PbGlowRing}" />
+            <Setter Property="BoxShadow" Value="{DynamicResource PbGlowRing}" />
         </Style>
     </UserControl.Styles>
 

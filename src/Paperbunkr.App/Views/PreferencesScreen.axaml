@@ -132,7 +132,7 @@
             </Setter>
         </Style>
         <Style Selector="Border.groupBox.searchPulse">
-            <Setter Property="BoxShadow" Value="{StaticResource PbGlowRing}" />
+            <Setter Property="BoxShadow" Value="{DynamicResource PbGlowRing}" />
         </Style>
     </UserControl.Styles>
 

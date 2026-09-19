@@ -21,7 +21,7 @@ public sealed partial class SeriesCardSample : ObservableObject, ISelectableCard
 {
     /// <summary>Panorama's variable-width virtualizing panel packs rows against this - the same
     /// value the card's DataTemplate binds its own <c>Width</c> to.</summary>
-    double IVariableWidthTile.PreferredWidth => PanoramaWidth;
+    double IVariableWidthTile.PreferredWidth => PanoramaCellWidth;
 
     /// <summary>Explicit implementation - <see cref="SeriesId"/> is this model's real, long-established
     /// public name for the same value; <see cref="ISelectableCard"/> only needs an <c>Id</c> accessor
@@ -48,9 +48,21 @@ public sealed partial class SeriesCardSample : ObservableObject, ISelectableCard
     public bool HasMembershipNote => !string.IsNullOrWhiteSpace(MembershipNote);
 
     public const double PanoramaHeight = 146;
-    public const double PanoramaMinWidth = 110;
+    // 88 = a 0.60 aspect ratio at PanoramaHeight. It was 110, which is wider than a standard
+    // 2:3 portrait cover's own natural width (~97), so every ordinary portrait card was inflated to
+    // 110 and its cover letterboxed with empty bands left and right.
+    public const double PanoramaMinWidth = 88;
     public const double PanoramaMaxWidth = 320;
     public const double DefaultCoverAspectRatio = 2.0 / 3.0; // standard portrait comic cover
+
+    /// <summary>
+    /// Permanent gutter (each side) between a Panorama card's cell edge and its cover Border, so the
+    /// 4px hover/focus ring (PbGlowRing) is drawn inside the card's own bounds - the same reason
+    /// Border.posterCover carries Margin="5,10,5,5". A ring on a Border flush with the Button's edge
+    /// is clipped to a thin shadow-like sliver. The cell (<c>PanoramaCellWidth</c>) is the cover
+    /// width plus this gutter on both sides; the panel spacing is reduced by the same amount.
+    /// </summary>
+    public const double PanoramaRingGutter = 5;
 
     public int SeriesId { get; init; }
     public required string Title { get; init; }
@@ -114,6 +126,9 @@ public sealed partial class SeriesCardSample : ObservableObject, ISelectableCard
     /// a real cover's been generated; re-tunes automatically once one exists.
     /// </summary>
     public double PanoramaWidth { get; init; }
+
+    /// <summary>The Panorama card's full cell width - <see cref="PanoramaWidth"/> (the cover) plus <see cref="PanoramaRingGutter"/> each side. The DataTemplate binds the Button's Width here.</summary>
+    public double PanoramaCellWidth => PanoramaWidth + (2 * PanoramaRingGutter);
 
     /// <summary>
     /// Cover issue id, resolved to a <see cref="Bitmap"/> lazily via <c>CoverImageConverter</c>

@@ -34,7 +34,7 @@ namespace Paperbunkr.App.ViewModels;
 /// </summary>
 public partial class PreferencesScreenViewModel : ViewModelBase
 {
-    private readonly SkinService _skinService;
+    private readonly ThemeService _themeService;
     private readonly IFilePickerService _filePicker;
     private readonly LibraryFolderScanner _libraryScanner;
     private readonly LibraryHealthService _libraryHealth;
@@ -56,11 +56,12 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     private bool _suppressBehaviorApply;
     private bool _suppressVirtualTagApply;
     private bool _suppressBackupSettingsApply;
+    private bool _suppressThemeOptionsApply;
     private Issue _previewIssue = SampleIssue();
     private Series? _previewSeries = new() { Name = "Sample Series" };
 
     public PreferencesScreenViewModel(
-        SkinService skinService,
+        ThemeService themeService,
         IFilePickerService filePicker,
         LibraryFolderScanner libraryScanner,
         FileAssociationService fileAssociationService,
@@ -77,13 +78,13 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         UpdateService updateService,
         Action<int, bool>? enqueueMetadataWriteBack = null,
         LibraryHealthService? libraryHealth = null)
-        : this(skinService, filePicker, libraryScanner, fileAssociationService, backupService, keyBindingService, showToast, migration, plugin, openMigration, activity, dialogService, reloadFolderWatch, openDesignShowcase, updateService, PaperbunkrDb.CreateContext, enqueueMetadataWriteBack, libraryHealth)
+        : this(themeService, filePicker, libraryScanner, fileAssociationService, backupService, keyBindingService, showToast, migration, plugin, openMigration, activity, dialogService, reloadFolderWatch, openDesignShowcase, updateService, PaperbunkrDb.CreateContext, enqueueMetadataWriteBack, libraryHealth)
     {
     }
 
     /// <summary>Test-only seam - production always uses the default ctor (the real per-user database).</summary>
     internal PreferencesScreenViewModel(
-        SkinService skinService,
+        ThemeService themeService,
         IFilePickerService filePicker,
         LibraryFolderScanner libraryScanner,
         FileAssociationService fileAssociationService,
@@ -104,7 +105,7 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     {
         _enqueueMetadataWriteBack = enqueueMetadataWriteBack ?? ((_, _) => { });
         _openDesignShowcase = openDesignShowcase;
-        _skinService = skinService;
+        _themeService = themeService;
         _filePicker = filePicker;
         _libraryScanner = libraryScanner;
         _libraryHealth = libraryHealth ?? new LibraryHealthService(contextFactory);
@@ -120,7 +121,7 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         _dialogService = dialogService;
         _reloadFolderWatch = reloadFolderWatch;
         _contextFactory = contextFactory;
-        Skins = new ObservableCollection<SkinSummary>();
+        Themes = new ObservableCollection<ThemeSummary>();
         FontFamilies = new ObservableCollection<string>();
         VirtualTags = new ObservableCollection<VirtualTagSummary>();
         WatchedFolders = new ObservableCollection<WatchedFolderSummary>();
@@ -202,7 +203,7 @@ public partial class PreferencesScreenViewModel : ViewModelBase
         Penciller = "Sample Penciller",
     };
 
-    public ObservableCollection<SkinSummary> Skins { get; }
+    public ObservableCollection<ThemeSummary> Themes { get; }
 
     public ObservableCollection<string> FontFamilies { get; }
 
@@ -738,21 +739,32 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     private void Reload()
     {
         RefreshChangelog();
-        RefreshSkins();
+        RefreshThemes();
 
         FontFamilies.Clear();
-        foreach (string family in _skinService.GetInstalledFontFamilies())
+        foreach (string family in _themeService.GetInstalledFontFamilies())
         {
             FontFamilies.Add(family);
         }
 
         _suppressFontApply = true;
-        SelectedFontFamily = _skinService.GetSelectedFontFamily() ?? "System Default";
+        SelectedFontFamily = _themeService.GetSelectedFontFamily() ?? "System Default";
         _suppressFontApply = false;
 
         _suppressMotionApply = true;
-        ReducedMotion = _skinService.GetReducedMotion();
+        ReducedMotion = _themeService.GetReducedMotion();
         _suppressMotionApply = false;
+
+        _suppressThemeOptionsApply = true;
+        TrueBlackDark = _themeService.GetTrueBlackDark();
+        MatrixRainEnabled = _themeService.GetMatrixRainEnabled();
+        ThemeAutoModeText = ThemeAutoModeToText(_themeService.GetThemeAutoMode());
+        var (darkHour, lightHour) = _themeService.GetThemeScheduleHours();
+        ThemeScheduledDarkHour = darkHour;
+        ThemeScheduledLightHour = lightHour;
+        TrueBlackAutoHourText = _themeService.GetTrueBlackAutoHour()?.ToString() ?? string.Empty;
+        AccentOverrideHexText = _themeService.GetAccentOverrideHex() ?? string.Empty;
+        _suppressThemeOptionsApply = false;
 
         using var context = _contextFactory();
         var settings = context.GetOrCreateAppSettings();
@@ -1015,20 +1027,28 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     [RelayCommand]
     private void CloseLegalDocumentViewer() => IsLegalDocumentViewerOpen = false;
 
-    private void RefreshSkins()
+    private void RefreshThemes()
     {
-        Skins.Clear();
-        foreach (var skin in _skinService.GetAvailableSkins())
+        Themes.Clear();
+        foreach (var theme in _themeService.GetAvailableThemes())
         {
-            Skins.Add(skin);
+            Themes.Add(theme);
         }
+        OnPropertyChanged(nameof(IsActiveThemeDarkMode));
+        OnPropertyChanged(nameof(IsActiveThemeMatrix));
     }
 
+    /// <summary>Gates the Matrix-rain toggle row's visibility - keyed on the theme key, same test <c>MainViewModel.IsMatrixThemeActive</c> uses for the overlay itself.</summary>
+    public bool IsActiveThemeMatrix => string.Equals(Themes.FirstOrDefault(t => t.IsActive)?.Key, "matrix", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>Gates the true-black toggle row's visibility (docs/superpowers/specs/2026-09-16-theme-system-design.md § Variant switching + true black) - a no-op under a Light theme, so hidden rather than shown doing nothing.</summary>
+    public bool IsActiveThemeDarkMode => Themes.FirstOrDefault(t => t.IsActive)?.Mode == "Dark";
+
     [RelayCommand]
-    private void SelectSkin(SkinSummary skin)
+    private void SelectTheme(ThemeSummary theme)
     {
-        _skinService.ApplySkin(skin.Key);
-        RefreshSkins();
+        _themeService.ApplyTheme(theme.Key);
+        RefreshThemes();
     }
 
     partial void OnSelectedFontFamilyChanged(string? value)
@@ -1038,7 +1058,7 @@ public partial class PreferencesScreenViewModel : ViewModelBase
             return;
         }
 
-        _skinService.ApplyFont(value);
+        _themeService.ApplyFont(value);
     }
 
     partial void OnReducedMotionChanged(bool value)
@@ -1048,7 +1068,121 @@ public partial class PreferencesScreenViewModel : ViewModelBase
             return;
         }
 
-        _skinService.ApplyReducedMotion(value);
+        _themeService.ApplyReducedMotion(value);
+    }
+
+    // ===================== Theme options (docs/superpowers/specs/2026-09-16-theme-system-design.md
+    // § Extended scope) =====================
+
+    [ObservableProperty]
+    private bool _trueBlackDark;
+
+    partial void OnTrueBlackDarkChanged(bool value)
+    {
+        if (_suppressThemeOptionsApply)
+        {
+            return;
+        }
+
+        _themeService.SetTrueBlackDark(value);
+    }
+
+    /// <summary>Matrix theme's code-rain background on/off - the Appearance row is only shown while Matrix is the active theme (<see cref="IsActiveThemeMatrix"/>).</summary>
+    [ObservableProperty]
+    private bool _matrixRainEnabled = true;
+
+    partial void OnMatrixRainEnabledChanged(bool value)
+    {
+        if (_suppressThemeOptionsApply)
+        {
+            return;
+        }
+
+        _themeService.SetMatrixRainEnabled(value);
+    }
+
+    private static readonly string[] ThemeAutoModeOptions = { "Off", "Follow System", "Scheduled" };
+
+    /// <summary>String projection over <see cref="ThemeAutoMode"/> for <c>controls:SuggestBox</c> - this codebase's app-wide SuggestBox migration replaced every ComboBox/AutoCompleteBox with SuggestBox + a VM string wrapper, same convention here.</summary>
+    public IReadOnlyList<string> ThemeAutoModeOptionsList => ThemeAutoModeOptions;
+
+    [ObservableProperty]
+    private string _themeAutoModeText = "Off";
+
+    partial void OnThemeAutoModeTextChanged(string value)
+    {
+        if (_suppressThemeOptionsApply)
+        {
+            return;
+        }
+
+        _themeService.SetThemeAutoMode(ThemeAutoModeFromText(value));
+        OnPropertyChanged(nameof(IsThemeScheduledMode));
+    }
+
+    public bool IsThemeScheduledMode => ThemeAutoModeText == "Scheduled";
+
+    private static string ThemeAutoModeToText(ThemeAutoMode mode) => mode switch
+    {
+        ThemeAutoMode.FollowSystem => "Follow System",
+        ThemeAutoMode.Scheduled => "Scheduled",
+        _ => "Off",
+    };
+
+    private static ThemeAutoMode ThemeAutoModeFromText(string text) => text switch
+    {
+        "Follow System" => ThemeAutoMode.FollowSystem,
+        "Scheduled" => ThemeAutoMode.Scheduled,
+        _ => ThemeAutoMode.Off,
+    };
+
+    [ObservableProperty]
+    private int _themeScheduledDarkHour = 20;
+
+    [ObservableProperty]
+    private int _themeScheduledLightHour = 7;
+
+    partial void OnThemeScheduledDarkHourChanged(int value) => ApplyThemeScheduleHoursIfNotSuppressed();
+
+    partial void OnThemeScheduledLightHourChanged(int value) => ApplyThemeScheduleHoursIfNotSuppressed();
+
+    private void ApplyThemeScheduleHoursIfNotSuppressed()
+    {
+        if (_suppressThemeOptionsApply)
+        {
+            return;
+        }
+
+        _themeService.SetThemeScheduleHours(ThemeScheduledDarkHour, ThemeScheduledLightHour);
+    }
+
+    /// <summary>Empty string = no schedule (null) - a plain text field rather than a nullable numeric control, same "empty means unset" convention <see cref="LibrarySearchQuery"/>-style nullable-string settings elsewhere in this codebase already use.</summary>
+    [ObservableProperty]
+    private string _trueBlackAutoHourText = string.Empty;
+
+    partial void OnTrueBlackAutoHourTextChanged(string value)
+    {
+        if (_suppressThemeOptionsApply)
+        {
+            return;
+        }
+
+        int? hour = int.TryParse(value, out int parsed) ? Math.Clamp(parsed, 0, 23) : null;
+        _themeService.SetTrueBlackAutoHour(hour);
+    }
+
+    /// <summary>Empty string = no override (null), matching <see cref="TrueBlackAutoHourText"/>'s convention - a plain hex TextBox rather than a full color-picker control, whose exact FluentAvalonia API shape wasn't verified against this project's actual package version.</summary>
+    [ObservableProperty]
+    private string _accentOverrideHexText = string.Empty;
+
+    partial void OnAccentOverrideHexTextChanged(string value)
+    {
+        if (_suppressThemeOptionsApply)
+        {
+            return;
+        }
+
+        _themeService.SetAccentOverrideHex(value);
     }
 
     partial void OnOpenLastPageChanged(bool value) => PersistBehaviorSetting(s => s.OpenLastPage = value);
@@ -1251,10 +1385,10 @@ public partial class PreferencesScreenViewModel : ViewModelBase
             return;
         }
 
-        if (_skinService.TryInstallSkin(path, out string? error))
+        if (_themeService.TryInstallSkin(path, out string? error))
         {
             InstallSkinError = null;
-            RefreshSkins();
+            RefreshThemes();
         }
         else
         {
@@ -1263,7 +1397,7 @@ public partial class PreferencesScreenViewModel : ViewModelBase
     }
 
     [RelayCommand]
-    private void OpenSkinsFolder() => _skinService.OpenSkinsFolder();
+    private void OpenSkinsFolder() => _themeService.OpenSkinsFolder();
 
     // ===================== Virtual Tags (docs/superpowers/specs/2026-08-07-preferences-libraries-tab-design.md §1) =====================
 

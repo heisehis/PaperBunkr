@@ -820,7 +820,16 @@ public class PaperbunkrDbContext : DbContext
         modelBuilder.Entity<AppSettings>(builder =>
         {
             builder.HasKey(a => a.Id);
-            builder.Property(a => a.ActiveSkinKey).IsRequired().HasDefaultValue("default");
+            builder.Property(a => a.ActiveThemeKey).IsRequired().HasDefaultValue("default");
+            builder.Property(a => a.TrueBlackDark).HasDefaultValue(false);
+            // Same enum-as-string HasSentinel treatment as PageTransitionStyle - Off is both the CLR
+            // default and the desired default here, but every enum-as-string AppSettings column gets
+            // configured identically rather than special-casing the coincidence.
+            builder.Property(a => a.ThemeAutoMode).HasConversion<string>().HasMaxLength(16)
+                .HasDefaultValue(ThemeAutoMode.Off)
+                .HasSentinel(ThemeAutoMode.Off);
+            builder.Property(a => a.ThemeScheduledDarkHour).HasDefaultValue(20);
+            builder.Property(a => a.ThemeScheduledLightHour).HasDefaultValue(7);
             builder.Property(a => a.OpenLastPage).HasDefaultValue(true);
             builder.Property(a => a.AutoNavigateComics).HasDefaultValue(true);
             builder.Property(a => a.BackupsToKeep).HasDefaultValue(5);
@@ -1237,7 +1246,7 @@ public class PaperbunkrDbContext : DbContext
     /// <summary>
     /// Test-only redirect for <see cref="GetDefaultDatabasePath"/> - mutable so tests can point
     /// every <c>PaperbunkrDb.CreateContext()</c> call (App-side ViewModels have no injected
-    /// context-factory seam, unlike <c>SkinService</c>/<c>CoverThumbnailService</c>) at a temp
+    /// context-factory seam, unlike <c>ThemeService</c>/<c>CoverThumbnailService</c>) at a temp
     /// SQLite file instead of the real per-user database. Never set this outside a test's own
     /// constructor/teardown.
     /// </summary>

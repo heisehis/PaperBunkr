@@ -44,7 +44,7 @@ public partial class ReaderScreenViewModel : ViewModelBase, IContextMenuProvider
     // placeholders, just with correct count/selection tracking the real current page now.
     private const int MaxThumbnails = 200;
 
-    // No injected context-factory seam needed here (unlike SkinService/CoverThumbnailService) -
+    // No injected context-factory seam needed here (unlike ThemeService/CoverThumbnailService) -
     // KeyBindingService's own default ctor already goes through PaperbunkrDb.CreateContext(),
     // which PaperbunkrDbContext.DatabasePathOverride already redirects in tests.
     private readonly KeyBindingService _keyBindings = new();

@@ -1,0 +1,32 @@
+{
+  "name": "Daylight",
+  "mode": "Light",
+  "colors": {
+    "bg": "#F7F3EC",
+    "chrome": "#FDFBF8",
+    "border": "#E2DBCB",
+    "text": "#2A2620",
+    "textMuted": "#6B6357",
+    "textFaint": "#948C7C",
+    "accent": "#985A27",
+    "accentText": "#8A5322",
+    "accentSoft": "#29985A27",
+    "badge": "#D19A3D",
+    "badgeText": "#241505",
+    "success": "#3E7A56",
+    "chartBlue": "#5B8DBE",
+    "chartViolet": "#9B7EBD",
+    "surface0": "#EDE7DA",
+    "surface1": "#F7F3EC",
+    "surface2": "#FDFBF8",
+    "surface3": "#FFFFFF",
+    "glow": "#668A5322",
+    "heroGradientStart": "#00F7F3EC",
+    "heroGradientEnd": "#FFF7F3EC"
+  },
+  "spacingUnit": 4,
+  "radius": 7,
+  "radiusSm": 5,
+  "radiusLg": 14,
+  "icons": {}
+}

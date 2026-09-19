@@ -50,7 +50,7 @@ public static class PaperbunkrDb
         // context - not left to whichever caller happens to touch it first. Confirmed necessary the
         // hard way: App.axaml.cs's post-EnsureCreated auto-backup trigger (docs/superpowers/specs/
         // 2026-08-29-db-corruption-safeguards-design.md §2) runs on a background thread that can
-        // race the main thread's own first GetOrCreateAppSettings() call (SkinService.
+        // race the main thread's own first GetOrCreateAppSettings() call (ThemeService.
         // ApplyPersistedSettings()) on a genuinely fresh install - both see no row yet and both try
         // to INSERT Id=1, and the loser throws "UNIQUE constraint failed: AppSettings.Id". Once this
         // row exists, every later GetOrCreateAppSettings() call is a plain SELECT, which is race-free.

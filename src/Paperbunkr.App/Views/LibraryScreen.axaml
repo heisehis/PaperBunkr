@@ -74,11 +74,11 @@
              showing is the standard tradeoff (the cover Image's corners can peek very slightly
              square during hover/focus) rather than losing the glow ring completely. -->
         <Style Selector="Button.card:pointerover Border.posterCover">
-            <Setter Property="BoxShadow" Value="{StaticResource PbGlowRing}" />
+            <Setter Property="BoxShadow" Value="{DynamicResource PbGlowRing}" />
             <Setter Property="ClipToBounds" Value="False" />
         </Style>
         <Style Selector="Button.card:focus-within Border.posterCover">
-            <Setter Property="BoxShadow" Value="{StaticResource PbGlowRing}" />
+            <Setter Property="BoxShadow" Value="{DynamicResource PbGlowRing}" />
             <Setter Property="ClipToBounds" Value="False" />
         </Style>
 
@@ -107,16 +107,48 @@
         </Style>
 
         <!-- Row-mode hover (4b §7) - List/Tiles rows get a surface-tint on hover. -->
+        <!-- BorderBrush lives here (not as a local attribute on each template's Border) so the
+             hover/focus ring rule below can override it - a local value would always beat a style
+             setter. "plain" = Details rows, which have no visible resting border of their own. -->
         <Style Selector="Border.libRow">
             <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderBrush" Value="{DynamicResource PbBorderBrush}" />
             <Setter Property="Transitions">
                 <Transitions>
                     <BrushTransition Property="Background" Duration="{DynamicResource PbMotionFast}" Easing="{StaticResource PbMotionEase}" />
+                    <BrushTransition Property="BorderBrush" Duration="{DynamicResource PbMotionFast}" Easing="{StaticResource PbMotionEase}" />
                 </Transitions>
             </Setter>
         </Style>
+        <Style Selector="Border.libRow.plain">
+            <Setter Property="BorderBrush" Value="Transparent" />
+        </Style>
         <Style Selector="Button.card:pointerover Border.libRow">
             <Setter Property="Background" Value="{DynamicResource PbSurface2Brush}" />
+        </Style>
+
+        <!-- Hover/focus ring for every non-poster view mode (List / Tiles / Details rows via
+             Border.libRow, Panorama covers via Border.panoramaCover) - the same PbGlowRing the
+             Poster grid's Border.posterCover gets above, so the focus indicator reads identically
+             across view modes and follows the active theme. Rows also recolor their 1px border to
+             the accent so the ring has a crisp inner edge. BoxShadow is never transitioned here (see
+             the posterCover note above: a BoxShadowsTransition tears the ring mid-animation).
+             Real bug (first cut of this): the ring rendered as a thin, shadow-like sliver because
+             these Borders sat flush with their Button's edge and the 4px spread was clipped to the
+             Button's bounds - exactly why Border.posterCover carries Margin="5,10,5,5". So every
+             ringed Border here carries a permanent Margin INSIDE its Button (Panorama cover 5, row
+             Borders 4) and the cell sizes/panel spacing are adjusted to compensate (see
+             SeriesCardSample.PanoramaRingGutter / LibraryScreenViewModel.TilesRingGutterTotal).
+             Panorama covers carry ClipToBounds via the
+             shared "cover" class, which would clip the ring away entirely - same tradeoff as
+             posterCover: drop clipping only while the ring shows. -->
+        <Style Selector="Button.card:pointerover Border.libRow, Button.card:focus-within Border.libRow">
+            <Setter Property="BorderBrush" Value="{DynamicResource PbAccentBrush}" />
+            <Setter Property="BoxShadow" Value="{DynamicResource PbGlowRing}" />
+        </Style>
+        <Style Selector="Button.card:pointerover Border.panoramaCover, Button.card:focus-within Border.panoramaCover">
+            <Setter Property="BoxShadow" Value="{DynamicResource PbGlowRing}" />
+            <Setter Property="ClipToBounds" Value="False" />
         </Style>
 
         <!-- Configurable Details table header cell (4b §8) - borderless click-to-sort button. -->
@@ -260,22 +292,24 @@
 
     <UserControl.Resources>
         <DataTemplate x:Key="PanoramaGridItemTemplate" x:DataType="models:IssueListRow">
-            <Button Classes="card" Margin="0" Width="{Binding PanoramaWidth}"
+            <Button Classes="card" Margin="0" Width="{Binding PanoramaCellWidth}"
                     KeyDown="OnCardKeyDown" PointerPressed="OnTilePointerPressed"
                     GotFocus="OnCardGotFocus" DoubleTapped="OnCardDoubleTapped">
                 <StackPanel>
                     <!-- Shared-element cover flight (docs/superpowers/specs/2026-09-04-navigation-
                          transition-system-design.md) - "issue-cover:{Id}", same scheme as the Poster
                          grid template. -->
-                    <Border Classes="cover" Background="{Binding CoverBrush}"
+                    <Border Classes="cover panoramaCover" Margin="5" Background="{Binding CoverBrush}"
                             Height="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PanoramaCardHeight}"
                             controls:SharedElement.Key="{Binding Id, StringFormat='issue-cover:{0}'}"
                             controls:SharedElement.ImageSource="{Binding #PanoramaIssueCoverImage.Source}"
                             PointerEntered="OnCoverPointerEntered" PointerExited="OnCoverPointerExited">
                         <Grid>
-                            <!-- Uniform (not UniformToFill) - the box is already sized to this cover's own
-                                 aspect ratio, so nothing gets cropped; only extreme clamped outliers letterbox. -->
-                            <Image x:Name="PanoramaIssueCoverImage" views:AsyncCoverImage.SourceId="{Binding CoverKey}" Stretch="Uniform" />
+                            <!-- UniformToFill - the box is sized to this cover's own aspect ratio, so for
+                                 a normal cover nothing is visibly cropped, and the rare clamped outlier
+                                 (or a ratio learned a hair off) fills the card instead of leaving empty
+                                 letterbox bands. -->
+                            <Image x:Name="PanoramaIssueCoverImage" views:AsyncCoverImage.SourceId="{Binding CoverKey}" Stretch="UniformToFill" />
                             <!-- DogEarThumbnails hover peek (docs/superpowers/specs/2026-09-13-
                                  preferences-cosmetic-toggles-design.md) - CE's real 2nd-page peek,
                                  clipped to a triangular fold in the bottom-right corner (revised
@@ -337,18 +371,18 @@
                     </Border>
                     <TextBlock Text="{Binding SeriesName}" FontSize="12.5" FontWeight="SemiBold"
                                Foreground="{DynamicResource PbTextBrush}" TextTrimming="CharacterEllipsis"
-                               Margin="0,8,0,0" ToolTip.Tip="{Binding SeriesName}" />
+                               Margin="5,3,5,0" ToolTip.Tip="{Binding SeriesName}" />
                     <TextBlock Text="{Binding Number, StringFormat='#{0}'}" FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}"
-                               Margin="0,1,0,0" />
+                               Margin="5,1,5,0" />
                 </StackPanel>
             </Button>
         </DataTemplate>
 
         <DataTemplate x:Key="ListItemTemplate" x:DataType="models:IssueListRow">
-            <Button Classes="card" HorizontalAlignment="Stretch" Margin="0,0,0,8"
+            <Button Classes="card" HorizontalAlignment="Stretch" Margin="0"
                     KeyDown="OnCardKeyDown" PointerPressed="OnTilePointerPressed"
                     GotFocus="OnCardGotFocus" DoubleTapped="OnCardDoubleTapped">
-                <Border Classes="libRow" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1" CornerRadius="{DynamicResource PbRadius}" Padding="10">
+                <Border Classes="libRow" Margin="4" BorderThickness="1" CornerRadius="{DynamicResource PbRadius}" Padding="10">
                     <Grid ColumnDefinitions="44,*,Auto">
                         <Panel Grid.Column="0">
                             <!-- Shared-element cover flight (docs/superpowers/specs/2026-09-04-
@@ -394,10 +428,11 @@
         </DataTemplate>
 
         <DataTemplate x:Key="DetailsItemTemplate" x:DataType="models:IssueListRow">
-            <Button Classes="card" HorizontalAlignment="Stretch" Margin="0,0,0,4"
+            <Button Classes="card" HorizontalAlignment="Stretch" Margin="0"
                     KeyDown="OnCardKeyDown" PointerPressed="OnTilePointerPressed"
                     GotFocus="OnCardGotFocus" DoubleTapped="OnCardDoubleTapped">
-                <Grid ColumnDefinitions="52,*" Margin="0,6">
+                <Border Classes="libRow plain" Margin="4" BorderThickness="1" CornerRadius="{DynamicResource PbRadiusSm}" Padding="0,3">
+                <Grid ColumnDefinitions="52,*">
                     <Panel Grid.Column="0">
                         <!-- Shared-element cover flight (docs/superpowers/specs/2026-09-04-
                              navigation-transition-system-design.md) - "issue-cover:{Id}". -->
@@ -433,6 +468,7 @@
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
                 </Grid>
+                </Border>
             </Button>
         </DataTemplate>
 
@@ -441,7 +477,7 @@
                     Width="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).TilesCardWidth}"
                     KeyDown="OnCardKeyDown" PointerPressed="OnTilePointerPressed"
                     GotFocus="OnCardGotFocus" DoubleTapped="OnCardDoubleTapped">
-                <Border Classes="libRow" BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1" CornerRadius="{DynamicResource PbRadius}" Padding="8">
+                <Border Classes="libRow" Margin="4" BorderThickness="1" CornerRadius="{DynamicResource PbRadius}" Padding="8">
                     <Grid ColumnDefinitions="Auto,*,Auto">
                         <Panel Grid.Column="0">
                             <!-- Shared-element cover flight (docs/superpowers/specs/2026-09-04-
@@ -494,22 +530,21 @@
              superpowers/specs/2026-08-18-library-book-centric-redesign-design.md). Phase 4a's
              PosterGridSeriesTemplate lives further down with its issue counterpart. -->
         <DataTemplate x:Key="SeriesPanoramaGridItemTemplate" x:DataType="models:SeriesCardSample">
-            <Button Classes="card" Margin="0" Width="{Binding PanoramaWidth}"
+            <Button Classes="card" Margin="0" Width="{Binding PanoramaCellWidth}"
                     KeyDown="OnCardKeyDown" PointerPressed="OnSeriesTilePointerPressed"
                     GotFocus="OnCardGotFocus" DoubleTapped="OnCardDoubleTapped">
                 <StackPanel>
                     <!-- Shared-element cover flight (docs/superpowers/specs/2026-09-04-navigation-
                          transition-system-design.md) - "series-cover:{SeriesId}", same scheme as the
                          Poster grid series template. -->
-                    <Border Classes="cover" Background="{Binding CoverBrush}"
+                    <Border Classes="cover panoramaCover" Margin="5" Background="{Binding CoverBrush}"
                             Height="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PanoramaCardHeight}"
                             controls:SharedElement.Key="{Binding SeriesId, StringFormat='series-cover:{0}'}"
                             controls:SharedElement.ImageSource="{Binding #SeriesPanoramaCoverImage.Source}"
                             PointerEntered="OnCoverPointerEntered" PointerExited="OnCoverPointerExited">
                         <Grid>
-                            <!-- Uniform (not UniformToFill) - the box is already sized to this cover's own
-                                 aspect ratio, so nothing gets cropped; only extreme clamped outliers letterbox. -->
-                            <Image x:Name="SeriesPanoramaCoverImage" views:AsyncCoverImage.SourceId="{Binding CoverKey}" Stretch="Uniform" />
+                            <!-- UniformToFill - see the issue Panorama template's note. -->
+                            <Image x:Name="SeriesPanoramaCoverImage" views:AsyncCoverImage.SourceId="{Binding CoverKey}" Stretch="UniformToFill" />
                             <!-- DogEarThumbnails hover peek (docs/superpowers/specs/2026-09-13-
                                  preferences-cosmetic-toggles-design.md) - sourced from
                                  RepresentativeRow (the same issue CoverKey above is keyed to);
@@ -568,18 +603,18 @@
                     </Border>
                     <TextBlock Text="{Binding Name}" FontSize="12.5" FontWeight="SemiBold"
                                Foreground="{DynamicResource PbTextBrush}" TextTrimming="CharacterEllipsis"
-                               Margin="0,8,0,0" />
+                               Margin="5,3,5,0" />
                     <TextBlock Text="{Binding Sub}" FontSize="11" Foreground="{DynamicResource PbTextFaintBrush}"
-                               Margin="0,1,0,0" />
+                               Margin="5,1,5,0" />
                 </StackPanel>
             </Button>
         </DataTemplate>
 
         <DataTemplate x:Key="SeriesListItemTemplate" x:DataType="models:SeriesCardSample">
-            <Button Classes="card" HorizontalAlignment="Stretch" Margin="0,0,0,8"
+            <Button Classes="card" HorizontalAlignment="Stretch" Margin="0"
                     KeyDown="OnCardKeyDown" PointerPressed="OnSeriesTilePointerPressed"
                     GotFocus="OnCardGotFocus" DoubleTapped="OnCardDoubleTapped">
-                <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1" CornerRadius="6" Padding="10">
+                <Border Classes="libRow" Margin="4" BorderThickness="1" CornerRadius="6" Padding="10">
                     <Grid ColumnDefinitions="44,*,Auto">
                         <!-- Shared-element cover flight (docs/superpowers/specs/2026-09-04-
                              navigation-transition-system-design.md) - "series-cover:{SeriesId}". -->
@@ -628,10 +663,11 @@
         </DataTemplate>
 
         <DataTemplate x:Key="SeriesDetailsItemTemplate" x:DataType="models:SeriesCardSample">
-            <Button Classes="card" HorizontalAlignment="Stretch" Margin="0,0,0,4"
+            <Button Classes="card" HorizontalAlignment="Stretch" Margin="0"
                     KeyDown="OnCardKeyDown" PointerPressed="OnSeriesTilePointerPressed"
                     GotFocus="OnCardGotFocus" DoubleTapped="OnCardDoubleTapped">
-                <Grid ColumnDefinitions="52,*,110,70,70,140" Margin="0,6">
+                <Border Classes="libRow plain" Margin="4" BorderThickness="1" CornerRadius="{DynamicResource PbRadiusSm}" Padding="0,3">
+                <Grid ColumnDefinitions="52,*,110,70,70,140">
                     <!-- Shared-element cover flight (docs/superpowers/specs/2026-09-04-navigation-
                          transition-system-design.md) - "series-cover:{SeriesId}". -->
                     <Border Grid.Column="0" Width="36" Height="50" CornerRadius="3" Background="{Binding CoverBrush}" ClipToBounds="True"
@@ -656,6 +692,7 @@
                     <controls:BrandMark Grid.Column="5" Family="Publisher" Value="{Binding Publisher}" ShowText="True"
                                         MarkSize="13" Foreground="{DynamicResource PbTextFaintBrush}" VerticalAlignment="Center" />
                 </Grid>
+                </Border>
             </Button>
         </DataTemplate>
 
@@ -664,7 +701,7 @@
                     Width="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).TilesCardWidth}"
                     KeyDown="OnCardKeyDown" PointerPressed="OnSeriesTilePointerPressed"
                     GotFocus="OnCardGotFocus" DoubleTapped="OnCardDoubleTapped">
-                <Border BorderBrush="{DynamicResource PbBorderBrush}" BorderThickness="1" CornerRadius="6" Padding="8">
+                <Border Classes="libRow" Margin="4" BorderThickness="1" CornerRadius="6" Padding="8">
                     <Grid ColumnDefinitions="Auto,*,Auto">
                         <!-- Shared-element cover flight (docs/superpowers/specs/2026-09-04-
                              navigation-transition-system-design.md) - "series-cover:{SeriesId}". -->
@@ -773,7 +810,7 @@
                                         <Binding Path="$parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowPublisherBadge" />
                                     </MultiBinding>
                                 </Border.IsVisible>
-                                <controls:BrandMark Family="Publisher" Value="{Binding Publisher}" ShowText="True"
+                                <controls:BrandMark Family="Publisher" Value="{Binding Publisher}" ShowText="False"
                                                     MarkSize="12" Foreground="{DynamicResource PbBadgeBrush}" />
                             </Border>
                             <Ellipse Width="9" Height="9" Fill="{DynamicResource PbAccentTextBrush}" Stroke="Black" StrokeThickness="1.5"
@@ -855,7 +892,7 @@
                                         <Binding Path="$parent[UserControl].((vm:LibraryScreenViewModel)DataContext).ShowPublisherBadge" />
                                     </MultiBinding>
                                 </Border.IsVisible>
-                                <controls:BrandMark Family="Publisher" Value="{Binding Publisher}" ShowText="True"
+                                <controls:BrandMark Family="Publisher" Value="{Binding Publisher}" ShowText="False"
                                                     MarkSize="12" Foreground="{DynamicResource PbBadgeBrush}" />
                             </Border>
                             <Border Classes="countPill" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="6">
@@ -1056,7 +1093,7 @@
                                   controls:EntranceAnimation.Enabled="{Binding PlayEntranceAnimation}"
                                   ItemTemplate="{StaticResource PanoramaGridItemTemplate}" Margin="24,22,24,40">
                         <ItemsControl.ItemsPanel>
-                            <ItemsPanelTemplate><controls:VirtualizingVariableWrapPanel ItemHeight="{Binding PanoramaGridItemHeight}" ItemSpacing="20" LineSpacing="20" /></ItemsPanelTemplate>
+                            <ItemsPanelTemplate><controls:VirtualizingVariableWrapPanel ItemHeight="{Binding PanoramaGridItemHeight}" ItemSpacing="10" LineSpacing="10" /></ItemsPanelTemplate>
                         </ItemsControl.ItemsPanel>
                     </ItemsControl>
                     <ItemsControl IsVisible="{Binding IssueList.IsGrouped}" ItemsSource="{Binding IssueList.Groups}" Margin="24,22,24,40">
@@ -1070,7 +1107,7 @@
                                     <ItemsControl ItemsSource="{Binding Items}" ItemTemplate="{StaticResource PanoramaGridItemTemplate}"
                                                   controls:EntranceAnimation.Enabled="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PlayEntranceAnimation}">
                                         <ItemsControl.ItemsPanel>
-                                            <ItemsPanelTemplate><controls:VirtualizingVariableWrapPanel ItemHeight="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PanoramaGridItemHeight}" ItemSpacing="20" LineSpacing="20" /></ItemsPanelTemplate>
+                                            <ItemsPanelTemplate><controls:VirtualizingVariableWrapPanel ItemHeight="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PanoramaGridItemHeight}" ItemSpacing="10" LineSpacing="10" /></ItemsPanelTemplate>
                                         </ItemsControl.ItemsPanel>
                                     </ItemsControl>
                                 </StackPanel>
@@ -1083,7 +1120,7 @@
                                   controls:EntranceAnimation.Enabled="{Binding PlayEntranceAnimation}"
                                   ItemTemplate="{StaticResource SeriesPanoramaGridItemTemplate}" Margin="24,22,24,40">
                         <ItemsControl.ItemsPanel>
-                            <ItemsPanelTemplate><controls:VirtualizingVariableWrapPanel ItemHeight="{Binding PanoramaGridItemHeight}" ItemSpacing="20" LineSpacing="20" /></ItemsPanelTemplate>
+                            <ItemsPanelTemplate><controls:VirtualizingVariableWrapPanel ItemHeight="{Binding PanoramaGridItemHeight}" ItemSpacing="10" LineSpacing="10" /></ItemsPanelTemplate>
                         </ItemsControl.ItemsPanel>
                     </ItemsControl>
                     <ItemsControl IsVisible="{Binding IsGrouped}" ItemsSource="{Binding Groups}" Margin="24,22,24,40">
@@ -1097,7 +1134,7 @@
                                     <ItemsControl ItemsSource="{Binding Items}" ItemTemplate="{StaticResource SeriesPanoramaGridItemTemplate}"
                                                   controls:EntranceAnimation.Enabled="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PlayEntranceAnimation}">
                                         <ItemsControl.ItemsPanel>
-                                            <ItemsPanelTemplate><controls:VirtualizingVariableWrapPanel ItemHeight="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PanoramaGridItemHeight}" ItemSpacing="20" LineSpacing="20" /></ItemsPanelTemplate>
+                                            <ItemsPanelTemplate><controls:VirtualizingVariableWrapPanel ItemHeight="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PanoramaGridItemHeight}" ItemSpacing="10" LineSpacing="10" /></ItemsPanelTemplate>
                                         </ItemsControl.ItemsPanel>
                                     </ItemsControl>
                                 </StackPanel>
@@ -1115,7 +1152,7 @@
             <ListBox x:Name="ListModeIssueBox" Classes="virtualRows" IsVisible="{Binding IsIssueGranularity}"
                      ItemsSource="{Binding IssueList.FlatRows}"
                      controls:EntranceAnimation.Enabled="{Binding PlayEntranceAnimation}"
-                     Padding="24,18,24,40" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                     Padding="20,14,20,36" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
                 <ListBox.ItemsPanel><ItemsPanelTemplate><VirtualizingStackPanel /></ItemsPanelTemplate></ListBox.ItemsPanel>
                 <ListBox.DataTemplates>
                     <DataTemplate DataType="models:IssueListRow">
@@ -1126,7 +1163,7 @@
             <ListBox x:Name="ListModeSeriesBox" Classes="virtualRows" IsVisible="{Binding IsSeriesGranularity}"
                      ItemsSource="{Binding FlatCovers}"
                      controls:EntranceAnimation.Enabled="{Binding PlayEntranceAnimation}"
-                     Padding="24,18,24,40" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                     Padding="20,14,20,36" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
                 <ListBox.ItemsPanel><ItemsPanelTemplate><VirtualizingStackPanel /></ItemsPanelTemplate></ListBox.ItemsPanel>
                 <ListBox.DataTemplates>
                     <DataTemplate DataType="models:SeriesCardSample">
@@ -1141,7 +1178,9 @@
             <!-- Configurable, click-to-sort header (4b §8) - same DetailsColumns source + fixed
                  widths as each data row, so hiding a column keeps both aligned. Right-click for the
                  column picker. -->
-            <Grid DockPanel.Dock="Top" ColumnDefinitions="52,*" Margin="0,0,16,8" IsVisible="{Binding IsIssueGranularity}"
+            <!-- Left margin 5 = the row Border's 4px ring-gutter Margin + its 1px border, so header cells
+                 stay aligned with the row cells (rows are wrapped in Border.libRow for the focus ring). -->
+            <Grid DockPanel.Dock="Top" ColumnDefinitions="52,*" Margin="5,0,16,8" IsVisible="{Binding IsIssueGranularity}"
                   controls:ContextMenuHost.Provider="{Binding DetailsColumnsMenuProvider}">
                 <ItemsControl Grid.Column="1" ItemsSource="{Binding DetailsColumns}">
                     <ItemsControl.ItemsPanel>
@@ -1170,7 +1209,7 @@
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
             </Grid>
-            <Grid DockPanel.Dock="Top" ColumnDefinitions="52,*,110,70,70,140" Margin="0,0,16,8" IsVisible="{Binding IsSeriesGranularity}">
+            <Grid DockPanel.Dock="Top" ColumnDefinitions="52,*,110,70,70,140" Margin="5,0,16,8" IsVisible="{Binding IsSeriesGranularity}">
                 <TextBlock Grid.Column="1" Text="Name" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource PbTextFaintBrush}" Margin="10,0,0,0" />
                 <TextBlock Grid.Column="2" Text="Content Type" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource PbTextFaintBrush}" />
                 <TextBlock Grid.Column="3" Text="Issues" FontSize="11" FontWeight="Bold" Foreground="{DynamicResource PbTextFaintBrush}" />
@@ -1211,7 +1250,7 @@
                                   controls:EntranceAnimation.Enabled="{Binding PlayEntranceAnimation}"
                                   ItemTemplate="{StaticResource TilesItemTemplate}" Margin="24,18,24,40">
                         <ItemsControl.ItemsPanel>
-                            <ItemsPanelTemplate><controls:VirtualizingWrapPanel ItemWidth="{Binding TilesCardWidth}" ItemHeight="{Binding TilesCardHeight}" ItemSpacing="14" LineSpacing="10" /></ItemsPanelTemplate>
+                            <ItemsPanelTemplate><controls:VirtualizingWrapPanel ItemWidth="{Binding TilesCardWidth}" ItemHeight="{Binding TilesCardHeight}" ItemSpacing="6" LineSpacing="2" /></ItemsPanelTemplate>
                         </ItemsControl.ItemsPanel>
                     </ItemsControl>
                     <ItemsControl IsVisible="{Binding IssueList.IsGrouped}" ItemsSource="{Binding IssueList.Groups}" Margin="24,18,24,40">
@@ -1225,7 +1264,7 @@
                                     <ItemsControl ItemsSource="{Binding Items}" ItemTemplate="{StaticResource TilesItemTemplate}"
                                                   controls:EntranceAnimation.Enabled="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PlayEntranceAnimation}">
                                         <ItemsControl.ItemsPanel>
-                                            <ItemsPanelTemplate><controls:VirtualizingWrapPanel ItemWidth="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).TilesCardWidth}" ItemHeight="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).TilesCardHeight}" ItemSpacing="14" LineSpacing="10" /></ItemsPanelTemplate>
+                                            <ItemsPanelTemplate><controls:VirtualizingWrapPanel ItemWidth="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).TilesCardWidth}" ItemHeight="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).TilesCardHeight}" ItemSpacing="6" LineSpacing="2" /></ItemsPanelTemplate>
                                         </ItemsControl.ItemsPanel>
                                     </ItemsControl>
                                 </StackPanel>
@@ -1238,7 +1277,7 @@
                                   controls:EntranceAnimation.Enabled="{Binding PlayEntranceAnimation}"
                                   ItemTemplate="{StaticResource SeriesTilesItemTemplate}" Margin="24,18,24,40">
                         <ItemsControl.ItemsPanel>
-                            <ItemsPanelTemplate><controls:VirtualizingWrapPanel ItemWidth="{Binding TilesCardWidth}" ItemHeight="{Binding TilesCardHeight}" ItemSpacing="14" LineSpacing="10" /></ItemsPanelTemplate>
+                            <ItemsPanelTemplate><controls:VirtualizingWrapPanel ItemWidth="{Binding TilesCardWidth}" ItemHeight="{Binding TilesCardHeight}" ItemSpacing="6" LineSpacing="2" /></ItemsPanelTemplate>
                         </ItemsControl.ItemsPanel>
                     </ItemsControl>
                     <ItemsControl IsVisible="{Binding IsGrouped}" ItemsSource="{Binding Groups}" Margin="24,18,24,40">
@@ -1252,7 +1291,7 @@
                                     <ItemsControl ItemsSource="{Binding Items}" ItemTemplate="{StaticResource SeriesTilesItemTemplate}"
                                                   controls:EntranceAnimation.Enabled="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).PlayEntranceAnimation}">
                                         <ItemsControl.ItemsPanel>
-                                            <ItemsPanelTemplate><controls:VirtualizingWrapPanel ItemWidth="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).TilesCardWidth}" ItemHeight="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).TilesCardHeight}" ItemSpacing="14" LineSpacing="10" /></ItemsPanelTemplate>
+                                            <ItemsPanelTemplate><controls:VirtualizingWrapPanel ItemWidth="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).TilesCardWidth}" ItemHeight="{Binding $parent[UserControl].((vm:LibraryScreenViewModel)DataContext).TilesCardHeight}" ItemSpacing="6" LineSpacing="2" /></ItemsPanelTemplate>
                                         </ItemsControl.ItemsPanel>
                                     </ItemsControl>
                                 </StackPanel>

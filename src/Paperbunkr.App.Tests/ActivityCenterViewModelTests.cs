@@ -59,6 +59,7 @@ public class ActivityCenterViewModelTests
         Assert.Equal("heads up", row.Alert.Title);
 
         row.DismissCommand.Execute(null);
+        TestDispatcher.Drain(); // deferred one dispatcher tick (CLAUDE.md: no detach from inside a routed event)
         Assert.Empty(svc.Alerts);
         Assert.Empty(vm.Alerts);
     }
@@ -74,11 +75,13 @@ public class ActivityCenterViewModelTests
         Assert.True(svc.PanelIsOpen);
 
         vm.OpenDrawerCommand.Execute(null);
+        TestDispatcher.Drain(); // OpenDrawer defers closing the peek one dispatcher tick
         Assert.False(vm.IsPeekOpen);
         Assert.True(vm.IsDrawerOpen);
         Assert.True(svc.PanelIsOpen);
 
         vm.CloseCommand.Execute(null);
+        TestDispatcher.Drain(); // deferred one dispatcher tick (CLAUDE.md: no detach from inside a routed event)
         Assert.False(svc.PanelIsOpen);
     }
 
@@ -101,6 +104,7 @@ public class ActivityCenterViewModelTests
 
         vm.IsDrawerOpen = true;
         vm.FollowLinkCommand.Execute(link);
+        TestDispatcher.Drain(); // deferred one dispatcher tick (CLAUDE.md: no detach from inside a routed event)
 
         Assert.Equal(link, Assert.Single(links));
         Assert.False(vm.IsDrawerOpen);

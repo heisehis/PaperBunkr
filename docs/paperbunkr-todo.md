@@ -1559,6 +1559,29 @@ docs/superpowers/specs/2026-08-09-reader-gestures-and-grid-navigation-design.md.
 
 ---
 
+## 2026-09-19 — Headless test-suite flake fixed (branch `fix/headless-test-dispatcher`)
+
+Test infrastructure only; no production code or `<Version>` change.
+
+- **Root cause (verified by logging thread ids):** `AvaloniaTestCollection`'s ctor bootstrapped Avalonia
+  (binding `Dispatcher.UIThread`) on one xunit pool thread (tid 4) while test bodies ran on others
+  (tid 22/26), so `CheckAccess()` was false. Per-class `PumpDispatcher()` guards then silently
+  no-opped, and every "delete → assert sidebar" test saw a stale, un-drained `Dispatcher.UIThread.Post`
+  queue; whether it passed depended on which classes ran first. The same thread mismatch is the
+  full-suite mass-fail (~1000 tests).
+- **Fix:** `PinnedThreadTestFramework` (custom xunit framework) runs every test case's synchronous
+  execution on one dedicated thread that also runs `AppBuilder.Setup()`; `TestDispatcher.Drain()`
+  throws instead of no-opping. Gotchas found: (1) a captured `SynchronizationContext` on that thread
+  deadlocks the six test files that block on `GetAwaiter().GetResult()`; (2) Avalonia's Setup installs an
+  `AvaloniaSynchronizationContext` that xunit's `AsyncTestSyncContext` forwards into the unpumped
+  dispatcher, hanging tests, so the pinned thread clears it before each work item.
+- **Test fixes:** added drains to Smart/Reading/ActivityCenter/Preferences delete-flow tests; DetailTabs
+  and Events now use the shared helper; `ReaderScreenViewModelTests` thumbnail test no longer silently
+  skips itself off-thread. `Results_MapCoverBrush…` was a separate stale assertion (PR #90 made
+  `CoverBrushFor` return `Immutable*` brushes); now asserts `IGradientBrush`, same colour checks.
+- **Verified:** narrow and wide filters twice each; full suite 2794/2794 twice. **Not done:** reversed
+  or shuffled class order (the collection orderer is fixed and Avalonia-first by design).
+
 ## Explicitly not in scope here
 
 - **Content-type classification manual dropdown** — flagged as a known gap, but the real

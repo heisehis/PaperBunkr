@@ -278,6 +278,7 @@ public class ReadingScreenViewModelTests : IDisposable
         var activeSummary = vm.Lists.Single(l => l.IsActive);
         activeSummary.DeleteConfirm.TriggerCommand.Execute(null);
         activeSummary.DeleteConfirm.TriggerCommand.Execute(null);
+        TestDispatcher.Drain(); // DeleteReadingList defers its sidebar refresh one dispatcher tick
 
         Assert.Equal(firstId, vm.Lists.Single().Id); // only the un-deleted one remains
         Assert.False(string.IsNullOrEmpty(vm.ListName)); // fell back to displaying it, not a blank screen
@@ -292,6 +293,7 @@ public class ReadingScreenViewModelTests : IDisposable
 
         summary.DeleteConfirm.TriggerCommand.Execute(null);
         summary.DeleteConfirm.TriggerCommand.Execute(null);
+        TestDispatcher.Drain(); // DeleteReadingList defers its sidebar refresh one dispatcher tick
 
         Assert.True(vm.HasNoReadingLists);
         Assert.Equal(string.Empty, vm.ListName);

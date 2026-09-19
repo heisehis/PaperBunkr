@@ -99,10 +99,18 @@ public static class TestAppBuilder
             // UI-layout tests) - disabled here since these tests need real Skia-backed image decode,
             // confirmed necessary after the default produced a silently-wrong 1x1 Bitmap for a real
             // 64x96 PNG with no exception thrown.
-            AppBuilder.Configure<Application>()
-                .UseSkia()
-                .UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false })
-                .SetupWithoutStarting();
+            //
+            // Setup() runs on PinnedThread, the same thread PinnedThreadTestFramework runs every test
+            // case's synchronous body on, so Dispatcher.UIThread is owned by the thread the tests are
+            // actually on (see PinnedThread for why the fixture-constructor thread isn't good enough).
+            PinnedThread.Run(() =>
+            {
+                AppBuilder.Configure<Application>()
+                    .UseSkia()
+                    .UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false })
+                    .SetupWithoutStarting();
+                return true;
+            });
             _initialized = true;
         }
     }

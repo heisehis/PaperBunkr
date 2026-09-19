@@ -85,4 +85,84 @@ public class CredentialStoreTests : IDisposable
         CredentialStore.Set(_context, "Metron", CredentialKind.Password, "hunter2");
         Assert.True(CredentialStore.HasCredentials(_context, "Metron", CredentialKind.Username, CredentialKind.Password));
     }
+
+    [Fact]
+    public void Set_StoresCiphertext_NotThePlainText()
+    {
+        CredentialStore.Set(_context, "qBittorrent", CredentialKind.Password, "hunter2");
+
+        var raw = _context.ProviderCredentials.Single(c => c.Provider == "qBittorrent").Value;
+        Assert.True(CredentialStore.IsEncrypted(raw));
+        Assert.DoesNotContain("hunter2", raw);
+        Assert.Equal("hunter2", CredentialStore.Get(_context, "qBittorrent", CredentialKind.Password));
+    }
+
+    [Fact]
+    public void Get_OnLegacyPlainTextRow_ReturnsValue_AndRewritesItEncrypted()
+    {
+        _context.ProviderCredentials.Add(new ProviderCredential
+        {
+            Provider = "ComicVine",
+            Kind = CredentialKind.ApiKey,
+            Value = "legacy-key",
+            UpdatedAt = DateTime.UtcNow,
+        });
+        _context.SaveChanges();
+
+        Assert.Equal("legacy-key", CredentialStore.Get(_context, "ComicVine", CredentialKind.ApiKey));
+
+        var raw = _context.ProviderCredentials.Single(c => c.Provider == "ComicVine").Value;
+        Assert.True(CredentialStore.IsEncrypted(raw));
+        Assert.Equal("legacy-key", CredentialStore.Get(_context, "ComicVine", CredentialKind.ApiKey));
+    }
+
+    [Fact]
+    public void Get_OnUndecryptableValue_ReturnsNull_InsteadOfThrowing()
+    {
+        // Simulates a DB copied from another Windows account/machine: prefixed, but not ours.
+        _context.ProviderCredentials.Add(new ProviderCredential
+        {
+            Provider = "Metron",
+            Kind = CredentialKind.Password,
+            Value = "dpapi1:" + Convert.ToBase64String(new byte[] { 1, 2, 3, 4, 5 }),
+            UpdatedAt = DateTime.UtcNow,
+        });
+        _context.SaveChanges();
+
+        Assert.Null(CredentialStore.Get(_context, "Metron", CredentialKind.Password));
+        Assert.Null(CredentialStore.Get(_context, "Metron", CredentialKind.Password));
+    }
+
+    [Fact]
+    public void Get_OnNonBase64Ciphertext_ReturnsNull()
+    {
+        _context.ProviderCredentials.Add(new ProviderCredential
+        {
+            Provider = "Metron",
+            Kind = CredentialKind.Username,
+            Value = "dpapi1:!!!not-base64!!!",
+            UpdatedAt = DateTime.UtcNow,
+        });
+        _context.SaveChanges();
+
+        Assert.Null(CredentialStore.Get(_context, "Metron", CredentialKind.Username));
+    }
+
+    [Fact]
+    public void Set_EmptyValue_StaysEmpty_SoHasCredentialsTreatsItAsAbsent()
+    {
+        CredentialStore.Set(_context, "Metron", CredentialKind.Username, "");
+
+        Assert.False(CredentialStore.HasCredentials(_context, "Metron", CredentialKind.Username));
+        Assert.Equal("", CredentialStore.Get(_context, "Metron", CredentialKind.Username));
+    }
+
+    [Fact]
+    public void HasCredentials_IsTrueForEncryptedValues()
+    {
+        CredentialStore.Set(_context, "Metron", CredentialKind.Username, "user");
+        CredentialStore.Set(_context, "Metron", CredentialKind.Password, "pass");
+
+        Assert.True(CredentialStore.HasCredentials(_context, "Metron", CredentialKind.Username, CredentialKind.Password));
+    }
 }

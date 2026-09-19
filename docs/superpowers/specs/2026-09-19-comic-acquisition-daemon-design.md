@@ -43,7 +43,7 @@ Slack; Activity Center covers in-app notification, so this is backlog).
 - **Threading/DB:** each tick uses its own `DbContext` with short transactions; SQLite WAL keeps UI
   reads unblocked.
 - **ComicVine client:** new `ComicVineClient` (volume search, volume issue lists, store dates). All
-  ComicVine HTTP goes through one shared `DelegatingHandler`: min 1 s spacing, an hourly budget
+  ComicVine HTTP goes through one shared `DelegatingHandler`: min ~1.1 s spacing (ComicVine returns HTTP 420 / status_code 107 on velocity violations), an hourly budget
   (~200 req/h, the documented ComicVine limit), ban/429 detection that pauses all ComicVine calls.
   The handler is also applied to the existing `ComicVineSource` (whose per-instance `ThrottleAsync`
   has no hourly cap or ban handling). Other sources are left alone.

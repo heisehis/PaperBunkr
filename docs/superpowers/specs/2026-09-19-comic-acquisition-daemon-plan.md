@@ -32,7 +32,7 @@ per-user dev DB:** run tests only; do not launch the app or run `dotnet ef` from
   itself when none matches. The new `WatchedSeries` link must reuse `FindSeriesByCascade`, not add a
   parallel lookup.
 
-## Step 1: CredentialStore DPAPI encryption
+## Step 1: CredentialStore DPAPI encryption  — DONE (0d12d19)
 **Files:** `src/Paperbunkr.Data/Credentials/CredentialStore.cs` (edit), `Paperbunkr.Data.csproj`
 (add `System.Security.Cryptography.ProtectedData`), `src/Paperbunkr.Data.Tests/CredentialStoreTests.cs`
 (edit/add)
@@ -47,7 +47,7 @@ callers are untouched.
 is read and rewritten encrypted; corrupt ciphertext returns null; existing `CredentialStoreTests`
 and tracker adapter tests still pass.
 
-## Step 2: Prioritized ComicVine rate-limit handler
+## Step 2: Prioritized ComicVine rate-limit handler  — DONE (d0f27f2)
 **Files:** `src/Paperbunkr.Data/ComicVine/ComicVineRateLimitHandler.cs` (new),
 `ComicVineRequestPriority.cs` (new), `ComicVineHttp.cs` (new: shared handler singleton +
 `HttpClient` factory), `ReadingLists/Sources/ComicVineSource.cs` (edit: use the shared client, drop
@@ -167,6 +167,17 @@ shown"; "Request missing" on arc-linked reading lists, per-item Request on other
 notes from the survey)
 **Depends on:** all
 **Verify:** full `dotnet test` run compared with the recorded baseline failure set.
+
+## Progress and baselines
+- **Baselines (before any change, `master` 955f62f):** `Data.Tests` 1101 pass / 6 fail (all six are
+  pre-existing `*MigrationTests` that call `Migrate()`); `App.Tests` `PreferencesScreenViewModelTests` +
+  `DetailTabsViewModelTests` 249 pass / 8 fail (Library Health + shortcut-conflict tests; identical
+  failures on an untouched `master` checkout, order-sensitive/flaky).
+- **After Steps 1-2:** `Data.Tests` 1115 pass / the same 6 fail (+14 new tests, 0 new failures);
+  `App.Tests` (same two classes) 249 pass / the same 8 fail.
+- Step 2 deviation from the spec: spacing is **1.1 s**, not 1 s (ComicVine's velocity limit returns HTTP
+  420 / `status_code` 107 and community guidance is >= ~1.1 s); the handler enforces the request timeout
+  itself so queue time never counts against `HttpClient.Timeout`.
 
 ## Test strategy
 xunit; temp-file SQLite in `Data.Tests`; fake `HttpMessageHandler`s and a fake clock for handler/
